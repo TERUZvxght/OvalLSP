@@ -75,6 +75,13 @@ module Rslsp
 
       route_registry.replace(snapshot[:routes] || [])
 
+      # Built up locally and installed in one #replace call rather than
+      # incrementally via #register_from_agent_response, so this
+      # generation's model table is a full swap (a model discoverable in
+      # an earlier boot but absent from this snapshot doesn't linger) —
+      # the same generation-replace semantics route_registry.replace
+      # already gives routes above (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+      responses_by_name = {}
       (snapshot[:models] || []).each do |entry|
         name = entry[:name]
         next unless name
@@ -82,8 +89,9 @@ module Rslsp
         response = manager.fetch_model(name: name)
         next unless response && !response[:error]
 
-        model_registry.register_from_agent_response(name, response)
+        responses_by_name[name] = response
       end
+      model_registry.replace(responses_by_name)
     rescue StandardError => e
       logger.error("failed to populate Rails registries from Runtime Agent snapshot: #{e.class}: #{e.message}")
     end

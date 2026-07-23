@@ -117,14 +117,45 @@ module Rslsp
       # only) — Task 007's "lazy agent/model request" means columns and
       # associations for a given model are fetched on demand via agent/model,
       # not eagerly for every model on every snapshot.
+      #
+      # `::ActiveRecord::Base.descendants` only reflects classes Ruby has
+      # already autoloaded, which in Rails' default (non-eager-load)
+      # development mode is often just whatever the app happened to touch
+      # since boot -- a model nobody has referenced yet (e.g. a controller
+      # behind a view that was never opened) would silently be missing.
+      # #eager_load_models! loads every autoload path first so discovery
+      # sees the app's full model set, not just an accident of boot order
+      # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
       def discover_models
         return [] unless active_record_available?
+
+        eager_load_models!
 
         ::ActiveRecord::Base.descendants.reject(&:abstract_class?).filter_map do |klass|
           next nil unless klass.respond_to?(:name) && klass.name
 
           { name: klass.name, tableName: safely { klass.table_name } }
         end
+      end
+
+      # Zeitwerk (Rails >= 6 default) exposes `Rails.autoloaders.main`;
+      # `Rails.application.eager_load!` is the version-spanning fallback
+      # for the classic autoloader and for any additional autoload paths
+      # Zeitwerk's main loader doesn't own. Never lets a broken model file
+      # (a real syntax/load error somewhere under an autoload path) take
+      # the whole Agent down with it -- discovery/model-fetch just falls
+      # back to whatever was already loaded, same as any other
+      # ActiveRecord failure this Agent degrades around.
+      def eager_load_models!
+        return unless rails_defined?
+
+        if Rails.respond_to?(:autoloaders) && Rails.autoloaders.respond_to?(:main) && Rails.autoloaders.main
+          Rails.autoloaders.main.eager_load
+        elsif Rails.respond_to?(:application) && Rails.application.respond_to?(:eager_load!)
+          Rails.application.eager_load!
+        end
+      rescue StandardError => e
+        @logger.call("model eager load failed: #{e.class}: #{e.message}")
       end
 
       # docs/design/docs/05-protocol.md's agent/model. Associations never
@@ -135,6 +166,7 @@ module Rslsp
       # "DB unavailable partial result").
       def model_result(params)
         name = params && params[:name].to_s
+        eager_load_models! if active_record_available?
         klass = valid_model_class(name)
         return { name: name, error: { code: "NOT_FOUND", message: "no such model: #{name.inspect}" } } unless klass
 
@@ -288,30 +320,53 @@ module Rslsp
         routes_available? && Rails.application.respond_to?(:reload_routes!)
       end
 
-      # docs/design/docs/04-runtime-agent.md section 8. Only routes reload
-      # so far — model/schema reload (section 9's other invalidation rules)
-      # isn't implemented yet. On failure, generation does NOT advance, so
-      # Core keeps treating the last-good snapshot as current
-      # (docs/design/docs/04-runtime-agent.md: "reloadに失敗した場合:
+      # docs/design/docs/04-runtime-agent.md section 8, extended by Task
+      # 008.5 to also reload models: `sections` (defaulting to both) picks
+      # which parts to redo, each independently rescued so a routes
+      # failure doesn't block a models reload or vice versa. On failure,
+      # that section is left out of `changedSections` and generation only
+      # advances if at least one section actually changed, so Core keeps
+      # treating the last-good snapshot as current for whatever didn't
+      # reload (docs/design/docs/04-runtime-agent.md: "reloadに失敗した場合:
       # generationを進めない").
-      def reload_result(_params)
-        unless reload_available?
-          return { generation: @generation, changedSections: [], errors: [] }
-        end
+      def reload_result(params)
+        sections = (params && params[:sections]) || %w[routes models]
+        changed = []
+        errors = []
 
-        begin
-          Rails.application.reload_routes!
-        rescue StandardError => e
-          @logger.call("agent/reload failed: #{e.class}: #{e.message}")
-          return {
-            generation: @generation,
-            changedSections: [],
-            errors: [{ code: "RELOAD_FAILED", message: e.message, recoverable: true }]
-          }
-        end
+        reload_routes_section(sections, changed, errors)
+        reload_models_section(sections, changed, errors)
 
-        @generation += 1
-        { generation: @generation, changedSections: ["routes"], errors: [] }
+        @generation += 1 unless changed.empty?
+        { generation: @generation, changedSections: changed, errors: errors }
+      end
+
+      def reload_routes_section(sections, changed, errors)
+        return unless sections.include?("routes") && reload_available?
+
+        Rails.application.reload_routes!
+        changed << "routes"
+      rescue StandardError => e
+        @logger.call("agent/reload (routes) failed: #{e.class}: #{e.message}")
+        errors << { code: "RELOAD_FAILED", message: e.message, recoverable: true }
+      end
+
+      # `Rails.application.reloader.reload!` is Rails' own mechanism for
+      # unloading and re-autoloading changed/removed app/models classes in
+      # development -- without it, a deleted model's class stays defined
+      # for the rest of the process, and `discover_models`/`model_result`
+      # would keep finding it. Re-runs #eager_load_models! afterward so a
+      # brand-new model file is immediately visible too, not just on the
+      # next unrelated eager-load trigger.
+      def reload_models_section(sections, changed, errors)
+        return unless sections.include?("models") && active_record_available?
+
+        Rails.application.reloader.reload! if rails_defined? && Rails.application.respond_to?(:reloader)
+        eager_load_models!
+        changed << "models"
+      rescue StandardError => e
+        @logger.call("agent/reload (models) failed: #{e.class}: #{e.message}")
+        errors << { code: "RELOAD_FAILED", message: e.message, recoverable: true }
       end
 
       def rails_defined?

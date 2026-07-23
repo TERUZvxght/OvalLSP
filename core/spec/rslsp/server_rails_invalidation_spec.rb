@@ -70,6 +70,7 @@ RSpec.describe "Rslsp::Server Rails file-change invalidation" do
     calls = Queue.new
     fake_manager = Class.new do
       define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| calls << :reload; { generation: 1, changedSections: ["models"], errors: [] } }
       define_singleton_method(:fetch_model) do |name:|
         calls << [:fetch_model, name]
         { name: name, tableName: "users", columns: [], associations: [], partial: false }
@@ -79,14 +80,37 @@ RSpec.describe "Rslsp::Server Rails file-change invalidation" do
     server = build_server(changes_input([{ uri: "file:///app/app/models/user.rb", type: 2 }]), agent_manager: fake_manager)
     server.run
 
+    expect(calls.pop(timeout: 2)).to eq(:reload)
     expect(calls.pop(timeout: 2)).to eq([:fetch_model, "User"])
     expect(wait_until { model_registry.known_model?("User") }).to be(true)
+  end
+
+  it "removes a model from the registry when the Agent reports it no longer exists after reload" do
+    calls = Queue.new
+    model_registry.register_from_agent_response(
+      "User", { name: "User", tableName: "users", columns: [], associations: [], partial: false }
+    )
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| { generation: 1, changedSections: ["models"], errors: [] } }
+      define_singleton_method(:fetch_model) do |name:|
+        calls << name
+        { name: name, error: { code: "NOT_FOUND", message: "no such model" } }
+      end
+    end
+
+    server = build_server(changes_input([{ uri: "file:///app/app/models/user.rb", type: 1 }]), agent_manager: fake_manager)
+    server.run
+
+    expect(calls.pop(timeout: 2)).to eq("User")
+    expect(wait_until { !model_registry.known_model?("User") }).to be(true)
   end
 
   it "camelizes a namespaced model path (app/models/admin/project.rb -> Admin::Project)" do
     calls = Queue.new
     fake_manager = Class.new do
       define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| nil }
       define_singleton_method(:fetch_model) do |name:|
         calls << name
         { name: name, tableName: "projects", columns: [], associations: [], partial: false }
@@ -233,6 +257,7 @@ RSpec.describe "Rslsp::Server Rails file-change invalidation" do
     calls = Queue.new
     fake_manager = Class.new do
       define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| nil }
       define_singleton_method(:fetch_model) do |name:|
         calls << name
         { name: name, tableName: "users", columns: [], associations: [], partial: false }

@@ -182,6 +182,17 @@ RSpec.describe Rslsp::LocalInferencer do
     it "does not resolve members on an unknown model" do
       expect(infer("x = Ghost.find(1)\n", line: 0, character: 1)).to eq(Rslsp::Types::UNKNOWN)
     end
+
+    it "adds nil to a nullable DB column's type instead of discarding the Agent's null flag (Task 008.5)" do
+      model_registry.register_from_agent_response(
+        "Note",
+        { tableName: "notes", partial: false,
+          columns: [{ name: "body", type: "string", null: true }], associations: [] }
+      )
+      source = "note = Note.find(1)\nnote.body\n"
+
+      expect(infer(source, line: 1, character: 5).to_s).to eq("String | nil")
+    end
   end
 
   describe "#infer_ivars_for_method (Task 008)" do

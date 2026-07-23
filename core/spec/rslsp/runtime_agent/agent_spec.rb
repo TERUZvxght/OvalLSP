@@ -363,6 +363,121 @@ RSpec.describe Rslsp::RuntimeAgent::Agent do
       expect(result[:partial]).to be(true)
       expect(result[:associations]).not_to be_empty
     end
+
+    describe "eager loading before discovery (Task 008.5)" do
+      it "discovers a model that only becomes defined once eager_load runs" do
+        base = stub_active_record_base!
+        autoloader = Class.new do
+          define_method(:eager_load) do
+            Object.const_set("LazyStubbedUser", Class.new(base) do
+              define_singleton_method(:name) { "LazyStubbedUser" }
+              define_singleton_method(:table_name) { "lazy_stubbed_users" }
+              define_singleton_method(:abstract_class?) { false }
+            end) unless Object.const_defined?("LazyStubbedUser")
+          end
+        end.new
+        autoloaders = Struct.new(:main).new(autoloader)
+        stub_const("Rails", Class.new do
+          define_singleton_method(:version) { "7.1.0-fixture" }
+          define_singleton_method(:autoloaders) { autoloaders }
+        end)
+
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "agent/snapshot", params: { sections: ["models"] }) +
+          frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+        build_agent(input).run
+
+        expect(sent_messages.first[:result][:models]).to eq([{ name: "LazyStubbedUser", tableName: "lazy_stubbed_users" }])
+      ensure
+        Object.send(:remove_const, "LazyStubbedUser") if Object.const_defined?("LazyStubbedUser")
+      end
+
+      it "logs and continues instead of crashing when eager_load raises" do
+        stub_active_record_base!
+        autoloader = Class.new { define_method(:eager_load) { raise "broken model file" } }.new
+        autoloaders = Struct.new(:main).new(autoloader)
+        stub_const("Rails", Class.new do
+          define_singleton_method(:version) { "7.1.0-fixture" }
+          define_singleton_method(:autoloaders) { autoloaders }
+        end)
+
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "agent/snapshot", params: { sections: ["models"] }) +
+          frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+        expect { build_agent(input).run }.not_to raise_error
+        expect(sent_messages.first[:result][:models]).to eq([])
+        expect(logger_messages.join).to include("eager load failed")
+      end
+    end
+
+    describe "reloading models (Task 008.5)" do
+      def stub_rails_with_reloader!(reload_calls, eager_load_calls)
+        autoloader = Class.new { define_method(:eager_load) {} }.new
+        autoloaders = Struct.new(:main).new(autoloader)
+        reloader = Class.new do
+          define_method(:reload!) { reload_calls << true }
+        end.new
+        fake_app = Struct.new(:reloader).new(reloader)
+
+        stub_const("Rails", Class.new do
+          define_singleton_method(:version) { "7.1.0-fixture" }
+          define_singleton_method(:autoloaders) { autoloaders }
+          define_singleton_method(:application) { fake_app }
+        end)
+      end
+
+      it "runs Rails' reloader and re-eager-loads when sections includes models" do
+        stub_active_record_base!
+        reload_calls = []
+        stub_rails_with_reloader!(reload_calls, [])
+
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "agent/reload", params: { sections: ["models"] }) +
+          frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+        build_agent(input).run
+
+        result = sent_messages.first[:result]
+        expect(result).to eq(generation: 1, changedSections: ["models"], errors: [])
+        expect(reload_calls).to eq([true])
+      end
+
+      it "reports a recoverable error and does not advance generation when the reloader raises" do
+        stub_active_record_base!
+        autoloader = Class.new { define_method(:eager_load) {} }.new
+        autoloaders = Struct.new(:main).new(autoloader)
+        reloader = Class.new { define_method(:reload!) { raise "boom" } }.new
+        fake_app = Struct.new(:reloader).new(reloader)
+        stub_const("Rails", Class.new do
+          define_singleton_method(:version) { "7.1.0-fixture" }
+          define_singleton_method(:autoloaders) { autoloaders }
+          define_singleton_method(:application) { fake_app }
+        end)
+
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "agent/reload", params: { sections: ["models"] }) +
+          frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+        build_agent(input).run
+
+        result = sent_messages.first[:result]
+        expect(result[:generation]).to eq(0)
+        expect(result[:changedSections]).to eq([])
+        expect(result[:errors].first).to include(code: "RELOAD_FAILED", recoverable: true)
+      end
+
+      it "does not attempt a models reload when Active Record isn't available" do
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "agent/reload", params: { sections: ["models"] }) +
+          frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+        build_agent(input).run
+
+        expect(sent_messages.first[:result]).to eq(generation: 0, changedSections: [], errors: [])
+      end
+    end
   end
 
   it "answers agent/status with the process pid" do

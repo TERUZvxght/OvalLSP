@@ -295,7 +295,8 @@ module Rslsp
           Types::Generic.new(name: "CollectionProxy", type_arg: target)
         end
       elsif (column = @model_registry.column(model_name, method_name))
-        Types::Nominal.new(name: column.ruby_type)
+        base = Types::Nominal.new(name: column.ruby_type)
+        column.nullable ? Types.normalize_union([base, Types::NIL]) : base
       end
     end
 

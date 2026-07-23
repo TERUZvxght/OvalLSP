@@ -55,4 +55,41 @@ RSpec.describe Rslsp::Models::ModelRegistry do
     expect(registry.known_model?("Ghost")).to be(false)
     expect(registry.model("Ghost")).to be_nil
   end
+
+  describe "nullable columns (Task 008.5)" do
+    it "retains the Agent's null flag instead of discarding it" do
+      registry.register_from_agent_response(
+        "User",
+        agent_response(columns: [
+                          { name: "bio", type: "string", null: true },
+                          { name: "email", type: "string", null: false }
+                        ])
+      )
+
+      expect(registry.column("User", "bio").nullable).to be(true)
+      expect(registry.column("User", "email").nullable).to be(false)
+    end
+  end
+
+  describe "#replace (Task 008.5)" do
+    it "fully swaps the model table so a model absent from the new generation disappears" do
+      registry.register_from_agent_response("User", agent_response)
+      expect(registry.known_model?("User")).to be(true)
+
+      registry.replace({ "Company" => agent_response(table_name: "companies") })
+
+      expect(registry.known_model?("User")).to be(false)
+      expect(registry.known_model?("Company")).to be(true)
+    end
+  end
+
+  describe "#remove (Task 008.5)" do
+    it "drops a single model, e.g. after the Agent reports it no longer exists" do
+      registry.register_from_agent_response("User", agent_response)
+
+      registry.remove("User")
+
+      expect(registry.known_model?("User")).to be(false)
+    end
+  end
 end

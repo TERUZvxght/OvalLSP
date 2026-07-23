@@ -536,7 +536,7 @@ module Rslsp
       return if needs_restart # a restart already refreshes everything
 
       with_ready_agent("config/routes.rb") { refresh_routes } if needs_routes_refresh
-      changed_models.each { |name| with_ready_agent("app/models/#{name}") { refresh_model_named(name) } }
+      with_ready_agent("app/models/*") { refresh_models(changed_models) } unless changed_models.empty?
     end
 
     def classify_rails_change(uri)
@@ -624,20 +624,36 @@ module Rslsp
       end
     end
 
-    # Unlike routes, a model's columns/associations are read live on every
-    # agent/model call (docs/design/docs/05-protocol.md) — there's no
-    # server-side model cache to explicitly reload, so refreshing just
-    # means asking again for the one model whose file changed.
-    def refresh_model_named(name)
+    # Asks the Agent to reload models first (Rails' own autoloader
+    # unload/reload for app/models -- docs/design/tasks/008.5-runtime-and-index-corrections.md)
+    # before re-fetching each changed name, so a deleted or renamed
+    # model's class is actually gone by the time #fetch_model asks about
+    # it, instead of an agent/model NOT_FOUND response never coming
+    # because the old class is still defined. A NOT_FOUND after that
+    # reload removes the entry from ModelRegistry rather than leaving its
+    # last-known columns/associations behind. One reload per batch (not
+    # per model) -- a Rails reload is whole-app regardless of which
+    # specific file triggered it.
+    def refresh_models(names)
       agent_manager = @agent_manager
       model_registry = @model_registry
       logger = @logger
 
       Thread.new do
-        response = agent_manager.fetch_model(name: name)
-        model_registry.register_from_agent_response(name, response) if response && !response[:error]
+        agent_manager.reload(sections: ["models"])
+
+        names.each do |name|
+          response = agent_manager.fetch_model(name: name)
+          next unless response
+
+          if response[:error]
+            model_registry.remove(name)
+          else
+            model_registry.register_from_agent_response(name, response)
+          end
+        end
       rescue StandardError => e
-        logger.error("failed to refresh model #{name}: #{e.class}: #{e.message}")
+        logger.error("failed to refresh models #{names.to_a.join(', ')}: #{e.class}: #{e.message}")
       end
     end
 
