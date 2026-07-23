@@ -440,12 +440,19 @@ module Rslsp
       helper = method_name && @route_registry.find_by_method_name(method_name)
       return { signatures: [] } unless helper
 
-      params_label = (helper.required_parts + ["options = {}"]).join(", ")
+      # `method_name` is exactly what the user typed (`post_path` or
+      # `post_url` -- #find_by_method_name resolves both back to the same
+      # helper), so the signature echoes that, not always path_helper
+      # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+      required_labels = helper.required_parts
+      optional_labels = helper.optional_parts.map { |part| "#{part} = nil" }
+      params_label = (required_labels + optional_labels + ["options = {}"]).join(", ")
       {
         signatures: [
           {
-            label: "#{helper.path_helper}(#{params_label})",
-            parameters: helper.required_parts.map { |part| { label: part } }
+            label: "#{method_name}(#{params_label})",
+            parameters: required_labels.map { |part| { label: part } } +
+              optional_labels.map { |label| { label: label } }
           }
         ]
       }

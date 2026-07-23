@@ -60,7 +60,7 @@ RSpec.describe "Rslsp::Server route helper support" do
     expect(labels).not_to include("posts_path") # "post_p" isn't a prefix of "posts_path"
   end
 
-  it "offers signature help for post_path(post) using the route's required parts" do
+  it "offers signature help for post_path(post) using the route's required and optional parts" do
     input =
       frame(
         jsonrpc: "2.0", method: "textDocument/didOpen",
@@ -75,8 +75,26 @@ RSpec.describe "Rslsp::Server route helper support" do
     build_server(input, post_registry).run
 
     signature = sent_messages.first[:result][:signatures].first
-    expect(signature[:label]).to eq("post_path(id, options = {})")
-    expect(signature[:parameters]).to eq([{ label: "id" }])
+    expect(signature[:label]).to eq("post_path(id, format = nil, options = {})")
+    expect(signature[:parameters]).to eq([{ label: "id" }, { label: "format = nil" }])
+  end
+
+  it "shows post_url (not post_path) in the signature label when that's what was actually called (Task 008.5)" do
+    input =
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: { textDocument: { uri: "file:///a.rb", text: "post_url(post)\n", version: 1, languageId: "ruby" } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
+        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 0, character: 9 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input, post_registry).run
+
+    signature = sent_messages.first[:result][:signatures].first
+    expect(signature[:label]).to eq("post_url(id, format = nil, options = {})")
   end
 
   it "resolves textDocument/definition for post_path to routes.rb and PostsController#show" do
