@@ -235,6 +235,162 @@ RSpec.describe Rslsp::LocalInferencer do
     end
   end
 
+  describe "conditional branch environment merging (Task 008.5)" do
+    def ivars_for(source)
+      document = Rslsp::TextDocument.new(uri: "file:///controller.rb", text: source, version: 1, language_id: "ruby")
+      inferencer.infer_ivars_for_method(document, owner_name: "::UsersController", method_name: "show")
+    end
+
+    def union(*names)
+      Rslsp::Types.normalize_union(names.map { |name| Rslsp::Types::Nominal.new(name: name) })
+    end
+
+    it "unions an ivar assigned differently in each branch of if/else" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            if cond
+              @user = User.new
+            else
+              @user = Admin.new
+            end
+          end
+        end
+      RUBY
+
+      expect(ivars_for(source)[:@user]).to eq(union("User", "Admin"))
+    end
+
+    it "unions with nil when the ivar is only assigned in the if branch" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            if cond
+              @user = User.new
+            end
+          end
+        end
+      RUBY
+
+      expect(ivars_for(source)[:@user]).to eq(Rslsp::Types.normalize_union(
+                                                 [Rslsp::Types::Nominal.new(name: "User"), Rslsp::Types::NIL]
+                                               ))
+    end
+
+    it "unions an ivar assigned differently in each branch of unless/else" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            unless cond
+              @user = User.new
+            else
+              @user = Admin.new
+            end
+          end
+        end
+      RUBY
+
+      expect(ivars_for(source)[:@user]).to eq(union("User", "Admin"))
+    end
+
+    it "checks each elsif's own predicate rather than skipping straight to its body" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            if a
+              @user = User.new
+            elsif b
+              @user = Admin.new
+            else
+              @user = Guest.new
+            end
+          end
+        end
+      RUBY
+
+      expect(ivars_for(source)[:@user]).to eq(union("User", "Admin", "Guest"))
+    end
+
+    it "unions across a modifier if assignment (implicit nil else)" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            @user = User.new if cond
+          end
+        end
+      RUBY
+
+      expect(ivars_for(source)[:@user]).to eq(Rslsp::Types.normalize_union(
+                                                 [Rslsp::Types::Nominal.new(name: "User"), Rslsp::Types::NIL]
+                                               ))
+    end
+
+    it "unions across a modifier unless assignment (implicit nil else)" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            @user = User.new unless cond
+          end
+        end
+      RUBY
+
+      expect(ivars_for(source)[:@user]).to eq(Rslsp::Types.normalize_union(
+                                                 [Rslsp::Types::Nominal.new(name: "User"), Rslsp::Types::NIL]
+                                               ))
+    end
+
+    it "only keeps the else branch's assignment when the if branch unconditionally returns" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            if cond
+              return
+            else
+              @user = Admin.new
+            end
+          end
+        end
+      RUBY
+
+      expect(ivars_for(source)[:@user]).to eq(Rslsp::Types::Nominal.new(name: "Admin"))
+    end
+
+    it "only keeps the if branch's assignment when the else branch unconditionally raises" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            if cond
+              @user = User.new
+            else
+              raise "no user"
+            end
+          end
+        end
+      RUBY
+
+      expect(ivars_for(source)[:@user]).to eq(Rslsp::Types::Nominal.new(name: "User"))
+    end
+
+    it "keeps a separately-assigned ivar out of the merge when only one branch touches it" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            @count = 1
+            if cond
+              @user = User.new
+            else
+              @user = Admin.new
+            end
+          end
+        end
+      RUBY
+
+      ivars = ivars_for(source)
+      expect(ivars[:@user]).to eq(union("User", "Admin"))
+      expect(ivars[:@count].to_s).to eq("Integer")
+    end
+  end
+
   describe "#find_static_render_target (Task 008)" do
     def document(source)
       Rslsp::TextDocument.new(uri: "file:///controller.rb", text: source, version: 1, language_id: "ruby")

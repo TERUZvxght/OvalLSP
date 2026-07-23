@@ -150,9 +150,11 @@ module Rslsp
         if contains?(stmt.location, offset)
           result = locate(stmt, offset, env)
         else
+          # If `stmt` is a conditional, eval_type's own branch-merge (see
+          # #eval_conditional) already folds its surviving branches'
+          # bindings into `env` in place — nothing further needed here.
           eval_type(stmt, env)
         end
-        apply_guard_narrowing(stmt, env)
       end
       result
     end
@@ -169,8 +171,12 @@ module Rslsp
 
       subsequent = node.consequent
       if subsequent && contains?(subsequent.location, offset)
-        else_statements = subsequent.respond_to?(:statements) ? subsequent.statements : subsequent
-        return locate(else_statements, offset, narrowed(env, node.predicate, negate(assume)))
+        else_env = narrowed(env, node.predicate, negate(assume))
+        # An `elsif` is another IfNode, not an ElseNode — recursing through
+        # #locate lets it check its *own* predicate instead of treating its
+        # then-branch as an unconditional else.
+        return locate(subsequent, offset, else_env) if subsequent.is_a?(Prism::IfNode)
+        return locate(subsequent.statements, offset, else_env) if subsequent.statements
       end
 
       eval_type(node, env)
@@ -308,40 +314,82 @@ module Rslsp
       node.is_a?(Prism::ConstantReadNode) || node.is_a?(Prism::ConstantPathNode)
     end
 
+    # One branch's outcome: the type its body evaluates to, the (narrowed,
+    # possibly-mutated) environment as of its end, and whether it
+    # unconditionally exits (return/next/break/raise) — a terminated
+    # branch's bindings never reach code after the conditional, so
+    # #merge_branches_into! excludes it entirely (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+    BranchOutcome = Struct.new(:type, :env, :terminated)
+    private_constant :BranchOutcome
+
+    # Evaluates both branches on their own narrowed environment *copies*,
+    # unions their types for this expression's own value, and then folds
+    # whichever branches survive (don't unconditionally exit) back into
+    # the caller's `env` — mutating it in place, the same way a plain
+    # assignment does. This is what makes `if c; @user = User.new; else;
+    # @user = Admin.new; end` leave `@user: User | Admin` visible after
+    # the conditional, and (as a special case where only one branch
+    # survives) is also what makes `return unless user` narrow `user` for
+    # the rest of the method.
     def eval_conditional(node, env)
       assume = node.is_a?(Prism::IfNode) ? :truthy : :falsy
       eval_type(node.predicate, env)
 
-      then_type = node.statements ? eval_type(node.statements, narrowed(env, node.predicate, assume)) : Types::NIL
+      then_outcome = evaluate_then_branch(node, env, assume)
+      else_outcome = evaluate_else_branch(node, env, assume)
 
-      subsequent = node.consequent
-      else_type =
-        if subsequent
-          else_statements = subsequent.respond_to?(:statements) ? subsequent.statements : subsequent
-          eval_type(else_statements, narrowed(env, node.predicate, negate(assume)))
-        else
-          Types::NIL
-        end
-
-      Types.normalize_union([then_type, else_type])
+      merge_branches_into!(env, [then_outcome, else_outcome])
+      Types.normalize_union([then_outcome.type, else_outcome.type])
     end
 
-    # If `stmt` is an if/unless where one branch unconditionally exits
-    # (return/next/break) and the other is absent, the code after `stmt`
-    # only runs via the surviving branch — so the outer `env` gets that
-    # branch's narrowing applied for real, mutating it in place. This is
-    # what makes `return unless user` narrow `user` for the rest of the
-    # method (Task 004's headline acceptance criterion).
-    def apply_guard_narrowing(stmt, env)
-      return unless stmt.is_a?(Prism::IfNode) || stmt.is_a?(Prism::UnlessNode)
-      return unless stmt.consequent.nil? # only the simple (no else) guard shape
+    def evaluate_then_branch(node, env, assume)
+      branch_env = narrowed(env, node.predicate, assume)
+      type = node.statements ? eval_type(node.statements, branch_env) : Types::NIL
+      terminated = node.statements ? exits_unconditionally?(node.statements) : false
+      BranchOutcome.new(type, branch_env, terminated)
+    end
 
-      assume = stmt.is_a?(Prism::IfNode) ? :truthy : :falsy
-      if exits_unconditionally?(stmt.statements)
-        apply_narrowing!(env, stmt.predicate, negate(assume))
-      elsif stmt.statements.nil? || stmt.statements.body.empty?
-        # `if x; end` with an empty body: nothing to narrow either way.
-        nil
+    def evaluate_else_branch(node, env, assume)
+      branch_env = narrowed(env, node.predicate, negate(assume))
+      subsequent = node.consequent
+
+      if subsequent.nil?
+        BranchOutcome.new(Types::NIL, branch_env, false)
+      elsif subsequent.is_a?(Prism::IfNode)
+        # `elsif` is another IfNode, not an ElseNode. Recursing through
+        # eval_type lets it check its *own* predicate and perform its own
+        # branch merge into `branch_env`, instead of treating its
+        # then-branch as an unconditional else (a real, pre-existing bug
+        # this task also fixes). Its own termination is folded in as
+        # "not terminated" conservatively — precisely tracking whether
+        # every arm of a whole elsif chain terminates isn't worth the
+        # extra complexity for what Task 008.5 asks for.
+        BranchOutcome.new(eval_type(subsequent, branch_env), branch_env, false)
+      else
+        statements = subsequent.statements
+        type = statements ? eval_type(statements, branch_env) : Types::NIL
+        terminated = statements ? exits_unconditionally?(statements) : false
+        BranchOutcome.new(type, branch_env, terminated)
+      end
+    end
+
+    # Unions each variable's type across every branch that doesn't
+    # unconditionally exit, and writes the result into `env` — the single
+    # merge point for both plain branch-merging and guard-clause
+    # narrowing (`return unless x`), which is just the special case where
+    # only one branch survives. A key a surviving branch never touched
+    # falls back to nil, not Unknown: if we're merging branches at all, we
+    # fully analyzed this scope, so "never assigned on this path" is
+    # exactly what real Ruby does with a local or instance variable that's
+    # reachable but never written — not missing information.
+    def merge_branches_into!(env, outcomes)
+      surviving = outcomes.reject(&:terminated)
+      return if surviving.empty? # every branch exits; nothing reaches code after this
+
+      keys = surviving.flat_map { |outcome| outcome.env.keys }.uniq
+      keys.each do |key|
+        types = surviving.map { |outcome| outcome.env.fetch(key) { env.fetch(key, Types::NIL) } }
+        env[key] = Types.normalize_union(types)
       end
     end
 
