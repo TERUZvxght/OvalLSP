@@ -54,5 +54,57 @@ RSpec.describe Rslsp::Erb::RubyRegionExtractor do
 
       expect(result.errors).to be_empty
     end
+
+    describe "multiple tags on the same rendered line (Task 008.5)" do
+      def assert_parses_cleanly(source)
+        extracted = described_class.extract_ruby_source(source)
+
+        expect(extracted.length).to eq(source.length)
+        expect(extracted.count("\n")).to eq(source.count("\n"))
+        expect(Prism.parse(extracted).errors).to be_empty
+        extracted
+      end
+
+      it "inserts a separator between two adjacent output tags with nothing between them" do
+        extracted = assert_parses_cleanly("<%= @a %><%= @b %>\n")
+
+        expect(extracted).to include("@a")
+        expect(extracted).to include("@b")
+      end
+
+      it "inserts a separator between two adjacent silent tags" do
+        assert_parses_cleanly("<% foo %><% bar %>\n")
+      end
+
+      it "inserts a separator between two tags separated only by HTML on the same line" do
+        extracted = assert_parses_cleanly("<div><%= @user.name %></div><%= @company.name %>\n")
+
+        expect(extracted).to include("@user.name")
+        expect(extracted).to include("@company.name")
+      end
+
+      it "inserts a separator after a tag whose own code spans multiple lines" do
+        extracted = assert_parses_cleanly("<%= foo(\n  bar\n) %><%= baz %>\n")
+
+        expect(extracted).to include("foo(")
+        expect(extracted).to include("baz")
+      end
+
+      it "does not insert a separator across an actual line break between tags" do
+        source = "<%= @a %>\n<%= @b %>\n"
+
+        extracted = assert_parses_cleanly(source)
+
+        expect(extracted).not_to include(";")
+      end
+
+      it "does not treat a comment tag as needing (or supplying) a code separator" do
+        # The comment carries no code, so it neither needs a semicolon
+        # before it nor establishes a "previous code" position for the
+        # *following* tag to need one against — there's a comment, not
+        # code, immediately before it.
+        assert_parses_cleanly("<%# a comment %><%= @a %>\n")
+      end
+    end
   end
 end
