@@ -116,6 +116,14 @@ params:
 {"name": "User", "include": ["columns", "associations", "enums", "ancestors"]}
 ```
 
+### agent/models
+
+引数なし。`agent/snapshot`の"models"section（name/tableNameのみの軽量discovery）と異なり、非abstractな全モデルのcolumns/associationsをまとめて1回のround tripで返す（Task 008.5: 実Railsアプリでモデル数が多い場合、モデル毎に`agent/model`を発行するとrequest/response overheadが支配的になるため）。
+
+```json
+{"models": [{"name": "User", "tableName": "users", "columns": [...], "associations": [...], "partial": false}]}
+```
+
 ### agent/routeLocation
 
 ```json
