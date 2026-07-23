@@ -1,0 +1,66 @@
+{
+  "name": "rslsp",
+  "displayName": "Ruby Semantic LSP",
+  "description": "Semantic Ruby/Rails language features backed by a standalone Core Language Server.",
+  "version": "0.0.1",
+  "private": true,
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:ruby",
+    "workspaceContains:Gemfile"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "Ruby Semantic LSP",
+      "properties": {
+        "rslsp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the RSLSP Core Language Server."
+        },
+        "rslsp.ruby.command": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Ruby interpreter used to launch the Core Server. Defaults to 'ruby' on PATH."
+        },
+        "rslsp.server.path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Path to the rslsp Core Server entrypoint. Defaults to the bundled core/bin/rslsp script."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -p . --watch",
+    "test:unit": "npm run compile && mocha out/test/unit/**/*.js",
+    "test:integration": "npm run compile && node ./out/test/integration/runTest.js",
+    "test": "npm run test:unit"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/glob": "^8.1.0",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.3.9",
+    "glob": "^10.3.10",
+    "mocha": "^10.3.0",
+    "typescript": "^5.4.0"
+  }
+}

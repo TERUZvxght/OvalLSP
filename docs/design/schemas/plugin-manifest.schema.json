@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/rslsp/plugin-manifest.schema.json",
+  "title": "RSLSP Plugin Manifest",
+  "type": "object",
+  "required": ["name", "version", "protocol_version"],
+  "properties": {
+    "name": {"type": "string", "pattern": "^[a-z0-9_-]+$"},
+    "version": {"type": "string"},
+    "protocol_version": {"type": "integer", "minimum": 1},
+    "static_entrypoint": {"type": "string"},
+    "runtime_entrypoint": {"type": "string"},
+    "capabilities": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "requires": {
+      "type": "object",
+      "properties": {
+        "gems": {"type": "object", "additionalProperties": {"type": "string"}},
+        "rslsp_api": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

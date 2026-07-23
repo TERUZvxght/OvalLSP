@@ -1,0 +1,12 @@
+# Ruby
+core/.bundle/
+core/vendor/bundle/
+*.gem
+
+# Node / VS Code extension
+vscode/node_modules/
+vscode/out/
+vscode/.vscode-test/
+
+# Editor / OS
+.DS_Store
