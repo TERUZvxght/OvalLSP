@@ -7,6 +7,7 @@
 # Task 006+; this fixture deliberately stays free of the `rails` gem.
 
 puts "accidental stdout from a noisy initializer"
+STDOUT.puts "accidental stdout via the STDOUT constant directly" # rubocop:disable Style/GlobalStdStream
 warn "expected: a normal log line on stderr"
 
 require_relative "fake_routing"

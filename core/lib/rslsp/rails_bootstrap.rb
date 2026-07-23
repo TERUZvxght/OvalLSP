@@ -8,8 +8,17 @@ module Rslsp
   # snapshot — the wiring `core/bin/rslsp` needs so route completion and
   # Active Record type inference actually work when the Core Server runs
   # for real, not just inside tests that construct AgentProcessManager
-  # directly (docs/design/docs/04-runtime-agent.md section 2's recommended
-  # `bundle exec bin/rails runner ... boot.rb start` invocation).
+  # directly.
+  #
+  # Deliberately does NOT use `bin/rails runner`: that command boots the
+  # whole Rails app (running every initializer) *before* handing control to
+  # boot.rb, so boot.rb's own stdout-protection swap would happen too late
+  # to catch initializer output — exactly the corruption
+  # docs/design/docs/04-runtime-agent.md section 4 warns about. Instead
+  # this spawns boot.rb as a plain Ruby process and passes
+  # config/environment.rb as an explicit argument, so boot.rb requires it
+  # itself, after protecting stdout first
+  # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
   #
   # Intentionally synchronous — the caller is expected to run #start on a
   # background thread if it shouldn't block the LSP transport (see
@@ -22,18 +31,22 @@ module Rslsp
     module_function
 
     def rails_app?(root)
-      File.file?(File.join(root, "bin", "rails"))
+      File.file?(File.join(root, "bin", "rails")) && File.file?(environment_file_for(root))
+    end
+
+    def environment_file_for(root)
+      File.join(root, "config", "environment.rb")
     end
 
     # `command`/`args` are overridable so tests can point this at the
-    # rails_minimal fixture (which has no real `bin/rails`) instead of the
-    # real `bundle exec bin/rails runner` invocation this defaults to.
+    # rails_minimal fixture instead of the real `bundle exec ruby boot.rb`
+    # invocation this defaults to.
     def start(root:, logger:, route_registry:, model_registry:, hello_timeout: 60, command: nil, args: nil)
       if command.nil?
         return nil unless rails_app?(root)
 
         command = "bundle"
-        args = ["exec", File.join(root, "bin", "rails"), "runner", BOOT_SCRIPT, "start"]
+        args = ["exec", "ruby", BOOT_SCRIPT, "start", environment_file_for(root)]
       end
 
       manager = AgentProcessManager.new(command: command, args: args, chdir: root, logger: logger,

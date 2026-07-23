@@ -15,12 +15,23 @@ RSpec.describe Rslsp::RailsBootstrap do
   after { @manager&.stop }
 
   describe ".rails_app?" do
-    it "is true when bin/rails exists at the root" do
+    it "is true when both bin/rails and config/environment.rb exist at the root" do
+      Dir.mktmpdir do |dir|
+        FileUtils.mkdir_p(File.join(dir, "bin"))
+        FileUtils.mkdir_p(File.join(dir, "config"))
+        File.write(File.join(dir, "bin", "rails"), "#!/usr/bin/env ruby\n")
+        File.write(File.join(dir, "config", "environment.rb"), "\n")
+
+        expect(described_class.rails_app?(dir)).to be(true)
+      end
+    end
+
+    it "is false when bin/rails exists but config/environment.rb doesn't" do
       Dir.mktmpdir do |dir|
         FileUtils.mkdir_p(File.join(dir, "bin"))
         File.write(File.join(dir, "bin", "rails"), "#!/usr/bin/env ruby\n")
 
-        expect(described_class.rails_app?(dir)).to be(true)
+        expect(described_class.rails_app?(dir)).to be(false)
       end
     end
 
@@ -63,6 +74,32 @@ RSpec.describe Rslsp::RailsBootstrap do
       expect(@manager.status).to eq(:static_only)
       expect(logger).to have_received(:warn).with(/static-only/).at_least(:once)
       expect(route_registry.completion_names("")).to be_empty
+    end
+
+    it "spawns boot.rb as a plain ruby process with the environment file as an argument, not via `bin/rails runner`" do
+      Dir.mktmpdir do |dir|
+        FileUtils.mkdir_p(File.join(dir, "bin"))
+        FileUtils.mkdir_p(File.join(dir, "config"))
+        File.write(File.join(dir, "bin", "rails"), "#!/usr/bin/env ruby\n")
+        File.write(File.join(dir, "config", "environment.rb"), "\n")
+
+        fake_manager = instance_double(Rslsp::AgentProcessManager, start: :static_only)
+        captured = nil
+        allow(Rslsp::AgentProcessManager).to receive(:new) do |**kwargs|
+          captured = kwargs
+          fake_manager
+        end
+
+        described_class.start(root: dir, logger: logger, route_registry: route_registry,
+                               model_registry: model_registry)
+
+        expect(captured[:command]).to eq("bundle")
+        # Must NOT be `bin/rails runner` — that boots Rails (running every
+        # initializer) before boot.rb gets a chance to protect stdout.
+        expect(captured[:args]).to eq(
+          ["exec", "ruby", Rslsp::RailsBootstrap::BOOT_SCRIPT, "start", File.join(dir, "config", "environment.rb")]
+        )
+      end
     end
   end
 end

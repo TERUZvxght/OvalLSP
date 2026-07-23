@@ -41,6 +41,9 @@ RSpec.describe Rslsp::AgentProcessManager do
     # stream instead of stderr, the Content-Length framing would have been
     # corrupted and hello would have timed out instead of succeeding.
     expect(logger).to have_received(:info).with(/accidental stdout from a noisy initializer/)
+    # Some gems/frameworks write via the STDOUT *constant* directly rather
+    # than the reassignable $stdout global; boot.rb must redirect both.
+    expect(logger).to have_received(:info).with(/accidental stdout via the STDOUT constant directly/)
   end
 
   it "answers agent/status once ready" do

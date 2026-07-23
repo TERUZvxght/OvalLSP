@@ -2,17 +2,29 @@
 # frozen_string_literal: true
 
 # Entry point for the Runtime Agent child process. In production this runs
-# as `bundle exec bin/rails runner .../boot.rb start <environment_file>`
-# inside the target app's own Ruby/Bundler environment; for tests it runs
-# directly against a fixture. Real Rails support (Task 006+) will change how
-# the environment gets loaded, not this stdout-protection sequence.
+# as `bundle exec ruby .../boot.rb start /absolute/path/to/config/environment.rb`
+# — a plain Ruby process, deliberately NOT `bin/rails runner`. `rails
+# runner` boots the whole Rails app, running every initializer, *before*
+# handing control to the script it's told to run; by the time this file's
+# own code got a chance to protect stdout, initializer output could
+# already have corrupted the protocol stream. Requiring
+# config/environment.rb ourselves, after the swap below, is what actually
+# closes that window (docs/design/tasks/008.5-runtime-and-index-corrections.md).
 #
-# The capture-then-reassign order matters: $stdout must be swapped out
+# The capture-then-reassign order matters: stdout must be swapped out
 # before any application code (Rails boot, initializers) gets a chance to
 # run, or a stray `puts` could corrupt the protocol stream
-# (docs/design/docs/04-runtime-agent.md section 4).
-protocol_stdout = $stdout
+# (docs/design/docs/04-runtime-agent.md section 4). Both the `$stdout`
+# global *and* the `STDOUT` constant are redirected — some gems/frameworks
+# write via the constant directly, which a `$stdout` reassignment alone
+# wouldn't catch.
+protocol_stdout = STDOUT
 $stdout = $stderr
+original_verbosity = $VERBOSE
+$VERBOSE = nil # silence the "already initialized constant" warning below
+Object.send(:remove_const, :STDOUT)
+Object.const_set(:STDOUT, $stderr)
+$VERBOSE = original_verbosity
 
 require_relative "../version"
 require_relative "agent"
