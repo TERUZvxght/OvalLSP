@@ -7,6 +7,7 @@ import {
 import { resolveServerConfig } from './serverConfig';
 
 const clients = new Map<string, LanguageClient>();
+const watchers = new Map<string, vscode.FileSystemWatcher>();
 
 function startClientForFolder(
   folder: vscode.WorkspaceFolder,
@@ -25,12 +26,19 @@ function startClientForFolder(
     debug: { command, args, options: { cwd: folder.uri.fsPath } }
   };
 
+  // Forwarded to the server as workspace/didChangeWatchedFiles so files
+  // edited or removed outside the open buffers (git checkout, another
+  // editor, rm) still update the workspace index.
+  const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, '**/*.rb'));
+  watchers.set(folder.uri.toString(), watcher);
+
   const clientOptions: LanguageClientOptions = {
     documentSelector: [
       { scheme: 'file', language: 'ruby', pattern: `${folder.uri.fsPath}/**/*` }
     ],
     workspaceFolder: folder,
-    outputChannel
+    outputChannel,
+    synchronize: { fileEvents: watcher }
   };
 
   const client = new LanguageClient('rslsp', `RSLSP (${folder.name})`, serverOptions, clientOptions);
@@ -39,6 +47,9 @@ function startClientForFolder(
 }
 
 function stopClient(key: string): Thenable<void> {
+  watchers.get(key)?.dispose();
+  watchers.delete(key);
+
   const client = clients.get(key);
   if (!client) {
     return Promise.resolve();

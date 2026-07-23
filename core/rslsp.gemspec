@@ -18,5 +18,6 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "prism", ">= 0.24"
 
+  spec.add_development_dependency "benchmark"
   spec.add_development_dependency "rspec", "~> 3.13"
 end

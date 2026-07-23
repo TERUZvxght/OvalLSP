@@ -149,4 +149,96 @@ RSpec.describe Rslsp::Server do
 
     expect(build_server(input).run).to eq(1)
   end
+
+  it "resolves textDocument/definition for an identifier by lexical name" do
+    input =
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri: "file:///user.rb",
+            text: "class User\nend\n",
+            version: 1,
+            languageId: "ruby"
+          }
+        }
+      ) +
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri: "file:///app.rb",
+            text: "User.new\n",
+            version: 1,
+            languageId: "ruby"
+          }
+        }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/definition",
+        params: { textDocument: { uri: "file:///app.rb" }, position: { line: 0, character: 1 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    result = sent_messages.first[:result]
+    expect(result).to eq([{ uri: "file:///user.rb", range: { start: { line: 0, character: 0 }, end: { line: 1, character: 3 } } }])
+  end
+
+  it "returns [] for textDocument/definition when no word is under the cursor" do
+    input =
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: { textDocument: { uri: "file:///a.rb", text: "  \n", version: 1, languageId: "ruby" } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/definition",
+        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 0, character: 1 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.first[:result]).to eq([])
+  end
+
+  it "answers workspace/symbol with matches across all open files" do
+    input =
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: { textDocument: { uri: "file:///user.rb", text: "class User\nend\n", version: 1, languageId: "ruby" } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "workspace/symbol",
+        params: { query: "Us" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    result = sent_messages.first[:result]
+    expect(result).to contain_exactly(a_hash_including(name: "User", kind: 5))
+  end
+
+  it "removes a file's workspace index contribution on a Deleted watched-file notification" do
+    input =
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: { textDocument: { uri: "file:///user.rb", text: "class User\nend\n", version: 1, languageId: "ruby" } }
+      ) +
+      frame(
+        jsonrpc: "2.0", method: "workspace/didChangeWatchedFiles",
+        params: { changes: [{ uri: "file:///user.rb", type: 3 }] }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "workspace/symbol",
+        params: { query: "User" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.first[:result]).to eq([])
+  end
 end
