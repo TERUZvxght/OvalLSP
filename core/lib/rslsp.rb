@@ -8,6 +8,13 @@ require_relative "rslsp/io/framed_reader"
 require_relative "rslsp/io/framed_writer"
 require_relative "rslsp/text_document"
 require_relative "rslsp/document_store"
+require_relative "rslsp/index/symbol_id"
+require_relative "rslsp/index/parameter"
+require_relative "rslsp/index/declaration"
+require_relative "rslsp/index/file_summary"
+require_relative "rslsp/index/source_location"
+require_relative "rslsp/index/document_symbol_builder"
+require_relative "rslsp/parser_service"
 require_relative "rslsp/server"
 
 module Rslsp

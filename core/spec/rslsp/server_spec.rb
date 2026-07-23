@@ -72,6 +72,46 @@ RSpec.describe Rslsp::Server do
     expect(doc.version).to eq(2)
   end
 
+  it "answers textDocument/documentSymbol with a hierarchical result after didOpen" do
+    input =
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: {
+          textDocument: {
+            uri: "file:///user.rb",
+            text: "class User\n  def name\n  end\nend\n",
+            version: 1,
+            languageId: "ruby"
+          }
+        }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/documentSymbol",
+        params: { textDocument: { uri: "file:///user.rb" } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    result = sent_messages.first[:result]
+    expect(result.size).to eq(1)
+    expect(result.first[:name]).to eq("User")
+    expect(result.first[:children].first[:name]).to eq("name")
+  end
+
+  it "returns an empty documentSymbol result for a uri that was never opened" do
+    input =
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/documentSymbol",
+        params: { textDocument: { uri: "file:///missing.rb" } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.first[:result]).to eq([])
+  end
+
   it "returns MethodNotFound for an unknown request instead of crashing" do
     input =
       frame(jsonrpc: "2.0", id: 1, method: "textDocument/completion", params: {}) +

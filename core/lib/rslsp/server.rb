@@ -3,11 +3,15 @@
 require_relative "io/framed_reader"
 require_relative "io/framed_writer"
 require_relative "document_store"
+require_relative "parser_service"
+require_relative "index/document_symbol_builder"
 
 module Rslsp
   # LSP transport + request router. Task 001 scope: initialize/initialized,
   # didOpen/didChange/didClose, a fixed hover response, and shutdown/exit.
-  # No parsing, indexing, or Rails integration happens here yet.
+  # Task 002 adds per-document FileSummary extraction (Prism) and
+  # textDocument/documentSymbol. Workspace-wide indexing and inference
+  # arrive in later tasks.
   class Server
     JSONRPC_VERSION = "2.0"
 
@@ -19,6 +23,8 @@ module Rslsp
       @writer = Rslsp::IO::FramedWriter.new(output)
       @logger = logger
       @document_store = DocumentStore.new
+      @parser_service = ParserService.new
+      @file_summaries = {}
       @shutdown_received = false
     end
 
@@ -63,6 +69,8 @@ module Rslsp
         handle_did_close(message[:params])
       when "textDocument/hover"
         respond(id, hover_result)
+      when "textDocument/documentSymbol"
+        respond(id, document_symbol_result(message[:params]))
       else
         handle_unknown_method(method, id)
       end
@@ -88,26 +96,44 @@ module Rslsp
 
     def handle_did_open(params)
       doc = params.fetch(:textDocument)
-      @document_store.open(
+      document = @document_store.open(
         uri: doc.fetch(:uri),
         text: doc.fetch(:text),
         version: doc.fetch(:version),
         language_id: doc.fetch(:languageId)
       )
+      reindex(document)
     end
 
     def handle_did_change(params)
       doc = params.fetch(:textDocument)
-      @document_store.change(
+      document = @document_store.change(
         uri: doc.fetch(:uri),
         version: doc.fetch(:version),
         changes: params.fetch(:contentChanges)
       )
+      reindex(document)
     end
 
     def handle_did_close(params)
-      doc = params.fetch(:textDocument)
-      @document_store.close(uri: doc.fetch(:uri))
+      uri = params.fetch(:textDocument).fetch(:uri)
+      @document_store.close(uri: uri)
+      @file_summaries.delete(uri)
+    end
+
+    def reindex(document)
+      @file_summaries[document.uri] = @parser_service.summarize(document)
+    rescue StandardError => e
+      # Parsing must never take the server down: keep the previous summary
+      # (if any) and let static features degrade gracefully for this file.
+      @logger.error("failed to summarize #{document.uri}: #{e.class}: #{e.message}")
+    end
+
+    def document_symbol_result(params)
+      summary = @file_summaries[params.fetch(:textDocument).fetch(:uri)]
+      return [] unless summary
+
+      Index::DocumentSymbolBuilder.build(summary.declarations)
     end
 
     def initialize_result
@@ -117,7 +143,8 @@ module Rslsp
             openClose: true,
             change: 2 # Incremental, per LSP 3.17 TextDocumentSyncKind.
           },
-          hoverProvider: true
+          hoverProvider: true,
+          documentSymbolProvider: true
         },
         serverInfo: {
           name: "rslsp",
