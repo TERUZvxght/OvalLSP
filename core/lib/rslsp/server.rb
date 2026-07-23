@@ -159,10 +159,24 @@ module Rslsp
       reindex(document)
     end
 
+    # Closing a buffer ends its authority over WorkspaceIndex — whatever's
+    # on disk becomes the truth again (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+    # Without this, closing an unsaved new file (or unsaved edits to an
+    # existing one) left its buffer-only declarations in WorkspaceIndex
+    # forever, showing up in completion/definition/workspace symbol
+    # results for a file nobody has open anymore and whose disk content
+    # (if any) says something else entirely.
     def handle_did_close(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       @document_store.close(uri: uri)
       @file_summaries.delete(uri)
+
+      path = UriUtil.to_path(uri)
+      if path && File.file?(path)
+        reindex_from_disk(uri)
+      else
+        @workspace_index.remove_file(uri)
+      end
     end
 
     def reindex(document)
