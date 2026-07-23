@@ -33,3 +33,8 @@ end
 
 require_relative "routes"
 
+require_relative "fake_active_record"
+require_relative "../app/models/user"
+require_relative "../app/models/company"
+require_relative "../app/models/order"
+

@@ -2,14 +2,20 @@
 
 require "prism"
 require_relative "types"
+require_relative "models/model_registry"
 
 module Rslsp
   # Minimal local type inference over a single document's top-level
   # statements (docs/design/tasks/004-type-model-and-local-inference.md).
   # Deliberately narrow: literals, `Class.new`, local variable bindings,
   # if/unless/ternary branch unions, truthy/nil narrowing after guard
-  # clauses, and safe navigation. No method body summaries, RBS, blocks, or
-  # Rails — those are later tasks.
+  # clauses, and safe navigation. No method body summaries or RBS yet.
+  #
+  # Task 007 adds an optional Models::ModelRegistry: when a receiver
+  # resolves to a known Active Record model, `.find`/`.find_by`/`.where`,
+  # association accessors, DB column accessors, and
+  # Relation/CollectionProxy#first all resolve through it instead of
+  # falling back to Unknown.
   #
   # Re-parses the document on demand and discards the AST when done; the
   # workspace index never retains it (docs/02-architecture.md).
@@ -23,9 +29,11 @@ module Rslsp
     class BudgetExceeded < StandardError; end
 
     TERMINAL_NODE_TYPES = [Prism::ReturnNode, Prism::NextNode, Prism::BreakNode].freeze
+    RELATION_LIKE = ["Relation", "CollectionProxy"].freeze
 
-    def initialize(max_steps: 5000)
+    def initialize(max_steps: 5000, model_registry: Models::ModelRegistry.new)
       @max_steps = max_steps
+      @model_registry = model_registry
     end
 
     # `document` is an Rslsp::TextDocument; `position` is an LSP
@@ -149,16 +157,97 @@ module Rslsp
     end
 
     def eval_call(node, env)
-      node.receiver && eval_type(node.receiver, env) # visited for narrowing side effects only
-
-      base =
-        if node.name == :new && constant_receiver?(node.receiver)
-          Types::Nominal.new(name: node.receiver.full_name)
-        else
-          Types::UNKNOWN
-        end
+      receiver_type = node.receiver && eval_type(node.receiver, env)
+      base = resolve_call(node, receiver_type)
 
       node.respond_to?(:safe_navigation?) && node.safe_navigation? ? Types.normalize_union([base, Types::NIL]) : base
+    end
+
+    def resolve_call(node, receiver_type)
+      if node.name == :new && constant_receiver?(node.receiver)
+        return Types::Nominal.new(name: node.receiver.full_name)
+      end
+
+      class_level = constant_receiver?(node.receiver) && resolve_class_level_finder(node.receiver.full_name, node.name)
+      return class_level if class_level
+
+      instance_level = receiver_type && resolve_instance_level(receiver_type, node.name)
+      return instance_level if instance_level
+
+      Types::UNKNOWN
+    end
+
+    # `Model.find` -> Model, `Model.find_by` -> Model | nil,
+    # `Model.where`/`Model.all` -> Relation[Model]
+    # (docs/03-semantic-engine.md section 7.1).
+    def resolve_class_level_finder(class_name, method_name)
+      return nil unless @model_registry.known_model?(class_name)
+
+      model_type = Types::Nominal.new(name: class_name)
+      case method_name
+      when :find then model_type
+      when :find_by then Types.normalize_union([model_type, Types::NIL])
+      when :where, :all then Types::Generic.new(name: "Relation", type_arg: model_type)
+      end
+    end
+
+    def resolve_instance_level(receiver_type, method_name)
+      case receiver_type
+      when Types::Nominal
+        resolve_model_member(receiver_type.name, method_name)
+      when Types::Generic
+        resolve_relation_member(receiver_type, method_name)
+      when Types::Union
+        resolve_union_member(receiver_type, method_name)
+      end
+    end
+
+    # `user.company.orders` where `company` is `Company | nil`: resolves
+    # against each non-nil member (docs/03-semantic-engine.md section 6,
+    # "Union: 各memberで解決し、共通部分を優先する") and unions whatever
+    # resolves. A bare (non-safe-navigation) call through a nilable receiver
+    # is exactly the kind of code these acceptance examples are written to
+    # infer through, so the nil member itself contributes nothing here.
+    def resolve_union_member(union_type, method_name)
+      resolved = union_type.members.filter_map do |member|
+        next if member == Types::NIL
+
+        resolve_instance_level(member, method_name)
+      end
+      return nil if resolved.empty?
+
+      Types.normalize_union(resolved)
+    end
+
+    # Association accessors (`user.company`, `company.orders`) and DB
+    # column accessors (`order.total`) on a known model instance.
+    def resolve_model_member(model_name, method_name)
+      return nil unless @model_registry.known_model?(model_name)
+
+      if (assoc = @model_registry.association(model_name, method_name))
+        target = Types::Nominal.new(name: assoc.class_name)
+        case assoc.macro
+        when :belongs_to
+          assoc.optional ? Types.normalize_union([target, Types::NIL]) : target
+        when :has_one
+          Types.normalize_union([target, Types::NIL])
+        when :has_many
+          Types::Generic.new(name: "CollectionProxy", type_arg: target)
+        end
+      elsif (column = @model_registry.column(model_name, method_name))
+        Types::Nominal.new(name: column.ruby_type)
+      end
+    end
+
+    # `Relation[T]#first`/`CollectionProxy[T]#first` -> T | nil,
+    # `#first!` -> T.
+    def resolve_relation_member(generic_type, method_name)
+      return nil unless RELATION_LIKE.include?(generic_type.name)
+
+      case method_name
+      when :first then Types.normalize_union([generic_type.type_arg, Types::NIL])
+      when :first! then generic_type.type_arg
+      end
     end
 
     def constant_receiver?(node)

@@ -14,13 +14,14 @@ module Rslsp
   class AgentProcessManager
     STATUSES = %i[not_started starting ready static_only stopped].freeze
 
-    def initialize(command:, args: [], chdir:, logger:, hello_timeout: 10, core_version: Rslsp::VERSION)
+    def initialize(command:, args: [], chdir:, logger:, hello_timeout: 10, core_version: Rslsp::VERSION, env: {})
       @command = command
       @args = args
       @chdir = chdir
       @logger = logger
       @hello_timeout = hello_timeout
       @core_version = core_version
+      @env = env
       @status = :not_started
       @inbox = Queue.new
       @next_id = 0
@@ -118,7 +119,7 @@ module Rslsp
       @stderr_read, stderr_write = ::IO.pipe
 
       @pid = Process.spawn(
-        @command, *@args,
+        @env, @command, *@args,
         chdir: @chdir,
         in: stdin_read, out: stdout_write, err: stderr_write
       )

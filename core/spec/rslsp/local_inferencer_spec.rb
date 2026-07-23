@@ -85,4 +85,71 @@ RSpec.describe Rslsp::LocalInferencer do
 
     expect { inferencer.infer_at(document, { line: 0, character: 5 }) }.not_to raise_error
   end
+
+  describe "Active Record model resolution (Task 007)" do
+    let(:model_registry) do
+      registry = Rslsp::Models::ModelRegistry.new
+      registry.register_from_agent_response(
+        "User",
+        { tableName: "users", partial: false, columns: [],
+          associations: [{ name: "company", macro: "belongs_to", className: "Company", optional: true }] }
+      )
+      registry.register_from_agent_response(
+        "Company",
+        { tableName: "companies", partial: false, columns: [{ name: "name", type: "string", null: false }],
+          associations: [{ name: "orders", macro: "has_many", className: "Order", optional: false }] }
+      )
+      registry.register_from_agent_response(
+        "Order",
+        { tableName: "orders", partial: false,
+          columns: [{ name: "total", type: "decimal", null: false }], associations: [] }
+      )
+      registry
+    end
+    let(:inferencer) { described_class.new(model_registry: model_registry) }
+
+    it "infers Model.find as the model itself" do
+      expect(infer("user = User.find(1)\n", line: 0, character: 1)).to eq(Rslsp::Types::Nominal.new(name: "User"))
+    end
+
+    it "infers Model.find_by as an optional model" do
+      type = infer("user = User.find_by(id: 1)\n", line: 0, character: 1)
+      expect(type).to eq(Rslsp::Types.normalize_union([Rslsp::Types::Nominal.new(name: "User"), Rslsp::Types::NIL]))
+    end
+
+    it "infers Model.where/.all as Relation[Model]" do
+      expect(infer("x = User.where(id: 1)\n", line: 0, character: 1).to_s).to eq("Relation[User]")
+      expect(infer("x = User.all\n", line: 0, character: 1).to_s).to eq("Relation[User]")
+    end
+
+    it "infers a belongs_to association through a Union receiver (user.company.orders)" do
+      source = "user = User.find(1)\nuser.company.orders\n"
+      expect(infer(source, line: 1, character: 13).to_s).to eq("CollectionProxy[Order]")
+    end
+
+    it "infers CollectionProxy[T]#first as T | nil, matching the README MVP example" do
+      source = "user = User.find(1)\nuser.company.orders.first\n"
+      type = infer(source, line: 1, character: 20)
+      expect(type).to eq(Rslsp::Types.normalize_union([Rslsp::Types::Nominal.new(name: "Order"), Rslsp::Types::NIL]))
+    end
+
+    it "infers CollectionProxy[T]#first! as T (no nil)" do
+      source = "user = User.find(1)\nuser.company.orders.first!\n"
+      expect(infer(source, line: 1, character: 20)).to eq(Rslsp::Types::Nominal.new(name: "Order"))
+    end
+
+    it "infers a DB column accessor by its mapped Ruby type" do
+      source = "company = User.find(1).company\ncompany.name\n"
+      expect(infer(source, line: 1, character: 9).to_s).to eq("String")
+    end
+
+    it "adds nil via safe navigation on top of an already-nilable association" do
+      source = "user = User.find(1)\nuser.company&.orders\n"
+      expect(infer(source, line: 1, character: 15).to_s).to eq("CollectionProxy[Order] | nil")
+    end
+
+    it "does not resolve members on an unknown model" do
+      expect(infer("x = Ghost.find(1)\n", line: 0, character: 1)).to eq(Rslsp::Types::UNKNOWN)
+    end
+  end
 end

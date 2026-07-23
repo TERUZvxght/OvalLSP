@@ -10,8 +10,9 @@ module Rslsp
     # process (via `bin/rails runner`, or a plain `ruby` invocation against a
     # fixture environment for tests) and answers agent/hello, agent/status,
     # and agent/shutdown over the same Content-Length JSON-RPC framing the
-    # Core Server's LSP transport uses. Task 005 scope only — no routes,
-    # Active Record extraction, reload, or plugins yet.
+    # Core Server's LSP transport uses. Task 006 adds route extraction;
+    # Task 007 adds model discovery and per-model column/association
+    # extraction via agent/model. No reload or plugins yet.
     class Agent
       PROTOCOL_VERSION = 1
 
@@ -56,6 +57,8 @@ module Rslsp
           respond(id, status_result)
         when "agent/snapshot"
           respond(id, snapshot_result(message[:params]))
+        when "agent/model"
+          respond(id, model_result(message[:params]))
         when "agent/shutdown"
           respond(id, {})
           return :exit
@@ -97,7 +100,88 @@ module Rslsp
         result = {}
         result[:metadata] = metadata_section if sections.include?("metadata")
         result[:routes] = extract_routes if sections.include?("routes")
+        result[:models] = discover_models if sections.include?("models")
         result
+      end
+
+      # Model *discovery* is intentionally lightweight (name/tableName
+      # only) — Task 007's "lazy agent/model request" means columns and
+      # associations for a given model are fetched on demand via agent/model,
+      # not eagerly for every model on every snapshot.
+      def discover_models
+        return [] unless active_record_available?
+
+        ::ActiveRecord::Base.descendants.reject(&:abstract_class?).filter_map do |klass|
+          next nil unless klass.respond_to?(:name) && klass.name
+
+          { name: klass.name, tableName: safely { klass.table_name } }
+        end
+      end
+
+      # docs/design/docs/05-protocol.md's agent/model. Associations never
+      # need a live DB connection in real ActiveRecord (they're pure Ruby
+      # reflection), so they're always returned; columns do need one, so a
+      # DB outage degrades to a partial result instead of failing the whole
+      # request (docs/design/tasks/007-active-record-model-snapshot.md
+      # "DB unavailable partial result").
+      def model_result(params)
+        name = params && params[:name].to_s
+        klass = valid_model_class(name)
+        return { name: name, error: { code: "NOT_FOUND", message: "no such model: #{name.inspect}" } } unless klass
+
+        columns, partial = extract_columns(klass)
+
+        {
+          name: klass.name,
+          tableName: safely { klass.table_name },
+          columns: columns,
+          associations: extract_associations(klass),
+          partial: partial
+        }
+      end
+
+      # "constantize前にconstant名を検証する" (docs/03-semantic-engine.md 7.1's
+      # sibling section, docs/04-runtime-agent.md section 6): only a
+      # syntactically valid, already-defined ActiveRecord model name is
+      # resolved — never Object.const_get on arbitrary user input.
+      def valid_model_class(name)
+        return nil unless active_record_available?
+        return nil unless name.is_a?(String) && name.match?(/\A[A-Z][A-Za-z0-9_]*(::[A-Z][A-Za-z0-9_]*)*\z/)
+        return nil unless Object.const_defined?(name, false)
+
+        klass = Object.const_get(name, false)
+        return nil unless klass.is_a?(Class) && klass < ::ActiveRecord::Base
+
+        klass
+      end
+
+      def extract_columns(klass)
+        columns = klass.columns.map { |c| { name: c.name.to_s, type: c.type.to_s, null: c.null != false } }
+        [columns, false]
+      rescue StandardError => e
+        @logger.call("columns unavailable for #{klass.name}: #{e.class}: #{e.message}")
+        [[], true]
+      end
+
+      def extract_associations(klass)
+        klass.reflect_on_all_associations.map do |reflection|
+          {
+            name: reflection.name.to_s,
+            macro: reflection.macro.to_s,
+            className: reflection.class_name,
+            optional: reflection.options[:optional] != false
+          }
+        end
+      end
+
+      def active_record_available?
+        defined?(::ActiveRecord::Base) && ::ActiveRecord::Base.respond_to?(:descendants)
+      end
+
+      def safely
+        yield
+      rescue StandardError
+        nil
       end
 
       def metadata_section

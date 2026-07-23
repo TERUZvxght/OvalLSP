@@ -31,14 +31,15 @@ module Rslsp
 
     FILE_CHANGE_DELETED = 3
 
-    def initialize(input:, output:, logger:, route_registry: Routes::RouteRegistry.new)
+    def initialize(input:, output:, logger:, route_registry: Routes::RouteRegistry.new,
+                   model_registry: Models::ModelRegistry.new)
       @reader = Rslsp::IO::FramedReader.new(input)
       @writer = Rslsp::IO::FramedWriter.new(output)
       @logger = logger
       @document_store = DocumentStore.new
       @parser_service = ParserService.new
       @workspace_index = WorkspaceIndex.new
-      @local_inferencer = LocalInferencer.new
+      @local_inferencer = LocalInferencer.new(model_registry: model_registry)
       @route_registry = route_registry
       @file_summaries = {}
       @shutdown_received = false

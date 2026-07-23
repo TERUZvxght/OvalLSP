@@ -2,10 +2,10 @@
 
 module Rslsp
   # MVP subset of the type lattice in docs/design/docs/03-semantic-engine.md
-  # section 2.4. Method body summaries, RBS, blocks, and generics are out of
-  # scope for Task 004, so only what local inference actually needs exists
-  # here: Unknown (no information yet), nil, a Nominal class reference, and
-  # Union for branch merges.
+  # section 2.4. Method body summaries, RBS, and blocks are still out of
+  # scope: Unknown (no information yet), nil, a Nominal class reference,
+  # Union for branch merges, and (since Task 007) Generic for the built-in
+  # Active Record Relation[T]/CollectionProxy[T] shapes.
   module Types
     # No information is available yet; more evidence could still narrow it.
     # Distinct from a resolved-but-unrepresentable type (which this
@@ -24,12 +24,21 @@ module Rslsp
     end
     NIL = NilType.new.freeze
 
-    # A concrete class/module reference, e.g. Nominal("User"). Generic
-    # arguments (Relation[T], Array[T]) are out of scope until Rails/generic
-    # support lands.
+    # A concrete class/module reference, e.g. Nominal("User").
     Nominal = Data.define(:name) do
       def to_s
         name
+      end
+    end
+
+    # A single-parameter generic container, e.g. Relation[Order] or
+    # CollectionProxy[Order]. Full generics (arbitrary arity, user-defined
+    # types) are still out of scope — this exists only for the built-in
+    # Active Record shapes Task 007 introduces
+    # (docs/03-semantic-engine.md section 7.1).
+    Generic = Data.define(:name, :type_arg) do
+      def to_s
+        "#{name}[#{type_arg}]"
       end
     end
 
