@@ -21,6 +21,22 @@ module Rslsp
       def camelize(segment)
         segment.split("_").map { |part| part[0]&.upcase.to_s + part[1..].to_s }.join
       end
+
+      # The inverse of #owner_name: "::UsersController" -> "users",
+      # "::Admin::ProjectsController" -> "admin/projects". Used to find a
+      # view's conventional controller (Task 008) as well as a route
+      # helper's underlying controller path.
+      def view_directory(owner_name)
+        segments = owner_name.to_s.delete_prefix("::").split("::")
+        return nil if segments.empty?
+
+        segments[-1] = segments[-1].sub(/Controller\z/, "")
+        segments.map { |segment| underscore(segment) }.join("/")
+      end
+
+      def underscore(segment)
+        segment.gsub(/([a-z0-9])([A-Z])/, '\1_\2').downcase
+      end
     end
   end
 end

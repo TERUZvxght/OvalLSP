@@ -24,6 +24,7 @@ require_relative "rslsp/runtime_agent/agent"
 require_relative "rslsp/agent_process_manager"
 require_relative "rslsp/routes/route_registry"
 require_relative "rslsp/routes/controller_naming"
+require_relative "rslsp/erb/ruby_region_extractor"
 require_relative "rslsp/server"
 
 module Rslsp

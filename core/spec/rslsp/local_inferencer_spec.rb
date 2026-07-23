@@ -152,4 +152,85 @@ RSpec.describe Rslsp::LocalInferencer do
       expect(infer("x = Ghost.find(1)\n", line: 0, character: 1)).to eq(Rslsp::Types::UNKNOWN)
     end
   end
+
+  describe "#infer_ivars_for_method (Task 008)" do
+    def document(source)
+      Rslsp::TextDocument.new(uri: "file:///controller.rb", text: source, version: 1, language_id: "ruby")
+    end
+
+    it "returns the type of each instance variable assigned in the method" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            @user = User.new
+            @count = 1
+          end
+        end
+      RUBY
+
+      ivars = inferencer.infer_ivars_for_method(document(source), owner_name: "::UsersController", method_name: "show")
+
+      expect(ivars[:@user]).to eq(Rslsp::Types::Nominal.new(name: "User"))
+      expect(ivars[:@count].to_s).to eq("Integer")
+    end
+
+    it "only returns the ivar's final type when reassigned" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            @user = 1
+            @user = "later"
+          end
+        end
+      RUBY
+
+      ivars = inferencer.infer_ivars_for_method(document(source), owner_name: "::UsersController", method_name: "show")
+
+      expect(ivars[:@user].to_s).to eq("String")
+    end
+
+    it "returns {} for a method that doesn't exist" do
+      source = "class UsersController\n  def show\n  end\nend\n"
+
+      ivars = inferencer.infer_ivars_for_method(document(source), owner_name: "::UsersController", method_name: "index")
+
+      expect(ivars).to eq({})
+    end
+
+    it "returns {} rather than raising for unparsable source" do
+      ivars = inferencer.infer_ivars_for_method(document("def broken(\n"), owner_name: "::X", method_name: "y")
+
+      expect(ivars).to eq({})
+    end
+  end
+
+  describe "#find_static_render_target (Task 008)" do
+    def document(source)
+      Rslsp::TextDocument.new(uri: "file:///controller.rb", text: source, version: 1, language_id: "ruby")
+    end
+
+    it "finds a literal symbol render target" do
+      source = "class PostsController\n  def update\n    render :edit\n  end\nend\n"
+
+      target = inferencer.find_static_render_target(document(source), owner_name: "::PostsController", method_name: "update")
+
+      expect(target).to eq("edit")
+    end
+
+    it "finds a literal string render target" do
+      source = "class PostsController\n  def update\n    render \"posts/edit\"\n  end\nend\n"
+
+      target = inferencer.find_static_render_target(document(source), owner_name: "::PostsController", method_name: "update")
+
+      expect(target).to eq("posts/edit")
+    end
+
+    it "returns nil when the method has no render call" do
+      source = "class PostsController\n  def update\n    @x = 1\n  end\nend\n"
+
+      target = inferencer.find_static_render_target(document(source), owner_name: "::PostsController", method_name: "update")
+
+      expect(target).to be_nil
+    end
+  end
 end

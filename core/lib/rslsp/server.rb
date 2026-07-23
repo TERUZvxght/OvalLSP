@@ -10,6 +10,7 @@ require_relative "local_inferencer"
 require_relative "index/document_symbol_builder"
 require_relative "routes/route_registry"
 require_relative "routes/controller_naming"
+require_relative "erb/ruby_region_extractor"
 
 module Rslsp
   # LSP transport + request router. Task 001 scope: initialize/initialized,
@@ -23,6 +24,8 @@ module Rslsp
   # Routes::RouteRegistry the caller builds from an agent/snapshot response
   # (Server itself doesn't manage the Runtime Agent process — see
   # AgentProcessManager — keeping this class free of Rails-boot concerns).
+  # Task 008 makes rslsp/explainType propagate a conventional controller
+  # action's instance variables into its .erb view.
   class Server
     JSONRPC_VERSION = "2.0"
 
@@ -169,13 +172,99 @@ module Rslsp
 
     # Custom (non-LSP-standard) request: infers the type of the expression
     # at a position using local-only inference (docs/design/tasks/004-type-model-and-local-inference.md).
+    # For a .erb view (Task 008), the query instead runs against a synthetic
+    # Ruby source extracted from the template's <% %> regions, seeded with
+    # the conventionally-corresponding controller action's instance
+    # variable types.
     def explain_type_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       document = @document_store.fetch(uri: uri)
       return { type: Types::UNKNOWN.to_s } unless document
 
-      type = @local_inferencer.infer_at(document, params.fetch(:position))
+      position = params.fetch(:position)
+      type = erb_view?(uri) ? explain_type_in_view(document, position) : @local_inferencer.infer_at(document, position)
       { type: type.to_s }
+    end
+
+    def erb_view?(uri)
+      uri.end_with?(".erb")
+    end
+
+    def explain_type_in_view(document, position)
+      ruby_source = Erb::RubyRegionExtractor.extract_ruby_source(document.text)
+      synthetic = TextDocument.new(uri: document.uri, text: ruby_source, version: document.version, language_id: "ruby")
+
+      @local_inferencer.infer_at(synthetic, position, initial_env: ivars_for_view(document.uri))
+    end
+
+    # No caching here by design: recomputed fresh from the controller's
+    # *current* text on every call, so an edited action's ivar types are
+    # immediately reflected — there's no stale view context to invalidate
+    # (docs/design/tasks/008-controller-view-propagation.md "action変更時に
+    # view contextをinvalidate"). Returns {} (-> Unknown for every @ivar)
+    # when the view doesn't match the app/views/<controller>/<action>.*.erb
+    # convention or its controller can't be found.
+    def ivars_for_view(view_uri)
+      context = view_action_context(view_uri)
+      return {} unless context
+
+      controller_document = @document_store.fetch(uri: context[:controller_uri]) ||
+                             load_document_from_disk(context[:controller_uri])
+      return {} unless controller_document
+
+      contributing_actions(controller_document, context[:owner], context[:action]).reduce({}) do |env, action_name|
+        env.merge(@local_inferencer.infer_ivars_for_method(controller_document, owner_name: context[:owner],
+                                                                                 method_name: action_name))
+      end
+    end
+
+    VIEW_PATH_PATTERN = %r{app/views/(?<dir>.+)/(?<action>[^/.]+)\.[^/]*\.erb\z}
+
+    def view_action_context(view_uri)
+      path = UriUtil.to_path(view_uri) || view_uri
+      match = VIEW_PATH_PATTERN.match(path)
+      return nil unless match
+
+      owner = Routes::ControllerNaming.owner_name(match[:dir])
+      return nil unless owner
+
+      controller_uri = find_controller_uri(owner)
+      return nil unless controller_uri
+
+      { owner: owner, action: match[:action], controller_uri: controller_uri }
+    end
+
+    def find_controller_uri(owner_name)
+      symbol_id = Index::SymbolId.new(kind: :class, owner: nil, name: owner_name, discriminator: nil)
+      @workspace_index.declarations_with_uri(symbol_id).first&.first
+    end
+
+    # An action contributes its ivars to this view if it either *is* the
+    # view's own action, or explicitly `render`s it — propagating e.g. a
+    # failed #update's ivars into "edit.html.erb"
+    # (docs/design/tasks/008-controller-view-propagation.md "render :edit
+    # 先へ伝播").
+    def contributing_actions(controller_document, owner_name, view_action)
+      summary = @parser_service.summarize(controller_document)
+      action_names = summary.declarations
+                            .select { |d| d.symbol_id.kind == :instance_method && d.symbol_id.owner == owner_name }
+                            .map { |d| d.symbol_id.name }
+
+      action_names.select do |action_name|
+        action_name == view_action ||
+          @local_inferencer.find_static_render_target(controller_document, owner_name: owner_name,
+                                                                             method_name: action_name) == view_action
+      end
+    end
+
+    def load_document_from_disk(uri)
+      path = UriUtil.to_path(uri)
+      return nil unless path && File.file?(path)
+
+      TextDocument.new(uri: uri, text: File.read(path), version: nil, language_id: "ruby")
+    rescue StandardError => e
+      @logger.error("failed to read #{uri} from disk: #{e.class}: #{e.message}")
+      nil
     end
 
     # Lexical-only "go to definition": resolves the identifier under the

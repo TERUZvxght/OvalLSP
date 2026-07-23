@@ -14,4 +14,18 @@ RSpec.describe Rslsp::Routes::ControllerNaming do
       expect(described_class.owner_name("line_items")).to eq("::LineItemsController")
     end
   end
+
+  describe ".view_directory" do
+    it "is the inverse of .owner_name for a simple controller" do
+      expect(described_class.view_directory("::UsersController")).to eq("users")
+    end
+
+    it "is the inverse of .owner_name for a namespaced controller" do
+      expect(described_class.view_directory("::Admin::ProjectsController")).to eq("admin/projects")
+    end
+
+    it "underscores a multi-word controller name" do
+      expect(described_class.view_directory("::LineItemsController")).to eq("line_items")
+    end
+  end
 end

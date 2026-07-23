@@ -37,20 +37,66 @@ module Rslsp
     end
 
     # `document` is an Rslsp::TextDocument; `position` is an LSP
-    # { line:, character: } position (UTF-16). Never raises — returns
-    # Types::UNKNOWN for anything unresolved, out of budget, or on
-    # unexpected parser input.
-    def infer_at(document, position)
+    # { line:, character: } position (UTF-16). `initial_env` seeds bindings
+    # before evaluation starts — Task 008 uses this to propagate a
+    # controller action's instance variable types into a view's Ruby
+    # regions. Never raises — returns Types::UNKNOWN for anything
+    # unresolved, out of budget, or on unexpected parser input.
+    def infer_at(document, position, initial_env: {})
       offset = document.position_to_char_offset(position)
       result = Prism.parse(document.text)
       @steps = 0
 
-      locate(result.value.statements, offset, {})
+      locate(result.value.statements, offset, initial_env.dup)
     rescue BudgetExceeded, StandardError
       Types::UNKNOWN
     end
 
+    # Walks every statement in `method_name`'s body (declared directly on
+    # `owner_name`, per ParserService's SymbolId#owner convention) and
+    # returns the type of each `@ivar` as of the end of the method — what a
+    # view rendered after this action runs would see
+    # (docs/design/tasks/008-controller-view-propagation.md). Returns {} if
+    # the method can't be found or parsing fails; never raises.
+    def infer_ivars_for_method(document, owner_name:, method_name:)
+      method_node = find_method_node(document, owner_name, method_name)
+      return {} unless method_node&.body
+
+      @steps = 0
+      env = {}
+      eval_type(method_node.body, env)
+      # Symbol-keyed (":@user", not "@user") to match how Prism names
+      # InstanceVariableReadNode/WriteNode, so this can be passed straight
+      # back in as another call's `initial_env` without re-keying.
+      env.select { |key, _| key.to_s.start_with?("@") }
+    rescue BudgetExceeded, StandardError
+      {}
+    end
+
+    # Finds a literal `render :name` / `render "name"` / `render "dir/name"`
+    # call anywhere in `method_name`'s body and returns its target as a
+    # string, or nil if there's no such call (or it's not statically
+    # resolvable — dynamic render strings are out of scope). Used to
+    # propagate ivars from an action into a *different* action's view when
+    # that action explicitly renders it.
+    def find_static_render_target(document, owner_name:, method_name:)
+      method_node = find_method_node(document, owner_name, method_name)
+      return nil unless method_node&.body
+
+      @steps = 0
+      RenderTargetFinder.new.tap { |finder| method_node.body.accept(finder) }.target
+    rescue StandardError
+      nil
+    end
+
     private
+
+    def find_method_node(document, owner_name, method_name)
+      result = Prism.parse(document.text)
+      locator = MethodLocator.new(owner_name, method_name.to_s)
+      result.value.accept(locator)
+      locator.found
+    end
 
     def step!
       @steps += 1
@@ -71,7 +117,7 @@ module Rslsp
       case node
       when Prism::StatementsNode
         locate_in_statements(node, offset, env)
-      when Prism::LocalVariableWriteNode
+      when Prism::LocalVariableWriteNode, Prism::InstanceVariableWriteNode
         if contains?(node.value.location, offset)
           result = locate(node.value, offset, env)
           env[node.name] = eval_type(node.value, env)
@@ -139,6 +185,10 @@ module Rslsp
       when Prism::LocalVariableWriteNode
         env[node.name] = eval_type(node.value, env)
       when Prism::LocalVariableReadNode
+        env.fetch(node.name, Types::UNKNOWN)
+      when Prism::InstanceVariableWriteNode
+        env[node.name] = eval_type(node.value, env)
+      when Prism::InstanceVariableReadNode
         env.fetch(node.name, Types::UNKNOWN)
       when Prism::IntegerNode then Types::Nominal.new(name: "Integer")
       when Prism::FloatNode then Types::Nominal.new(name: "Float")
@@ -337,5 +387,69 @@ module Rslsp
     def negate(assume)
       assume == :truthy ? :falsy : :truthy
     end
+
+    # Finds the single DefNode for an unqualified instance method
+    # (`owner_name`/`method_name`, matching ParserService's SymbolId
+    # convention) anywhere in the file, tracking lexical nesting the same
+    # way ParserService::Visitor does. Stops descending once found.
+    class MethodLocator < Prism::Visitor
+      attr_reader :found
+
+      def initialize(owner_name, method_name)
+        super()
+        @owner_name = owner_name
+        @method_name = method_name
+        @owner_stack = []
+        @found = nil
+      end
+
+      def visit_module_node(node) = visit_namespace(node)
+      def visit_class_node(node) = visit_namespace(node)
+
+      def visit_def_node(node)
+        return if @found
+        return unless node.receiver.nil? && node.name.to_s == @method_name && @owner_stack.last == @owner_name
+
+        @found = node
+      end
+
+      private
+
+      def visit_namespace(node)
+        return if @found
+
+        @owner_stack.push(qualify(node.constant_path.full_name))
+        node.each_child_node { |child| child.accept(self) }
+        @owner_stack.pop
+      end
+
+      def qualify(local_path)
+        return local_path if local_path.start_with?("::")
+
+        @owner_stack.last ? "#{@owner_stack.last}::#{local_path}" : "::#{local_path}"
+      end
+    end
+    private_constant :MethodLocator
+
+    # Finds the first literal-argument `render` call (no receiver) in a
+    # method body. Dynamic render targets (interpolated strings, variables)
+    # are intentionally left unresolved.
+    class RenderTargetFinder < Prism::Visitor
+      attr_reader :target
+
+      def visit_call_node(node)
+        return super if @target
+        return super unless node.receiver.nil? && node.name == :render
+
+        arg = node.arguments&.arguments&.first
+        case arg
+        when Prism::SymbolNode then @target = arg.value.to_s
+        when Prism::StringNode then @target = arg.unescaped
+        end
+
+        super
+      end
+    end
+    private_constant :RenderTargetFinder
   end
 end

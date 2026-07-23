@@ -11,6 +11,8 @@ class PostsController
   end
 
   def update
+    @post = 42
+    render :edit
   end
 
   def destroy
