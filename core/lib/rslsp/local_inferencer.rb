@@ -43,7 +43,11 @@ module Rslsp
     # regions. Never raises — returns Types::UNKNOWN for anything
     # unresolved, out of budget, or on unexpected parser input.
     def infer_at(document, position, initial_env: {})
-      offset = document.position_to_char_offset(position)
+      # Prism node locations are UTF-8 byte offsets, not Ruby character
+      # offsets — using #position_to_char_offset here would select the
+      # wrong node whenever a multibyte character appears anywhere before
+      # the target position (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+      offset = document.position_to_byte_offset(position)
       result = Prism.parse(document.text)
       @steps = 0
 

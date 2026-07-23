@@ -14,6 +14,37 @@ RSpec.describe Rslsp::LocalInferencer do
     expect(type).to eq(Rslsp::Types::Nominal.new(name: "User"))
   end
 
+  describe "non-ASCII text preceding the query position (Task 008.5)" do
+    it "does not let a multibyte comment/string on earlier lines shift node selection" do
+      source = <<~RUBY
+        # 日本語コメント
+        message = "日本語"
+        user = User.new
+        user
+      RUBY
+
+      # Query the bare `user` reference on the last line. Before the
+      # byte/char offset fix, comparing a Ruby *character* offset against
+      # Prism's *byte*-offset node locations would pick the wrong node
+      # once enough multibyte bytes had accumulated earlier in the file.
+      type = infer(source, line: 3, character: 1)
+
+      expect(type).to eq(Rslsp::Types::Nominal.new(name: "User"))
+    end
+
+    it "resolves correctly when the query line itself mixes ASCII and Japanese" do
+      source = "x = 1 # 日本語コメント\nuser = User.new\nuser\n"
+
+      expect(infer(source, line: 2, character: 1)).to eq(Rslsp::Types::Nominal.new(name: "User"))
+    end
+
+    it "resolves correctly past a line containing an astral emoji character" do
+      source = "label = \"😀\"\nuser = User.new\nuser\n"
+
+      expect(infer(source, line: 2, character: 1)).to eq(Rslsp::Types::Nominal.new(name: "User"))
+    end
+  end
+
   it "infers literals as their base class" do
     expect(infer("x = 1\n", line: 0, character: 1).to_s).to eq("Integer")
     expect(infer("x = 1.5\n", line: 0, character: 1).to_s).to eq("Float")
