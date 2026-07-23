@@ -50,6 +50,7 @@ module Rslsp
       @model_registry = model_registry
       @workspace_root = workspace_root
       @agent_bootstrap = agent_bootstrap
+      @agent_manager = nil
       @file_summaries = {}
       @shutdown_received = false
     end
@@ -198,7 +199,13 @@ module Rslsp
       model_registry = @model_registry
 
       Thread.new do
-        bootstrap.start(root: root, logger: logger, route_registry: route_registry, model_registry: model_registry)
+        # Stored for later use by file-change-triggered reload/refresh (see
+        # #invalidate_rails_state_for) — a single reference reassignment,
+        # safe to read concurrently under CRuby's GVL the same way
+        # RouteRegistry/ModelRegistry's own updates are (see their class
+        # comments).
+        @agent_manager = bootstrap.start(root: root, logger: logger, route_registry: route_registry,
+                                          model_registry: model_registry)
       rescue StandardError => e
         logger.error("Runtime Agent bootstrap failed: #{e.class}: #{e.message}")
       end
@@ -463,6 +470,8 @@ module Rslsp
           # reindex from disk for files nobody currently has open.
           reindex_from_disk(uri)
         end
+
+        invalidate_rails_state_for(uri)
       end
     end
 
@@ -474,6 +483,88 @@ module Rslsp
       @workspace_index.replace_file(@parser_service.summarize(document))
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
+    end
+
+    MODEL_FILE_PATTERN = %r{app/models/(?<relative>.+)\.rb\z}
+
+    # docs/design/docs/04-runtime-agent.md section 9's invalidation rules,
+    # scoped down to what actually needs Runtime Agent round-trips: routes
+    # and models (a bare re-parse via #reindex_from_disk above already
+    # covers everything WorkspaceIndex needs). No-ops entirely when no
+    # Agent is running (never started, still starting, or degraded to
+    # static-only) — there's nothing to refresh from.
+    def invalidate_rails_state_for(uri)
+      return unless @agent_manager&.ready?
+
+      path = UriUtil.to_path(uri) || uri
+
+      if path.end_with?("config/routes.rb")
+        refresh_routes
+      elsif (match = MODEL_FILE_PATTERN.match(path))
+        refresh_model(match[:relative])
+      elsif path.end_with?("Gemfile.lock") || path.include?("config/initializers/")
+        restart_agent
+      end
+    end
+
+    # Re-draws routes via agent/reload, then re-fetches the routes section
+    # so RouteRegistry reflects whatever changed — added, removed, or
+    # edited (docs/design/tasks/006-routes-snapshot.md "reload後に削除route
+    # が消える"). Runs on its own thread: both requests block on Agent I/O,
+    # and nothing here may delay LSP responses.
+    def refresh_routes
+      agent_manager = @agent_manager
+      route_registry = @route_registry
+      logger = @logger
+
+      Thread.new do
+        next unless agent_manager.reload(sections: ["routes"])
+
+        snapshot = agent_manager.fetch_snapshot(sections: ["routes"])
+        route_registry.replace(snapshot[:routes]) if snapshot
+      rescue StandardError => e
+        logger.error("failed to refresh routes after routes.rb change: #{e.class}: #{e.message}")
+      end
+    end
+
+    # Unlike routes, a model's columns/associations are read live on every
+    # agent/model call (docs/design/docs/05-protocol.md) — there's no
+    # server-side model cache to explicitly reload, so refreshing just
+    # means asking again for the one model whose file changed.
+    def refresh_model(relative_path)
+      name = relative_path.split("/").map { |segment| Routes::ControllerNaming.camelize(segment) }.join("::")
+      agent_manager = @agent_manager
+      model_registry = @model_registry
+      logger = @logger
+
+      Thread.new do
+        response = agent_manager.fetch_model(name: name)
+        model_registry.register_from_agent_response(name, response) if response && !response[:error]
+      rescue StandardError => e
+        logger.error("failed to refresh model #{name}: #{e.class}: #{e.message}")
+      end
+    end
+
+    # Gemfile.lock and initializer changes can alter what's loaded at boot
+    # in ways routes/model refresh alone can't recover from, so the whole
+    # Agent process restarts (docs/design/docs/04-runtime-agent.md section 9:
+    # "Gemfile.lock -> Core/Agent full restart", "config/initializers/** ->
+    # Agent restart").
+    def restart_agent
+      agent_manager = @agent_manager
+      bootstrap = @agent_bootstrap
+      root = @workspace_root
+      route_registry = @route_registry
+      model_registry = @model_registry
+      logger = @logger
+
+      Thread.new do
+        agent_manager.stop
+        @agent_manager = bootstrap.start(root: root, logger: logger, route_registry: route_registry,
+                                          model_registry: model_registry)
+      rescue StandardError => e
+        logger.error("failed to restart runtime agent: #{e.class}: #{e.message}")
+      end
     end
 
     def initialize_result
