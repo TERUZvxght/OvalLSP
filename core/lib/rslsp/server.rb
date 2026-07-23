@@ -173,19 +173,21 @@ module Rslsp
     # Starts the Runtime Agent on a background thread — never the request
     # thread, so a slow or absent Rails boot can't delay any LSP response
     # (docs/02-architecture.md section 8's threading model) — but only
-    # once the *client* has said the workspace is trusted. Workspace Trust
-    # is a VS Code (client-side) concept with no standard LSP field for it,
-    # so the client passes it through `initializationOptions.workspaceTrusted`
-    # (see vscode/src/extension.ts). A client that doesn't participate in
-    # workspace trust at all (no VS Code, or the field is simply absent)
-    # is treated as trusted, matching how untrusted is something a client
-    # must actively assert, not the unset default — but an *explicit*
-    # `workspaceTrusted: false` always blocks Agent/Bundler code execution
-    # (docs/02-architecture.md section 11, docs/10-ai-execution-guide.md
-    # section 8 "Workspace Trustを迂回してcode executionしていないか").
+    # once the *client* has explicitly said the workspace is trusted.
+    # Workspace Trust is a VS Code (client-side) concept with no standard
+    # LSP field for it, so the client passes it through
+    # `initializationOptions.workspaceTrusted` (see vscode/src/extension.ts).
+    # Fail-closed by design: anything other than a literal `true` — absent,
+    # `false`, or a client that doesn't send `initializationOptions` at all
+    # — skips starting the Agent, per docs/02-architecture.md section 11
+    # ("Workspace Trustがない場合...起動しない") and
+    # docs/10-ai-execution-guide.md section 8 ("Workspace Trustを迂回して
+    # code executionしていないか"). The VS Code extension always sends this
+    # explicitly, so real usage is unaffected; a client that never mentions
+    # trust at all gets static-only behavior rather than an implicit grant.
     def maybe_start_agent(params)
       unless workspace_trusted?(params)
-        @logger.warn("workspace is untrusted; not starting the Runtime Agent")
+        @logger.warn("workspace trust not confirmed; not starting the Runtime Agent")
         return
       end
 
@@ -204,9 +206,7 @@ module Rslsp
 
     def workspace_trusted?(params)
       options = params && params[:initializationOptions]
-      return true unless options.is_a?(Hash)
-
-      options[:workspaceTrusted] != false
+      options.is_a?(Hash) && options[:workspaceTrusted] == true
     end
 
     def document_symbol_result(params)

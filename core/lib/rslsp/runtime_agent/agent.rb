@@ -131,7 +131,7 @@ module Rslsp
       # need a live DB connection in real ActiveRecord (they're pure Ruby
       # reflection), so they're always returned; columns do need one, so a
       # DB outage degrades to a partial result instead of failing the whole
-      # request (docs/design/tasks/007-active-record-model-snapshot.md
+      # request (docs/design/tasks/007-active-record-snapshot.md
       # "DB unavailable partial result").
       def model_result(params)
         name = params && params[:name].to_s

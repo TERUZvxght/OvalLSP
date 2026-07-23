@@ -27,7 +27,7 @@ module Rslsp
     # Holds per-model column/association facts fetched (lazily, one model
     # at a time) via agent/model, keyed by model name so LocalInferencer
     # can resolve `user.company`, `company.orders`, DB-column accessors,
-    # and so on (docs/design/tasks/007-active-record-model-snapshot.md).
+    # and so on (docs/design/tasks/007-active-record-snapshot.md).
     # Populated from a background thread (RailsBootstrap) while the main
     # thread may already be reading it (LocalInferencer). No mutex: each
     # #register_from_agent_response call is a single Hash#[]= on `@models`,

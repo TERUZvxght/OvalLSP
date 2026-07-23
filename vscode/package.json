@@ -10,6 +10,12 @@
   "categories": [
     "Programming Languages"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Static analysis (parsing, completion, definition) works in an untrusted workspace. The Runtime Agent, which executes the workspace's own Rails/Bundler code, only starts once the workspace is trusted."
+    }
+  },
   "activationEvents": [
     "onLanguage:ruby",
     "workspaceContains:Gemfile",

@@ -52,14 +52,14 @@ RSpec.describe "Rslsp::Server workspace trust gating" do
     expect(call[:root]).to eq("/workspace")
   end
 
-  it "starts the Runtime Agent bootstrap when trust isn't communicated at all (non-VS-Code client)" do
+  it "does NOT start the Runtime Agent bootstrap when trust isn't communicated at all (fail-closed)" do
     input =
       frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
       frame(jsonrpc: "2.0", method: "exit", params: nil)
 
     build_server(input).run
 
-    expect(calls.pop(timeout: 2)).not_to be_nil
+    expect(calls.pop(timeout: 0.3)).to be_nil
   end
 
   it "does NOT start the Runtime Agent bootstrap when the workspace is explicitly untrusted" do
@@ -71,7 +71,7 @@ RSpec.describe "Rslsp::Server workspace trust gating" do
     build_server(input).run
 
     expect(calls.pop(timeout: 0.3)).to be_nil
-    expect(logger).to have_received(:warn).with(/untrusted/)
+    expect(logger).to have_received(:warn).with(/workspace trust/)
   end
 
   it "still answers the initialize handshake immediately even when the bootstrap is slow" do
