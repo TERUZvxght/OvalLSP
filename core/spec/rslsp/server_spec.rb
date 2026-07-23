@@ -241,4 +241,21 @@ RSpec.describe Rslsp::Server do
 
     expect(sent_messages.first[:result]).to eq([])
   end
+
+  it "answers the custom rslsp/explainType request with the inferred type" do
+    input =
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: { textDocument: { uri: "file:///a.rb", text: "user = User.new\n", version: 1, languageId: "ruby" } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "rslsp/explainType",
+        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 0, character: 1 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.first[:result]).to eq(type: "User")
+  end
 end

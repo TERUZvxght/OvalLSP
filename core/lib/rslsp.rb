@@ -17,6 +17,8 @@ require_relative "rslsp/index/document_symbol_builder"
 require_relative "rslsp/parser_service"
 require_relative "rslsp/workspace_index"
 require_relative "rslsp/uri_util"
+require_relative "rslsp/types"
+require_relative "rslsp/local_inferencer"
 require_relative "rslsp/server"
 
 module Rslsp

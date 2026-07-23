@@ -6,6 +6,7 @@ require_relative "document_store"
 require_relative "parser_service"
 require_relative "workspace_index"
 require_relative "uri_util"
+require_relative "local_inferencer"
 require_relative "index/document_symbol_builder"
 
 module Rslsp
@@ -14,8 +15,9 @@ module Rslsp
   # Task 002 adds per-document FileSummary extraction (Prism) and
   # textDocument/documentSymbol. Task 003 adds a workspace-wide index behind
   # textDocument/definition (lexical, name-based — see WorkspaceIndex),
-  # workspace/symbol, and workspace/didChangeWatchedFiles. Real reference
-  # resolution and type inference arrive in later tasks.
+  # workspace/symbol, and workspace/didChangeWatchedFiles. Task 004 adds the
+  # custom rslsp/explainType request, backed by LocalInferencer. Rails
+  # integration arrives in later tasks.
   class Server
     JSONRPC_VERSION = "2.0"
 
@@ -31,6 +33,7 @@ module Rslsp
       @document_store = DocumentStore.new
       @parser_service = ParserService.new
       @workspace_index = WorkspaceIndex.new
+      @local_inferencer = LocalInferencer.new
       @file_summaries = {}
       @shutdown_received = false
     end
@@ -84,6 +87,8 @@ module Rslsp
         respond(id, workspace_symbol_result(message[:params]))
       when "workspace/didChangeWatchedFiles"
         handle_did_change_watched_files(message[:params])
+      when "rslsp/explainType"
+        respond(id, explain_type_result(message[:params]))
       else
         handle_unknown_method(method, id)
       end
@@ -149,6 +154,17 @@ module Rslsp
       return [] unless summary
 
       Index::DocumentSymbolBuilder.build(summary.declarations)
+    end
+
+    # Custom (non-LSP-standard) request: infers the type of the expression
+    # at a position using local-only inference (docs/design/tasks/004-type-model-and-local-inference.md).
+    def explain_type_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = @document_store.fetch(uri: uri)
+      return { type: Types::UNKNOWN.to_s } unless document
+
+      type = @local_inferencer.infer_at(document, params.fetch(:position))
+      { type: type.to_s }
     end
 
     # Lexical-only "go to definition": resolves the identifier under the
