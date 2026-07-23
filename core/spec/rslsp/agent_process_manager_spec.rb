@@ -89,4 +89,41 @@ RSpec.describe Rslsp::AgentProcessManager do
     expect(@manager.alive?).to be(false)
     expect { Process.kill(0, pid) }.to raise_error(Errno::ESRCH)
   end
+
+  it "fetches a single model's columns and associations via #fetch_model" do
+    @manager = build_manager
+    @manager.start
+
+    result = @manager.fetch_model(name: "User")
+
+    expect(result[:associations]).to include(a_hash_including(name: "company", macro: "belongs_to"))
+  end
+
+  describe "#reload" do
+    let(:disable_flag) { File.join(fixture_root, "config", ".disable_archived_route") }
+
+    after { File.delete(disable_flag) if File.exist?(disable_flag) }
+
+    it "removes a route from a fresh snapshot after routes.rb changes and #reload runs (Task 006)" do
+      File.delete(disable_flag) if File.exist?(disable_flag)
+
+      @manager = build_manager
+      @manager.start
+
+      before_routes = @manager.fetch_snapshot(sections: ["routes"])[:routes]
+      expect(before_routes.map { |r| r[:name] }).to include("archived")
+
+      # Simulate editing routes.rb to remove the route, then Core telling
+      # the Agent to reload — mirrors docs/04-runtime-agent.md section 8's
+      # file-change -> agent/reload flow.
+      File.write(disable_flag, "1")
+      reload_result = @manager.reload
+
+      expect(reload_result[:changedSections]).to eq(["routes"])
+      expect(reload_result[:generation]).to be > 0
+
+      after_routes = @manager.fetch_snapshot(sections: ["routes"])[:routes]
+      expect(after_routes.map { |r| r[:name] }).not_to include("archived")
+    end
+  end
 end

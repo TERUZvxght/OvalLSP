@@ -10,3 +10,6 @@ vscode/.vscode-test/
 
 # Editor / OS
 .DS_Store
+
+# Test-generated flag files (rails_minimal reload fixture)
+core/spec/fixtures/rails_minimal/config/.disable_archived_route

@@ -12,7 +12,8 @@
   ],
   "activationEvents": [
     "onLanguage:ruby",
-    "workspaceContains:Gemfile"
+    "workspaceContains:Gemfile",
+    "workspaceContains:**/*.erb"
   ],
   "main": "./out/extension.js",
   "contributes": {

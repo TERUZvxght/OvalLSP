@@ -12,7 +12,8 @@ module Rslsp
     # and agent/shutdown over the same Content-Length JSON-RPC framing the
     # Core Server's LSP transport uses. Task 006 adds route extraction;
     # Task 007 adds model discovery and per-model column/association
-    # extraction via agent/model. No reload or plugins yet.
+    # extraction via agent/model; Task 006's reload follow-up adds
+    # agent/reload for routes. No plugins yet.
     class Agent
       PROTOCOL_VERSION = 1
 
@@ -25,6 +26,7 @@ module Rslsp
         @logger = logger
         @root = root
         @started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        @generation = 0
       end
 
       # Returns the process exit code (always 0 — a clean agent/shutdown and
@@ -59,6 +61,8 @@ module Rslsp
           respond(id, snapshot_result(message[:params]))
         when "agent/model"
           respond(id, model_result(message[:params]))
+        when "agent/reload"
+          respond(id, reload_result(message[:params]))
         when "agent/shutdown"
           respond(id, {})
           return :exit
@@ -80,7 +84,12 @@ module Rslsp
           root: rails_root,
           railsVersion: rails_defined? ? Rails.version.to_s : nil,
           rubyVersion: RUBY_VERSION,
-          capabilities: { routes: false, activeRecord: false, reload: false, runtimePlugins: false }
+          capabilities: {
+            routes: routes_available?,
+            activeRecord: active_record_available?,
+            reload: reload_available?,
+            runtimePlugins: false
+          }
         }
       end
 
@@ -186,6 +195,7 @@ module Rslsp
 
       def metadata_section
         {
+          generation: @generation,
           railsVersion: rails_defined? ? Rails.version.to_s : nil,
           rubyVersion: RUBY_VERSION,
           root: rails_root
@@ -220,6 +230,36 @@ module Rslsp
 
       def routes_available?
         rails_defined? && Rails.respond_to?(:application) && Rails.application.respond_to?(:routes)
+      end
+
+      def reload_available?
+        routes_available? && Rails.application.respond_to?(:reload_routes!)
+      end
+
+      # docs/design/docs/04-runtime-agent.md section 8. Only routes reload
+      # so far — model/schema reload (section 9's other invalidation rules)
+      # isn't implemented yet. On failure, generation does NOT advance, so
+      # Core keeps treating the last-good snapshot as current
+      # (docs/design/docs/04-runtime-agent.md: "reloadに失敗した場合:
+      # generationを進めない").
+      def reload_result(_params)
+        unless reload_available?
+          return { generation: @generation, changedSections: [], errors: [] }
+        end
+
+        begin
+          Rails.application.reload_routes!
+        rescue StandardError => e
+          @logger.call("agent/reload failed: #{e.class}: #{e.message}")
+          return {
+            generation: @generation,
+            changedSections: [],
+            errors: [{ code: "RELOAD_FAILED", message: e.message, recoverable: true }]
+          }
+        end
+
+        @generation += 1
+        { generation: @generation, changedSections: ["routes"], errors: [] }
       end
 
       def rails_defined?

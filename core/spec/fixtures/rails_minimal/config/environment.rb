@@ -28,10 +28,19 @@ module Rails
     def routes
       @routes ||= FakeRouting::RouteSet.new
     end
+
+    # Simulates Rails.application.reload_routes!: re-draws routes.rb from
+    # scratch. Real Rails apps re-evaluate the routes DSL on reload the
+    # same way; `load` (not `require`) is what makes that possible here
+    # too, since `require` would silently no-op on an already-loaded file.
+    def reload_routes!
+      routes.routes.clear
+      load(File.join(__dir__, "routes.rb"))
+    end
   end
 end
 
-require_relative "routes"
+load(File.join(__dir__, "routes.rb"))
 
 require_relative "fake_active_record"
 require_relative "../app/models/user"

@@ -29,12 +29,19 @@ function startClientForFolder(
   // Forwarded to the server as workspace/didChangeWatchedFiles so files
   // edited or removed outside the open buffers (git checkout, another
   // editor, rm) still update the workspace index.
-  const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, '**/*.rb'));
+  const watcher = vscode.workspace.createFileSystemWatcher(
+    new vscode.RelativePattern(folder, '**/*.{rb,erb}')
+  );
   watchers.set(folder.uri.toString(), watcher);
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [
-      { scheme: 'file', language: 'ruby', pattern: `${folder.uri.fsPath}/**/*` }
+      { scheme: 'file', language: 'ruby', pattern: `${folder.uri.fsPath}/**/*` },
+      // Matched by extension, not language id: VS Code doesn't assign a
+      // built-in language id to .erb, and requiring another extension to
+      // register one first would make Task 008's view support silently
+      // unreachable (docs/design/tasks/008-controller-view-propagation.md).
+      { scheme: 'file', pattern: `${folder.uri.fsPath}/**/*.erb` }
     ],
     workspaceFolder: folder,
     outputChannel,

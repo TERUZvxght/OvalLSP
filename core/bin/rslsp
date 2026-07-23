@@ -21,6 +21,25 @@ $stdout.binmode
 $stdout.sync = true
 
 logger = Rslsp::Logger.new(io: $stderr)
-server = Rslsp::Server.new(input: $stdin, output: $stdout, logger: logger)
+route_registry = Rslsp::Routes::RouteRegistry.new
+model_registry = Rslsp::Models::ModelRegistry.new
+
+# Runs on a background thread so a slow (or absent) Rails boot never
+# blocks the LSP transport below: static features must stay responsive
+# immediately, per docs/02-architecture.md's failure-isolation table.
+# RouteRegistry/RouteRegistry#replace and ModelRegistry's per-key writes
+# are safe to observe mid-population from the main thread — a reader
+# just sees whatever's been populated so far, never a torn write.
+Thread.new do
+  Rslsp::RailsBootstrap.start(
+    root: Dir.pwd, logger: logger, route_registry: route_registry, model_registry: model_registry
+  )
+rescue StandardError => e
+  logger.error("Runtime Agent bootstrap failed: #{e.class}: #{e.message}")
+end
+
+server = Rslsp::Server.new(
+  input: $stdin, output: $stdout, logger: logger, route_registry: route_registry, model_registry: model_registry
+)
 
 exit(server.run)

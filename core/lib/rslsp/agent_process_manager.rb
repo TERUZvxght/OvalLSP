@@ -91,6 +91,31 @@ module Rslsp
       response && response[:result]
     end
 
+    # Requests a single model's columns/associations via agent/model.
+    # Returns nil if the Agent isn't ready or doesn't respond in time; the
+    # result hash may still contain an `:error` key (e.g. NOT_FOUND) that
+    # callers should check.
+    def fetch_model(name:, timeout: 5)
+      return nil unless ready?
+
+      response = request("agent/model", { name: name }, timeout: timeout)
+      response && response[:result]
+    end
+
+    # Asks the Agent to re-draw routes (and anything else a real reload
+    # touches) and returns its { generation:, changedSections:, errors: }
+    # result, or nil if unavailable.
+    def reload(reason: "filesChanged", changed_paths: [], sections: ["routes"], timeout: 30)
+      return nil unless ready?
+
+      response = request(
+        "agent/reload",
+        { reason: reason, changedPaths: changed_paths, sections: sections },
+        timeout: timeout
+      )
+      response && response[:result]
+    end
+
     # Idempotent: asks the Agent to shut down cleanly, then force-kills it
     # if it doesn't exit promptly. Safe to call even if the Agent already
     # died on its own (crash) or was never started.

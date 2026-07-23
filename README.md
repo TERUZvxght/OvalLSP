@@ -12,9 +12,20 @@ Ruby/Rails向けセマンティック言語サーバーのmonorepo。設計の�
 
 ## Status
 
-`tasks/001-bootstrap-core-and-vscode.md` を実装済み: LSP handshake、
-didOpen/didChange/didClose、固定Hover応答、VS Code拡張からの起動、統合テスト。
-次は `docs/design/tasks/002-prism-file-summary.md`。
+`docs/design/tasks/001-*.md` 〜 `008-*.md` を実装済み。
+
+- LSP transport、didOpen/didChange/didClose、Hover
+- Prismによる宣言抽出とdocumentSymbol
+- ワークスペース索引・definition・workspace/symbol
+- ローカル型推論(`rslsp/explainType`)
+- Runtime Agentプロセス管理(hello/status/snapshot/model/reload/shutdown)
+- Rails routesからの`*_path`/`*_url`補完・signature help・definition
+- Active Recordモデルのcolumn/association型推論
+- controller→viewへのinstance variable伝播(ERB)
+
+`core/bin/rslsp`はワークスペースroot直下に`bin/rails`があるRailsアプリを検出すると、
+バックグラウンドスレッドでRuntime Agentを起動し、routesとmodelのsnapshotを取得して
+補完・definition・型推論に反映する（Railsが無い/起動失敗時は静的機能のみで継続）。
 
 ## Development
 

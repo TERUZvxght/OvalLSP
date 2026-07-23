@@ -86,6 +86,67 @@ RSpec.describe Rslsp::RuntimeAgent::Agent do
     expect(routes.first).to include(name: "post", verb: "GET", requiredParts: ["id"])
   end
 
+  describe "agent/reload" do
+    it "re-draws routes and advances generation when the app supports reload_routes!" do
+      route_set = Struct.new(:routes).new([])
+      reload_count = 0
+      fake_app = Class.new do
+        define_method(:routes) { route_set }
+        define_method(:reload_routes!) { reload_count += 1 }
+      end.new
+
+      stub_const("Rails", Class.new do
+        define_singleton_method(:version) { "7.1.0-fixture" }
+        define_singleton_method(:application) { fake_app }
+      end)
+
+      input =
+        frame(jsonrpc: "2.0", id: 1, method: "agent/reload", params: {}) +
+        frame(jsonrpc: "2.0", id: 2, method: "agent/reload", params: {}) +
+        frame(jsonrpc: "2.0", id: 3, method: "agent/shutdown", params: {})
+
+      build_agent(input).run
+
+      messages = sent_messages
+      expect(messages[0][:result]).to eq(generation: 1, changedSections: ["routes"], errors: [])
+      expect(messages[1][:result]).to eq(generation: 2, changedSections: ["routes"], errors: [])
+      expect(reload_count).to eq(2)
+    end
+
+    it "reports a recoverable error and does not advance generation when reload_routes! raises" do
+      fake_app = Class.new do
+        def routes = Struct.new(:routes).new([])
+        def reload_routes! = raise("boom")
+      end.new
+
+      stub_const("Rails", Class.new do
+        define_singleton_method(:version) { "7.1.0-fixture" }
+        define_singleton_method(:application) { fake_app }
+      end)
+
+      input =
+        frame(jsonrpc: "2.0", id: 1, method: "agent/reload", params: {}) +
+        frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+      build_agent(input).run
+
+      result = sent_messages.first[:result]
+      expect(result[:generation]).to eq(0)
+      expect(result[:changedSections]).to eq([])
+      expect(result[:errors].first).to include(code: "RELOAD_FAILED", recoverable: true)
+    end
+
+    it "is a graceful no-op (not an error) when there's no Rails app to reload" do
+      input =
+        frame(jsonrpc: "2.0", id: 1, method: "agent/reload", params: {}) +
+        frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+      build_agent(input).run
+
+      expect(sent_messages.first[:result]).to eq(generation: 0, changedSections: [], errors: [])
+    end
+  end
+
   describe "Active Record model extraction" do
     def stub_active_record_base!
       base = Class.new do
@@ -215,7 +276,7 @@ RSpec.describe Rslsp::RuntimeAgent::Agent do
 
   it "returns MethodNotFound for unknown requests without crashing the loop" do
     input =
-      frame(jsonrpc: "2.0", id: 1, method: "agent/reload", params: {}) +
+      frame(jsonrpc: "2.0", id: 1, method: "agent/thisMethodDoesNotExist", params: {}) +
       frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
 
     build_agent(input).run
