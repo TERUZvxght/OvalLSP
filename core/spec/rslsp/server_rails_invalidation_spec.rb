@@ -124,6 +124,30 @@ RSpec.describe "Rslsp::Server Rails file-change invalidation" do
     expect(calls.pop(timeout: 2)).to eq([:restarted, "/workspace"])
   end
 
+  it "restarts the Agent on a Gemfile.lock change even when it's currently static-only — restart IS the recovery path" do
+    calls = Queue.new
+    static_only_manager = Class.new do
+      define_singleton_method(:ready?) { false }
+      define_singleton_method(:status) { :static_only }
+      define_singleton_method(:stop) { calls << :stopped }
+    end
+    fake_bootstrap = Class.new do
+      define_singleton_method(:start) do |**|
+        calls << :restarted
+        :new_manager
+      end
+    end
+
+    server = build_server(
+      changes_input([{ uri: "file:///workspace/Gemfile.lock", type: 2 }]),
+      agent_manager: static_only_manager, agent_bootstrap: fake_bootstrap, workspace_root: "/workspace"
+    )
+    server.run
+
+    expect(calls.pop(timeout: 2)).to eq(:stopped)
+    expect(calls.pop(timeout: 2)).to eq(:restarted)
+  end
+
   it "does nothing when no Agent is running (never started or static-only)" do
     server = build_server(changes_input([{ uri: "file:///app/config/routes.rb", type: 2 }]), agent_manager: nil)
 

@@ -489,7 +489,7 @@ module Rslsp
       # switch can touch dozens of files in one notification, and without
       # this a restart (or the same model) would otherwise be requested
       # once per file instead of once per batch.
-      with_ready_agent("<batch>") { restart_agent } if needs_restart
+      maybe_restart_agent if needs_restart
       return if needs_restart # a restart already refreshes everything
 
       with_ready_agent("config/routes.rb") { refresh_routes } if needs_routes_refresh
@@ -545,6 +545,19 @@ module Rslsp
       elsif @agent_manager
         @logger.warn("skipping Runtime Agent refresh for #{path}: agent not ready (status=#{@agent_manager.status})")
       end
+    end
+
+    # Unlike routes/model refresh, a restart is exactly the recovery
+    # mechanism for an Agent that *isn't* :ready (:starting, or degraded
+    # to :static_only after a failed boot) — gating it on #ready? the same
+    # way would mean a workspace stuck in :static_only could never recover
+    # from a Gemfile.lock fix without a full Core Server restart (reloading
+    # the VS Code window). The only real precondition is that some Agent
+    # was ever started for this workspace in the first place; a workspace
+    # with none (not Rails, or trust not yet granted) has nothing to
+    # restart and stays quiet, same as #with_ready_agent's nil case.
+    def maybe_restart_agent
+      restart_agent if @agent_manager
     end
 
     # Re-draws routes via agent/reload, then re-fetches the routes section
