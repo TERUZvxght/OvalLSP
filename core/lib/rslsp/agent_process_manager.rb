@@ -80,49 +80,40 @@ module Rslsp
     # Returns the agent/status result, or nil if the Agent isn't ready or
     # stops responding (in which case status degrades to :static_only).
     def request_status(timeout: 5)
-      return nil unless ready?
-
-      response = request("agent/status", {}, timeout: timeout)
-      if response.nil?
-        @logger.warn("agent/status timed out; marking runtime agent static-only")
-        @status = :static_only
-        terminate_process
-        nil
-      else
-        response[:result]
-      end
+      response = request_while_ready("agent/status", {}, timeout: timeout, on_failure: "agent/status timed out")
+      response && response[:result]
     end
 
     # Requests one or more agent/snapshot sections (e.g. ["routes"]).
-    # Returns nil if the Agent isn't ready or doesn't respond in time.
+    # Returns nil if the Agent isn't ready or doesn't respond in time (in
+    # which case status degrades to :static_only).
     def fetch_snapshot(sections:, timeout: 5)
-      return nil unless ready?
-
-      response = request("agent/snapshot", { sections: sections }, timeout: timeout)
+      response = request_while_ready(
+        "agent/snapshot", { sections: sections }, timeout: timeout, on_failure: "agent/snapshot timed out"
+      )
       response && response[:result]
     end
 
     # Requests a single model's columns/associations via agent/model.
-    # Returns nil if the Agent isn't ready or doesn't respond in time; the
-    # result hash may still contain an `:error` key (e.g. NOT_FOUND) that
-    # callers should check.
+    # Returns nil if the Agent isn't ready or doesn't respond in time (in
+    # which case status degrades to :static_only); the result hash may
+    # still contain an `:error` key (e.g. NOT_FOUND) that callers should
+    # check -- that's a valid response, not a failed round trip.
     def fetch_model(name:, timeout: 5)
-      return nil unless ready?
-
-      response = request("agent/model", { name: name }, timeout: timeout)
+      response = request_while_ready(
+        "agent/model", { name: name }, timeout: timeout, on_failure: "agent/model timed out"
+      )
       response && response[:result]
     end
 
     # Asks the Agent to re-draw routes (and anything else a real reload
     # touches) and returns its { generation:, changedSections:, errors: }
-    # result, or nil if unavailable.
+    # result, or nil if unavailable (in which case status degrades to
+    # :static_only).
     def reload(reason: "filesChanged", changed_paths: [], sections: ["routes"], timeout: 30)
-      return nil unless ready?
-
-      response = request(
-        "agent/reload",
-        { reason: reason, changedPaths: changed_paths, sections: sections },
-        timeout: timeout
+      response = request_while_ready(
+        "agent/reload", { reason: reason, changedPaths: changed_paths, sections: sections }, timeout: timeout,
+        on_failure: "agent/reload timed out"
       )
       response && response[:result]
     end
@@ -149,6 +140,31 @@ module Rslsp
 
     private
 
+    # Every read-style request (agent/status, agent/snapshot, agent/model,
+    # agent/reload) shares the same failure contract: not ready -> nil
+    # without side effects; a round trip that returns nothing (EOF,
+    # timeout, a crashed reader thread, an unparsable frame) degrades
+    # status to :static_only so a request that timed out today is never
+    # mistaken for a live Agent tomorrow (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+    # An in-band `:error` result (e.g. agent/model's NOT_FOUND) is still a
+    # *successful* round trip and must NOT degrade anything -- only #request
+    # returning nil does.
+    def request_while_ready(method, params, timeout:, on_failure:)
+      return nil unless ready?
+
+      response = request(method, params, timeout: timeout)
+      degrade_to_static_only(on_failure) if response.nil?
+      response
+    end
+
+    def degrade_to_static_only(reason)
+      return unless @status == :ready # already static_only/stopped/stopping: nothing to degrade
+
+      @logger.warn("#{reason}; marking runtime agent static-only")
+      @status = :static_only
+      terminate_process
+    end
+
     def spawn_process
       stdin_read, @stdin_write = ::IO.pipe
       @stdout_read, stdout_write = ::IO.pipe
@@ -172,6 +188,15 @@ module Rslsp
       reader = Rslsp::IO::FramedReader.new(@stdout_read)
       loop { @inbox << reader.read_message }
     rescue Rslsp::IO::FramedReader::EOF, IOError, Errno::EBADF
+      @inbox << :eof
+    rescue StandardError => e
+      # An invalid frame or unparsable JSON raises something other than
+      # the three "normal" end-of-stream shapes above -- without this,
+      # the thread would die silently, @inbox would never receive
+      # anything again, and every pending/future request would have to
+      # wait out its full timeout instead of failing fast, with @status
+      # stuck at :ready the whole time (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+      @logger.error("runtime agent reader thread crashed: #{e.class}: #{e.message}")
       @inbox << :eof
     end
 

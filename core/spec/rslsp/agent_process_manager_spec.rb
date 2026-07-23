@@ -82,6 +82,34 @@ RSpec.describe Rslsp::AgentProcessManager do
     expect(@manager.status).to eq(:static_only)
   end
 
+  it "degrades to static-only after any request times out, not just request_status (Task 008.5)" do
+    @manager = build_manager
+    @manager.start
+    pid = @manager.pid
+
+    expect { Process.kill("KILL", pid) }.not_to raise_error
+    sleep 0.3
+
+    expect(@manager.fetch_model(name: "User", timeout: 0.5)).to be_nil
+    expect(@manager.status).to eq(:static_only)
+  end
+
+  it "degrades to static-only instead of getting stuck at :ready when the reader thread crashes on a corrupt frame (Task 008.5)" do
+    @manager = described_class.new(
+      command: RbConfig.ruby,
+      args: [File.join(core_root, "spec/fixtures/corrupting_agent/boot.rb")],
+      chdir: core_root,
+      logger: logger,
+      hello_timeout: 5
+    )
+
+    expect(@manager.start).to eq(:ready)
+
+    expect(@manager.request_status(timeout: 2)).to be_nil
+    expect(@manager.status).to eq(:static_only)
+    expect(logger).to have_received(:error).with(/reader thread crashed/)
+  end
+
   it "leaves no process behind after #stop" do
     @manager = build_manager
     @manager.start
