@@ -109,6 +109,38 @@ RSpec.describe Rslsp::WorkspaceIndex do
     end
   end
 
+  describe "internal index hygiene (Task 008.5)" do
+    it "does not plant an empty entry for a SymbolId that was never indexed, via a mere existence check" do
+      unknown = Rslsp::Index::SymbolId.new(kind: :class, owner: nil, name: "::Ghost", discriminator: nil)
+
+      index.declarations(unknown)
+      index.declarations_with_uri(unknown)
+      index.declarations(unknown)
+
+      by_symbol = index.instance_variable_get(:@by_symbol)
+      expect(by_symbol).not_to have_key(unknown)
+    end
+
+    it "does not plant an empty entry in the simple-name index for a name that was never indexed" do
+      index.find_by_simple_name("Ghost")
+      index.find_by_simple_name("Ghost")
+
+      by_simple_name = index.instance_variable_get(:@by_simple_name)
+      expect(by_simple_name).not_to have_key("ghost")
+    end
+
+    it "removes the simple-name index entry once the last declaration with that name is removed" do
+      decl = declaration(kind: :class, owner: nil, name: "::User")
+      index.replace_file(summary(uri: "file:///a.rb", declarations: [decl]))
+
+      index.remove_file("file:///a.rb")
+
+      expect(index.find_by_simple_name("User")).to eq([])
+      by_simple_name = index.instance_variable_get(:@by_simple_name)
+      expect(by_simple_name).not_to have_key("user")
+    end
+  end
+
   describe "#search" do
     it "ranks an exact name match above a substring match" do
       user = declaration(kind: :class, owner: nil, name: "::User")
