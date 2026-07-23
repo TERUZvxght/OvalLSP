@@ -13,6 +13,7 @@ require_relative "routes/route_registry"
 require_relative "routes/controller_naming"
 require_relative "erb/ruby_region_extractor"
 require_relative "rails_bootstrap"
+require_relative "cold_indexer"
 
 module Rslsp
   # LSP transport + request router. Task 001 scope: initialize/initialized,
@@ -83,6 +84,7 @@ module Rslsp
       case method
       when "initialize"
         respond(id, initialize_result)
+        start_cold_index
         maybe_start_agent(message[:params])
       when "initialized"
         # no-op: nothing to do yet at this task's scope.
@@ -171,6 +173,28 @@ module Rslsp
       # Parsing must never take the server down: keep the previous summary
       # (if any) and let static features degrade gracefully for this file.
       @logger.error("failed to summarize #{document.uri}: #{e.class}: #{e.message}")
+    end
+
+    # Cold Index (docs/design/tasks/008.5-runtime-and-index-corrections.md):
+    # indexes the workspace from disk after initialize, so files nobody
+    # has opened yet (a controller behind a view opened first, a model
+    # nobody's touched this session) are still resolvable. Unlike the
+    # Agent, this needs no trust check — reading and parsing local Ruby
+    # source executes none of it, unlike booting the workspace's own Rails
+    # app does.
+    def start_cold_index
+      root = @workspace_root
+      parser_service = @parser_service
+      workspace_index = @workspace_index
+      document_store = @document_store
+      logger = @logger
+
+      Thread.new do
+        ColdIndexer.new(root: root, parser_service: parser_service, workspace_index: workspace_index,
+                        document_store: document_store, logger: logger).run
+      rescue StandardError => e
+        logger.error("cold index failed: #{e.class}: #{e.message}")
+      end
     end
 
     # Starts the Runtime Agent on a background thread — never the request
@@ -319,7 +343,7 @@ module Rslsp
       path = UriUtil.to_path(uri)
       return nil unless path && File.file?(path)
 
-      TextDocument.new(uri: uri, text: File.read(path), version: nil, language_id: "ruby")
+      TextDocument.new(uri: uri, text: File.read(path, encoding: Encoding::UTF_8), version: nil, language_id: "ruby")
     rescue StandardError => e
       @logger.error("failed to read #{uri} from disk: #{e.class}: #{e.message}")
       nil
@@ -521,7 +545,8 @@ module Rslsp
       path = UriUtil.to_path(uri)
       return unless path && File.file?(path)
 
-      document = TextDocument.new(uri: uri, text: File.read(path), version: nil, language_id: "ruby")
+      document = TextDocument.new(uri: uri, text: File.read(path, encoding: Encoding::UTF_8), version: nil,
+                                   language_id: "ruby")
       @workspace_index.replace_file(@parser_service.summarize(document))
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
