@@ -114,7 +114,7 @@ RSpec.describe Rslsp::Server do
 
   it "returns MethodNotFound for an unknown request instead of crashing" do
     input =
-      frame(jsonrpc: "2.0", id: 1, method: "textDocument/completion", params: {}) +
+      frame(jsonrpc: "2.0", id: 1, method: "textDocument/thisMethodDoesNotExist", params: {}) +
       frame(jsonrpc: "2.0", id: 2, method: "initialize", params: {}) +
       frame(jsonrpc: "2.0", method: "exit", params: nil)
 

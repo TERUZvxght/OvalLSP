@@ -8,6 +8,8 @@ require_relative "workspace_index"
 require_relative "uri_util"
 require_relative "local_inferencer"
 require_relative "index/document_symbol_builder"
+require_relative "routes/route_registry"
+require_relative "routes/controller_naming"
 
 module Rslsp
   # LSP transport + request router. Task 001 scope: initialize/initialized,
@@ -16,8 +18,11 @@ module Rslsp
   # textDocument/documentSymbol. Task 003 adds a workspace-wide index behind
   # textDocument/definition (lexical, name-based — see WorkspaceIndex),
   # workspace/symbol, and workspace/didChangeWatchedFiles. Task 004 adds the
-  # custom rslsp/explainType request, backed by LocalInferencer. Rails
-  # integration arrives in later tasks.
+  # custom rslsp/explainType request, backed by LocalInferencer. Task 006
+  # adds route-helper completion/signatureHelp/definition, backed by a
+  # Routes::RouteRegistry the caller builds from an agent/snapshot response
+  # (Server itself doesn't manage the Runtime Agent process — see
+  # AgentProcessManager — keeping this class free of Rails-boot concerns).
   class Server
     JSONRPC_VERSION = "2.0"
 
@@ -26,7 +31,7 @@ module Rslsp
 
     FILE_CHANGE_DELETED = 3
 
-    def initialize(input:, output:, logger:)
+    def initialize(input:, output:, logger:, route_registry: Routes::RouteRegistry.new)
       @reader = Rslsp::IO::FramedReader.new(input)
       @writer = Rslsp::IO::FramedWriter.new(output)
       @logger = logger
@@ -34,6 +39,7 @@ module Rslsp
       @parser_service = ParserService.new
       @workspace_index = WorkspaceIndex.new
       @local_inferencer = LocalInferencer.new
+      @route_registry = route_registry
       @file_summaries = {}
       @shutdown_received = false
     end
@@ -89,6 +95,10 @@ module Rslsp
         handle_did_change_watched_files(message[:params])
       when "rslsp/explainType"
         respond(id, explain_type_result(message[:params]))
+      when "textDocument/completion"
+        respond(id, completion_result(message[:params]))
+      when "textDocument/signatureHelp"
+        respond(id, signature_help_result(message[:params]))
       else
         handle_unknown_method(method, id)
       end
@@ -169,8 +179,9 @@ module Rslsp
 
     # Lexical-only "go to definition": resolves the identifier under the
     # cursor by name against the workspace index (docs/03-semantic-engine.md
-    # section 6's name-heuristic fallback). Real reference tracking arrives
-    # with the type engine.
+    # section 6's name-heuristic fallback) and, if it's a route helper,
+    # against the route registry too. Real reference tracking arrives with
+    # the type engine.
     def definition_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       document = @document_store.fetch(uri: uri)
@@ -179,7 +190,92 @@ module Rslsp
       word = word_at_position(document, params.fetch(:position))
       return [] unless word
 
-      @workspace_index.find_by_simple_name(word).map { |match| { uri: match[:uri], range: match[:range] } }
+      lexical = @workspace_index.find_by_simple_name(word).map { |match| { uri: match[:uri], range: match[:range] } }
+      (lexical + route_helper_definitions(word)).uniq
+    end
+
+    # A route helper's primary definition is its routes.rb source line (the
+    # RouteRegistry.route_helper's location — absent for a route Task 006's
+    # "source location unavailable" case falls back to, so it's simply
+    # omitted rather than pointing somewhere meaningless). Its secondary
+    # definitions are every controller action it can dispatch to, resolved
+    # via the workspace index — GET actions sort first, so a plain resource
+    # route's "show" action leads.
+    def route_helper_definitions(word)
+      helper = @route_registry.find_by_method_name(word)
+      return [] unless helper
+
+      locations = []
+      if helper.source_location
+        line = helper.source_location.fetch(:line)
+        locations << {
+          uri: UriUtil.from_path(helper.source_location.fetch(:path)),
+          range: { start: { line: line, character: 0 }, end: { line: line, character: 0 } }
+        }
+      end
+
+      helper.action_targets.each do |target|
+        owner = Routes::ControllerNaming.owner_name(target.controller)
+        next unless owner
+
+        symbol_id = Index::SymbolId.new(kind: :instance_method, owner: owner, name: target.action, discriminator: nil)
+        @workspace_index.declarations_with_uri(symbol_id).each do |(decl_uri, decl)|
+          locations << { uri: decl_uri, range: decl.location }
+        end
+      end
+
+      locations
+    end
+
+    def completion_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = @document_store.fetch(uri: uri)
+      return [] unless document
+
+      prefix = word_prefix_at_position(document, params.fetch(:position))
+      return [] if prefix.empty?
+
+      @route_registry.completion_names(prefix).map do |name|
+        { label: name, kind: 3 } # LSP CompletionItemKind::Function
+      end
+    end
+
+    # Finds the call whose argument list the cursor is inside by scanning
+    # backward for an unmatched `(`, then reads the identifier immediately
+    # before it. Good enough for the common `post_path(|)` shape signature
+    # help actually needs to handle; it doesn't try to track nested calls.
+    def signature_help_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = @document_store.fetch(uri: uri)
+      return { signatures: [] } unless document
+
+      method_name = enclosing_call_name(document, params.fetch(:position))
+      helper = method_name && @route_registry.find_by_method_name(method_name)
+      return { signatures: [] } unless helper
+
+      params_label = (helper.required_parts + ["options = {}"]).join(", ")
+      {
+        signatures: [
+          {
+            label: "#{helper.path_helper}(#{params_label})",
+            parameters: helper.required_parts.map { |part| { label: part } }
+          }
+        ]
+      }
+    end
+
+    def enclosing_call_name(document, position)
+      text = document.text
+      idx = document.position_to_char_offset(position) - 1
+      idx -= 1 while idx >= 0 && text[idx] != "("
+      return nil if idx.negative?
+
+      name_end = idx
+      name_start = name_end
+      name_start -= 1 while name_start.positive? && word_char?(text[name_start - 1])
+      return nil if name_start == name_end
+
+      text[name_start...name_end]
     end
 
     def word_at_position(document, position)
@@ -194,6 +290,15 @@ module Rslsp
       return nil if left == right
 
       text[left...right]
+    end
+
+    def word_prefix_at_position(document, position)
+      text = document.text
+      offset = document.position_to_char_offset(position)
+
+      left = offset
+      left -= 1 while left > 0 && word_char?(text[left - 1])
+      text[left...offset]
     end
 
     def word_char?(char)
@@ -245,7 +350,9 @@ module Rslsp
           hoverProvider: true,
           documentSymbolProvider: true,
           definitionProvider: true,
-          workspaceSymbolProvider: true
+          workspaceSymbolProvider: true,
+          completionProvider: { triggerCharacters: [] },
+          signatureHelpProvider: { triggerCharacters: ["("] }
         },
         serverInfo: {
           name: "rslsp",

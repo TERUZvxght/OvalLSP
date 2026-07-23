@@ -54,6 +54,8 @@ module Rslsp
           respond(id, hello_result(message[:params]))
         when "agent/status"
           respond(id, status_result)
+        when "agent/snapshot"
+          respond(id, snapshot_result(message[:params]))
         when "agent/shutdown"
           respond(id, {})
           return :exit
@@ -84,6 +86,56 @@ module Rslsp
           pid: Process.pid,
           uptimeSeconds: Process.clock_gettime(Process::CLOCK_MONOTONIC) - @started_at
         }
+      end
+
+      # docs/design/docs/05-protocol.md's agent/snapshot: returns only the
+      # requested sections, so a Core that only needs routes doesn't pay for
+      # a full model dump. Task 006 implements "metadata" and "routes";
+      # "models" arrives with Task 007.
+      def snapshot_result(params)
+        sections = (params && params[:sections]) || ["metadata"]
+        result = {}
+        result[:metadata] = metadata_section if sections.include?("metadata")
+        result[:routes] = extract_routes if sections.include?("routes")
+        result
+      end
+
+      def metadata_section
+        {
+          railsVersion: rails_defined? ? Rails.version.to_s : nil,
+          rubyVersion: RUBY_VERSION,
+          root: rails_root
+        }
+      end
+
+      # Reads only the duck-typed subset of ActionDispatch::Journey::Route's
+      # real interface (name/verb/path.spec/defaults/required_parts), so this
+      # works unchanged against a real Rails app once one is wired in and
+      # against the rails_minimal fixture's fake router alike. Unnamed
+      # routes produce no helper and are skipped, matching the fact that
+      # Rails itself doesn't generate a `*_path` method for them.
+      def extract_routes
+        return [] unless routes_available?
+
+        Rails.application.routes.routes.filter_map do |route|
+          name = route.respond_to?(:name) ? route.name : nil
+          next nil unless name
+
+          {
+            name: name.to_s,
+            verb: (route.verb || "GET").to_s,
+            pathTemplate: route.path.spec.to_s,
+            requiredParts: Array(route.required_parts).map(&:to_s),
+            optionalParts: route.path.spec.to_s.include?("(.:format)") ? ["format"] : [],
+            defaults: route.defaults.to_h { |k, v| [k.to_s.to_sym, v.to_s] },
+            sourceLocation: route.respond_to?(:source_location) ? route.source_location : nil,
+            routeSet: "main_app"
+          }
+        end
+      end
+
+      def routes_available?
+        rails_defined? && Rails.respond_to?(:application) && Rails.application.respond_to?(:routes)
       end
 
       def rails_defined?

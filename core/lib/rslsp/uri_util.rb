@@ -16,5 +16,9 @@ module Rslsp
     rescue URI::InvalidURIError
       nil
     end
+
+    def from_path(path)
+      "file://#{path}"
+    end
   end
 end

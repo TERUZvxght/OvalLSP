@@ -81,6 +81,15 @@ module Rslsp
       end
     end
 
+    # Requests one or more agent/snapshot sections (e.g. ["routes"]).
+    # Returns nil if the Agent isn't ready or doesn't respond in time.
+    def fetch_snapshot(sections:, timeout: 5)
+      return nil unless ready?
+
+      response = request("agent/snapshot", { sections: sections }, timeout: timeout)
+      response && response[:result]
+    end
+
     # Idempotent: asks the Agent to shut down cleanly, then force-kills it
     # if it doesn't exit promptly. Safe to call even if the Agent already
     # died on its own (crash) or was never started.

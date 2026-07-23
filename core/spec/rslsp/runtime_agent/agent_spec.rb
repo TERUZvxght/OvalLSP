@@ -57,6 +57,35 @@ RSpec.describe Rslsp::RuntimeAgent::Agent do
     expect(result[:root]).to eq("/rails/app")
   end
 
+  it "answers agent/snapshot's routes section via the duck-typed route interface" do
+    fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :source_location) do
+      def path
+        Struct.new(:spec).new(path_spec)
+      end
+    end
+    named = fake_route_class.new("post", "GET", "/posts/:id(.:format)", { controller: "posts", action: "show" }, [:id], nil)
+    unnamed = fake_route_class.new(nil, "GET", "/ping(.:format)", { controller: "health", action: "ping" }, [], nil)
+
+    fake_app = Class.new do
+      define_method(:routes) { Struct.new(:routes).new([named, unnamed]) }
+    end.new
+
+    stub_const("Rails", Class.new do
+      define_singleton_method(:version) { "7.1.0-fixture" }
+      define_singleton_method(:application) { fake_app }
+    end)
+
+    input =
+      frame(jsonrpc: "2.0", id: 1, method: "agent/snapshot", params: { sections: ["routes"] }) +
+      frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+    build_agent(input).run
+
+    routes = sent_messages.first[:result][:routes]
+    expect(routes.size).to eq(1) # the unnamed /ping route is skipped
+    expect(routes.first).to include(name: "post", verb: "GET", requiredParts: ["id"])
+  end
+
   it "answers agent/status with the process pid" do
     input =
       frame(jsonrpc: "2.0", id: 1, method: "agent/status", params: {}) +

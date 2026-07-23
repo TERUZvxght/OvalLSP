@@ -9,6 +9,8 @@
 puts "accidental stdout from a noisy initializer"
 warn "expected: a normal log line on stderr"
 
+require_relative "fake_routing"
+
 module Rails
   def self.root
     File.expand_path("..", __dir__)
@@ -17,4 +19,17 @@ module Rails
   def self.version
     "7.1.0-fixture"
   end
+
+  def self.application
+    @application ||= FakeApplication.new
+  end
+
+  class FakeApplication
+    def routes
+      @routes ||= FakeRouting::RouteSet.new
+    end
+  end
 end
+
+require_relative "routes"
+
