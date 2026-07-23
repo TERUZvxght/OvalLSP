@@ -309,6 +309,39 @@ RSpec.describe Rslsp::RuntimeAgent::Agent do
       expect(models).to eq([{ name: "StubbedUser", tableName: "stubbed_users" }])
     end
 
+    it "returns every non-abstract model's full columns/associations in one agent/models response (Task 008.5)" do
+      base = stub_active_record_base!
+      fake_model_class("ApplicationRecord", base: base, table_name: nil, abstract: true)
+      fake_model_class(
+        "StubbedUser", base: base, table_name: "stubbed_users",
+        columns: [{ name: "id", type: :integer, null: false }],
+        associations: [{ macro: :belongs_to, name: :company, class_name: "StubbedCompany", options: { optional: true } }]
+      )
+      fake_model_class("StubbedCompany", base: base, table_name: "stubbed_companies")
+
+      input =
+        frame(jsonrpc: "2.0", id: 1, method: "agent/models", params: {}) +
+        frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+      build_agent(input).run
+
+      models = sent_messages.first[:result][:models]
+      user = models.find { |m| m[:name] == "StubbedUser" }
+      expect(user[:columns]).to include(name: "id", type: "integer", null: false)
+      expect(user[:associations]).to include(name: "company", macro: "belongs_to", className: "StubbedCompany", optional: true)
+      expect(models.map { |m| m[:name] }).to contain_exactly("StubbedUser", "StubbedCompany")
+    end
+
+    it "returns an empty list from agent/models rather than crashing when Active Record isn't available" do
+      input =
+        frame(jsonrpc: "2.0", id: 1, method: "agent/models", params: {}) +
+        frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+      build_agent(input).run
+
+      expect(sent_messages.first[:result]).to eq(models: [])
+    end
+
     it "returns columns and associations for a known model via agent/model" do
       base = stub_active_record_base!
       fake_model_class(

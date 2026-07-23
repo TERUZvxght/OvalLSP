@@ -62,35 +62,28 @@ module Rslsp
       manager
     end
 
-    # Fetches routes eagerly (there's one flat list, and Core needs all of
-    # it for completion) and models in two passes: a lightweight discovery
-    # list, then one agent/model request per discovered model. Real Rails
-    # apps can have hundreds of models, so this can be slow — it runs on
-    # the caller's (background) thread, not the LSP transport thread, and
-    # a failure here is logged and swallowed rather than propagated, since
-    # static features must keep working either way.
+    # Fetches routes (one flat list) and models (one bulk agent/models
+    # request returning every model's full columns/associations in one
+    # round trip, rather than a lightweight discovery list followed by one
+    # agent/model request per model -- real Rails apps can have hundreds
+    # of models, so N round trips was pure request/response overhead, not
+    # actual work (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+    # Runs on the caller's (background) thread, not the LSP transport
+    # thread, and a failure here is logged and swallowed rather than
+    # propagated, since static features must keep working either way.
     def populate_registries(manager, route_registry:, model_registry:, logger:)
-      snapshot = manager.fetch_snapshot(sections: %w[routes models])
+      snapshot = manager.fetch_snapshot(sections: %w[routes])
       return unless snapshot
 
       route_registry.replace(snapshot[:routes] || [])
 
-      # Built up locally and installed in one #replace call rather than
-      # incrementally via #register_from_agent_response, so this
-      # generation's model table is a full swap (a model discoverable in
-      # an earlier boot but absent from this snapshot doesn't linger) —
-      # the same generation-replace semantics route_registry.replace
-      # already gives routes above (docs/design/tasks/008.5-runtime-and-index-corrections.md).
-      responses_by_name = {}
-      (snapshot[:models] || []).each do |entry|
-        name = entry[:name]
-        next unless name
-
-        response = manager.fetch_model(name: name)
-        next unless response && !response[:error]
-
-        responses_by_name[name] = response
-      end
+      # Built up into a name-keyed Hash and installed in one #replace call
+      # rather than incrementally, so this generation's model table is a
+      # full swap (a model discoverable in an earlier boot but absent from
+      # this fetch doesn't linger) — the same generation-replace semantics
+      # route_registry.replace already gives routes above.
+      models = manager.fetch_all_models || []
+      responses_by_name = models.filter_map { |entry| entry[:name] && [entry[:name], entry] }.to_h
       model_registry.replace(responses_by_name)
     rescue StandardError => e
       logger.error("failed to populate Rails registries from Runtime Agent snapshot: #{e.class}: #{e.message}")

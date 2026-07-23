@@ -106,6 +106,16 @@ module Rslsp
       response && response[:result]
     end
 
+    # Bulk counterpart to N x #fetch_model: one agent/models round trip
+    # returns every model's full columns/associations, avoiding the
+    # request/response overhead of fetching hundreds of models one at a
+    # time (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+    # Returns nil if the Agent isn't ready or doesn't respond in time.
+    def fetch_all_models(timeout: 30)
+      response = request_while_ready("agent/models", {}, timeout: timeout, on_failure: "agent/models timed out")
+      response && response[:result] && response[:result][:models]
+    end
+
     # Asks the Agent to re-draw routes (and anything else a real reload
     # touches) and returns its { generation:, changedSections:, errors: }
     # result, or nil if unavailable (in which case status degrades to

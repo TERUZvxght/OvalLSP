@@ -61,6 +61,8 @@ module Rslsp
           respond(id, snapshot_result(message[:params]))
         when "agent/model"
           respond(id, model_result(message[:params]))
+        when "agent/models"
+          respond(id, models_result)
         when "agent/reload"
           respond(id, reload_result(message[:params]))
         when "agent/shutdown"
@@ -170,6 +172,36 @@ module Rslsp
         klass = valid_model_class(name)
         return { name: name, error: { code: "NOT_FOUND", message: "no such model: #{name.inspect}" } } unless klass
 
+        model_payload(klass)
+      end
+
+      # Bulk counterpart to discover_models + N x agent/model: returns
+      # every non-abstract model's full columns/associations in a single
+      # response. Real Rails apps can have hundreds of models, and issuing
+      # one agent/model round trip per model made initial registry
+      # population (RailsBootstrap) slow purely from request/response
+      # overhead, not actual work -- this does the same
+      # descendants/extract_columns/extract_associations work Core needed
+      # anyway, just without a round trip per model
+      # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+      # agent/snapshot's "models" section stays deliberately lightweight
+      # (name/tableName only) for callers that just need to know what
+      # exists, not this method's full detail.
+      def models_result
+        return { models: [] } unless active_record_available?
+
+        eager_load_models!
+
+        models = ::ActiveRecord::Base.descendants.reject(&:abstract_class?).filter_map do |klass|
+          next nil unless klass.respond_to?(:name) && klass.name
+
+          model_payload(klass)
+        end
+
+        { models: models }
+      end
+
+      def model_payload(klass)
         columns, partial = extract_columns(klass)
 
         {

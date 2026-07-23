@@ -130,6 +130,17 @@ RSpec.describe Rslsp::AgentProcessManager do
     expect(result[:associations]).to include(a_hash_including(name: "company", macro: "belongs_to"))
   end
 
+  it "fetches every model's full columns/associations in one agent/models round trip (Task 008.5)" do
+    @manager = build_manager
+    @manager.start
+
+    models = @manager.fetch_all_models
+
+    user = models.find { |m| m[:name] == "User" }
+    expect(user[:associations]).to include(a_hash_including(name: "company", macro: "belongs_to"))
+    expect(models.map { |m| m[:name] }).to include("User", "Company")
+  end
+
   it "serializes concurrent requests from multiple threads instead of losing responses to each other" do
     @manager = build_manager
     @manager.start
