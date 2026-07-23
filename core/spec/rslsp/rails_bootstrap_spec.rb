@@ -99,6 +99,14 @@ RSpec.describe Rslsp::RailsBootstrap do
         expect(captured[:args]).to eq(
           ["exec", "ruby", Rslsp::RailsBootstrap::BOOT_SCRIPT, "start", File.join(dir, "config", "environment.rb")]
         )
+        # If Core Server's own process was launched via `bundle exec`,
+        # BUNDLE_GEMFILE is already set and would otherwise be inherited
+        # verbatim by this child, silently pointing its `bundle exec` at
+        # Core's own Gemfile instead of the target Rails app's
+        # (docs/design/tasks/008.5-runtime-and-index-corrections.md) --
+        # `nil` here must be passed through to unset it for the child,
+        # not merely omitted.
+        expect(captured[:env]).to eq("BUNDLE_GEMFILE" => nil)
       end
     end
   end

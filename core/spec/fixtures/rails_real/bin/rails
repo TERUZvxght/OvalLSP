@@ -1,0 +1,4 @@
+#!/usr/bin/env ruby
+# Marker file only -- RailsBootstrap.rails_app? checks for this file's
+# existence but never executes it (docs/design/tasks/008.5-runtime-and-index-corrections.md
+# deliberately spawns boot.rb as a plain ruby process instead of `bin/rails runner`).

@@ -42,15 +42,28 @@ module Rslsp
     # rails_minimal fixture instead of the real `bundle exec ruby boot.rb`
     # invocation this defaults to.
     def start(root:, logger:, route_registry:, model_registry:, hello_timeout: 60, command: nil, args: nil)
+      env = {}
       if command.nil?
         return nil unless rails_app?(root)
 
         command = "bundle"
         args = ["exec", "ruby", BOOT_SCRIPT, "start", environment_file_for(root)]
+        # If Core Server's own process was itself launched via `bundle
+        # exec` (its normal invocation, being a Ruby gem), BUNDLE_GEMFILE
+        # is already set in this process' environment and would
+        # otherwise be inherited verbatim by the child -- silently
+        # pointing `bundle exec` at *Core's* Gemfile instead of the
+        # target Rails app's own one, since the target's own
+        # config/boot.rb sets BUNDLE_GEMFILE with `||=` and never
+        # overrides an inherited value
+        # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+        # `nil` here tells Process.spawn to unset the var for the child
+        # rather than merely not setting a new one.
+        env = { "BUNDLE_GEMFILE" => nil }
       end
 
       manager = AgentProcessManager.new(command: command, args: args, chdir: root, logger: logger,
-                                         hello_timeout: hello_timeout)
+                                         hello_timeout: hello_timeout, env: env)
       status = manager.start
 
       if status == :ready

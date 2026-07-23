@@ -13,3 +13,13 @@ vscode/.vscode-test/
 
 # Test-generated flag files (rails_minimal reload fixture)
 core/spec/fixtures/rails_minimal/config/.disable_archived_route
+
+# Real-Rails integration fixture (spec/integration/real_rails_spec.rb):
+# Gemfile.lock/.bundle/db/log/tmp are environment-specific -- regenerated
+# locally via `bundle install --local` before the suite runs, and skipped
+# entirely if Rails/sqlite3 aren't available on the machine running specs.
+core/spec/fixtures/rails_real/Gemfile.lock
+core/spec/fixtures/rails_real/.bundle/
+core/spec/fixtures/rails_real/db/*.sqlite3*
+core/spec/fixtures/rails_real/log/
+core/spec/fixtures/rails_real/tmp/
