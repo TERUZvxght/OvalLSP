@@ -52,6 +52,7 @@ module Rslsp
       @workspace_root = workspace_root
       @agent_bootstrap = agent_bootstrap
       @agent_manager = nil
+      @agent_restart_mutex = Mutex.new
       @file_summaries = {}
       @shutdown_received = false
     end
@@ -198,15 +199,18 @@ module Rslsp
       logger = @logger
       route_registry = @route_registry
       model_registry = @model_registry
+      mutex = @agent_restart_mutex
 
       Thread.new do
-        # Stored for later use by file-change-triggered reload/refresh (see
-        # #invalidate_rails_state_for) — a single reference reassignment,
-        # safe to read concurrently under CRuby's GVL the same way
-        # RouteRegistry/ModelRegistry's own updates are (see their class
-        # comments).
-        @agent_manager = bootstrap.start(root: root, logger: logger, route_registry: route_registry,
-                                          model_registry: model_registry)
+        # Serialized on the same mutex #restart_agent uses: an extremely
+        # fast client could in principle fire a file-change restart before
+        # this initial bootstrap finishes, and without sharing the lock,
+        # both writes to @agent_manager could interleave the same way
+        # described in #restart_agent's comment.
+        mutex.synchronize do
+          @agent_manager = bootstrap.start(root: root, logger: logger, route_registry: route_registry,
+                                            model_registry: model_registry)
+        end
       rescue StandardError => e
         logger.error("Runtime Agent bootstrap failed: #{e.class}: #{e.message}")
       end
@@ -602,18 +606,33 @@ module Rslsp
     # Agent process restarts (docs/design/docs/04-runtime-agent.md section 9:
     # "Gemfile.lock -> Core/Agent full restart", "config/initializers/** ->
     # Agent restart").
+    #
+    # Serialized on @agent_restart_mutex: two restart triggers arriving as
+    # separate didChangeWatchedFiles notifications in quick succession
+    # (e.g. `bundle install` touching Gemfile.lock, then a follow-up save)
+    # each spawn their own thread here. Without the mutex, both would
+    # capture the same starting @agent_manager, both stop it and start a
+    # fresh process, and whichever thread finished last would overwrite
+    # @agent_manager — orphaning the other thread's freshly-started Agent
+    # process with nothing left to stop it (docs/11-risk-register.md R-08,
+    # memory/process growth). Re-reading @agent_manager *inside* the lock
+    # (not capturing it beforehand) means a second, serialized restart
+    # correctly stops the process the first restart just started, instead
+    # of a stale reference to the one from before either ran.
     def restart_agent
-      agent_manager = @agent_manager
       bootstrap = @agent_bootstrap
       root = @workspace_root
       route_registry = @route_registry
       model_registry = @model_registry
       logger = @logger
+      mutex = @agent_restart_mutex
 
       Thread.new do
-        agent_manager.stop
-        @agent_manager = bootstrap.start(root: root, logger: logger, route_registry: route_registry,
-                                          model_registry: model_registry)
+        mutex.synchronize do
+          @agent_manager&.stop
+          @agent_manager = bootstrap.start(root: root, logger: logger, route_registry: route_registry,
+                                            model_registry: model_registry)
+        end
       rescue StandardError => e
         logger.error("failed to restart runtime agent: #{e.class}: #{e.message}")
       end

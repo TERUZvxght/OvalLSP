@@ -148,6 +148,54 @@ RSpec.describe "Rslsp::Server Rails file-change invalidation" do
     expect(calls.pop(timeout: 2)).to eq(:restarted)
   end
 
+  it "never leaks an Agent process when two restart triggers race across separate notifications" do
+    events = Queue.new
+    next_id = 0
+
+    fake_bootstrap = Class.new do
+      define_singleton_method(:start) do |**|
+        id = (next_id += 1)
+        sleep 0.05 # simulate a slow Rails boot so both restarts overlap
+        manager = Object.new
+        manager.define_singleton_method(:id) { id }
+        manager.define_singleton_method(:stop) { events << [:stopped, id] }
+        events << [:started, id]
+        manager
+      end
+    end
+
+    initial_manager = Object.new
+    initial_manager.define_singleton_method(:stop) { events << [:stopped, :initial] }
+
+    # Two SEPARATE notifications (not one batch) — e.g. `bundle install`
+    # touching Gemfile.lock, then a followup save shortly after — each
+    # independently triggers its own #restart_agent call.
+    input =
+      frame(jsonrpc: "2.0", method: "workspace/didChangeWatchedFiles",
+            params: { changes: [{ uri: "file:///workspace/Gemfile.lock", type: 2 }] }) +
+      frame(jsonrpc: "2.0", method: "workspace/didChangeWatchedFiles",
+            params: { changes: [{ uri: "file:///workspace/Gemfile.lock", type: 2 }] }) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    server = Rslsp::Server.new(
+      input: StringIO.new(input), output: output, logger: logger,
+      route_registry: route_registry, model_registry: model_registry,
+      workspace_root: "/workspace", agent_bootstrap: fake_bootstrap
+    )
+    server.instance_variable_set(:@agent_manager, initial_manager)
+    server.run
+
+    collected = Array.new(4) { events.pop(timeout: 2) }
+    started_ids = collected.select { |kind, _| kind == :started }.map(&:last)
+    stopped_ids = collected.select { |kind, _| kind == :stopped }.map(&:last)
+
+    expect(wait_until { server.instance_variable_get(:@agent_manager).respond_to?(:id) }).to be(true)
+    final_id = server.instance_variable_get(:@agent_manager).id
+
+    leaked = started_ids - stopped_ids - [final_id]
+    expect(leaked).to be_empty
+  end
+
   it "does nothing when no Agent is running (never started or static-only)" do
     server = build_server(changes_input([{ uri: "file:///app/config/routes.rb", type: 2 }]), agent_manager: nil)
 
