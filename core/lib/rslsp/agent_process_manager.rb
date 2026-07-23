@@ -11,6 +11,16 @@ module Rslsp
   # agent/shutdown). If the Agent never answers hello in time, or later
   # stops responding, this degrades to :static_only rather than taking the
   # Core Server down with it (docs/02-architecture.md 障害分離 table).
+  #
+  # docs/05-protocol.md section 7 explicitly allows "MVP Agentは
+  # single-flight reloadと、read requestの並行処理なしでもよい" — #request
+  # enforces exactly that with a mutex, because Server can call public
+  # methods here (fetch_model, reload, request_status, ...) from several
+  # background threads at once (one per changed file), and without
+  # serializing the write-then-await-matching-response round trip, one
+  # thread can steal and discard another's response, leaving it to time
+  # out. There is one shared stdin/stdout pipe pair; only one request may
+  # be in flight on it at a time.
   class AgentProcessManager
     STATUSES = %i[not_started starting ready static_only stopped].freeze
 
@@ -27,6 +37,7 @@ module Rslsp
       @next_id = 0
       @pid = nil
       @hello_result = nil
+      @request_mutex = Mutex.new
     end
 
     attr_reader :status, :hello_result, :pid
@@ -170,7 +181,14 @@ module Rslsp
       nil
     end
 
+    # Serialized: only one request may be written and awaited at a time
+    # (see the class comment). A concurrent caller simply waits its turn
+    # rather than risking stealing another caller's response off `@inbox`.
     def request(method, params, timeout:)
+      @request_mutex.synchronize { request_locked(method, params, timeout) }
+    end
+
+    def request_locked(method, params, timeout)
       id = (@next_id += 1)
       @writer.write_message(jsonrpc: "2.0", id: id, method: method, params: params)
 
@@ -182,8 +200,9 @@ module Rslsp
         message = @inbox.pop(timeout: remaining)
         return nil if message.nil? || message == :eof
         return message if message.is_a?(Hash) && message[:id] == id
-        # A stray notification or mismatched id: MVP is single-flight, so
-        # just ignore it and keep waiting for our own response.
+        # A stray notification or mismatched id: with the mutex held, this
+        # should be unreachable in practice, but staying defensive costs
+        # nothing — just keep waiting for our own response.
       end
     rescue StandardError => e
       @logger.error("agent request #{method} failed: #{e.class}: #{e.message}")

@@ -28,9 +28,15 @@ function startClientForFolder(
 
   // Forwarded to the server as workspace/didChangeWatchedFiles so files
   // edited or removed outside the open buffers (git checkout, another
-  // editor, rm) still update the workspace index.
+  // editor, rm) still update the workspace index — and, for Gemfile.lock
+  // specifically, tell the server to restart the Runtime Agent (a changed
+  // lockfile can mean different gem versions or a different Rails
+  // version entirely; docs/design/docs/04-runtime-agent.md section 9:
+  // "Gemfile.lock -> Core/Agent full restart"). Without this pattern
+  // covering it, that server-side restart logic would exist but never
+  // actually run.
   const watcher = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(folder, '**/*.{rb,erb}')
+    new vscode.RelativePattern(folder, '**/{*.rb,*.erb,Gemfile.lock}')
   );
   watchers.set(folder.uri.toString(), watcher);
 

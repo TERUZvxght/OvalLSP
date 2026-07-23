@@ -99,6 +99,26 @@ RSpec.describe Rslsp::AgentProcessManager do
     expect(result[:associations]).to include(a_hash_including(name: "company", macro: "belongs_to"))
   end
 
+  it "serializes concurrent requests from multiple threads instead of losing responses to each other" do
+    @manager = build_manager
+    @manager.start
+
+    # Simulates many files changing at once (e.g. a git checkout touching
+    # many app/models/*.rb files), each refreshed on its own background
+    # thread — exactly what Server#refresh_model does per changed file.
+    # Without serializing the write-then-await round trip in
+    # AgentProcessManager#request, one thread's response can be read and
+    # discarded by another thread waiting on a different request id,
+    # leaving the rightful recipient to time out.
+    names = %w[User Company Order] * 8
+    threads = names.map { |name| Thread.new(name) { |n| @manager.fetch_model(name: n) } }
+    results = threads.map(&:value)
+
+    # Every thread must get back the model it actually asked for — not
+    # nil (a timed-out request) and not another thread's response.
+    expect(results.map { |r| r && r[:name] }).to eq(names)
+  end
+
   describe "#reload" do
     let(:disable_flag) { File.join(fixture_root, "config", ".disable_archived_route") }
 

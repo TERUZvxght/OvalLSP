@@ -141,4 +141,107 @@ RSpec.describe "Rslsp::Server Rails file-change invalidation" do
 
     expect { server.run }.not_to raise_error
   end
+
+  it "logs a warning instead of silently dropping a change when the Agent isn't ready" do
+    not_ready_manager = Class.new do
+      define_singleton_method(:ready?) { false }
+      define_singleton_method(:status) { :starting }
+    end
+
+    server = build_server(
+      changes_input([{ uri: "file:///app/config/routes.rb", type: 2 }]), agent_manager: not_ready_manager
+    )
+
+    server.run
+
+    expect(logger).to have_received(:warn).with(/not ready/)
+  end
+
+  it "deduplicates a batch: many files for the same model only trigger one fetch_model call" do
+    calls = Queue.new
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:fetch_model) do |name:|
+        calls << name
+        { name: name, tableName: "users", columns: [], associations: [], partial: false }
+      end
+    end
+
+    # Simulates an editor reporting the same file changed twice in one
+    # notification batch (harmless in practice, but shouldn't double the
+    # Agent traffic) alongside a genuinely different model.
+    changes = [
+      { uri: "file:///app/app/models/user.rb", type: 2 },
+      { uri: "file:///app/app/models/user.rb", type: 2 },
+      { uri: "file:///app/app/models/company.rb", type: 2 }
+    ]
+
+    server = build_server(changes_input(changes), agent_manager: fake_manager)
+    server.run
+
+    seen = []
+    seen << calls.pop(timeout: 2)
+    seen << calls.pop(timeout: 2)
+    expect(seen).to contain_exactly("User", "Company")
+    expect(calls.pop(timeout: 0.2)).to be_nil # no third call
+  end
+
+  it "deduplicates a batch: many Gemfile.lock/initializer changes only trigger one restart" do
+    calls = Queue.new
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:stop) { calls << :stopped }
+    end
+    fake_bootstrap = Class.new do
+      define_singleton_method(:start) do |**|
+        calls << :restarted
+        :new_manager
+      end
+    end
+
+    changes = [
+      { uri: "file:///workspace/Gemfile.lock", type: 2 },
+      { uri: "file:///workspace/config/initializers/a.rb", type: 2 },
+      { uri: "file:///workspace/config/initializers/b.rb", type: 2 }
+    ]
+
+    server = build_server(
+      changes_input(changes), agent_manager: fake_manager, agent_bootstrap: fake_bootstrap,
+      workspace_root: "/workspace"
+    )
+    server.run
+
+    expect(calls.pop(timeout: 2)).to eq(:stopped)
+    expect(calls.pop(timeout: 2)).to eq(:restarted)
+    expect(calls.pop(timeout: 0.2)).to be_nil # only one restart despite three matching files
+  end
+
+  it "skips routes/model refreshes entirely when the same batch also needs a restart" do
+    calls = Queue.new
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:stop) { calls << :stopped }
+      define_singleton_method(:reload) { |**| calls << :reload; nil }
+      define_singleton_method(:fetch_model) { |**| calls << :fetch_model; nil }
+    end
+    fake_bootstrap = Class.new do
+      define_singleton_method(:start) { |**| calls << :restarted; :new_manager }
+    end
+
+    changes = [
+      { uri: "file:///workspace/Gemfile.lock", type: 2 },
+      { uri: "file:///workspace/config/routes.rb", type: 2 },
+      { uri: "file:///workspace/app/models/user.rb", type: 2 }
+    ]
+
+    server = build_server(
+      changes_input(changes), agent_manager: fake_manager, agent_bootstrap: fake_bootstrap,
+      workspace_root: "/workspace"
+    )
+    server.run
+
+    expect(calls.pop(timeout: 2)).to eq(:stopped)
+    expect(calls.pop(timeout: 2)).to eq(:restarted)
+    expect(calls.pop(timeout: 0.2)).to be_nil # reload/fetch_model never called — restart supersedes them
+  end
 end

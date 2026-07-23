@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "set"
 require_relative "io/framed_reader"
 require_relative "io/framed_writer"
 require_relative "document_store"
@@ -460,6 +461,10 @@ module Rslsp
     end
 
     def handle_did_change_watched_files(params)
+      changed_models = Set.new
+      needs_routes_refresh = false
+      needs_restart = false
+
       params.fetch(:changes, []).each do |change|
         uri = change.fetch(:uri)
         if change.fetch(:type) == FILE_CHANGE_DELETED
@@ -471,8 +476,40 @@ module Rslsp
           reindex_from_disk(uri)
         end
 
-        invalidate_rails_state_for(uri)
+        case classify_rails_change(uri)
+        when :routes then needs_routes_refresh = true
+        when :restart then needs_restart = true
+        else
+          model_name = model_name_for(uri)
+          changed_models << model_name if model_name
+        end
       end
+
+      # Deduplicated across the whole batch — a git checkout or branch
+      # switch can touch dozens of files in one notification, and without
+      # this a restart (or the same model) would otherwise be requested
+      # once per file instead of once per batch.
+      with_ready_agent("<batch>") { restart_agent } if needs_restart
+      return if needs_restart # a restart already refreshes everything
+
+      with_ready_agent("config/routes.rb") { refresh_routes } if needs_routes_refresh
+      changed_models.each { |name| with_ready_agent("app/models/#{name}") { refresh_model_named(name) } }
+    end
+
+    def classify_rails_change(uri)
+      path = UriUtil.to_path(uri) || uri
+      return :routes if path.end_with?("config/routes.rb")
+      return :restart if path.end_with?("Gemfile.lock") || path.include?("config/initializers/")
+
+      nil
+    end
+
+    def model_name_for(uri)
+      path = UriUtil.to_path(uri) || uri
+      match = MODEL_FILE_PATTERN.match(path)
+      return nil unless match
+
+      match[:relative].split("/").map { |segment| Routes::ControllerNaming.camelize(segment) }.join("::")
     end
 
     def reindex_from_disk(uri)
@@ -492,18 +529,21 @@ module Rslsp
     # and models (a bare re-parse via #reindex_from_disk above already
     # covers everything WorkspaceIndex needs). No-ops entirely when no
     # Agent is running (never started, still starting, or degraded to
-    # static-only) — there's nothing to refresh from.
-    def invalidate_rails_state_for(uri)
-      return unless @agent_manager&.ready?
-
-      path = UriUtil.to_path(uri) || uri
-
-      if path.end_with?("config/routes.rb")
-        refresh_routes
-      elsif (match = MODEL_FILE_PATTERN.match(path))
-        refresh_model(match[:relative])
-      elsif path.end_with?("Gemfile.lock") || path.include?("config/initializers/")
-        restart_agent
+    # static-only) — there's nothing to refresh from. Only warns when
+    # there's an Agent to begin with (started but not
+    # currently :ready — e.g. mid-restart, or degraded to :static_only) so
+    # a change is never silently dropped without a trace. A workspace with
+    # no Agent at all (not Rails, or trust not yet granted) is the normal
+    # case and stays quiet. A change arriving mid-restart is usually
+    # harmless in practice — #restart_agent's own bootstrap fetches a full
+    # fresh routes+models snapshot on completion, which normally already
+    # reflects whatever this change was — but it's still logged since
+    # "usually" isn't "always".
+    def with_ready_agent(path)
+      if @agent_manager&.ready?
+        yield
+      elsif @agent_manager
+        @logger.warn("skipping Runtime Agent refresh for #{path}: agent not ready (status=#{@agent_manager.status})")
       end
     end
 
@@ -531,8 +571,7 @@ module Rslsp
     # agent/model call (docs/design/docs/05-protocol.md) — there's no
     # server-side model cache to explicitly reload, so refreshing just
     # means asking again for the one model whose file changed.
-    def refresh_model(relative_path)
-      name = relative_path.split("/").map { |segment| Routes::ControllerNaming.camelize(segment) }.join("::")
+    def refresh_model_named(name)
       agent_manager = @agent_manager
       model_registry = @model_registry
       logger = @logger
