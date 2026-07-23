@@ -86,6 +86,32 @@ RSpec.describe Rslsp::RuntimeAgent::Agent do
     expect(routes.first).to include(name: "post", verb: "GET", requiredParts: ["id"])
   end
 
+  it "treats a route's empty-string verb (e.g. real Rails' `via: :all`) as GET, not \"\"" do
+    fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :source_location) do
+      def path
+        Struct.new(:spec).new(path_spec)
+      end
+    end
+    any_verb = fake_route_class.new("catch_all", "", "/catch_all(.:format)", { controller: "x", action: "y" }, [], nil)
+
+    fake_app = Class.new do
+      define_method(:routes) { Struct.new(:routes).new([any_verb]) }
+    end.new
+
+    stub_const("Rails", Class.new do
+      define_singleton_method(:version) { "7.1.0-fixture" }
+      define_singleton_method(:application) { fake_app }
+    end)
+
+    input =
+      frame(jsonrpc: "2.0", id: 1, method: "agent/snapshot", params: { sections: ["routes"] }) +
+      frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+    build_agent(input).run
+
+    expect(sent_messages.first[:result][:routes].first[:verb]).to eq("GET")
+  end
+
   describe "agent/reload" do
     it "re-draws routes and advances generation when the app supports reload_routes!" do
       route_set = Struct.new(:routes).new([])

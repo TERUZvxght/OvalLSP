@@ -45,7 +45,12 @@ function startClientForFolder(
     ],
     workspaceFolder: folder,
     outputChannel,
-    synchronize: { fileEvents: watcher }
+    synchronize: { fileEvents: watcher },
+    // There's no standard LSP field for workspace trust, so it's passed
+    // through here — the Core Server must not launch the Runtime Agent
+    // (Rails/Bundler code execution) in an untrusted workspace
+    // (docs/design/docs/02-architecture.md section 11).
+    initializationOptions: { workspaceTrusted: vscode.workspace.isTrusted }
   };
 
   const client = new LanguageClient('rslsp', `RSLSP (${folder.name})`, serverOptions, clientOptions);
@@ -80,6 +85,23 @@ export function activate(context: vscode.ExtensionContext): void {
       clients.set(key, startClientForFolder(folder, outputChannel, context));
     }
   }
+
+  // Workspace Trust can only go from untrusted to trusted while a window
+  // stays open (never the reverse), and Server decided whether to start
+  // the Runtime Agent once, at its own `initialize` time. Restarting each
+  // client here re-sends `initialize` with `workspaceTrusted: true`, which
+  // is simpler and more robust than adding a custom notification just for
+  // this rare, one-time event.
+  context.subscriptions.push(
+    vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        const key = folder.uri.toString();
+        void stopClient(key).then(() => {
+          clients.set(key, startClientForFolder(folder, outputChannel, context));
+        });
+      }
+    })
+  );
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders((event) => {

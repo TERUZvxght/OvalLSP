@@ -28,6 +28,13 @@ module Rslsp
     # at a time) via agent/model, keyed by model name so LocalInferencer
     # can resolve `user.company`, `company.orders`, DB-column accessors,
     # and so on (docs/design/tasks/007-active-record-model-snapshot.md).
+    # Populated from a background thread (RailsBootstrap) while the main
+    # thread may already be reading it (LocalInferencer). No mutex: each
+    # #register_from_agent_response call is a single Hash#[]= on `@models`,
+    # which is atomic under CRuby's GVL — a concurrent reader sees either
+    # the old or the new value, never a torn write. This relies on CRuby's
+    # GVL specifically; a JRuby/TruffleRuby port would need real locking
+    # here (unlike WorkspaceIndex, which already uses a Mutex throughout).
     class ModelRegistry
       def initialize
         @models = {}

@@ -217,7 +217,10 @@ module Rslsp
 
           {
             name: name.to_s,
-            verb: (route.verb || "GET").to_s,
+            # Real Rails routes matching any verb (`match ... via: :all`)
+            # report verb as "", not nil — treat both as "GET" for our
+            # purposes rather than surfacing an empty string.
+            verb: route.verb.to_s.empty? ? "GET" : route.verb.to_s,
             pathTemplate: route.path.spec.to_s,
             requiredParts: Array(route.required_parts).map(&:to_s),
             optionalParts: route.path.spec.to_s.include?("(.:format)") ? ["format"] : [],

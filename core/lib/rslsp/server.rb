@@ -11,6 +11,7 @@ require_relative "index/document_symbol_builder"
 require_relative "routes/route_registry"
 require_relative "routes/controller_naming"
 require_relative "erb/ruby_region_extractor"
+require_relative "rails_bootstrap"
 
 module Rslsp
   # LSP transport + request router. Task 001 scope: initialize/initialized,
@@ -21,11 +22,12 @@ module Rslsp
   # workspace/symbol, and workspace/didChangeWatchedFiles. Task 004 adds the
   # custom rslsp/explainType request, backed by LocalInferencer. Task 006
   # adds route-helper completion/signatureHelp/definition, backed by a
-  # Routes::RouteRegistry the caller builds from an agent/snapshot response
-  # (Server itself doesn't manage the Runtime Agent process — see
-  # AgentProcessManager — keeping this class free of Rails-boot concerns).
-  # Task 008 makes rslsp/explainType propagate a conventional controller
-  # action's instance variables into its .erb view.
+  # Routes::RouteRegistry either injected directly (tests) or populated by
+  # RailsBootstrap once the client confirms the workspace is trusted (see
+  # #maybe_start_agent — docs/02-architecture.md section 11: untrusted
+  # workspaces get static analysis only, never Agent/Bundler code
+  # execution). Task 008 makes rslsp/explainType propagate a conventional
+  # controller action's instance variables into its .erb view.
   class Server
     JSONRPC_VERSION = "2.0"
 
@@ -35,7 +37,8 @@ module Rslsp
     FILE_CHANGE_DELETED = 3
 
     def initialize(input:, output:, logger:, route_registry: Routes::RouteRegistry.new,
-                   model_registry: Models::ModelRegistry.new)
+                   model_registry: Models::ModelRegistry.new, workspace_root: Dir.pwd,
+                   agent_bootstrap: RailsBootstrap)
       @reader = Rslsp::IO::FramedReader.new(input)
       @writer = Rslsp::IO::FramedWriter.new(output)
       @logger = logger
@@ -44,6 +47,9 @@ module Rslsp
       @workspace_index = WorkspaceIndex.new
       @local_inferencer = LocalInferencer.new(model_registry: model_registry)
       @route_registry = route_registry
+      @model_registry = model_registry
+      @workspace_root = workspace_root
+      @agent_bootstrap = agent_bootstrap
       @file_summaries = {}
       @shutdown_received = false
     end
@@ -74,6 +80,7 @@ module Rslsp
       case method
       when "initialize"
         respond(id, initialize_result)
+        maybe_start_agent(message[:params])
       when "initialized"
         # no-op: nothing to do yet at this task's scope.
       when "shutdown"
@@ -161,6 +168,45 @@ module Rslsp
       # Parsing must never take the server down: keep the previous summary
       # (if any) and let static features degrade gracefully for this file.
       @logger.error("failed to summarize #{document.uri}: #{e.class}: #{e.message}")
+    end
+
+    # Starts the Runtime Agent on a background thread — never the request
+    # thread, so a slow or absent Rails boot can't delay any LSP response
+    # (docs/02-architecture.md section 8's threading model) — but only
+    # once the *client* has said the workspace is trusted. Workspace Trust
+    # is a VS Code (client-side) concept with no standard LSP field for it,
+    # so the client passes it through `initializationOptions.workspaceTrusted`
+    # (see vscode/src/extension.ts). A client that doesn't participate in
+    # workspace trust at all (no VS Code, or the field is simply absent)
+    # is treated as trusted, matching how untrusted is something a client
+    # must actively assert, not the unset default — but an *explicit*
+    # `workspaceTrusted: false` always blocks Agent/Bundler code execution
+    # (docs/02-architecture.md section 11, docs/10-ai-execution-guide.md
+    # section 8 "Workspace Trustを迂回してcode executionしていないか").
+    def maybe_start_agent(params)
+      unless workspace_trusted?(params)
+        @logger.warn("workspace is untrusted; not starting the Runtime Agent")
+        return
+      end
+
+      bootstrap = @agent_bootstrap
+      root = @workspace_root
+      logger = @logger
+      route_registry = @route_registry
+      model_registry = @model_registry
+
+      Thread.new do
+        bootstrap.start(root: root, logger: logger, route_registry: route_registry, model_registry: model_registry)
+      rescue StandardError => e
+        logger.error("Runtime Agent bootstrap failed: #{e.class}: #{e.message}")
+      end
+    end
+
+    def workspace_trusted?(params)
+      options = params && params[:initializationOptions]
+      return true unless options.is_a?(Hash)
+
+      options[:workspaceTrusted] != false
     end
 
     def document_symbol_result(params)

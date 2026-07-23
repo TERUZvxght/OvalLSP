@@ -18,6 +18,13 @@ module Rslsp
     # later snapshot (e.g. after a routes.rb edit + Agent reload) that no
     # longer includes a route makes that helper disappear from completion
     # and definition — there's no merge/accumulation across snapshots.
+    #
+    # #replace may run on a background thread (RailsBootstrap) concurrently
+    # with reads from the main thread. No mutex: `@helpers` is only ever
+    # reassigned wholesale, after the new Hash is fully built, so a reader
+    # sees either the complete old table or the complete new one — never a
+    # partial one. This relies on CRuby's GVL making that single Hash
+    # reference reassignment atomic.
     class RouteRegistry
       def self.from_route_facts(route_facts)
         new.tap { |registry| registry.replace(route_facts) }
