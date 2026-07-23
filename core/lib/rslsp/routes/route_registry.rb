@@ -79,9 +79,25 @@ module Rslsp
           url_helper: "#{first[:name]}_url",
           required_parts: Array(first[:requiredParts]).map(&:to_s),
           optional_parts: Array(first[:optionalParts]).map(&:to_s),
-          source_location: first[:sourceLocation],
+          source_location: valid_source_location(first[:sourceLocation]),
           action_targets: action_targets(facts)
         )
+      end
+
+      # The Agent is expected to normalize source locations to
+      # { path:, line:, column: } before this ever arrives
+      # (docs/design/tasks/008.5-runtime-and-index-corrections.md), but
+      # Core must not crash or build a bogus jump target if it doesn't —
+      # an Agent Protocol implementation is still a boundary, not a
+      # trusted internal call.
+      def valid_source_location(value)
+        return nil unless value.is_a?(Hash)
+
+        path = value[:path]
+        line = value[:line]
+        return nil unless path.is_a?(String) && !path.empty? && line.is_a?(Integer)
+
+        { path: path, line: line, column: value[:column].is_a?(Integer) ? value[:column] : 0 }
       end
 
       def action_targets(facts)

@@ -356,9 +356,10 @@ module Rslsp
       locations = []
       if helper.source_location
         line = helper.source_location.fetch(:line)
+        column = helper.source_location.fetch(:column, 0)
         locations << {
           uri: UriUtil.from_path(helper.source_location.fetch(:path)),
-          range: { start: { line: line, character: 0 }, end: { line: line, character: 0 } }
+          range: { start: { line: line, character: column }, end: { line: line, character: column } }
         }
       end
 

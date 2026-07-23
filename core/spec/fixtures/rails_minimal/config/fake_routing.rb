@@ -52,17 +52,24 @@ module FakeRouting
       base_path = "#{@path_prefix}/#{name}"
       member_path = "#{base_path}/:id"
 
+      # Real Rails only names the *first* verb sharing a path — index (GET
+      # /posts) is named "posts", but create (POST /posts) shares that
+      # path and gets no name of its own; same for show vs. update/destroy
+      # on /posts/:id. Verified against actual Rails 8.1 route output
+      # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
       add_route(name: "#{@helper_prefix}#{name}", verb: "GET", path: base_path, action: "index",
                 controller: controller, location: location)
-      add_route(name: "#{@helper_prefix}#{name}", verb: "POST", path: base_path, action: "create",
+      add_route(name: nil, verb: "POST", path: base_path, action: "create",
                 controller: controller, location: location)
       add_route(name: "#{@helper_prefix}new_#{singular}", verb: "GET", path: "#{base_path}/new", action: "new",
                 controller: controller, location: location)
       add_route(name: "#{@helper_prefix}#{singular}", verb: "GET", path: member_path, action: "show",
                 controller: controller, location: location)
-      add_route(name: "#{@helper_prefix}#{singular}", verb: "PATCH", path: member_path, action: "update",
+      add_route(name: nil, verb: "PATCH", path: member_path, action: "update",
                 controller: controller, location: location)
-      add_route(name: "#{@helper_prefix}#{singular}", verb: "DELETE", path: member_path, action: "destroy",
+      add_route(name: nil, verb: "PUT", path: member_path, action: "update",
+                controller: controller, location: location)
+      add_route(name: nil, verb: "DELETE", path: member_path, action: "destroy",
                 controller: controller, location: location)
       add_route(name: "#{@helper_prefix}edit_#{singular}", verb: "GET", path: "#{member_path}/edit", action: "edit",
                 controller: controller, location: location)
@@ -106,7 +113,12 @@ module FakeRouting
         path_spec: full_path,
         defaults: { "controller" => controller, "action" => action },
         required_parts: required,
-        source_location: location && { path: location.absolute_path, line: location.lineno - 1 }
+        # Matches real Rails' actual format (verified against Rails 8.1:
+        # "/abs/path/config/routes.rb:12", 1-based) rather than a
+        # pre-normalized Hash — normalization is the Agent's job
+        # (docs/design/tasks/008.5-runtime-and-index-corrections.md), not
+        # something a Rails app itself provides pre-digested.
+        source_location: location && "#{location.absolute_path}:#{location.lineno}"
       )
     end
   end
@@ -171,7 +183,7 @@ module FakeRouting
           path_spec: full_path,
           defaults: { "controller" => @controller, "action" => action.to_s },
           required_parts: required,
-          source_location: { path: location.absolute_path, line: location.lineno }
+          source_location: "#{location.absolute_path}:#{location.lineno}"
         )
       end
     end

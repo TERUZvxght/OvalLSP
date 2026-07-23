@@ -86,6 +86,93 @@ RSpec.describe Rslsp::RuntimeAgent::Agent do
     expect(routes.first).to include(name: "post", verb: "GET", requiredParts: ["id"])
   end
 
+  describe "route source_location normalization (Task 008.5)" do
+    def fake_route(source_location:, name: "post")
+      fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :source_location) do
+        def path
+          Struct.new(:spec).new(path_spec)
+        end
+      end
+      fake_route_class.new(name, "GET", "/posts/:id(.:format)", { controller: "posts", action: "show" }, [:id],
+                            source_location)
+    end
+
+    def snapshot_routes(route)
+      fake_app = Class.new { define_method(:routes) { Struct.new(:routes).new([route]) } }.new
+      stub_const("Rails", Class.new do
+        define_singleton_method(:version) { "7.1.0-fixture" }
+        define_singleton_method(:application) { fake_app }
+      end)
+
+      input =
+        frame(jsonrpc: "2.0", id: 1, method: "agent/snapshot", params: { sections: ["routes"] }) +
+        frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+      build_agent(input).run
+      sent_messages.first[:result][:routes].first
+    end
+
+    it "parses real Rails' \"path:line\" string format, converting to a 0-based line" do
+      route = fake_route(source_location: "/app/config/routes.rb:12")
+
+      expect(snapshot_routes(route)[:sourceLocation]).to eq(path: "/app/config/routes.rb", line: 11, column: 0)
+    end
+
+    it "resolves a relative path against Rails.root" do
+      stub_const("Rails", Class.new do
+        define_singleton_method(:version) { "7.1.0-fixture" }
+        define_singleton_method(:root) { "/app" }
+      end)
+      # Reassigning Rails.application after the fact so #routes_available?
+      # still finds it; simplest is to just build the route directly.
+      route = fake_route(source_location: "config/routes.rb:1")
+      fake_app = Class.new { define_method(:routes) { Struct.new(:routes).new([route]) } }.new
+      Rails.define_singleton_method(:application) { fake_app }
+
+      input =
+        frame(jsonrpc: "2.0", id: 1, method: "agent/snapshot", params: { sections: ["routes"] }) +
+        frame(jsonrpc: "2.0", method: "agent/shutdown", params: {})
+      build_agent(input).run
+
+      expect(sent_messages.first[:result][:routes].first[:sourceLocation]).to eq(
+        path: "/app/config/routes.rb", line: 0, column: 0
+      )
+    end
+
+    it "handles a gem-internal path string (framework routes) without crashing" do
+      # Real Rails source_location for framework-internal routes (e.g.
+      # rails/info) looks like this — not a real file under the app root,
+      # but normalization must still produce a well-formed result rather
+      # than raising; Core degrades gracefully if the path doesn't resolve
+      # to anything openable.
+      route = fake_route(source_location: "railties (8.1.3) lib/rails/application/finisher.rb:143")
+
+      result = nil
+      expect { result = snapshot_routes(route)[:sourceLocation] }.not_to raise_error
+      expect(result[:line]).to eq(142)
+      expect(result[:path]).to end_with("railties (8.1.3) lib/rails/application/finisher.rb")
+    end
+
+    it "returns nil for an unparsable source_location string instead of raising" do
+      route = fake_route(source_location: "not a location at all")
+
+      expect { snapshot_routes(route) }.not_to raise_error
+      expect(snapshot_routes(route)[:sourceLocation]).to be_nil
+    end
+
+    it "accepts a Hash form, treating :line as 1-based like every other shape Rails gives" do
+      route = fake_route(source_location: { path: "/app/config/routes.rb", line: 5 })
+
+      expect(snapshot_routes(route)[:sourceLocation]).to eq(path: "/app/config/routes.rb", line: 4, column: 0)
+    end
+
+    it "returns nil when there's no source location at all" do
+      route = fake_route(source_location: nil)
+
+      expect(snapshot_routes(route)[:sourceLocation]).to be_nil
+    end
+  end
+
   it "treats a route's empty-string verb (e.g. real Rails' `via: :all`) as GET, not \"\"" do
     fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :source_location) do
       def path

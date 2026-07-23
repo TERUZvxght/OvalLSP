@@ -43,6 +43,29 @@ RSpec.describe Rslsp::Routes::RouteRegistry do
     expect(helper.source_location).to be_nil
   end
 
+  describe "malformed sourceLocation from the Agent boundary (Task 008.5)" do
+    it "discards a sourceLocation that isn't a Hash instead of crashing" do
+      facts = [fact(name: "post", verb: "GET", action: "show", location: "config/routes.rb:10")]
+
+      expect { described_class.from_route_facts(facts) }.not_to raise_error
+      expect(described_class.from_route_facts(facts).helper("post").source_location).to be_nil
+    end
+
+    it "discards a sourceLocation Hash missing required keys" do
+      facts = [fact(name: "post", verb: "GET", action: "show", location: { path: "config/routes.rb" })]
+
+      expect(described_class.from_route_facts(facts).helper("post").source_location).to be_nil
+    end
+
+    it "defaults column to 0 when the Agent omits it" do
+      facts = [fact(name: "post", verb: "GET", action: "show", location: { path: "/app/config/routes.rb", line: 3 })]
+
+      expect(described_class.from_route_facts(facts).helper("post").source_location).to eq(
+        path: "/app/config/routes.rb", line: 3, column: 0
+      )
+    end
+  end
+
   describe "#completion_names" do
     it "returns both _path and _url forms filtered by prefix" do
       facts = [fact(name: "post", verb: "GET", action: "show", required: ["id"])]

@@ -110,6 +110,37 @@ RSpec.describe "Rslsp::Server route helper support" do
     )
   end
 
+  it "resolves textDocument/definition for post_url to the exact same locations as post_path (Task 008.5)" do
+    controller_uri = "file:///app/controllers/posts_controller.rb"
+    controller_text = "class PostsController\n  def show\n  end\nend\n"
+
+    input =
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: { textDocument: { uri: controller_uri, text: controller_text, version: 1, languageId: "ruby" } }
+      ) +
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: { textDocument: { uri: "file:///a.rb", text: "post_url(post)\n", version: 1, languageId: "ruby" } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/definition",
+        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 0, character: 2 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input, post_registry).run
+
+    locations = sent_messages.first[:result]
+    expect(locations).to include(
+      uri: "file:///app/config/routes.rb",
+      range: { start: { line: 3, character: 0 }, end: { line: 3, character: 0 } }
+    )
+    expect(locations).to include(
+      a_hash_including(uri: controller_uri, range: { start: { line: 1, character: 2 }, end: { line: 2, character: 5 } })
+    )
+  end
+
   it "falls back gracefully when a route helper has no source location" do
     registry = Rslsp::Routes::RouteRegistry.from_route_facts(
       [route_fact(name: "unlocatable", verb: "GET", action: "show", controller: "mystery", location: nil)]

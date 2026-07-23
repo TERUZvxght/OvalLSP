@@ -203,11 +203,14 @@ module Rslsp
       end
 
       # Reads only the duck-typed subset of ActionDispatch::Journey::Route's
-      # real interface (name/verb/path.spec/defaults/required_parts), so this
-      # works unchanged against a real Rails app once one is wired in and
-      # against the rails_minimal fixture's fake router alike. Unnamed
-      # routes produce no helper and are skipped, matching the fact that
-      # Rails itself doesn't generate a `*_path` method for them.
+      # real interface (name/verb/path.spec/defaults/required_parts,
+      # source_location), so this works unchanged against a real Rails app
+      # once one is wired in and against the rails_minimal fixture's fake
+      # router alike. Unnamed routes produce no helper and are skipped,
+      # matching the fact that Rails itself doesn't generate a `*_path`
+      # method for them — real Rails only names the first verb sharing a
+      # path (e.g. GET /posts is "posts", POST /posts sharing that same
+      # path is unnamed), verified empirically against Rails 8.1.
       def extract_routes
         return [] unless routes_available?
 
@@ -225,10 +228,56 @@ module Rslsp
             requiredParts: Array(route.required_parts).map(&:to_s),
             optionalParts: route.path.spec.to_s.include?("(.:format)") ? ["format"] : [],
             defaults: route.defaults.to_h { |k, v| [k.to_s.to_sym, v.to_s] },
-            sourceLocation: route.respond_to?(:source_location) ? route.source_location : nil,
+            sourceLocation: normalize_source_location(route.respond_to?(:source_location) ? route.source_location : nil),
             routeSet: "main_app"
           }
         end
+      end
+
+      # Normalizes whatever shape `route.source_location` comes in as into
+      # a stable `{ path:, line:, column: }` (or nil), per
+      # docs/design/tasks/008.5-runtime-and-index-corrections.md. Real
+      # Rails (verified against 8.1) returns a `"path:line"` string with a
+      # 1-based line number — sometimes a gem path like
+      # "railties (8.1.3) lib/rails/application/finisher.rb:143" for
+      # framework-internal routes, not necessarily a real file on disk,
+      # which is fine: Core degrades gracefully (docs/design/tasks/006-routes-snapshot.md
+      # "source location unavailable" fallback) if the path doesn't
+      # resolve to anything real. Never raises — a route whose location
+      # can't be parsed just gets nil, exactly like one with no location
+      # data at all.
+      def normalize_source_location(raw)
+        path, line = parse_source_location(raw)
+        return nil unless path && line
+
+        {
+          path: absolute_source_path(path),
+          line: [line.to_i - 1, 0].max, # Rails line numbers are 1-based; LSP is 0-based
+          column: 0
+        }
+      rescue StandardError => e
+        @logger.call("failed to normalize route source_location #{raw.inspect}: #{e.class}: #{e.message}")
+        nil
+      end
+
+      def parse_source_location(raw)
+        case raw
+        when String
+          match = raw.match(/\A(?<path>.+):(?<line>\d+)\z/)
+          match ? [match[:path], match[:line]] : nil
+        when Hash
+          [raw[:path] || raw["path"], raw[:line] || raw["line"]]
+        when Array
+          raw.size == 2 ? raw : nil
+        else
+          raw.respond_to?(:path) && raw.respond_to?(:lineno) ? [raw.path, raw.lineno] : nil
+        end
+      end
+
+      def absolute_source_path(path)
+        return path if path.start_with?("/")
+
+        File.expand_path(path, rails_root)
       end
 
       def routes_available?
