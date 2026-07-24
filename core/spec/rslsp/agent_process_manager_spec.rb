@@ -131,6 +131,33 @@ RSpec.describe Rslsp::AgentProcessManager do
     expect(logger).to have_received(:error).with(/reader thread crashed/)
   end
 
+  it "transitions to static-only the moment the reader thread detects EOF, without any request ever being made (Task 008.6)" do
+    @manager = build_manager
+    @manager.start
+    pid = @manager.pid
+
+    expect { Process.kill("KILL", pid) }.not_to raise_error
+
+    # No #request_status, #fetch_model, or any other request call here --
+    # the whole point is that #status must already reflect the crash on
+    # its own, driven directly by the reader thread's own EOF detection,
+    # not lazily discovered the next time something happens to ask the
+    # Agent for a response.
+    became_static_only = wait_until { @manager.status == :static_only }
+
+    expect(became_static_only).to be(true)
+  end
+
+  def wait_until(timeout: 2)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+    loop do
+      return true if yield
+      return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      sleep 0.02
+    end
+  end
+
   it "leaves no process behind after #stop" do
     @manager = build_manager
     @manager.start

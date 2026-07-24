@@ -38,6 +38,8 @@ module Rslsp
       @pid = nil
       @hello_result = nil
       @request_mutex = Mutex.new
+      @status_mutex = Mutex.new
+      @terminate_mutex = Mutex.new
     end
 
     attr_reader :status, :hello_result, :pid
@@ -152,10 +154,11 @@ module Rslsp
 
     # Every read-style request (agent/status, agent/snapshot, agent/model,
     # agent/reload) shares the same failure contract: not ready -> nil
-    # without side effects; a round trip that returns nothing (EOF,
-    # timeout, a crashed reader thread, an unparsable frame) degrades
-    # status to :static_only so a request that timed out today is never
-    # mistaken for a live Agent tomorrow (docs/design/tasks/008.5-runtime-and-index-corrections.md).
+    # without side effects; a round trip that returns nothing (timeout —
+    # EOF and a crashed reader thread are now caught directly at the
+    # source, see #mark_unavailable) degrades status to :static_only so a
+    # request that timed out today is never mistaken for a live Agent
+    # tomorrow (docs/design/tasks/008.5-runtime-and-index-corrections.md).
     # An in-band `:error` result (e.g. agent/model's NOT_FOUND) is still a
     # *successful* round trip and must NOT degrade anything -- only #request
     # returning nil does.
@@ -163,16 +166,50 @@ module Rslsp
       return nil unless ready?
 
       response = request(method, params, timeout: timeout)
-      degrade_to_static_only(on_failure) if response.nil?
+      mark_unavailable(on_failure, from_reader_thread: false) if response.nil?
       response
     end
 
-    def degrade_to_static_only(reason)
-      return unless @status == :ready # already static_only/stopped/stopping: nothing to degrade
+    # The single place every :ready -> :static_only transition goes
+    # through, whichever *event* triggers it. Before Task 008.6 this only
+    # ran lazily, from inside a request that happened to fail -- if the
+    # reader thread died (EOF, a crashed parse) while no request was in
+    # flight, @status stayed :ready indefinitely, and anything that reads
+    # #ready?/#status directly without making a request (e.g.
+    # Server#with_ready_agent) would keep believing the Agent was healthy
+    # (docs/design/tasks/008.6-agent-and-index-hardening.md). #read_loop
+    # now calls this directly, at the moment it detects EOF or a crash --
+    # the actual event -- instead of waiting for some future request to
+    # discover it.
+    #
+    # The status flag itself is updated under @status_mutex (a tiny,
+    # fast compare-and-set) so two triggers racing each other (a reader
+    # thread crash and an in-flight request timing out at nearly the same
+    # moment) only ever run cleanup once. #terminate_process is run
+    # *outside* that lock, and on a separate thread when `from_reader_thread`
+    # is set -- #terminate_process calls `@reader_thread.kill`, which
+    # would otherwise be the reader thread trying to kill itself
+    # mid-rescue-clause, silently abandoning everything after that call
+    # (pipe cleanup, @stderr_thread.join, @pid = nil) instead of running
+    # it. `from_reader_thread` is passed explicitly by the one caller that
+    # knows statically it *is* the reader thread (#read_loop), rather than
+    # compared via `Thread.current == @reader_thread` — @reader_thread is
+    # itself assigned from the *return value* of `Thread.new { read_loop }`
+    # in #spawn_process, so the thread body can start running before that
+    # assignment completes, and an identity check could otherwise briefly
+    # see @reader_thread as nil and misidentify itself as a different
+    # thread.
+    def mark_unavailable(reason, from_reader_thread:)
+      became_unavailable = @status_mutex.synchronize do
+        next false unless @status == :ready
+
+        @status = :static_only
+        true
+      end
+      return unless became_unavailable
 
       @logger.warn("#{reason}; marking runtime agent static-only")
-      @status = :static_only
-      terminate_process
+      from_reader_thread ? Thread.new { terminate_process } : terminate_process
     end
 
     def spawn_process
@@ -199,6 +236,12 @@ module Rslsp
       loop { @inbox << reader.read_message }
     rescue Rslsp::IO::FramedReader::EOF, IOError, Errno::EBADF
       @inbox << :eof
+      # The Agent's stdout closed: it exited (crash or normal termination
+      # outside of our own #stop) or the pipe was torn down. This is a
+      # definite, permanent event, not merely "a request happened to fail"
+      # -- transition immediately rather than waiting for whatever request
+      # (if any) is pending or next attempted to discover it.
+      mark_unavailable("runtime agent stdout closed (EOF)", from_reader_thread: true)
     rescue StandardError => e
       # An invalid frame or unparsable JSON raises something other than
       # the three "normal" end-of-stream shapes above -- without this,
@@ -208,6 +251,7 @@ module Rslsp
       # stuck at :ready the whole time (docs/design/tasks/008.5-runtime-and-index-corrections.md).
       @logger.error("runtime agent reader thread crashed: #{e.class}: #{e.message}")
       @inbox << :eof
+      mark_unavailable("runtime agent reader thread crashed: #{e.class}", from_reader_thread: true)
     end
 
     def log_stderr
@@ -248,7 +292,20 @@ module Rslsp
       Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
+    # #mark_unavailable can now trigger this from a background thread
+    # (when the reader thread itself detected EOF/a crash) *concurrently*
+    # with an explicit #stop from the caller's own thread — without
+    # serializing here, both invocations would race on @pid/@reader_thread/
+    # the pipes (e.g. one sees `@pid` go nil out from under it between its
+    # own `return unless @pid` check and its `Process.wait(@pid, ...)`
+    # call). @terminate_mutex makes a second, concurrent call block until
+    # the first finishes and then see the now-nil @pid via the guard
+    # clause below and no-op, rather than racing it.
     def terminate_process
+      @terminate_mutex.synchronize { terminate_process_locked }
+    end
+
+    def terminate_process_locked
       return unless @pid
 
       begin
