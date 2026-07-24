@@ -63,6 +63,39 @@ RSpec.describe Rslsp::RailsBootstrap do
       expect(model_registry.association("User", "company").class_name).to eq("Company")
     end
 
+    it "keeps the last-known-good models instead of wiping the registry when fetch_all_models fails (Task 008.6)" do
+      model_registry.register_from_agent_response(
+        "User", { name: "User", tableName: "users", columns: [], associations: [], partial: false }
+      )
+      fake_manager = instance_double(
+        Rslsp::AgentProcessManager,
+        fetch_snapshot: { routes: [] },
+        fetch_all_models: nil # simulates a timeout/communication failure, not a genuinely empty app
+      )
+
+      Rslsp::RailsBootstrap.populate_registries(
+        fake_manager, route_registry: route_registry, model_registry: model_registry, logger: logger
+      )
+
+      expect(model_registry.known_model?("User")).to be(true)
+      expect(logger).to have_received(:warn).with(/leaving model_registry as-is/)
+    end
+
+    it "keeps the last-known-good routes instead of wiping the registry when fetch_snapshot fails (Task 008.6)" do
+      route_registry.replace(
+        [{ name: "existing", verb: "GET", pathTemplate: "/existing", requiredParts: [], optionalParts: [],
+           defaults: { controller: "existing", action: "index" }, sourceLocation: nil, routeSet: "main_app" }]
+      )
+      fake_manager = instance_double(Rslsp::AgentProcessManager, fetch_snapshot: nil, fetch_all_models: [])
+
+      Rslsp::RailsBootstrap.populate_registries(
+        fake_manager, route_registry: route_registry, model_registry: model_registry, logger: logger
+      )
+
+      expect(route_registry.completion_names("existing")).to include("existing_path")
+      expect(logger).to have_received(:warn).with(/leaving route_registry as-is/)
+    end
+
     it "logs a warning and leaves the registries empty when the Agent never becomes ready" do
       unresponsive = File.join(core_root, "spec/fixtures/unresponsive_agent/boot.rb")
 

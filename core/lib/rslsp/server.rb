@@ -629,16 +629,39 @@ module Rslsp
     # edited (docs/design/tasks/006-routes-snapshot.md "reload後に削除route
     # が消える"). Runs on its own thread: both requests block on Agent I/O,
     # and nothing here may delay LSP responses.
+    #
+    # The final write is guarded by @agent_restart_mutex and an identity
+    # check against the *current* @agent_manager: this thread captured a
+    # specific manager instance at call time, and if a restart (Gemfile.lock,
+    # an initializer change) swaps in a fresh one — and fully repopulates
+    # both registries — while this thread's own round trip was still in
+    # flight, its (now stale, from the old Agent generation) result must
+    # not land on top of the new Agent's already-current data
+    # (docs/design/tasks/008.6-agent-and-index-hardening.md). `snapshot`
+    # itself is also checked for nil separately from an empty routes list,
+    # so a communication failure (timeout, degraded Agent) never gets
+    # treated as "the app genuinely has zero routes" and wipes the
+    # registry — it leaves the last-known-good routes in place instead.
     def refresh_routes
       agent_manager = @agent_manager
       route_registry = @route_registry
       logger = @logger
+      mutex = @agent_restart_mutex
 
       Thread.new do
         next unless agent_manager.reload(sections: ["routes"])
 
         snapshot = agent_manager.fetch_snapshot(sections: ["routes"])
-        route_registry.replace(snapshot[:routes]) if snapshot
+        unless snapshot
+          logger.warn("failed to fetch routes snapshot after routes.rb change; keeping last-known-good routes")
+          next
+        end
+
+        mutex.synchronize do
+          next unless agent_manager.equal?(@agent_manager)
+
+          route_registry.replace(snapshot[:routes] || [])
+        end
       rescue StandardError => e
         logger.error("failed to refresh routes after routes.rb change: #{e.class}: #{e.message}")
       end
@@ -654,10 +677,16 @@ module Rslsp
     # last-known columns/associations behind. One reload per batch (not
     # per model) -- a Rails reload is whole-app regardless of which
     # specific file triggered it.
+    # Same stale-generation guard as #refresh_routes: each per-model write
+    # is checked against the *current* @agent_manager (not just once
+    # before the loop), since a restart can land partway through a batch
+    # of models just as easily as between #refresh_models calls
+    # (docs/design/tasks/008.6-agent-and-index-hardening.md).
     def refresh_models(names)
       agent_manager = @agent_manager
       model_registry = @model_registry
       logger = @logger
+      mutex = @agent_restart_mutex
 
       Thread.new do
         agent_manager.reload(sections: ["models"])
@@ -666,10 +695,14 @@ module Rslsp
           response = agent_manager.fetch_model(name: name)
           next unless response
 
-          if response[:error]
-            model_registry.remove(name)
-          else
-            model_registry.register_from_agent_response(name, response)
+          mutex.synchronize do
+            next unless agent_manager.equal?(@agent_manager)
+
+            if response[:error]
+              model_registry.remove(name)
+            else
+              model_registry.register_from_agent_response(name, response)
+            end
           end
         end
       rescue StandardError => e

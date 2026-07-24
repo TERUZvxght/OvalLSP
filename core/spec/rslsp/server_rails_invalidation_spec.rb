@@ -313,6 +313,80 @@ RSpec.describe "Rslsp::Server Rails file-change invalidation" do
     expect(calls.pop(timeout: 0.2)).to be_nil # only one restart despite three matching files
   end
 
+  it "does not let a stale in-flight refresh from a replaced Agent overwrite the new Agent's fresh data (Task 008.6)" do
+    release_old_fetch = Queue.new
+    old_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| { generation: 1, changedSections: ["routes"], errors: [] } }
+      define_singleton_method(:fetch_snapshot) do |**|
+        release_old_fetch.pop # blocks until the test explicitly releases it, simulating an in-flight round trip
+        {
+          routes: [{
+            name: "stale_route", verb: "GET", pathTemplate: "/stale", requiredParts: [], optionalParts: [],
+            defaults: { controller: "stale", action: "index" }, sourceLocation: nil, routeSet: "main_app"
+          }]
+        }
+      end
+      define_singleton_method(:stop) {}
+    end
+    new_manager_populated = Queue.new
+    fake_bootstrap = Class.new do
+      define_singleton_method(:start) do |route_registry:, **|
+        route_registry.replace(
+          [{ name: "fresh_route", verb: "GET", pathTemplate: "/fresh", requiredParts: [], optionalParts: [],
+             defaults: { controller: "fresh", action: "index" }, sourceLocation: nil, routeSet: "main_app" }]
+        )
+        new_manager_populated << true
+        :new_manager
+      end
+    end
+
+    # Observes every #replace call (rather than sleeping and hoping) so
+    # this test deterministically tells whether the old Agent's stale
+    # write ever lands, instead of a timing-dependent guess.
+    replace_calls = Queue.new
+    allow(route_registry).to receive(:replace).and_wrap_original do |original, facts|
+      result = original.call(facts)
+      replace_calls << facts.map { |f| f[:name] }
+      result
+    end
+
+    # Two SEPARATE notifications, not one batch: a batch containing both a
+    # :routes and a :restart change short-circuits straight to the
+    # restart and skips #refresh_routes entirely (see "skips routes/model
+    # refreshes..." above) -- this test needs #refresh_routes to actually
+    # run and race the restart, which only happens across two
+    # notifications, e.g. an editor saving routes.rb and then a
+    # `bundle install` moments later.
+    input =
+      frame(jsonrpc: "2.0", method: "workspace/didChangeWatchedFiles",
+            params: { changes: [{ uri: "file:///workspace/config/routes.rb", type: 2 }] }) +
+      frame(jsonrpc: "2.0", method: "workspace/didChangeWatchedFiles",
+            params: { changes: [{ uri: "file:///workspace/Gemfile.lock", type: 2 }] }) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+    server = build_server(input, agent_manager: old_manager, agent_bootstrap: fake_bootstrap)
+    server.run
+
+    # The restart (triggered by the Gemfile.lock change in the same
+    # batch) must complete -- and fully repopulate route_registry with
+    # the new Agent's data -- before the old Agent's blocked fetch is
+    # allowed to finish.
+    expect(new_manager_populated.pop(timeout: 2)).to be(true)
+    expect(replace_calls.pop(timeout: 2)).to eq(["fresh_route"])
+    release_old_fetch << true
+
+    # The old (stale) refresh_routes thread now proceeds: on unguarded
+    # code it calls #replace with the stale route, which would show up
+    # here; on guarded code it never calls #replace at all, and this
+    # simply times out with nil -- either way we get a definite answer
+    # instead of guessing via sleep.
+    stale_replace_call = replace_calls.pop(timeout: 1)
+
+    expect(stale_replace_call).to be_nil
+    expect(route_registry.completion_names("fresh").map(&:to_s)).to include("fresh_route_path")
+    expect(route_registry.completion_names("stale")).to be_empty
+  end
+
   it "skips routes/model refreshes entirely when the same batch also needs a restart" do
     calls = Queue.new
     fake_manager = Class.new do

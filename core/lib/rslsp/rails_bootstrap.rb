@@ -86,18 +86,35 @@ module Rslsp
     # propagated, since static features must keep working either way.
     def populate_registries(manager, route_registry:, model_registry:, logger:)
       snapshot = manager.fetch_snapshot(sections: %w[routes])
-      return unless snapshot
+      if snapshot
+        route_registry.replace(snapshot[:routes] || [])
+      else
+        logger.warn("failed to fetch routes snapshot from Runtime Agent; leaving route_registry as-is")
+      end
 
-      route_registry.replace(snapshot[:routes] || [])
-
+      # `nil` (communication failure — timeout, degraded Agent) and `[]`
+      # (the app genuinely has zero models) are different outcomes and
+      # must not be conflated: `manager.fetch_all_models || []` used to
+      # treat a failed fetch as "zero models" and wipe every previously
+      # known model via #replace({}) — including ones from *before* this
+      # populate call (e.g. a restart repopulating after a Gemfile.lock
+      # fix, where the Agent answers routes fine but times out on the
+      # heavier models fetch). Only a genuine (non-nil) response, empty or
+      # not, is installed; a failed fetch leaves the last-known-good
+      # models in place (docs/design/tasks/008.6-agent-and-index-hardening.md).
+      #
       # Built up into a name-keyed Hash and installed in one #replace call
-      # rather than incrementally, so this generation's model table is a
-      # full swap (a model discoverable in an earlier boot but absent from
-      # this fetch doesn't linger) — the same generation-replace semantics
-      # route_registry.replace already gives routes above.
-      models = manager.fetch_all_models || []
-      responses_by_name = models.filter_map { |entry| entry[:name] && [entry[:name], entry] }.to_h
-      model_registry.replace(responses_by_name)
+      # rather than incrementally, so a successful fetch's model table is
+      # a full swap (a model discoverable in an earlier boot but absent
+      # from this fetch doesn't linger) — the same generation-replace
+      # semantics route_registry.replace already gives routes above.
+      models = manager.fetch_all_models
+      if models
+        responses_by_name = models.filter_map { |entry| entry[:name] && [entry[:name], entry] }.to_h
+        model_registry.replace(responses_by_name)
+      else
+        logger.warn("failed to fetch models from Runtime Agent; leaving model_registry as-is")
+      end
     rescue StandardError => e
       logger.error("failed to populate Rails registries from Runtime Agent snapshot: #{e.class}: #{e.message}")
     end
