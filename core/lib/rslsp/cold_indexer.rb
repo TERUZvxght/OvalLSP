@@ -3,7 +3,6 @@
 require "set"
 require_relative "text_document"
 require_relative "uri_util"
-require_relative "erb/ruby_region_extractor"
 
 module Rslsp
   # Walks the workspace on disk after `initialize` and indexes every
@@ -142,9 +141,13 @@ module Rslsp
       @logger.error("cold index: failed to index #{path}: #{e.class}: #{e.message}")
     end
 
-    # .erb isn't Ruby — Prism can't parse the surrounding HTML — so its Ruby
-    # regions are extracted the same way Server does for Task 008's view
-    # queries before this ever reaches ParserService.
+    # ERB extraction itself now happens inside ParserService#summarize,
+    # keyed off the document's uri — the one place every declaration-
+    # extracting caller (Cold Index here, didOpen/didChange's #reindex,
+    # didChangeWatchedFiles' #reindex_from_disk) goes through, so none of
+    # them can implement it differently or forget it
+    # (docs/design/tasks/008.6-agent-and-index-hardening.md). This method
+    # only reads the raw file content.
     def source_for(path)
       # Never rely on Encoding.default_external here: it reflects the
       # *process's* locale, not the file's actual encoding, and reading
@@ -152,8 +155,7 @@ module Rslsp
       # non-ASCII bytes (Japanese comments, em dashes, emoji, ...) raise
       # ArgumentError the moment ParserService tries to String#split it
       # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
-      text = File.read(path, encoding: Encoding::UTF_8)
-      path.end_with?(".erb") ? Erb::RubyRegionExtractor.extract_ruby_source(text) : text
+      File.read(path, encoding: Encoding::UTF_8)
     end
 
     def safe_realpath(path)

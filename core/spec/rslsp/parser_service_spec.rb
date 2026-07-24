@@ -43,6 +43,50 @@ RSpec.describe Rslsp::ParserService do
     expect(summary.content_hash).not_to eq(service.summarize(document("class B; end\n", version: 7)).content_hash)
   end
 
+  describe "ERB documents (Task 008.6)" do
+    # Before Task 008.6, #summarize fed a .erb document's raw HTML+`<% %>`
+    # source directly to Prism, which parsed it as (mostly invalid) Ruby
+    # via error recovery -- only Cold Index applied ERB extraction itself,
+    # so a constant assigned inside a `<% %>` tag was never actually
+    # captured by #summarize when reached through didOpen/didChange or
+    # didChangeWatchedFiles' disk reindex, even though the exact same tag
+    # indexed correctly through Cold Index. #summarize is now the single
+    # place ERB extraction happens, so every caller gets it uniformly
+    # (docs/design/tasks/008.6-agent-and-index-hardening.md).
+    def erb_document(text, uri: "file:///view.html.erb", version: 1)
+      Rslsp::TextDocument.new(uri: uri, text: text, version: version, language_id: "erb")
+    end
+
+    it "extracts a constant assigned inside a <% %> tag, surrounded by ordinary HTML" do
+      summary = service.summarize(erb_document("<p><% MyHelperConst = 1 %></p>\n"))
+
+      expect(symbol_ids(summary)).to include(
+        Rslsp::Index::SymbolId.new(kind: :constant, owner: nil, name: "MyHelperConst", discriminator: nil)
+      )
+    end
+
+    it "reports no syntax errors for ordinary ERB (HTML isn't Ruby, and must not be parsed as such)" do
+      summary = service.summarize(erb_document("<div class=\"x\"><%= @user.name %></div>\n"))
+
+      expect(summary.diagnostics).to be_empty
+    end
+
+    it "does not run non-.erb documents through ERB extraction" do
+      summary = service.summarize(document("class A\nend\n"))
+
+      expect(symbol_ids(summary)).to contain_exactly(
+        Rslsp::Index::SymbolId.new(kind: :class, owner: nil, name: "::A", discriminator: nil)
+      )
+    end
+
+    it "hashes content from the raw (pre-extraction) source, not the extracted Ruby" do
+      raw_a = erb_document("<p>A</p><%= @x %>\n")
+      raw_b = erb_document("<p>B</p><%= @x %>\n") # different HTML, identical extracted Ruby region
+
+      expect(service.summarize(raw_a).content_hash).not_to eq(service.summarize(raw_b).content_hash)
+    end
+  end
+
   it "gives a reopened class the same SymbolId across both occurrences" do
     source = <<~RUBY
       class User

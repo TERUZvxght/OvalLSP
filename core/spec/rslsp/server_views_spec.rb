@@ -122,4 +122,26 @@ RSpec.describe "Rslsp::Server controller-to-view instance variable propagation (
     expect { build_server(input).run }.not_to raise_error
     expect(sent_messages.first[:result]).to eq(type: "Unknown")
   end
+
+  # Task 008.6: didOpen must run a .erb document's declaration extraction
+  # (WorkspaceIndex/documentSymbol) through the same ERB-aware parsing
+  # Cold Index already used — before this, opening a .erb file fed its
+  # raw HTML+`<% %>` source directly to Prism, which parsed it as invalid
+  # Ruby and never captured a constant assigned inside a tag (and could
+  # raise on some HTML shapes, silently swallowed by #reindex's rescue).
+  it "indexes a constant assigned inside a <% %> tag on didOpen, not just via Cold Index" do
+    view_uri = "file:///app/views/widgets/index.html.erb"
+    input =
+      open(view_uri, "<div class=\"x\"><% WidgetLimit = 10 %></div>\n", language_id: "erb") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/documentSymbol",
+        params: { textDocument: { uri: view_uri } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    symbols = sent_messages.first[:result]
+    expect(symbols.map { |s| s[:name] }).to include("WidgetLimit")
+  end
 end

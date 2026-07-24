@@ -8,6 +8,7 @@ require_relative "index/parameter"
 require_relative "index/declaration"
 require_relative "index/file_summary"
 require_relative "index/source_location"
+require_relative "erb/ruby_region_extractor"
 
 module Rslsp
   # Parses a document with Prism and extracts class/module/method/constant
@@ -15,19 +16,38 @@ module Rslsp
   # source has a syntax error, it still produces a best-effort AST, so
   # declarations before the error remain visible (Task 002 acceptance
   # criterion). AST node objects are never retained past this method.
+  #
+  # `.erb` documents are transparently run through
+  # Erb::RubyRegionExtractor before parsing — this is the single point
+  # every caller (didOpen/didChange's #summarize call, didChangeWatchedFiles'
+  # reindex, Cold Index) goes through, so none of them can diverge on how
+  # ERB is handled. Before Task 008.6, only Cold Index applied the
+  # extraction itself; every other path fed raw HTML+`<% %>` template
+  # source directly to Prism, which parsed it as (mostly invalid) Ruby —
+  # opening a .erb file via didOpen never actually indexed its Ruby
+  # regions at all
+  # (docs/design/tasks/008.6-agent-and-index-hardening.md).
   class ParserService
     DIAGNOSTIC_ERROR_SEVERITY = 1
 
     def summarize(document)
-      source = document.text
-      result = Prism.parse(source)
-      lines = source.split("\n", -1)
+      raw_source = document.text
+      parse_source = erb_document?(document.uri) ? Erb::RubyRegionExtractor.extract_ruby_source(raw_source) : raw_source
+      result = Prism.parse(parse_source)
+      lines = parse_source.split("\n", -1)
 
       declarations = Visitor.new(lines).tap { |visitor| result.value.accept(visitor) }.declarations
 
       Index::FileSummary.new(
         uri: document.uri,
-        content_hash: Digest::SHA256.hexdigest(source),
+        # Hashed from the raw (pre-extraction) source: what matters for
+        # WorkspaceIndex's no-op-skip check is whether the underlying
+        # file actually changed, not whether its *extracted* form did —
+        # the two are equivalent in practice (extraction is a pure
+        # function of the raw source) but hashing the raw source avoids
+        # re-running extraction just to compute a hash when nothing
+        # changed.
+        content_hash: Digest::SHA256.hexdigest(raw_source),
         document_version: document.version,
         declarations: declarations,
         diagnostics: result.errors.map { |error| to_diagnostic(error, lines) }
@@ -35,6 +55,10 @@ module Rslsp
     end
 
     private
+
+    def erb_document?(uri)
+      uri.to_s.end_with?(".erb")
+    end
 
     def to_diagnostic(error, lines)
       {
