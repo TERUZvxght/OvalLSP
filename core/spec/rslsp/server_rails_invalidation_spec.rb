@@ -125,6 +125,87 @@ RSpec.describe "Rslsp::Server Rails file-change invalidation" do
     expect(calls.pop(timeout: 2)).to eq("Admin::Project")
   end
 
+  describe "schema changes (Task 008.6)" do
+    def fake_manager_for(models_by_name)
+      Class.new do
+        define_singleton_method(:ready?) { true }
+        define_singleton_method(:reload) { |**| nil }
+        define_singleton_method(:fetch_all_models) { models_by_name.values }
+      end
+    end
+
+    it "re-fetches every model in one bulk round trip when db/schema.rb changes" do
+      fake_manager = fake_manager_for(
+        "User" => { name: "User", tableName: "users", columns: [{ name: "bio", type: "string", null: true }],
+                    associations: [], partial: false },
+        "Company" => { name: "Company", tableName: "companies", columns: [], associations: [], partial: false }
+      )
+
+      server = build_server(changes_input([{ uri: "file:///app/db/schema.rb", type: 2 }]), agent_manager: fake_manager)
+      server.run
+
+      expect(wait_until { model_registry.known_model?("User") && model_registry.known_model?("Company") }).to be(true)
+      expect(model_registry.column("User", "bio").nullable).to be(true)
+    end
+
+    it "treats db/structure.sql the same as db/schema.rb" do
+      fake_manager = fake_manager_for(
+        "Order" => { name: "Order", tableName: "orders", columns: [], associations: [], partial: false }
+      )
+
+      server = build_server(changes_input([{ uri: "file:///app/db/structure.sql", type: 2 }]), agent_manager: fake_manager)
+      server.run
+
+      expect(wait_until { model_registry.known_model?("Order") }).to be(true)
+    end
+
+    it "treats a file under db/migrate/ the same as a schema change" do
+      fake_manager = fake_manager_for(
+        "Order" => { name: "Order", tableName: "orders", columns: [], associations: [], partial: false }
+      )
+
+      server = build_server(
+        changes_input([{ uri: "file:///app/db/migrate/20260101000000_add_status_to_orders.rb", type: 2 }]),
+        agent_manager: fake_manager
+      )
+      server.run
+
+      expect(wait_until { model_registry.known_model?("Order") }).to be(true)
+    end
+
+    it "drops a model no longer returned after a schema change (generation-replace, not merge)" do
+      model_registry.register_from_agent_response(
+        "Removed", { name: "Removed", tableName: "removeds", columns: [], associations: [], partial: false }
+      )
+      fake_manager = fake_manager_for(
+        "User" => { name: "User", tableName: "users", columns: [], associations: [], partial: false }
+      )
+
+      server = build_server(changes_input([{ uri: "file:///app/db/schema.rb", type: 2 }]), agent_manager: fake_manager)
+      server.run
+
+      expect(wait_until { model_registry.known_model?("User") }).to be(true)
+      expect(model_registry.known_model?("Removed")).to be(false)
+    end
+
+    it "keeps last-known-good models instead of wiping the registry when the post-schema-change fetch fails" do
+      model_registry.register_from_agent_response(
+        "User", { name: "User", tableName: "users", columns: [], associations: [], partial: false }
+      )
+      fake_manager = Class.new do
+        define_singleton_method(:ready?) { true }
+        define_singleton_method(:reload) { |**| nil }
+        define_singleton_method(:fetch_all_models) { nil } # communication failure
+      end
+
+      server = build_server(changes_input([{ uri: "file:///app/db/schema.rb", type: 2 }]), agent_manager: fake_manager)
+      server.run
+      sleep 0.1
+
+      expect(model_registry.known_model?("User")).to be(true)
+    end
+  end
+
   it "restarts the whole Agent when Gemfile.lock changes" do
     calls = Queue.new
     fake_manager = Class.new do

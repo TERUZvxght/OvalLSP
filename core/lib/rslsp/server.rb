@@ -520,6 +520,7 @@ module Rslsp
       changed_models = Set.new
       needs_routes_refresh = false
       needs_restart = false
+      needs_full_models_refresh = false
 
       params.fetch(:changes, []).each do |change|
         uri = change.fetch(:uri)
@@ -535,6 +536,7 @@ module Rslsp
         case classify_rails_change(uri)
         when :routes then needs_routes_refresh = true
         when :restart then needs_restart = true
+        when :schema then needs_full_models_refresh = true
         else
           model_name = model_name_for(uri)
           changed_models << model_name if model_name
@@ -549,13 +551,26 @@ module Rslsp
       return if needs_restart # a restart already refreshes everything
 
       with_ready_agent("config/routes.rb") { refresh_routes } if needs_routes_refresh
-      with_ready_agent("app/models/*") { refresh_models(changed_models) } unless changed_models.empty?
+      # A schema-wide change (a migration, `db/schema.rb`/`structure.sql`
+      # regenerated) can alter any model's columns, not just one whose own
+      # file changed — a full model-table refresh subsumes any individual
+      # #refresh_models call this same batch would otherwise also trigger,
+      # so it takes priority and the per-file path is skipped
+      # (docs/design/tasks/008.6-agent-and-index-hardening.md).
+      if needs_full_models_refresh
+        with_ready_agent("db/schema.rb") { refresh_all_models }
+      elsif !changed_models.empty?
+        with_ready_agent("app/models/*") { refresh_models(changed_models) }
+      end
     end
+
+    SCHEMA_FILE_PATTERNS = [%r{db/schema\.rb\z}, %r{db/structure\.sql\z}, %r{db/migrate/}].freeze
 
     def classify_rails_change(uri)
       path = UriUtil.to_path(uri) || uri
       return :routes if path.end_with?("config/routes.rb")
       return :restart if path.end_with?("Gemfile.lock") || path.include?("config/initializers/")
+      return :schema if SCHEMA_FILE_PATTERNS.any? { |pattern| pattern.match?(path) }
 
       nil
     end
@@ -707,6 +722,43 @@ module Rslsp
         end
       rescue StandardError => e
         logger.error("failed to refresh models #{names.to_a.join(', ')}: #{e.class}: #{e.message}")
+      end
+    end
+
+    # A migration, `db/schema.rb`, or `db/structure.sql` change can alter
+    # any model's columns/associations, not just one whose own file
+    # changed, so this re-fetches every model in one bulk agent/models
+    # round trip and installs it as a full generation-replace (mirroring
+    # RailsBootstrap#populate_registries at startup) rather than looping
+    # over a specific name list (docs/design/tasks/008.6-agent-and-index-hardening.md).
+    # Same failure-preserves-last-known-good and stale-Agent-generation
+    # guards as #refresh_routes/#refresh_models: a nil fetch (communication
+    # failure) leaves the registry untouched instead of wiping it, and the
+    # write is dropped if a restart has already replaced @agent_manager by
+    # the time this round trip completes.
+    def refresh_all_models
+      agent_manager = @agent_manager
+      model_registry = @model_registry
+      logger = @logger
+      mutex = @agent_restart_mutex
+
+      Thread.new do
+        agent_manager.reload(sections: ["models"])
+
+        models = agent_manager.fetch_all_models
+        unless models
+          logger.warn("failed to fetch models after a schema change; keeping last-known-good models")
+          next
+        end
+
+        mutex.synchronize do
+          next unless agent_manager.equal?(@agent_manager)
+
+          responses_by_name = models.filter_map { |entry| entry[:name] && [entry[:name], entry] }.to_h
+          model_registry.replace(responses_by_name)
+        end
+      rescue StandardError => e
+        logger.error("failed to refresh models after a schema change: #{e.class}: #{e.message}")
       end
     end
 
