@@ -50,6 +50,29 @@ module Rslsp
       end
     end
 
+    # A placeholder used only *inside* a Semantic::GenericRule template
+    # (Task 011) — e.g. `T` standing for a container's element type, `U`
+    # for a block's return type. Never appears in a final, resolved type;
+    # Semantic::GenericRuleRegistry substitutes every TypeParameter away
+    # before returning a result.
+    TypeParameter = Data.define(:name) do
+      def to_s
+        name
+      end
+    end
+
+    # A block/proc's shape: `parameters` is the ordered list of types its
+    # own parameters are bound to, `return_type` is what its body
+    # evaluates to. Used both as a GenericRule template (with
+    # TypeParameter placeholders) and as the concrete, evaluated shape a
+    # caller reports back after actually running a block's body through
+    # the same type evaluator (Task 011).
+    ProcType = Data.define(:parameters, :return_type) do
+      def to_s
+        "(#{parameters.map(&:to_s).join(', ')}) -> #{return_type}"
+      end
+    end
+
     module_function
 
     # Flattens nested unions, removes duplicate members (structural

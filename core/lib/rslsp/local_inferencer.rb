@@ -3,6 +3,7 @@
 require "prism"
 require_relative "types"
 require_relative "models/model_registry"
+require_relative "semantic/generic_rule_registry"
 
 module Rslsp
   # Minimal local type inference over a single document's top-level
@@ -17,6 +18,11 @@ module Rslsp
   # Relation/CollectionProxy#first all resolve through it instead of
   # falling back to Unknown.
   #
+  # Task 011 adds array-literal element tracking (`[User.new]` is
+  # `Array[User]`, not a bare `Array`) and Semantic::GenericRuleRegistry-
+  # backed block inference for `map`/`select`/`filter_map`/`find`/`each`/
+  # `find_each`/`to_a`/`build` across Array/Relation/CollectionProxy.
+  #
   # Re-parses the document on demand and discards the AST when done; the
   # workspace index never retains it (docs/02-architecture.md).
   class LocalInferencer
@@ -29,11 +35,31 @@ module Rslsp
     class BudgetExceeded < StandardError; end
 
     TERMINAL_NODE_TYPES = [Prism::ReturnNode, Prism::NextNode, Prism::BreakNode].freeze
-    RELATION_LIKE = ["Relation", "CollectionProxy"].freeze
+    # Array joins Relation/CollectionProxy here (Task 011): `#first`/
+    # `#first!` mean the exact same thing on any of the three.
+    RELATION_LIKE = ["Array", "Relation", "CollectionProxy"].freeze
+    # Caps how many array-literal elements contribute to the inferred
+    # element-type union before widening the whole array to Unknown
+    # element type — "type argument explosion widening"
+    # (docs/design/tasks/011-generic-types-and-block-inference.md). A
+    # 200-element literal of 200 distinct types is not a realistic Ruby
+    # array; it's almost certainly generated/data, not a case worth an
+    # increasingly large Union over.
+    MAX_ARRAY_ELEMENT_UNION = 8
 
-    def initialize(max_steps: 5000, model_registry: Models::ModelRegistry.new)
+    def initialize(max_steps: 5000, model_registry: Models::ModelRegistry.new, generic_rules: nil)
       @max_steps = max_steps
       @model_registry = model_registry
+      @generic_rules = generic_rules || self.class.default_generic_rules
+    end
+
+    # A fresh registry per instance by default (registries are cheap and
+    # stateless once built) rather than one shared mutable singleton — a
+    # caller that wants to `register` an extra project-specific rule can
+    # pass its own registry in without affecting every other
+    # LocalInferencer instance.
+    def self.default_generic_rules
+      Semantic::GenericRuleRegistry.new.tap { |registry| Semantic::BuiltInGenericRules.install(registry) }
     end
 
     # `document` is an Rslsp::TextDocument; `position` is an LSP
@@ -132,6 +158,8 @@ module Rslsp
       when Prism::CallNode
         if node.receiver && contains?(node.receiver.location, offset)
           locate(node.receiver, offset, env)
+        elsif node.block.is_a?(Prism::BlockNode) && contains?(node.block.location, offset)
+          locate_in_block(node, offset, env)
         else
           eval_type(node, env)
         end
@@ -142,6 +170,43 @@ module Rslsp
       else
         eval_type(node, env)
       end
+    end
+
+    # A position inside a block (its parameter list or its body) needs its
+    # own nested env, built the same way #resolve_generic_call's block
+    # binding does — but without running the block's body, since we don't
+    # yet know which subnode the caller actually wants evaluated. Falls
+    # back to the whole call's own type when the receiver isn't a
+    # generic-rule-backed container (nothing to bind block params to).
+    def locate_in_block(node, offset, env)
+      receiver_type = node.receiver && eval_type(node.receiver, env)
+      nested_env = block_nested_env(node, receiver_type, env)
+      return eval_type(node, env) unless nested_env
+
+      param_node = block_parameter_node_at(node.block, offset)
+      return nested_env.fetch(param_node.name, Types::UNKNOWN) if param_node
+
+      locate(node.block.body, offset, nested_env)
+    end
+
+    def block_nested_env(node, receiver_type, env)
+      return nil unless receiver_type.is_a?(Types::Generic)
+
+      param_types = @generic_rules.block_parameter_types(receiver_type: receiver_type, method_name: node.name)
+      return nil unless param_types
+
+      nested_env = env.dup
+      block_parameter_names(node.block).each_with_index do |name, index|
+        nested_env[name] = param_types[index] || Types::UNKNOWN
+      end
+      nested_env
+    end
+
+    def block_parameter_node_at(block_node, offset)
+      params = block_node.parameters
+      return nil unless params.is_a?(Prism::BlockParametersNode)
+
+      params.parameters&.requireds&.find { |p| p.respond_to?(:name) && contains?(p.location, offset) }
     end
 
     def locate_in_statements(node, offset, env)
@@ -207,7 +272,7 @@ module Rslsp
       when Prism::SymbolNode then Types::Nominal.new(name: "Symbol")
       when Prism::TrueNode, Prism::FalseNode then Types::Nominal.new(name: "Boolean")
       when Prism::NilNode then Types::NIL
-      when Prism::ArrayNode then Types::Nominal.new(name: "Array")
+      when Prism::ArrayNode then eval_array(node, env)
       when Prism::HashNode then Types::Nominal.new(name: "Hash")
       when Prism::ParenthesesNode then eval_type(node.body, env)
       when Prism::CallNode then eval_call(node, env)
@@ -216,14 +281,27 @@ module Rslsp
       end
     end
 
+    # Elements beyond #MAX_ARRAY_ELEMENT_UNION contribute to a widened
+    # (Unknown) element type rather than an ever-growing Union — "type
+    # argument explosion widening". An empty array literal has no
+    # evidence for its element type at all, so it stays Unknown too
+    # (`[]` alone can't say what it's an array *of*).
+    def eval_array(node, env)
+      return Types::Generic.new(name: "Array", type_arg: Types::UNKNOWN) if node.elements.empty?
+      return Types::Generic.new(name: "Array", type_arg: Types::UNKNOWN) if node.elements.size > MAX_ARRAY_ELEMENT_UNION
+
+      element_type = Types.normalize_union(node.elements.map { |element| eval_type(element, env) })
+      Types::Generic.new(name: "Array", type_arg: element_type)
+    end
+
     def eval_call(node, env)
       receiver_type = node.receiver && eval_type(node.receiver, env)
-      base = resolve_call(node, receiver_type)
+      base = resolve_call(node, receiver_type, env)
 
       node.respond_to?(:safe_navigation?) && node.safe_navigation? ? Types.normalize_union([base, Types::NIL]) : base
     end
 
-    def resolve_call(node, receiver_type)
+    def resolve_call(node, receiver_type, env)
       if node.name == :new && constant_receiver?(node.receiver)
         return Types::Nominal.new(name: node.receiver.full_name)
       end
@@ -231,10 +309,60 @@ module Rslsp
       class_level = constant_receiver?(node.receiver) && resolve_class_level_finder(node.receiver.full_name, node.name)
       return class_level if class_level
 
+      generic = receiver_type && resolve_generic_call(node, receiver_type, env)
+      return generic if generic
+
       instance_level = receiver_type && resolve_instance_level(receiver_type, node.name)
       return instance_level if instance_level
 
       Types::UNKNOWN
+    end
+
+    # Block-taking (and a couple of blockless) generic container methods
+    # go through Semantic::GenericRuleRegistry first — `#first`/`#first!`
+    # deliberately stay on the older #resolve_relation_member path just
+    # below instead of being duplicated into a rule, since they need no
+    # block and no template substitution.
+    #
+    # A nested block gets its own env *copy* (`env.dup`), never the outer
+    # env directly — this is what keeps an inner block's parameter
+    # binding from leaking into (or shadowing) the outer scope's own
+    # bindings once evaluation returns to it ("nested blockで外側binding
+    # を壊さない").
+    def resolve_generic_call(node, receiver_type, env)
+      return nil unless receiver_type.is_a?(Types::Generic)
+
+      block_callable =
+        if node.block.is_a?(Prism::BlockNode)
+          ->(bound_params) { eval_block(node.block, bound_params, env) }
+        end
+
+      @generic_rules.resolve(receiver_type: receiver_type, method_name: node.name, block: block_callable)
+    end
+
+    def eval_block(block_node, bound_params, outer_env)
+      nested_env = outer_env.dup
+      block_parameter_names(block_node).each_with_index do |name, index|
+        nested_env[name] = bound_params[index] || Types::UNKNOWN
+      end
+
+      eval_type(block_node.body, nested_env)
+    end
+
+    # Destructuring parameters (`|(a, b)|`) are out of scope
+    # ("destructuringの完全対応") and simply contribute no binding — the
+    # block body just sees Unknown for whatever it references from them,
+    # same as any other unresolved local.
+    def block_parameter_names(block_node)
+      params = block_node.parameters
+      case params
+      when Prism::NumberedParametersNode
+        (1..params.maximum).map { |i| :"_#{i}" }
+      when Prism::BlockParametersNode
+        params.parameters&.requireds&.filter_map { |p| p.name if p.respond_to?(:name) } || []
+      else
+        []
+      end
     end
 
     # `Model.find` -> Model, `Model.find_by` -> Model | nil,

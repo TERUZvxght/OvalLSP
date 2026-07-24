@@ -195,6 +195,118 @@ RSpec.describe Rslsp::LocalInferencer do
     end
   end
 
+  describe "Generic types and block inference (Task 011)" do
+    it "infers an array literal's element type from a homogeneous literal" do
+      expect(infer("xs = [User.new]\n", line: 0, character: 1).to_s).to eq("Array[User]")
+    end
+
+    it "unions element types for a heterogeneous array literal" do
+      type = infer("xs = [User.new, Admin.new]\n", line: 0, character: 1)
+      expect(type.to_s).to eq("Array[Admin | User]")
+    end
+
+    it "widens an empty array literal's element type to Unknown rather than guessing" do
+      expect(infer("xs = []\n", line: 0, character: 1).to_s).to eq("Array[Unknown]")
+    end
+
+    # "type argument explosion widening"
+    it "widens a very large array literal's element type instead of building an unbounded Union" do
+      elements = (1..50).map { |i| "T#{i}.new" }.join(", ")
+      type = infer("xs = [#{elements}]\n", line: 0, character: 1)
+      expect(type.to_s).to eq("Array[Unknown]")
+    end
+
+    # "Array[User]#map`のblock引数がUser" / "map結果がblock戻り値のArrayになる"
+    it "binds a map block's parameter to the array's element type, and the result to Array[block return]" do
+      source = "xs = [User.new]\nxs.map { |user| user }\n"
+
+      block_param_type = infer(source, line: 1, character: 10) # inside `|user|`
+      result_type = infer(source, line: 1, character: 3) # the `xs.map { ... }` call itself
+
+      expect(block_param_type.to_s).to eq("User")
+      expect(result_type.to_s).to eq("Array[User]")
+    end
+
+    it "does not crash and returns Unknown for a call with a block syntax error, degrading partially" do
+      source = "xs = [User.new]\nxs.map { |user\n"
+
+      expect { infer(source, line: 1, character: 0) }.not_to raise_error
+    end
+
+    it "infers each's numbered parameter (_1)" do
+      expect(infer("xs = [User.new]\nxs.map { _1 }\n", line: 1, character: 9).to_s).to eq("User")
+    end
+
+    it "infers select/filter_map results" do
+      expect(infer("xs = [1]\nxs.select { |x| x }\n", line: 1, character: 3).to_s).to eq("Array[Integer]")
+      expect(infer("xs = [1]\nxs.filter_map { |x| x.to_s }\n", line: 1, character: 3).to_s).to eq("Array[Unknown]")
+    end
+
+    it "infers find as element type or nil" do
+      type = infer("xs = [User.new]\nxs.find { |x| x }\n", line: 1, character: 3)
+      expect(type).to eq(Rslsp::Types.normalize_union([Rslsp::Types::Nominal.new(name: "User"), Rslsp::Types::NIL]))
+    end
+
+    it "keeps outer block bindings intact across a nested block (does not clobber outer parameter names)" do
+      source = "xs = [1]\nys = [\"a\"]\nresult = xs.map { |x| ys.map { |y| x } }\n"
+
+      expect(infer(source, line: 2, character: 35).to_s).to eq("Integer") # inner block body still sees outer x
+      expect(infer(source, line: 2, character: 12).to_s).to eq("Array[Array[Integer]]")
+    end
+
+    describe "Active Record generic rules" do
+      let(:model_registry) do
+        registry = Rslsp::Models::ModelRegistry.new
+        registry.register_from_agent_response(
+          "User", { tableName: "users", partial: false, columns: [],
+                    associations: [{ name: "company", macro: "belongs_to", className: "Company", optional: true }] }
+        )
+        registry.register_from_agent_response(
+          "Company", { tableName: "companies", partial: false, columns: [],
+                       associations: [{ name: "orders", macro: "has_many", className: "Order", optional: false }] }
+        )
+        registry
+      end
+      let(:inferencer) { described_class.new(model_registry: model_registry) }
+
+      # "Relation[Order]が`first`が`Order | nil`" (verified generically for Relation[User] here)
+      it "infers Relation[T]#first as T | nil, matching Array/CollectionProxy" do
+        source = "users = User.where(id: 1)\nusers.first\n"
+        type = infer(source, line: 1, character: 8)
+        expect(type).to eq(Rslsp::Types.normalize_union([Rslsp::Types::Nominal.new(name: "User"), Rslsp::Types::NIL]))
+      end
+
+      it "infers Relation[T]#map with a block through the same generic rule as Array" do
+        source = "users = User.where(id: 1)\nusers.map { |u| u }\n"
+        expect(infer(source, line: 1, character: 6).to_s).to eq("Array[User]")
+      end
+
+      # "実際の戻り値と一致するようRails APIをfixtureで確認する": Relation#find_each
+      # returns nil in real Rails (a batched, void-ish iteration method,
+      # unlike #each).
+      it "infers Relation[T]#find_each as nil" do
+        source = "result = User.where(id: 1).find_each { |u| u }\n"
+        expect(infer(source, line: 0, character: 0)).to eq(Rslsp::Types::NIL)
+      end
+
+      # "CollectionProxy[Order]#build`がOrder"
+      it "infers CollectionProxy[T]#build as T" do
+        source = "orders = User.find(1).company.orders\norders.build\n"
+        expect(infer(source, line: 1, character: 9)).to eq(Rslsp::Types::Nominal.new(name: "Order"))
+      end
+
+      it "infers CollectionProxy[T]#to_a as Array[T] (generic substitution in a chained call)" do
+        source = "orders = User.find(1).company.orders\norders.to_a\n"
+        expect(infer(source, line: 1, character: 9).to_s).to eq("Array[Order]")
+      end
+
+      it "infers CollectionProxy[T]#each as the receiver's own type unchanged" do
+        source = "orders = User.find(1).company.orders\norders.each { |o| o }\n"
+        expect(infer(source, line: 1, character: 9).to_s).to eq("CollectionProxy[Order]")
+      end
+    end
+  end
+
   describe "#infer_ivars_for_method (Task 008)" do
     def document(source)
       Rslsp::TextDocument.new(uri: "file:///controller.rb", text: source, version: 1, language_id: "ruby")
