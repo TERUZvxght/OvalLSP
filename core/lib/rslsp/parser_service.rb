@@ -136,7 +136,8 @@ module Rslsp
           location: Index::SourceLocation.to_range(node.location, @lines),
           visibility: singleton ? nil : @visibility_stack.last,
           parameters: extract_parameters(node.parameters),
-          origin: :source
+          origin: :source,
+          body_source: node.body&.slice
         )
 
         super
