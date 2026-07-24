@@ -89,6 +89,49 @@ RSpec.describe Rslsp::ColdIndexer do
     end
   end
 
+  # Task 008.6: the previous test only covers a buffer opened *before*
+  # Cold Index ever looks at the file, where its own "skip if already
+  # open" check is enough. The real race is narrower and worse: a didOpen
+  # landing in the window between that check and the disk-read's
+  # #replace_file call — Cold Index already decided "not open" and is
+  # mid-flight reading/parsing the (soon to be stale) disk content when
+  # the buffer opens. This reproduces exactly that interleaving by
+  # triggering the didOpen as a side effect of DocumentStore#fetch's
+  # first (pre-read) call inside Cold Index's own check — the guarantee
+  # must hold structurally (in WorkspaceIndex#replace_file), not just
+  # because Cold Index happened to check first
+  # (docs/design/tasks/008.6-agent-and-index-hardening.md).
+  it "does not lose a didOpen that lands in the race window between Cold Index's open-check and its disk write" do
+    Dir.mktmpdir do |dir|
+      path = write(dir, "app/models/user.rb", "class User\nend\n")
+      uri = Rslsp::UriUtil.from_path(path)
+      opened = false
+
+      allow(document_store).to receive(:fetch).and_wrap_original do |original, **kwargs|
+        if kwargs[:uri] == uri && !opened
+          opened = true
+          # Simulates textDocument/didOpen arriving on the transport
+          # thread right after Cold Index's check observed "not open",
+          # but before Cold Index's own disk-read summary reaches
+          # WorkspaceIndex#replace_file. Returning nil here (rather than
+          # delegating to the now-true `original.call`) is what actually
+          # reproduces the race: Cold Index's check itself must still see
+          # "not open" so it proceeds to read+parse+replace_file with
+          # disk content, racing the buffer that opened in between.
+          document_store.open(uri: uri, text: "class OpenedDuringColdIndex\nend\n", version: 1, language_id: "ruby")
+          workspace_index.replace_file(parser_service.summarize(document_store.fetch(uri: uri)))
+          next nil
+        end
+        original.call(**kwargs)
+      end
+
+      run_indexer(dir)
+
+      expect(class_declared?("OpenedDuringColdIndex")).to be(true)
+      expect(class_declared?("User")).to be(false)
+    end
+  end
+
   it "avoids an infinite loop on a symlink cycle" do
     Dir.mktmpdir do |dir|
       write(dir, "app/models/user.rb", "class User\nend\n")

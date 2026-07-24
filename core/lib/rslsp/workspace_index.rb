@@ -31,19 +31,37 @@ module Rslsp
       # once Cold Index has populated thousands of them.
       @by_simple_name = Hash.new { |h, k| h[k] = Set.new }
       @generation = 0
+      @next_read_sequence = 0
     end
 
     def generation
       @mutex.synchronize { @generation }
     end
 
+    # Monotonic counter callers reading a file from disk (Cold Index,
+    # didChangeWatchedFiles' reindex, any future background indexer) must
+    # fetch *before* they read the file's content, and stamp onto the
+    # resulting FileSummary's `read_sequence`. This is what
+    # #replace_file's staleness check for `source: :disk` orders by,
+    # instead of write-arrival order — see #stale?'s comment for why that
+    # distinction matters (docs/design/tasks/008.6-agent-and-index-hardening.md).
+    def next_read_sequence
+      @mutex.synchronize { @next_read_sequence += 1 }
+    end
+
     # Adds or updates one file's contribution to the index. Returns false
-    # (a no-op) when the content hash is unchanged, or when `summary` is
-    # older than what's already indexed for this uri — a nil
-    # `document_version` on either side skips the ordering check entirely,
-    # since disk-sourced summaries (no LSP version) and buffer-sourced
-    # summaries (LSP version) are different channels that aren't mutually
-    # comparable.
+    # (a no-op) when the content hash is unchanged, or when `summary` loses
+    # to what's already indexed for this uri under #stale?'s rules — an
+    # open buffer's contribution (`source: :buffer`) can never be
+    # overwritten by a disk read (`source: :disk`) for the same uri, no
+    # matter which call reaches #replace_file second; this is enforced
+    # here, once, rather than relying on every disk-reading caller to
+    # separately check DocumentStore before indexing
+    # (docs/design/tasks/008.6-agent-and-index-hardening.md — Cold Index's
+    # own "skip if open" check at read time left a race window between
+    # that check and this call, where a didOpen for the same file landing
+    # in between would get silently overwritten by the disk read finishing
+    # after it).
     def replace_file(summary)
       @mutex.synchronize do
         existing = @summaries[summary.uri]
@@ -120,11 +138,31 @@ module Rslsp
 
     private
 
+    # Buffer-vs-disk precedence is absolute and one-directional: a buffer
+    # can always overwrite a disk-sourced entry (the user started editing,
+    # or didOpen simply raced ahead of a Cold Index read already in
+    # flight for the same file — either way the buffer is authoritative),
+    # but a disk read can never overwrite a buffer, full stop. Only when
+    # both sides share the same source does either kind of "staleness"
+    # ordering apply: document_version for two buffer updates (an LSP
+    # client always sends increasing versions per document), or
+    # read_sequence for two disk reads (ordered by when each *started*
+    # reading, not when each *finished* writing to the index — a slow
+    # walk that began reading stale content before a fast, later-started
+    # targeted reindex must lose to it even if the slow walk's
+    # #replace_file call happens to arrive second).
     def stale?(existing, incoming)
       return false unless existing
-      return false if incoming.document_version.nil? || existing.document_version.nil?
+      return true if existing.source == :buffer && incoming.source == :disk # disk never beats an open buffer
+      return false if existing.source == :disk && incoming.source == :buffer # a buffer always promotes over disk
 
-      incoming.document_version < existing.document_version
+      if incoming.source == :buffer
+        return false if incoming.document_version.nil? || existing.document_version.nil?
+
+        incoming.document_version < existing.document_version
+      else
+        incoming.read_sequence < existing.read_sequence
+      end
     end
 
     def remove_file_locked(uri)

@@ -171,12 +171,18 @@ module Rslsp
       @document_store.close(uri: uri)
       @file_summaries.delete(uri)
 
+      # Unconditional and first: WorkspaceIndex#replace_file now refuses to
+      # let any disk-sourced summary overwrite a buffer-sourced one for the
+      # same uri (the whole point of Task 008.6's open-buffer-always-wins
+      # guarantee) — closing the buffer is the one legitimate transition
+      # away from that protection, and it must happen *before*
+      # #reindex_from_disk's own replace_file call, or that call would see
+      # a still-buffer-sourced existing entry and be silently rejected as
+      # stale (docs/design/tasks/008.6-agent-and-index-hardening.md).
+      @workspace_index.remove_file(uri)
+
       path = UriUtil.to_path(uri)
-      if path && File.file?(path)
-        reindex_from_disk(uri)
-      else
-        @workspace_index.remove_file(uri)
-      end
+      reindex_from_disk(uri) if path && File.file?(path)
     end
 
     def reindex(document)
@@ -562,13 +568,20 @@ module Rslsp
       match[:relative].split("/").map { |segment| Routes::ControllerNaming.camelize(segment) }.join("::")
     end
 
+    # The read_sequence is fetched *before* reading the file, not after,
+    # so ordering reflects when each disk read actually observed the
+    # file's content, not when its #replace_file call happened to arrive
+    # — see WorkspaceIndex#stale?'s comment
+    # (docs/design/tasks/008.6-agent-and-index-hardening.md).
     def reindex_from_disk(uri)
       path = UriUtil.to_path(uri)
       return unless path && File.file?(path)
 
+      read_sequence = @workspace_index.next_read_sequence
       document = TextDocument.new(uri: uri, text: File.read(path, encoding: Encoding::UTF_8), version: nil,
                                    language_id: "ruby")
-      @workspace_index.replace_file(@parser_service.summarize(document))
+      summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
+      @workspace_index.replace_file(summary)
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
     end

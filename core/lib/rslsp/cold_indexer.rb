@@ -107,10 +107,21 @@ module Rslsp
       visited_files << real_path
 
       uri = UriUtil.from_path(path)
-      return if @document_store.fetch(uri: uri) # an open buffer's content is authoritative; leave it alone
+      # This check alone is NOT what prevents an open buffer from being
+      # overwritten — there's a window between it and the #replace_file
+      # call below where a didOpen for this exact uri can land, and this
+      # thread's read (already in flight) would otherwise clobber it. The
+      # real guarantee is structural, inside WorkspaceIndex#replace_file
+      # itself (buffer always beats disk, unconditionally); this check is
+      # only a cheap early-out to skip reading+parsing a file we already
+      # know is open, not a substitute for that guarantee
+      # (docs/design/tasks/008.6-agent-and-index-hardening.md).
+      return if @document_store.fetch(uri: uri)
 
+      read_sequence = @workspace_index.next_read_sequence
       document = TextDocument.new(uri: uri, text: source_for(path), version: nil, language_id: "ruby")
-      @workspace_index.replace_file(@parser_service.summarize(document))
+      summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
+      @workspace_index.replace_file(summary)
     rescue StandardError => e
       @logger.error("cold index: failed to index #{path}: #{e.class}: #{e.message}")
     end

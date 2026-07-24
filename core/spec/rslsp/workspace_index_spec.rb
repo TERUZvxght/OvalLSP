@@ -3,9 +3,10 @@
 RSpec.describe Rslsp::WorkspaceIndex do
   subject(:index) { described_class.new }
 
-  def summary(uri:, declarations:, content_hash: "hash-#{uri}", version: 1)
+  def summary(uri:, declarations:, content_hash: "hash-#{uri}", version: 1, source: :buffer, read_sequence: 0)
     Rslsp::Index::FileSummary.new(
-      uri: uri, content_hash: content_hash, document_version: version, declarations: declarations, diagnostics: []
+      uri: uri, content_hash: content_hash, document_version: version, declarations: declarations, diagnostics: [],
+      source: source, read_sequence: read_sequence
     )
   end
 
@@ -158,6 +159,83 @@ RSpec.describe Rslsp::WorkspaceIndex do
       index.replace_file(summary(uri: "file:///a.rb", declarations: declarations))
 
       expect(index.search("widget", limit: 2).size).to eq(2)
+    end
+  end
+
+  describe "open-buffer-always-wins over disk (Task 008.6)" do
+    it "never lets a disk-sourced summary overwrite a buffer-sourced one, no matter the read_sequence" do
+      buffer_decl = declaration(kind: :class, owner: nil, name: "::Buffered")
+      disk_decl = declaration(kind: :class, owner: nil, name: "::Stale")
+
+      index.replace_file(summary(uri: "file:///a.rb", declarations: [buffer_decl], content_hash: "buf", source: :buffer))
+      # A huge read_sequence would win against another disk summary, but
+      # must still lose to the buffer -- source precedence is checked
+      # before read_sequence, not instead of a version/sequence comparison
+      # that happens to favor disk.
+      accepted = index.replace_file(
+        summary(uri: "file:///a.rb", declarations: [disk_decl], content_hash: "disk", source: :disk, read_sequence: 999_999)
+      )
+
+      expect(accepted).to be(false)
+      expect(index.declarations(buffer_decl.symbol_id)).to eq([buffer_decl])
+      expect(index.declarations(disk_decl.symbol_id)).to eq([])
+    end
+
+    it "lets a buffer-sourced summary overwrite an existing disk-sourced one unconditionally" do
+      disk_decl = declaration(kind: :class, owner: nil, name: "::FromDisk")
+      buffer_decl = declaration(kind: :class, owner: nil, name: "::FromBuffer")
+
+      index.replace_file(summary(uri: "file:///a.rb", declarations: [disk_decl], content_hash: "disk", source: :disk, read_sequence: 5))
+      accepted = index.replace_file(
+        summary(uri: "file:///a.rb", declarations: [buffer_decl], content_hash: "buf", source: :buffer, version: 1)
+      )
+
+      expect(accepted).to be(true)
+      expect(index.declarations(buffer_decl.symbol_id)).to eq([buffer_decl])
+      expect(index.declarations(disk_decl.symbol_id)).to eq([])
+    end
+
+    it "orders two disk-sourced summaries by read_sequence (when each started reading), not by call order" do
+      stale_decl = declaration(kind: :class, owner: nil, name: "::Stale")
+      fresh_decl = declaration(kind: :class, owner: nil, name: "::Fresh")
+
+      # Simulates a slow background walk (e.g. Cold Index) starting to
+      # read stale content *before* a fast targeted reindex starts
+      # reading fresh content -- but the fast one finishes (calls
+      # #replace_file) first.
+      stale_sequence = index.next_read_sequence
+      fresh_sequence = index.next_read_sequence
+
+      index.replace_file(
+        summary(uri: "file:///a.rb", declarations: [fresh_decl], content_hash: "fresh", source: :disk, read_sequence: fresh_sequence)
+      )
+      accepted = index.replace_file(
+        summary(uri: "file:///a.rb", declarations: [stale_decl], content_hash: "stale", source: :disk, read_sequence: stale_sequence)
+      )
+
+      expect(accepted).to be(false) # the stale read must lose even though it arrived second
+      expect(index.declarations(fresh_decl.symbol_id)).to eq([fresh_decl])
+      expect(index.declarations(stale_decl.symbol_id)).to eq([])
+    end
+
+    it "holds the buffer-wins guarantee under real concurrent replace_file calls from many threads" do
+      buffer_decl = declaration(kind: :class, owner: nil, name: "::Buffered")
+      index.replace_file(summary(uri: "file:///race.rb", declarations: [buffer_decl], content_hash: "buf", source: :buffer))
+
+      disk_decl = declaration(kind: :class, owner: nil, name: "::Stale")
+      threads = Array.new(30) do |i|
+        Thread.new do
+          sequence = index.next_read_sequence
+          index.replace_file(
+            summary(uri: "file:///race.rb", declarations: [disk_decl], content_hash: "disk#{i}", source: :disk,
+                    read_sequence: sequence)
+          )
+        end
+      end
+      threads.each(&:join)
+
+      expect(index.declarations(buffer_decl.symbol_id)).to eq([buffer_decl])
+      expect(index.declarations(disk_decl.symbol_id)).to eq([])
     end
   end
 end
