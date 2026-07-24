@@ -23,3 +23,7 @@ core/spec/fixtures/rails_real/.bundle/
 core/spec/fixtures/rails_real/db/*.sqlite3*
 core/spec/fixtures/rails_real/log/
 core/spec/fixtures/rails_real/tmp/
+
+# Task source zips dropped into the workspace root are working material,
+# not repo content -- never auto-commit them.
+/*.zip
