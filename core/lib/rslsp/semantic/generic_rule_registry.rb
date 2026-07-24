@@ -63,13 +63,13 @@ module Rslsp
         if rule.block_type
           return nil unless block
 
-          bound_params = rule.block_type.parameters.map { |template| substitute(template, bindings) }
+          bound_params = rule.block_type.parameters.map { |template| Types.substitute(template, bindings) }
           bindings["U"] = block.call(bound_params)
         end
 
         return receiver_type if rule.return_template == :receiver
 
-        substitute(rule.return_template, bindings)
+        Types.substitute(rule.return_template, bindings)
       end
 
       # The block parameter types a matching rule would bind (e.g. `T` for
@@ -82,7 +82,7 @@ module Rslsp
         return nil unless rule&.block_type
 
         bindings = { "T" => receiver_type.type_arg }
-        rule.block_type.parameters.map { |template| substitute(template, bindings) }
+        rule.block_type.parameters.map { |template| Types.substitute(template, bindings) }
       end
 
       private
@@ -91,15 +91,6 @@ module Rslsp
         return nil unless receiver_type.is_a?(Types::Generic)
 
         @rules.find { |rule| rule.method_name == method_name && rule.receiver_pattern.include?(receiver_type.name) }
-      end
-
-      def substitute(template, bindings)
-        case template
-        when Types::TypeParameter then bindings.fetch(template.name, Types::UNKNOWN)
-        when Types::Generic then Types::Generic.new(name: template.name, type_arg: substitute(template.type_arg, bindings))
-        when Types::Union then Types.normalize_union(template.members.map { |member| substitute(member, bindings) })
-        else template
-        end
       end
     end
 

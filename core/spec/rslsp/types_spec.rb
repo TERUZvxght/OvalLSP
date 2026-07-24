@@ -43,4 +43,42 @@ RSpec.describe Rslsp::Types do
       expect(described_class.remove_nil(user)).to eq(user)
     end
   end
+
+  describe ".substitute (Task 012)" do
+    let(:t) { described_class::TypeParameter.new(name: "T") }
+    let(:user) { described_class::Nominal.new(name: "User") }
+
+    it "replaces a bound TypeParameter with its binding" do
+      expect(described_class.substitute(t, { "T" => user })).to eq(user)
+    end
+
+    it "widens an unbound TypeParameter to Unknown instead of leaking the placeholder" do
+      expect(described_class.substitute(t, {})).to eq(described_class::UNKNOWN)
+    end
+
+    it "recurses into a Generic's type_arg" do
+      generic = described_class::Generic.new(name: "Array", type_arg: t)
+
+      expect(described_class.substitute(generic, { "T" => user })).to eq(described_class::Generic.new(name: "Array", type_arg: user))
+    end
+
+    it "recurses into a Union's members and re-normalizes" do
+      union = described_class.normalize_union([t, described_class::NIL])
+
+      expect(described_class.substitute(union, { "T" => user })).to eq(described_class.normalize_union([user, described_class::NIL]))
+    end
+
+    it "recurses into a ProcType's parameters and return_type" do
+      u = described_class::TypeParameter.new(name: "U")
+      proc_type = described_class::ProcType.new(parameters: [t], return_type: u)
+
+      result = described_class.substitute(proc_type, { "T" => user, "U" => described_class::NIL })
+
+      expect(result).to eq(described_class::ProcType.new(parameters: [user], return_type: described_class::NIL))
+    end
+
+    it "leaves a non-template type unchanged" do
+      expect(described_class.substitute(user, { "T" => described_class::NIL })).to eq(user)
+    end
+  end
 end

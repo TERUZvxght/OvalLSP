@@ -1,0 +1,4 @@
+class Widget
+  def self.build: (String name) -> Widget
+  def name: () -> String
+end

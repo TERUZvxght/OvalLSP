@@ -3,13 +3,19 @@ PATH
   specs:
     rslsp (0.0.1)
       prism (>= 0.24)
+      rbs (>= 3.0)
 
 GEM
   remote: https://rubygems.org/
   specs:
     benchmark (0.5.0)
     diff-lcs (1.6.2)
+    logger (1.7.0)
     prism (1.9.0)
+    rbs (4.0.3)
+      logger
+      prism (>= 1.6.0)
+      tsort
     rspec (3.13.2)
       rspec-core (~> 3.13.0)
       rspec-expectations (~> 3.13.0)
@@ -23,6 +29,7 @@ GEM
       diff-lcs (>= 1.2.0, < 2.0)
       rspec-support (~> 3.13.0)
     rspec-support (3.13.7)
+    tsort (0.2.0)
 
 PLATFORMS
   arm64-darwin-25

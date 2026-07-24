@@ -1,0 +1,3 @@
+class Gadget
+  def serial: () -> Integer
+end

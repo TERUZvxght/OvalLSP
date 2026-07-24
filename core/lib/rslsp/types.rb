@@ -102,5 +102,26 @@ module Rslsp
       else type
       end
     end
+
+    # Replaces every TypeParameter in `type` with its binding from
+    # `bindings` (a name-String => Types value Hash), recursing through
+    # Generic/Union/ProcType — shared by Semantic::GenericRuleRegistry
+    # (Task 011's built-in container rules) and Signatures::Environment
+    # (Task 012's RBS/RBI-sourced signatures), since both resolve a
+    # template return type against a receiver's actual bound type
+    # argument the same way. An unbound TypeParameter (no entry in
+    # `bindings`) widens to Unknown rather than leaking a placeholder
+    # name into a final, caller-visible type.
+    def substitute(type, bindings)
+      case type
+      when TypeParameter then bindings.fetch(type.name, UNKNOWN)
+      when Generic then Generic.new(name: type.name, type_arg: substitute(type.type_arg, bindings))
+      when Union then normalize_union(type.members.map { |member| substitute(member, bindings) })
+      when ProcType
+        ProcType.new(parameters: type.parameters.map { |p| substitute(p, bindings) },
+                      return_type: substitute(type.return_type, bindings))
+      else type
+      end
+    end
   end
 end
