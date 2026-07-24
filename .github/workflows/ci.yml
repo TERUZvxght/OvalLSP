@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  core:
+    name: Core Server (Ruby)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+          bundler-cache: true
+          working-directory: core
+
+      # The real-Rails integration suite (spec/integration/real_rails_spec.rb)
+      # is *designed* to skip itself, not fail, when `rails`/`sqlite3`
+      # aren't resolvable as local gems -- that's deliberate for local
+      # development on a machine without them. In CI it must never
+      # silently skip: a skip here means the suite that catches bugs Fake
+      # Rails structurally can't (docs/design/tasks/008.5-runtime-and-index-corrections.md,
+      # docs/design/tasks/008.6-agent-and-index-hardening.md) simply
+      # didn't run, and nothing else would notice
+      # (docs/design/tasks/008.6-agent-and-index-hardening.md item 10).
+      # Installing real rails/sqlite3 gems here up front is what makes
+      # `bundle install --local` inside spec/fixtures/rails_real succeed
+      # instead of skipping.
+      - name: Install real Rails/sqlite3 (required for spec/integration/real_rails_spec.rb)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+          gem install rails -v '~> 8.1' --no-document
+          gem install sqlite3 -v '>= 2.1' --no-document
+
+      - name: Ruby syntax check
+        working-directory: core
+        run: find lib spec -name '*.rb' -print0 | xargs -0 -n1 ruby -c
+
+      - name: Run full test suite
+        working-directory: core
+        run: bundle exec rspec --format documentation --format json --out tmp/rspec.json
+
+      # `bundle exec rspec` exits 0 as long as nothing *failed* -- a
+      # skipped example (RSpec's `pending`) doesn't fail the run on its
+      # own, which is exactly how the real-Rails suite behaves when it
+      # can't find rails/sqlite3 locally. This step turns that into a
+      # hard CI failure specifically for the :real_rails-tagged examples,
+      # so a broken/missing real-Rails setup in CI can never masquerade
+      # as "tests passed".
+      - name: Fail if the real-Rails integration suite was skipped instead of run
+        working-directory: core
+        run: |
+          ruby -rjson -e '
+            result = JSON.parse(File.read("tmp/rspec.json"))
+            real_rails_examples = result.fetch("examples").select { |ex| ex.fetch("file_path").include?("spec/integration/real_rails_spec.rb") }
+            if real_rails_examples.empty?
+              warn "real_rails_spec.rb contributed zero examples -- was it even loaded?"
+              exit 1
+            end
+            skipped = real_rails_examples.select { |ex| ex.fetch("status") == "pending" }
+            unless skipped.empty?
+              warn "#{skipped.size}/#{real_rails_examples.size} real-Rails integration examples were skipped in CI (rails/sqlite3 must be installed, not optional, here):"
+              skipped.each { |ex| warn "  - #{ex.fetch("full_description")} (#{ex.fetch("pending_message")})" }
+              exit 1
+            end
+            puts "All #{real_rails_examples.size} real-Rails integration examples ran (none skipped)."
+          '
+
+  vscode:
+    name: VS Code extension (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+
+      - name: Install dependencies
+        working-directory: vscode
+        run: npm ci
+
+      - name: Type check
+        working-directory: vscode
+        run: npm run compile
+
+      - name: Unit tests
+        working-directory: vscode
+        run: npm run test:unit
