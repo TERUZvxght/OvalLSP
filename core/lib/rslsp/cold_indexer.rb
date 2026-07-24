@@ -69,7 +69,7 @@ module Rslsp
 
         if File.directory?(path)
           next if excluded_dir?(dir, entry)
-          next if File.symlink?(path) && !symlinked_dir_stays_inside_root?(path)
+          next if File.symlink?(path) && !symlinked_path_stays_inside_root?(path)
 
           each_candidate_file(path, visited_dirs) { |file| yield file }
         elsif @included_extensions.any? { |ext| entry.end_with?(ext) }
@@ -80,11 +80,26 @@ module Rslsp
       @logger.error("cold index: skipping #{dir}: #{e.class}: #{e.message}")
     end
 
-    def symlinked_dir_stays_inside_root?(path)
-      target_real = safe_realpath(path)
-      return false if target_real.nil?
+    # A symlinked *directory* pointing outside the workspace was already
+    # checked here before Task 008.6; a symlinked *file* pointing outside
+    # the workspace (e.g. `app/models/evil.rb -> /etc/passwd`, or more
+    # realistically a symlink into another project entirely) was not —
+    # #index_file only used realpath for dedup, never for a boundary
+    # check, so any file-level symlink escaping the root was silently
+    # read and indexed regardless of where it actually pointed
+    # (docs/design/tasks/008.6-agent-and-index-hardening.md). #index_file
+    # applies the same `real_path_stays_inside_root?` check below to
+    # every file, not just ones File.symlink? itself flags, since a file
+    # reached through an *already-permitted* symlinked directory can
+    # still individually be a symlink pointing back out.
+    def symlinked_path_stays_inside_root?(path)
+      real_path_stays_inside_root?(safe_realpath(path))
+    end
 
-      target_real == @root_real || target_real.start_with?("#{@root_real}/")
+    def real_path_stays_inside_root?(real_path)
+      return false if real_path.nil?
+
+      real_path == @root_real || real_path.start_with?("#{@root_real}/")
     end
 
     def excluded_dir?(parent_dir, entry)
@@ -105,6 +120,7 @@ module Rslsp
       return if visited_files.include?(real_path) # same file reached via two symlinked paths
 
       visited_files << real_path
+      return unless real_path_stays_inside_root?(real_path)
 
       uri = UriUtil.from_path(path)
       # This check alone is NOT what prevents an open buffer from being

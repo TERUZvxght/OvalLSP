@@ -158,6 +158,28 @@ RSpec.describe Rslsp::ColdIndexer do
     end
   end
 
+  # Task 008.6: the previous test only covers a symlinked *directory*
+  # escaping the workspace root -- #index_file itself only used realpath
+  # for dedup, never as a boundary check, so a symlinked *file* pointing
+  # outside the root (reached via a perfectly ordinary, non-symlinked
+  # directory) was read and indexed regardless of where it actually
+  # pointed.
+  it "does not follow a symlink *file* that points outside the workspace root" do
+    Dir.mktmpdir do |workspace|
+      Dir.mktmpdir do |outside|
+        secret = write(outside, "secret.rb", "class ShouldNeverBeIndexed\nend\n")
+        write(workspace, "app/models/user.rb", "class User\nend\n")
+        FileUtils.mkdir_p(File.join(workspace, "app", "models"))
+        File.symlink(secret, File.join(workspace, "app", "models", "leaked.rb"))
+
+        run_indexer(workspace)
+
+        expect(class_declared?("ShouldNeverBeIndexed")).to be(false)
+        expect(class_declared?("User")).to be(true)
+      end
+    end
+  end
+
   it "does not index the same file twice when reached via two symlinked paths" do
     Dir.mktmpdir do |dir|
       write(dir, "app/models/user.rb", "class User\nend\n")
