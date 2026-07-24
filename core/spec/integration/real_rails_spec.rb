@@ -165,6 +165,21 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
     @manager&.stop
   end
 
+  # Task 008.6: a belongs_to written *without* an explicit `optional:`
+  # is required, not optional, under real Rails' own
+  # belongs_to_required_by_default (true under any `config.load_defaults`
+  # targeting Rails 5+, which this fixture sets to 8.1) -- Comment#post
+  # exercises exactly that implicit case, unlike every other association
+  # in this fixture which sets `optional:` explicitly.
+  it "reports an implicit (no optional: kwarg) belongs_to as required under real Rails' belongs_to_required_by_default" do
+    @manager = boot_manager
+    comment = @manager.fetch_all_models.find { |m| m[:name] == "Comment" }
+
+    expect(comment[:associations]).to include(name: "post", macro: "belongs_to", className: "Post", optional: false)
+  ensure
+    @manager&.stop
+  end
+
   # 9. A model added after boot becomes visible after an agent/reload
   # (models), and one removed after boot disappears -- Rails' own
   # reloader unloading/reloading autoloaded app/models constants.

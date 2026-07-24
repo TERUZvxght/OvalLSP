@@ -20,4 +20,9 @@ ActiveRecord::Schema.define do
     t.text :body, null: true
     t.integer :user_id
   end
+
+  create_table :comments, force: true do |t|
+    t.string :body, null: false
+    t.integer :post_id, null: false
+  end
 end

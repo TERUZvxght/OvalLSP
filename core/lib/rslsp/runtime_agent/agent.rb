@@ -242,9 +242,37 @@ module Rslsp
             name: reflection.name.to_s,
             macro: reflection.macro.to_s,
             className: reflection.class_name,
-            optional: reflection.options[:optional] != false
+            optional: association_optional?(klass, reflection)
           }
         end
+      end
+
+      # `optional: reflection.options[:optional] != false` (the previous
+      # implementation) is wrong for `belongs_to` on any app targeting
+      # Rails 5+: `config.load_defaults` sets `belongs_to_required_by_default`
+      # to true, meaning a `belongs_to` written *without* an explicit
+      # `optional:` is actually REQUIRED, not optional -- but
+      # `options[:optional]` is simply absent (nil) in that ordinary case,
+      # and `nil != false` is true, so every belongs_to without an
+      # explicit `optional:` kwarg was reported as optional regardless of
+      # the app's actual (and, since Rails 5, default) configuration
+      # (docs/design/tasks/008.6-agent-and-index-hardening.md). Only
+      # `belongs_to` has this required-by-default behavior in Rails;
+      # `has_one`/`has_many` keep the prior raw-options check, which is
+      # what they've always meant here (LocalInferencer never reads
+      # `.optional` for those macros the same way -- see
+      # resolve_model_member in local_inferencer.rb).
+      def association_optional?(klass, reflection)
+        return reflection.options[:optional] != false unless reflection.macro == :belongs_to
+
+        explicit = reflection.options[:optional]
+        return explicit unless explicit.nil?
+
+        !required_by_default?(klass)
+      end
+
+      def required_by_default?(klass)
+        klass.respond_to?(:belongs_to_required_by_default) && klass.belongs_to_required_by_default ? true : false
       end
 
       def active_record_available?

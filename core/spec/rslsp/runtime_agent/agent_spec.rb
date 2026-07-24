@@ -377,6 +377,62 @@ RSpec.describe Rslsp::RuntimeAgent::Agent do
       expect(messages[1][:result][:error][:code]).to eq("NOT_FOUND")
     end
 
+    describe "belongs_to optional? honors belongs_to_required_by_default (Task 008.6)" do
+      it "reports a belongs_to with no explicit optional: as NOT optional when belongs_to_required_by_default is true (Rails 5+ default)" do
+        base = stub_active_record_base!
+        base.define_singleton_method(:belongs_to_required_by_default) { true }
+        fake_model_class(
+          "StubbedUser", base: base, table_name: "stubbed_users",
+          associations: [{ macro: :belongs_to, name: :company, class_name: "StubbedCompany", options: {} }]
+        )
+
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "agent/model", params: { name: "StubbedUser" }) +
+          frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+        build_agent(input).run
+
+        association = sent_messages.first[:result][:associations].first
+        expect(association[:optional]).to be(false)
+      end
+
+      it "reports a belongs_to with no explicit optional: as optional when belongs_to_required_by_default is false" do
+        base = stub_active_record_base!
+        base.define_singleton_method(:belongs_to_required_by_default) { false }
+        fake_model_class(
+          "StubbedUser", base: base, table_name: "stubbed_users",
+          associations: [{ macro: :belongs_to, name: :company, class_name: "StubbedCompany", options: {} }]
+        )
+
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "agent/model", params: { name: "StubbedUser" }) +
+          frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+        build_agent(input).run
+
+        association = sent_messages.first[:result][:associations].first
+        expect(association[:optional]).to be(true)
+      end
+
+      it "still honors an explicit optional: false even when belongs_to_required_by_default is false" do
+        base = stub_active_record_base!
+        base.define_singleton_method(:belongs_to_required_by_default) { false }
+        fake_model_class(
+          "StubbedUser", base: base, table_name: "stubbed_users",
+          associations: [{ macro: :belongs_to, name: :company, class_name: "StubbedCompany", options: { optional: false } }]
+        )
+
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "agent/model", params: { name: "StubbedUser" }) +
+          frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+        build_agent(input).run
+
+        association = sent_messages.first[:result][:associations].first
+        expect(association[:optional]).to be(false)
+      end
+    end
+
     it "returns a partial result with associations intact when columns raise (DB unavailable)" do
       base = stub_active_record_base!
       user = fake_model_class(
