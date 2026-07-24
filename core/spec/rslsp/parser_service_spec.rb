@@ -165,6 +165,85 @@ RSpec.describe Rslsp::ParserService do
     )
   end
 
+  describe "ancestor and alias facts (Task 009)" do
+    def ancestor_facts(summary) = summary.ancestor_facts
+    def alias_facts(summary) = summary.alias_facts
+
+    it "captures a superclass declaration, owned by the subclass itself" do
+      summary = service.summarize(document("class Admin < User\nend\n"))
+
+      expect(ancestor_facts(summary)).to contain_exactly(
+        have_attributes(owner: "::Admin", relation: :superclass, target: "User")
+      )
+    end
+
+    it "does not record a superclass fact when none is written" do
+      summary = service.summarize(document("class Plain\nend\n"))
+
+      expect(ancestor_facts(summary)).to be_empty
+    end
+
+    it "captures include/prepend/extend as separate facts, each owned by the enclosing class" do
+      source = <<~RUBY
+        class Widget
+          include Comparable
+          prepend Loud
+          extend Helpers
+        end
+      RUBY
+
+      facts = ancestor_facts(service.summarize(document(source)))
+
+      expect(facts).to contain_exactly(
+        have_attributes(owner: "::Widget", relation: :include, target: "Comparable"),
+        have_attributes(owner: "::Widget", relation: :prepend, target: "Loud"),
+        have_attributes(owner: "::Widget", relation: :extend, target: "Helpers")
+      )
+    end
+
+    it "captures multiple modules from one include call, in argument order" do
+      summary = service.summarize(document("class Widget\n  include Comparable, Enumerable\nend\n"))
+
+      expect(ancestor_facts(summary).map(&:target)).to eq(%w[Comparable Enumerable])
+    end
+
+    it "does not record include/prepend/extend called with an explicit receiver (out of scope: dynamic reopening)" do
+      summary = service.summarize(document("SomeClass.include(Foo)\n"))
+
+      expect(ancestor_facts(summary)).to be_empty
+    end
+
+    it "captures `alias new old` (the keyword form)" do
+      summary = service.summarize(document("class Widget\n  alias short_name name\nend\n"))
+
+      expect(alias_facts(summary)).to contain_exactly(
+        have_attributes(owner: "::Widget", new_name: "short_name", old_name: "name", singleton: false)
+      )
+    end
+
+    it "captures `alias_method :new, :old` (the method-call form, with symbol arguments)" do
+      summary = service.summarize(document("class Widget\n  alias_method :short_name, :name\nend\n"))
+
+      expect(alias_facts(summary)).to contain_exactly(
+        have_attributes(owner: "::Widget", new_name: "short_name", old_name: "name", singleton: false)
+      )
+    end
+
+    it "marks an alias inside `class << self` as singleton" do
+      summary = service.summarize(document("class Widget\n  class << self\n    alias short create\n  end\nend\n"))
+
+      expect(alias_facts(summary)).to contain_exactly(
+        have_attributes(owner: "::Widget", singleton: true)
+      )
+    end
+
+    it "does not record alias_method with a non-literal (dynamic) argument" do
+      summary = service.summarize(document("class Widget\n  alias_method :short_name, some_variable\nend\n"))
+
+      expect(alias_facts(summary)).to be_empty
+    end
+  end
+
   it "captures required, optional, rest, keyword, keyrest, and block parameters" do
     source = "def m(a, b = 1, *rest, k:, ok: 2, **kw, &blk); end\n"
 

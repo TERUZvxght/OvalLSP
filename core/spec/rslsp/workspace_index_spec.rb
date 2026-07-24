@@ -162,6 +162,65 @@ RSpec.describe Rslsp::WorkspaceIndex do
     end
   end
 
+  describe "type name resolution (Task 009)" do
+    it "resolves an absolute (::-prefixed) name to itself when declared" do
+      index.replace_file(summary(uri: "file:///a.rb", declarations: [declaration(kind: :class, owner: nil, name: "::User")]))
+
+      expect(index.resolve_type_name("::User")).to eq("::User")
+    end
+
+    it "resolves an unqualified simple name to its declared absolute name" do
+      index.replace_file(
+        summary(uri: "file:///a.rb", declarations: [declaration(kind: :class, owner: "::Blog", name: "::Blog::Post")])
+      )
+
+      expect(index.resolve_type_name("Post")).to eq("::Blog::Post")
+    end
+
+    it "returns nil for a name that isn't declared anywhere" do
+      expect(index.resolve_type_name("TotallyUnknown")).to be_nil
+    end
+
+    it "does not resolve a method/constant name -- only class/module kinds" do
+      index.replace_file(
+        summary(uri: "file:///a.rb", declarations: [declaration(kind: :constant, owner: nil, name: "MAX")])
+      )
+
+      expect(index.resolve_type_name("MAX")).to be_nil
+    end
+
+    it "reports the declared kind (:class or :module) for a resolvable type name" do
+      index.replace_file(
+        summary(uri: "file:///a.rb", declarations: [
+                  declaration(kind: :class, owner: nil, name: "::User"),
+                  declaration(kind: :module, owner: nil, name: "::Greetable")
+                ])
+      )
+
+      expect(index.type_kind("User")).to eq(:class)
+      expect(index.type_kind("Greetable")).to eq(:module)
+      expect(index.type_kind("Nope")).to be_nil
+    end
+  end
+
+  describe "#method_symbol_ids (Task 009)" do
+    it "returns every SymbolId of the given kind declared directly under an owner, across reopened files" do
+      index.replace_file(
+        summary(uri: "file:///a.rb", declarations: [declaration(kind: :instance_method, owner: "::Widget", name: "a")])
+      )
+      index.replace_file(
+        summary(uri: "file:///b.rb", declarations: [declaration(kind: :instance_method, owner: "::Widget", name: "b")])
+      )
+      index.replace_file(
+        summary(uri: "file:///c.rb", declarations: [declaration(kind: :singleton_method, owner: "::Widget", name: "c")])
+      )
+
+      names = index.method_symbol_ids("::Widget", kind: :instance_method).map(&:name)
+
+      expect(names).to contain_exactly("a", "b")
+    end
+  end
+
   describe "open-buffer-always-wins over disk (Task 008.6)" do
     it "never lets a disk-sourced summary overwrite a buffer-sourced one, no matter the read_sequence" do
       buffer_decl = declaration(kind: :class, owner: nil, name: "::Buffered")

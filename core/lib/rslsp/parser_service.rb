@@ -6,6 +6,8 @@ require "prism"
 require_relative "index/symbol_id"
 require_relative "index/parameter"
 require_relative "index/declaration"
+require_relative "index/ancestor_fact"
+require_relative "index/alias_fact"
 require_relative "index/file_summary"
 require_relative "index/source_location"
 require_relative "erb/ruby_region_extractor"
@@ -36,7 +38,7 @@ module Rslsp
       result = Prism.parse(parse_source)
       lines = parse_source.split("\n", -1)
 
-      declarations = Visitor.new(lines).tap { |visitor| result.value.accept(visitor) }.declarations
+      visitor = Visitor.new(lines).tap { |v| result.value.accept(v) }
 
       Index::FileSummary.new(
         uri: document.uri,
@@ -49,8 +51,10 @@ module Rslsp
         # changed.
         content_hash: Digest::SHA256.hexdigest(raw_source),
         document_version: document.version,
-        declarations: declarations,
-        diagnostics: result.errors.map { |error| to_diagnostic(error, lines) }
+        declarations: visitor.declarations,
+        diagnostics: result.errors.map { |error| to_diagnostic(error, lines) },
+        ancestor_facts: visitor.ancestor_facts,
+        alias_facts: visitor.alias_facts
       )
     end
 
@@ -75,12 +79,21 @@ module Rslsp
     # absolute names, and tracks whether we're inside `class << self` so
     # unqualified `def`s there are recognized as singleton methods.
     class Visitor < Prism::Visitor
-      attr_reader :declarations
+      # Task 009: bare `include`/`prepend`/`extend` calls to track. Any
+      # other call named the same but with an explicit receiver (e.g.
+      # `SomeClass.include(Foo)`, dynamically reopening a *different*
+      # class) is out of scope — this only recognizes the ordinary,
+      # lexical-body form.
+      ANCESTOR_RELATIONS = { include: :include, prepend: :prepend, extend: :extend }.freeze
+
+      attr_reader :declarations, :ancestor_facts, :alias_facts
 
       def initialize(lines)
         super()
         @lines = lines
         @declarations = []
+        @ancestor_facts = []
+        @alias_facts = []
         @owner_stack = []
         @singleton_context_stack = [false]
         @visibility_stack = [:public]
@@ -130,7 +143,33 @@ module Rslsp
       end
 
       def visit_call_node(node)
-        update_visibility(node) if node.receiver.nil? && node.arguments.nil?
+        if node.receiver.nil?
+          update_visibility(node) if node.arguments.nil?
+          record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
+          record_alias_method_call(node) if node.name == :alias_method
+        end
+        super
+      end
+
+      # `alias new old` (the keyword form, not a method call) —
+      # `alias_method :new, :old` is handled in #visit_call_node instead.
+      # `alias $new $old` (global variable aliasing) uses
+      # GlobalVariableNode for both instead of a bareword/SymbolNode; not
+      # a method alias, so it's simply skipped rather than misrecorded.
+      def visit_alias_method_node(node)
+        new_name = symbol_name(node.new_name)
+        old_name = symbol_name(node.old_name)
+
+        if new_name && old_name
+          @alias_facts << Index::AliasFact.new(
+            owner: current_owner,
+            new_name: new_name,
+            old_name: old_name,
+            singleton: @singleton_context_stack.last,
+            location: Index::SourceLocation.to_range(node.location, @lines)
+          )
+        end
+
         super
       end
 
@@ -160,6 +199,8 @@ module Rslsp
           origin: :source
         )
 
+        record_superclass(node, absolute_name) if node.is_a?(Prism::ClassNode)
+
         @owner_stack.push(absolute_name)
         @singleton_context_stack.push(false)
         @visibility_stack.push(:public)
@@ -174,6 +215,78 @@ module Rslsp
         return local_path if local_path.start_with?("::")
 
         current_owner ? "#{current_owner}::#{local_path}" : "::#{local_path}"
+      end
+
+      # Deliberately NOT qualified via #qualify — a superclass/included
+      # module is resolved through Ruby's normal (lexical-scope) constant
+      # lookup, not automatically nested under whatever class references
+      # it. Recorded as written in source; Semantic::HierarchyIndex
+      # resolves it against the workspace's declared types when
+      # aggregating ancestor chains.
+      def record_superclass(node, owner)
+        return unless node.superclass
+
+        target = raw_constant_name(node.superclass)
+        return unless target
+
+        @ancestor_facts << Index::AncestorFact.new(
+          owner: owner, relation: :superclass, target: target,
+          location: Index::SourceLocation.to_range(node.superclass.location, @lines)
+        )
+      end
+
+      def record_ancestor_call(node)
+        return unless node.arguments
+
+        relation = ANCESTOR_RELATIONS.fetch(node.name)
+        node.arguments.arguments.each do |arg|
+          target = raw_constant_name(arg)
+          next unless target
+
+          @ancestor_facts << Index::AncestorFact.new(
+            owner: current_owner, relation: relation, target: target,
+            location: Index::SourceLocation.to_range(arg.location, @lines)
+          )
+        end
+      end
+
+      # `alias_method :new, :old` — the method-call form; symbol (or
+      # plain string) arguments only. A non-literal argument (a variable,
+      # an interpolated string) can't be resolved statically and is
+      # skipped, same policy as Task 006/007's "constantize前に検証する"
+      # (docs/03-semantic-engine.md 7.1) — never guess at dynamic input.
+      def record_alias_method_call(node)
+        return unless node.arguments
+
+        new_arg, old_arg = node.arguments.arguments
+        new_name = symbol_name(new_arg)
+        old_name = symbol_name(old_arg)
+        return unless new_name && old_name
+
+        @alias_facts << Index::AliasFact.new(
+          owner: current_owner, new_name: new_name, old_name: old_name,
+          singleton: @singleton_context_stack.last,
+          location: Index::SourceLocation.to_range(node.location, @lines)
+        )
+      end
+
+      # A dynamic superclass/module expression (`Class.new`, a local
+      # variable, `send(...)`) has no statically-known name — returns nil
+      # rather than guessing, matching this task's explicit "動的な
+      # include(send(...))は対象外" scope boundary.
+      def raw_constant_name(node)
+        return nil unless node.respond_to?(:full_name)
+
+        node.full_name
+      rescue StandardError
+        nil
+      end
+
+      def symbol_name(node)
+        case node
+        when Prism::SymbolNode, Prism::StringNode
+          node.unescaped
+        end
       end
 
       def current_owner

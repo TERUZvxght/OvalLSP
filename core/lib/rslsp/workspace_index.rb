@@ -140,6 +140,35 @@ module Rslsp
       end
     end
 
+    # Resolves a raw type name as written in source ("User", "::User",
+    # "Admin::Manager") to the canonical, fully-qualified name of a
+    # declared class/module, or nil if none is known. Real (lexical-scope-
+    # aware) constant resolution is out of scope (Task 009's explicit
+    # boundary) — this is the same "名前ヒューリスティック" #find_by_simple_name
+    # already uses: match by unqualified simple name, then prefer whichever
+    # candidate's own full name exactly matches what was written. An
+    # ambiguous simple name (two same-named classes in different
+    # namespaces) resolves to whichever was indexed first.
+    def resolve_type_name(name)
+      @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
+    end
+
+    # Same resolution as #resolve_type_name, but returns the declared
+    # kind (:class or :module) instead of the name — Semantic::HierarchyIndex
+    # uses this to decide whether a type implicitly inherits from Object
+    # (only classes do).
+    def type_kind(name)
+      @mutex.synchronize { resolve_type_symbol_locked(name)&.kind }
+    end
+
+    # Every SymbolId of `kind` declared directly under `owner` (e.g. every
+    # instance method declared in "::User", across however many files
+    # reopen it). Semantic::MethodResolver#complete uses this to enumerate
+    # a type's own method names rather than checking one name at a time.
+    def method_symbol_ids(owner, kind:)
+      @mutex.synchronize { @by_symbol.keys.select { |sid| sid.owner == owner && sid.kind == kind } }
+    end
+
     # Workspace symbol search: case-insensitive substring match on the
     # symbol's own (unqualified) name, exact matches ranked first.
     def search(query, limit:)
@@ -216,6 +245,17 @@ module Rslsp
 
     def simple_name(symbol_id)
       symbol_id.name.to_s.split("::").last.to_s
+    end
+
+    def resolve_type_symbol_locked(name)
+      raw = name.to_s
+      simple = raw.split("::").last
+      candidates = @by_simple_name.fetch(simple.to_s.downcase, []).select do |sid|
+        %i[class module].include?(sid.kind) && simple_name(sid) == simple
+      end
+      return nil if candidates.empty?
+
+      candidates.find { |sid| sid.name == raw || sid.name == "::#{raw}" } || candidates.first
     end
 
     def rank(matches, needle)

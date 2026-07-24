@@ -29,10 +29,18 @@ module Rslsp
     #   what actually prevents a slow, earlier-started walk (e.g. Cold
     #   Index, mid-way through a large workspace) from clobbering a fast,
     #   later-started targeted reindex with stale content.
+    # - ancestor_facts / alias_facts (Task 009): raw superclass/include/
+    #   prepend/extend and alias/alias_method statements found in this
+    #   file, in source order. Semantic::HierarchyIndex aggregates these
+    #   across files the same way WorkspaceIndex aggregates declarations —
+    #   kept as a separate field (not folded into `declarations`) because
+    #   they describe *relationships between* types, not a type's own
+    #   declaration site.
     FileSummary = Data.define(:uri, :content_hash, :document_version, :declarations, :diagnostics, :source,
-                               :read_sequence) do
-      def initialize(source: :buffer, read_sequence: 0, **rest)
-        super(source: source, read_sequence: read_sequence, **rest)
+                               :read_sequence, :ancestor_facts, :alias_facts) do
+      def initialize(source: :buffer, read_sequence: 0, ancestor_facts: [], alias_facts: [], **rest)
+        super(source: source, read_sequence: read_sequence, ancestor_facts: ancestor_facts, alias_facts: alias_facts,
+              **rest)
       end
     end
   end
