@@ -79,6 +79,24 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
     @manager&.stop
   end
 
+  # Task 008.6: a Ruby-level $stdout/STDOUT swap alone does not stop a
+  # native extension writing to fd 1 directly, or a child process
+  # (system/backticks/Open3) that inherits fd 1 -- both are realistic for
+  # a genuine Rails app (asset pipelines, git/version probes, etc.).
+  # boot.rb must redirect file descriptor 1 itself, not just the two Ruby
+  # objects, before Rails is required.
+  it "isolates a raw fd-1 write and a child process' inherited stdout against real Rails (Task 008.6)" do
+    @manager = boot_manager
+
+    expect(@manager.status).to eq(:ready)
+    expect(@manager.request_status[:pid]).to eq(@manager.pid) # protocol wasn't corrupted by any of the below
+
+    expect(logger_messages).to include([:info, a_string_matching(/accidental raw fd1 write via IO\.for_fd\(1\) \(real Rails\)/)])
+    expect(logger_messages).to include([:info, a_string_matching(/accidental stdout from a child process via system.*\(real Rails\)/)])
+  ensure
+    @manager&.stop
+  end
+
   # 2 & 3. Routes come from real config/routes.rb, and each source
   # location is normalized (absolute path, 0-based line).
   it "lists routes drawn by real config/routes.rb with a normalized source_location" do

@@ -46,6 +46,27 @@ RSpec.describe Rslsp::AgentProcessManager do
     expect(logger).to have_received(:info).with(/accidental stdout via the STDOUT constant directly/)
   end
 
+  it "isolates a raw fd-1 write and a child process' inherited stdout, not just $stdout/STDOUT (Task 008.6)" do
+    @manager = build_manager
+
+    # If any of these three had reached the protocol pipe, Content-Length
+    # framing would have been corrupted (extra/garbled bytes before the
+    # next frame) and either hello would time out, or a later request
+    # would get a mismatched/garbage response instead of failing cleanly.
+    # A Ruby-level `$stdout`/`STDOUT` swap alone (Task 008.5) does not
+    # stop any of the three, because none of them go through a Ruby IO
+    # object at all -- boot.rb must redirect file descriptor 1 itself.
+    expect(@manager.start).to eq(:ready)
+    expect(@manager.request_status[:pid]).to eq(@manager.pid) # protocol wasn't corrupted by any of the below
+
+    expect(logger).to have_received(:info).with(/accidental raw fd1 write via IO\.for_fd\(1\)/)
+    expect(logger).to have_received(:info).with(/accidental stdout from a child process via system/)
+    # Open3.capture2 pipes its child's stdout back into a Ruby string
+    # rather than letting it inherit fd 1 at all, so it can't corrupt the
+    # protocol either way -- this only proves boot doesn't crash when the
+    # target app happens to use it (no assertion on stdout forwarding).
+  end
+
   it "answers agent/status once ready" do
     @manager = build_manager
     @manager.start
