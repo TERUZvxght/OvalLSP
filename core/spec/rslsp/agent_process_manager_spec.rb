@@ -169,6 +169,30 @@ RSpec.describe Rslsp::AgentProcessManager do
     expect { Process.kill(0, pid) }.to raise_error(Errno::ESRCH)
   end
 
+  it "always ends at :stopped after #stop, never :static_only, however the reader thread's concurrent EOF write interleaves (Task 008.6)" do
+    @manager = build_manager
+    @manager.start
+
+    # agent/shutdown causes the fixture Agent process to exit, which the
+    # reader thread observes as EOF and reports via #mark_unavailable
+    # concurrently with #stop's own cleanup. Without funneling #stop's
+    # final write through the same @status_mutex #mark_unavailable's
+    # compare-and-set uses, there is a real (if narrow) TOCTOU window: the
+    # reader thread can read @status == :ready, then #stop writes
+    # :stopped, then the reader thread's now-stale-read-based write lands
+    # and overwrites it with :static_only. Real thread scheduling makes
+    # this specific interleaving unreliable to force from a single test
+    # run, so this drives many stop attempts to raise the odds of
+    # catching the window if the mutex funnel were ever removed, rather
+    # than asserting off one run alone.
+    10.times do
+      manager = build_manager
+      manager.start
+      manager.stop
+      expect(manager.status).to eq(:stopped)
+    end
+  end
+
   it "fetches a single model's columns and associations via #fetch_model" do
     @manager = build_manager
     @manager.start

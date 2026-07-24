@@ -133,12 +133,24 @@ module Rslsp
     # Idempotent: asks the Agent to shut down cleanly, then force-kills it
     # if it doesn't exit promptly. Safe to call even if the Agent already
     # died on its own (crash) or was never started.
+    #
+    # `request("agent/shutdown", ...)` below can itself cause the Agent to
+    # exit, which the reader thread observes as EOF and reports through
+    # #mark_unavailable — concurrently with this method's own cleanup.
+    # The final `@status = :stopped` write goes through the same
+    # @status_mutex #mark_unavailable uses, and unconditionally wins
+    # (rather than a compare-and-set), so an explicit #stop always ends
+    # in :stopped even if a same-moment reader-thread-detected EOF
+    # otherwise would have written :static_only first
+    # (docs/design/tasks/008.6-agent-and-index-hardening.md) — a
+    # deliberate stop is a stronger, terminal signal than a mere
+    # unavailability degrade.
     def stop(timeout: 3)
       return if @status == :stopped || @pid.nil?
 
       request("agent/shutdown", {}, timeout: timeout) unless @status == :static_only
       terminate_process
-      @status = :stopped
+      @status_mutex.synchronize { @status = :stopped }
     end
 
     def alive?
