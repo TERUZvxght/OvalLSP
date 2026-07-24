@@ -237,5 +237,34 @@ RSpec.describe Rslsp::WorkspaceIndex do
       expect(index.declarations(buffer_decl.symbol_id)).to eq([buffer_decl])
       expect(index.declarations(disk_decl.symbol_id)).to eq([])
     end
+
+    it "promotes a disk-sourced entry to :buffer when an opened file's content happens to match disk exactly, even though that's a content-hash no-op" do
+      decl = declaration(kind: :class, owner: nil, name: "::Unchanged")
+      # Disk-sourced first (e.g. Cold Index reaches it before anyone
+      # opens it), then a didOpen for the exact same, unmodified content
+      # -- the ordinary case: most files are opened without having been
+      # edited first.
+      index.replace_file(summary(uri: "file:///a.rb", declarations: [decl], content_hash: "same", source: :disk, read_sequence: 1))
+      accepted = index.replace_file(summary(uri: "file:///a.rb", declarations: [decl], content_hash: "same", source: :buffer, version: 1))
+
+      expect(accepted).to be(true)
+
+      # The entry must now behave as buffer-sourced: a later disk read
+      # with *different* content (the file changed on disk while still
+      # open, or a stale background read racing in) must be rejected
+      # unconditionally, exactly like the "never lets a disk-sourced
+      # summary overwrite a buffer-sourced one" case above -- if the
+      # promotion above didn't actually happen, this disk write would be
+      # compared via read_sequence (both :disk) and incorrectly accepted.
+      stale_disk_decl = declaration(kind: :class, owner: nil, name: "::StaleFromDisk")
+      rejected = index.replace_file(
+        summary(uri: "file:///a.rb", declarations: [stale_disk_decl], content_hash: "different", source: :disk,
+                read_sequence: 999_999)
+      )
+
+      expect(rejected).to be(false)
+      expect(index.declarations(decl.symbol_id)).to eq([decl])
+      expect(index.declarations(stale_disk_decl.symbol_id)).to eq([])
+    end
   end
 end

@@ -65,7 +65,26 @@ module Rslsp
     def replace_file(summary)
       @mutex.synchronize do
         existing = @summaries[summary.uri]
-        next false if existing && existing.content_hash == summary.content_hash
+        if existing && existing.content_hash == summary.content_hash
+          # Identical content is a genuine no-op ONLY when the source
+          # agrees too. A disk-sourced entry whose content happens to
+          # match an incoming *buffer*-sourced summary (the ordinary case
+          # — most files are opened unmodified) must still be promoted to
+          # `:buffer`, or the entry stays tagged `:disk` forever despite a
+          # live open buffer existing for it, silently reopening exactly
+          # the race #stale? below exists to close: a later disk read
+          # (different content — the file changed on disk while open)
+          # would see `existing.source == :disk` and fall through to
+          # read_sequence ordering instead of being unconditionally
+          # rejected as it must be against an open buffer
+          # (docs/design/tasks/008.6-agent-and-index-hardening.md).
+          # Declarations are identical either way (same content_hash), so
+          # this only needs to swap the stored FileSummary object, not
+          # touch @by_symbol/@by_simple_name at all.
+          next promote_source_locked(summary) if existing.source == :disk && summary.source == :buffer
+
+          next false
+        end
         next false if stale?(existing, summary)
 
         remove_file_locked(summary.uri)
@@ -137,6 +156,16 @@ module Rslsp
     end
 
     private
+
+    # Swaps in a buffer-sourced summary whose content is byte-for-byte
+    # identical to the disk-sourced one already indexed, so `source`
+    # (and `document_version`, for future staleness comparisons) update
+    # even though nothing about the declarations themselves changed.
+    def promote_source_locked(summary)
+      @summaries[summary.uri] = summary
+      @generation += 1
+      true
+    end
 
     # Buffer-vs-disk precedence is absolute and one-directional: a buffer
     # can always overwrite a disk-sourced entry (the user started editing,
