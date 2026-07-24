@@ -55,6 +55,63 @@ RSpec.describe Rslsp::Erb::RubyRegionExtractor do
       expect(result.errors).to be_empty
     end
 
+    describe "UTF-16 position alignment across non-BMP characters (Task 008.6)" do
+      # The invariant that actually matters for LSP: the UTF-16 offset of
+      # a Ruby token in the *original* .erb source (computed independently
+      # here) must equal the UTF-16 offset Prism's byte-offset location
+      # for that same token converts to when read against the *synthetic*
+      # source -- not any particular Ruby character-count or byte-count
+      # equality, which astral characters make impossible to hold
+      # simultaneously with UTF-16 alignment.
+      def utf16_offset_of(line_text, char_index)
+        line_text[0...char_index].each_char.sum { |c| Rslsp::TextDocument.utf16_unit_count(c) }
+      end
+
+      it "keeps an ivar reference at its correct UTF-16 position after an astral emoji earlier on the line" do
+        source = "<p>\u{1F600}</p><%= @user %>\n"
+        extracted = described_class.extract_ruby_source(source)
+
+        original_line = source.split("\n", -1).first
+        expected_utf16 = utf16_offset_of(original_line, original_line.index("@user"))
+
+        node = Prism.parse(extracted).value.statements.body.last
+        synthetic_line = extracted.split("\n", -1).first
+        actual_utf16 = Rslsp::Index::SourceLocation.byte_offset_to_utf16(synthetic_line, node.location.start_column)
+
+        expect(node).to be_a(Prism::InstanceVariableReadNode)
+        expect(actual_utf16).to eq(expected_utf16)
+      end
+
+      it "keeps a token aligned after two astral emoji and a BMP (Japanese) character on the same line" do
+        source = "<p>\u{1F600}\u{1F600}日</p><%= @user %>\n"
+        extracted = described_class.extract_ruby_source(source)
+
+        original_line = source.split("\n", -1).first
+        expected_utf16 = utf16_offset_of(original_line, original_line.index("@user"))
+
+        node = Prism.parse(extracted).value.statements.body.last
+        synthetic_line = extracted.split("\n", -1).first
+        actual_utf16 = Rslsp::Index::SourceLocation.byte_offset_to_utf16(synthetic_line, node.location.start_column)
+
+        expect(actual_utf16).to eq(expected_utf16)
+      end
+
+      it "keeps CRLF line endings from shifting positions on a later line" do
+        source = "<p>\u{1F600}</p>\r\n<%= @user %>\r\n"
+        extracted = described_class.extract_ruby_source(source)
+
+        original_second_line = source.split("\n", -1)[1]
+        expected_utf16 = utf16_offset_of(original_second_line, original_second_line.index("@user"))
+
+        node = Prism.parse(extracted).value.statements.body.last
+        synthetic_second_line = extracted.split("\n", -1)[1]
+        actual_utf16 = Rslsp::Index::SourceLocation.byte_offset_to_utf16(synthetic_second_line, node.location.start_column)
+
+        expect(node.location.start_line).to eq(2) # Prism lines are 1-based
+        expect(actual_utf16).to eq(expected_utf16)
+      end
+    end
+
     describe "multiple tags on the same rendered line (Task 008.5)" do
       def assert_parses_cleanly(source)
         extracted = described_class.extract_ruby_source(source)

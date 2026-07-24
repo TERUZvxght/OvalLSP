@@ -134,17 +134,52 @@ RSpec.describe "Rslsp::Server non-ASCII position handling (Task 008.5)" do
   end
 
   describe "ERB position correspondence with non-ASCII content" do
-    it "keeps Ruby code at its original character offset alongside Japanese/emoji HTML content" do
+    it "keeps Ruby code recoverable alongside Japanese/emoji HTML content" do
       source = "<p>日本語😀</p><%= @user.name %>\n"
 
       extracted = Rslsp::Erb::RubyRegionExtractor.extract_ruby_source(source)
       offset = source.index("@user")
 
       expect(offset).to be > 0 # sanity: the Japanese/emoji text really does precede the code
-      expect(extracted[offset, 5]).to eq("@user")
-      expect(extracted.length).to eq(source.length)
+      # The astral emoji makes the *character*-offset invariant this test
+      # used to assert (Task 008.5) impossible to hold simultaneously with
+      # UTF-16 alignment (Task 008.6) -- `extracted` is UTF-16-aligned,
+      # not character-offset-aligned, with the original, so recover the
+      # token by content rather than by the original's character offset.
+      expect(extracted).to include("@user.name")
       expect(extracted.count("\n")).to eq(source.count("\n"))
       expect(Prism.parse(extracted).errors).to be_empty
+    end
+
+    # Task 008.6: end to end through the real Server dispatch, at the
+    # exact LSP Position (UTF-16 code units) a real client would send —
+    # not a Ruby character count — proving the astral-emoji fix holds all
+    # the way from didOpen through rslsp/explainType, not just inside the
+    # extractor in isolation.
+    it "resolves rslsp/explainType at the correct UTF-16 Position after several astral emoji earlier on the same .erb line" do
+      # 5 astral emoji before the tag: a per-character drift big enough
+      # (5 UTF-16 units) to push a naive char-count-preserving blank
+      # *past* the 4-character `user` token entirely if the client's LSP
+      # Position (computed from the real, UTF-16 document) were mapped
+      # against such a drifted synthetic source -- one or two emoji can
+      # drift by less than the target token's own width and still
+      # (mis)land inside it by coincidence, which wouldn't actually catch
+      # a regression here.
+      source = "<p>#{"\u{1F600}" * 5}</p><%= user = User.new; user %>\n"
+      input =
+        frame(
+          jsonrpc: "2.0", method: "textDocument/didOpen",
+          params: { textDocument: { uri: "file:///view.html.erb", text: source, version: 1, languageId: "erb" } }
+        ) +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "rslsp/explainType",
+          params: { textDocument: { uri: "file:///view.html.erb" }, position: { line: 0, character: 38 } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+
+      expect(sent_messages.first[:result]).to eq(type: "User")
     end
   end
 end
