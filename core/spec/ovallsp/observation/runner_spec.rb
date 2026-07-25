@@ -33,6 +33,23 @@ RSpec.describe Ovallsp::Observation::Runner do
     expect(results).to eq([])
   end
 
+  # Found by an independent review (round 6) of Task 022.2. Everything
+  # before the spawn -- Tempfile creation, and (since round 5 routed env
+  # construction through BundleEnvironment.for_workspace)
+  # `File.realpath(workspace_root)` plus the workspace Gemfile probe --
+  # ran outside any rescue, so a workspace deleted or renamed while the
+  # editor is still open made #run raise Errno::ENOENT despite its own
+  # documented "never raises" contract, turning the user's explicit
+  # `Run Tests with Type Observation` command into a bare LSP
+  # `internal error` instead of an empty, logged result.
+  it "returns an empty array, without raising, when the workspace root doesn't exist at all" do
+    missing = File.join(fixtures_root, "definitely-not-a-real-directory")
+    results = nil
+
+    expect { results = runner.run(command: "ruby", args: [], workspace_root: missing) }.not_to raise_error
+    expect(results).to eq([])
+  end
+
   # Task 022.2 (found by an independent review, round 5): the command
   # spawned here is the *workspace's* own test command -- in practice
   # `bundle exec rspec` -- so it is a second instance of the exact Bundler

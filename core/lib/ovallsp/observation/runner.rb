@@ -47,6 +47,28 @@ module Ovallsp
                           env_source: env_source)
         results = spawn_and_collect(command, args, workspace_root, env, output_file.path, log_file.path, timeout_seconds)
         results || []
+      rescue StandardError => e
+        # The "never raises" half of this method's own contract, made
+        # structural rather than aspirational (found by an independent
+        # review, round 6). #spawn_and_collect has always had this rescue,
+        # but everything *before* the spawn -- Tempfile creation, and
+        # (since round 5 moved env construction through
+        # BundleEnvironment.for_workspace) `File.realpath(workspace_root)`
+        # plus the workspace Gemfile probe -- ran outside any rescue at
+        # all. A workspace directory that has been deleted or renamed
+        # while the editor is still open is enough: `File.realpath` raises
+        # Errno::ENOENT straight out of #run, so
+        # Server#run_observed_tests_result answers the user's explicit
+        # `Run Tests with Type Observation` command with a bare LSP
+        # `internal error` instead of the "this run produced no evidence"
+        # outcome the class docs above promise. Rescued as a class, not
+        # by special-casing realpath, per this repo's "fix the class of
+        # bug, not the reported instance" discipline -- and matching the
+        # identical blanket rescue every other subprocess boundary here
+        # (#spawn_and_collect, #read_results, Plugins::Loader) already
+        # uses.
+        @logger.error("observation runner could not start: #{e.class}: #{e.message}")
+        []
       ensure
         output_file&.unlink
         log_file&.unlink
