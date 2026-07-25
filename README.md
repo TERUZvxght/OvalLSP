@@ -9,19 +9,30 @@ Ruby/Rails向けセマンティック言語サーバーのmonorepo。設計の�
 - `core/` — Ruby製Core Language Server (`rslsp`)。LSP 3.17をstdio/Content-Length framingで実装。
 - `vscode/` — VS Code拡張 (TypeScript)。workspace folderごとに `core/bin/rslsp --stdio` を起動する薄いLSPクライアント。
 - `docs/design/` — 設計文書一式（PRD、architecture、ADR、実装タスク）。
+- `docs/design/docs/12-release-and-support.md` — 利用者向けリリースドキュメント
+  (Installation、Security model、Configuration、Troubleshooting等)。
+- `docs/SUPPORT_MATRIX.md` / `docs/RELEASE_CHECKLIST.md` — 対応環境と1.0
+  リリースチェックリスト。
 
 ## Status
 
-`docs/design/tasks/001-*.md` 〜 `008-*.md` を実装済み。
+`docs/design/tasks/001-*.md` 〜 `022-*.md` を実装済み(1.0リリース候補に
+向けた準備段階)。詳細は`docs/RELEASE_CHECKLIST.md`と
+`docs/SUPPORT_MATRIX.md`を参照。
 
-- LSP transport、didOpen/didChange/didClose、Hover
-- Prismによる宣言抽出とdocumentSymbol
-- ワークスペース索引・definition・workspace/symbol
-- ローカル型推論(`rslsp/explainType`)
-- Runtime Agentプロセス管理(hello/status/snapshot/model/reload/shutdown)
+- LSP transport、didOpen/didChange/didClose、Hover/completion/signature help
+- Prismによる宣言抽出とdocumentSymbol、永続キャッシュによるwarm start
+- ワークスペース索引・definition・workspace/symbol・find references・rename
+- ローカル型推論(`rslsp/explainType`)、RBS/RBI連携
+- Runtime Agentプロセス管理(hello/status/snapshot/model/reload/shutdown)、
+  exponential backoff付き自動再起動とcrash loop保護
 - Rails routesからの`*_path`/`*_url`補完・signature help・definition
-- Active Recordモデルのcolumn/association型推論
+- Active Recordモデルのcolumn/association型推論、Rails DSL(enum/scope/delegate)
 - controller→viewへのinstance variable伝播(ERB)
+- Plugin API(static/runtime)、プロセス隔離されたplugin実行
+- opt-inのruntime型観測(Task 019)
+- VSIXパッケージング、Ruby環境の自動解決(mise/asdf/rbenv/chruby/PATH)
+- ログredaction、protocol version negotiation
 
 `core/bin/rslsp`はワークスペースroot直下に`bin/rails`があるRailsアプリを検出すると、
 バックグラウンドスレッドでRuntime Agentを起動し、routesとmodelのsnapshotを取得して
