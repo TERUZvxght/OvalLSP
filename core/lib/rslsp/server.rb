@@ -103,6 +103,7 @@ module Rslsp
       @observation_runner = Observation::Runner.new(logger: @logger)
       @observation_test_command = nil
       @cold_indexing = false
+      @agent_supervisor = AgentSupervisor.new
     end
 
     # Runs the read/dispatch loop until `exit` is received or the input
@@ -347,6 +348,11 @@ module Rslsp
     # itself returns immediately rather than blocking on however long a
     # full Rails boot takes.
     def restart_agent_result(_params)
+      # A user-initiated restart always gets a fresh attempt, regardless
+      # of how many *automatic* attempts were already exhausted --
+      # "manual restart" is its own capability (Task 022), not gated by
+      # the automatic backoff's own crash-loop cap.
+      @agent_supervisor.reset
       restart_agent
       { acknowledged: true }
     end
@@ -728,10 +734,36 @@ module Rslsp
         # described in #restart_agent's comment.
         mutex.synchronize do
           @agent_manager = bootstrap.start(root: root, logger: logger, route_registry: route_registry,
-                                            model_registry: model_registry)
+                                            model_registry: model_registry, on_unavailable: method(:handle_agent_unavailable))
         end
+        @agent_supervisor.record_success if @agent_manager&.ready?
       rescue StandardError => e
         logger.error("Runtime Agent bootstrap failed: #{e.class}: #{e.message}")
+      end
+    end
+
+    # Task 022: called (on whichever thread AgentProcessManager's own
+    # reader thread or a timed-out request runs on) exactly once each
+    # time an Agent that had been :ready unexpectedly becomes
+    # unavailable -- never for an explicit #stop, and never for a
+    # bootstrap that never reached :ready in the first place (that
+    # degrades straight to static-only with no automatic retry, matching
+    # the pre-Task-022 behavior for "the Agent never worked" as opposed
+    # to "the Agent was working and then crashed").
+    def handle_agent_unavailable(reason)
+      delay = @agent_supervisor.record_failure_and_next_delay
+      if delay.nil?
+        @logger.error(
+          "runtime agent crash-looped (#{reason}); giving up automatic restarts -- use " \
+          "'RSLSP: Restart Rails Agent' to try again manually"
+        )
+        return
+      end
+
+      @logger.warn("runtime agent became unavailable (#{reason}); retrying in #{delay}s")
+      Thread.new do
+        sleep delay
+        restart_agent
       end
     end
 
@@ -1516,8 +1548,9 @@ module Rslsp
         mutex.synchronize do
           @agent_manager&.stop
           @agent_manager = bootstrap.start(root: root, logger: logger, route_registry: route_registry,
-                                            model_registry: model_registry)
+                                            model_registry: model_registry, on_unavailable: method(:handle_agent_unavailable))
         end
+        @agent_supervisor.record_success if @agent_manager&.ready?
       rescue StandardError => e
         logger.error("failed to restart runtime agent: #{e.class}: #{e.message}")
       end

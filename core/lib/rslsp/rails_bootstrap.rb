@@ -41,7 +41,8 @@ module Rslsp
     # `command`/`args` are overridable so tests can point this at the
     # rails_minimal fixture instead of the real `bundle exec ruby boot.rb`
     # invocation this defaults to.
-    def start(root:, logger:, route_registry:, model_registry:, hello_timeout: 60, command: nil, args: nil)
+    def start(root:, logger:, route_registry:, model_registry:, hello_timeout: 60, command: nil, args: nil,
+              on_unavailable: nil)
       env = {}
       if command.nil?
         return nil unless rails_app?(root)
@@ -63,7 +64,7 @@ module Rslsp
       end
 
       manager = AgentProcessManager.new(command: command, args: args, chdir: root, logger: logger,
-                                         hello_timeout: hello_timeout, env: env)
+                                         hello_timeout: hello_timeout, env: env, on_unavailable: on_unavailable)
       status = manager.start
 
       if status == :ready

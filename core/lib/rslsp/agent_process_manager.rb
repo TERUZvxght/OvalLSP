@@ -24,7 +24,8 @@ module Rslsp
   class AgentProcessManager
     STATUSES = %i[not_started starting ready static_only stopped].freeze
 
-    def initialize(command:, args: [], chdir:, logger:, hello_timeout: 10, core_version: Rslsp::VERSION, env: {})
+    def initialize(command:, args: [], chdir:, logger:, hello_timeout: 10, core_version: Rslsp::VERSION, env: {},
+                   on_unavailable: nil)
       @command = command
       @args = args
       @chdir = chdir
@@ -32,6 +33,14 @@ module Rslsp
       @hello_timeout = hello_timeout
       @core_version = core_version
       @env = env
+      # Task 022: called at most once, exactly when this manager
+      # transitions ready -> static_only on its own (a crash, a stopped-
+      # responding Agent) -- never for an explicit #stop, and never more
+      # than once for a manager that's already static_only. Lets Server
+      # layer an auto-restart-with-backoff policy (AgentSupervisor) on
+      # top without AgentProcessManager itself knowing anything about
+      # restart policy -- it only ever reports its own state transitions.
+      @on_unavailable = on_unavailable
       @status = :not_started
       @inbox = Queue.new
       @next_id = 0
@@ -62,9 +71,23 @@ module Rslsp
                           { protocolVersion: RuntimeAgent::Agent::PROTOCOL_VERSION, coreVersion: @core_version,
                             capabilities: {} }, timeout: @hello_timeout)
 
-      if response && response[:result]
+      if response && response[:result] && compatible_protocol_version?(response[:result][:protocolVersion])
         @hello_result = response[:result]
         @status = :ready
+      elsif response && response[:result]
+        # Task 022: "major不一致は接続拒否" -- Core and the Agent it just
+        # spawned ship together (same gem, same install), so in practice
+        # this should never actually fire; it exists as a fail-safe
+        # against a stale boot script, a manually-launched Agent from a
+        # different install, or any future skew between the two, rather
+        # than trusting whatever protocolVersion came back unconditionally
+        # (the pre-Task-022 behavior).
+        @logger.error(
+          "runtime agent protocol version mismatch (agent=#{response[:result][:protocolVersion].inspect}, " \
+          "core expects #{RuntimeAgent::Agent::PROTOCOL_VERSION}); refusing to use it, falling back to static-only mode"
+        )
+        @status = :static_only
+        terminate_process
       else
         @logger.warn("agent/hello did not complete in time; falling back to static-only mode")
         @status = :static_only
@@ -222,6 +245,11 @@ module Rslsp
 
       @logger.warn("#{reason}; marking runtime agent static-only")
       from_reader_thread ? Thread.new { terminate_process } : terminate_process
+      @on_unavailable&.call(reason)
+    end
+
+    def compatible_protocol_version?(agent_protocol_version)
+      agent_protocol_version == RuntimeAgent::Agent::PROTOCOL_VERSION
     end
 
     def spawn_process

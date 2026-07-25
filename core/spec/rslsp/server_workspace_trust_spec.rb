@@ -12,7 +12,7 @@ RSpec.describe "Rslsp::Server workspace trust gating" do
   let(:fake_bootstrap) do
     queue = calls
     Class.new do
-      define_singleton_method(:start) do |root:, logger:, route_registry:, model_registry:|
+      define_singleton_method(:start) do |root:, logger:, route_registry:, model_registry:, on_unavailable: nil|
         queue << { root: root, route_registry: route_registry, model_registry: model_registry }
       end
     end

@@ -260,4 +260,60 @@ RSpec.describe Rslsp::AgentProcessManager do
       expect(after_routes.map { |r| r[:name] }).not_to include("archived")
     end
   end
+
+  describe "protocol version negotiation (Task 022)" do
+    # Mutating the constant only affects *this* (Core-side test) process
+    # -- the fixture Agent is a genuinely separate `ruby` process that
+    # loads its own fresh copy of RuntimeAgent::Agent, so it still
+    # reports its own real (unmutated) PROTOCOL_VERSION back. That's
+    # exactly what makes this a faithful "the Agent I'm talking to
+    # reports a different protocol version than I expect" repro, not
+    # just an isolated unit check.
+    around do |example|
+      original = Rslsp::RuntimeAgent::Agent::PROTOCOL_VERSION
+      Rslsp::RuntimeAgent::Agent.send(:remove_const, :PROTOCOL_VERSION)
+      Rslsp::RuntimeAgent::Agent.const_set(:PROTOCOL_VERSION, 999)
+      example.run
+    ensure
+      Rslsp::RuntimeAgent::Agent.send(:remove_const, :PROTOCOL_VERSION)
+      Rslsp::RuntimeAgent::Agent.const_set(:PROTOCOL_VERSION, original)
+    end
+
+    it "refuses to use an Agent whose reported protocol version doesn't match, falling back to static-only" do
+      @manager = build_manager
+
+      status = @manager.start
+
+      expect(status).to eq(:static_only)
+      expect(logger).to have_received(:error).with(a_string_matching(/protocol version mismatch/))
+    end
+  end
+
+  describe "on_unavailable callback (Task 022)" do
+    it "is called exactly once, with the reason, when the Agent stops responding after being ready" do
+      reasons = []
+      @manager = described_class.new(
+        command: RbConfig.ruby,
+        args: ["-I", File.join(core_root, "lib"), boot_script, "start", environment_file],
+        chdir: fixture_root, logger: logger, hello_timeout: 5, on_unavailable: ->(reason) { reasons << reason }
+      )
+      @manager.start
+      Process.kill("KILL", @manager.pid)
+
+      wait_until { @manager.status == :static_only }
+
+      expect(reasons.size).to eq(1)
+    end
+
+    def wait_until(timeout: 3)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+      loop do
+        return true if yield
+
+        return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+        sleep 0.02
+      end
+    end
+  end
 end
