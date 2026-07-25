@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "tmpdir"
+
 RSpec.describe Ovallsp::Observation::Runner do
   let(:logger) { instance_double(Ovallsp::Logger, info: nil, warn: nil, error: nil) }
   let(:fixtures_root) { File.expand_path("../../fixtures/observation_runner", __dir__) }
@@ -7,6 +9,30 @@ RSpec.describe Ovallsp::Observation::Runner do
   subject(:runner) { described_class.new(logger: logger) }
 
   def sym(kind:, owner:, name:) = Ovallsp::Index::SymbolId.new(kind: kind, owner: owner, name: name, discriminator: nil)
+
+  # SIGKILL delivery and the subsequent reparent-and-reap by init are not
+  # instantaneous, so poll briefly rather than sampling once -- an
+  # orphaned process stays alive indefinitely, so a real failure never
+  # needs the full budget to show itself.
+  def process_gone?(pid, timeout: 5)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+    loop do
+      Process.kill(0, pid)
+      return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+
+      sleep 0.05
+    rescue Errno::ESRCH
+      return true
+    end
+  end
+
+  # Never leave a stray `sleep 120` behind if the expectation above it
+  # failed (i.e. exactly when the process is still running).
+  def kill_leftover(pid)
+    Process.kill("KILL", pid) if pid
+  rescue Errno::ESRCH
+    nil
+  end
 
   it "observes a real, separately-spawned Ruby process running the workspace's own test command" do
     results = runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)
@@ -38,6 +64,26 @@ RSpec.describe Ovallsp::Observation::Runner do
     end.not_to raise_error
 
     expect(results).to be_nil
+  end
+
+  # Found by an independent review (round 9) of Task 022.2. The timeout
+  # kill signalled only the pid Runner itself spawned, but the workspace's
+  # configured test command is arbitrary and almost always a *wrapper*
+  # that forks (`bin/rails test`, `make test`, `npm test`, `docker compose
+  # run ...`, a shell wrapper, or Ruby's own single-string shell fallback).
+  # So a hung suite survived its own timeout: Runner reaped the wrapper,
+  # reported "no evidence", and left the real test process running
+  # unsupervised forever, holding DB connections, ports and CPU with
+  # nothing left that knew its pid.
+  it "kills the hung command's whole process group, not just the wrapper it spawned" do
+    pid_file = File.join(Dir.mktmpdir("ovallsp-observation-pgroup"), "grandchild.pid")
+    runner.run(command: "ruby", args: ["hang_with_child.rb", pid_file], workspace_root: fixtures_root,
+               timeout_seconds: 2)
+
+    grandchild = Integer(File.read(pid_file))
+    expect(process_gone?(grandchild)).to be(true)
+  ensure
+    kill_leftover(grandchild)
   end
 
   it "returns nil, not an empty array, when the command name doesn't resolve to anything at all" do

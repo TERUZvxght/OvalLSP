@@ -94,6 +94,21 @@ module Ovallsp
         # identical blanket rescue every other subprocess boundary here
         # (#spawn_and_collect, #read_results, Plugins::Loader) already
         # uses.
+        #
+        # `StandardError`, not `Exception`, and that is a decision rather
+        # than an oversight (reviewed explicitly in round 9). Everything
+        # this method can realistically hit is under StandardError:
+        # Errno::* (SystemCallError), Timeout::Error (RuntimeError),
+        # Marshal/IOError, ArgumentError. What `Exception` would
+        # additionally catch is exactly what must NOT be caught here --
+        # Interrupt/SignalException (the user Ctrl-C'ing the editor's
+        # server must still terminate it, not be logged as "this run
+        # produced no evidence"), SystemExit (an `exit` swallowed here
+        # would hang the process), and NoMemoryError/SystemStackError
+        # (unrecoverable; continuing to serve LSP requests afterwards is
+        # worse than dying). "Never raises" means "never raises for any
+        # failure of the observed run", not "converts a fatal
+        # interpreter condition into a silent nil".
         @logger.error("observation runner could not start: #{e.class}: #{e.message}")
         nil
       ensure
@@ -151,8 +166,25 @@ module Ovallsp
       # caller's own diagnostics (e.g. surfacing the test command's
       # output back to the editor), never forwarded to this process' own
       # fd 1/2.
+      #
+      # `pgroup: true` makes the child the leader of its own process
+      # group, so #kill can signal the whole tree rather than just the
+      # one pid (found by an independent review, round 9). `command` is
+      # the workspace's *arbitrary user-configured* test command, and
+      # most real shapes of it are a wrapper that forks: `bin/rails
+      # test`, `make test`, `npm test`, `docker compose run ...`, any
+      # shell wrapper -- and Ruby's own `Process.spawn(env, single_string)`
+      # shell fallback when `args` is empty. Killing only `pid` on
+      # timeout reaped the wrapper and left the actual test suite running
+      # unsupervised forever, holding DB connections, ports and CPU, with
+      # nothing left that knows its pid. Verified before the fix by
+      # timing out a wrapper that had spawned a `sleep 300` grandchild:
+      # the grandchild outlived the kill. Only the *timeout* path signals
+      # the group -- a command that exits normally having deliberately
+      # backgrounded something is its own business, not Core's to reap.
       def spawn_and_collect(command, args, workspace_root, env, output_path, log_path, timeout_seconds)
-        pid = Process.spawn(env, command, *Array(args), chdir: workspace_root, out: log_path, err: log_path)
+        pid = Process.spawn(env, command, *Array(args),
+                            chdir: workspace_root, out: log_path, err: log_path, pgroup: true)
         status = wait_for_exit(pid, timeout_seconds)
         return nil if status.nil?
 
@@ -205,8 +237,18 @@ module Ovallsp
         :unknown
       end
 
+      # Signals the child's whole process group (negative pid -- the
+      # group #spawn_and_collect's `pgroup: true` created, whose id is
+      # the child's own pid), not just the child, so a wrapper's forked
+      # test suite dies with it; see #spawn_and_collect's own docs. Falls
+      # back to the bare pid if the group is already gone but the child
+      # somehow isn't, and still reaps the child either way.
       def kill(pid)
-        Process.kill("KILL", pid)
+        begin
+          Process.kill("KILL", -pid)
+        rescue Errno::ESRCH
+          Process.kill("KILL", pid)
+        end
         Process.waitpid(pid)
       rescue Errno::ESRCH, Errno::ECHILD
         nil

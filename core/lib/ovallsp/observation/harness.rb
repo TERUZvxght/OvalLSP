@@ -36,15 +36,38 @@ module Ovallsp
         collector = Collector.new(workspace_root: workspace_root)
         collector.start
 
-        at_exit do
-          collector.stop
-          dump(collector.results(run_id: run_id), output_path)
-        end
+        at_exit { finish(collector, run_id, output_path) }
       rescue StandardError
         # A broken harness must never break the actual test run it's
         # silently riding along with ("runner障害で通常LSPが影響を受け
         # ない" -- and symmetrically, a broken harness must never affect
         # the workspace's own test run either).
+        nil
+      end
+
+      # The at_exit half of #install's "must never break the actual test
+      # run" contract, and it needs its own rescue rather than relying on
+      # #install's: by the time this runs, #install has long since
+      # returned, so its `rescue StandardError` is completely out of
+      # scope. An exception escaping an at_exit handler is not swallowed
+      # by Ruby -- it prints a stack trace to the test process' stderr
+      # *and* forces that process' exit status to 1. So any bug in
+      # Collector#stop/#results turned a green suite red, blaming a
+      # harness the user never asked to think about (found by an
+      # independent review, round 9; reproduced by making
+      # Collector#results raise: `suite passed` on stdout, a
+      # `harness.rb:41` backtrace on stderr, exit status 1).
+      #
+      # #dump already had exactly this rescue, which is what makes the
+      # gap a structural one rather than a typo: of the three calls in
+      # the at_exit block, only the last was protected, and only because
+      # it happened to live in its own method. Guarding the block itself
+      # covers the class of bug (any future work added here), not just
+      # today's two unprotected calls.
+      def finish(collector, run_id, output_path)
+        collector.stop
+        dump(collector.results(run_id: run_id), output_path)
+      rescue StandardError
         nil
       end
 
