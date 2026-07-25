@@ -37,8 +37,15 @@ module Rslsp
     /ix
 
     # A bearer/authorization-header-shaped token, wherever it appears
-    # (not just after a `key=` label).
-    BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9\-._~+\/]+=*/
+    # (not just after a `key=` label). Case-insensitive: found by a
+    # follow-up review round that only the exact capitalization `Bearer`
+    # was ever matched, so a `bearer`/`BEARER` header value (common --
+    # curl and several HTTP libraries normalize header names/values to
+    # lowercase in their own logging) passed through completely
+    # unredacted. The replacement text always reads "Bearer [REDACTED]"
+    # regardless of the original casing -- redaction only needs to hide
+    # the secret, not preserve exactly how the label was capitalized.
+    BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9\-._~+\/]+=*/i
 
     # `scheme://user:password@host` -- a DB connection string
     # (`postgres://user:pass@host/db`), a Redis URL, an HTTP Basic-Auth
@@ -48,7 +55,21 @@ module Rslsp
     # before this fix -- only an explicit `password=`-labeled assignment
     # was ever caught. The username is kept (useful for troubleshooting,
     # rarely secret on its own); only the password is redacted.
-    URL_USERINFO_PATTERN = %r{(?<prefix>[a-zA-Z][a-zA-Z0-9+.\-]*://)(?<user>[^:/?#\s@]+):(?<password>[^@/?#\s]+)@}
+    #
+    # The password group deliberately does NOT exclude "@"/"#" the way
+    # an earlier version did -- a password containing either of those
+    # characters (legal in practice, even if technically requiring
+    # percent-encoding per RFC 3986) made that version either leak a
+    # suffix of the real password (stopping at an embedded "@" and
+    # treating the rest as host) or skip redacting the message entirely
+    # (an embedded "#", found by a follow-up review round, meant no
+    # `@`-terminated run of allowed characters existed at all, so the
+    # whole pattern simply failed to match). Excluding only "/", "?",
+    # and whitespace and relying on `+`'s default greedy backtracking
+    # finds the *last* "@" before the next `/`/`?`/whitespace -- exactly
+    # the delimiter between userinfo and host, however much `@`/`#` the
+    # password itself contains.
+    URL_USERINFO_PATTERN = %r{(?<prefix>[a-zA-Z][a-zA-Z0-9+.\-]*://)(?<user>[^:/?\s@]+):(?<password>[^/?\s]+)@}
 
     # High-confidence, low-false-positive vendor secret shapes -- unlike
     # GENERIC_TOKEN_PATTERN (below), these are specific enough to enable

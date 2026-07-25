@@ -83,6 +83,37 @@ RSpec.describe Rslsp::Redactor do
 
       expect(redacted).not_to include("ghp_1234567890abcdefghij1234567890ABCD")
     end
+
+    # Found by a follow-up review round: BEARER_PATTERN had no /i flag,
+    # unlike every other pattern in the pipeline, so a differently-cased
+    # bearer header (common -- curl and several HTTP libraries normalize
+    # header names/values to lowercase in their own logging) leaked the
+    # full token.
+    it "redacts a Bearer token regardless of the label's capitalization" do
+      expect(described_class.redact("Authorization: bearer my-lowercase-secret-token-value")).not_to include(
+        "my-lowercase-secret-token-value"
+      )
+      expect(described_class.redact("Authorization: BEARER my-uppercase-secret-token-value")).not_to include(
+        "my-uppercase-secret-token-value"
+      )
+    end
+
+    # Found by a follow-up review round: a password containing "@" was
+    # only partially redacted (the earlier pattern stopped at the first
+    # "@" it saw, leaking everything after it as if it were part of the
+    # host), and a password containing "#" made the whole pattern fail
+    # to match at all, leaking the entire password in plain text.
+    it "redacts the whole password even when it contains '@' or '#'" do
+      at_message = "could not connect to postgres://user:p@ssw0rd!@host.internal:5432/db"
+      at_redacted = described_class.redact(at_message)
+      expect(at_redacted).to include("postgres://user:[REDACTED]@host.internal:5432/db")
+      expect(at_redacted).not_to include("ssw0rd")
+
+      hash_message = "could not connect to postgres://user:pa#ss@host.internal:5432/db"
+      hash_redacted = described_class.redact(hash_message)
+      expect(hash_redacted).to include("postgres://user:[REDACTED]@host.internal:5432/db")
+      expect(hash_redacted).not_to include("pa#ss")
+    end
   end
 
   describe ".redact_generic_tokens" do
