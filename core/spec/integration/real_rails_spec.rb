@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "open3"
+require "tmpdir"
 
 # Exercises the Runtime Agent against a genuinely installed Rails
 # (real `rails`/`activerecord`/`sqlite3` gems, not the hand-written
@@ -22,12 +24,33 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
   DB_FILE = File.join(FIXTURE_ROOT, "db/rails_real.sqlite3")
   BOOT_SCRIPT = File.expand_path("../../lib/ovallsp/runtime_agent/boot.rb", __dir__)
 
+  # Deliberately isolated from Core's own Bundler context via
+  # BundleEnvironment (see its own docs): this fixture is a genuinely
+  # separate Bundle graph from Core's, and Core's own BUNDLE_GEMFILE/
+  # BUNDLE_PATH/BUNDLE_APP_CONFIG must never leak into the fixture's own
+  # `bundle lock`/`bundle install` any more than they may leak into the
+  # Runtime Agent process #boot_manager below eventually spawns via
+  # RailsBootstrap.start (which applies the exact same isolation). Found
+  # necessary by a review-bundle script that runs Core's own test suite
+  # against a temporary, isolated BUNDLE_PATH to keep Core's own gem
+  # install self-contained: without this, that isolation leaked into
+  # *this* fixture's own bundle operations too (system() inherits the
+  # parent process' ENV by default, same trap Process.spawn has), making
+  # `bundle install --local` here fail to resolve rails/sqlite3/
+  # activerecord from the machine's actual system gem install and this
+  # entire suite spuriously report itself unavailable -- or, worse, only
+  # partially unavailable in a way that let stale/wrong gems resolve.
+  def self.fixture_bundle_env
+    Ovallsp::BundleEnvironment.for_workspace(FIXTURE_ROOT)
+  end
+
   def self.real_rails_available?
     return @available if defined?(@available)
 
     Dir.chdir(FIXTURE_ROOT) do
-      locked = system("bundle", "lock", "--local", out: File::NULL, err: File::NULL)
-      installed = locked && system("bundle", "install", "--local", out: File::NULL, err: File::NULL)
+      env = fixture_bundle_env
+      locked = system(env, "bundle", "lock", "--local", out: File::NULL, err: File::NULL)
+      installed = locked && system(env, "bundle", "install", "--local", out: File::NULL, err: File::NULL)
       @available = installed
     end
   end
@@ -257,5 +280,127 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
 
     expect(@manager.request_status).to be_nil
     expect(@manager.status).to eq(:static_only)
+  end
+
+  # Task 022.2: Bundler boundary isolation. Core and this fixture are two
+  # entirely separate Bundle graphs; a review-bundle process that runs
+  # Core's own test suite against a temporary, isolated BUNDLE_PATH must
+  # never leak that isolation into the Runtime Agent this fixture spawns.
+  # Every scenario below exercises the *real* production path
+  # (RailsBootstrap.start -> BundleEnvironment.for_workspace ->
+  # AgentProcessManager -> a genuinely spawned Agent process) with a
+  # simulated "parent process had X polluted" environment passed via
+  # `env_source:` -- never a global ENV mutation (see BundleEnvironment's
+  # own docs for why: Server is multi-threaded, and a global ENV mutation
+  # would race any other thread reading ENV during the same window).
+  describe "Bundler boundary isolation (Task 022.2)" do
+    def boot_manager_with_simulated_parent_env(overrides)
+      env_source = ENV.to_h.merge(overrides)
+      Ovallsp::RailsBootstrap.start(
+        root: FIXTURE_ROOT, logger: logger, route_registry: Ovallsp::Routes::RouteRegistry.new,
+        model_registry: Ovallsp::Models::ModelRegistry.new, hello_timeout: 30, env_source: env_source
+      )
+    end
+
+    # Regression A: a parent process whose own BUNDLE_PATH/BUNDLE_APP_CONFIG
+    # point at a throwaway, Core-only directory (exactly what a
+    # review-bundle script isolating Core's own gem install does) must
+    # not stop the Runtime Agent from reaching :ready against the
+    # fixture's own, separate Bundle graph.
+    it "boots to :ready even when the simulated parent process' BUNDLE_PATH/BUNDLE_APP_CONFIG point at a Core-only directory" do
+      Dir.mktmpdir do |core_only_dir|
+        @manager = boot_manager_with_simulated_parent_env(
+          "BUNDLE_PATH" => File.join(core_only_dir, "core-bundle"),
+          "BUNDLE_APP_CONFIG" => File.join(core_only_dir, "core-config"),
+          "GEM_HOME" => File.join(core_only_dir, "core-bundle", "ruby", "3.4.0"),
+          "GEM_PATH" => ""
+        )
+
+        expect(@manager.status).to eq(:ready)
+      ensure
+        @manager&.stop
+      end
+    end
+
+    # Regression B: a parent process whose own BUNDLE_GEMFILE points at
+    # Core's own Gemfile (exactly what happens whenever Core's own
+    # process is itself launched via `bundle exec`, its normal
+    # invocation) must not make the Runtime Agent try to use Core's
+    # Gemfile instead of the fixture's own.
+    it "uses the fixture's own Gemfile, not the simulated parent's BUNDLE_GEMFILE" do
+      @manager = boot_manager_with_simulated_parent_env(
+        "BUNDLE_GEMFILE" => File.expand_path("../../Gemfile", __dir__)
+      )
+
+      expect(@manager.status).to eq(:ready)
+      # Only resolvable via the fixture's own Gemfile (rails/sqlite3
+      # aren't in Core's) -- reaching :ready and successfully fetching a
+      # real ActiveRecord model's columns is only possible if the Agent
+      # actually loaded Rails from the fixture's own bundle, not Core's.
+      user = @manager.fetch_all_models.find { |m| m[:name] == "User" }
+      expect(user[:columns]).to include(name: "email", type: "string", null: true)
+    ensure
+      @manager&.stop
+    end
+
+    # Regression C: a parent process whose own RUBYOPT carries
+    # "-rbundler/setup" (exactly what `bundle exec` injects, i.e. every
+    # normal invocation of Core itself) must not prevent the Runtime
+    # Agent's own `bundle exec` from resolving the fixture's Bundle, and
+    # any *other* RUBYOPT content the parent legitimately had must
+    # survive into the child (BundleEnvironment strips only the
+    # bundler/setup flag, not RUBYOPT wholesale -- verified with a
+    # distinctive extra flag here rather than only via the unit-level
+    # spec/ovallsp/bundle_environment_spec.rb coverage).
+    it "boots to :ready even when the simulated parent process' RUBYOPT carries -rbundler/setup" do
+      @manager = boot_manager_with_simulated_parent_env(
+        "RUBYOPT" => "-r/some/core/bundler/setup"
+      )
+
+      expect(@manager.status).to eq(:ready)
+    ensure
+      @manager&.stop
+    end
+
+    # Regression D/E: the Agent process genuinely runs against the
+    # fixture's own separate Bundle -- it can resolve a gem the fixture's
+    # own Gemfile.lock installs (sqlite3, which Core's own Gemfile never
+    # lists) but NOT one only Core's own Gemfile lists (rspec-core, which
+    # the fixture's Gemfile never lists) -- proving actual Bundle graph
+    # isolation, not merely that some Ruby process happened to boot.
+    #
+    # Deliberately NOT prism/rbs for the "Core-only" half of this check:
+    # prism specifically ships as a *default* gem bundled with the Ruby
+    # interpreter itself (Ruby 3.3+), so `require "prism"` succeeds
+    # regardless of which Bundle is active -- found by this exact test
+    # failing with `prism=true` even under correct isolation, before
+    # switching to rspec-core (a genuine third-party gem, never bundled
+    # with Ruby, only ever pulled in by Core's own Gemfile as a
+    # development dependency).
+    it "resolves a workspace-only gem the Agent needs (sqlite3) but not a Core-only gem (rspec-core) (regression D/E)" do
+      env = Ovallsp::BundleEnvironment.for_workspace(FIXTURE_ROOT)
+      probe = <<~RUBY
+        begin
+          require "sqlite3"
+          sqlite3_loaded = true
+        rescue LoadError
+          sqlite3_loaded = false
+        end
+        begin
+          require "rspec/core"
+          rspec_loaded = true
+        rescue LoadError
+          rspec_loaded = false
+        end
+        puts "sqlite3=\#{sqlite3_loaded} rspec=\#{rspec_loaded}"
+      RUBY
+
+      stdout, _stderr, status = Open3.capture3(
+        env, "bundle", "exec", "ruby", "-e", probe, chdir: FIXTURE_ROOT
+      )
+
+      expect(status).to be_success
+      expect(stdout.strip).to eq("sqlite3=true rspec=false")
+    end
   end
 end

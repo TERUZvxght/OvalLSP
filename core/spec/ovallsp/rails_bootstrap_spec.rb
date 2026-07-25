@@ -132,14 +132,20 @@ RSpec.describe Ovallsp::RailsBootstrap do
         expect(captured[:args]).to eq(
           ["exec", "ruby", Ovallsp::RailsBootstrap::BOOT_SCRIPT, "start", File.join(dir, "config", "environment.rb")]
         )
-        # If Core Server's own process was launched via `bundle exec`,
-        # BUNDLE_GEMFILE is already set and would otherwise be inherited
-        # verbatim by this child, silently pointing its `bundle exec` at
-        # Core's own Gemfile instead of the target Rails app's
-        # (docs/design/tasks/008.5-runtime-and-index-corrections.md) --
-        # `nil` here must be passed through to unset it for the child,
-        # not merely omitted.
-        expect(captured[:env]).to eq("BUNDLE_GEMFILE" => nil)
+        # Core and the target Rails app are separate Bundle graphs --
+        # Core's own BUNDLE_GEMFILE/BUNDLE_PATH/BUNDLE_APP_CONFIG (and
+        # RUBYOPT's "-rbundler/setup", RUBYLIB's Core-bundler-lib entry)
+        # must never leak into this child's `bundle exec`
+        # (docs/design/tasks/008.5-runtime-and-index-corrections.md
+        # first found this for BUNDLE_GEMFILE alone; a later review found
+        # the same leak for BUNDLE_PATH/BUNDLE_APP_CONFIG, closed by
+        # BundleEnvironment). Compared against BundleEnvironment's own
+        # output rather than a hardcoded Hash literal, since exactly
+        # which keys need nil-ing out depends on which Bundler-owned
+        # variables are actually live in whatever environment is running
+        # this spec -- the contract is "matches BundleEnvironment for
+        # this workspace", not "matches this one machine's env snapshot".
+        expect(captured[:env]).to eq(Ovallsp::BundleEnvironment.for_workspace(dir))
       end
     end
   end

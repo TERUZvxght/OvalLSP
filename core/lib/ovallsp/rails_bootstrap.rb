@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "bundle_environment"
 require_relative "agent_process_manager"
 
 module Ovallsp
@@ -56,26 +57,35 @@ module Ovallsp
     # it (terminating any already-spawned child process, or preventing one
     # from ever spawning) regardless of exactly how far the handshake
     # below has gotten.
+    # `env_source:` (default: the real `ENV`) is the environment
+    # BundleEnvironment.for_workspace reads Core's own Bundler/RubyGems
+    # pollution *from* -- production code always leaves it as the
+    # default; it exists so integration tests can simulate "what if
+    # Core's own process had X polluted" by passing a plain Hash,
+    # exercising this real method end-to-end without ever mutating global
+    # ENV (see BundleEnvironment's own docs for why that matters).
     def start(root:, logger:, route_registry:, model_registry:, hello_timeout: 60, command: nil, args: nil,
-              on_unavailable: nil, on_manager_created: nil)
+              on_unavailable: nil, on_manager_created: nil, env_source: ENV)
       env = {}
       if command.nil?
         return nil unless rails_app?(root)
 
         command = "bundle"
         args = ["exec", "ruby", BOOT_SCRIPT, "start", environment_file_for(root)]
-        # If Core Server's own process was itself launched via `bundle
-        # exec` (its normal invocation, being a Ruby gem), BUNDLE_GEMFILE
-        # is already set in this process' environment and would
-        # otherwise be inherited verbatim by the child -- silently
-        # pointing `bundle exec` at *Core's* Gemfile instead of the
-        # target Rails app's own one, since the target's own
-        # config/boot.rb sets BUNDLE_GEMFILE with `||=` and never
-        # overrides an inherited value
-        # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
-        # `nil` here tells Process.spawn to unset the var for the child
-        # rather than merely not setting a new one.
-        env = { "BUNDLE_GEMFILE" => nil }
+        # Core and the target Rails app are two entirely separate Bundle
+        # graphs -- Core's own BUNDLE_GEMFILE/BUNDLE_PATH/BUNDLE_APP_CONFIG
+        # (and RUBYOPT's "-rbundler/setup", RUBYLIB's Core-bundler-lib
+        # entry) must never leak into this `bundle exec` and silently
+        # point it at Core's own Gemfile/gem install instead of the
+        # target app's own (docs/design/tasks/008.5-runtime-and-index-corrections.md
+        # first found this for BUNDLE_GEMFILE alone; a review-bundle
+        # script that runs Core's own test suite against a temporary,
+        # isolated BUNDLE_PATH later found the same leak applied to
+        # BUNDLE_PATH/BUNDLE_APP_CONFIG too, making the Runtime Agent
+        # unable to resolve rails/sqlite3/activerecord from the target
+        # app's own bundle install at all). See BundleEnvironment's own
+        # docs for why `Bundler.unbundled_env` alone isn't enough here.
+        env = Ovallsp::BundleEnvironment.for_workspace(root, env: env_source)
       end
 
       manager = AgentProcessManager.new(command: command, args: args, chdir: root, logger: logger,
