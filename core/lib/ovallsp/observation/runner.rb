@@ -22,6 +22,9 @@ module Ovallsp
     class Runner
       DEFAULT_TIMEOUT_SECONDS = 300
       HARNESS_PATH = File.expand_path("harness.rb", __dir__)
+      # How long #reap is willing to wait for a SIGKILL'd child to
+      # actually die before handing it to Process.detach -- see #reap.
+      REAP_TIMEOUT_SECONDS = 2
 
       def initialize(logger:)
         @logger = logger
@@ -215,6 +218,17 @@ module Ovallsp
       # wait did *not* settle means the child is always still unreaped
       # here, and an unreaped child holds its pid (as a zombie at worst),
       # so no other process or group can have acquired that id yet.
+      #
+      # (Reviewed in round 11 and left as-is: an asynchronous Interrupt
+      # landing in the single VM instruction between #wait_for_exit
+      # returning and `settled = true` would kill an already-reaped pid.
+      # There is no blocking call in that window, and hitting it would
+      # additionally require the kernel to have recycled that exact pid
+      # onto a new *group leader* within it -- pids are handed out
+      # monotonically, so that is tens of thousands of intervening
+      # spawns. Closing it properly would need Thread.handle_interrupt
+      # around the wait, which makes Ctrl-C itself less responsive: a
+      # strictly worse trade for the failure it removes.)
       def spawn_and_collect(command, args, workspace_root, env, output_path, log_path, timeout_seconds)
         settled = false
         pid = Process.spawn(env, command, *Array(args),
@@ -279,8 +293,8 @@ module Ovallsp
       # the child's own pid), not just the child, so a wrapper's forked
       # test suite dies with it; see #spawn_and_collect's own docs for
       # why `-pid` cannot collide with an unrelated group. Falls back to
-      # the bare pid if the group is already gone but the child somehow
-      # isn't.
+      # the bare pid whenever that group signal did not actually land --
+      # the group already gone, or refused for any other reason.
       #
       # Never raises, and always reaps: one of its two call sites is
       # #spawn_and_collect's own `ensure`, where an exception escaping
@@ -291,20 +305,63 @@ module Ovallsp
       # path only: had both kills raised ESRCH, Core would have kept the
       # child as a zombie for the rest of the session, since nothing else
       # tracks that pid.
+      #
+      # The bare-pid retry fires on *any* failure of the group signal, not
+      # only Errno::ESRCH (found by an independent review, round 11). The
+      # ESRCH-only version had the fallback wired to the one failure that
+      # least needs it -- ESRCH means the group is already gone -- while
+      # the failures that genuinely leave a live child unsignalled (EPERM
+      # from a group member that changed uid, or anything else killpg(2)
+      # can report) fell through to the outer `rescue StandardError` and
+      # skipped the retry entirely. #reap then blocked forever on a child
+      # nothing had ever actually signalled; see #reap.
       def kill(pid)
-        begin
-          Process.kill("KILL", -pid)
-        rescue Errno::ESRCH
-          Process.kill("KILL", pid)
-        end
-      rescue StandardError
-        nil
+        signal(-pid) || signal(pid)
       ensure
         reap(pid)
       end
 
+      # True only if the signal was genuinely delivered, so #kill can tell
+      # "the group is handled" from "nothing was signalled at all" -- and
+      # never raises, per #kill's own contract.
+      def signal(target)
+        Process.kill("KILL", target)
+        true
+      rescue StandardError
+        false
+      end
+
+      # Bounded, never an unbounded `Process.waitpid(pid)` (found by an
+      # independent review, round 11). This method is the last thing
+      # #wait_for_exit's *timeout* path runs, and #run is called
+      # synchronously on the LSP transport thread
+      # (Server#run_observed_tests_result), so a blocking wait here isn't
+      # a stray zombie -- it is the entire `timeout_seconds` mechanism
+      # this class exists to enforce, quietly converted into "block the
+      # editor's whole LSP loop forever". Any child that outlives the
+      # SIGKILL above reaches it: one #kill couldn't signal at all (see
+      # #kill), or one sitting in an uninterruptible kernel wait (a test
+      # suite blocked on a wedged NFS/FUSE/network mount -- SIGKILL cannot
+      # be caught or ignored, but it still cannot preempt a D-state
+      # syscall). Reproduced before the fix by making Process.kill raise
+      # Errno::EPERM -- the exact case #kill's own docs already named as
+      # possible -- and watching a `timeout_seconds: 1` run never return.
+      #
+      # Giving up hands the pid to Process.detach rather than abandoning
+      # it: that reaps in a background thread whenever the child finally
+      # does die, so declining to block here still can't leave a permanent
+      # zombie for the rest of the session.
       def reap(pid)
-        Process.waitpid(pid)
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REAP_TIMEOUT_SECONDS
+        loop do
+          return if Process.waitpid(pid, Process::WNOHANG)
+          break if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+          sleep 0.01
+        end
+
+        @logger.error("observation runner child #{pid} outlived SIGKILL -- detaching it rather than blocking on it")
+        Process.detach(pid)
       rescue StandardError
         nil
       end

@@ -147,6 +147,29 @@ module Ovallsp
       # the child raising, the child exceeding @timeout_seconds (killed
       # with SIGKILL), or the child's result failing to Marshal/unMarshal
       # at all.
+      #
+      # Deliberately does NOT use Observation::Runner's `pgroup: true` +
+      # whole-group kill, and that is a judged tradeoff rather than an
+      # oversight (re-examined by independent reviews, rounds 6-7 and
+      # again in round 11). A plugin that forks its own grandchild would
+      # leak it here the way Runner's timeout path used to: the grandchild
+      # inherits the result fd, so the parent never sees EOF, #kill_child
+      # signals only the plugin child, and the grandchild survives. The
+      # difference is what the two subprocesses *are*. Runner spawns the
+      # workspace's arbitrary, user-configured test command, where being a
+      # forking wrapper (`bin/rails test`, `make test`, `docker compose
+      # run ...`) is the *normal* shape rather than the exotic one -- so
+      # there the leak was the common case. A plugin entrypoint is
+      # explicitly-configured local code whose job is to return
+      # declarations, forking is not part of its contract at all, and a
+      # process it forked on purpose is arguably its own to reap (the same
+      # line Runner draws for a test command that exits normally having
+      # backgrounded something). Crucially, unlike round 11's finding in
+      # Runner, nothing here can *hang*: the read is bounded by
+      # Timeout.timeout and every wait after it runs only once the child
+      # has already closed the result fd and is about to `exit!`, so the
+      # cost of the leak is bounded to a stray process, never a blocked
+      # Core.
       def run_isolated(name)
         reader, writer = ::IO.pipe
         pid =

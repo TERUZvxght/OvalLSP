@@ -31,10 +31,14 @@ RSpec.describe Ovallsp::Observation::Runner do
   # leftover's whole group, because the shape being asserted about is a
   # wrapper *plus* its grandchild -- killing the recorded pid alone would
   # itself leak the wrapper on every failure.
-  def kill_leftover(pid)
+  # `killer:` exists for the one example below that deliberately stubs
+  # Process.kill into failing: its cleanup has to use the *real* one
+  # (captured before the stub was installed), or the leftover it is there
+  # to reap would survive the example that created it.
+  def kill_leftover(pid, killer: Process.method(:kill))
     return unless pid
 
-    Process.kill("KILL", -Process.getpgid(pid))
+    killer.call("KILL", -Process.getpgid(pid))
   rescue Errno::ESRCH, Errno::EPERM
     nil
   end
@@ -133,6 +137,44 @@ RSpec.describe Ovallsp::Observation::Runner do
     expect(process_gone?(grandchild)).to be(true)
   ensure
     kill_leftover(grandchild)
+  end
+
+  # Found by an independent review (round 11) of Task 022.2. #kill's own
+  # docs already named Errno::EPERM as a signal failure that can happen --
+  # but #kill only retried the bare pid on Errno::ESRCH (the one failure
+  # meaning "already gone", i.e. the one that needs no retry), so any
+  # other failure left the child completely unsignalled, and #reap's
+  # unbounded `Process.waitpid(pid)` then blocked on it forever. That is
+  # not a stray zombie: this is the last thing the *timeout* path runs,
+  # and Server#run_observed_tests_result calls #run synchronously on the
+  # LSP transport thread, so `timeout_seconds` silently became "hang the
+  # user's whole editor session". Same shape for a child that outlives
+  # SIGKILL for any other reason (an uninterruptible kernel wait on a
+  # wedged network mount).
+  it "still honours its own timeout when the kill signal fails to land rather than the child ignoring it" do
+    real_kill = Process.method(:kill)
+    spawned = nil
+    allow(Process).to receive(:spawn).and_wrap_original do |original, *args, **options|
+      spawned = original.call(*args, **options)
+    end
+    allow(Process).to receive(:kill).and_wrap_original do |original, signal, target|
+      raise Errno::EPERM if signal == "KILL"
+
+      original.call(signal, target)
+    end
+
+    results = :unset
+    expect do
+      # Generously above `timeout_seconds` + REAP_TIMEOUT_SECONDS, so this
+      # only ever fires for a genuinely unbounded wait, never a slow one.
+      Timeout.timeout(20) do
+        results = runner.run(command: "ruby", args: ["hang.rb"], workspace_root: fixtures_root, timeout_seconds: 1)
+      end
+    end.not_to raise_error
+
+    expect(results).to be_nil
+  ensure
+    kill_leftover(spawned, killer: real_kill)
   end
 
   it "returns nil, not an empty array, when the command name doesn't resolve to anything at all" do
