@@ -24,6 +24,7 @@ require_relative "semantic/reference_index"
 require_relative "semantic/reference_resolver"
 require_relative "diagnostics/engine"
 require_relative "rename/planner"
+require_relative "plugins/loader"
 require_relative "signatures/environment"
 
 module Rslsp
@@ -96,6 +97,7 @@ module Rslsp
       @diagnostics_engine = Diagnostics::Engine.new
       @diagnostics_mode = :safe
       @rename_planner = Rename::Planner.new(workspace_index: @workspace_index, reference_index: @reference_index)
+      @plugin_loader = Plugins::Loader.new(logger: @logger)
     end
 
     # Runs the read/dispatch loop until `exit` is received or the input
@@ -125,6 +127,7 @@ module Rslsp
       when "initialize"
         @diagnostics_mode = diagnostics_mode_from(message[:params])
         respond(id, initialize_result)
+        load_static_plugins(message[:params])
         start_cold_index
         maybe_start_agent(message[:params])
       when "initialized"
@@ -303,6 +306,61 @@ module Rslsp
       mode = options.is_a?(Hash) ? options[:diagnosticsMode] : nil
       Diagnostics::Engine::MODES.include?(mode&.to_sym) ? mode.to_sym : :safe
     end
+
+    # Task 018: loads only manifests the client explicitly lists in
+    # `initializationOptions.pluginManifests` -- never auto-discovered
+    # from installed Gems ("自動検出したGemだけを理由にコード実行しない").
+    # Each plugin's declarations (and generated-method facts, for ones
+    # that gave a return_type) are merged in under a synthetic
+    # `plugin://<name>` uri, exactly the same replace/remove-by-uri
+    # contract every other per-file contribution to WorkspaceIndex/
+    # HierarchyIndex/GeneratedMethodIndex already has -- a plugin's
+    # contribution can be swapped wholesale on the next `initialize`
+    # (there's no live reload endpoint yet) without leaving anything
+    # behind. Runtime plugin loading (Plugins::Loader#load_runtime) is
+    # implemented and tested but not called here -- forwarding a
+    # runtime plugin's contributions into the actual Rails Runtime
+    # Agent process is further work this task doesn't complete (see
+    # Plugins::RuntimeContext's own docs).
+    def load_static_plugins(params)
+      options = params && params[:initializationOptions]
+      manifest_paths = options.is_a?(Hash) ? options[:pluginManifests] : nil
+      return unless manifest_paths.is_a?(Array) && !manifest_paths.empty?
+
+      @plugin_loader.load_static(manifest_paths).each { |context| apply_plugin_context(context) }
+    end
+
+    def apply_plugin_context(context)
+      return if context.declarations.empty?
+
+      uri = "plugin://#{context.plugin_name}"
+      declarations = context.declarations.map { |fact| plugin_declaration(fact) }
+      summary = Index::FileSummary.new(
+        uri: uri, content_hash: uri, document_version: nil, declarations: declarations, diagnostics: []
+      )
+
+      @workspace_index.replace_file(summary)
+      @hierarchy_index.replace_file(summary)
+      facts = context.declarations.filter_map { |fact| plugin_generated_fact(fact) }
+      @generated_method_index.replace_file(uri: uri, facts: facts) unless facts.empty?
+    end
+
+    def plugin_declaration(fact)
+      Index::Declaration.new(symbol_id: fact[:symbol_id], location: PLUGIN_LOCATION, visibility: :public,
+                              parameters: [], origin: :plugin)
+    end
+
+    def plugin_generated_fact(fact)
+      return nil unless fact[:return_type]
+
+      symbol_id = fact[:symbol_id]
+      Index::GeneratedMethodFact.new(
+        owner: symbol_id.owner, name: symbol_id.name, kind: symbol_id.kind, return_type: fact[:return_type],
+        source_location: PLUGIN_LOCATION, origin: :plugin, confidence: :high
+      )
+    end
+
+    PLUGIN_LOCATION = { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }.freeze
 
     # Task 014: resolves this file's raw reference candidates (Prism-level
     # constant/local/ivar/cvar/method-call sites -- ParserService already
