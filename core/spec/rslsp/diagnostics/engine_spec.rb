@@ -112,6 +112,34 @@ RSpec.describe Rslsp::Diagnostics::Engine do
       expect(findings.map(&:code)).not_to include("unknown-method")
     end
 
+    it "does not flag a call inside an open, namespaced class just because an unrelated top-level class shares its simple name" do
+      # Found by the Task 014-018 independent review's live repro: a
+      # closed top-level `Bar` and an open `Api::Bar` (whose real
+      # ancestor is an unresolved external gem class) share the simple
+      # name "Bar" -- resolving the receiver by simple name alone
+      # (the previous behavior) picked the wrong, closed `Bar` and
+      # wrongly flagged a call that's only unresolvable because it
+      # legitimately comes from the gem.
+      document = index(<<~RUBY)
+        class Bar
+          def known_method
+          end
+        end
+
+        module Api
+          class Bar < SomeExternalGemBaseClass
+            def show
+              mystery_call_from_the_gem
+            end
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).not_to include("unknown-method")
+    end
+
     it "does not flag any call at all when Signatures::Environment isn't available" do
       document = index("class Widget\n  def show\n    puts \"hi\"\n  end\nend\n")
 

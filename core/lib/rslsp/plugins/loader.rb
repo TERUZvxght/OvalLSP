@@ -16,6 +16,23 @@ module Rslsp
     # degrades to "this one plugin contributes nothing", logged, never
     # raised -- one broken plugin must never take Core down, and must
     # never prevent every *other* plugin (or Core itself) from working.
+    #
+    # A plugin's entrypoint runs in a genuinely separate OS process
+    # (Process.fork), not merely a Timeout-wrapped Kernel.load in this
+    # process -- a follow-up review of this task found that an earlier
+    # version ran `Kernel.load` directly here, meaning a plugin file's
+    # own top-level code (reopening `Rslsp::WorkspaceIndex` to monkey-
+    # patch a method, defining a stray top-level constant, anything at
+    # all -- independent of what it does with the StaticContext object
+    # it's handed) permanently corrupted this Core process for the rest
+    # of its lifetime, surviving even after the "isolated" call
+    # returned. Only plain data crosses back across the fork boundary
+    # (declarations for a static plugin; snapshot-section/reload-hook
+    # *names*, not the Procs themselves, for a runtime one, since Ruby
+    # Procs can't be Marshaled across a process boundary) -- whatever
+    # damage a plugin's own code does happens in a short-lived child
+    # process that's discarded (successfully or not) the moment this
+    # method returns, POSIX `Process.fork` semantics.
     class Loader
       DEFAULT_TIMEOUT_SECONDS = 5
       MAX_CONSECUTIVE_FAILURES = 3
@@ -54,13 +71,22 @@ module Rslsp
         return nil unless manifest && entrypoint_ok?(manifest, manifest.static_entrypoint_path, "static")
         return nil if disabled?(manifest.name)
 
+        declarations = run_isolated(manifest.name) { static_plugin_declarations(manifest) }
+        return nil unless declarations
+
+        StaticContext.new(manifest.name).tap { |context| context.restore_declarations(declarations) }
+      end
+
+      # Runs *inside the forked child* -- everything this touches
+      # (loading the entrypoint file, invoking the plugin's registered
+      # block) is thrown away with the child process; only the plain-
+      # data `declarations` array returned here is Marshaled back to
+      # the parent.
+      def static_plugin_declarations(manifest)
         context = StaticContext.new(manifest.name)
-        succeeded = run_isolated(manifest.name) do
-          Kernel.load(manifest.static_entrypoint_path)
-          Plugins.static_registration(manifest.name)&.call(context)
-        end
-        Plugins.clear_registration(manifest.name)
-        succeeded ? context : nil
+        Kernel.load(manifest.static_entrypoint_path)
+        Plugins.static_registration(manifest.name)&.call(context)
+        context.declarations
       end
 
       def load_runtime_one(path)
@@ -68,13 +94,24 @@ module Rslsp
         return nil unless manifest && entrypoint_ok?(manifest, manifest.runtime_entrypoint_path, "runtime")
         return nil if disabled?(manifest.name)
 
-        context = RuntimeContext.new(manifest.name)
-        succeeded = run_isolated(manifest.name) do
-          Kernel.load(manifest.runtime_entrypoint_path)
-          Plugins.runtime_registration(manifest.name)&.call(context)
+        summary = run_isolated(manifest.name) { runtime_plugin_summary(manifest) }
+        return nil unless summary
+
+        RuntimeContext.new(manifest.name).tap do |context|
+          context.restore_summary(summary[:snapshot_section_names], summary[:reload_hook_count])
         end
-        Plugins.clear_registration(manifest.name)
-        succeeded ? context : nil
+      end
+
+      # Same "runs inside the forked child" contract as
+      # #static_plugin_declarations -- but a Proc can't be Marshaled
+      # across the fork boundary at all, so only the registered
+      # sections'/hooks' *names* (not the callables themselves) survive
+      # back into the parent. See RuntimeContext#restore_summary.
+      def runtime_plugin_summary(manifest)
+        context = RuntimeContext.new(manifest.name)
+        Kernel.load(manifest.runtime_entrypoint_path)
+        Plugins.runtime_registration(manifest.name)&.call(context)
+        { snapshot_section_names: context.snapshot_sections.keys, reload_hook_count: context.reload_hooks.size }
       end
 
       def safe_load_manifest(path)
@@ -103,20 +140,84 @@ module Rslsp
         @disabled.key?(name)
       end
 
-      # A plugin whose entrypoint raises or times out MAX_CONSECUTIVE_FAILURES
-      # times in a row is disabled for the remainder of this Loader's
-      # lifetime -- "disable after repeated failure". Returns whether the
-      # block completed without error, so callers can tell "ran, but
-      # registered nothing" apart from "never ran at all".
+      # Forks a child process to run `block`, Marshals whatever it
+      # returns back to the parent through a pipe, and returns that
+      # value here -- or nil (logged, failure-counted, eventually
+      # disabling the plugin after MAX_CONSECUTIVE_FAILURES) for any of:
+      # the child raising, the child exceeding @timeout_seconds (killed
+      # with SIGKILL), or the child's result failing to Marshal/unMarshal
+      # at all.
       def run_isolated(name)
-        Timeout.timeout(@timeout_seconds) { yield }
-        @failure_counts[name] = 0
-        true
-      rescue StandardError, Timeout::Error => e
-        @failure_counts[name] += 1
-        @logger.error("plugin #{name} failed (#{@failure_counts[name]}/#{MAX_CONSECUTIVE_FAILURES}): #{e.class}: #{e.message}")
-        @disabled[name] = true if @failure_counts[name] >= MAX_CONSECUTIVE_FAILURES
-        false
+        reader, writer = ::IO.pipe
+        pid = fork_plugin_child(writer) { yield }
+        writer.close
+
+        payload = read_isolated_result(reader, pid)
+        reader.close
+
+        apply_isolation_result(name, payload)
+      end
+
+      def fork_plugin_child(writer)
+        Process.fork do
+          result = begin
+            { ok: true, result: yield }
+          rescue Exception => e # rubocop:disable Lint/RescueException -- a plugin's own code, isolated in this child, may raise anything at all; none of it may ever propagate past this process boundary
+            { ok: false, error: "#{e.class}: #{e.message}" }
+          end
+          begin
+            writer.write(Marshal.dump(result))
+          rescue StandardError => e
+            # The result itself couldn't be Marshaled (e.g. a plugin
+            # somehow returned an object holding a Proc/IO/etc.) --
+            # report that specific failure instead of leaving the parent
+            # to time out waiting for output that will never arrive.
+            writer.write(Marshal.dump({ ok: false, error: "result could not be serialized: #{e.class}: #{e.message}" }))
+          end
+        ensure
+          writer.close
+          Kernel.exit!(0)
+        end
+      end
+
+      def read_isolated_result(reader, pid)
+        raw = nil
+        begin
+          Timeout.timeout(@timeout_seconds) { raw = reader.read }
+        rescue Timeout::Error
+          kill_child(pid)
+          return { ok: false, error: "Timeout::Error: exceeded #{@timeout_seconds}s" }
+        end
+        Process.waitpid(pid)
+
+        return { ok: false, error: "plugin process produced no output" } if raw.nil? || raw.empty?
+
+        begin
+          Marshal.load(raw)
+        rescue StandardError => e
+          { ok: false, error: "failed to read plugin process output: #{e.class}: #{e.message}" }
+        end
+      rescue Errno::ECHILD
+        { ok: false, error: "plugin process exited unexpectedly" }
+      end
+
+      def kill_child(pid)
+        Process.kill("KILL", pid)
+        Process.waitpid(pid)
+      rescue Errno::ESRCH, Errno::ECHILD
+        nil
+      end
+
+      def apply_isolation_result(name, payload)
+        if payload[:ok]
+          @failure_counts[name] = 0
+          payload[:result]
+        else
+          @failure_counts[name] += 1
+          @logger.error("plugin #{name} failed (#{@failure_counts[name]}/#{MAX_CONSECUTIVE_FAILURES}): #{payload[:error]}")
+          @disabled[name] = true if @failure_counts[name] >= MAX_CONSECUTIVE_FAILURES
+          nil
+        end
       end
     end
   end

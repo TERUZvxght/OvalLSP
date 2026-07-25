@@ -196,7 +196,15 @@ module Rslsp
 
       def visit_constant_path_node(node)
         target = raw_constant_name(node)
-        record_reference(:constant, target, node.location) if target
+        # `node.name_loc` is just the last segment ("Bar" in `Foo::Bar`),
+        # not the whole compound path -- using the whole path here (the
+        # previous behavior) meant a rename of `Bar` to `Container` would
+        # rewrite every `Foo::Bar.something` reference to bare
+        # `Container.something`, silently stripping the `Foo::` prefix
+        # instead of touching only the identifier being renamed (found by
+        # the Task 014-018 independent review; see also #visit_namespace's
+        # matching fix for the declaration side of the same class of bug).
+        record_reference(:constant, target, node.name_loc) if target
         super
       end
 
@@ -277,7 +285,7 @@ module Rslsp
           visibility: nil,
           parameters: [],
           origin: :source,
-          name_location: Index::SourceLocation.to_range(node.constant_path.location, @lines)
+          name_location: Index::SourceLocation.to_range(namespace_name_location(node.constant_path), @lines)
         )
 
         record_superclass(node, absolute_name) if node.is_a?(Prism::ClassNode)
@@ -292,6 +300,20 @@ module Rslsp
         @singleton_context_stack.pop
         @visibility_stack.pop
         @scope_stack.pop
+      end
+
+      # For `class Foo::Bar`, `node.constant_path` is a Prism::ConstantPathNode
+      # whose own #location spans the whole "Foo::Bar" -- using that
+      # directly as the narrow, in-place-editable name_location (the
+      # previous behavior) meant Rename::Planner's edit for renaming just
+      # `Bar` replaced "Foo::Bar" wholesale, silently dropping the class
+      # out of its namespace. ConstantPathNode#name_loc is the last
+      # segment alone ("Bar"); a bare `class Foo` has a ConstantReadNode
+      # instead, which has no #name_loc because its own #location is
+      # already exactly that narrow (there's only one segment). Found by
+      # the Task 014-018 independent review.
+      def namespace_name_location(constant_path_node)
+        constant_path_node.respond_to?(:name_loc) ? constant_path_node.name_loc : constant_path_node.location
       end
 
       def qualify(local_path)

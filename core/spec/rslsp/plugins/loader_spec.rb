@@ -21,6 +21,7 @@ RSpec.describe Rslsp::Plugins::Loader do
     Rslsp::Plugins.clear_registration("rslsp-slow")
     Rslsp::Plugins.clear_registration("rslsp-malformed-fact")
     Rslsp::Plugins.clear_registration("rslsp-runtime-example")
+    Rslsp::Plugins.clear_registration("rslsp-monkeypatching")
   end
 
   describe "#load_static" do
@@ -98,6 +99,21 @@ RSpec.describe Rslsp::Plugins::Loader do
       second = loader.load_static([manifest_path("state_machine_example")])
 
       expect(first.first.declarations).to eq(second.first.declarations)
+    end
+
+    it "isolates a plugin's top-level code in a separate process -- monkeypatching a Core class does not survive back into this process" do
+      symbol_id = Rslsp::Index::SymbolId.new(kind: :class, owner: nil, name: "::Whatever", discriminator: nil)
+      expect(symbol_id.to_s).not_to eq("MONKEYPATCHED_BY_PLUGIN")
+
+      contexts = loader.load_static([manifest_path("monkeypatching")])
+
+      expect(contexts.size).to eq(1)
+      expect(contexts.first.declarations.first[:symbol_id].owner).to eq("::MonkeypatchModel")
+      # The plugin's own file reopened Rslsp::Index::SymbolId and
+      # redefined #to_s at its top level, independent of anything it did
+      # through StaticContext -- if that patch leaked into this (parent)
+      # process, every SymbolId in Core would now report this string.
+      expect(symbol_id.to_s).not_to eq("MONKEYPATCHED_BY_PLUGIN")
     end
   end
 

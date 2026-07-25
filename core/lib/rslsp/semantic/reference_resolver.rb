@@ -96,18 +96,34 @@ module Rslsp
       def receiver_type_for(document, candidate)
         case candidate.receiver
         when nil
-          candidate.owner && Types::Nominal.new(name: strip_namespace(candidate.owner))
+          candidate.owner && Types::Nominal.new(name: canonical_receiver_name(candidate.owner))
         when Hash
           return nil unless document
 
           @local_inferencer.infer_at(document, candidate.receiver.fetch(:position))
         else
-          Types::Nominal.new(name: strip_namespace(candidate.receiver))
+          Types::Nominal.new(name: canonical_receiver_name(candidate.receiver))
         end
       end
 
-      def strip_namespace(name)
-        name.to_s.split("::").last
+      # Drops only the leading "::" ParserService's own #current_owner
+      # always prefixes fully-qualified names with -- never any inner
+      # namespace segment. Collapsing to the *simple* name here (the
+      # previous behavior) threw away exactly the information that
+      # disambiguates two same-named classes in different namespaces
+      # (e.g. a closed top-level `Bar` vs. an open `Api::Bar`),
+      # resolving to whichever candidate WorkspaceIndex#resolve_type_name
+      # happened to index first — found by the Task 014-018 independent
+      # review via a live repro of that exact false positive. Both
+      # HierarchyIndex#ancestors and WorkspaceIndex#resolve_type_name
+      # already do their own exact-full-name-first matching internally
+      # (WorkspaceIndex#resolve_type_symbol_locked), so passing the full
+      # (colon-stripped) name through lets that matching actually work;
+      # ModelRegistry's own keys (Rails' own `model.name`) never carry a
+      # leading "::" either, so this is also what
+      # #resolve_via_model_registry needs.
+      def canonical_receiver_name(name)
+        name.to_s.delete_prefix("::")
       end
 
       def resolve_via_method_resolver(candidate, receiver_type, uri, generation)

@@ -90,6 +90,39 @@ RSpec.describe Rslsp::Rename::Planner do
       expect(plan.confirmed_edits).to eq([])
       expect(plan.conflicts).not_to be_empty
     end
+
+    it "renames only the class's own identifier in a compact-nested declaration, leaving it inside its namespace" do
+      # Found by the Task 014-018 independent review: `class Foo::Bar`'s
+      # name_location previously spanned the whole "Foo::Bar" text, so
+      # applying this edit replaced it wholesale -- `class Foo::Bar`
+      # became `class Container`, silently dropping the class out of the
+      # `Foo` namespace instead of renaming just the `Bar` identifier.
+      text = "module Foo\nend\n\nclass Foo::Bar\nend\n"
+      index_source(text)
+
+      plan = planner.plan(sym(kind: :class, owner: nil, name: "::Foo::Bar"), new_name: "Container", generation: 1)
+
+      decl_edit = plan.confirmed_edits.find { |e| e[:range][:start][:line] == 3 }
+      expect(decl_edit).not_to be_nil
+      before = decl_edit[:range][:start][:character]
+      after = decl_edit[:range][:end][:character]
+      expect(text.lines[3][0...before]).to eq("class Foo::")
+      expect(text.lines[3][before...after]).to eq("Bar")
+    end
+
+    it "renames only the identifier segment of a compact-nested constant reference, keeping its namespace prefix intact" do
+      text = "module Foo\n  class Bar\n  end\nend\n\nFoo::Bar.new\n"
+      index_source(text)
+
+      plan = planner.plan(sym(kind: :class, owner: nil, name: "::Foo::Bar"), new_name: "Container", generation: 1)
+
+      ref_edit = plan.confirmed_edits.find { |e| e[:range][:start][:line] == 5 }
+      expect(ref_edit).not_to be_nil
+      before = ref_edit[:range][:start][:character]
+      after = ref_edit[:range][:end][:character]
+      expect(text.lines[5][0...before]).to eq("Foo::")
+      expect(text.lines[5][before...after]).to eq("Bar")
+    end
   end
 
   describe "method rename" do

@@ -60,6 +60,18 @@ module Rslsp
       def register_diagnostics(&block)
         @diagnostic_checks << block if block
       end
+
+      # Loader-internal: reconstructs a StaticContext in the *parent*
+      # process from the plain-data `declarations` a plugin's entrypoint
+      # produced in its isolated child process (Plugins::Loader,
+      # #static_plugin_declarations) -- `generic_rules`/`diagnostic_checks`
+      # deliberately stay empty here, since neither is consumed by
+      # anything yet (confirmed by the Task 014-018 independent review)
+      # and, being Proc-bearing, couldn't cross the process boundary
+      # even if something did read them.
+      def restore_declarations(declarations)
+        @declarations = declarations
+      end
     end
   end
 end
