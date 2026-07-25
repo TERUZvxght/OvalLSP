@@ -326,4 +326,37 @@ RSpec.describe Rslsp::WorkspaceIndex do
       expect(index.declarations(stale_disk_decl.symbol_id)).to eq([])
     end
   end
+
+  describe "#declarations_for_uri (Task 013 review fix)" do
+    it "returns every Declaration currently indexed for a uri, regardless of which source populated it" do
+      decl = declaration(kind: :instance_method, owner: "::Widget", name: "build")
+      index.replace_file(summary(uri: "file:///a.rb", declarations: [decl], source: :disk))
+
+      expect(index.declarations_for_uri("file:///a.rb")).to eq([decl])
+    end
+
+    it "returns [] for a uri nothing has ever indexed" do
+      expect(index.declarations_for_uri("file:///never.rb")).to eq([])
+    end
+
+    it "returns [] after the uri's contribution has been removed" do
+      decl = declaration(kind: :instance_method, owner: "::Widget", name: "build")
+      index.replace_file(summary(uri: "file:///a.rb", declarations: [decl]))
+      index.remove_file("file:///a.rb")
+
+      expect(index.declarations_for_uri("file:///a.rb")).to eq([])
+    end
+
+    it "reflects the previous version's declarations when called before a #replace_file that supersedes them" do
+      old_decl = declaration(kind: :instance_method, owner: "::Widget", name: "old_name")
+      index.replace_file(summary(uri: "file:///a.rb", declarations: [old_decl], content_hash: "v1"))
+
+      before_replace = index.declarations_for_uri("file:///a.rb")
+      new_decl = declaration(kind: :instance_method, owner: "::Widget", name: "new_name")
+      index.replace_file(summary(uri: "file:///a.rb", declarations: [new_decl], content_hash: "v2"))
+
+      expect(before_replace).to eq([old_decl]) # captured before the replace, not mutated by it
+      expect(index.declarations_for_uri("file:///a.rb")).to eq([new_decl])
+    end
+  end
 end

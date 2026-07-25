@@ -77,8 +77,6 @@ module Rslsp
       @agent_manager = nil
       @agent_restart_mutex = Mutex.new
       @file_summaries = {}
-      @method_symbol_ids_by_uri = {}
-      @method_tracking_mutex = Mutex.new
       @shutdown_received = false
       @signatures = load_signatures_environment
       @query_service = Semantic::QueryService.new(
@@ -208,9 +206,10 @@ module Rslsp
       # #reindex_from_disk's own replace_file call, or that call would see
       # a still-buffer-sourced existing entry and be silently rejected as
       # stale (docs/design/tasks/008.6-agent-and-index-hardening.md).
+      previous_declarations = @workspace_index.declarations_for_uri(uri)
       @workspace_index.remove_file(uri)
       @hierarchy_index.remove_file(uri)
-      untrack_methods(uri)
+      invalidate_method_summaries(previous_declarations)
 
       path = UriUtil.to_path(uri)
       reindex_from_disk(uri) if path && File.file?(path)
@@ -219,9 +218,10 @@ module Rslsp
     def reindex(document)
       summary = @parser_service.summarize(document)
       @file_summaries[document.uri] = summary
+      previous_declarations = @workspace_index.declarations_for_uri(document.uri)
       if @workspace_index.replace_file(summary)
         @hierarchy_index.replace_file(summary)
-        track_methods(document.uri, summary)
+        invalidate_method_summaries(previous_declarations)
       end
     rescue StandardError => e
       # Parsing must never take the server down: keep the previous summary
@@ -235,28 +235,31 @@ module Rslsp
     # every method a uri declared *before* this replace must be
     # invalidated (and, transitively, everything that depended on it),
     # or an edited method body would keep returning its stale cached
-    # return type indefinitely. Deliberately invalidates on every replace
+    # return type indefinitely.
+    #
+    # `previous_declarations` always comes from
+    # WorkspaceIndex#declarations_for_uri, called by the caller *before*
+    # its own #replace_file/#remove_file for the same uri — WorkspaceIndex
+    # is the single write path every source (didOpen/didChange, disk
+    # re-reads, Cold Index) already funnels through, so this needs no
+    # Server-side bookkeeping of its own to stay in sync. An earlier
+    # version of this fix kept a separate `@method_symbol_ids_by_uri`
+    # shadow hash that only #reindex/#reindex_from_disk updated — Cold
+    # Index populated WorkspaceIndex directly without touching it, so a
+    # file only ever cold-indexed (never opened) whose *first* Server-side
+    # touch was an external disk edit invalidated nothing, leaving a
+    # stale cached return type for any method already summarized through
+    # some other open file's call chain (found by an independent review;
+    # deriving "previous" from WorkspaceIndex itself instead closes this
+    # for every caller, present and future, rather than patching Cold
+    # Index specifically). Deliberately invalidates on every replace
     # rather than diffing old/new declarations for real changes: matching
     # HierarchyIndex's own "always a full swap" policy, correctness over
     # cache-hit-rate here.
-    def track_methods(uri, summary)
-      symbol_ids = method_symbol_ids_in(summary)
-      previous = @method_tracking_mutex.synchronize do
-        prior = @method_symbol_ids_by_uri[uri]
-        @method_symbol_ids_by_uri[uri] = symbol_ids
-        prior
-      end
-      @method_summary_store.invalidate(previous) if previous && !previous.empty?
-    end
-
-    def untrack_methods(uri)
-      previous = @method_tracking_mutex.synchronize { @method_symbol_ids_by_uri.delete(uri) }
-      @method_summary_store.invalidate(previous) if previous && !previous.empty?
-    end
-
-    def method_symbol_ids_in(summary)
-      summary.declarations.select { |d| %i[instance_method singleton_method].include?(d.symbol_id.kind) }
-             .map(&:symbol_id)
+    def invalidate_method_summaries(declarations)
+      symbol_ids = declarations.select { |d| %i[instance_method singleton_method].include?(d.symbol_id.kind) }
+                               .map(&:symbol_id)
+      @method_summary_store.invalidate(symbol_ids) unless symbol_ids.empty?
     end
 
     # Cold Index (docs/design/tasks/008.5-runtime-and-index-corrections.md):
@@ -722,9 +725,10 @@ module Rslsp
       params.fetch(:changes, []).each do |change|
         uri = change.fetch(:uri)
         if change.fetch(:type) == FILE_CHANGE_DELETED
+          previous_declarations = @workspace_index.declarations_for_uri(uri)
           @workspace_index.remove_file(uri)
           @hierarchy_index.remove_file(uri)
-          untrack_methods(uri)
+          invalidate_method_summaries(previous_declarations)
           @file_summaries.delete(uri)
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
@@ -795,10 +799,11 @@ module Rslsp
       document = TextDocument.new(uri: uri, text: File.read(path, encoding: Encoding::UTF_8), version: nil,
                                    language_id: "ruby")
       summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
+      previous_declarations = @workspace_index.declarations_for_uri(uri)
       if @workspace_index.replace_file(summary)
         @hierarchy_index.replace_file(summary)
         @file_summaries[uri] = summary
-        track_methods(uri, summary)
+        invalidate_method_summaries(previous_declarations)
       end
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")

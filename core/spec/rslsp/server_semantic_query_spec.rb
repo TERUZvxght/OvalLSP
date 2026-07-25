@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "stringio"
+require "tmpdir"
+require "fileutils"
 
 RSpec.describe "Rslsp::Server semantic query integration (Task 013)" do
   let(:output) { StringIO.new }
@@ -125,5 +127,57 @@ RSpec.describe "Rslsp::Server semantic query integration (Task 013)" do
 
     expect(before_type).to eq("Integer")
     expect(after_type).to eq("String")
+  end
+
+  # A follow-up review of the Finding-1 fix (MethodAnalyzer wiring) found
+  # its cache invalidation only covered files that Server itself had
+  # already reindexed at least once (didOpen/didChange/disk re-read) --
+  # a file that was only ever Cold-Indexed (never opened, so its *first*
+  # Server-side touch is an external disk edit) could get a method
+  # summary cached against it (from some other open file's call chain)
+  # and then never see that summary invalidated when the file changed on
+  # disk, because the invalidation trigger lived in a Server-side shadow
+  # hash Cold Index never wrote to. The fix derives "previous
+  # declarations" from WorkspaceIndex itself (the one place every
+  # populate path -- including Cold Index -- already writes through)
+  # instead of a separately-maintained cache.
+  it "invalidates a cached method summary for a file that was only ever cold-indexed, once it changes on disk" do
+    Dir.mktmpdir do |root|
+      b_path = File.join(root, "b.rb")
+      File.write(b_path, "class B\n  def foo\n    1\n  end\nend\n")
+      b_uri = Rslsp::UriUtil.from_path(b_path)
+
+      server = Rslsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: root)
+
+      # Cold Index runs on a background thread and is the *only* thing
+      # that has ever indexed b.rb at this point -- it never goes through
+      # #reindex/#reindex_from_disk.
+      server.send(:start_cold_index)
+      b_symbol = Rslsp::Index::SymbolId.new(kind: :class, owner: nil, name: "::B", discriminator: nil)
+      indexed = wait_until { !server.instance_variable_get(:@workspace_index).declarations(b_symbol).empty? }
+      raise "cold index never picked up b.rb" unless indexed
+
+      a_uri = "file:///a.rb"
+      server.instance_variable_get(:@document_store).open(uri: a_uri, text: "B.new.foo\n", version: 1, language_id: "ruby")
+
+      before = server.send(:explain_type_result, { textDocument: { uri: a_uri }, position: { line: 0, character: 7 } })
+      expect(before).to eq(type: "Integer") # cached MethodAnalyzer summary for B#foo now exists
+
+      File.write(b_path, "class B\n  def foo\n    \"str\"\n  end\nend\n")
+      server.send(:handle_did_change_watched_files, { changes: [{ uri: b_uri, type: 2 }] }) # 2 = Changed
+
+      after = server.send(:explain_type_result, { textDocument: { uri: a_uri }, position: { line: 0, character: 7 } })
+      expect(after).to eq(type: "String")
+    end
+  end
+
+  def wait_until(timeout: 3)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+    loop do
+      return true if yield
+      return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      sleep 0.02
+    end
   end
 end

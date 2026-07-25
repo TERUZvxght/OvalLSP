@@ -119,6 +119,24 @@ module Rslsp
       @mutex.synchronize { @by_symbol.fetch(symbol_id, []).dup }
     end
 
+    # Every Declaration currently indexed for `uri` (regardless of which
+    # caller last populated it — #replace_file is the single write path
+    # every source funnels through: didOpen/didChange, disk re-reads, and
+    # Cold Index all end up in the same `@summaries[uri]`), or [] if
+    # nothing is indexed for it. A caller that needs "what did this uri
+    # declare *before* the replace I'm about to make" (Task 013's
+    # MethodSummaryStore invalidation, so an edited method's stale cached
+    # return type doesn't survive an edit) must call this *before*
+    # #replace_file for the same uri — this deliberately doesn't track
+    # that pairing itself, so there is nothing for a new caller to forget
+    # to wire in the way a separate caller-maintained "previous
+    # declarations" cache could be (docs/design/tasks/013-unified-semantic-query-and-lsp-integration.md
+    # review: a Server-side shadow hash for this left Cold Index's
+    # first-ever index of a file unable to seed invalidation for it).
+    def declarations_for_uri(uri)
+      @mutex.synchronize { @summaries[uri]&.declarations&.dup || [] }
+    end
+
     # Lexical (name-only) lookup across class/module/constant declarations,
     # independent of any particular SymbolId#owner. This is the "名前ヒュー
     # リスティック" fallback from docs/03-semantic-engine.md section 6 — the
