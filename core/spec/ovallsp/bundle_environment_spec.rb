@@ -33,6 +33,12 @@ RSpec.describe Ovallsp::BundleEnvironment do
       # spec/integration/real_rails_spec.rb regression was found the hard
       # way from treating this as a mere flag.
       "BUNDLER_SETUP" => "/repo/core/.bundle/bundler/setup",
+      "BUNDLER_VERSION" => "2.7.2",
+      # Bundler's own pre-`bundle exec` snapshot (see
+      # BUNDLER_PREFIXED_KEYS' docs for why these are deliberately
+      # inherited rather than nil'd).
+      "BUNDLER_ORIG_PATH" => "/usr/bin:/bin",
+      "BUNDLER_ORIG_GEM_HOME" => "BUNDLER_ENVIRONMENT_PRESERVER_INTENTIONALLY_NIL",
       "GEM_HOME" => "/tmp/core-only-bundle/ruby/3.4.0",
       "GEM_PATH" => "",
       "RUBYOPT" => "-r/repo/core/.bundle/bundler/setup",
@@ -126,6 +132,52 @@ RSpec.describe Ovallsp::BundleEnvironment do
 
     expect(env["BUNDLER_SETUP"]).to be_nil
     expect(env.key?("BUNDLER_SETUP")).to be(true)
+  end
+
+  # Found by an independent review (round 3): `BUNDLER_VERSION` is set by
+  # `bundle exec` (bundler/shared_helpers.rb's `set_env "BUNDLER_VERSION",
+  # Bundler::VERSION`) and matches neither the `BUNDLE_`-prefix check nor
+  # the then-only `BUNDLER_SETUP` special case, so Core's own Bundler
+  # version leaked straight into the Agent. That silently disables
+  # Bundler's own self-manager auto-switching in the child
+  # (`SelfManager#autoswitching_applies?` requires
+  # `ENV["BUNDLER_VERSION"].nil?`), so a workspace whose Gemfile.lock says
+  # `BUNDLED WITH <other version>` would have its bundle resolved under
+  # Core's Bundler instead of its own.
+  it "unsets BUNDLER_VERSION" do
+    env = described_class.base(env: polluted_env)
+
+    expect(env["BUNDLER_VERSION"]).to be_nil
+    expect(env.key?("BUNDLER_VERSION")).to be(true)
+  end
+
+  # The architectural half of the BUNDLER_VERSION fix (per this project's
+  # "fix the class of bug, not the reported instance" discipline): rather
+  # than special-casing `BUNDLER_`-spelled variables one at a time as each
+  # leak is discovered the hard way, pin Core's own list against Bundler's
+  # authoritative one. A future Bundler that introduces another
+  # `BUNDLER_`-spelled variable fails here, loudly, instead of silently
+  # reintroducing the same leak.
+  it "covers every BUNDLER_-spelled variable Bundler itself claims ownership of" do
+    require "bundler/environment_preserver"
+    bundler_owned = Bundler::EnvironmentPreserver::BUNDLER_KEYS.select { |key| key.start_with?("BUNDLER_") }
+
+    expect(bundler_owned).not_to be_empty # guard: the constant still means what we think
+    expect(described_class::BUNDLER_PREFIXED_KEYS).to include(*bundler_owned)
+  end
+
+  # The deliberate non-fix, pinned so it can't be "tidied up" into a
+  # regression: Bundler's `BUNDLER_ORIG_*` snapshot of the pre-Bundler
+  # environment must be inherited, NOT nil'd -- the child's own Bundler
+  # only re-snapshots keys that aren't already set, so nil'ing these makes
+  # the Agent record Core's *already-modified* PATH/RUBYLIB as the
+  # pristine original, breaking any `Bundler.with_unbundled_env` the Rails
+  # app itself uses to shell out (see BUNDLER_PREFIXED_KEYS' own docs).
+  it "leaves Bundler's BUNDLER_ORIG_* pre-bundle-exec snapshot inherited, not nil'd" do
+    env = described_class.base(env: polluted_env)
+
+    expect(env.key?("BUNDLER_ORIG_PATH")).to be(false)
+    expect(env.key?("BUNDLER_ORIG_GEM_HOME")).to be(false)
   end
 
   # Regression (chruby/RVM): GEM_HOME/GEM_PATH must be left alone -- not

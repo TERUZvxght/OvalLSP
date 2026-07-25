@@ -44,15 +44,73 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
     Ovallsp::BundleEnvironment.for_workspace(FIXTURE_ROOT)
   end
 
-  def self.real_rails_available?
-    return @available if defined?(@available)
+  # Whether rails/sqlite3 are installed on this *machine* at all --
+  # answered WITHOUT going through BundleEnvironment, deliberately.
+  #
+  # Found by an independent review (round 3): #real_rails_available? below
+  # gates this entire suite on `bundle lock/install --local` succeeding
+  # *through BundleEnvironment* -- i.e. its precondition is the very code
+  # under test. A regression in BundleEnvironment.base therefore made the
+  # whole real-Rails suite report itself "unavailable" and silently SKIP
+  # (0 failures, everything pending) under exactly the isolated-BUNDLE_PATH
+  # invocation this Task 022.2 fix exists to make work -- turning a real
+  # regression into a green run, the same "silently provides no coverage"
+  # shape round 1 already caught for a different mechanism. Verified by
+  # neutering `BundleEnvironment.base` to return `{}`: under a plain
+  # `bundle exec rspec` the suite still failed loudly, but under
+  # `BUNDLE_PATH=<tmp> bundle exec rspec` all 15 examples went pending.
+  #
+  # The pre-Bundler environment is reconstructed from Bundler's own
+  # `BUNDLER_ORIG_*` snapshot (present whenever this suite runs under
+  # `bundle exec`, which is always) rather than from BundleEnvironment's
+  # heuristics, so this probe is genuinely independent of the module it
+  # guards. Restoring GEM_HOME/GEM_PATH from that snapshot rather than
+  # blindly nil'ing them also keeps the probe correct on chruby/RVM, whose
+  # own GEM_HOME is not bundle-exec-derived (the round-1 finding).
+  def self.machine_has_real_rails_gems?
+    return @machine_gems if defined?(@machine_gems)
 
-    Dir.chdir(FIXTURE_ROOT) do
-      env = fixture_bundle_env
-      locked = system(env, "bundle", "lock", "--local", out: File::NULL, err: File::NULL)
-      installed = locked && system(env, "bundle", "install", "--local", out: File::NULL, err: File::NULL)
-      @available = installed
+    intentionally_nil = "BUNDLER_ENVIRONMENT_PRESERVER_INTENTIONALLY_NIL"
+    env = {}
+    ENV.each_key do |key|
+      env[key] = nil if key.start_with?("BUNDLE_", "BUNDLER_") || %w[RUBYOPT RUBYLIB].include?(key)
     end
+    %w[GEM_HOME GEM_PATH PATH].each do |key|
+      original = ENV["BUNDLER_ORIG_#{key}"]
+      env[key] = original == intentionally_nil ? nil : original if original
+    end
+
+    probe = 'exit(%w[rails sqlite3].all? { |g| !Gem::Specification.find_all_by_name(g).empty? } ? 0 : 1)'
+    @machine_gems = system(env, RbConfig.ruby, "-e", probe, out: File::NULL, err: File::NULL)
+  end
+
+  def self.real_rails_available?
+    unless defined?(@available)
+      @available = Dir.chdir(FIXTURE_ROOT) do
+        env = fixture_bundle_env
+        locked = system(env, "bundle", "lock", "--local", out: File::NULL, err: File::NULL)
+        locked && system(env, "bundle", "install", "--local", out: File::NULL, err: File::NULL)
+      end
+      # The machine genuinely has the gems, yet resolving them through
+      # BundleEnvironment's spawn env failed -- that is a BundleEnvironment
+      # (Task 022.2) regression, not an unavailable-fixture situation.
+      # Memoized as an error (rather than raised inline) so it is re-raised
+      # for *every* example rather than only whichever one happened to run
+      # first under `--order random`.
+      @availability_error =
+        if @available || !machine_has_real_rails_gems?
+          nil
+        else
+          "rails/sqlite3 ARE installed on this machine, but `bundle lock/install --local` failed for " \
+          "#{FIXTURE_ROOT} under BundleEnvironment.for_workspace's env -- Core's own Bundler context is " \
+          "leaking into the fixture's separate Bundle graph (Task 022.2 regression). Reproduce with: " \
+          "BUNDLE_PATH=$(mktemp -d) bundle exec rspec #{__FILE__}"
+        end
+    end
+
+    raise @availability_error if @availability_error
+
+    @available
   end
 
   before do

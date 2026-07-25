@@ -58,6 +58,51 @@ module Ovallsp
   # (no `Bundler.with_unbundled_env`, no `ENV[...] =`) that could race
   # another thread reading ENV during the same window.
   module BundleEnvironment
+    # The Bundler-owned keys that do NOT match the `BUNDLE_`-prefix check
+    # below, because they're spelled `BUNDLER_` (position 6 is "R", not
+    # "_"). Bundler's own
+    # `Bundler::EnvironmentPreserver::BUNDLER_KEYS` is the authoritative
+    # list of every variable `bundle exec` takes ownership of, and
+    # spec/ovallsp/bundle_environment_spec.rb pins this constant against
+    # it, so a future Bundler introducing another `BUNDLER_`-spelled
+    # variable fails Core's own suite loudly instead of silently
+    # reintroducing this leak one variable at a time (found by an
+    # independent review, round 3: `BUNDLER_SETUP` had been special-cased
+    # individually and `BUNDLER_VERSION` -- set by `bundle exec` at
+    # bundler/shared_helpers.rb's `set_env "BUNDLER_VERSION"` -- was
+    # simply missed).
+    #
+    # `BUNDLER_VERSION` leaking is not cosmetic: Bundler's own
+    # self-manager treats a set `BUNDLER_VERSION` as "an explicit version
+    # was requested, don't auto-switch"
+    # (`SelfManager#autoswitching_applies?` is literally
+    # `ENV["BUNDLER_VERSION"].nil? && ...`). With Core's own version
+    # leaked in, the Agent's `bundle exec` silently loses the
+    # auto-restart-under-the-version-your-Gemfile.lock-names behaviour, so
+    # a workspace whose `Gemfile.lock` says `BUNDLED WITH 2.5.11` gets its
+    # bundle resolved by whatever Bundler *Core* happens to run under
+    # instead -- the exact "the Agent must run in the target workspace's
+    # own Bundler context, never Core's" invariant this module exists to
+    # enforce.
+    BUNDLER_PREFIXED_KEYS = %w[BUNDLER_SETUP BUNDLER_VERSION].freeze
+
+    # Bundler's `BUNDLER_ORIG_*` bookkeeping (`BUNDLER_ORIG_PATH`,
+    # `BUNDLER_ORIG_GEM_HOME`, ...) is deliberately NOT nil'd, and that is
+    # a considered decision rather than an oversight (documented here
+    # because the naive "it's Bundler-owned, unset it" reflex actively
+    # makes things worse). Those keys are Bundler's snapshot of what the
+    # environment looked like *before* any `bundle exec` ran, and the
+    # child's own Bundler only records a fresh snapshot for keys not
+    # already present (`env[prefix + key] ||= ...` in
+    # Bundler::EnvironmentPreserver#backup). Nil'ing them makes the Agent
+    # snapshot Core's *already-modified* PATH/RUBYLIB as if it were the
+    # pristine original, so any `Bundler.with_unbundled_env` /
+    # `Bundler.original_env` inside the Rails app (a very common way for
+    # apps to shell out) would restore Core's bundle-exec PATH rather than
+    # the real pre-Bundler one. Inheriting Core's snapshot is strictly
+    # closer to correct: Core and the workspace run on the same machine,
+    # so "the environment before Bundler touched anything" is the same
+    # environment for both.
     module_function
 
     # Every ENV key, in `env`, that Bundler or RubyGems could plausibly
@@ -71,7 +116,8 @@ module Ovallsp
     # shell -- exported BUNDLE_PATH before Core's own `bundle exec` even
     # ran).
     def bundler_owned_keys(env: ENV)
-      env.keys.select { |key| key.start_with?("BUNDLE_") || key == "BUNDLER_SETUP" } + gem_home_path_keys(env)
+      env.keys.select { |key| key.start_with?("BUNDLE_") || BUNDLER_PREFIXED_KEYS.include?(key) } +
+        gem_home_path_keys(env)
     end
 
     # GEM_HOME/GEM_PATH are nil'd only when they actually *look*
