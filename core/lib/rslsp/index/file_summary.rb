@@ -36,11 +36,19 @@ module Rslsp
     #   kept as a separate field (not folded into `declarations`) because
     #   they describe *relationships between* types, not a type's own
     #   declaration site.
+    # - reference_candidates (Task 014): raw, unresolved reference sites
+    #   (constant reads, local/instance/class variable reads and writes,
+    #   method calls) found in this file — Semantic::ReferenceResolver
+    #   turns these into confirmed Index::Reference values once every
+    #   file's declarations are known. Kept separate from `declarations`
+    #   the same way ancestor_facts is: a reference candidate describes a
+    #   *usage* site, not a thing being declared.
     FileSummary = Data.define(:uri, :content_hash, :document_version, :declarations, :diagnostics, :source,
-                               :read_sequence, :ancestor_facts, :alias_facts) do
-      def initialize(source: :buffer, read_sequence: 0, ancestor_facts: [], alias_facts: [], **rest)
+                               :read_sequence, :ancestor_facts, :alias_facts, :reference_candidates) do
+      def initialize(source: :buffer, read_sequence: 0, ancestor_facts: [], alias_facts: [], reference_candidates: [],
+                      **rest)
         super(source: source, read_sequence: read_sequence, ancestor_facts: ancestor_facts, alias_facts: alias_facts,
-              **rest)
+              reference_candidates: reference_candidates, **rest)
       end
     end
   end

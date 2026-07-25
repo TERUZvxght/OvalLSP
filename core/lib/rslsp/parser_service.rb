@@ -8,6 +8,7 @@ require_relative "index/parameter"
 require_relative "index/declaration"
 require_relative "index/ancestor_fact"
 require_relative "index/alias_fact"
+require_relative "index/reference_candidate"
 require_relative "index/file_summary"
 require_relative "index/source_location"
 require_relative "erb/ruby_region_extractor"
@@ -54,7 +55,8 @@ module Rslsp
         declarations: visitor.declarations,
         diagnostics: result.errors.map { |error| to_diagnostic(error, lines) },
         ancestor_facts: visitor.ancestor_facts,
-        alias_facts: visitor.alias_facts
+        alias_facts: visitor.alias_facts,
+        reference_candidates: visitor.reference_candidates
       )
     end
 
@@ -86,7 +88,7 @@ module Rslsp
       # lexical-body form.
       ANCESTOR_RELATIONS = { include: :include, prepend: :prepend, extend: :extend }.freeze
 
-      attr_reader :declarations, :ancestor_facts, :alias_facts
+      attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates
 
       def initialize(lines)
         super()
@@ -94,9 +96,19 @@ module Rslsp
         @declarations = []
         @ancestor_facts = []
         @alias_facts = []
+        @reference_candidates = []
         @owner_stack = []
         @singleton_context_stack = [false]
         @visibility_stack = [:public]
+        # Task 014: a fresh local-variable scope id per class/module body,
+        # `def`, `class << self`, and block — matching real Ruby's own
+        # local-scoping boundaries (verified live: `class << self` does
+        # NOT see an enclosing class body's locals, the same as a `def`
+        # wouldn't). #next_scope_id is only ever called while entering one
+        # of those, so two same-named locals in different scopes never
+        # share a scope id.
+        @scope_counter = 0
+        @scope_stack = [next_scope_id]
       end
 
       def visit_module_node(node)
@@ -109,9 +121,11 @@ module Rslsp
 
       def visit_singleton_class_node(node)
         @singleton_context_stack.push(true)
+        @scope_stack.push(next_scope_id)
         super
       ensure
         @singleton_context_stack.pop
+        @scope_stack.pop
       end
 
       def visit_def_node(node)
@@ -140,7 +154,10 @@ module Rslsp
           body_source: node.body&.slice
         )
 
+        @scope_stack.push(next_scope_id)
         super
+      ensure
+        @scope_stack.pop
       end
 
       def visit_call_node(node)
@@ -149,6 +166,55 @@ module Rslsp
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
         end
+        record_method_call_candidate(node)
+        super
+      end
+
+      def visit_block_node(node)
+        @scope_stack.push(next_scope_id)
+        super
+      ensure
+        @scope_stack.pop
+      end
+
+      def visit_constant_read_node(node)
+        record_reference(:constant, node.name.to_s, node.location)
+        super
+      end
+
+      def visit_constant_path_node(node)
+        target = raw_constant_name(node)
+        record_reference(:constant, target, node.location) if target
+        super
+      end
+
+      def visit_local_variable_read_node(node)
+        record_reference(:local_variable, node.name.to_s, node.location, scope_id: current_scope_id)
+        super
+      end
+
+      def visit_local_variable_write_node(node)
+        record_reference(:local_variable, node.name.to_s, node.name_loc, scope_id: current_scope_id)
+        super
+      end
+
+      def visit_instance_variable_read_node(node)
+        record_reference(:ivar, node.name.to_s, node.location)
+        super
+      end
+
+      def visit_instance_variable_write_node(node)
+        record_reference(:ivar, node.name.to_s, node.name_loc)
+        super
+      end
+
+      def visit_class_variable_read_node(node)
+        record_reference(:cvar, node.name.to_s, node.location)
+        super
+      end
+
+      def visit_class_variable_write_node(node)
+        record_reference(:cvar, node.name.to_s, node.name_loc)
         super
       end
 
@@ -205,11 +271,13 @@ module Rslsp
         @owner_stack.push(absolute_name)
         @singleton_context_stack.push(false)
         @visibility_stack.push(:public)
+        @scope_stack.push(next_scope_id)
         node.each_child_node { |child| child.accept(self) }
       ensure
         @owner_stack.pop
         @singleton_context_stack.pop
         @visibility_stack.pop
+        @scope_stack.pop
       end
 
       def qualify(local_path)
@@ -292,6 +360,49 @@ module Rslsp
 
       def current_owner
         @owner_stack.last
+      end
+
+      def next_scope_id
+        @scope_counter += 1
+      end
+
+      def current_scope_id
+        @scope_stack.last
+      end
+
+      def record_reference(kind, name, location, scope_id: nil)
+        @reference_candidates << Index::ReferenceCandidate.new(
+          kind: kind, name: name, location: Index::SourceLocation.to_range(location, @lines), scope_id: scope_id,
+          owner: current_owner, singleton: @singleton_context_stack.last, receiver: nil
+        )
+      end
+
+      # `node.receiver`'s three shapes: nil (implicit self -- `foo`), a
+      # literal constant (`Foo.bar` -- statically known, no type inference
+      # needed), or an arbitrary expression (`user.name` -- needs its own
+      # type resolved later, so this records *where* to query it rather
+      # than a name). `node.name` ending in `=` (an attribute-write call,
+      # `user.name = x`) is included the same as any other call; whether
+      # that's a meaningful "reference" for Find References is a call-site
+      # policy decision, not something worth filtering out here.
+      def record_method_call_candidate(node)
+        return unless node.message_loc
+
+        receiver, singleton =
+          if node.receiver.nil?
+            [nil, @singleton_context_stack.last]
+          elsif (name = raw_constant_name(node.receiver))
+            [name, true] # `Foo.bar` -- always a class-level call, regardless of the lexical writing context
+          else
+            position = Index::SourceLocation.to_position(node.receiver.location.end_line,
+                                                           node.receiver.location.end_column, @lines)
+            [{ position: position }, false] # arbitrary expression receiver -- always an instance call
+          end
+
+        @reference_candidates << Index::ReferenceCandidate.new(
+          kind: :method_call, name: node.name.to_s, location: Index::SourceLocation.to_range(node.message_loc, @lines),
+          scope_id: nil, owner: current_owner, singleton: singleton, receiver: receiver
+        )
       end
 
       def constant_full_name(node)

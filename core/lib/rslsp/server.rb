@@ -20,6 +20,8 @@ require_relative "semantic/method_summary_store"
 require_relative "semantic/method_analyzer"
 require_relative "semantic/query_context"
 require_relative "semantic/query_service"
+require_relative "semantic/reference_index"
+require_relative "semantic/reference_resolver"
 require_relative "signatures/environment"
 
 module Rslsp
@@ -83,6 +85,11 @@ module Rslsp
         local_inferencer: @local_inferencer, method_resolver: @method_resolver, model_registry: @model_registry,
         signatures: @signatures, workspace_index: @workspace_index
       )
+      @reference_index = Semantic::ReferenceIndex.new
+      @reference_resolver = Semantic::ReferenceResolver.new(
+        workspace_index: @workspace_index, method_resolver: @method_resolver, local_inferencer: @local_inferencer,
+        model_registry: @model_registry, route_registry: @route_registry
+      )
     end
 
     # Runs the read/dispatch loop until `exit` is received or the input
@@ -142,6 +149,8 @@ module Rslsp
         respond(id, completion_result(message[:params]))
       when "textDocument/signatureHelp"
         respond(id, signature_help_result(message[:params]))
+      when "textDocument/references"
+        respond(id, references_result(message[:params]))
       else
         handle_unknown_method(method, id)
       end
@@ -209,6 +218,7 @@ module Rslsp
       previous_declarations = @workspace_index.declarations_for_uri(uri)
       @workspace_index.remove_file(uri)
       @hierarchy_index.remove_file(uri)
+      @reference_index.remove_file(uri)
       invalidate_method_summaries(previous_declarations)
 
       path = UriUtil.to_path(uri)
@@ -222,11 +232,27 @@ module Rslsp
       if @workspace_index.replace_file(summary)
         @hierarchy_index.replace_file(summary)
         invalidate_method_summaries(previous_declarations)
+        index_references(document.uri, document, summary)
       end
     rescue StandardError => e
       # Parsing must never take the server down: keep the previous summary
       # (if any) and let static features degrade gracefully for this file.
       @logger.error("failed to summarize #{document.uri}: #{e.class}: #{e.message}")
+    end
+
+    # Task 014: resolves this file's raw reference candidates (Prism-level
+    # constant/local/ivar/cvar/method-call sites -- ParserService already
+    # collected them into `summary.reference_candidates`) against the
+    # *current* whole-workspace state, and replaces this uri's
+    # contribution to ReferenceIndex. Errors degrade the same way
+    # #reindex itself does: Find References for this file just stays
+    # stale/empty rather than taking the server down.
+    def index_references(uri, document, summary)
+      references = @reference_resolver.resolve(document, summary.reference_candidates, uri: uri,
+                                                          generation: @reference_index.generation)
+      @reference_index.replace_file(uri: uri, references: references)
+    rescue StandardError => e
+      @logger.error("failed to resolve references for #{uri}: #{e.class}: #{e.message}")
     end
 
     # MethodSummaryStore's cache (Task 010, wired into resolution by Task
@@ -542,6 +568,63 @@ module Rslsp
       locations
     end
 
+    # Task 014: finds the reference candidate ParserService already
+    # recorded at `position` (the same candidate list #index_references
+    # resolved into ReferenceIndex), resolves *that one* candidate again
+    # to learn its SymbolId, then returns every location ReferenceIndex
+    # has for that SymbolId. Resolving just the one clicked-on candidate
+    # rather than looking up a pre-built "SymbolId at position" table
+    # keeps this consistent with Hover/Definition/Completion's own "same
+    # expression, same resolution path" property from Task 013 -- it's
+    # the exact same #resolve a background reindex would have run.
+    def references_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = @document_store.fetch(uri: uri)
+      summary = @file_summaries[uri]
+      return [] unless document && summary
+
+      position = params.fetch(:position)
+      symbol_id = reference_symbol_id_at(document, summary, uri, position) || declaration_symbol_id_at(summary, position)
+      return [] unless symbol_id
+
+      @reference_index.references(symbol_id, minimum_confidence: :high).map { |r| { uri: r.uri, range: r.location } }
+    end
+
+    def reference_symbol_id_at(document, summary, uri, position)
+      candidate = summary.reference_candidates.find { |c| position_within?(c.location, position) }
+      return nil unless candidate
+
+      @reference_resolver.resolve(document, [candidate], uri: uri, generation: @reference_index.generation).first&.symbol_id
+    end
+
+    # A click on the declaration site itself (`def build`, `class Widget`)
+    # has no ReferenceCandidate of its own -- ParserService only records
+    # *usage* sites -- so Find References triggered from a declaration
+    # falls back to WorkspaceIndex's own per-file declarations instead.
+    # Picks the *smallest* enclosing declaration among matches (not just
+    # the first): a class's own range spans its entire body, so clicking
+    # on a nested `def build`'s line would otherwise resolve to the
+    # class itself, since `declarations` lists the class before its
+    # methods.
+    def declaration_symbol_id_at(summary, position)
+      candidates = summary.declarations.select { |d| position_within?(d.location, position) }
+      candidates.min_by { |d| range_span(d.location) }&.symbol_id
+    end
+
+    def range_span(range)
+      [range[:end][:line] - range[:start][:line], range[:end][:character] - range[:start][:character]]
+    end
+
+    def position_within?(range, position)
+      start = range[:start]
+      finish = range[:end]
+      return false if position[:line] < start[:line] || position[:line] > finish[:line]
+      return false if position[:line] == start[:line] && position[:character] < start[:character]
+      return false if position[:line] == finish[:line] && position[:character] > finish[:character]
+
+      true
+    end
+
     # LSP CompletionItemKind values used below: Function=3, Method=2,
     # Field=5, Property=10.
     COMPLETION_KIND = { source: 2, model_column: 5, model_association: 10, signature: 2 }.freeze
@@ -728,6 +811,7 @@ module Rslsp
           previous_declarations = @workspace_index.declarations_for_uri(uri)
           @workspace_index.remove_file(uri)
           @hierarchy_index.remove_file(uri)
+          @reference_index.remove_file(uri)
           invalidate_method_summaries(previous_declarations)
           @file_summaries.delete(uri)
         elsif @document_store.fetch(uri: uri).nil?
@@ -804,6 +888,7 @@ module Rslsp
         @hierarchy_index.replace_file(summary)
         @file_summaries[uri] = summary
         invalidate_method_summaries(previous_declarations)
+        index_references(uri, document, summary)
       end
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
@@ -1017,6 +1102,7 @@ module Rslsp
           hoverProvider: true,
           documentSymbolProvider: true,
           definitionProvider: true,
+          referencesProvider: true,
           workspaceSymbolProvider: true,
           completionProvider: { triggerCharacters: ["."] },
           signatureHelpProvider: { triggerCharacters: ["("] }
