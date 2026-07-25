@@ -101,6 +101,7 @@ module Rslsp
       @observation_store = Observation::Store.new
       @observation_runner = Observation::Runner.new(logger: @logger)
       @observation_test_command = nil
+      @cold_indexing = false
     end
 
     # Runs the read/dispatch loop until `exit` is received or the input
@@ -175,6 +176,12 @@ module Rslsp
         respond(id, clear_observed_types_result(message[:params]))
       when "rslsp/showTypeEvidence"
         respond(id, show_type_evidence_result(message[:params]))
+      when "rslsp/status"
+        respond(id, status_result(message[:params]))
+      when "rslsp/restartAgent"
+        respond(id, restart_agent_result(message[:params]))
+      when "rslsp/reindexWorkspace"
+        respond(id, reindex_workspace_result(message[:params]))
       else
         handle_unknown_method(method, id)
       end
@@ -302,6 +309,55 @@ module Rslsp
         range: finding.range, severity: DIAGNOSTIC_SEVERITY.fetch(finding.severity, 2), code: finding.code,
         source: "rslsp", message: finding.message, relatedInformation: finding.related_information
       }
+    end
+
+    # Task 020: `RSLSP: Show Environment Diagnostics`/status bar. Polled by
+    # the client rather than pushed as notifications -- simpler than
+    # threading a push-on-every-transition mechanism through Cold Index's
+    # and the Agent bootstrap's own background threads, and a request the
+    # client can send whenever its own UI needs a fresh read (after
+    # startup, on an interval, or right before showing the status bar
+    # tooltip) is just as useful for "見える化" purposes as a live push
+    # would be. One of: "indexing" (Cold Index still walking the
+    # workspace), "ready-rails" (a live, responding Runtime Agent),
+    # "agent-unavailable" (an Agent bootstrap was attempted -- the
+    # workspace is trusted and looks like a Rails app -- but it's not
+    # currently responding), or "ready-static" (no Agent attempt at all:
+    # untrusted workspace, or not a Rails app).
+    def status_result(_params)
+      state =
+        if @cold_indexing
+          "indexing"
+        elsif @agent_manager&.ready?
+          "ready-rails"
+        elsif @agent_manager
+          "agent-unavailable"
+        else
+          "ready-static"
+        end
+
+      { state: state }
+    end
+
+    # `RSLSP: Restart Rails Agent` -- reuses the exact same
+    # #restart_agent already wired to Gemfile.lock/initializer file-watch
+    # triggers, just invoked on explicit user request instead. Runs on
+    # its own background thread (inside #restart_agent), so this request
+    # itself returns immediately rather than blocking on however long a
+    # full Rails boot takes.
+    def restart_agent_result(_params)
+      restart_agent
+      { acknowledged: true }
+    end
+
+    # `RSLSP: Re-index Workspace` -- re-runs Cold Index exactly as it ran
+    # at startup. Idempotent: ColdIndexer/WorkspaceIndex#replace_file's
+    # own per-uri replace semantics mean re-walking the workspace a
+    # second time simply refreshes every file's declarations in place,
+    # never duplicates them.
+    def reindex_workspace_result(_params)
+      start_cold_index
+      { acknowledged: true }
     end
 
     def diagnostics_semantic_context
@@ -560,11 +616,14 @@ module Rslsp
       document_store = @document_store
       logger = @logger
 
+      @cold_indexing = true
       Thread.new do
         ColdIndexer.new(root: root, parser_service: parser_service, workspace_index: workspace_index,
                         hierarchy_index: hierarchy_index, document_store: document_store, logger: logger).run
       rescue StandardError => e
         logger.error("cold index failed: #{e.class}: #{e.message}")
+      ensure
+        @cold_indexing = false
       end
     end
 

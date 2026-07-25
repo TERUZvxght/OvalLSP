@@ -37,7 +37,15 @@
             "null"
           ],
           "default": null,
-          "description": "Ruby interpreter used to launch the Core Server. Defaults to 'ruby' on PATH."
+          "description": "Deprecated synonym for rslsp.rubyExecutablePath, kept for compatibility. Explicit Ruby interpreter used to launch the Core Server, skipping the mise/asdf/rbenv/chruby/PATH search entirely."
+        },
+        "rslsp.rubyExecutablePath": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "description": "Explicit Ruby interpreter used to launch the Core Server, skipping the mise/asdf/rbenv/chruby/PATH search entirely. When unset, RSLSP searches mise, asdf, rbenv, chruby, PATH, then (on Windows) common RubyInstaller locations -- see 'RSLSP: Show Environment Diagnostics' for what was actually picked and why."
         },
         "rslsp.server.path": {
           "type": [
@@ -72,6 +80,26 @@
       {
         "command": "rslsp.observation.showEvidence",
         "title": "RSLSP: Show Type Evidence"
+      },
+      {
+        "command": "rslsp.restartServer",
+        "title": "RSLSP: Restart Server"
+      },
+      {
+        "command": "rslsp.restartAgent",
+        "title": "RSLSP: Restart Rails Agent"
+      },
+      {
+        "command": "rslsp.showLogs",
+        "title": "RSLSP: Show Logs"
+      },
+      {
+        "command": "rslsp.showEnvironmentDiagnostics",
+        "title": "RSLSP: Show Environment Diagnostics"
+      },
+      {
+        "command": "rslsp.reindexWorkspace",
+        "title": "RSLSP: Re-index Workspace"
       }
     ]
   },
@@ -80,7 +108,9 @@
     "watch": "tsc -p . --watch",
     "test:unit": "npm run compile && mocha out/test/unit/**/*.js",
     "test:integration": "npm run compile && node ./out/test/integration/runTest.js",
-    "test": "npm run test:unit"
+    "test": "npm run test:unit",
+    "copy-core": "node scripts/copy-core.js",
+    "package": "npm run copy-core && npm run compile && vsce package"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
@@ -91,6 +121,7 @@
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
     "@vscode/test-electron": "^2.3.9",
+    "@vscode/vsce": "^2.24.0",
     "glob": "^10.3.10",
     "mocha": "^10.3.0",
     "typescript": "^5.4.0"

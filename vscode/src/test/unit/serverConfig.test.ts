@@ -32,4 +32,25 @@ describe('resolveServerConfig', () => {
 
     assert.deepStrictEqual(result.args, ['/custom/rslsp', '--stdio']);
   });
+
+  it('prefers a Core bundled inside the extension own install directory over the monorepo-relative sibling path', () => {
+    const bundled = path.join(extensionRoot, 'core', 'bin', 'rslsp');
+    const result = resolveServerConfig({ extensionRoot, existsSync: (p) => p === bundled });
+
+    assert.strictEqual(result.args[0], bundled);
+  });
+
+  it('falls back to the monorepo-relative sibling path when nothing is bundled (local F5 development)', () => {
+    const result = resolveServerConfig({ extensionRoot, existsSync: () => false });
+
+    assert.strictEqual(result.args[0], path.join(extensionRoot, '..', 'core', 'bin', 'rslsp'));
+  });
+
+  it('passes a path containing spaces and non-ASCII characters through unescaped -- spawn() takes args as an array, never a shell string', () => {
+    const trickyRoot = '/Users/開発者/My RSLSP Extension';
+    const result = resolveServerConfig({ extensionRoot: trickyRoot, existsSync: () => false });
+
+    assert.strictEqual(result.args[0], path.join(trickyRoot, '..', 'core', 'bin', 'rslsp'));
+    assert.ok(!result.args[0].includes('\\'), 'no manual shell-escaping was applied');
+  });
 });

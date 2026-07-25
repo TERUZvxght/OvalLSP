@@ -37,15 +37,20 @@ an explicit `rslsp/runObservedTests` request) — Core's own LSP-serving
 process never installs a `TracePoint` and pays zero runtime cost for this
 feature unless a user explicitly triggers an observation run.
 
-Within the runner process itself, `Collector#handle`'s per-event cost is
-dominated by one `Method#source_location` call (to filter by workspace
-path and compute the fingerprint) and, for `:call` events, one
-`Binding#local_variable_get` per `:req`/`:opt` parameter — no full
-argument serialization, no full-file re-parsing. `Fingerprint#file_digest`
-caches nothing itself but is only invoked once per `:call` event; a
-production-quality follow-up could memoize it per source file within one
-run to cut redundant digest work when one file's methods are called
-repeatedly, which the current implementation does not yet do.
+Within the runner process itself, `Collector#handle_call` memoizes every
+per-method computation (workspace-eligibility check, `SymbolId`,
+`code_fingerprint`, parameter name list) in `@method_cache`, keyed by
+`[defined_class, method_id]` — all of it is invariant across repeated
+calls to the *same* method within one run, so the (comparatively
+expensive) full-file `SHA256` digest behind `code_fingerprint` only
+actually runs once per distinct method, not once per call. Only the
+per-call argument *values* (via `Binding#local_variable_get`, one per
+`:req`/`:opt` parameter) are read fresh every time, since those
+necessarily differ call to call. This caching was added after this
+module's own overhead benchmark
+(`spec/rslsp/observation/overhead_spec.rb`) caught the pre-caching
+version taking ~32s for 3,000 calls to one method; with it, the same
+benchmark runs in well under a second.
 
 Server-side (`invalidate_stale_observations`), the added per-`#reindex`
 cost is exactly zero whenever the observation store is empty (the default

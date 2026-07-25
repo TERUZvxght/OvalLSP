@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import {
   LanguageClient,
@@ -5,9 +6,37 @@ import {
   ServerOptions
 } from 'vscode-languageclient/node';
 import { resolveServerConfig } from './serverConfig';
+import { resolveRuby, RubyResolution } from './rubyResolver';
 
 const clients = new Map<string, LanguageClient>();
 const watchers = new Map<string, vscode.FileSystemWatcher>();
+// The Ruby resolution actually used to launch each folder's client — kept
+// around purely so `RSLSP: Show Environment Diagnostics` can show *why*
+// that Ruby was picked without re-running the search (020's "Ruby
+// executable選択理由を診断画面で確認できる").
+const rubyResolutions = new Map<string, RubyResolution>();
+
+// Task 020's priority order: an explicit path setting always wins outright
+// (never even runs the version-manager search); everything below that is
+// `rubyResolver.resolveRuby`'s job. `rslsp.rubyExecutablePath` is this
+// task's own setting name; `rslsp.ruby.command` (pre-existing) is kept
+// working as a synonym at the same priority, for anyone already using it.
+function resolveRubyForFolder(folder: vscode.WorkspaceFolder): { command: string; resolution: RubyResolution | null } {
+  const config = vscode.workspace.getConfiguration('rslsp', folder);
+  const explicit = config.get<string | null>('rubyExecutablePath') ?? config.get<string | null>('ruby.command');
+  if (explicit && explicit.trim().length > 0) {
+    return { command: explicit, resolution: null };
+  }
+
+  const resolution = resolveRuby({
+    platform: process.platform,
+    home: process.env.HOME ?? process.env.USERPROFILE,
+    pathEnv: process.env.PATH,
+    workspaceRoot: folder.uri.fsPath,
+    existsSync: fs.existsSync
+  });
+  return { command: resolution.executable, resolution };
+}
 
 function startClientForFolder(
   folder: vscode.WorkspaceFolder,
@@ -15,8 +44,15 @@ function startClientForFolder(
   context: vscode.ExtensionContext
 ): LanguageClient {
   const config = vscode.workspace.getConfiguration('rslsp', folder);
+  const { command: resolvedRubyCommand, resolution } = resolveRubyForFolder(folder);
+  if (resolution) {
+    rubyResolutions.set(folder.uri.toString(), resolution);
+  } else {
+    rubyResolutions.delete(folder.uri.toString());
+  }
+
   const { command, args } = resolveServerConfig({
-    rubyCommand: config.get<string | null>('ruby.command'),
+    rubyCommand: resolvedRubyCommand,
     serverPath: config.get<string | null>('server.path'),
     extensionRoot: context.extensionPath
   });
@@ -156,6 +192,107 @@ function registerObservationCommands(context: vscode.ExtensionContext, outputCha
   );
 }
 
+// Task 020's required status set. Polled (see #startStatusPolling) rather
+// than pushed, matching Server's own `rslsp/status`'s own design ("polled
+// by the client rather than pushed as notifications").
+const STATUS_LABELS: Record<string, string> = {
+  indexing: '$(sync~spin) RSLSP: Indexing',
+  'ready-static': '$(check) RSLSP: Ready (static)',
+  'ready-rails': '$(check) RSLSP: Ready (Rails)',
+  'agent-unavailable': '$(warning) RSLSP: Agent unavailable'
+};
+
+function startStatusPolling(statusBarItem: vscode.StatusBarItem): vscode.Disposable {
+  const interval = setInterval(() => {
+    void (async () => {
+      const uri = vscode.window.activeTextEditor?.document.uri;
+      const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : vscode.workspace.workspaceFolders?.[0];
+      const client = folder ? clients.get(folder.uri.toString()) : undefined;
+      if (!client) {
+        statusBarItem.hide();
+        return;
+      }
+
+      try {
+        const result = await client.sendRequest<{ state: string }>('rslsp/status', {});
+        statusBarItem.text = STATUS_LABELS[result.state] ?? `RSLSP: ${result.state}`;
+        statusBarItem.show();
+      } catch {
+        statusBarItem.text = '$(error) RSLSP: Configuration error';
+        statusBarItem.show();
+      }
+    })();
+  }, 2000);
+
+  return new vscode.Disposable(() => clearInterval(interval));
+}
+
+function registerEnvironmentCommands(
+  context: vscode.ExtensionContext,
+  outputChannel: vscode.OutputChannel
+): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand('rslsp.restartServer', async () => {
+      for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        const key = folder.uri.toString();
+        await stopClient(key);
+        clients.set(key, startClientForFolder(folder, outputChannel, context));
+      }
+      void vscode.window.showInformationMessage('RSLSP: Core Server restarted.');
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('rslsp.restartAgent', async () => {
+      const client = clientForActiveEditor(outputChannel);
+      if (!client) {
+        return;
+      }
+      await client.sendRequest('rslsp/restartAgent', {});
+      void vscode.window.showInformationMessage('RSLSP: Runtime Agent restart requested.');
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('rslsp.showLogs', () => outputChannel.show())
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('rslsp.reindexWorkspace', async () => {
+      const client = clientForActiveEditor(outputChannel);
+      if (!client) {
+        return;
+      }
+      await client.sendRequest('rslsp/reindexWorkspace', {});
+      void vscode.window.showInformationMessage('RSLSP: re-indexing workspace.');
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('rslsp.showEnvironmentDiagnostics', () => {
+      const uri = vscode.window.activeTextEditor?.document.uri;
+      const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : vscode.workspace.workspaceFolders?.[0];
+      if (!folder) {
+        void vscode.window.showWarningMessage('RSLSP: no workspace folder is open.');
+        return;
+      }
+
+      outputChannel.appendLine(`--- RSLSP environment diagnostics: ${folder.name} ---`);
+      const resolution = rubyResolutions.get(folder.uri.toString());
+      if (!resolution) {
+        outputChannel.appendLine('Ruby executable: explicitly configured (rslsp.rubyExecutablePath/rslsp.ruby.command) -- version-manager search was skipped.');
+      } else {
+        outputChannel.appendLine(`Ruby executable chosen: ${resolution.executable}`);
+        for (const step of resolution.steps) {
+          const mark = step.matched ? '✓' : ' ';
+          outputChannel.appendLine(`  [${mark}] ${step.strategy}: ${step.reason}`);
+        }
+      }
+      outputChannel.show();
+    })
+  );
+}
+
 function stopClient(key: string): Thenable<void> {
   watchers.get(key)?.dispose();
   watchers.delete(key);
@@ -178,6 +315,11 @@ export function activate(context: vscode.ExtensionContext): void {
   }
 
   registerObservationCommands(context, outputChannel);
+  registerEnvironmentCommands(context, outputChannel);
+
+  const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+  context.subscriptions.push(statusBarItem);
+  context.subscriptions.push(startStatusPolling(statusBarItem));
 
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const key = folder.uri.toString();

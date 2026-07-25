@@ -31,6 +31,17 @@ module Rslsp
         @mutex = Mutex.new
         @aggregates = {}
         @stacks = Hash.new { |h, k| h[k] = [] }
+        # `[defined_class, method_id]` -> the workspace-eligibility check,
+        # symbol_id, fingerprint (re-hashes the *whole* source file --
+        # deliberately coarse, see Fingerprint's own docs), and parameter
+        # name list -- every one of which is invariant across repeated
+        # calls to the *same* method within one run. Recomputing this
+        # (in particular the SHA256 file digest) on every single `:call`
+        # event made a tight loop calling one method thousands of times
+        # pay for thousands of redundant full-file hashes; caught by
+        # this module's own overhead regression test
+        # (spec/rslsp/observation/overhead_spec.rb).
+        @method_cache = {}
       end
 
       def start
@@ -75,15 +86,32 @@ module Rslsp
       end
 
       def handle_call(tp)
+        info = cached_method_info(tp)
+        return unless info
+
+        param_types = positional_param_types(tp, info[:param_names])
+        current_stack.push(Frame.new(info[:symbol_id], info[:fingerprint], param_types))
+      end
+
+      def cached_method_info(tp)
+        key = [tp.defined_class, tp.method_id]
+        return @method_cache[key] if @method_cache.key?(key)
+
+        @method_cache[key] = compute_method_info(tp)
+      end
+
+      def compute_method_info(tp)
         method_obj = defined_method(tp)
-        return unless method_obj && workspace_method?(method_obj)
+        return nil unless method_obj && workspace_method?(method_obj)
 
         symbol_id = symbol_id_for(tp)
-        return unless symbol_id
+        return nil unless symbol_id
 
-        fingerprint = fingerprint_for(method_obj)
-        param_types = positional_param_types(tp, method_obj)
-        current_stack.push(Frame.new(symbol_id, fingerprint, param_types))
+        {
+          symbol_id: symbol_id,
+          fingerprint: fingerprint_for(method_obj),
+          param_names: positional_param_names(method_obj)
+        }
       end
 
       def handle_return(tp)
@@ -175,9 +203,18 @@ module Rslsp
       # parameters don't fit ObservedSignature's flat, position-indexed
       # `parameter_types` array, and are rarer in the small, first-hop
       # method summaries this evidence is meant to supplement anyway.
-      def positional_param_types(tp, method_obj)
-        names = method_obj.parameters.select { |(kind, _)| %i[req opt].include?(kind) }.map { |(_, name)| name }
-        names.map do |name|
+      # Split from #positional_param_types (below) so the name list --
+      # invariant per method -- is computed once and cached, while the
+      # actual argument *values* (which must be read fresh from each
+      # call's own binding) stay per-call.
+      def positional_param_names(method_obj)
+        method_obj.parameters.select { |(kind, _)| %i[req opt].include?(kind) }.map { |(_, name)| name }
+      rescue StandardError
+        []
+      end
+
+      def positional_param_types(tp, param_names)
+        param_names.map do |name|
           TypeNormalizer.normalize(tp.binding.local_variable_get(name))
         rescue StandardError
           Types::UNKNOWN

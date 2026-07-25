@@ -8,6 +8,12 @@ vscode/node_modules/
 vscode/out/
 vscode/.vscode-test/
 
+# vscode/core/ is generated at package time by vscode/scripts/copy-core.js
+# (ADR-0004) -- a copy of ../core plus vendored gem dependencies, never
+# source to commit.
+vscode/core/
+vscode/*.vsix
+
 # Editor / OS
 .DS_Store
 

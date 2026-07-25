@@ -1,6 +1,21 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+# ADR-0004: a packaged VSIX vendors Core's own runtime gem dependencies
+# (prism, rbs) into vendor/bundle alongside this script
+# (vscode/scripts/copy-core.js), so a bundle-free launch never needs the
+# end user to have run `bundle install` themselves, or even have Bundler
+# installed at all. Deliberately hand-rolled (not `require "bundler/setup"`)
+# since Bundler itself might not be installed in whatever Ruby
+# resolveRuby picked; only ever *adds* to $LOAD_PATH when a vendored gem
+# is actually present, so a non-packaged dev checkout (no vendor/bundle
+# directory at all) falls through unchanged to ordinary `bundle exec`/
+# already-installed-gems resolution, exactly the pre-Task-020 behavior.
+vendor_gems_root = File.expand_path("../vendor/bundle", __dir__)
+if Dir.exist?(vendor_gems_root)
+  Dir.glob(File.join(vendor_gems_root, "**", "gems", "*", "lib")).each { |lib| $LOAD_PATH.unshift(lib) }
+end
+
 require "optparse"
 require_relative "../lib/rslsp"
 

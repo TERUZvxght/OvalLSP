@@ -1,0 +1,12 @@
+.vscode-test/**
+test-fixtures/**
+src/**
+scripts/**
+out/test/**
+**/*.map
+**/tsconfig.json
+core/spec/**
+core/tmp/**
+core/vendor/bundle/ruby/*/cache/**
+.gitignore
+**/.eslintrc*
