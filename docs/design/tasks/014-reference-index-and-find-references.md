@@ -33,7 +33,7 @@
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Index
     Reference = Data.define(
       :symbol_id,

@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-describe('RSLSP extension (Extension Development Host)', () => {
+describe('OvalLSP extension (Extension Development Host)', () => {
   it('starts the Core Server and shows the fixed hover for a Ruby file', async function () {
     this.timeout(30000);
 
@@ -34,6 +34,6 @@ describe('RSLSP extension (Extension Development Host)', () => {
     const content = hovers![0].contents
       .map((c) => (typeof c === 'string' ? c : (c as vscode.MarkdownString).value))
       .join('\n');
-    assert.match(content, /RSLSP(?:\s|&nbsp;)connected/);
+    assert.match(content, /OvalLSP(?:\s|&nbsp;)connected/);
   });
 });

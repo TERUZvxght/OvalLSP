@@ -1,6 +1,6 @@
 {
-  "name": "rslsp",
-  "displayName": "Ruby Semantic LSP",
+  "name": "ovallsp",
+  "displayName": "OvalLSP",
   "description": "Semantic Ruby/Rails language features backed by a standalone Core Language Server.",
   "version": "0.0.1",
   "publisher": "ovallsp",
@@ -25,38 +25,38 @@
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
-      "title": "Ruby Semantic LSP",
+      "title": "OvalLSP",
       "properties": {
-        "rslsp.enabled": {
+        "ovallsp.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable the RSLSP Core Language Server."
+          "description": "Enable the OvalLSP Core Language Server."
         },
-        "rslsp.ruby.command": {
+        "ovallsp.ruby.command": {
           "type": [
             "string",
             "null"
           ],
           "default": null,
-          "description": "Deprecated synonym for rslsp.rubyExecutablePath, kept for compatibility. Explicit Ruby interpreter used to launch the Core Server, skipping the mise/asdf/rbenv/chruby/PATH search entirely."
+          "description": "Deprecated synonym for ovallsp.rubyExecutablePath, kept for compatibility. Explicit Ruby interpreter used to launch the Core Server, skipping the mise/asdf/rbenv/chruby/PATH search entirely."
         },
-        "rslsp.rubyExecutablePath": {
+        "ovallsp.rubyExecutablePath": {
           "type": [
             "string",
             "null"
           ],
           "default": null,
-          "description": "Explicit Ruby interpreter used to launch the Core Server, skipping the mise/asdf/rbenv/chruby/PATH search entirely. When unset, RSLSP searches mise, asdf, rbenv, chruby, PATH, then (on Windows) common RubyInstaller locations -- see 'RSLSP: Show Environment Diagnostics' for what was actually picked and why."
+          "description": "Explicit Ruby interpreter used to launch the Core Server, skipping the mise/asdf/rbenv/chruby/PATH search entirely. When unset, OvalLSP searches mise, asdf, rbenv, chruby, PATH, then (on Windows) common RubyInstaller locations -- see 'OvalLSP: Show Environment Diagnostics' for what was actually picked and why."
         },
-        "rslsp.server.path": {
+        "ovallsp.server.path": {
           "type": [
             "string",
             "null"
           ],
           "default": null,
-          "description": "Path to the rslsp Core Server entrypoint. Defaults to the bundled core/bin/rslsp script."
+          "description": "Path to the ovallsp Core Server entrypoint. Defaults to the bundled core/bin/ovallsp script."
         },
-        "rslsp.observation.testCommand": {
+        "ovallsp.observation.testCommand": {
           "type": [
             "array",
             "null"
@@ -65,42 +65,42 @@
             "type": "string"
           },
           "default": null,
-          "description": "Command used by 'RSLSP: Run Tests with Type Observation', e.g. [\"bundle\", \"exec\", \"rspec\"]. Defaults to the Core Server's own default (bundle exec rspec)."
+          "description": "Command used by 'OvalLSP: Run Tests with Type Observation', e.g. [\"bundle\", \"exec\", \"rspec\"]. Defaults to the Core Server's own default (bundle exec rspec)."
         }
       }
     },
     "commands": [
       {
-        "command": "rslsp.observation.runTests",
-        "title": "RSLSP: Run Tests with Type Observation"
+        "command": "ovallsp.observation.runTests",
+        "title": "OvalLSP: Run Tests with Type Observation"
       },
       {
-        "command": "rslsp.observation.clearTypes",
-        "title": "RSLSP: Clear Observed Types"
+        "command": "ovallsp.observation.clearTypes",
+        "title": "OvalLSP: Clear Observed Types"
       },
       {
-        "command": "rslsp.observation.showEvidence",
-        "title": "RSLSP: Show Type Evidence"
+        "command": "ovallsp.observation.showEvidence",
+        "title": "OvalLSP: Show Type Evidence"
       },
       {
-        "command": "rslsp.restartServer",
-        "title": "RSLSP: Restart Server"
+        "command": "ovallsp.restartServer",
+        "title": "OvalLSP: Restart Server"
       },
       {
-        "command": "rslsp.restartAgent",
-        "title": "RSLSP: Restart Rails Agent"
+        "command": "ovallsp.restartAgent",
+        "title": "OvalLSP: Restart Rails Agent"
       },
       {
-        "command": "rslsp.showLogs",
-        "title": "RSLSP: Show Logs"
+        "command": "ovallsp.showLogs",
+        "title": "OvalLSP: Show Logs"
       },
       {
-        "command": "rslsp.showEnvironmentDiagnostics",
-        "title": "RSLSP: Show Environment Diagnostics"
+        "command": "ovallsp.showEnvironmentDiagnostics",
+        "title": "OvalLSP: Show Environment Diagnostics"
       },
       {
-        "command": "rslsp.reindexWorkspace",
-        "title": "RSLSP: Re-index Workspace"
+        "command": "ovallsp.reindexWorkspace",
+        "title": "OvalLSP: Re-index Workspace"
       }
     ]
   },

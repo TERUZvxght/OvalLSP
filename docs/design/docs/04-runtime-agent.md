@@ -23,15 +23,15 @@ Agentは型推論を行わない。返すのは正規化された事実である
 推奨コマンド:
 
 ```bash
-bundle exec bin/rails runner /absolute/path/to/rslsp/runtime_agent_boot.rb start '<capabilities-json>'
+bundle exec bin/rails runner /absolute/path/to/ovallsp/runtime_agent_boot.rb start '<capabilities-json>'
 ```
 
 環境変数:
 
 ```text
 RAILS_ENV=development
-RSLSP_AGENT=1
-RSLSP_PROTOCOL_VERSION=1
+OvalLSP_AGENT=1
+OvalLSP_PROTOCOL_VERSION=1
 ```
 
 `test` environmentはDB副作用やinitializer差があるため既定にしない。

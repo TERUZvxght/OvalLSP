@@ -20,7 +20,7 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
   ROUTES_FILE = File.join(FIXTURE_ROOT, "config/routes.rb")
   MODELS_DIR = File.join(FIXTURE_ROOT, "app/models")
   DB_FILE = File.join(FIXTURE_ROOT, "db/rails_real.sqlite3")
-  BOOT_SCRIPT = File.expand_path("../../lib/rslsp/runtime_agent/boot.rb", __dir__)
+  BOOT_SCRIPT = File.expand_path("../../lib/ovallsp/runtime_agent/boot.rb", __dir__)
 
   def self.real_rails_available?
     return @available if defined?(@available)
@@ -58,9 +58,9 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
   # process and silently point it at the wrong Gemfile
   # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
   def boot_manager(hello_timeout: 30)
-    route_registry = Rslsp::Routes::RouteRegistry.new
-    model_registry = Rslsp::Models::ModelRegistry.new
-    Rslsp::RailsBootstrap.start(
+    route_registry = Ovallsp::Routes::RouteRegistry.new
+    model_registry = Ovallsp::Models::ModelRegistry.new
+    Ovallsp::RailsBootstrap.start(
       root: FIXTURE_ROOT, logger: logger, route_registry: route_registry, model_registry: model_registry,
       hello_timeout: hello_timeout
     )
@@ -127,7 +127,7 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
   it "resolves both post_path and post_url to the same routes.rb definition (Core-side RouteRegistry over the real snapshot)" do
     @manager = boot_manager
     routes = @manager.fetch_snapshot(sections: ["routes"])[:routes]
-    registry = Rslsp::Routes::RouteRegistry.from_route_facts(routes)
+    registry = Ovallsp::Routes::RouteRegistry.from_route_facts(routes)
 
     path_helper = registry.find_by_method_name("post_path")
     url_helper = registry.find_by_method_name("post_url")

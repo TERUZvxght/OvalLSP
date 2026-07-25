@@ -10,7 +10,7 @@
 VS Code Marketplace(公開後)またはVSIXファイルから導入する。
 
 ```bash
-code --install-extension rslsp-<version>.vsix
+code --install-extension ovallsp-<version>.vsix
 ```
 
 VSIXにはCore Server本体(`core/`)と、そのRuntime依存gem(prism/rbs)が同梱されている
@@ -34,11 +34,11 @@ VSIXにはCore Server本体(`core/`)と、そのRuntime依存gem(prism/rbs)が�
   fallbackする(`AgentProcessManager#compatible_protocol_version?`)。
 - Agent crash後は自動でexponential backoff付きの再起動を試みるが、
   上限(既定5回)を超えると自動再起動を諦め、static-onlyを維持する
-  (`AgentSupervisor`)。手動での`RSLSP: Restart Rails Agent`コマンドは
+  (`AgentSupervisor`)。手動での`OvalLSP: Restart Rails Agent`コマンドは
   この上限に関係なく常に試行できる。
 - Plugin(Task 018)のstatic entrypointは`Process.fork`による本物のOSプロセス
   隔離下で実行され、Core自身のプロセス空間・fd・グローバル状態を一切
-  侵害できない(`core/lib/rslsp/plugins/loader.rb`のコメントに詳細)。
+  侵害できない(`core/lib/ovallsp/plugins/loader.rb`のコメントに詳細)。
 - Runtime plugin(untrusted workspaceでは一切ロードしない)は、trusted
   workspaceに限り、対象RailsアプリそのものLと同等のコード実行権限を持つ
   ことを明示する。
@@ -56,11 +56,11 @@ Runtime Agentを起動しない(静的解析のみで継続)。Trustが後から
 
 | 設定キー | 用途 |
 |---|---|
-| `rslsp.enabled` | 拡張機能全体の有効/無効 |
-| `rslsp.rubyExecutablePath` | 明示的なRuby実行系パス(未設定時はmise→asdf→rbenv→chruby→PATH→Windows RubyInstallerの順で自動解決) |
-| `rslsp.ruby.command` | `rubyExecutablePath`の旧名(互換のため維持) |
-| `rslsp.server.path` | Core Serverのentrypointを明示指定(未設定時はVSIX同梱→monorepo相対の順) |
-| `rslsp.observation.testCommand` | Task 019のobservation実行時のテストコマンド(既定: `bundle exec rspec`) |
+| `ovallsp.enabled` | 拡張機能全体の有効/無効 |
+| `ovallsp.rubyExecutablePath` | 明示的なRuby実行系パス(未設定時はmise→asdf→rbenv→chruby→PATH→Windows RubyInstallerの順で自動解決) |
+| `ovallsp.ruby.command` | `rubyExecutablePath`の旧名(互換のため維持) |
+| `ovallsp.server.path` | Core Serverのentrypointを明示指定(未設定時はVSIX同梱→monorepo相対の順) |
+| `ovallsp.observation.testCommand` | Task 019のobservation実行時のテストコマンド(既定: `bundle exec rspec`) |
 
 ## Features and limitations
 
@@ -91,14 +91,14 @@ enum・scope・delegate)の型推論、RBS/RBI連携、opt-inのruntime型観測
 
 ## Troubleshooting
 
-1. `RSLSP: Show Logs`でOutput channelを確認する。
-2. `RSLSP: Show Environment Diagnostics`でRuby実行系の解決経緯
+1. `OvalLSP: Show Logs`でOutput channelを確認する。
+2. `OvalLSP: Show Environment Diagnostics`でRuby実行系の解決経緯
    (mise/asdf/rbenv/chruby/PATH のどれが、なぜ選ばれたか)を確認する。
-3. Rails機能(routes補完等)が効かない場合は、`RSLSP: Restart Rails Agent`
+3. Rails機能(routes補完等)が効かない場合は、`OvalLSP: Restart Rails Agent`
    を試す。それでも直らない場合はWorkspace Trustが付与されているか確認する。
 4. ステータスバーの表示(`Indexing`/`Ready (static)`/`Ready (Rails)`/
    `Agent unavailable`)で現在の状態を確認できる。
-5. キャッシュが壊れていると疑われる場合、キャッシュは`~/.cache/rslsp/`
+5. キャッシュが壊れていると疑われる場合、キャッシュは`~/.cache/ovallsp/`
    以下にworkspace/Ruby/Prism/Gemfile.lock/RBSの組合せごとに分離されて
    いるため、該当ディレクトリを削除すれば強制的にcold re-indexされる。
 
@@ -118,7 +118,7 @@ enum・scope・delegate)の型推論、RBS/RBI連携、opt-inのruntime型観測
 
 - static entrypointはCore process外の隔離されたforkで実行され、Ruby
   Data値(SymbolId/Types)のみをMarshalで受け渡しする。
-- `Rslsp::Plugins.register_static("plugin-name") { |context| ... }`で
+- `Ovallsp::Plugins.register_static("plugin-name") { |context| ... }`で
   登録し、`context.register_declarations([...])`でmethodをCoreへ伝える。
 - protocol_versionの不一致は明示的にログへ出て、そのpluginだけが
   スキップされる(他のplugin/Core自体には影響しない)。

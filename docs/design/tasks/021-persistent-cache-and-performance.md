@@ -38,7 +38,7 @@
 
 Cache keyへ最低限含める。
 
-- RSLSP schema version
+- OvalLSP schema version
 - Ruby version
 - Prism version
 - workspace canonical path identity

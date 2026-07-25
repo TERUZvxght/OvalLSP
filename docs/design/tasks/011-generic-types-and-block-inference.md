@@ -33,7 +33,7 @@
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Types
     TypeParameter = Data.define(:name)
     ProcType = Data.define(:parameters, :return_type)

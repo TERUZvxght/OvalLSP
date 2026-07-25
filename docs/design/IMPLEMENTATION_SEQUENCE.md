@@ -1,4 +1,4 @@
-# RSLSP Task 009以降の実装順序
+# OvalLSP Task 009以降の実装順序
 
 ## 1. 基本方針
 

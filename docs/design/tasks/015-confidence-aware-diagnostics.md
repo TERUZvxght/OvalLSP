@@ -59,7 +59,7 @@ Rubyの動的性を考慮し、確信度の高い誤りだけを報告する安�
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Diagnostics
     Finding = Data.define(
       :code,

@@ -14,9 +14,9 @@
 STDOUT.syswrite("EVIL-EVIL-LSP-PROTOCOL-CORRUPTION-STDOUT\n")
 STDERR.syswrite("EVIL-EVIL-LSP-PROTOCOL-CORRUPTION-STDERR\n")
 
-Rslsp::Plugins.register_static("rslsp-stdout-writer") do |context|
+Ovallsp::Plugins.register_static("ovallsp-stdout-writer") do |context|
   context.register_declarations([
                                    { owner: "::StdoutWriterModel", name: "harmless?", kind: :instance_method,
-                                     return_type: Rslsp::Types::Nominal.new(name: "Boolean") }
+                                     return_type: Ovallsp::Types::Nominal.new(name: "Boolean") }
                                  ])
 end

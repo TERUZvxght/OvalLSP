@@ -7,7 +7,7 @@
 # something resources/nested-resources/namespace-shaped, without pulling in
 # actionpack. Every FakeRoute exposes the same accessor names a real
 # ActionDispatch::Journey::Route does (name, verb, path.spec, defaults,
-# required_parts), so Rslsp::RuntimeAgent::Agent#extract_routes only ever
+# required_parts), so Ovallsp::RuntimeAgent::Agent#extract_routes only ever
 # talks to that duck-typed interface.
 module FakeRouting
   Route = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :source_location, keyword_init: true) do

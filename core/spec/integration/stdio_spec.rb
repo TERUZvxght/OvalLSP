@@ -3,9 +3,9 @@
 require "open3"
 require "rbconfig"
 
-RSpec.describe "rslsp --stdio (subprocess integration)" do
+RSpec.describe "ovallsp --stdio (subprocess integration)" do
   let(:core_root) { File.expand_path("../..", __dir__) }
-  let(:bin_path) { File.join(core_root, "bin", "rslsp") }
+  let(:bin_path) { File.join(core_root, "bin", "ovallsp") }
 
   def frame(hash)
     json = JSON.generate(hash)

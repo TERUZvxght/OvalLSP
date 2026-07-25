@@ -1,5 +1,5 @@
 {
-  "name": "rslsp-bad-version",
+  "name": "ovallsp-bad-version",
   "version": "0.1.0",
   "protocol_version": 99,
   "static_entrypoint": "lib/plugin.rb"

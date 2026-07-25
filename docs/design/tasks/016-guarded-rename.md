@@ -56,7 +56,7 @@ lexical bindingが確定している場合のみ許可する。
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Rename
     Plan = Data.define(
       :target,

@@ -23,9 +23,9 @@ const CORE_DEST = path.join(__dirname, '..', 'core');
 // `CORE_DEST` once the entire build (copy + vendor) succeeds -- found
 // missing by an independent review of Task 020: the previous version
 // copied files directly into `CORE_DEST` one at a time, so a process
-// kill mid-copy (or, worse, mid-write of `core/bin/rslsp` itself) could
+// kill mid-copy (or, worse, mid-write of `core/bin/ovallsp` itself) could
 // leave a *partially-written* `core/` behind that `serverConfig.ts`'s
-// `existsSync(core/bin/rslsp)` check would still treat as "the bundled
+// `existsSync(core/bin/ovallsp)` check would still treat as "the bundled
 // Core is present and should be preferred", causing the extension to
 // launch a broken server instead of falling back to the (working)
 // monorepo-relative path. `fs.renameSync` between two siblings in the
@@ -34,10 +34,10 @@ const CORE_DEST = path.join(__dirname, '..', 'core');
 // the new complete build, never a partial one.
 const CORE_STAGING = `${CORE_DEST}.building-${process.pid}`;
 
-// Only what bin/rslsp actually needs at runtime -- never spec/ (test
+// Only what bin/ovallsp actually needs at runtime -- never spec/ (test
 // code, fixtures with their own throwaway Gemfiles that would confuse a
 // packaged install), never tmp/ (local dev scratch state).
-const INCLUDE = ['lib', 'bin', 'rslsp.gemspec', 'Gemfile', 'Gemfile.lock'];
+const INCLUDE = ['lib', 'bin', 'ovallsp.gemspec', 'Gemfile', 'Gemfile.lock'];
 
 function copyRecursive(src, dest) {
   const stat = fs.statSync(src);
@@ -69,7 +69,7 @@ function copyCoreSourceIntoStaging() {
 }
 
 // Best-effort: a packaging environment without network access or a
-// working `bundle` still produces a usable (if degraded) VSIX -- bin/rslsp
+// working `bundle` still produces a usable (if degraded) VSIX -- bin/ovallsp
 // only ever *adds* vendor/bundle to $LOAD_PATH when it exists (see its
 // own bootstrap), so a missing vendor directory just means end users need
 // prism/rbs already available in whatever Ruby resolveRuby picks for

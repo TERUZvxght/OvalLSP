@@ -55,7 +55,7 @@ server options:
 
 ```text
 command: resolved Ruby command
-args: [path/to/rslsp-core, "--stdio"]
+args: [path/to/ovallsp-core, "--stdio"]
 cwd: workspace folder
 ```
 
@@ -75,13 +75,13 @@ MVPでは1とsystem Rubyだけでもよい。環境解決は独立moduleにす�
 状態:
 
 ```text
-RSLSP: Starting
-RSLSP: Static
-RSLSP: Rails loading
-RSLSP: Ready
-RSLSP: Rails stale
-RSLSP: Rails failed
-RSLSP: Crashed
+OvalLSP: Starting
+OvalLSP: Static
+OvalLSP: Rails loading
+OvalLSP: Ready
+OvalLSP: Rails stale
+OvalLSP: Rails failed
+OvalLSP: Crashed
 ```
 
 クリック時にQuick Pick:
@@ -96,30 +96,30 @@ RSLSP: Crashed
 ## 6. Commands
 
 ```text
-rslsp.restart
-rslsp.restartRuntimeAgent
-rslsp.showStatus
-rslsp.showEvidence
-rslsp.explainType
-rslsp.clearCaches
-rslsp.runObservation
-rslsp.openLogs
+ovallsp.restart
+ovallsp.restartRuntimeAgent
+ovallsp.showStatus
+ovallsp.showEvidence
+ovallsp.explainType
+ovallsp.clearCaches
+ovallsp.runObservation
+ovallsp.openLogs
 ```
 
 ## 7. Settings
 
 ```jsonc
 {
-  "rslsp.enabled": true,
-  "rslsp.ruby.command": null,
-  "rslsp.rails.enabled": true,
-  "rslsp.rails.environment": "development",
-  "rslsp.rails.bootTimeoutMs": 60000,
-  "rslsp.runtimeObservation.enabled": false,
-  "rslsp.diagnostics.strictness": "safe",
-  "rslsp.completion.showUncertain": true,
-  "rslsp.trace.server": "off",
-  "rslsp.plugins.enabled": []
+  "ovallsp.enabled": true,
+  "ovallsp.ruby.command": null,
+  "ovallsp.rails.enabled": true,
+  "ovallsp.rails.environment": "development",
+  "ovallsp.rails.bootTimeoutMs": 60000,
+  "ovallsp.runtimeObservation.enabled": false,
+  "ovallsp.diagnostics.strictness": "safe",
+  "ovallsp.completion.showUncertain": true,
+  "ovallsp.trace.server": "off",
+  "ovallsp.plugins.enabled": []
 }
 ```
 
@@ -147,7 +147,7 @@ untrusted workspace:
 
 将来、次の互換モードを検討できる。
 
-- RSLSPはsemantic機能のみ
+- OvalLSPはsemantic機能のみ
 - Ruby LSPはformat/test/code lensのみ
 
 ただしMVPの対象外。

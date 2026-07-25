@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require_relative "../lib/rslsp"
+require_relative "../lib/ovallsp"
 
 RSpec.configure do |config|
   config.expect_with :rspec do |expectations|

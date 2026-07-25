@@ -42,8 +42,8 @@ Observation Runner内で動作する。初期版では非公開。
 name: aasm
 version: 0.1.0
 protocol_version: 1
-static_entrypoint: lib/rslsp/plugins/aasm/static.rb
-runtime_entrypoint: lib/rslsp/plugins/aasm/runtime.rb
+static_entrypoint: lib/ovallsp/plugins/aasm/static.rb
+runtime_entrypoint: lib/ovallsp/plugins/aasm/runtime.rb
 requires:
   gems:
     aasm: ">= 5.0"
@@ -144,7 +144,7 @@ Pluginが直接SymbolIndexへ書かないことで、generation rollbackとplugi
 Plugin APIはsemantic versioningする。
 
 ```ruby
-Rslsp::Plugin.require_api!(">= 1.0", "< 2.0")
+Ovallsp::Plugin.require_api!(">= 1.0", "< 2.0")
 ```
 
 - incompatible pluginは起動失敗させず無効化する。
@@ -155,8 +155,8 @@ Rslsp::Plugin.require_api!(">= 1.0", "< 2.0")
 
 優先順位:
 
-1. workspace `.rslsp/plugins/`
-2. bundle内gemの`rslsp/plugin.yml`
+1. workspace `.ovallsp/plugins/`
+2. bundle内gemの`ovallsp/plugin.yml`
 3. user設定で明示したpath
 
 Workspace Trustがない場合、workspace pluginとruntime pluginをロードしない。

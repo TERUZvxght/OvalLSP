@@ -1,6 +1,6 @@
 # Ruby Semantic LSP 設計パッケージ
 
-作業名: **Ruby Semantic LSP (RSLSP)**  
+作業名: **Ruby Semantic LSP (OvalLSP)**  
 目的: RubyおよびRailsに対して、型注釈を必須とせず、静的解析・Rails実行時情報・任意の実行観測を統合した高精度なVS Code向け言語機能を提供する。
 
 このパッケージは、AI実装エージェントへ順番に渡して開発を開始できる粒度で構成している。

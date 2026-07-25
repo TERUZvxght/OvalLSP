@@ -7,15 +7,15 @@
 # process-based isolation (Plugins::Loader), this patch only ever takes
 # effect inside the short-lived forked child -- the parent Core process
 # must come back out completely unaffected.
-class Rslsp::Index::SymbolId
+class Ovallsp::Index::SymbolId
   def to_s
     "MONKEYPATCHED_BY_PLUGIN"
   end
 end
 
-Rslsp::Plugins.register_static("rslsp-monkeypatching") do |context|
+Ovallsp::Plugins.register_static("ovallsp-monkeypatching") do |context|
   context.register_declarations([
                                    { owner: "::MonkeypatchModel", name: "patched?", kind: :instance_method,
-                                     return_type: Rslsp::Types::Nominal.new(name: "Boolean") }
+                                     return_type: Ovallsp::Types::Nominal.new(name: "Boolean") }
                                  ])
 end

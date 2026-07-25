@@ -45,10 +45,10 @@ Gem固有・社内DSL対応をCore本体へ直書きせず追加できる、vers
 
 ```json
 {
-  "name": "rslsp-aasm",
+  "name": "ovallsp-aasm",
   "version": "0.1.0",
   "apiVersion": "1",
-  "entrypoint": "lib/rslsp_aasm/plugin.rb",
+  "entrypoint": "lib/ovallsp_aasm/plugin.rb",
   "capabilities": ["staticFacts", "runtimeFacts"]
 }
 ```
@@ -56,7 +56,7 @@ Gem固有・社内DSL対応をCore本体へ直書きせず追加できる、vers
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Plugins
     class StaticContext
       def register_declarations(...); end

@@ -96,7 +96,7 @@ Ruby LSPのアドオンAPIは現在も変更可能性があり、既存のmethod
 
 ```text
 VS Code Extension Host
-└── rslsp-core (project Ruby + composed bundle)
+└── ovallsp-core (project Ruby + composed bundle)
     └── bin/rails runner .../runtime_agent.rb start
 ```
 
@@ -117,7 +117,7 @@ Core ServerはプロジェクトのGemfileへ直接gem追加を要求しない�
 推奨:
 
 ```text
-.rslsp/
+.ovallsp/
 ├── Gemfile
 ├── Gemfile.lock
 └── cache/

@@ -43,7 +43,7 @@ Ruby標準ライブラリ、project signature、Gem signatureから型情報を�
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Signatures
     SignatureMethod = Data.define(
       :symbol_id,

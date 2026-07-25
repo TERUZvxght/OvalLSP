@@ -1,6 +1,6 @@
-# RSLSP Plugin SDK (Task 018)
+# OvalLSP Plugin SDK (Task 018)
 
-A minimal, explicitly-opt-in way to teach RSLSP Core about a Gem- or
+A minimal, explicitly-opt-in way to teach OvalLSP Core about a Gem- or
 project-specific DSL, without editing Core itself. See
 `docs/design/tasks/018-static-runtime-plugin-api-and-sdk.md` for the
 full design; this is the short "how do I write one" version.
@@ -12,7 +12,7 @@ Every plugin has a `plugin-manifest.json`, validated against
 
 ```json
 {
-  "name": "rslsp-my-plugin",
+  "name": "ovallsp-my-plugin",
   "version": "0.1.0",
   "protocol_version": 1,
   "static_entrypoint": "lib/plugin.rb",
@@ -21,7 +21,7 @@ Every plugin has a `plugin-manifest.json`, validated against
 ```
 
 - `name` must match `^[a-z0-9_-]+$`.
-- `protocol_version` must equal `Rslsp::Plugins::CURRENT_PROTOCOL_VERSION`
+- `protocol_version` must equal `Ovallsp::Plugins::CURRENT_PROTOCOL_VERSION`
   (currently `1`) or the plugin is skipped, with a clear log message
   explaining the mismatch — never silently ignored.
 - `static_entrypoint` / `runtime_entrypoint` are paths relative to the
@@ -35,15 +35,15 @@ diagnostic checks. The entrypoint file registers a block:
 
 ```ruby
 # lib/plugin.rb
-Rslsp::Plugins.register_static("rslsp-my-plugin") do |context|
+Ovallsp::Plugins.register_static("ovallsp-my-plugin") do |context|
   context.register_declarations([
     { owner: "::MyModel", name: "some_generated_method", kind: :instance_method,
-      return_type: Rslsp::Types::Nominal.new(name: "Boolean") }
+      return_type: Ovallsp::Types::Nominal.new(name: "Boolean") }
   ])
 end
 ```
 
-`context` is a `Rslsp::Plugins::StaticContext` — a write-only
+`context` is a `Ovallsp::Plugins::StaticContext` — a write-only
 collection surface, never the real `WorkspaceIndex`. What you register
 here becomes an ordinary `Index::Declaration` (so completion, hover
 existence, definition, and the unknown-method diagnostic all see it for
@@ -61,7 +61,7 @@ registers a diagnostic check returning an array of
 ## Runtime plugins
 
 A runtime plugin would contribute to the Rails Runtime Agent's own
-snapshot (routes/models/...) via `Rslsp::Plugins::RuntimeContext`'s
+snapshot (routes/models/...) via `Ovallsp::Plugins::RuntimeContext`'s
 `register_snapshot_section`/`register_reload_hook`. **Only loaded for a
 trusted workspace** — a runtime plugin runs with the same code-execution
 authority as the Rails app itself, so `Plugins::Loader#load_runtime`
@@ -73,20 +73,20 @@ calls `#load_runtime` today.
 
 ## Loading
 
-RSLSP never auto-discovers plugins from installed Gems. List manifest
+OvalLSP never auto-discovers plugins from installed Gems. List manifest
 paths explicitly in `initializationOptions.pluginManifests`:
 
 ```json
 {
   "initializationOptions": {
-    "pluginManifests": ["/absolute/path/to/rslsp-my-plugin/plugin-manifest.json"]
+    "pluginManifests": ["/absolute/path/to/ovallsp-my-plugin/plugin-manifest.json"]
   }
 }
 ```
 
 ## Failure isolation
 
-Every plugin entrypoint runs under `Rslsp::Plugins::Loader`, which:
+Every plugin entrypoint runs under `Ovallsp::Plugins::Loader`, which:
 
 - times out a plugin that hangs (`DEFAULT_TIMEOUT_SECONDS`, 5s),
 - rescues any exception the entrypoint or its registered block raises,
@@ -100,5 +100,5 @@ Every plugin entrypoint runs under `Rslsp::Plugins::Loader`, which:
 `core/spec/fixtures/plugins/state_machine_example/` is a complete,
 working minimal plugin — stand-in for a `state_machine do state
 :pending end`-style DSL, registering the `pending?` method it would
-generate. See `core/spec/rslsp/server_plugins_spec.rb` for it loaded
+generate. See `core/spec/ovallsp/server_plugins_spec.rb` for it loaded
 through a real Server end to end.

@@ -36,7 +36,7 @@ Rubyの通常の祖先関係をSemantic Graphへ取り込み、receiver型から
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Semantic
     AncestorEntry = Data.define(:name, :kind, :origin, :location)
 
@@ -146,5 +146,5 @@ end
 ```bash
 cd core
 bundle exec rspec
-bundle exec ruby -Ilib bin/rslsp --version
+bundle exec ruby -Ilib bin/ovallsp --version
 ```

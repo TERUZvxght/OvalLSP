@@ -56,7 +56,7 @@
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Observation
     ObservedSignature = Data.define(
       :symbol_id,
@@ -88,9 +88,9 @@ end
 
 ## VS Code commands
 
-- `RSLSP: Run Tests with Type Observation`
-- `RSLSP: Clear Observed Types`
-- `RSLSP: Show Type Evidence`
+- `OvalLSP: Run Tests with Type Observation`
+- `OvalLSP: Clear Observed Types`
+- `OvalLSP: Show Type Evidence`
 
 テストコマンドは設定可能にする。
 

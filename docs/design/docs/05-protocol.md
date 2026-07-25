@@ -4,7 +4,7 @@
 
 VS CodeとCore Serverは標準LSP 3.17を使用する。
 
-Core ServerとRuntime Agentは、JSON-RPC 2.0互換の**RSLSP Agent Protocol v1**を使用する。
+Core ServerとRuntime Agentは、JSON-RPC 2.0互換の**OvalLSP Agent Protocol v1**を使用する。
 
 transport:
 
@@ -216,12 +216,12 @@ Agentはrequestごとのtokenを保持する。Rails reflection APIが中断不�
 VS Code固有UI用にCoreが提供するcustom request:
 
 ```text
-rslsp/status
-rslsp/restartRuntimeAgent
-rslsp/showEvidence
-rslsp/explainType
-rslsp/runObservation
-rslsp/clearCaches
+ovallsp/status
+ovallsp/restartRuntimeAgent
+ovallsp/showEvidence
+ovallsp/explainType
+ovallsp/runObservation
+ovallsp/clearCaches
 ```
 
 標準language featureは必ず標準LSP requestで返す。

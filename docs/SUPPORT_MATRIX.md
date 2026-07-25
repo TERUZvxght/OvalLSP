@@ -14,7 +14,7 @@
 
 | バージョン | 区分 | 根拠 |
 |---|---|---|
-| 3.3+ | supported | `core/rslsp.gemspec`の`required_ruby_version >= 3.3`、CIで実行 |
+| 3.3+ | supported | `core/ovallsp.gemspec`の`required_ruby_version >= 3.3`、CIで実行 |
 | 3.2以下 | unsupported | `required_ruby_version`で明示的に拒否 |
 
 ## Rails

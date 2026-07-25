@@ -7,9 +7,9 @@ export interface ServerLaunchConfig {
 }
 
 export interface ResolveServerConfigInput {
-  /** `rslsp.ruby.command` setting, or null/undefined to use the default. */
+  /** `ovallsp.ruby.command` setting, or null/undefined to use the default. */
   rubyCommand?: string | null;
-  /** `rslsp.server.path` setting, or null/undefined to use the bundled core. */
+  /** `ovallsp.server.path` setting, or null/undefined to use the bundled core. */
   serverPath?: string | null;
   /** Absolute path to this extension's install directory (`context.extensionPath`). */
   extensionRoot: string;
@@ -26,7 +26,7 @@ const DEFAULT_RUBY_COMMAND = 'ruby';
  * for environment resolution.
  *
  * `rubyCommand` is expected to already be the caller's own fully-resolved
- * choice (an explicit `rslsp.ruby.command`/`rslsp.rubyExecutablePath`
+ * choice (an explicit `ovallsp.ruby.command`/`ovallsp.rubyExecutablePath`
  * setting, or the result of `rubyResolver.resolveRuby` — see
  * `extension.ts`) — this function itself only ever falls back to the bare
  * `ruby` command, it doesn't run the version-manager search itself.
@@ -56,9 +56,9 @@ export function resolveServerConfig(input: ResolveServerConfigInput): ServerLaun
 // development against this repo's own `core/` keeps working without
 // requiring the packaging step first.
 function defaultServerPath(extensionRoot: string, existsSync: (candidatePath: string) => boolean): string {
-  const bundled = path.join(extensionRoot, 'core', 'bin', 'rslsp');
+  const bundled = path.join(extensionRoot, 'core', 'bin', 'ovallsp');
   if (existsSync(bundled)) {
     return bundled;
   }
-  return path.join(extensionRoot, '..', 'core', 'bin', 'rslsp');
+  return path.join(extensionRoot, '..', 'core', 'bin', 'ovallsp');
 }

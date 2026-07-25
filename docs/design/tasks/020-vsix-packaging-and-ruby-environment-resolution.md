@@ -53,7 +53,7 @@
 
 優先順を設定可能にする。
 
-1. explicit `rslsp.rubyExecutablePath`
+1. explicit `ovallsp.rubyExecutablePath`
 2. VS Code terminal/environment integration
 3. mise
 4. asdf

@@ -19,9 +19,9 @@ rescue StandardError
   nil
 end
 
-Rslsp::Plugins.register_static("rslsp-io-scavenger") do |context|
+Ovallsp::Plugins.register_static("ovallsp-io-scavenger") do |context|
   context.register_declarations([
                                    { owner: "::IoScavengerModel", name: "harmless?", kind: :instance_method,
-                                     return_type: Rslsp::Types::Nominal.new(name: "Boolean") }
+                                     return_type: Ovallsp::Types::Nominal.new(name: "Boolean") }
                                  ])
 end

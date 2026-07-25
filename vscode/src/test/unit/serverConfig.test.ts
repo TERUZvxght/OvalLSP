@@ -3,13 +3,13 @@ import * as path from 'path';
 import { resolveServerConfig } from '../../serverConfig';
 
 describe('resolveServerConfig', () => {
-  const extensionRoot = '/ext/rslsp-vscode';
+  const extensionRoot = '/ext/ovallsp-vscode';
 
   it('defaults to the system ruby and the bundled core script', () => {
     const result = resolveServerConfig({ extensionRoot });
 
     assert.strictEqual(result.command, 'ruby');
-    assert.strictEqual(result.args[0], path.join(extensionRoot, '..', 'core', 'bin', 'rslsp'));
+    assert.strictEqual(result.args[0], path.join(extensionRoot, '..', 'core', 'bin', 'ovallsp'));
     assert.strictEqual(result.args[1], '--stdio');
   });
 
@@ -28,13 +28,13 @@ describe('resolveServerConfig', () => {
   });
 
   it('honors an explicit server path override', () => {
-    const result = resolveServerConfig({ serverPath: '/custom/rslsp', extensionRoot });
+    const result = resolveServerConfig({ serverPath: '/custom/ovallsp', extensionRoot });
 
-    assert.deepStrictEqual(result.args, ['/custom/rslsp', '--stdio']);
+    assert.deepStrictEqual(result.args, ['/custom/ovallsp', '--stdio']);
   });
 
   it('prefers a Core bundled inside the extension own install directory over the monorepo-relative sibling path', () => {
-    const bundled = path.join(extensionRoot, 'core', 'bin', 'rslsp');
+    const bundled = path.join(extensionRoot, 'core', 'bin', 'ovallsp');
     const result = resolveServerConfig({ extensionRoot, existsSync: (p) => p === bundled });
 
     assert.strictEqual(result.args[0], bundled);
@@ -43,14 +43,14 @@ describe('resolveServerConfig', () => {
   it('falls back to the monorepo-relative sibling path when nothing is bundled (local F5 development)', () => {
     const result = resolveServerConfig({ extensionRoot, existsSync: () => false });
 
-    assert.strictEqual(result.args[0], path.join(extensionRoot, '..', 'core', 'bin', 'rslsp'));
+    assert.strictEqual(result.args[0], path.join(extensionRoot, '..', 'core', 'bin', 'ovallsp'));
   });
 
   it('passes a path containing spaces and non-ASCII characters through unescaped -- spawn() takes args as an array, never a shell string', () => {
-    const trickyRoot = '/Users/開発者/My RSLSP Extension';
+    const trickyRoot = '/Users/開発者/My OvalLSP Extension';
     const result = resolveServerConfig({ extensionRoot: trickyRoot, existsSync: () => false });
 
-    assert.strictEqual(result.args[0], path.join(trickyRoot, '..', 'core', 'bin', 'rslsp'));
+    assert.strictEqual(result.args[0], path.join(trickyRoot, '..', 'core', 'bin', 'ovallsp'));
     assert.ok(!result.args[0].includes('\\'), 'no manual shell-escaping was applied');
   });
 });

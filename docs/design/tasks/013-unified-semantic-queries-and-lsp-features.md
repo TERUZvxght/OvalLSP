@@ -39,7 +39,7 @@ Completion、Hover、Definition、Signature Helpが同一のSemantic Query層を
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Semantic
     QueryContext = Data.define(
       :uri,

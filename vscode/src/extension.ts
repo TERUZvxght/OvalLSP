@@ -11,18 +11,18 @@ import { resolveRuby, RubyResolution } from './rubyResolver';
 const clients = new Map<string, LanguageClient>();
 const watchers = new Map<string, vscode.FileSystemWatcher>();
 // The Ruby resolution actually used to launch each folder's client — kept
-// around purely so `RSLSP: Show Environment Diagnostics` can show *why*
+// around purely so `OvalLSP: Show Environment Diagnostics` can show *why*
 // that Ruby was picked without re-running the search (020's "Ruby
 // executable選択理由を診断画面で確認できる").
 const rubyResolutions = new Map<string, RubyResolution>();
 
 // Task 020's priority order: an explicit path setting always wins outright
 // (never even runs the version-manager search); everything below that is
-// `rubyResolver.resolveRuby`'s job. `rslsp.rubyExecutablePath` is this
-// task's own setting name; `rslsp.ruby.command` (pre-existing) is kept
+// `rubyResolver.resolveRuby`'s job. `ovallsp.rubyExecutablePath` is this
+// task's own setting name; `ovallsp.ruby.command` (pre-existing) is kept
 // working as a synonym at the same priority, for anyone already using it.
 function resolveRubyForFolder(folder: vscode.WorkspaceFolder): { command: string; resolution: RubyResolution | null } {
-  const config = vscode.workspace.getConfiguration('rslsp', folder);
+  const config = vscode.workspace.getConfiguration('ovallsp', folder);
   const explicit = config.get<string | null>('rubyExecutablePath') ?? config.get<string | null>('ruby.command');
   if (explicit && explicit.trim().length > 0) {
     return { command: explicit, resolution: null };
@@ -43,7 +43,7 @@ function startClientForFolder(
   outputChannel: vscode.OutputChannel,
   context: vscode.ExtensionContext
 ): LanguageClient {
-  const config = vscode.workspace.getConfiguration('rslsp', folder);
+  const config = vscode.workspace.getConfiguration('ovallsp', folder);
   const { command: resolvedRubyCommand, resolution } = resolveRubyForFolder(folder);
   if (resolution) {
     rubyResolutions.set(folder.uri.toString(), resolution);
@@ -95,7 +95,7 @@ function startClientForFolder(
     initializationOptions: { workspaceTrusted: vscode.workspace.isTrusted }
   };
 
-  const client = new LanguageClient('rslsp', `RSLSP (${folder.name})`, serverOptions, clientOptions);
+  const client = new LanguageClient('ovallsp', `OvalLSP (${folder.name})`, serverOptions, clientOptions);
   client.start().then(undefined, (err) => outputChannel.appendLine(`failed to start Core Server: ${err}`));
   return client;
 }
@@ -109,39 +109,39 @@ function clientForActiveEditor(outputChannel: vscode.OutputChannel): LanguageCli
   const uri = vscode.window.activeTextEditor?.document.uri;
   const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : vscode.workspace.workspaceFolders?.[0];
   if (!folder) {
-    void vscode.window.showWarningMessage('RSLSP: no workspace folder is open.');
+    void vscode.window.showWarningMessage('OvalLSP: no workspace folder is open.');
     return undefined;
   }
 
   const client = clients.get(folder.uri.toString());
   if (!client) {
-    outputChannel.appendLine(`RSLSP: no running Core Server for ${folder.name}.`);
+    outputChannel.appendLine(`OvalLSP: no running Core Server for ${folder.name}.`);
   }
   return client;
 }
 
 function registerObservationCommands(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('rslsp.observation.runTests', async () => {
+    vscode.commands.registerCommand('ovallsp.observation.runTests', async () => {
       const client = clientForActiveEditor(outputChannel);
       if (!client) {
         return;
       }
 
-      const testCommand = vscode.workspace.getConfiguration('rslsp').get<string[] | null>('observation.testCommand');
+      const testCommand = vscode.workspace.getConfiguration('ovallsp').get<string[] | null>('observation.testCommand');
       await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: 'RSLSP: running tests with type observation…' },
+        { location: vscode.ProgressLocation.Notification, title: 'OvalLSP: running tests with type observation…' },
         async () => {
           try {
             const result = await client.sendRequest<{ sampleCount: number; methodCount: number }>(
-              'rslsp/runObservedTests',
+              'ovallsp/runObservedTests',
               testCommand && testCommand.length > 0 ? { testCommand } : {}
             );
             void vscode.window.showInformationMessage(
-              `RSLSP: observed ${result.methodCount} method(s) across ${result.sampleCount} call(s).`
+              `OvalLSP: observed ${result.methodCount} method(s) across ${result.sampleCount} call(s).`
             );
           } catch (err) {
-            void vscode.window.showErrorMessage(`RSLSP: observation run failed: ${err}`);
+            void vscode.window.showErrorMessage(`OvalLSP: observation run failed: ${err}`);
           }
         }
       );
@@ -149,19 +149,19 @@ function registerObservationCommands(context: vscode.ExtensionContext, outputCha
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('rslsp.observation.clearTypes', async () => {
+    vscode.commands.registerCommand('ovallsp.observation.clearTypes', async () => {
       const client = clientForActiveEditor(outputChannel);
       if (!client) {
         return;
       }
 
-      await client.sendRequest('rslsp/clearObservedTypes', {});
-      void vscode.window.showInformationMessage('RSLSP: cleared observed types.');
+      await client.sendRequest('ovallsp/clearObservedTypes', {});
+      void vscode.window.showInformationMessage('OvalLSP: cleared observed types.');
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('rslsp.observation.showEvidence', async () => {
+    vscode.commands.registerCommand('ovallsp.observation.showEvidence', async () => {
       const client = clientForActiveEditor(outputChannel);
       const editor = vscode.window.activeTextEditor;
       if (!client || !editor) {
@@ -177,15 +177,15 @@ function registerObservationCommands(context: vscode.ExtensionContext, outputCha
         returnType: string;
         samples: number;
         confidence: string;
-      } | null>('rslsp/showTypeEvidence', params);
+      } | null>('ovallsp/showTypeEvidence', params);
 
       if (!evidence) {
-        void vscode.window.showInformationMessage('RSLSP: no observed type evidence at this position.');
+        void vscode.window.showInformationMessage('OvalLSP: no observed type evidence at this position.');
         return;
       }
 
       void vscode.window.showInformationMessage(
-        `RSLSP (${evidence.confidence} confidence, ${evidence.samples} sample(s)): ` +
+        `OvalLSP (${evidence.confidence} confidence, ${evidence.samples} sample(s)): ` +
           `(${evidence.parameterTypes.join(', ')}) -> ${evidence.returnType}`
       );
     })
@@ -193,13 +193,13 @@ function registerObservationCommands(context: vscode.ExtensionContext, outputCha
 }
 
 // Task 020's required status set. Polled (see #startStatusPolling) rather
-// than pushed, matching Server's own `rslsp/status`'s own design ("polled
+// than pushed, matching Server's own `ovallsp/status`'s own design ("polled
 // by the client rather than pushed as notifications").
 const STATUS_LABELS: Record<string, string> = {
-  indexing: '$(sync~spin) RSLSP: Indexing',
-  'ready-static': '$(check) RSLSP: Ready (static)',
-  'ready-rails': '$(check) RSLSP: Ready (Rails)',
-  'agent-unavailable': '$(warning) RSLSP: Agent unavailable'
+  indexing: '$(sync~spin) OvalLSP: Indexing',
+  'ready-static': '$(check) OvalLSP: Ready (static)',
+  'ready-rails': '$(check) OvalLSP: Ready (Rails)',
+  'agent-unavailable': '$(warning) OvalLSP: Agent unavailable'
 };
 
 function startStatusPolling(statusBarItem: vscode.StatusBarItem): vscode.Disposable {
@@ -214,11 +214,11 @@ function startStatusPolling(statusBarItem: vscode.StatusBarItem): vscode.Disposa
       }
 
       try {
-        const result = await client.sendRequest<{ state: string }>('rslsp/status', {});
-        statusBarItem.text = STATUS_LABELS[result.state] ?? `RSLSP: ${result.state}`;
+        const result = await client.sendRequest<{ state: string }>('ovallsp/status', {});
+        statusBarItem.text = STATUS_LABELS[result.state] ?? `OvalLSP: ${result.state}`;
         statusBarItem.show();
       } catch {
-        statusBarItem.text = '$(error) RSLSP: Configuration error';
+        statusBarItem.text = '$(error) OvalLSP: Configuration error';
         statusBarItem.show();
       }
     })();
@@ -232,55 +232,55 @@ function registerEnvironmentCommands(
   outputChannel: vscode.OutputChannel
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('rslsp.restartServer', async () => {
+    vscode.commands.registerCommand('ovallsp.restartServer', async () => {
       for (const folder of vscode.workspace.workspaceFolders ?? []) {
         const key = folder.uri.toString();
         await stopClient(key);
         clients.set(key, startClientForFolder(folder, outputChannel, context));
       }
-      void vscode.window.showInformationMessage('RSLSP: Core Server restarted.');
+      void vscode.window.showInformationMessage('OvalLSP: Core Server restarted.');
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('rslsp.restartAgent', async () => {
+    vscode.commands.registerCommand('ovallsp.restartAgent', async () => {
       const client = clientForActiveEditor(outputChannel);
       if (!client) {
         return;
       }
-      await client.sendRequest('rslsp/restartAgent', {});
-      void vscode.window.showInformationMessage('RSLSP: Runtime Agent restart requested.');
+      await client.sendRequest('ovallsp/restartAgent', {});
+      void vscode.window.showInformationMessage('OvalLSP: Runtime Agent restart requested.');
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('rslsp.showLogs', () => outputChannel.show())
+    vscode.commands.registerCommand('ovallsp.showLogs', () => outputChannel.show())
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('rslsp.reindexWorkspace', async () => {
+    vscode.commands.registerCommand('ovallsp.reindexWorkspace', async () => {
       const client = clientForActiveEditor(outputChannel);
       if (!client) {
         return;
       }
-      await client.sendRequest('rslsp/reindexWorkspace', {});
-      void vscode.window.showInformationMessage('RSLSP: re-indexing workspace.');
+      await client.sendRequest('ovallsp/reindexWorkspace', {});
+      void vscode.window.showInformationMessage('OvalLSP: re-indexing workspace.');
     })
   );
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('rslsp.showEnvironmentDiagnostics', () => {
+    vscode.commands.registerCommand('ovallsp.showEnvironmentDiagnostics', () => {
       const uri = vscode.window.activeTextEditor?.document.uri;
       const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : vscode.workspace.workspaceFolders?.[0];
       if (!folder) {
-        void vscode.window.showWarningMessage('RSLSP: no workspace folder is open.');
+        void vscode.window.showWarningMessage('OvalLSP: no workspace folder is open.');
         return;
       }
 
-      outputChannel.appendLine(`--- RSLSP environment diagnostics: ${folder.name} ---`);
+      outputChannel.appendLine(`--- OvalLSP environment diagnostics: ${folder.name} ---`);
       const resolution = rubyResolutions.get(folder.uri.toString());
       if (!resolution) {
-        outputChannel.appendLine('Ruby executable: explicitly configured (rslsp.rubyExecutablePath/rslsp.ruby.command) -- version-manager search was skipped.');
+        outputChannel.appendLine('Ruby executable: explicitly configured (ovallsp.rubyExecutablePath/ovallsp.ruby.command) -- version-manager search was skipped.');
       } else {
         outputChannel.appendLine(`Ruby executable chosen: ${resolution.executable}`);
         for (const step of resolution.steps) {
@@ -306,10 +306,10 @@ function stopClient(key: string): Thenable<void> {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  const outputChannel = vscode.window.createOutputChannel('RSLSP');
+  const outputChannel = vscode.window.createOutputChannel('OvalLSP');
   context.subscriptions.push(outputChannel);
 
-  const config = vscode.workspace.getConfiguration('rslsp');
+  const config = vscode.workspace.getConfiguration('ovallsp');
   if (config.get<boolean>('enabled') === false) {
     return;
   }

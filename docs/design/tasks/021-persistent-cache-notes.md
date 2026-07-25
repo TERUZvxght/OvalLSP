@@ -6,10 +6,10 @@ deliberately deferred.
 
 ## What's cached
 
-`Rslsp::Cache::Store` persists one `Index::FileSummary` per on-disk file
+`Ovallsp::Cache::Store` persists one `Index::FileSummary` per on-disk file
 (declarations, ancestor/alias facts, reference candidates, generated
 method facts — everything `ColdIndexer` produces per file), under
-`~/.cache/rslsp/<workspace_digest>/<sha256(path)>.cache`. `MethodSummary`
+`~/.cache/ovallsp/<workspace_digest>/<sha256(path)>.cache`. `MethodSummary`
 (Task 010's per-method body-summary/call-chain cache) is **not**
 persisted in this pass — it's already cheap to recompute on first query
 (one method body, not a whole-workspace walk), and Cold Index warming is
@@ -31,7 +31,7 @@ staleness is a separate, cheaper `content_hash` check inside
 
 ## Measured numbers
 
-`Rslsp::Benchmark::ColdIndexBenchmark` (spec/rslsp/benchmark/cold_index_benchmark_spec.rb)
+`Ovallsp::Benchmark::ColdIndexBenchmark` (spec/ovallsp/benchmark/cold_index_benchmark_spec.rb)
 runs a 50-synthetic-file corpus on every CI run (kept small deliberately,
 see the spec's own comment) and writes a report to
 `core/tmp/cold_index_benchmark_report.json`. A representative run on this

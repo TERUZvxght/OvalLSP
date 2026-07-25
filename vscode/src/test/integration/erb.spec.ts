@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-describe('RSLSP extension .erb support (Extension Development Host)', () => {
+describe('OvalLSP extension .erb support (Extension Development Host)', () => {
   it('forwards a .erb file to the Core Server (documentSelector actually matches it)', async function () {
     this.timeout(30000);
 

@@ -35,7 +35,7 @@ Ruby method bodyから戻り値型を推論してMethodSummaryを生成し、通
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Semantic
     MethodSummary = Data.define(
       :symbol_id,

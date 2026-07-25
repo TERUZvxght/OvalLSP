@@ -1,6 +1,6 @@
 # Ruby Semantic LSP 設計パッケージ
 
-作業名: **Ruby Semantic LSP (RSLSP)**  
+作業名: **Ruby Semantic LSP (OvalLSP)**  
 目的: RubyおよびRailsに対して、型注釈を必須とせず、静的解析・Rails実行時情報・任意の実行観測を統合した高精度なVS Code向け言語機能を提供する。
 
 このパッケージは、AI実装エージェントへ順番に渡して開発を開始できる粒度で構成している。
@@ -417,7 +417,7 @@ Ruby LSPのアドオンAPIは現在も変更可能性があり、既存のmethod
 
 ```text
 VS Code Extension Host
-└── rslsp-core (project Ruby + composed bundle)
+└── ovallsp-core (project Ruby + composed bundle)
     └── bin/rails runner .../runtime_agent.rb start
 ```
 
@@ -438,7 +438,7 @@ Core ServerはプロジェクトのGemfileへ直接gem追加を要求しない�
 推奨:
 
 ```text
-.rslsp/
+.ovallsp/
 ├── Gemfile
 ├── Gemfile.lock
 └── cache/
@@ -1029,15 +1029,15 @@ Agentは型推論を行わない。返すのは正規化された事実である
 推奨コマンド:
 
 ```bash
-bundle exec bin/rails runner /absolute/path/to/rslsp/runtime_agent_boot.rb start '<capabilities-json>'
+bundle exec bin/rails runner /absolute/path/to/ovallsp/runtime_agent_boot.rb start '<capabilities-json>'
 ```
 
 環境変数:
 
 ```text
 RAILS_ENV=development
-RSLSP_AGENT=1
-RSLSP_PROTOCOL_VERSION=1
+OvalLSP_AGENT=1
+OvalLSP_PROTOCOL_VERSION=1
 ```
 
 `test` environmentはDB副作用やinitializer差があるため既定にしない。
@@ -1229,7 +1229,7 @@ pluginは直接protocol writerへ触れず、registryへrequest handlerとsnapsh
 
 VS CodeとCore Serverは標準LSP 3.17を使用する。
 
-Core ServerとRuntime Agentは、JSON-RPC 2.0互換の**RSLSP Agent Protocol v1**を使用する。
+Core ServerとRuntime Agentは、JSON-RPC 2.0互換の**OvalLSP Agent Protocol v1**を使用する。
 
 transport:
 
@@ -1433,12 +1433,12 @@ Agentはrequestごとのtokenを保持する。Rails reflection APIが中断不�
 VS Code固有UI用にCoreが提供するcustom request:
 
 ```text
-rslsp/status
-rslsp/restartRuntimeAgent
-rslsp/showEvidence
-rslsp/explainType
-rslsp/runObservation
-rslsp/clearCaches
+ovallsp/status
+ovallsp/restartRuntimeAgent
+ovallsp/showEvidence
+ovallsp/explainType
+ovallsp/runObservation
+ovallsp/clearCaches
 ```
 
 標準language featureは必ず標準LSP requestで返す。
@@ -1490,8 +1490,8 @@ Observation Runner内で動作する。初期版では非公開。
 name: aasm
 version: 0.1.0
 protocol_version: 1
-static_entrypoint: lib/rslsp/plugins/aasm/static.rb
-runtime_entrypoint: lib/rslsp/plugins/aasm/runtime.rb
+static_entrypoint: lib/ovallsp/plugins/aasm/static.rb
+runtime_entrypoint: lib/ovallsp/plugins/aasm/runtime.rb
 requires:
   gems:
     aasm: ">= 5.0"
@@ -1592,7 +1592,7 @@ Pluginが直接SymbolIndexへ書かないことで、generation rollbackとplugi
 Plugin APIはsemantic versioningする。
 
 ```ruby
-Rslsp::Plugin.require_api!(">= 1.0", "< 2.0")
+Ovallsp::Plugin.require_api!(">= 1.0", "< 2.0")
 ```
 
 - incompatible pluginは起動失敗させず無効化する。
@@ -1603,8 +1603,8 @@ Rslsp::Plugin.require_api!(">= 1.0", "< 2.0")
 
 優先順位:
 
-1. workspace `.rslsp/plugins/`
-2. bundle内gemの`rslsp/plugin.yml`
+1. workspace `.ovallsp/plugins/`
+2. bundle内gemの`ovallsp/plugin.yml`
 3. user設定で明示したpath
 
 Workspace Trustがない場合、workspace pluginとruntime pluginをロードしない。
@@ -1703,7 +1703,7 @@ server options:
 
 ```text
 command: resolved Ruby command
-args: [path/to/rslsp-core, "--stdio"]
+args: [path/to/ovallsp-core, "--stdio"]
 cwd: workspace folder
 ```
 
@@ -1723,13 +1723,13 @@ MVPでは1とsystem Rubyだけでもよい。環境解決は独立moduleにす�
 状態:
 
 ```text
-RSLSP: Starting
-RSLSP: Static
-RSLSP: Rails loading
-RSLSP: Ready
-RSLSP: Rails stale
-RSLSP: Rails failed
-RSLSP: Crashed
+OvalLSP: Starting
+OvalLSP: Static
+OvalLSP: Rails loading
+OvalLSP: Ready
+OvalLSP: Rails stale
+OvalLSP: Rails failed
+OvalLSP: Crashed
 ```
 
 クリック時にQuick Pick:
@@ -1744,30 +1744,30 @@ RSLSP: Crashed
 ## 6. Commands
 
 ```text
-rslsp.restart
-rslsp.restartRuntimeAgent
-rslsp.showStatus
-rslsp.showEvidence
-rslsp.explainType
-rslsp.clearCaches
-rslsp.runObservation
-rslsp.openLogs
+ovallsp.restart
+ovallsp.restartRuntimeAgent
+ovallsp.showStatus
+ovallsp.showEvidence
+ovallsp.explainType
+ovallsp.clearCaches
+ovallsp.runObservation
+ovallsp.openLogs
 ```
 
 ## 7. Settings
 
 ```jsonc
 {
-  "rslsp.enabled": true,
-  "rslsp.ruby.command": null,
-  "rslsp.rails.enabled": true,
-  "rslsp.rails.environment": "development",
-  "rslsp.rails.bootTimeoutMs": 60000,
-  "rslsp.runtimeObservation.enabled": false,
-  "rslsp.diagnostics.strictness": "safe",
-  "rslsp.completion.showUncertain": true,
-  "rslsp.trace.server": "off",
-  "rslsp.plugins.enabled": []
+  "ovallsp.enabled": true,
+  "ovallsp.ruby.command": null,
+  "ovallsp.rails.enabled": true,
+  "ovallsp.rails.environment": "development",
+  "ovallsp.rails.bootTimeoutMs": 60000,
+  "ovallsp.runtimeObservation.enabled": false,
+  "ovallsp.diagnostics.strictness": "safe",
+  "ovallsp.completion.showUncertain": true,
+  "ovallsp.trace.server": "off",
+  "ovallsp.plugins.enabled": []
 }
 ```
 
@@ -1795,7 +1795,7 @@ untrusted workspace:
 
 将来、次の互換モードを検討できる。
 
-- RSLSPはsemantic機能のみ
+- OvalLSPはsemantic機能のみ
 - Ruby LSPはformat/test/code lensのみ
 
 ただしMVPの対象外。
@@ -1854,11 +1854,11 @@ release時にはsupply-chainとoffline利用を再検討する。
 ## 2. Repository layout
 
 ```text
-rslsp/
+ovallsp/
 ├── Gemfile
-├── rslsp.gemspec
-├── exe/rslsp
-├── lib/rslsp/
+├── ovallsp.gemspec
+├── exe/ovallsp
+├── lib/ovallsp/
 │   ├── server.rb
 │   ├── transport/
 │   ├── lsp/
@@ -1896,7 +1896,7 @@ monorepoを採用する。protocol schemaとfixtureを共有しやすくする�
 
 ### Deliverables
 
-- Ruby executable `rslsp --stdio`
+- Ruby executable `ovallsp --stdio`
 - initialize/shutdown/exit
 - didOpen/didChange/didClose
 - hover固定応答

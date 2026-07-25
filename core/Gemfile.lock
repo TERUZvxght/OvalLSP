@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    rslsp (0.0.1)
+    ovallsp (0.0.1)
       prism (>= 0.24)
       rbs (>= 3.0)
 
@@ -37,7 +37,7 @@ PLATFORMS
 
 DEPENDENCIES
   benchmark
-  rslsp!
+  ovallsp!
   rspec (~> 3.13)
 
 BUNDLED WITH

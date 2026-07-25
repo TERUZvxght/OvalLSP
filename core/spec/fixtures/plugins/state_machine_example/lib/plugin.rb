@@ -19,9 +19,9 @@
 # real per-file DSL recognition -- out of scope for this pass (see
 # StaticContext's own docs); this example demonstrates the *pipeline*,
 # not that specific recognition.
-Rslsp::Plugins.register_static("rslsp-example-state-machine") do |context|
+Ovallsp::Plugins.register_static("ovallsp-example-state-machine") do |context|
   context.register_declarations([
                                    { owner: "::ExampleModel", name: "pending?", kind: :instance_method,
-                                     return_type: Rslsp::Types::Nominal.new(name: "Boolean") }
+                                     return_type: Ovallsp::Types::Nominal.new(name: "Boolean") }
                                  ])
 end

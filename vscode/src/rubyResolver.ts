@@ -45,7 +45,7 @@ function pathEntries(env: RubyResolverEnv): string[] {
  * docs/design/tasks/020-vsix-packaging-and-ruby-environment-resolution.md's
  * priority order:
  *
- *   1. explicit `rslsp.rubyExecutablePath`
+ *   1. explicit `ovallsp.rubyExecutablePath`
  *   2. mise
  *   3. asdf
  *   4. rbenv

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Project-specific instructions for working on RSLSP (Ruby Semantic LSP: Core Server + VS Code extension + Rails Runtime Agent).
+Project-specific instructions for working on OvalLSP (Ruby Semantic LSP: Core Server + VS Code extension + Rails Runtime Agent).
 
 ## Review cadence (mandatory)
 

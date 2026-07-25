@@ -12,14 +12,14 @@ RSpec.describe "AgentProcessManager lifecycle (subprocess integration)" do
   # survives it (docs/design/tasks/005-runtime-agent-heartbeat.md).
   it "cleans up the Runtime Agent when the parent (Core) process exits normally" do
     fixture_root = File.join(core_root, "spec/fixtures/rails_minimal")
-    boot_script = File.join(core_root, "lib/rslsp/runtime_agent/boot.rb")
+    boot_script = File.join(core_root, "lib/ovallsp/runtime_agent/boot.rb")
     environment_file = File.join(fixture_root, "config/environment.rb")
 
     script = <<~RUBY
-      require #{File.join(core_root, "lib/rslsp").inspect}
+      require #{File.join(core_root, "lib/ovallsp").inspect}
       require "logger"
 
-      manager = Rslsp::AgentProcessManager.new(
+      manager = Ovallsp::AgentProcessManager.new(
         command: #{RbConfig.ruby.inspect},
         args: ["-I", #{File.join(core_root, "lib").inspect}, #{boot_script.inspect}, "start", #{environment_file.inspect}],
         chdir: #{fixture_root.inspect},

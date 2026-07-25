@@ -7,7 +7,7 @@ VS Code拡張がworkspace folderごとにRuby製Core Serverをstdioで起動し�
 ## In scope
 
 - monorepo skeleton
-- Ruby `rslsp --stdio`
+- Ruby `ovallsp --stdio`
 - Content-Length LSP reader/writer
 - initialize/initialized/shutdown/exit
 - didOpen/didChange/didClose
@@ -28,7 +28,7 @@ VS Code拡張がworkspace folderごとにRuby製Core Serverをstdioで起動し�
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   class Server
     def initialize(input:, output:, logger:); end
     def run; end
@@ -71,7 +71,7 @@ cd vscode && npm test
 ## Acceptance criteria
 
 - [ ] Extension Development HostでRuby fileを開ける
-- [ ] Hoverに`RSLSP connected`と表示される
+- [ ] Hoverに`OvalLSP connected`と表示される
 - [ ] document versionが更新される
 - [ ] stdout contamination testが通る
 - [ ] shutdownで子プロセスが残らない

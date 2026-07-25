@@ -25,7 +25,7 @@ Ruby documentをPrismでparseし、class/module/method/constantの宣言をFileS
 ## Required interfaces
 
 ```ruby
-module Rslsp
+module Ovallsp
   module Index
     SymbolId = Data.define(:kind, :owner, :name, :discriminator)
     Declaration = Data.define(:symbol_id, :location, :visibility, :parameters, :origin)

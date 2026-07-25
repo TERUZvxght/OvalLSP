@@ -11,11 +11,11 @@
 ## 2. Repository layout
 
 ```text
-rslsp/
+ovallsp/
 ├── Gemfile
-├── rslsp.gemspec
-├── exe/rslsp
-├── lib/rslsp/
+├── ovallsp.gemspec
+├── exe/ovallsp
+├── lib/ovallsp/
 │   ├── server.rb
 │   ├── transport/
 │   ├── lsp/
@@ -53,7 +53,7 @@ monorepoを採用する。protocol schemaとfixtureを共有しやすくする�
 
 ### Deliverables
 
-- Ruby executable `rslsp --stdio`
+- Ruby executable `ovallsp --stdio`
 - initialize/shutdown/exit
 - didOpen/didChange/didClose
 - hover固定応答

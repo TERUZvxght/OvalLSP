@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://example.invalid/rslsp/runtime-agent.schema.json",
-  "title": "RSLSP Runtime Agent Messages",
+  "$id": "https://example.invalid/ovallsp/runtime-agent.schema.json",
+  "title": "OvalLSP Runtime Agent Messages",
   "type": "object",
   "oneOf": [
     {"$ref": "#/$defs/request"},

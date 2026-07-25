@@ -22,9 +22,9 @@ rescue StandardError
   nil
 end
 
-Rslsp::Plugins.register_static("rslsp-pipe-forger") do |context|
+Ovallsp::Plugins.register_static("ovallsp-pipe-forger") do |context|
   context.register_declarations([
                                    { owner: "::PipeForgerModel", name: "legitimate?", kind: :instance_method,
-                                     return_type: Rslsp::Types::Nominal.new(name: "Boolean") }
+                                     return_type: Ovallsp::Types::Nominal.new(name: "Boolean") }
                                  ])
 end

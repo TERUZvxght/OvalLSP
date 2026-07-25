@@ -6,11 +6,11 @@ and what was measured.
 
 ## Privacy
 
-`Rslsp::Observation::TypeNormalizer` is the only place an observed Ruby
+`Ovallsp::Observation::TypeNormalizer` is the only place an observed Ruby
 *value* is ever touched, and it only ever calls `#nil?`, `#is_a?`, and (on
 a Class/Module value only) `#name` — never `#inspect`/`#to_s`/`#to_str` on
 application data, never reads instance variables, never serializes an
-argument. `spec/rslsp/observation/type_normalizer_spec.rb`'s "never calls
+argument. `spec/ovallsp/observation/type_normalizer_spec.rb`'s "never calls
 #inspect or #to_s" example asserts this directly against a poisoned test
 double whose `#inspect`/`#to_s` raise if ever invoked.
 
@@ -33,7 +33,7 @@ so a Gem/stdlib method invoked from workspace test code is never observed
 
 The collector only ever runs inside the isolated runner process
 (`Observation::Runner`, a genuinely separate OS process spawned only for
-an explicit `rslsp/runObservedTests` request) — Core's own LSP-serving
+an explicit `ovallsp/runObservedTests` request) — Core's own LSP-serving
 process never installs a `TracePoint` and pays zero runtime cost for this
 feature unless a user explicitly triggers an observation run.
 
@@ -48,7 +48,7 @@ per-call argument *values* (via `Binding#local_variable_get`, one per
 `:req`/`:opt` parameter) are read fresh every time, since those
 necessarily differ call to call. This caching was added after this
 module's own overhead benchmark
-(`spec/rslsp/observation/overhead_spec.rb`) caught the pre-caching
+(`spec/ovallsp/observation/overhead_spec.rb`) caught the pre-caching
 version taking ~32s for 3,000 calls to one method; with it, the same
 benchmark runs in well under a second.
 

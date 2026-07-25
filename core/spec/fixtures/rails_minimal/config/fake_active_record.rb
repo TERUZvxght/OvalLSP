@@ -3,7 +3,7 @@
 # A tiny stand-in for ActiveRecord::Base. Real `activerecord` isn't a
 # dependency of this repo (docs/design/tasks/007-active-record-model-and-local-inference.md),
 # so this exposes just enough of the real interface for
-# Rslsp::RuntimeAgent::Agent's model extraction to work unchanged against
+# Ovallsp::RuntimeAgent::Agent's model extraction to work unchanged against
 # it and against real ActiveRecord later: `.columns` (name/type/null),
 # `.reflect_on_all_associations` (macro/name/class_name/options), and
 # `.table_name`/`.abstract_class?`/`.descendants`.
@@ -46,7 +46,7 @@ module ActiveRecord
       # table_name) don't need a live DB connection in real ActiveRecord,
       # only schema introspection does.
       def columns
-        raise "database unavailable" if ENV["RSLSP_FIXTURE_DB_DOWN"] == "1"
+        raise "database unavailable" if ENV["OvalLSP_FIXTURE_DB_DOWN"] == "1"
 
         declared_columns
       end
