@@ -232,6 +232,7 @@ module Ovallsp
       # the plugin not to close the result fd early. Neither wait is
       # unbounded any more; see #kill_child and #reap_finished_child.
       def run_isolated(name)
+        settled = false
         reader, writer = ::IO.pipe
         pid =
           begin
@@ -244,16 +245,61 @@ module Ovallsp
             # out of #load_static/#load_runtime, the same "one broken
             # plugin must never take Core down" invariant every other
             # failure mode here already honors.
-            reader.close
-            writer.close
             return apply_isolation_result(name, { ok: false, error: "#{e.class}: #{e.message}" })
           end
         writer.close
 
         payload = read_isolated_result(reader, pid)
-        reader.close
+        # #read_isolated_result owns the child from here: both of its exits
+        # (timeout -> #kill_child, EOF -> #reap_finished_child) have already
+        # signalled and reaped it. Anything that stops it from returning
+        # normally leaves the child to the `ensure` below instead.
+        settled = true
 
         apply_isolation_result(name, payload)
+      ensure
+        # Round 10 taught this same lesson in Observation::Runner
+        # (`ensure { kill(pid) if pid && !settled }`) and it was never
+        # applied to the sibling boundary here, which forks a child of its
+        # own on the identical LSP transport thread. Found by an
+        # independent review, round 14.
+        #
+        # Every cleanup this method owes -- both pipe ends, and the plugin
+        # child itself -- used to sit on the straight-line success path, so
+        # anything raising between the fork and the end of the method
+        # skipped all of it. That was already a leak before round 13; round
+        # 13's #guarded then made it *silent*, converting "raises out of
+        # #load_static, having leaked a child" into "logs one line, returns
+        # [], having leaked a child". The escapes are not hypothetical:
+        # #guarded's own docs name `reader.read`/`reader.close` raising
+        # IOError/Errno::EIO as reachable, `Timeout.timeout` allocates a
+        # thread and so can raise ThreadError under thread exhaustion, and
+        # an Interrupt (Ctrl-C on the transport thread, exactly round 10's
+        # scenario) passes straight through #guarded's StandardError rescue.
+        # In every one of those the forked child -- which is running
+        # arbitrary plugin code, quite possibly a `sleep` or a loop -- was
+        # left running *and* unreaped for the rest of the LSP session, with
+        # nothing anywhere still tracking its pid, plus a leaked read fd per
+        # occurrence in a long-lived process that can already reach EMFILE.
+        #
+        # #kill_child is the right primitive rather than a bare reap: on
+        # this path we do not know the child is dying (that is precisely
+        # what we failed to establish), so it must be signalled first, and
+        # ChildProcess.reap then bounds the wait.
+        #
+        # Closes go through #close_quietly because an IOError raised out of
+        # an `ensure` would *replace* the exception currently propagating --
+        # the same reason ChildProcess.signal is total, and the reason an
+        # Interrupt must survive this block intact.
+        close_quietly(reader)
+        close_quietly(writer)
+        kill_child(pid) if pid && !settled
+      end
+
+      def close_quietly(io)
+        io.close unless io.nil? || io.closed?
+      rescue StandardError
+        nil
       end
 
       def fork_plugin_child(writer)

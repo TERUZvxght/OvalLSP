@@ -10,6 +10,34 @@ RSpec.describe Ovallsp::Plugins::Loader do
     File.join(fixtures_root, name, "plugin-manifest.json")
   end
 
+  # Polls rather than probing once: ChildProcess.reap can hand a stubborn
+  # pid to Process.detach and let its waiter thread finish the job, so
+  # "the loader dealt with the child" is a state reached within a bounded
+  # window, not necessarily by the instant #load_static returns. The
+  # window is generous (well past ChildProcess' own 2s reap budget) so a
+  # loaded CI machine can't make this flake, while a genuinely leaked
+  # child -- the fixtures sleep 60 -- still fails it.
+  def child_alive?(pid, within: 5)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + within
+    loop do
+      Process.kill(0, pid)
+      return true if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+      sleep 0.05
+    end
+  rescue Errno::ESRCH
+    false
+  end
+
+  def kill_leaked_child(pid)
+    return unless pid
+
+    Process.kill("KILL", pid)
+    Process.waitpid(pid)
+  rescue StandardError
+    nil
+  end
+
   after do
     # Loader always calls Plugins.clear_registration after a run, but a
     # test that inspects state mid-way (or a fixture whose block itself
@@ -166,6 +194,14 @@ RSpec.describe Ovallsp::Plugins::Loader do
       # Pins that this went through the EOF path being guarded, rather than
       # passing because the plugin happened to fail some earlier way.
       expect(logger).to have_received(:error).with(a_string_matching(/produced no output/))
+      # ...and that #reap_finished_child's *escalation* ran, not merely its
+      # bounded wait. Without this the example still passed against a
+      # #reap_finished_child reduced to `return` -- returning promptly is
+      # only half of what the fix promises; the other half is that a child
+      # which faked EOF and then refused to exit actually gets SIGKILLed
+      # rather than left running for its full 60s sleep (round 14,
+      # stress-testing round 13's own regression test).
+      expect(logger).to have_received(:error).with(a_string_matching(/closed its result channel without exiting/))
     ensure
       worker&.kill
       begin
@@ -209,6 +245,65 @@ RSpec.describe Ovallsp::Plugins::Loader do
 
       expect(contexts).to eq([])
       expect(logger).to have_received(:error).with(a_string_matching(/Errno::EMFILE/))
+    end
+
+    # Found by an independent review (round 14) of Task 022.2, and
+    # byte-for-byte the gap round 10 found in Observation::Runner --
+    # #spawn_and_collect's `ensure { kill(pid) if pid && !settled }` --
+    # never applied to the sibling boundary here, which forks a child of
+    # its own on the identical LSP transport thread.
+    #
+    # #run_isolated did all of its cleanup (both pipe ends, and the plugin
+    # child) on the straight-line success path, so any exception between
+    # the fork and the end of the method skipped every bit of it. Round 13
+    # made that *quieter* rather than safer: before it, such an exception
+    # raised out of #load_static having leaked a child; after it, #guarded
+    # logs one line, returns [], and the child is leaked with nothing
+    # anywhere still holding its pid.
+    #
+    # Errno::EIO from Timeout.timeout stands in for the whole class of
+    # escapes, all of which #guarded's own docs already name as reachable:
+    # `reader.read`/`reader.close` raising IOError/Errno::EIO, and
+    # Timeout.timeout itself raising ThreadError under thread exhaustion
+    # (it allocates a thread). The leaked child is running arbitrary plugin
+    # code -- here `sleep 60` -- so "leaked" means a live process plus an
+    # unreapable pid for the rest of the LSP session, not just a zombie.
+    it "kills and reaps the plugin child even when the read path fails in a way #guarded swallows" do
+      forked = nil
+      allow(Process).to receive(:fork).and_wrap_original { |original, &blk| forked = original.call(&blk) }
+      allow(Timeout).to receive(:timeout).and_raise(Errno::EIO)
+
+      contexts = :unset
+      expect { contexts = loader.load_static([manifest_path("slow")]) }.not_to raise_error
+
+      expect(contexts).to eq([])
+      expect(logger).to have_received(:error).with(a_string_matching(/Errno::EIO/))
+      expect(forked).not_to be_nil
+      expect(child_alive?(forked)).to be(false),
+                                      "plugin child #{forked} survived #load_static -- nothing tracks its pid any more"
+    ensure
+      kill_leaked_child(forked)
+    end
+
+    # The same structural hole, reached by the exception class #guarded
+    # deliberately does *not* rescue. Ctrl-C on the LSP transport thread
+    # while a plugin child is being read from is precisely round 10's
+    # scenario ("a Ctrl-C'd observation run orphaned the workspace's whole
+    # test tree"), and an Interrupt must both keep propagating *and* leave
+    # no child behind -- which is why the cleanup has to be an `ensure`
+    # rather than one more rescue.
+    it "kills and reaps the plugin child when a non-StandardError propagates out of #load_static" do
+      forked = nil
+      allow(Process).to receive(:fork).and_wrap_original { |original, &blk| forked = original.call(&blk) }
+      allow(Timeout).to receive(:timeout).and_raise(Interrupt)
+
+      expect { loader.load_static([manifest_path("slow")]) }.to raise_error(Interrupt)
+
+      expect(forked).not_to be_nil
+      expect(child_alive?(forked)).to be(false),
+                                      "plugin child #{forked} outlived the Interrupt that tore #load_static down"
+    ensure
+      kill_leaked_child(forked)
     end
 
     it "isolates a plugin that registers a malformed fact (missing required keys)" do
