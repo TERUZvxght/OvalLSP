@@ -19,6 +19,20 @@ const { execFileSync } = require('child_process');
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CORE_SOURCE = path.join(REPO_ROOT, 'core');
 const CORE_DEST = path.join(__dirname, '..', 'core');
+// Built in a staging directory and only ever `renameSync`d into place as
+// `CORE_DEST` once the entire build (copy + vendor) succeeds -- found
+// missing by an independent review of Task 020: the previous version
+// copied files directly into `CORE_DEST` one at a time, so a process
+// kill mid-copy (or, worse, mid-write of `core/bin/rslsp` itself) could
+// leave a *partially-written* `core/` behind that `serverConfig.ts`'s
+// `existsSync(core/bin/rslsp)` check would still treat as "the bundled
+// Core is present and should be preferred", causing the extension to
+// launch a broken server instead of falling back to the (working)
+// monorepo-relative path. `fs.renameSync` between two siblings in the
+// same directory is a same-filesystem rename, so the swap itself is
+// atomic: `CORE_DEST` is always either the previous complete build or
+// the new complete build, never a partial one.
+const CORE_STAGING = `${CORE_DEST}.building-${process.pid}`;
 
 // Only what bin/rslsp actually needs at runtime -- never spec/ (test
 // code, fixtures with their own throwaway Gemfiles that would confuse a
@@ -38,20 +52,20 @@ function copyRecursive(src, dest) {
   fs.copyFileSync(src, dest);
 }
 
-function copyCoreSource() {
+function copyCoreSourceIntoStaging() {
   if (!fs.existsSync(CORE_SOURCE)) {
     throw new Error(`copy-core: expected a sibling core/ directory at ${CORE_SOURCE}, but it doesn't exist`);
   }
 
-  fs.rmSync(CORE_DEST, { recursive: true, force: true });
+  fs.rmSync(CORE_STAGING, { recursive: true, force: true });
   for (const entry of INCLUDE) {
     const src = path.join(CORE_SOURCE, entry);
     if (!fs.existsSync(src)) {
       continue; // Gemfile.lock, in particular, is optional in some checkouts.
     }
-    copyRecursive(src, path.join(CORE_DEST, entry));
+    copyRecursive(src, path.join(CORE_STAGING, entry));
   }
-  console.log(`copy-core: copied ${INCLUDE.join(', ')} into ${CORE_DEST}`);
+  console.log(`copy-core: staged ${INCLUDE.join(', ')} into ${CORE_STAGING}`);
 }
 
 // Best-effort: a packaging environment without network access or a
@@ -61,11 +75,11 @@ function copyCoreSource() {
 // prism/rbs already available in whatever Ruby resolveRuby picks for
 // them, exactly the pre-Task-020 behavior. This must never make VSIX
 // packaging itself fail outright.
-function vendorGemDependencies() {
+function vendorGemDependenciesIntoStaging() {
   try {
-    execFileSync('bundle', ['config', 'set', '--local', 'path', 'vendor/bundle'], { cwd: CORE_DEST, stdio: 'inherit' });
-    execFileSync('bundle', ['install', '--without', 'development'], { cwd: CORE_DEST, stdio: 'inherit' });
-    console.log('copy-core: vendored runtime gem dependencies into core/vendor/bundle');
+    execFileSync('bundle', ['config', 'set', '--local', 'path', 'vendor/bundle'], { cwd: CORE_STAGING, stdio: 'inherit' });
+    execFileSync('bundle', ['install', '--without', 'development'], { cwd: CORE_STAGING, stdio: 'inherit' });
+    console.log('copy-core: vendored runtime gem dependencies into staging');
   } catch (err) {
     console.warn(
       `copy-core: could not vendor gem dependencies (${err.message}) -- packaged Core will rely on the ` +
@@ -74,5 +88,19 @@ function vendorGemDependencies() {
   }
 }
 
-copyCoreSource();
-vendorGemDependencies();
+function commitStaging() {
+  fs.rmSync(CORE_DEST, { recursive: true, force: true });
+  fs.renameSync(CORE_STAGING, CORE_DEST);
+  console.log(`copy-core: committed staged build to ${CORE_DEST}`);
+}
+
+try {
+  copyCoreSourceIntoStaging();
+  vendorGemDependenciesIntoStaging();
+  commitStaging();
+} finally {
+  // Only ever removes leftovers from *this run*'s own staging directory
+  // (pid-suffixed) -- never touches CORE_DEST itself, which #commitStaging
+  // has already either populated or left untouched.
+  fs.rmSync(CORE_STAGING, { recursive: true, force: true });
+}

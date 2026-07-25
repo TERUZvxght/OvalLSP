@@ -20,6 +20,21 @@ module Rslsp
     # miss is always correct, just slower), never raised. "corrupt/stale
     # cacheでCoreが落ちない" is enforced structurally: nothing calling
     # #load ever needs its own rescue.
+    #
+    # #load's `Marshal.load` is an accepted, deliberately-not-hardened
+    # trust boundary, flagged by an independent review of Task 022: the
+    # `is_a?(Index::FileSummary)` check after it only guards what Core
+    # *does* with a malformed entry, not the deserialization itself
+    # (Marshal can already run arbitrary code while reconstructing a
+    # crafted payload, before that check ever runs). Not fixed in this
+    # pass because the cache directory lives under this OS user's own
+    # `$XDG_CACHE_HOME`/`~/.cache` (see Server#build_cache_store), never
+    # inside the workspace/repo -- planting a hostile entry there already
+    # requires the same local file-write access that would let an
+    # attacker run arbitrary code directly, so hardening this
+    # deserialization step wouldn't close a real privilege boundary, only
+    # add defense-in-depth. Worth revisiting if this cache root is ever
+    # moved somewhere a lower-privilege or remote actor could write to.
     class Store
       # A soft LRU-ish bound ("memory bounds/LRU"): pruned opportunistically
       # on #save rather than tracked precisely, since exact LRU ordering

@@ -44,6 +44,45 @@ RSpec.describe Rslsp::Redactor do
       expect { described_class.redact(nil) }.not_to raise_error
       expect { described_class.redact(:a_symbol) }.not_to raise_error
     end
+
+    # Found by an independent review of Task 022: the module's own
+    # docstring names "a DB connection string" and an API client's own
+    # exception text as its motivating examples, but neither actually
+    # matched anything before this fix -- only an explicit
+    # `password=`-labeled assignment was ever redacted.
+    it "redacts the password in a DB connection string URL, keeping the username" do
+      message = "PG::ConnectionBad: could not connect to postgres://myapp_user:hunter2Secret@db.internal:5432/production"
+
+      redacted = described_class.redact(message)
+
+      expect(redacted).to include("postgres://myapp_user:[REDACTED]@db.internal:5432/production")
+      expect(redacted).not_to include("hunter2Secret")
+    end
+
+    it "redacts a live Stripe API key with no credential-sounding label in front of it" do
+      message = "Stripe::AuthenticationError: Invalid API Key provided: sk_live_51H8xJ2eZvKYloExampleKeyValue123"
+
+      redacted = described_class.redact(message)
+
+      expect(redacted).not_to include("sk_live_51H8xJ2eZvKYloExampleKeyValue123")
+      expect(redacted).to include("[REDACTED]")
+    end
+
+    it "redacts an AWS-style access key ID embedded in a URL query string" do
+      message = "Net::HTTPServerException: 401 for https://api.example.com/v1/resource?key=AKIAIOSFODNN7EXAMPLE"
+
+      redacted = described_class.redact(message)
+
+      expect(redacted).not_to include("AKIAIOSFODNN7EXAMPLE")
+    end
+
+    it "redacts a GitHub personal access token with no label" do
+      message = "fatal: unable to access 'https://github.com/org/repo.git/': ghp_1234567890abcdefghij1234567890ABCD"
+
+      redacted = described_class.redact(message)
+
+      expect(redacted).not_to include("ghp_1234567890abcdefghij1234567890ABCD")
+    end
   end
 
   describe ".redact_generic_tokens" do

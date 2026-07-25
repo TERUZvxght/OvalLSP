@@ -32,17 +32,36 @@ module Rslsp
         return Types::NIL if value.nil?
         return normalize_module(value) if value.is_a?(Module)
 
-        name = value.class.name
-        return Types::UNKNOWN if name.nil?
-
-        Types::Nominal.new(name: name)
+        as_nominal_name(value.class.name)
       end
 
       def normalize_module(mod)
-        name = mod.name
-        return Types::UNKNOWN if name.nil?
+        name = as_nominal_name(mod.name)
+        return Types::UNKNOWN if name == Types::UNKNOWN
 
-        Types::Generic.new(name: "ClassOf", type_arg: Types::Nominal.new(name: name))
+        Types::Generic.new(name: "ClassOf", type_arg: name)
+      end
+
+      # `#name` is one of the handful of methods this module calls
+      # directly on an observed value (or its `.class`) -- an ordinary
+      # object can't make that return anything but `nil` or a String, but
+      # an adversarial one (a proxy/delegator with `#class`/`#name`
+      # overridden) could return anything at all. Found by an independent
+      # review of Task 019: an earlier version trusted whatever came back
+      # verbatim, which could have put a non-String into
+      # `Types::Nominal#name` -- and since `Nominal#to_s` (types.rb)
+      # returns `name` as-is rather than `name.to_s`, that non-String
+      # value would have flowed unchanged all the way out to
+      # `rslsp/showTypeEvidence`'s JSON response. Only ever runs inside
+      # the already-fully-untrusted isolated observation runner process
+      # (never Core's own), so this is a data-integrity fix, not a
+      # privilege boundary -- an adversarial value here could already run
+      # arbitrary code in that same process via the workspace's own test
+      # suite.
+      def as_nominal_name(name)
+        return Types::UNKNOWN unless name.is_a?(String)
+
+        Types::Nominal.new(name: name)
       end
     end
   end

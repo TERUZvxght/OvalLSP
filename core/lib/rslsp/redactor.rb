@@ -40,6 +40,31 @@ module Rslsp
     # (not just after a `key=` label).
     BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9\-._~+\/]+=*/
 
+    # `scheme://user:password@host` -- a DB connection string
+    # (`postgres://user:pass@host/db`), a Redis URL, an HTTP Basic-Auth
+    # URL, etc. Found missing by an independent review of this task: the
+    # module's own docstring names "a DB connection string" as its
+    # motivating example, but nothing here actually matched that shape
+    # before this fix -- only an explicit `password=`-labeled assignment
+    # was ever caught. The username is kept (useful for troubleshooting,
+    # rarely secret on its own); only the password is redacted.
+    URL_USERINFO_PATTERN = %r{(?<prefix>[a-zA-Z][a-zA-Z0-9+.\-]*://)(?<user>[^:/?#\s@]+):(?<password>[^@/?#\s]+)@}
+
+    # High-confidence, low-false-positive vendor secret shapes -- unlike
+    # GENERIC_TOKEN_PATTERN (below), these are specific enough to enable
+    # by default without drowning ordinary log messages (commit SHAs,
+    # content digests, UUIDs) in false positives. Also found missing by
+    # the same review: a bare API key with no `key=`/`token=` label
+    # immediately in front of it (e.g. straight from a third-party
+    # client library's own exception message) previously passed through
+    # completely unredacted.
+    KNOWN_SECRET_PATTERN = %r{
+      \bAKIA[0-9A-Z]{16}\b                              # AWS access key ID
+      | \b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{10,}\b  # Stripe-style secret, publishable, restricted keys
+      | \bgh[aoprsu]_[A-Za-z0-9]{20,}\b                  # GitHub personal-access, OAuth, app tokens
+      | \bxox[baprs]-[A-Za-z0-9\-]{10,}\b                # Slack tokens
+    }x
+
     # A long (20+ char) run of base64/hex-alphabet characters is the
     # generic shape most API keys/tokens/secrets take, regardless of
     # which service issued them -- deliberately broad rather than trying
@@ -56,6 +81,8 @@ module Rslsp
       # "Bearer" as its "value" and leaving the actual token after it
       # completely unredacted.
       text = text.gsub(BEARER_PATTERN, "Bearer [REDACTED]")
+      text = text.gsub(URL_USERINFO_PATTERN) { "#{Regexp.last_match(:prefix)}#{Regexp.last_match(:user)}:[REDACTED]@" }
+      text = text.gsub(KNOWN_SECRET_PATTERN, "[REDACTED]")
       text = text.gsub(CREDENTIAL_KEY_PATTERN) { "#{Regexp.last_match(:key)}#{Regexp.last_match(:sep)}[REDACTED]" }
       redact_home_directory(text)
     end
