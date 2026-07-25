@@ -76,6 +76,25 @@ RSpec.describe Ovallsp::Cache::Store do
       Dir.mktmpdir do |cache_dir|
         store = described_class.new(cache_dir: cache_dir, max_entries: 3)
 
+        # #save's own auto-prune is only sampled with probability 1/64
+        # (`rand(64).zero?`) precisely so it's cheap to call on every
+        # save -- but that same randomness made this test flaky: on
+        # roughly 1 run in 16 (4 saves x 1/64), it fired mid-setup,
+        # before any of a/b/c had been deliberately backdated below, and
+        # pruned by *filesystem* mtime -- which, with all four entries
+        # written within the same test in quick succession, ties or
+        # near-ties arbitrarily, sometimes deleting one of a/b/c early
+        # and crashing the explicit File.utime backdating below with
+        # ENOENT (found by a 10x flakiness-check loop; unrelated to
+        # Task 022.2's own Bundler-isolation work, which that loop was
+        # actually run to verify). Stubbing only the `rand(64)` call
+        # (not `rand(1_000_000)`, still used unmodified for temp-file
+        # naming) makes this test's own explicit
+        # `store.send(:prune_if_over_bound)` below the sole source of
+        # pruning, without weakening what it actually asserts.
+        allow(store).to receive(:rand).with(64).and_return(1)
+        allow(store).to receive(:rand).with(1_000_000).and_call_original
+
         store.save("/a.rb", summary(uri: "file:///a.rb", content_hash: "a"))
         store.save("/b.rb", summary(uri: "file:///b.rb", content_hash: "b"))
         store.save("/c.rb", summary(uri: "file:///c.rb", content_hash: "c"))
