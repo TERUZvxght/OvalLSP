@@ -90,14 +90,31 @@ module Ovallsp
     # BUNDLE_PATH -- exactly what `bundle exec` does
     # (GEM_HOME=<BUNDLE_PATH>/ruby/<version>) and a version manager's own
     # GEM_HOME independently would not be.
+    #
+    # Only returns a key name that's actually present in `env` (matching
+    # every other method here, per `base`'s own docstring) -- and the
+    # BUNDLE_PATH/GEM_HOME nesting check compares against a real path
+    # boundary, not a bare string prefix -- both found by an independent
+    # review: a version of this method could return "GEM_HOME" even when
+    # `env` never had that key at all (harmless at runtime -- nil'ing an
+    # already-unset variable -- but a real invariant violation), and
+    # `gem_home.start_with?(bundle_path)` alone would misclassify e.g.
+    # BUNDLE_PATH=/tmp/core + GEM_HOME=/tmp/core-other/ruby/3.4.0 (a
+    # string prefix, but not a path ancestor) as bundle-exec-derived --
+    # exactly the false-positive shape #strip_bundler_setup_flag was
+    # already hardened against, just not carried over to this sibling
+    # method in the same original fix.
     def gem_home_path_keys(env)
-      return %w[GEM_HOME GEM_PATH] if env["GEM_PATH"] == ""
+      candidates =
+        if env["GEM_PATH"] == ""
+          %w[GEM_HOME GEM_PATH]
+        else
+          bundle_path = env["BUNDLE_PATH"]
+          gem_home = env["GEM_HOME"]
+          bundle_path && gem_home&.start_with?("#{bundle_path.chomp("/")}/") ? %w[GEM_HOME GEM_PATH] : []
+        end
 
-      bundle_path = env["BUNDLE_PATH"]
-      gem_home = env["GEM_HOME"]
-      return %w[GEM_HOME GEM_PATH] if bundle_path && gem_home&.start_with?(bundle_path)
-
-      []
+      candidates.select { |key| env.key?(key) }
     end
 
     # The exact `-r<path ending in bundler/setup>` flag(s) `bundle exec`

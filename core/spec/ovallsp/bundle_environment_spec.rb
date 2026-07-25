@@ -113,6 +113,101 @@ RSpec.describe Ovallsp::BundleEnvironment do
     expect(env.key?("GEM_PATH")).to be(true)
   end
 
+  # Found missing entirely by an independent review (round 2): the
+  # explicit `key == "BUNDLER_SETUP"` clause in #bundler_owned_keys exists
+  # precisely because "BUNDLER_SETUP" does NOT match the `BUNDLE_`-prefix
+  # check (position 6 is "R", not "_") -- nothing previously asserted this
+  # key actually gets nil'd, even though RubyGems' own bootstrap
+  # unconditionally `require`s whatever path it names, independent of
+  # RUBYOPT's own -r flags (see spec/integration/real_rails_spec.rb's own
+  # "Bundler boundary isolation" block for the real-process reproduction).
+  it "unsets BUNDLER_SETUP" do
+    env = described_class.base(env: polluted_env)
+
+    expect(env["BUNDLER_SETUP"]).to be_nil
+    expect(env.key?("BUNDLER_SETUP")).to be(true)
+  end
+
+  # Regression (chruby/RVM): GEM_HOME/GEM_PATH must be left alone -- not
+  # nil'd -- when they don't actually look bundle-exec-derived. chruby and
+  # RVM export their own GEM_HOME/GEM_PATH unconditionally, independent of
+  # any active `bundle exec`; nil'ing them for the spawned Agent would
+  # discard the real location those tools' own gems live in, exactly the
+  # class of bug this whole module exists to prevent, just in the
+  # opposite direction (found by an independent review of an earlier,
+  # unconditional version of this check).
+  it "leaves a chruby/RVM-style GEM_HOME/GEM_PATH alone (not nil'd) when neither looks bundle-exec-derived" do
+    env = described_class.base(env: polluted_env(
+      "BUNDLE_PATH" => nil,
+      "GEM_HOME" => "/Users/example/.gem/ruby/3.4.0",
+      "GEM_PATH" => "/Users/example/.gem/ruby/3.4.0:/opt/rubies/3.4.0/lib/ruby/gems/3.4.0"
+    ))
+
+    expect(env.key?("GEM_HOME")).to be(false)
+    expect(env.key?("GEM_PATH")).to be(false)
+  end
+
+  # Regression: a BUNDLE_PATH that is a bare *string* prefix of GEM_HOME,
+  # but not a real path ancestor of it, must not be misclassified as
+  # bundle-exec-derived -- found by an independent review: an earlier
+  # version's `gem_home.start_with?(bundle_path)` (no path-separator
+  # boundary) would nil out a chruby/RVM GEM_HOME that merely happens to
+  # share a string prefix with an unrelated BUNDLE_PATH, exactly the
+  # false-positive shape #strip_bundler_setup_flag was already hardened
+  # against elsewhere in this same module.
+  it "does not treat GEM_HOME as bundle-exec-derived just because it shares a string prefix with BUNDLE_PATH" do
+    env = described_class.base(env: polluted_env(
+      "BUNDLE_PATH" => "/tmp/core",
+      "GEM_HOME" => "/tmp/core-other/ruby/3.4.0",
+      "GEM_PATH" => "/tmp/core-other/ruby/3.4.0"
+    ))
+
+    expect(env.key?("GEM_HOME")).to be(false)
+    expect(env.key?("GEM_PATH")).to be(false)
+  end
+
+  it "does treat GEM_HOME as bundle-exec-derived when it's genuinely nested under BUNDLE_PATH" do
+    env = described_class.base(env: polluted_env(
+      "BUNDLE_PATH" => "/tmp/core",
+      "GEM_HOME" => "/tmp/core/ruby/3.4.0",
+      "GEM_PATH" => "/tmp/core/ruby/3.4.0"
+    ))
+
+    expect(env["GEM_HOME"]).to be_nil
+    expect(env.key?("GEM_HOME")).to be(true)
+    expect(env["GEM_PATH"]).to be_nil
+    expect(env.key?("GEM_PATH")).to be(true)
+  end
+
+  # Regression: #base must never introduce a key that was never present
+  # in the source `env` at all -- found by an independent review: an
+  # earlier version of #gem_home_path_keys always returned both
+  # "GEM_HOME" and "GEM_PATH" whenever GEM_PATH == "", even if GEM_HOME
+  # itself was never set, contradicting #base's own "only keys present in
+  # env" contract (harmless at runtime -- nil'ing an already-unset
+  # variable -- but a real invariant violation worth pinning down).
+  it "never adds GEM_HOME to the result when the source env never had that key at all" do
+    source = polluted_env("GEM_PATH" => "")
+    source.delete("GEM_HOME")
+
+    env = described_class.base(env: source)
+
+    expect(env.key?("GEM_HOME")).to be(false)
+    expect(env.key?("GEM_PATH")).to be(true) # GEM_PATH itself was present, so it's still correctly nil'd
+  end
+
+  # Regression (false positive, strip_bundler_setup_flag): an unrelated -r
+  # flag that merely *ends* with the substring "bundler/setup" (e.g. a
+  # gem literally named *bundler) must survive -- only the bare relative
+  # form or a path with a real separator before "bundler/setup" counts
+  # (found by an independent review).
+  it "does not strip an unrelated -r flag that only shares a substring with bundler/setup" do
+    env = described_class.base(env: polluted_env("RUBYOPT" => "-r/opt/gems/mybundler/setup -W2"))
+
+    rubyopt_flags = env["RUBYOPT"].split(" ")
+    expect(rubyopt_flags).to include("-r/opt/gems/mybundler/setup", "-W2")
+  end
+
   it "removes Bundler's own lib directory from RUBYLIB, and only that entry" do
     env = described_class.base(env: polluted_env)
 

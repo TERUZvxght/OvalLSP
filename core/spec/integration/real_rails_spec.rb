@@ -310,7 +310,19 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
   # rspec`, they passed even with the fix fully reverted, silently
   # providing no coverage in the common case (found by an independent
   # review). Spawning a real subprocess whose own ENV is genuinely
-  # polluted closes that gap: it fails pre-fix under ANY invocation.
+  # polluted closes that gap for regression A (BUNDLE_PATH/BUNDLE_APP_CONFIG
+  # /GEM_HOME/GEM_PATH pollution): it fails pre-fix there under ANY
+  # invocation, not just the isolated-BUNDLE_PATH one. Regression C
+  # (RUBYOPT carrying "-rbundler/setup") is different: reverting only
+  # #strip_bundler_setup_flag still passes this end-to-end scenario either
+  # way, because a *stale* RUBYOPT alone doesn't stop `bundle exec` from
+  # resolving the fixture's own Gemfile once BUNDLE_GEMFILE/BUNDLE_PATH are
+  # already correct -- so this block's C scenario is a true end-to-end
+  # sanity check ("the Agent still boots with this RUBYOPT set"), not a
+  # regression test for #strip_bundler_setup_flag specifically. That
+  # method's own behavior (it strips the flag, and only that flag) is
+  # covered by spec/ovallsp/bundle_environment_spec.rb's unit tests, which
+  # do fail pre-fix (found by an independent review).
   describe "Bundler boundary isolation (Task 022.2)" do
     CORE_LIB_DIR = File.expand_path("../../lib", __dir__)
 
