@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "child_process"
 require_relative "io/framed_reader"
 require_relative "io/framed_writer"
 require_relative "runtime_agent/agent"
@@ -444,11 +445,16 @@ module Ovallsp
     def terminate_process_locked
       return unless @pid
 
-      begin
-        Process.kill("TERM", @pid)
-      rescue Errno::ESRCH
-        nil
-      end
+      # Signalled through ChildProcess, so a signal failure can never
+      # propagate out of here (found by an independent review, round 12 --
+      # the third site in this codebase to hand-roll this, see
+      # ChildProcess' own docs). Rescuing only Errno::ESRCH meant an
+      # EPERM (or anything else kill(2) reports) escaped *before* the
+      # teardown below: the Agent's three pipes stayed open, the reader
+      # thread stayed alive, `@pid` stayed set, and the exception replaced
+      # whatever was already propagating through #stop's `ensure` -- or
+      # escaped `at_exit { stop }` entirely.
+      ChildProcess.signal(@pid, "TERM")
       wait_for_exit(2) || force_kill
 
       [@stdin_write, @stdout_read, @stderr_read].each { |io| io&.close unless io&.closed? }
@@ -457,15 +463,17 @@ module Ovallsp
       @pid = nil
     end
 
+    # Same total signal as above, plus a give-up that *detaches* rather
+    # than abandoning the pid: this method's caller goes on to nil out
+    # `@pid`, so on giving up nothing in this process would have been left
+    # tracking the child at all and it would have stayed a zombie for the
+    # rest of the LSP session. ChildProcess.reap is already the bounded
+    # WNOHANG poll #wait_for_exit does, with that fallback attached.
     def force_kill
       return unless @pid
 
-      begin
-        Process.kill("KILL", @pid)
-      rescue Errno::ESRCH
-        return true
-      end
-      wait_for_exit(2)
+      ChildProcess.signal(@pid)
+      ChildProcess.reap(@pid, timeout: 2, logger: @logger)
     end
 
     def wait_for_exit(timeout)

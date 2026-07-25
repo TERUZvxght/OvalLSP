@@ -4,6 +4,7 @@ require "tempfile"
 require "timeout"
 require_relative "observed_signature"
 require_relative "../bundle_environment"
+require_relative "../child_process"
 
 module Ovallsp
   module Observation
@@ -22,9 +23,10 @@ module Ovallsp
     class Runner
       DEFAULT_TIMEOUT_SECONDS = 300
       HARNESS_PATH = File.expand_path("harness.rb", __dir__)
-      # How long #reap is willing to wait for a SIGKILL'd child to
-      # actually die before handing it to Process.detach -- see #reap.
-      REAP_TIMEOUT_SECONDS = 2
+      # How long the kill path is willing to wait for a SIGKILL'd child to
+      # actually die before handing it to Process.detach -- see
+      # ChildProcess.reap.
+      REAP_TIMEOUT_SECONDS = ChildProcess::DEFAULT_REAP_TIMEOUT_SECONDS
 
       def initialize(logger:)
         @logger = logger
@@ -307,63 +309,24 @@ module Ovallsp
       # tracks that pid.
       #
       # The bare-pid retry fires on *any* failure of the group signal, not
-      # only Errno::ESRCH (found by an independent review, round 11). The
-      # ESRCH-only version had the fallback wired to the one failure that
-      # least needs it -- ESRCH means the group is already gone -- while
-      # the failures that genuinely leave a live child unsignalled (EPERM
-      # from a group member that changed uid, or anything else killpg(2)
-      # can report) fell through to the outer `rescue StandardError` and
-      # skipped the retry entirely. #reap then blocked forever on a child
-      # nothing had ever actually signalled; see #reap.
-      def kill(pid)
-        signal(-pid) || signal(pid)
-      ensure
-        reap(pid)
-      end
-
-      # True only if the signal was genuinely delivered, so #kill can tell
-      # "the group is handled" from "nothing was signalled at all" -- and
-      # never raises, per #kill's own contract.
-      def signal(target)
-        Process.kill("KILL", target)
-        true
-      rescue StandardError
-        false
-      end
-
-      # Bounded, never an unbounded `Process.waitpid(pid)` (found by an
-      # independent review, round 11). This method is the last thing
-      # #wait_for_exit's *timeout* path runs, and #run is called
-      # synchronously on the LSP transport thread
-      # (Server#run_observed_tests_result), so a blocking wait here isn't
-      # a stray zombie -- it is the entire `timeout_seconds` mechanism
-      # this class exists to enforce, quietly converted into "block the
-      # editor's whole LSP loop forever". Any child that outlives the
-      # SIGKILL above reaches it: one #kill couldn't signal at all (see
-      # #kill), or one sitting in an uninterruptible kernel wait (a test
-      # suite blocked on a wedged NFS/FUSE/network mount -- SIGKILL cannot
-      # be caught or ignored, but it still cannot preempt a D-state
-      # syscall). Reproduced before the fix by making Process.kill raise
-      # Errno::EPERM -- the exact case #kill's own docs already named as
-      # possible -- and watching a `timeout_seconds: 1` run never return.
+      # only Errno::ESRCH (found by an independent review, round 11), and
+      # the reap is bounded rather than an unbounded
+      # `Process.waitpid(pid)` (same round). Both now live in
+      # ChildProcess, which carries the full rationale -- round 12 found
+      # Plugins::Loader had made byte-for-byte the same two mistakes in
+      # its own hand-rolled copy, so the contract belongs in one place
+      # rather than being re-derived per call site.
       #
-      # Giving up hands the pid to Process.detach rather than abandoning
-      # it: that reaps in a background thread whenever the child finally
-      # does die, so declining to block here still can't leave a permanent
-      # zombie for the rest of the session.
-      def reap(pid)
-        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + REAP_TIMEOUT_SECONDS
-        loop do
-          return if Process.waitpid(pid, Process::WNOHANG)
-          break if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
-
-          sleep 0.01
-        end
-
-        @logger.error("observation runner child #{pid} outlived SIGKILL -- detaching it rather than blocking on it")
-        Process.detach(pid)
-      rescue StandardError
-        nil
+      # The bounded reap matters more here than "don't strand a zombie":
+      # this is the last thing #wait_for_exit's *timeout* path runs, and
+      # #run is called synchronously on the LSP transport thread
+      # (Server#run_observed_tests_result), so blocking here converts the
+      # entire `timeout_seconds` mechanism this class exists to enforce
+      # into "hang the editor's whole LSP loop forever".
+      def kill(pid)
+        ChildProcess.signal_group(pid)
+      ensure
+        ChildProcess.reap(pid, timeout: REAP_TIMEOUT_SECONDS, logger: @logger)
       end
 
       # `[]` -- "the suite ran and genuinely observed nothing" -- only

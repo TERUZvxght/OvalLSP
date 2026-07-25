@@ -176,6 +176,48 @@ RSpec.describe Ovallsp::AgentProcessManager do
     expect { Process.kill(0, pid) }.to raise_error(Errno::ESRCH)
   end
 
+  # Found by an independent review (round 12) of Task 022.2, the third
+  # site in this codebase hand-rolling "signal a child, then wait for it"
+  # and the second to get it wrong (see Ovallsp::ChildProcess' own docs;
+  # rounds 9-11 fixed the same class in Observation::Runner, round 12 in
+  # Plugins::Loader).
+  #
+  # #terminate_process_locked rescued only Errno::ESRCH around its
+  # `Process.kill("TERM", @pid)`. Any other signal failure -- EPERM is the
+  # documented one, and #alive? two methods away already rescues it, so
+  # this class demonstrably considers it reachable -- escaped *before* the
+  # teardown that follows the kill: the Agent's three pipes stayed open,
+  # @reader_thread stayed alive, @pid stayed set, and the exception
+  # replaced whatever was already propagating through #stop's own
+  # `ensure`, or escaped `at_exit { stop }` outright. Every one of those
+  # is a leak of exactly the resources #stop exists to release, triggered
+  # by the one path that only ever runs when something is already wrong.
+  it "still tears down its pipes, reader thread and pid when the TERM signal itself fails to land" do
+    @manager = build_manager
+    expect(@manager.start).to eq(:ready)
+    pid = @manager.pid
+    real_kill = Process.method(:kill)
+    allow(Process).to receive(:kill) do |name, target|
+      raise Errno::EPERM if name == "TERM"
+
+      real_kill.call(name, target)
+    end
+
+    expect { @manager.stop }.not_to raise_error
+
+    expect(@manager.pid).to be_nil
+    expect(@manager.status).to eq(:stopped)
+    # The SIGKILL escalation is what must still get to run: TERM never
+    # landed, so nothing else would have ended this process.
+    expect(process_alive?(pid)).to be(false)
+  ensure
+    begin
+      real_kill&.call("KILL", pid)
+    rescue Errno::ESRCH, Errno::EPERM, TypeError
+      nil
+    end
+  end
+
   # Server's BackgroundTasks#shutdown runs #stop on its own short-lived
   # thread and Thread#kills it if it doesn't return in time (found
   # necessary because #stop's `agent/shutdown` RPC has no bound of its

@@ -151,6 +151,19 @@ RSpec.describe Ovallsp::Observation::Runner do
   # user's whole editor session". Same shape for a child that outlives
   # SIGKILL for any other reason (an uninterruptible kernel wait on a
   # wedged network mount).
+  #
+  # Bounded by Thread#join, NOT by wrapping #run in an outer
+  # Timeout.timeout -- and that is the whole difference between a guard
+  # and a decoration (found by an independent review, round 12). #run's
+  # contract is a blanket `rescue StandardError`, and Timeout::Error is a
+  # RuntimeError, so an outer Timeout raises *into* the code under test
+  # and #run swallows it and returns nil: the assertions still pass. The
+  # original version of this test did exactly that and passed against
+  # pre-round-11 Runner -- it merely took 60s instead of 3s, because
+  # `hang.rb` happens to `sleep 60` and the unbounded `Process.waitpid`
+  # eventually returned when the child died of old age. A join deadline is
+  # measured from outside the thread and cannot be intercepted by anything
+  # #run rescues.
   it "still honours its own timeout when the kill signal fails to land rather than the child ignoring it" do
     real_kill = Process.method(:kill)
     spawned = nil
@@ -164,16 +177,22 @@ RSpec.describe Ovallsp::Observation::Runner do
     end
 
     results = :unset
-    expect do
-      # Generously above `timeout_seconds` + REAP_TIMEOUT_SECONDS, so this
-      # only ever fires for a genuinely unbounded wait, never a slow one.
-      Timeout.timeout(20) do
-        results = runner.run(command: "ruby", args: ["hang.rb"], workspace_root: fixtures_root, timeout_seconds: 1)
-      end
-    end.not_to raise_error
+    error = nil
+    worker = Thread.new do
+      results = runner.run(command: "ruby", args: ["hang.rb"], workspace_root: fixtures_root, timeout_seconds: 1)
+    rescue Exception => e # rubocop:disable Lint/RescueException -- #run's contract is that nothing at all escapes it here
+      error = e
+    end
 
+    # Generously above `timeout_seconds` + REAP_TIMEOUT_SECONDS, so this
+    # only ever trips for a genuinely unbounded wait, never a slow one --
+    # and well under `hang.rb`'s own 60s lifetime, so a run that is merely
+    # waiting the child out still fails.
+    expect(worker.join(15)).not_to be_nil, "Runner#run never returned -- its own timeout_seconds blocked forever"
+    expect(error).to be_nil
     expect(results).to be_nil
   ensure
+    worker&.kill
     kill_leftover(spawned, killer: real_kill)
   end
 
@@ -275,7 +294,7 @@ RSpec.describe Ovallsp::Observation::Runner do
       captured = nil
       allow(Process).to receive(:spawn).and_wrap_original do |original, env, *|
         captured = env
-        original.call(RbConfig.ruby, "-e", "") # a real, immediately-exiting child, so #wait_with_timeout still works
+        original.call(RbConfig.ruby, "-e", "") # a real, immediately-exiting child, so #wait_for_exit still works
       end
       runner.run(command: "ruby", args: [], workspace_root: workspace_root, env_source: env_source)
       captured

@@ -2,6 +2,7 @@
 
 require "timeout"
 require_relative "../plugins"
+require_relative "../child_process"
 require_relative "manifest"
 require_relative "static_context"
 require_relative "runtime_context"
@@ -164,12 +165,18 @@ module Ovallsp
       # declarations, forking is not part of its contract at all, and a
       # process it forked on purpose is arguably its own to reap (the same
       # line Runner draws for a test command that exits normally having
-      # backgrounded something). Crucially, unlike round 11's finding in
-      # Runner, nothing here can *hang*: the read is bounded by
-      # Timeout.timeout and every wait after it runs only once the child
-      # has already closed the result fd and is about to `exit!`, so the
-      # cost of the leak is bounded to a stray process, never a blocked
-      # Core.
+      # backgrounded something). The cost of declining the group kill is
+      # therefore bounded to a stray process, never a blocked Core.
+      #
+      # An earlier version of this note went further and claimed nothing
+      # in this file could hang at all, on the grounds that "the read is
+      # bounded by Timeout.timeout and every wait after it runs only once
+      # the child has already closed the result fd and is about to
+      # `exit!`". That is true of #read_isolated_result's own
+      # `Process.waitpid` on the success path -- reaching it requires EOF,
+      # which requires every holder of the write fd to have closed it --
+      # and false of #kill_child's, which round 12 found is reached only
+      # when the read did *not* see EOF. See #kill_child.
       def run_isolated(name)
         reader, writer = ::IO.pipe
         pid =
@@ -333,11 +340,40 @@ module Ovallsp
         { ok: false, error: "plugin process exited unexpectedly" }
       end
 
+      # Total and bounded, via the shared ChildProcess contract (found by
+      # an independent review, round 12 -- this was byte-for-byte the pair
+      # of mistakes round 11 had just fixed in Observation::Runner, still
+      # live here, and #run_isolated's own note above asserted the hang
+      # could not happen in this file).
+      #
+      # Two distinct bugs, both on the *timeout* path, i.e. exactly when
+      # the plugin has already proved it is misbehaving:
+      #
+      # 1. `Process.kill("KILL", pid)` rescued only ESRCH/ECHILD, so any
+      #    other signal failure propagated out of #kill_child, out of
+      #    #read_isolated_result (which rescues only Errno::ECHILD), out
+      #    of #run_isolated and #load_static entirely -- breaking the
+      #    "one broken plugin must never take Core down" invariant this
+      #    class exists for, from the one code path most likely to run
+      #    against a plugin process in a strange state.
+      # 2. `Process.waitpid(pid)` was unbounded. Unlike the waitpid on the
+      #    success path in #read_isolated_result, this one runs precisely
+      #    when the child has *not* closed the result fd and is *not*
+      #    about to `exit!` -- the read timed out, that is why we are here
+      #    -- so "the child is already dying" does not hold. A plugin
+      #    wedged in an uninterruptible kernel wait (a `File.read` on a
+      #    hung NFS/FUSE mount is enough, and reading files is the entire
+      #    job of a static plugin) cannot be preempted by SIGKILL, and a
+      #    plugin whose signal failed per (1) was never even asked to die.
+      #    Either way Core blocks here forever -- and #load_static is
+      #    called synchronously from Server#dispatch's `initialize`
+      #    handler on the LSP transport thread, so a single bad plugin
+      #    wedges the editor's entire session at startup, having already
+      #    been given up on. The @timeout_seconds bound became decorative
+      #    at exactly the moment it fired.
       def kill_child(pid)
-        Process.kill("KILL", pid)
-        Process.waitpid(pid)
-      rescue Errno::ESRCH, Errno::ECHILD
-        nil
+        ChildProcess.signal(pid)
+        ChildProcess.reap(pid, logger: @logger)
       end
 
       def apply_isolation_result(name, payload)

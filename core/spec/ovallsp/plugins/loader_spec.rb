@@ -63,6 +63,58 @@ RSpec.describe Ovallsp::Plugins::Loader do
       expect(contexts).to eq([])
     end
 
+    # Found by an independent review (round 12), and byte-for-byte the
+    # pair of mistakes round 11 had just fixed in Observation::Runner --
+    # still live in this file's own hand-rolled copy, which #run_isolated's
+    # note then asserted could not hang. #kill_child rescued only
+    # ESRCH/ECHILD around its `Process.kill`, so any other signal failure
+    # escaped #load_static entirely (breaking "one broken plugin must never
+    # take Core down"), and its `Process.waitpid` was unbounded -- reached
+    # precisely when the read did NOT see EOF, i.e. when the child is
+    # demonstrably not about to exit. #load_static runs synchronously in
+    # Server#dispatch's `initialize` handler on the LSP transport thread,
+    # so one wedged plugin hung the editor's whole session at startup,
+    # after @timeout_seconds had already given up on it.
+    #
+    # Bounded by Thread#join rather than an outer Timeout.timeout on
+    # purpose: a Timeout::Error raised into the code under test is a
+    # StandardError like any other, and every subprocess boundary in this
+    # codebase rescues those by contract -- so it would be swallowed and
+    # the guard would silently pass. (That is exactly why round 11's own
+    # regression test did not fail against pre-round-11 Runner; fixed in
+    # the same pass.)
+    it "still honours its own timeout when the plugin child's kill signal fails to land" do
+      real_kill = Process.method(:kill)
+      forked = nil
+      allow(Process).to receive(:fork).and_wrap_original { |original, &blk| forked = original.call(&blk) }
+      allow(Process).to receive(:kill).and_wrap_original do |original, signal, target|
+        raise Errno::EPERM if signal == "KILL"
+
+        original.call(signal, target)
+      end
+
+      contexts = :unset
+      error = nil
+      worker = Thread.new do
+        contexts = loader.load_static([manifest_path("slow")])
+      rescue Exception => e # rubocop:disable Lint/RescueException -- the whole point is that *nothing* may escape #load_static
+        error = e
+      end
+
+      # Generously above @timeout_seconds (1) + the reap bound (2), so this
+      # only ever trips on a genuinely unbounded wait, never a slow one.
+      expect(worker.join(15)).not_to be_nil, "Plugins::Loader#load_static never returned -- its own timeout blocked forever"
+      expect(error).to be_nil
+      expect(contexts).to eq([])
+    ensure
+      worker&.kill
+      begin
+        real_kill.call("KILL", forked) if forked
+      rescue Errno::ESRCH, Errno::EPERM
+        nil
+      end
+    end
+
     it "isolates a plugin that registers a malformed fact (missing required keys)" do
       contexts = nil
       expect { contexts = loader.load_static([manifest_path("malformed_fact")]) }.not_to raise_error
