@@ -184,14 +184,37 @@ RSpec.describe Ovallsp::AgentProcessManager do
   #
   # #terminate_process_locked rescued only Errno::ESRCH around its
   # `Process.kill("TERM", @pid)`. Any other signal failure -- EPERM is the
-  # documented one, and #alive? two methods away already rescues it, so
-  # this class demonstrably considers it reachable -- escaped *before* the
+  # documented one, and #alive? two methods away already treated it as a
+  # normal answer, so this class demonstrably considers it reachable --
+  # escaped *before* the
   # teardown that follows the kill: the Agent's three pipes stayed open,
   # @reader_thread stayed alive, @pid stayed set, and the exception
   # replaced whatever was already propagating through #stop's own
   # `ensure`, or escaped `at_exit { stop }` outright. Every one of those
   # is a leak of exactly the resources #stop exists to release, triggered
   # by the one path that only ever runs when something is already wrong.
+  # Found by an independent review (round 13): #alive? was the fourth
+  # hand-rolled Process.kill in Core and the one round 12's migration left
+  # behind, because its `rescue Errno::ESRCH, Errno::EPERM` looked
+  # exhaustive for signal 0. Enumerating the failures you thought of is
+  # the exact mistake ChildProcess exists to stop -- a probe whose job is
+  # to answer true/false must not be able to raise instead, least of all
+  # from #stop's own teardown window. Errno::EIO stands in here for "any
+  # failure the old list didn't name"; the reachable real one is the
+  # TypeError from `@pid` being nil'd by a concurrent
+  # #terminate_process_locked between the guard and the kill, which the
+  # same fix (read @pid once into a local) closes and which no
+  # non-flaky test can pin down to a single VM instruction.
+  it "answers #alive? as false, rather than raising, for a signal failure its old rescue list never named" do
+    @manager = build_manager
+    expect(@manager.start).to eq(:ready)
+    allow(Process).to receive(:kill).and_raise(Errno::EIO)
+
+    result = :unset
+    expect { result = @manager.alive? }.not_to raise_error
+    expect(result).to be(false)
+  end
+
   it "still tears down its pipes, reader thread and pid when the TERM signal itself fails to land" do
     @manager = build_manager
     expect(@manager.start).to eq(:ready)

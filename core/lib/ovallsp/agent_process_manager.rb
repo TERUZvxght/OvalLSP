@@ -256,13 +256,35 @@ module Ovallsp
       end
     end
 
+    # The fourth (and last) hand-rolled `Process.kill` in Core, folded into
+    # the shared contract by an independent review, round 13 -- round 12
+    # migrated the three sites that *kill* a child and left this one, which
+    # merely probes with signal 0, on the reasonable-looking grounds that
+    # its own `rescue Errno::ESRCH, Errno::EPERM` already enumerated the
+    # two failures signal 0 can produce. Enumerating is the mistake; that
+    # is the whole thesis of ChildProcess (see its docs). Two concrete
+    # holes the enumeration left:
+    #
+    # 1. `@pid` was read twice -- once for the guard, once as the kill
+    #    target -- and #terminate_process_locked nils it from another
+    #    thread (the reader thread's own EOF-detected teardown runs there
+    #    by design, see #mark_unavailable). A nil landing between the two
+    #    reads makes this `Process.kill(0, nil)`, i.e. TypeError, which is
+    #    not in the rescue list and is not even an Errno. Read once into a
+    #    local instead, so there is no window to lose.
+    # 2. Any other failure kill(2) can report escaped a method whose entire
+    #    contract is to answer a boolean question about liveness.
+    #
+    # Semantics are unchanged for both previously-enumerated cases: ESRCH
+    # ("no such process") and EPERM ("it exists but this uid may not signal
+    # it, so we cannot treat it as our live child") both still answer
+    # false, which is exactly ChildProcess.signal's own "did the signal
+    # land" return value.
     def alive?
-      return false unless @pid
+      pid = @pid
+      return false unless pid
 
-      Process.kill(0, @pid)
-      true
-    rescue Errno::ESRCH, Errno::EPERM
-      false
+      ChildProcess.signal(pid, 0)
     end
 
     private

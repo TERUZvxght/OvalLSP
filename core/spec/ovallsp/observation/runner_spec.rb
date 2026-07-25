@@ -191,6 +191,13 @@ RSpec.describe Ovallsp::Observation::Runner do
     expect(worker.join(15)).not_to be_nil, "Runner#run never returned -- its own timeout_seconds blocked forever"
     expect(error).to be_nil
     expect(results).to be_nil
+    # `nil` is #run's answer to *every* failure, so on its own it does not
+    # witness that this run reached the kill path at all -- a spawn that
+    # never happened would satisfy it just as well. Pinning the timeout log
+    # keeps the example a guard rather than a decoration, the same lesson
+    # round 12 drew about this test's own outer bound (round 13).
+    expect(logger).to have_received(:error).with(a_string_matching(/exceeded 1s -- killing it/))
+    expect(spawned).not_to be_nil
   ensure
     worker&.kill
     kill_leftover(spawned, killer: real_kill)

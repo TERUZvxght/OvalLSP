@@ -17,6 +17,9 @@ module Ovallsp
     # degrades to "this one plugin contributes nothing", logged, never
     # raised -- one broken plugin must never take Core down, and must
     # never prevent every *other* plugin (or Core itself) from working.
+    # That list is illustrative, not exhaustive, and #guarded is what makes
+    # the contract structural rather than a promise kept by remembering to
+    # rescue each case individually (round 13; see #guarded's own docs).
     #
     # A plugin's entrypoint runs in a genuinely separate OS process
     # (Process.fork), not merely a Timeout-wrapped Kernel.load in this
@@ -50,7 +53,7 @@ module Ovallsp
       # failed any of those simply contributes no entry to the returned
       # array.
       def load_static(manifest_paths)
-        Array(manifest_paths).filter_map { |path| load_static_one(path) }
+        Array(manifest_paths).filter_map { |path| guarded(path) { load_static_one(path) } }
       end
 
       # "untrusted workspaceでruntime pluginを実行しない" -- checked here,
@@ -62,10 +65,61 @@ module Ovallsp
       def load_runtime(manifest_paths, trusted:)
         return [] unless trusted
 
-        Array(manifest_paths).filter_map { |path| load_runtime_one(path) }
+        Array(manifest_paths).filter_map { |path| guarded(path) { load_runtime_one(path) } }
       end
 
       private
+
+      # The "never raises" half of this class' own contract ("Every failure
+      # mode ... degrades to 'this one plugin contributes nothing', logged,
+      # never raised -- one broken plugin must never take Core down"), made
+      # structural rather than aspirational (found by an independent
+      # review, round 13). It is byte-for-byte the gap round 6 found and
+      # fixed in Observation::Runner#run, never applied to the sibling
+      # boundary that promises the same thing more emphatically.
+      #
+      # Individually-rescued failures were only ever the ones somebody
+      # thought of: an invalid manifest (InvalidManifest), a plugin's own
+      # code raising (rescued inside the fork), Process.fork itself failing.
+      # Everything else on the path ran outside any rescue at all, and the
+      # reachable ones are ordinary environmental faults, not exotica:
+      #
+      # * `Manifest.load`'s `File.read` rescues Errno::ENOENT/EISDIR but
+      #   not Errno::EACCES -- a manifest the LSP process may not read (a
+      #   root-owned plugin dir, a mode-600 file from another user) raises
+      #   straight out of #safe_load_manifest.
+      # * `::IO.pipe` in #run_isolated is the very first thing that runs
+      #   and is unrescued: Errno::EMFILE/ENFILE under fd pressure, which a
+      #   long-lived LSP process holding the transport, Agent pipes and
+      #   index files can genuinely reach.
+      # * `reader.read`/`reader.close` can raise IOError/Errno::EIO.
+      #
+      # Every one of those escaped #load_static, which Server#dispatch
+      # calls synchronously from its `initialize` handler -- so a single
+      # unreadable manifest answered the editor's session-opening request
+      # with a bare LSP `internal error`, taking down not just that plugin
+      # but Core's whole startup. Rescued as a class, not by adding one
+      # more Errno to one more rescue list, per this repo's "fix the class
+      # of bug, not the reported instance" discipline.
+      #
+      # `StandardError`, not `Exception`, for exactly the reasons
+      # Observation::Runner#run documents at length: Interrupt/
+      # SignalException, SystemExit and NoMemoryError/SystemStackError must
+      # keep propagating.
+      #
+      # Logged by path rather than by plugin name, and deliberately NOT
+      # run through #apply_isolation_result's failure counter: this fires
+      # for failures that can happen *before* a name is known at all (the
+      # manifest read itself), and the ones it does catch are environmental
+      # rather than the plugin misbehaving -- disabling a perfectly good
+      # plugin because the process was briefly out of file descriptors
+      # would be the wrong lesson to draw.
+      def guarded(path)
+        yield
+      rescue StandardError => e
+        @logger.error("plugin at #{path} could not be loaded: #{e.class}: #{e.message}")
+        nil
+      end
 
       def load_static_one(path)
         manifest = safe_load_manifest(path)
@@ -172,11 +226,11 @@ module Ovallsp
       # in this file could hang at all, on the grounds that "the read is
       # bounded by Timeout.timeout and every wait after it runs only once
       # the child has already closed the result fd and is about to
-      # `exit!`". That is true of #read_isolated_result's own
-      # `Process.waitpid` on the success path -- reaching it requires EOF,
-      # which requires every holder of the write fd to have closed it --
-      # and false of #kill_child's, which round 12 found is reached only
-      # when the read did *not* see EOF. See #kill_child.
+      # `exit!`". It was false of #kill_child's wait, which round 12 found
+      # is reached only when the read did *not* see EOF -- and false of
+      # the success-path wait too, which round 13 found rests on trusting
+      # the plugin not to close the result fd early. Neither wait is
+      # unbounded any more; see #kill_child and #reap_finished_child.
       def run_isolated(name)
         reader, writer = ::IO.pipe
         pid =
@@ -327,7 +381,7 @@ module Ovallsp
           kill_child(pid)
           return { ok: false, error: "Timeout::Error: exceeded #{@timeout_seconds}s" }
         end
-        Process.waitpid(pid)
+        reap_finished_child(pid)
 
         return { ok: false, error: "plugin process produced no output" } if raw.nil? || raw.empty?
 
@@ -336,8 +390,54 @@ module Ovallsp
         rescue StandardError => e
           { ok: false, error: "failed to read plugin process output: #{e.class}: #{e.message}" }
         end
-      rescue Errno::ECHILD
-        { ok: false, error: "plugin process exited unexpectedly" }
+      end
+
+      # The EOF path's own wait, bounded for the same reason #kill_child's
+      # is (found by an independent review, round 13 -- round 12 migrated
+      # the timeout path in this file and left this one, on the strength of
+      # an argument that turns out to trust plugin code).
+      #
+      # That argument was: reaching here requires EOF on the result pipe,
+      # EOF requires every holder of the write fd to have closed it, the
+      # child is the last such holder, and the child closes it only inside
+      # #deliver_result -- whose caller's very next act is `Kernel.exit!`.
+      # So the child is always already dying, and an unbounded
+      # `Process.waitpid(pid)` always returns immediately.
+      #
+      # Every step of that holds except the premise that the child closes
+      # the fd only where this class intends it to. #isolate_child_io's own
+      # docs already concede the residual hole it cannot close ("A plugin
+      # could still, in principle, brute-force-guess the fd number and call
+      # `IO.for_fd` itself"), and considered only what a plugin might
+      # *write* through such an fd. Closing it is strictly easier, needs no
+      # valid payload, and produces an ordinary-looking EOF while the child
+      # is still running whatever it likes. @timeout_seconds cannot bound
+      # that: it bounds the read, and the read has already returned. The
+      # result was a genuinely unbounded block in #load_static, which
+      # Server#dispatch calls synchronously from its `initialize` handler
+      # on the LSP transport thread -- the editor's entire session, hung by
+      # a plugin, which is the one outcome this class exists to prevent.
+      # (Reproduced before the fix; see the matching spec.)
+      #
+      # A child that has closed the result channel and still hasn't exited
+      # within the reap budget is misbehaving by definition, so it is
+      # SIGKILLed rather than merely detached -- ChildProcess.reap's
+      # detach already guarantees it can't linger as a zombie, but nothing
+      # else would ever have asked it to stop running.
+      #
+      # This also retired #read_isolated_result's trailing `rescue
+      # Errno::ECHILD` ("plugin process exited unexpectedly"). The bare
+      # `Process.waitpid` was its only possible source, so with that gone
+      # the branch was unreachable and its message a falsehood -- and it
+      # additionally used to discard a perfectly good `raw` payload
+      # whenever it did fire. ChildProcess.reap treats "somebody else
+      # already reaped it" as success, so that payload is now parsed
+      # instead. #guarded is the structural backstop this method never had.
+      def reap_finished_child(pid)
+        return if ChildProcess.reap(pid)
+
+        @logger.error("plugin process #{pid} closed its result channel without exiting -- killing it")
+        ChildProcess.signal(pid)
       end
 
       # Total and bounded, via the shared ChildProcess contract (found by

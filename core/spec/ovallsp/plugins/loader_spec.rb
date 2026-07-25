@@ -26,6 +26,7 @@ RSpec.describe Ovallsp::Plugins::Loader do
     Ovallsp::Plugins.clear_registration("ovallsp-monkeypatching-runtime")
     Ovallsp::Plugins.clear_registration("ovallsp-io-scavenger")
     Ovallsp::Plugins.clear_registration("ovallsp-pipe-forger")
+    Ovallsp::Plugins.clear_registration("ovallsp-fd-closer")
   end
 
   describe "#load_static" do
@@ -106,6 +107,13 @@ RSpec.describe Ovallsp::Plugins::Loader do
       expect(worker.join(15)).not_to be_nil, "Plugins::Loader#load_static never returned -- its own timeout blocked forever"
       expect(error).to be_nil
       expect(contexts).to eq([])
+      # `[]` is #load_static's answer to *every* failure, so on its own it
+      # does not witness that this run reached #kill_child at all. Pinning
+      # the timeout log keeps the example a guard rather than a decoration
+      # -- the same lesson round 12 drew about this test's outer bound
+      # (round 13).
+      expect(logger).to have_received(:error).with(a_string_matching(/Timeout::Error: exceeded 1s/))
+      expect(forked).not_to be_nil
     ensure
       worker&.kill
       begin
@@ -113,6 +121,94 @@ RSpec.describe Ovallsp::Plugins::Loader do
       rescue Errno::ESRCH, Errno::EPERM
         nil
       end
+    end
+
+    # Found by an independent review (round 13) of Task 022.2 -- the one
+    # unbounded wait round 12's migration left behind, in the file it had
+    # just fixed, on the same thread, with the same consequence.
+    #
+    # #read_isolated_result's post-EOF `Process.waitpid(pid)` was defended
+    # by "reaching it requires EOF, which requires every holder of the
+    # write fd to have closed it, so the child is already inside exit!".
+    # That reasoning trusts the *plugin* to be the thing that didn't close
+    # the fd early -- and trusting plugin code is exactly what this class
+    # refuses to do everywhere else. #isolate_child_io's own docs already
+    # concede a plugin can reach the result fd by guessing its number, so
+    # a plugin can produce EOF whenever it likes and then simply not exit.
+    # @timeout_seconds cannot save Core here: it bounds the read, and the
+    # read already returned. #load_static runs synchronously in
+    # Server#dispatch's `initialize` handler on the LSP transport thread,
+    # so the editor's whole session hangs for as long as the plugin sleeps.
+    #
+    # Bounded by Thread#join, not an outer Timeout.timeout, for the same
+    # reason as the example above: a Timeout::Error raised into the code
+    # under test is a StandardError and would be swallowed by the blanket
+    # rescues this codebase's subprocess boundaries all use.
+    it "still returns when a plugin closes the result pipe itself and then refuses to exit" do
+      real_kill = Process.method(:kill)
+      forked = nil
+      allow(Process).to receive(:fork).and_wrap_original { |original, &blk| forked = original.call(&blk) }
+
+      contexts = :unset
+      error = nil
+      worker = Thread.new do
+        contexts = loader.load_static([manifest_path("fd_closer")])
+      rescue Exception => e # rubocop:disable Lint/RescueException -- the whole point is that *nothing* may escape #load_static
+        error = e
+      end
+
+      # Generously above the reap bound (2), and well under the fixture's
+      # own 60s sleep, so a wait that is merely riding the child out still
+      # fails this.
+      expect(worker.join(15)).not_to be_nil, "Plugins::Loader#load_static never returned -- it waited on the child unboundedly"
+      expect(error).to be_nil
+      expect(contexts).to eq([])
+      # Pins that this went through the EOF path being guarded, rather than
+      # passing because the plugin happened to fail some earlier way.
+      expect(logger).to have_received(:error).with(a_string_matching(/produced no output/))
+    ensure
+      worker&.kill
+      begin
+        real_kill.call("KILL", forked) if forked
+      rescue Errno::ESRCH, Errno::EPERM
+        nil
+      end
+    end
+
+    # Found by an independent review (round 13) of Task 022.2, and
+    # byte-for-byte the gap round 6 found in Observation::Runner#run: the
+    # "never raises" contract was honoured by a list of individually
+    # rescued failures somebody had thought of, not structurally. This
+    # class states that contract more emphatically than Runner does ("one
+    # broken plugin must never take Core down"), and #load_static is what
+    # Server#dispatch calls synchronously from its `initialize` handler --
+    # so any unrescued raise answers the editor's session-opening request
+    # with a bare LSP `internal error`.
+    #
+    # Two genuinely reachable escapes, deliberately covering two *different*
+    # points on the path (before a plugin name is even known, and inside
+    # the subprocess machinery), because the fix has to be the class rather
+    # than either instance.
+    it "degrades to 'this plugin contributes nothing' when the manifest itself can't be read at all" do
+      path = manifest_path("state_machine_example")
+      allow(File).to receive(:read).and_call_original
+      allow(File).to receive(:read).with(path).and_raise(Errno::EACCES)
+
+      contexts = :unset
+      expect { contexts = loader.load_static([path]) }.not_to raise_error
+
+      expect(contexts).to eq([])
+      expect(logger).to have_received(:error).with(a_string_matching(/Errno::EACCES/))
+    end
+
+    it "degrades to 'this plugin contributes nothing' when the result pipe itself can't be created" do
+      allow(::IO).to receive(:pipe).and_raise(Errno::EMFILE)
+
+      contexts = :unset
+      expect { contexts = loader.load_static([manifest_path("state_machine_example")]) }.not_to raise_error
+
+      expect(contexts).to eq([])
+      expect(logger).to have_received(:error).with(a_string_matching(/Errno::EMFILE/))
     end
 
     it "isolates a plugin that registers a malformed fact (missing required keys)" do
