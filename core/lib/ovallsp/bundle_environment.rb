@@ -183,6 +183,32 @@ module Ovallsp
       end.join(" ")
     end
 
+    # The search-path variables `bundle exec` prepends its own entries to
+    # (Bundler::SharedHelpers#set_path unshifts "#{Bundler.bundle_path}/bin"
+    # onto PATH; Bundler::Runtime#setup_manpath unshifts every activated
+    # gem's own man/ directory onto MANPATH). Both are listed in Bundler's
+    # own `EnvironmentPreserver::BUNDLER_KEYS` -- i.e. Bundler itself
+    # considers them variables it takes ownership of, and its own
+    # `unbundled_env` restores them from the pre-Bundler snapshot for
+    # exactly that reason.
+    #
+    # Found by an independent review (round 4). An earlier version of this
+    # module documented PATH as "none of that is Bundler's concern" and
+    # left it fully inherited, which is simply not true of a process
+    # running under `bundle exec`: with Core running under an isolated
+    # BUNDLE_PATH (the review-bundle script this whole task exists for),
+    # Core's own `<bundle path>/bin` is the FIRST entry on PATH and was
+    # inherited verbatim by the Agent. That directory holds Core's own
+    # gems' executables (rspec, rbs, ovallsp, ...), and `Process.spawn`
+    # resolves a bare command name through the env Hash's own PATH -- so
+    # any executable the target app shells out to whose name Core's bundle
+    # also provides, but the app's own bundle does not, resolved to Core's
+    # copy instead of the machine's. Worse, those binstubs are then broken
+    # by this module's own (correct) GEM_HOME/GEM_PATH nil'ing, so the app
+    # sees "can't find executable rspec" for a gem that is genuinely
+    # installed system-wide.
+    SEARCH_PATH_KEYS = %w[PATH MANPATH].freeze
+
     # Core's own Bundler installation's lib directory (wherever *this*
     # process' `require "bundler"` actually resolved to) -- the one
     # RUBYLIB entry `bundle exec` adds that a child running a different
@@ -195,23 +221,94 @@ module Ovallsp
       rubylib.to_s.split(File::PATH_SEPARATOR).reject { |path| path == bundler_lib_dir }.join(File::PATH_SEPARATOR)
     end
 
+    # PATH/MANPATH with the entries `bundle exec` derived from Core's own
+    # bundle removed, and nothing else -- surgical removal by path
+    # containment, exactly like #strip_core_bundler_lib and
+    # #strip_bundler_setup_flag, never a wholesale restore of Bundler's
+    # `BUNDLER_ORIG_PATH` snapshot (that would also discard any legitimate
+    # PATH entry the caller's own environment added, e.g. an editor
+    # launching Core with an augmented PATH).
+    #
+    # Gated on the *same* "does GEM_HOME actually look bundle-exec-derived"
+    # classification #gem_home_path_keys already uses, so it cannot misfire
+    # on chruby/RVM (whose GEM_HOME is exported unconditionally, and whose
+    # `<gem home>/bin` is the real location of that user's own gem
+    # executables -- see #gem_home_path_keys' own docs for the round-1
+    # finding). Under any env where this fires, GEM_HOME/GEM_PATH are
+    # already being nil'd by the same predicate, so this can never be the
+    # *first* thing to go wrong.
+    #
+    # Only emitted when something was actually removed: a PATH carrying
+    # nothing of Core's bundle stays absent from the returned Hash (plain
+    # inheritance), per #base's own "everything else is deliberately
+    # untouched" contract.
+    def strip_bundle_exec_search_paths(env)
+      gem_home = bundle_exec_gem_home(env)
+      return {} if gem_home.nil?
+
+      SEARCH_PATH_KEYS.each_with_object({}) do |key, result|
+        next unless env.key?(key)
+
+        cleaned = reject_paths_under(env[key], gem_home)
+        result[key] = cleaned unless cleaned == env[key]
+      end
+    end
+
+    # The gem home `bundle exec` itself derived from the active BUNDLE_PATH
+    # (Bundler sets GEM_HOME to `Bundler.bundle_path`, and PATH's injected
+    # entry is that same directory's `bin`), or nil when this env's GEM_HOME
+    # doesn't look bundle-exec-derived at all.
+    # A degenerate GEM_HOME ("" or "/") is explicitly not treated as a
+    # bundle path: `"".chomp("/") + "/"` and `"/".chomp("/") + "/"` are both
+    # the prefix "/", which #reject_paths_under would then match against
+    # *every* absolute entry, emptying the child's PATH entirely and leaving
+    # it unable to resolve `bundle` at all -- turning a leak fix into a total
+    # outage. Neither value can name a real bundle path, so classify as
+    # "not bundle-exec-derived" and leave PATH/MANPATH alone.
+    def bundle_exec_gem_home(env)
+      return nil unless gem_home_path_keys(env).include?("GEM_HOME")
+
+      gem_home = env["GEM_HOME"].to_s
+      gem_home.chomp("/").empty? ? nil : gem_home
+    end
+
+    # `value` (a PATH_SEPARATOR-joined search path) with every entry that is
+    # `root` itself, or nested under it, removed. Compares against a real
+    # path boundary rather than a bare string prefix (the round-2 finding
+    # for #gem_home_path_keys, carried over here deliberately), and splits
+    # with a -1 limit so a trailing empty entry -- meaningful in both PATH
+    # ("the current directory") and MANPATH ("append the system default")
+    # -- survives untouched.
+    def reject_paths_under(value, root)
+      prefix = "#{root.chomp("/")}/"
+      value.to_s
+           .split(File::PATH_SEPARATOR, -1)
+           .reject { |entry| entry == root || entry.start_with?(prefix) }
+           .join(File::PATH_SEPARATOR)
+    end
+
     # Explicit-nil overrides for every Bundler/RubyGems-owned key present
     # in `env` right now, plus RUBYOPT/RUBYLIB with Core's own Bundler
     # injection stripped out (not nil'd -- a child still needs whatever
     # *other* RUBYOPT/RUBYLIB content was legitimately there).
     #
+    # ...plus PATH/MANPATH with only the entries `bundle exec` derived from
+    # Core's own bundle removed (see SEARCH_PATH_KEYS -- these are Bundler's
+    # own, per its `EnvironmentPreserver::BUNDLER_KEYS`, and were previously
+    # mis-documented here as "not Bundler's concern").
+    #
     # Everything NOT covered above is deliberately absent from the
     # returned Hash, so `Process.spawn` leaves it untouched (inherited
-    # from the caller's own process) -- e.g. PATH, HOME, a mise/asdf/rbenv
-    # shim directory -- none of that is Bundler's concern, and this
-    # module's job is narrowly "don't leak the source Bundle graph", not
-    # "sanitize the child's entire environment".
+    # from the caller's own process) -- e.g. HOME, a mise/asdf/rbenv shim
+    # directory, the rest of PATH -- none of that is Bundler's concern, and
+    # this module's job is narrowly "don't leak the source Bundle graph",
+    # not "sanitize the child's entire environment".
     def base(env: ENV)
       overrides = {}
       bundler_owned_keys(env: env).each { |key| overrides[key] = nil }
       overrides["RUBYOPT"] = strip_bundler_setup_flag(env["RUBYOPT"]) if env.key?("RUBYOPT")
       overrides["RUBYLIB"] = strip_core_bundler_lib(env["RUBYLIB"]) if env.key?("RUBYLIB")
-      overrides
+      overrides.merge(strip_bundle_exec_search_paths(env))
     end
 
     # The environment a child process should use to run entirely inside

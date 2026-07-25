@@ -166,6 +166,37 @@ RSpec.describe Ovallsp::BundleEnvironment do
     expect(described_class::BUNDLER_PREFIXED_KEYS).to include(*bundler_owned)
   end
 
+  # The architectural half of the round-4 PATH/MANPATH fix. Round 3's pin
+  # above only covered the `BUNDLER_`-spelled subset of Bundler's own
+  # ownership list, which is exactly why PATH and MANPATH -- both listed in
+  # BUNDLER_KEYS, both genuinely mutated by `bundle exec` -- went on leaking
+  # for another round. This pins the WHOLE list: every variable Bundler
+  # claims must be handled by some mechanism here, or be explicitly named
+  # below as a considered non-fix. A future Bundler adding any new
+  # variable, whatever its spelling, now fails loudly.
+  it "accounts for every variable Bundler itself claims ownership of" do
+    require "bundler/environment_preserver"
+
+    handled =
+      described_class::BUNDLER_PREFIXED_KEYS +   # nil'd outright
+      described_class::SEARCH_PATH_KEYS +        # bundle-exec entries stripped
+      %w[GEM_HOME GEM_PATH] +                    # nil'd when bundle-exec-derived
+      %w[RUBYOPT RUBYLIB]                        # Bundler's own injection stripped
+
+    # `bundle exec` never sets this; only `bundle install` does, and only on
+    # FreeBSD (Bundler::CLI::Install: `set_env "RB_USER_INSTALL", "1" if
+    # Gem.freebsd_platform?`). Core never runs `bundle install` in-process,
+    # so it cannot be present in Core's own env to leak in the first place.
+    deliberately_unhandled = %w[RB_USER_INSTALL]
+
+    unaccounted = Bundler::EnvironmentPreserver::BUNDLER_KEYS.reject do |key|
+      key.start_with?("BUNDLE_") || handled.include?(key) || deliberately_unhandled.include?(key)
+    end
+
+    expect(Bundler::EnvironmentPreserver::BUNDLER_KEYS).not_to be_empty # guard against a vacuous pass
+    expect(unaccounted).to be_empty
+  end
+
   # The deliberate non-fix, pinned so it can't be "tidied up" into a
   # regression: Bundler's `BUNDLER_ORIG_*` snapshot of the pre-Bundler
   # environment must be inherited, NOT nil'd -- the child's own Bundler
@@ -266,6 +297,92 @@ RSpec.describe Ovallsp::BundleEnvironment do
     rubylib_entries = env["RUBYLIB"].split(File::PATH_SEPARATOR)
     expect(rubylib_entries).not_to include(real_bundler_lib_dir)
     expect(rubylib_entries).to include("/some/other/legit/entry")
+  end
+
+  # Regression (round 4): `bundle exec` unshifts "#{Bundler.bundle_path}/bin"
+  # onto PATH (SharedHelpers#set_path) and every activated gem's man/ dir
+  # onto MANPATH (Runtime#setup_manpath) -- both listed in Bundler's own
+  # EnvironmentPreserver::BUNDLER_KEYS. An earlier version of this module
+  # documented PATH as "none of that is Bundler's concern" and inherited it
+  # verbatim, so with Core running under an isolated BUNDLE_PATH its own
+  # `<bundle path>/bin` (holding Core's gems' executables: rspec, rbs,
+  # ovallsp, ...) was the FIRST entry on the Agent's PATH. `Process.spawn`
+  # resolves a bare command name through the env Hash's own PATH, so the
+  # Agent -- and anything the target app shells out to -- resolved those
+  # names to Core's copies rather than the machine's own.
+  it "strips Core's own bundle-exec bin directory from PATH, and only that entry" do
+    env = described_class.base(env: polluted_env(
+      "PATH" => "/tmp/core-only-bundle/ruby/3.4.0/bin:/usr/local/bin:/usr/bin:/bin"
+    ))
+
+    expect(env["PATH"].split(File::PATH_SEPARATOR)).to eq(%w[/usr/local/bin /usr/bin /bin])
+  end
+
+  it "strips Core's own bundle's man directories from MANPATH, preserving unrelated entries" do
+    env = described_class.base(env: polluted_env(
+      "MANPATH" => "/tmp/core-only-bundle/ruby/3.4.0/gems/rspec-core-3.13.0/man:/usr/share/man"
+    ))
+
+    expect(env["MANPATH"]).to eq("/usr/share/man")
+  end
+
+  # The trailing-empty-entry semantics both variables have (PATH: "the
+  # current directory"; MANPATH: "append the system default") must survive
+  # a strip -- the split/join must not silently drop it.
+  it "preserves a trailing empty search-path entry while stripping the bundle-exec one" do
+    env = described_class.base(env: polluted_env(
+      "MANPATH" => "/tmp/core-only-bundle/ruby/3.4.0/gems/rbs-3.9.0/man:/usr/share/man:"
+    ))
+
+    expect(env["MANPATH"]).to eq("/usr/share/man:")
+  end
+
+  # The same chruby/RVM guard #gem_home_path_keys carries: when GEM_HOME
+  # doesn't look bundle-exec-derived, `<GEM_HOME>/bin` is the real location
+  # of that user's own gem executables and must NOT be stripped.
+  it "leaves a chruby/RVM-style GEM_HOME's bin directory on PATH (not bundle-exec-derived)" do
+    env = described_class.base(env: polluted_env(
+      "BUNDLE_PATH" => nil,
+      "GEM_HOME" => "/Users/example/.gem/ruby/3.4.0",
+      "GEM_PATH" => "/Users/example/.gem/ruby/3.4.0",
+      "PATH" => "/Users/example/.gem/ruby/3.4.0/bin:/usr/bin"
+    ))
+
+    expect(env.key?("PATH")).to be(false) # untouched, inherited as-is
+  end
+
+  # Only emitted when something was actually removed -- a PATH carrying
+  # nothing of Core's bundle stays absent from the returned Hash.
+  it "does not emit PATH at all when it carries no bundle-exec-derived entry" do
+    env = described_class.base(env: polluted_env("PATH" => "/usr/local/bin:/usr/bin"))
+
+    expect(env.key?("PATH")).to be(false)
+  end
+
+  # A bare string prefix that isn't a real path ancestor must not match
+  # (the round-2 finding for GEM_HOME, carried over to this sibling logic).
+  it "does not strip a PATH entry that merely shares a string prefix with Core's bundle path" do
+    env = described_class.base(env: polluted_env(
+      "PATH" => "/tmp/core-only-bundle/ruby/3.4.0-other/bin:/usr/bin"
+    ))
+
+    expect(env.key?("PATH")).to be(false)
+  end
+
+  # A degenerate GEM_HOME must never turn the search-path strip into a total
+  # outage: a "" or "/" gem home yields the path prefix "/", which would
+  # match every absolute entry and hand the child an EMPTY PATH -- leaving
+  # it unable to resolve `bundle` at all.
+  ["", "/"].each do |degenerate|
+    it "never empties PATH when GEM_HOME is the degenerate value #{degenerate.inspect}" do
+      env = described_class.base(env: polluted_env(
+        "GEM_HOME" => degenerate,
+        "GEM_PATH" => "",
+        "PATH" => "/usr/local/bin:/usr/bin:/bin"
+      ))
+
+      expect(env.fetch("PATH", "/usr/local/bin:/usr/bin:/bin")).to eq("/usr/local/bin:/usr/bin:/bin")
+    end
   end
 
   it "leaves keys unrelated to Bundler/RubyGems entirely untouched (absent from the returned Hash)" do

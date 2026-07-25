@@ -104,7 +104,9 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
           "rails/sqlite3 ARE installed on this machine, but `bundle lock/install --local` failed for " \
           "#{FIXTURE_ROOT} under BundleEnvironment.for_workspace's env -- Core's own Bundler context is " \
           "leaking into the fixture's separate Bundle graph (Task 022.2 regression). Reproduce with: " \
-          "BUNDLE_PATH=$(mktemp -d) bundle exec rspec #{__FILE__}"
+          "d=$(mktemp -d); BUNDLE_PATH=$d bundle install && BUNDLE_PATH=$d bundle exec rspec #{__FILE__} " \
+          "(the `bundle install` is required -- an empty BUNDLE_PATH would fail for the unrelated reason " \
+          "that Core's own gems aren't there yet)"
         end
     end
 
@@ -498,6 +500,36 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
           "BUNDLE_APP_CONFIG" => File.join(core_only_dir, "core-config"),
           "GEM_HOME" => File.join(core_only_dir, "core-bundle", "ruby", RUBY_VERSION),
           "GEM_PATH" => ""
+        )
+
+        expect(result["status"]).to eq("ready")
+      end
+    end
+
+    # Regression (round 4): `bundle exec` unshifts its own
+    # "#{Bundler.bundle_path}/bin" onto PATH, and `Process.spawn` resolves a
+    # bare command name (this Agent is spawned as literally `bundle`)
+    # through the env Hash's own PATH -- so leaving PATH fully inherited
+    # meant the Agent resolved executables out of *Core's* bundle. Proven
+    # here rather than only at the unit level by planting a deliberately
+    # broken `bundle` in exactly the directory Core's own `bundle exec`
+    # would have put first on PATH: pre-fix the Agent runs that one and
+    # never reaches :ready.
+    it "does not resolve the Agent's own `bundle` out of Core's bundle-exec PATH entry" do
+      Dir.mktmpdir do |core_only_dir|
+        gem_home = File.join(core_only_dir, "core-bundle", "ruby", RUBY_VERSION)
+        bin_dir = File.join(gem_home, "bin")
+        FileUtils.mkdir_p(bin_dir)
+        poisoned = File.join(bin_dir, "bundle")
+        File.write(poisoned, "#!/bin/sh\nexit 47\n")
+        FileUtils.chmod(0o755, poisoned)
+
+        result = self.class.parsed_boot_result(
+          "BUNDLE_PATH" => File.join(core_only_dir, "core-bundle"),
+          "BUNDLE_APP_CONFIG" => File.join(core_only_dir, "core-config"),
+          "GEM_HOME" => gem_home,
+          "GEM_PATH" => "",
+          "PATH" => "#{bin_dir}#{File::PATH_SEPARATOR}#{ENV.fetch("PATH")}"
         )
 
         expect(result["status"]).to eq("ready")
