@@ -470,6 +470,19 @@ module Ovallsp
       command = valid_test_command?(override) ? override : @observation_test_command
 
       results = @observation_runner.run(command: command.first, args: command[1..], workspace_root: @workspace_root)
+
+      # `nil` is Runner's "this run produced no outcome at all" (see its
+      # own docs) -- a command that couldn't start, was killed on
+      # timeout, or died without observing anything -- as opposed to `[]`,
+      # "the suite ran and genuinely observed nothing". Store#replace_run
+      # is a full generation swap, so conflating the two would let one
+      # broken run silently destroy every signature the user had already
+      # accumulated. Report the honest zero counts for *this* run, but
+      # leave the last-known-good evidence exactly where it is (the same
+      # resolution Task 008.6 applied to RailsBootstrap's own
+      # `fetch_all_models || []`).
+      return { sampleCount: 0, methodCount: 0 } if results.nil?
+
       @observation_store.replace_run(results)
       invalidate_stale_observations
 

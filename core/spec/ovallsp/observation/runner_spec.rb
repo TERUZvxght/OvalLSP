@@ -17,20 +17,52 @@ RSpec.describe Ovallsp::Observation::Runner do
     expect(signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "Integer"))
   end
 
-  it "returns an empty array, without raising, when the test command itself crashes" do
-    results = nil
+  # Found by an independent review (round 7) of Task 022.2. Every failure
+  # mode below used to return `[]`, indistinguishable from "the suite ran
+  # and genuinely observed nothing" -- and Server#run_observed_tests_result
+  # feeds that straight into Store#replace_run, a full generation swap. So
+  # one broken run wiped every signature the user had already accumulated.
+  # See Runner#run's own docs; same conflation Task 008.6 fixed for
+  # RailsBootstrap's `fetch_all_models || []`.
+  it "returns nil, not an empty array, without raising, when the test command itself crashes" do
+    results = :unset
     expect { results = runner.run(command: "ruby", args: ["crash.rb"], workspace_root: fixtures_root) }.not_to raise_error
 
-    expect(results).to eq([])
+    expect(results).to be_nil
   end
 
-  it "kills a hung test command past the timeout and returns an empty array, without raising" do
-    results = nil
+  it "kills a hung test command past the timeout and returns nil, without raising" do
+    results = :unset
     expect do
       results = runner.run(command: "ruby", args: ["hang.rb"], workspace_root: fixtures_root, timeout_seconds: 1)
     end.not_to raise_error
 
-    expect(results).to eq([])
+    expect(results).to be_nil
+  end
+
+  it "returns nil, not an empty array, when the command name doesn't resolve to anything at all" do
+    results = :unset
+    expect do
+      results = runner.run(command: "ovallsp-definitely-not-an-executable", args: [], workspace_root: fixtures_root)
+    end.not_to raise_error
+
+    expect(results).to be_nil
+  end
+
+  it "returns nil, not an empty array, when the result file is corrupt rather than merely empty" do
+    allow(File).to receive(:binread).and_call_original
+    allow(File).to receive(:binread).with(a_string_including("ovallsp-observation")).and_return("not a Marshal payload")
+
+    expect(runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)).to be_nil
+  end
+
+  # The other half of the same distinction -- the fix must not collapse
+  # into "always nil". A command that exits cleanly having observed
+  # nothing is a completed run with zero evidence, and Server is supposed
+  # to install that (emptying the store) rather than preserve stale
+  # evidence.
+  it "returns an empty array, not nil, for a test command that completes cleanly having observed nothing" do
+    expect(runner.run(command: "ruby", args: ["no_observations.rb"], workspace_root: fixtures_root)).to eq([])
   end
 
   # Found by an independent review (round 6) of Task 022.2. Everything
@@ -42,12 +74,12 @@ RSpec.describe Ovallsp::Observation::Runner do
   # documented "never raises" contract, turning the user's explicit
   # `Run Tests with Type Observation` command into a bare LSP
   # `internal error` instead of an empty, logged result.
-  it "returns an empty array, without raising, when the workspace root doesn't exist at all" do
+  it "returns nil, without raising, when the workspace root doesn't exist at all" do
     missing = File.join(fixtures_root, "definitely-not-a-real-directory")
-    results = nil
+    results = :unset
 
     expect { results = runner.run(command: "ruby", args: [], workspace_root: missing) }.not_to raise_error
-    expect(results).to eq([])
+    expect(results).to be_nil
   end
 
   # Task 022.2 (found by an independent review, round 5): the command

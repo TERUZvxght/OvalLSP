@@ -13,9 +13,12 @@ module Ovallsp
     # process injection" is explicitly out of scope;
     # docs/design/tasks/019-runtime-observation.md). A runner crash,
     # hang, or empty/corrupt result never raises out of #run; it's
-    # exactly one more "this run produced no evidence" outcome, logged,
-    # the same fail-closed posture every other subprocess boundary in
-    # this codebase (Plugins::Loader, AgentProcessManager) already uses.
+    # exactly one more "this run produced no evidence" outcome (`nil`),
+    # logged, the same fail-closed posture every other subprocess
+    # boundary in this codebase (Plugins::Loader, AgentProcessManager)
+    # already uses -- and, per #run's own docs, kept distinct from the
+    # genuinely-empty `[]` a run that completed and observed nothing
+    # returns.
     class Runner
       DEFAULT_TIMEOUT_SECONDS = 300
       HARNESS_PATH = File.expand_path("harness.rb", __dir__)
@@ -27,8 +30,30 @@ module Ovallsp
       # `command`/`args` are the workspace's own configured test command
       # (e.g. `["bundle", "exec", "rspec"]`), run with `workspace_root`
       # as both cwd and the Collector's own workspace-path filter root.
-      # Returns an Array of ObservedSignature (possibly empty) -- never
-      # raises.
+      # Never raises.
+      #
+      # Returns an Array of ObservedSignature -- possibly empty -- for a
+      # run that actually *completed*, and `nil` when no run outcome
+      # could be obtained at all: Core couldn't even start the command
+      # (a deleted/renamed workspace, a command that isn't on PATH), the
+      # command was killed on timeout, it exited non-zero having
+      # produced no evidence, or its result file came back corrupt.
+      #
+      # `nil` and `[]` are deliberately different values rather than
+      # both flattened to `[]` (found by an independent review, round 7).
+      # Store#replace_run is a full generation swap, so a caller that
+      # treats a failed run as "the suite genuinely observed nothing"
+      # silently destroys every previously observed signature the user
+      # had accumulated -- a broken test command, or a workspace
+      # directory renamed while the editor is open, would wipe the whole
+      # evidence store as a side effect of a run that produced no
+      # information whatsoever. That is the identical conflation Task
+      # 008.6 already had to fix one code path over, in
+      # RailsBootstrap#populate_registries' `fetch_all_models || []`
+      # (see its own docs), and the distinguishing information was
+      # already being computed here -- #spawn_and_collect has always
+      # returned nil for failure -- and then discarded one line later by
+      # a `results || []`.
       #
       # `env_source:` (default: the real `ENV`) is the environment
       # BundleEnvironment.for_workspace reads Core's own Bundler/RubyGems
@@ -45,8 +70,7 @@ module Ovallsp
 
         env = harness_env(workspace_root: workspace_root, output_path: output_file.path, run_id: run_id,
                           env_source: env_source)
-        results = spawn_and_collect(command, args, workspace_root, env, output_file.path, log_file.path, timeout_seconds)
-        results || []
+        spawn_and_collect(command, args, workspace_root, env, output_file.path, log_file.path, timeout_seconds)
       rescue StandardError => e
         # The "never raises" half of this method's own contract, made
         # structural rather than aspirational (found by an independent
@@ -68,7 +92,7 @@ module Ovallsp
         # (#spawn_and_collect, #read_results, Plugins::Loader) already
         # uses.
         @logger.error("observation runner could not start: #{e.class}: #{e.message}")
-        []
+        nil
       ensure
         output_file&.unlink
         log_file&.unlink
@@ -126,24 +150,44 @@ module Ovallsp
       # fd 1/2.
       def spawn_and_collect(command, args, workspace_root, env, output_path, log_path, timeout_seconds)
         pid = Process.spawn(env, command, *Array(args), chdir: workspace_root, out: log_path, err: log_path)
-        finished = wait_with_timeout(pid, timeout_seconds)
-        return nil unless finished
+        status = wait_for_exit(pid, timeout_seconds)
+        return nil if status.nil?
 
-        read_results(output_path)
+        results = read_results(output_path)
+        return nil if results.nil?
+        return nil if failed_without_evidence?(status, results)
+
+        results
       rescue StandardError => e
         @logger.error("observation runner failed: #{e.class}: #{e.message}")
         nil
       end
 
-      def wait_with_timeout(pid, timeout_seconds)
-        Timeout.timeout(timeout_seconds) { Process.waitpid(pid) }
-        true
+      # A non-zero exit *and* nothing observed is the shape of "the test
+      # command didn't run" (a syntax error, a missing gem, a typo'd
+      # command name), not "the suite ran and genuinely observed
+      # nothing" -- see #run's own docs for why the two must not be
+      # conflated. A non-zero exit that still produced evidence is left
+      # alone: an ordinary red test suite exits non-zero and its
+      # observations are perfectly good evidence.
+      def failed_without_evidence?(status, results)
+        return false unless results.empty?
+        return false if status == :unknown
+
+        !status.success?
+      end
+
+      # Returns the child's Process::Status, `:unknown` when it had
+      # already been reaped out from under us (Errno::ECHILD), or nil
+      # when it had to be killed for exceeding `timeout_seconds`.
+      def wait_for_exit(pid, timeout_seconds)
+        Timeout.timeout(timeout_seconds) { Process.waitpid2(pid).last }
       rescue Timeout::Error
         @logger.error("observation runner exceeded #{timeout_seconds}s -- killing it")
         kill(pid)
-        false
+        nil
       rescue Errno::ECHILD
-        true
+        :unknown
       end
 
       def kill(pid)
@@ -153,17 +197,23 @@ module Ovallsp
         nil
       end
 
+      # `[]` only for the one genuinely-empty case (the harness ran and
+      # wrote nothing at all); `nil` -- "no outcome", per #run's docs --
+      # for a result file that exists but can't be trusted, so a corrupt
+      # or truncated Marshal payload never masquerades as "the suite
+      # observed zero methods" and wipes the store.
       def read_results(output_path)
         raw = File.binread(output_path)
         return [] if raw.empty?
 
         results = Marshal.load(raw)
-        return [] unless results.is_a?(Array) && results.all? { |r| r.is_a?(ObservedSignature) }
+        return results if results.is_a?(Array) && results.all? { |r| r.is_a?(ObservedSignature) }
 
-        results
+        @logger.error("observation runner produced results of an unexpected shape (#{results.class})")
+        nil
       rescue StandardError => e
         @logger.error("observation runner produced unreadable results: #{e.class}: #{e.message}")
-        []
+        nil
       end
     end
   end

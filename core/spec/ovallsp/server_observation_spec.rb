@@ -92,6 +92,65 @@ RSpec.describe "Ovallsp::Server runtime observation (Task 019)" do
     expect(sent_messages.find { |m| m[:id] == 4 }[:result]).to be_nil
   end
 
+  # Found by an independent review (round 7) of Task 022.2. Round 6 made
+  # Runner#run honour its "never raises" contract by returning an empty
+  # array for a run that couldn't even start -- which Server then fed
+  # straight into Store#replace_run, a *full generation swap*. So a
+  # workspace renamed while the editor is open, or a test command that
+  # simply fails to boot, silently destroyed every signature the user had
+  # accumulated, reported as a perfectly ordinary `methodCount: 0`. Runner
+  # now distinguishes "no outcome" (nil) from "ran, observed nothing"
+  # ([]), and Server only installs the latter.
+  it "keeps previously observed evidence when a later run fails outright" do
+    calculator_uri = Ovallsp::UriUtil.from_path(File.join(fixtures_root, "lib", "calculator.rb"))
+    calculator_source = File.read(File.join(fixtures_root, "lib", "calculator.rb"))
+
+    input =
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      did_open(calculator_uri, calculator_source) +
+      frame(jsonrpc: "2.0", id: 2, method: "ovallsp/runObservedTests",
+            params: { testCommand: ["ruby", "run_tests.rb"] }) +
+      frame(jsonrpc: "2.0", id: 3, method: "ovallsp/runObservedTests",
+            params: { testCommand: ["ruby", "crash.rb"] }) +
+      frame(jsonrpc: "2.0", id: 4, method: "ovallsp/showTypeEvidence",
+            params: { textDocument: { uri: calculator_uri }, position: { line: 3, character: 6 } }) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.find { |m| m[:id] == 2 }[:result][:methodCount]).to be >= 1
+    expect(sent_messages.find { |m| m[:id] == 3 }[:result]).to eq(sampleCount: 0, methodCount: 0)
+
+    evidence = sent_messages.find { |m| m[:id] == 4 }[:result]
+    expect(evidence).not_to be_nil
+    expect(evidence[:parameterTypes]).to eq(%w[Integer Integer])
+  end
+
+  # The converse, so the fix above can't be "just never replace on a
+  # small result": a run that genuinely completes having observed nothing
+  # must still swap the store empty.
+  it "clears previously observed evidence when a later run completes having observed nothing" do
+    calculator_uri = Ovallsp::UriUtil.from_path(File.join(fixtures_root, "lib", "calculator.rb"))
+    calculator_source = File.read(File.join(fixtures_root, "lib", "calculator.rb"))
+
+    input =
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      did_open(calculator_uri, calculator_source) +
+      frame(jsonrpc: "2.0", id: 2, method: "ovallsp/runObservedTests",
+            params: { testCommand: ["ruby", "run_tests.rb"] }) +
+      frame(jsonrpc: "2.0", id: 3, method: "ovallsp/runObservedTests",
+            params: { testCommand: ["ruby", "no_observations.rb"] }) +
+      frame(jsonrpc: "2.0", id: 4, method: "ovallsp/showTypeEvidence",
+            params: { textDocument: { uri: calculator_uri }, position: { line: 3, character: 6 } }) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.find { |m| m[:id] == 2 }[:result][:methodCount]).to be >= 1
+    expect(sent_messages.find { |m| m[:id] == 3 }[:result]).to eq(sampleCount: 0, methodCount: 0)
+    expect(sent_messages.find { |m| m[:id] == 4 }[:result]).to be_nil
+  end
+
   it "invalidates an observed method's evidence once its own source changes" do
     calculator_uri = Ovallsp::UriUtil.from_path(File.join(fixtures_root, "lib", "calculator.rb"))
     calculator_source = File.read(File.join(fixtures_root, "lib", "calculator.rb"))
