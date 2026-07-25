@@ -8,17 +8,35 @@ RSpec.describe Ovallsp::BundleEnvironment do
   # a global ENV mutation would race any other thread reading ENV during
   # the same window). Every method under test accepts `env:` precisely so
   # this is possible.
+  # The actual directory `Bundler.method(:unbundled_env).source_location`
+  # resolves to on *this* machine -- used (not a hardcoded guess) so the
+  # RUBYLIB fixture below genuinely exercises #strip_core_bundler_lib's
+  # removal branch rather than silently never matching anything (found by
+  # an independent review: an earlier fixture's RUBYLIB entry didn't
+  # match the real bundler lib dir on any machine, so the whole suite
+  # stayed green even with the removal logic completely deleted).
+  def real_bundler_lib_dir
+    File.dirname(Bundler.method(:unbundled_env).source_location.first)
+  end
+
   def polluted_env(overrides = {})
     {
       "BUNDLE_GEMFILE" => "/repo/core/Gemfile",
       "BUNDLE_PATH" => "/tmp/core-only-bundle",
       "BUNDLE_APP_CONFIG" => "/tmp/core-only-config",
       "BUNDLE_BIN_PATH" => "/repo/core/.bundle/bin/bundle",
-      "BUNDLER_SETUP" => "1",
+      # A real absolute path in practice (what `bundle exec` actually sets
+      # it to -- RubyGems' own bootstrap auto-`require`s this exact path
+      # unconditionally, independent of RUBYOPT's own -r flags), not a
+      # boolean-ish flag; the exact value doesn't matter for what's tested
+      # here (only that the key gets nil'd), but kept realistic since a
+      # spec/integration/real_rails_spec.rb regression was found the hard
+      # way from treating this as a mere flag.
+      "BUNDLER_SETUP" => "/repo/core/.bundle/bundler/setup",
       "GEM_HOME" => "/tmp/core-only-bundle/ruby/3.4.0",
       "GEM_PATH" => "",
       "RUBYOPT" => "-r/repo/core/.bundle/bundler/setup",
-      "RUBYLIB" => "/repo/core/.bundle/bundler:/some/other/legit/entry",
+      "RUBYLIB" => "#{real_bundler_lib_dir}#{File::PATH_SEPARATOR}/some/other/legit/entry",
       "PATH" => "/usr/bin:/bin",
       "HOME" => "/Users/example"
     }.merge(overrides)
@@ -95,10 +113,11 @@ RSpec.describe Ovallsp::BundleEnvironment do
     expect(env.key?("GEM_PATH")).to be(true)
   end
 
-  it "leaves RUBYLIB's own non-bundler entries in place" do
+  it "removes Bundler's own lib directory from RUBYLIB, and only that entry" do
     env = described_class.base(env: polluted_env)
 
     rubylib_entries = env["RUBYLIB"].split(File::PATH_SEPARATOR)
+    expect(rubylib_entries).not_to include(real_bundler_lib_dir)
     expect(rubylib_entries).to include("/some/other/legit/entry")
   end
 
@@ -125,11 +144,20 @@ RSpec.describe Ovallsp::BundleEnvironment do
 
   # Regression F: #base/#for_workspace must be pure functions with no
   # shared mutable state -- two concurrent calls for two different
-  # workspaces must never cross-contaminate each other's result. A
-  # version implemented via global ENV mutation (even briefly, even with
-  # an ensure-restore) would be expected to fail this under real thread
-  # interleaving; this module's env: parameter design makes that
-  # structurally impossible rather than merely unlikely.
+  # workspaces must never cross-contaminate each other's result. Note
+  # (found by an independent review): this test detects a coarse-grained
+  # shared-mutable-state regression (e.g. a memoized/cached result Hash
+  # reused across calls) reliably, but is NOT a guaranteed catch-all for
+  # every conceivable implementation that mutates global ENV -- a
+  # sufficiently fine-grained race (no yield point inside the critical
+  # section) can pass this test by chance under MRI's GIL even with a
+  # genuinely racy implementation, the same class of false confidence
+  # this project's own agent_supervisor_spec.rb history already
+  # documents for a different race. This module's env: parameter design
+  # (no global ENV mutation at all, ever) is what actually makes the bug
+  # class impossible; this test is a real, non-vacuous regression check
+  # for the specific "shared mutable Hash" shape, not a substitute for
+  # that design guarantee.
   it "never cross-contaminates concurrent calls for different workspaces (regression F)" do
     Dir.mktmpdir do |workspace_a|
       Dir.mktmpdir do |workspace_b|

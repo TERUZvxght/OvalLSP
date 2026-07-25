@@ -286,80 +286,185 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
   # entirely separate Bundle graphs; a review-bundle process that runs
   # Core's own test suite against a temporary, isolated BUNDLE_PATH must
   # never leak that isolation into the Runtime Agent this fixture spawns.
-  # Every scenario below exercises the *real* production path
-  # (RailsBootstrap.start -> BundleEnvironment.for_workspace ->
-  # AgentProcessManager -> a genuinely spawned Agent process) with a
-  # simulated "parent process had X polluted" environment passed via
-  # `env_source:` -- never a global ENV mutation (see BundleEnvironment's
-  # own docs for why: Server is multi-threaded, and a global ENV mutation
-  # would race any other thread reading ENV during the same window).
+  #
+  # Every scenario below spawns a genuinely separate OS process whose OWN
+  # live ENV carries the pollution under test, then has THAT process run
+  # the real, unmodified RailsBootstrap.start -> BundleEnvironment.for_workspace
+  # -> AgentProcessManager -> spawn-a-real-Agent path against its own
+  # (now genuinely polluted) ENV -- never a global ENV mutation of *this*
+  # RSpec process (see BundleEnvironment's own docs for why: Server is
+  # multi-threaded, and a global ENV mutation would race any other thread
+  # reading ENV during the same window).
+  #
+  # An earlier version of this block instead built a `env_source:` Hash
+  # (`ENV.to_h.merge(overrides)`) and passed it directly to
+  # `RailsBootstrap.start` in the *current* process. That does NOT
+  # reproduce the actual bug: `BundleEnvironment.base` only emits
+  # *overrides* (nil-outs and cleaned values) for whatever the given `env`
+  # already has *live* -- `Process.spawn` still inherits everything else
+  # from the real, current-process ENV regardless of what `env_source`
+  # claims. So those tests only failed pre-fix when the RSpec process
+  # *itself* happened to be running under a polluted bundle already
+  # (i.e., only under the exact isolated-BUNDLE_PATH invocation this
+  # whole fix is about) -- under a completely ordinary `bundle exec
+  # rspec`, they passed even with the fix fully reverted, silently
+  # providing no coverage in the common case (found by an independent
+  # review). Spawning a real subprocess whose own ENV is genuinely
+  # polluted closes that gap: it fails pre-fix under ANY invocation.
   describe "Bundler boundary isolation (Task 022.2)" do
-    def boot_manager_with_simulated_parent_env(overrides)
-      env_source = ENV.to_h.merge(overrides)
-      Ovallsp::RailsBootstrap.start(
-        root: FIXTURE_ROOT, logger: logger, route_registry: Ovallsp::Routes::RouteRegistry.new,
-        model_registry: Ovallsp::Models::ModelRegistry.new, hello_timeout: 30, env_source: env_source
-      )
+    CORE_LIB_DIR = File.expand_path("../../lib", __dir__)
+
+    # Explicit load-path entries for Core's own runtime gem deps, computed
+    # from *this* (unpolluted) process -- not left to the spawned
+    # subprocess's own GEM_HOME/GEM_PATH resolution. This is deliberate:
+    # the pollution under test represents "Core's own process was already
+    # running (already successfully resolved its own prism/rbs) when it
+    # spawns the Agent child" -- not "a process that can't even load
+    # itself". Passing these via `-I` means the harness script's own
+    # `require "ovallsp"` never depends on GEM_HOME/GEM_PATH being
+    # correct, so a test can pollute GEM_HOME/GEM_PATH for
+    # BundleEnvironment to read without also breaking the harness script
+    # that reads it.
+    def self.core_runtime_gem_load_paths
+      %w[prism rbs].map { |name| File.join(Gem::Specification.find_by_name(name).full_gem_path, "lib") }
+    end
+
+    # The real, existing "bundler/setup" Bundler's own installation
+    # provides -- a valid `-r` target, unlike a made-up path, so a test
+    # that deliberately sets RUBYOPT to something ending in
+    # "/bundler/setup" (regression C) doesn't crash the *harness*
+    # process's own interpreter startup (RUBYOPT's `-r` flags are
+    # auto-required for *every* Ruby invocation, including this harness
+    # script's own -- not just ones going through `bundle exec`).
+    def self.real_bundler_setup_require_arg
+      bundler_dir = File.dirname(Bundler.method(:unbundled_env).source_location.first)
+      "-r#{File.join(bundler_dir, "bundler", "setup")}"
+    end
+
+    # Spawns a real, separate Ruby process whose own ENV is
+    # `ENV.to_h.merge(overrides)` (genuine pollution, not a Hash passed
+    # only to a method call), runs the real RailsBootstrap.start against
+    # this fixture with its own default `env_source: ENV` (i.e. exactly
+    # the production code path, reading whatever's actually live in that
+    # subprocess), and reports the resulting manager status (and, when
+    # ready, a real ActiveRecord column) back as JSON on stdout.
+    #
+    # RUBYOPT is cleared for the harness's own spawn by default (not left
+    # inherited) -- the ambient RUBYOPT under a normal `bundle exec rspec`
+    # invocation already carries "-rbundler/setup" pointing at Core's own
+    # (real, working) Bundler install, harmless on its own, but combined
+    # with a test that deliberately breaks GEM_HOME/GEM_PATH (regression
+    # A) it would make the *harness script itself* fail to boot before it
+    # ever reaches the scenario under test. A test that specifically wants
+    # RUBYOPT pollution (regression C) passes its own explicit override,
+    # using #real_bundler_setup_require_arg rather than a made-up path for
+    # exactly the same reason.
+    #
+    # BUNDLER_SETUP is cleared for the same reason, and is NOT merely
+    # RUBYOPT's own concern: RubyGems' own bootstrap
+    # (rubygems.rb -- `require ENV["BUNDLER_SETUP"] if ENV["BUNDLER_SETUP"]
+    # && !defined?(Bundler)`) auto-requires whatever path BUNDLER_SETUP
+    # names, completely independently of RUBYOPT's own `-r` flags.
+    # `bundle exec` sets it to the real, absolute path of its own
+    # `bundler/setup.rb` -- found the hard way: clearing RUBYOPT alone
+    # still left the harness itself crashing during its own interpreter
+    # startup (before this script's own code ever runs) whenever this
+    # spec suite is invoked via the ordinary `bundle exec rspec` (which
+    # sets BUNDLER_SETUP ambiently) combined with a test that deliberately
+    # breaks GEM_HOME/GEM_PATH -- RubyGems' auto-require doesn't check
+    # RUBYOPT at all, it checks this separate variable directly.
+    def self.boot_status_with_polluted_subprocess_env(overrides)
+      script = <<~RUBY
+        require "ovallsp"
+        require "json"
+
+        logger = Object.new
+        logger.define_singleton_method(:info) { |*| }
+        logger.define_singleton_method(:warn) { |*| }
+        logger.define_singleton_method(:error) { |*| }
+
+        manager = Ovallsp::RailsBootstrap.start(
+          root: #{FIXTURE_ROOT.inspect}, logger: logger,
+          route_registry: Ovallsp::Routes::RouteRegistry.new,
+          model_registry: Ovallsp::Models::ModelRegistry.new,
+          hello_timeout: 30
+        )
+
+        result = { "status" => manager&.status&.to_s }
+        if manager&.status == :ready
+          user = manager.fetch_all_models&.find { |m| m[:name] == "User" }
+          email_column = user && user[:columns]&.find { |c| c[:name] == "email" }
+          result["user_email_column"] = email_column && email_column.transform_keys(&:to_s)
+        end
+        manager&.stop
+
+        STDOUT.puts(JSON.generate(result))
+      RUBY
+
+      env = ENV.to_h.merge("RUBYOPT" => nil, "BUNDLER_SETUP" => nil).merge(overrides)
+      load_path_args = ([CORE_LIB_DIR] + core_runtime_gem_load_paths).flat_map { |path| ["-I", path] }
+      Open3.capture3(env, RbConfig.ruby, *load_path_args, "-e", script)
+    end
+
+    def self.parsed_boot_result(overrides)
+      stdout, stderr, status = boot_status_with_polluted_subprocess_env(overrides)
+      raise "subprocess failed (status=#{status.exitstatus}): #{stderr}" unless status.success?
+
+      JSON.parse(stdout)
+    rescue JSON::ParserError
+      raise "subprocess produced non-JSON output -- stdout: #{stdout.inspect}, stderr: #{stderr.inspect}"
     end
 
     # Regression A: a parent process whose own BUNDLE_PATH/BUNDLE_APP_CONFIG
-    # point at a throwaway, Core-only directory (exactly what a
-    # review-bundle script isolating Core's own gem install does) must
-    # not stop the Runtime Agent from reaching :ready against the
-    # fixture's own, separate Bundle graph.
-    it "boots to :ready even when the simulated parent process' BUNDLE_PATH/BUNDLE_APP_CONFIG point at a Core-only directory" do
+    # (and the GEM_HOME/GEM_PATH `bundle exec` itself derives from them --
+    # see BundleEnvironment's own docs) point at a throwaway, Core-only
+    # directory (exactly what a review-bundle script isolating Core's own
+    # gem install does) must not stop the Runtime Agent from reaching
+    # :ready against the fixture's own, separate Bundle graph.
+    it "boots to :ready even when the parent process' BUNDLE_PATH/BUNDLE_APP_CONFIG genuinely point at a Core-only directory" do
       Dir.mktmpdir do |core_only_dir|
-        @manager = boot_manager_with_simulated_parent_env(
+        result = self.class.parsed_boot_result(
           "BUNDLE_PATH" => File.join(core_only_dir, "core-bundle"),
           "BUNDLE_APP_CONFIG" => File.join(core_only_dir, "core-config"),
-          "GEM_HOME" => File.join(core_only_dir, "core-bundle", "ruby", "3.4.0"),
+          "GEM_HOME" => File.join(core_only_dir, "core-bundle", "ruby", RUBY_VERSION),
           "GEM_PATH" => ""
         )
 
-        expect(@manager.status).to eq(:ready)
-      ensure
-        @manager&.stop
+        expect(result["status"]).to eq("ready")
       end
     end
 
-    # Regression B: a parent process whose own BUNDLE_GEMFILE points at
-    # Core's own Gemfile (exactly what happens whenever Core's own
-    # process is itself launched via `bundle exec`, its normal
+    # Regression B: a parent process whose own BUNDLE_GEMFILE genuinely
+    # points at Core's own Gemfile (exactly what happens whenever Core's
+    # own process is itself launched via `bundle exec`, its normal
     # invocation) must not make the Runtime Agent try to use Core's
     # Gemfile instead of the fixture's own.
-    it "uses the fixture's own Gemfile, not the simulated parent's BUNDLE_GEMFILE" do
-      @manager = boot_manager_with_simulated_parent_env(
+    it "uses the fixture's own Gemfile, not the parent's genuine BUNDLE_GEMFILE" do
+      result = self.class.parsed_boot_result(
         "BUNDLE_GEMFILE" => File.expand_path("../../Gemfile", __dir__)
       )
 
-      expect(@manager.status).to eq(:ready)
+      expect(result["status"]).to eq("ready")
       # Only resolvable via the fixture's own Gemfile (rails/sqlite3
       # aren't in Core's) -- reaching :ready and successfully fetching a
       # real ActiveRecord model's columns is only possible if the Agent
       # actually loaded Rails from the fixture's own bundle, not Core's.
-      user = @manager.fetch_all_models.find { |m| m[:name] == "User" }
-      expect(user[:columns]).to include(name: "email", type: "string", null: true)
-    ensure
-      @manager&.stop
+      expect(result["user_email_column"]).to include("name" => "email", "type" => "string", "null" => true)
     end
 
-    # Regression C: a parent process whose own RUBYOPT carries
+    # Regression C: a parent process whose own RUBYOPT genuinely carries
     # "-rbundler/setup" (exactly what `bundle exec` injects, i.e. every
     # normal invocation of Core itself) must not prevent the Runtime
     # Agent's own `bundle exec` from resolving the fixture's Bundle, and
-    # any *other* RUBYOPT content the parent legitimately had must
-    # survive into the child (BundleEnvironment strips only the
-    # bundler/setup flag, not RUBYOPT wholesale -- verified with a
-    # distinctive extra flag here rather than only via the unit-level
-    # spec/ovallsp/bundle_environment_spec.rb coverage).
-    it "boots to :ready even when the simulated parent process' RUBYOPT carries -rbundler/setup" do
-      @manager = boot_manager_with_simulated_parent_env(
-        "RUBYOPT" => "-r/some/core/bundler/setup"
+    # any *other*, legitimate RUBYOPT content survives alongside it
+    # (verified with a distinctive extra flag here, not just via the
+    # unit-level spec/ovallsp/bundle_environment_spec.rb coverage).
+    it "boots to :ready even when the parent process' RUBYOPT genuinely carries -rbundler/setup" do
+      result = self.class.parsed_boot_result(
+        "RUBYOPT" => "#{self.class.real_bundler_setup_require_arg} -W1"
       )
 
-      expect(@manager.status).to eq(:ready)
-    ensure
-      @manager&.stop
+      expect(result["status"]).to eq("ready")
     end
 
     # Regression D/E: the Agent process genuinely runs against the

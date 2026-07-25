@@ -71,18 +71,53 @@ module Ovallsp
     # shell -- exported BUNDLE_PATH before Core's own `bundle exec` even
     # ran).
     def bundler_owned_keys(env: ENV)
-      env.keys.select do |key|
-        key.start_with?("BUNDLE_") || %w[BUNDLER_SETUP GEM_HOME GEM_PATH].include?(key)
-      end
+      env.keys.select { |key| key.start_with?("BUNDLE_") || key == "BUNDLER_SETUP" } + gem_home_path_keys(env)
+    end
+
+    # GEM_HOME/GEM_PATH are nil'd only when they actually *look*
+    # bundle-exec-derived, not unconditionally -- found by an independent
+    # review: a version that always nil'd them (whenever present at all)
+    # is correct on rbenv (where GEM_HOME is unset outside `bundle exec`)
+    # but silently *breaks* chruby/RVM setups, which export their own
+    # GEM_HOME/GEM_ROOT/GEM_PATH unconditionally, not just inside `bundle
+    # exec` -- unconditional nil'ing would discard the very location a
+    # chruby/RVM user's actual gems live in for the spawned child, which
+    # is exactly the class of bug this whole module exists to fix, just
+    # in the opposite direction. `GEM_PATH == ""` is unambiguous (only
+    # `bundle exec` sets it to an explicit empty string; a version
+    # manager has no reason to). Otherwise, only treat GEM_HOME as
+    # bundle-exec-derived when it's actually nested under the live
+    # BUNDLE_PATH -- exactly what `bundle exec` does
+    # (GEM_HOME=<BUNDLE_PATH>/ruby/<version>) and a version manager's own
+    # GEM_HOME independently would not be.
+    def gem_home_path_keys(env)
+      return %w[GEM_HOME GEM_PATH] if env["GEM_PATH"] == ""
+
+      bundle_path = env["BUNDLE_PATH"]
+      gem_home = env["GEM_HOME"]
+      return %w[GEM_HOME GEM_PATH] if bundle_path && gem_home&.start_with?(bundle_path)
+
+      []
     end
 
     # The exact `-r<path ending in bundler/setup>` flag(s) `bundle exec`
     # injects into RUBYOPT, and nothing else -- removed by exact
     # flag-shape match, not by clearing RUBYOPT wholesale, so any other
     # Ruby options a caller's own environment legitimately set (e.g.
-    # `-W2`, `-rdebug`) survive untouched.
+    # `-W2`, `-rdebug`) survive untouched. Requires either the bare
+    # relative form (`-rbundler/setup`) or a path ending in
+    # `/bundler/setup` -- not just "ends with the substring
+    # bundler/setup" -- so a hypothetical `-r/opt/gems/mybundler/setup`
+    # (a different, unrelated `-r` flag that merely happens to share a
+    # suffix) is never mistaken for Bundler's own injection (found by an
+    # independent review).
     def strip_bundler_setup_flag(rubyopt)
-      rubyopt.to_s.split(" ").reject { |flag| flag.start_with?("-r") && flag.end_with?("bundler/setup") }.join(" ")
+      rubyopt.to_s.split(" ").reject do |flag|
+        next false unless flag.start_with?("-r")
+
+        value = flag[2..]
+        value == "bundler/setup" || value.end_with?("/bundler/setup")
+      end.join(" ")
     end
 
     # Core's own Bundler installation's lib directory (wherever *this*
