@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "redactor"
+
 module Rslsp
   # Writes diagnostic messages to an injectable IO. Must never be pointed at
   # stdout: stdout carries only LSP protocol frames.
@@ -22,8 +24,12 @@ module Rslsp
 
     private
 
+    # Task 022: every message goes through Redactor before it ever
+    # reaches the log file/output channel -- see Redactor's own docs for
+    # why this applies even to messages this codebase didn't author
+    # itself (rendered exception text from a workspace's own Rails app).
     def write(level, message)
-      @io.puts("[rslsp] #{level}: #{message}")
+      @io.puts("[rslsp] #{level}: #{Redactor.redact(message)}")
       @io.flush if @io.respond_to?(:flush)
     rescue StandardError
       nil
