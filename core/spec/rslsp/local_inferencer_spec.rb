@@ -543,4 +543,100 @@ RSpec.describe Rslsp::LocalInferencer do
       expect(target).to be_nil
     end
   end
+
+  # A follow-up review of Tasks 009-013 found MethodAnalyzer/MethodSummaryStore
+  # (Task 010) built and unit-tested, but never actually consulted by
+  # LocalInferencer -- a plain (non-Active-Record) method call resolved to
+  # Unknown even when its return type was staticly inferable, silently
+  # defeating "current_user.company.orders.first.total"-style call chains
+  # everywhere except through Active Record's own DSL surface.
+  describe "resolving a plain source-declared method call through MethodResolver/MethodAnalyzer (Task 013 review fix)" do
+    def wired_inferencer(source, uri: "file:///a.rb")
+      document = Rslsp::TextDocument.new(uri: uri, text: source, version: 1, language_id: "ruby")
+      workspace_index = Rslsp::WorkspaceIndex.new
+      hierarchy_index = Rslsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      summary = Rslsp::ParserService.new.summarize(document)
+      workspace_index.replace_file(summary)
+      hierarchy_index.replace_file(summary)
+
+      method_resolver = Rslsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
+      summary_store = Rslsp::Semantic::MethodSummaryStore.new
+      method_analyzer = Rslsp::Semantic::MethodAnalyzer.new(
+        workspace_index: workspace_index, method_resolver: method_resolver, summary_store: summary_store
+      )
+
+      described_class.new(method_resolver: method_resolver, method_analyzer: method_analyzer)
+    end
+
+    it "resolves a method call's type through its body's return-type analysis, not just Active Record columns" do
+      source = <<~RUBY
+        class Company
+          def name
+            "acme"
+          end
+        end
+
+        class Widget
+          def company
+            Company.new
+          end
+        end
+
+        widget = Widget.new
+        widget.company
+      RUBY
+
+      document = Rslsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+      type = wired_inferencer(source).infer_at(document, { line: 13, character: 9 }) # inside "widget.company"
+
+      expect(type).to eq(Rslsp::Types::Nominal.new(name: "Company"))
+    end
+
+    it "resolves a full call chain, one hop at a time, through plain methods" do
+      source = <<~RUBY
+        class Company
+          def name
+            "acme"
+          end
+        end
+
+        class Widget
+          def company
+            Company.new
+          end
+        end
+
+        widget = Widget.new
+        widget.company.name
+      RUBY
+
+      document = Rslsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+      type = wired_inferencer(source).infer_at(document, { line: 13, character: 17 }) # inside "...company.name"
+
+      expect(type).to eq(Rslsp::Types::Nominal.new(name: "String"))
+    end
+
+    it "still resolves Unknown for a plain method call when method_resolver/method_analyzer aren't wired up (default behavior unchanged)" do
+      source = "class Widget\n  def build\n    1\n  end\nend\n\nWidget.new.build\n"
+      type = infer(source, line: 6, character: 13)
+
+      expect(type).to eq(Rslsp::Types::UNKNOWN)
+    end
+  end
+
+  describe "#infer_at max_steps override (Task 013 review fix)" do
+    it "uses the per-call max_steps instead of the constructor default when given" do
+      # A long chain of statements, each one costing at least one #step! --
+      # comfortably exceeds a tiny per-call budget while staying well under
+      # the constructor's own (much larger) default.
+      source = (["x = 1"] * 50).join("\n") + "\nx\n"
+
+      type = infer(source, line: 50, character: 0)
+      expect(type.to_s).to eq("Integer") # plenty of budget by default
+
+      document = Rslsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+      widened = inferencer.infer_at(document, { line: 50, character: 0 }, max_steps: 3)
+      expect(widened).to eq(Rslsp::Types::UNKNOWN) # budget exhausted -> degrades, doesn't raise
+    end
+  end
 end

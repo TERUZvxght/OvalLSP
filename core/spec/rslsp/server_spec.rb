@@ -282,4 +282,37 @@ RSpec.describe Rslsp::Server do
 
     expect(sent_messages.first[:result]).to eq(type: "User")
   end
+
+  # Task 013's QueryContext existed (matching the design doc's required
+  # interface) but was never actually constructed or consulted anywhere
+  # -- a follow-up review of Tasks 009-013 flagged it as orphaned. These
+  # exercise the fix directly: Server now builds one per hover/explainType
+  # request and checks it for staleness afterward.
+  describe "QueryContext wiring (Task 013 review fix)" do
+    let(:server) { build_server("") }
+
+    it "#build_query_context captures the current workspace/signature generations" do
+      query_context = server.send(:build_query_context, "file:///a.rb", { line: 0, character: 0 })
+
+      expect(query_context.workspace_generation).to eq(server.instance_variable_get(:@workspace_index).generation)
+      expect(query_context.signature_generation).to eq(server.instance_variable_get(:@signatures).generation)
+    end
+
+    it "#warn_if_stale logs a warning when the workspace generation moved on since the context was built" do
+      query_context = server.send(:build_query_context, "file:///a.rb", { line: 0, character: 0 })
+      allow(server.instance_variable_get(:@workspace_index)).to receive(:generation).and_return(
+        query_context.workspace_generation + 1
+      )
+
+      expect(logger).to receive(:warn).with(a_string_matching(/became stale/))
+      server.send(:warn_if_stale, query_context)
+    end
+
+    it "#warn_if_stale does not log when nothing has changed" do
+      query_context = server.send(:build_query_context, "file:///a.rb", { line: 0, character: 0 })
+
+      expect(logger).not_to receive(:warn)
+      server.send(:warn_if_stale, query_context)
+    end
+  end
 end

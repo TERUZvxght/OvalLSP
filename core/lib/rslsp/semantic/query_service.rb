@@ -52,8 +52,10 @@ module Rslsp
 
       # The type of the expression at `document`/`position` — the single
       # source of truth every other QueryService method builds on.
-      def type_at(document, position, initial_env: {})
-        @local_inferencer.infer_at(document, position, initial_env: initial_env)
+      # `budget` (typically a QueryContext#budget) overrides
+      # LocalInferencer's own per-instance step budget for this one call.
+      def type_at(document, position, initial_env: {}, budget: nil)
+        @local_inferencer.infer_at(document, position, initial_env: initial_env, max_steps: budget)
       end
 
       # Every distinct member name starting with `prefix` reachable from

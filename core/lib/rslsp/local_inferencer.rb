@@ -47,10 +47,19 @@ module Rslsp
     # increasingly large Union over.
     MAX_ARRAY_ELEMENT_UNION = 8
 
-    def initialize(max_steps: 5000, model_registry: Models::ModelRegistry.new, generic_rules: nil)
+    def initialize(max_steps: 5000, model_registry: Models::ModelRegistry.new, generic_rules: nil,
+                   method_resolver: nil, method_analyzer: nil)
       @max_steps = max_steps
       @model_registry = model_registry
       @generic_rules = generic_rules || self.class.default_generic_rules
+      # Both optional and nil-safe: a caller with no HierarchyIndex/
+      # MethodResolver/MethodSummaryStore wired up yet (most unit tests,
+      # every LocalInferencer built before Task 013) still gets exactly
+      # the pre-existing behavior -- a plain (non-Active-Record) method
+      # call simply stays Types::UNKNOWN, as it always has.
+      @method_resolver = method_resolver
+      @method_analyzer = method_analyzer
+      @step_budget = max_steps
     end
 
     # A fresh registry per instance by default (registries are cheap and
@@ -66,9 +75,12 @@ module Rslsp
     # { line:, character: } position (UTF-16). `initial_env` seeds bindings
     # before evaluation starts — Task 008 uses this to propagate a
     # controller action's instance variable types into a view's Ruby
-    # regions. Never raises — returns Types::UNKNOWN for anything
-    # unresolved, out of budget, or on unexpected parser input.
-    def infer_at(document, position, initial_env: {})
+    # regions. `max_steps` overrides the constructor's default for this
+    # one call only (Task 013's QueryContext#budget, threaded down from a
+    # single request rather than fixed per LocalInferencer instance).
+    # Never raises — returns Types::UNKNOWN for anything unresolved, out
+    # of budget, or on unexpected parser input.
+    def infer_at(document, position, initial_env: {}, max_steps: nil)
       # Prism node locations are UTF-8 byte offsets, not Ruby character
       # offsets — using #position_to_char_offset here would select the
       # wrong node whenever a multibyte character appears anywhere before
@@ -76,6 +88,7 @@ module Rslsp
       offset = document.position_to_byte_offset(position)
       result = Prism.parse(document.text)
       @steps = 0
+      @step_budget = max_steps || @max_steps
 
       locate(result.value.statements, offset, initial_env.dup)
     rescue BudgetExceeded, StandardError
@@ -93,6 +106,7 @@ module Rslsp
       return {} unless method_node&.body
 
       @steps = 0
+      @step_budget = @max_steps
       env = {}
       eval_type(method_node.body, env)
       # Symbol-keyed (":@user", not "@user") to match how Prism names
@@ -114,6 +128,7 @@ module Rslsp
       return nil unless method_node&.body
 
       @steps = 0
+      @step_budget = @max_steps
       RenderTargetFinder.new.tap { |finder| method_node.body.accept(finder) }.target
     rescue StandardError
       nil
@@ -130,7 +145,7 @@ module Rslsp
 
     def step!
       @steps += 1
-      raise BudgetExceeded if @steps > @max_steps
+      raise BudgetExceeded if @steps > @step_budget
     end
 
     def contains?(location, offset)
@@ -382,12 +397,33 @@ module Rslsp
     def resolve_instance_level(receiver_type, method_name)
       case receiver_type
       when Types::Nominal
-        resolve_model_member(receiver_type.name, method_name)
+        resolve_model_member(receiver_type.name, method_name) || resolve_source_method_member(receiver_type, method_name)
       when Types::Generic
         resolve_relation_member(receiver_type, method_name)
       when Types::Union
         resolve_union_member(receiver_type, method_name)
       end
+    end
+
+    # A plain, hand-written instance method (not an Active Record column/
+    # association, which #resolve_model_member already handles) resolves
+    # through Semantic::MethodResolver (Task 009, ancestor-aware lookup)
+    # and Semantic::MethodAnalyzer (Task 010, body-source return-type
+    # inference with its own call-chain recursion and cache) when both are
+    # wired up. This is what makes a call chain like
+    # `current_user.company.orders.first.total` keep resolving past the
+    # first hop instead of widening to Unknown the moment it leaves
+    # Active Record's own DSL surface. Nil-safe: either dependency being
+    # absent (most unit tests, anything predating Task 013's Server
+    # wiring) just skips this and falls through to Unknown, exactly as
+    # before this method existed.
+    def resolve_source_method_member(receiver_type, method_name)
+      return nil unless @method_resolver && @method_analyzer
+
+      candidate = @method_resolver.resolve(receiver_type: receiver_type, name: method_name).min_by(&:lookup_rank)
+      return nil unless candidate
+
+      @method_analyzer.summarize(symbol_id: candidate.symbol_id).return_type
     end
 
     # `user.company.orders` where `company` is `Company | nil`: resolves

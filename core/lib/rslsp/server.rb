@@ -16,6 +16,9 @@ require_relative "rails_bootstrap"
 require_relative "cold_indexer"
 require_relative "semantic/hierarchy_index"
 require_relative "semantic/method_resolver"
+require_relative "semantic/method_summary_store"
+require_relative "semantic/method_analyzer"
+require_relative "semantic/query_context"
 require_relative "semantic/query_service"
 require_relative "signatures/environment"
 
@@ -53,7 +56,20 @@ module Rslsp
       @workspace_index = WorkspaceIndex.new
       @hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: @workspace_index)
       @method_resolver = Semantic::MethodResolver.new(workspace_index: @workspace_index, hierarchy_index: @hierarchy_index)
-      @local_inferencer = LocalInferencer.new(model_registry: model_registry)
+      @method_summary_store = Semantic::MethodSummaryStore.new
+      @method_analyzer = Semantic::MethodAnalyzer.new(
+        workspace_index: @workspace_index, method_resolver: @method_resolver, summary_store: @method_summary_store,
+        model_registry: model_registry
+      )
+      # method_resolver/method_analyzer let a plain (non-Active-Record)
+      # method call chain keep resolving past its first hop instead of
+      # widening to Unknown immediately -- see LocalInferencer#resolve_source_method_member
+      # (docs/design/tasks/010-method-summaries-and-call-chains.md; wired
+      # in as part of Task 013 after an independent review found Task 010
+      # had shipped as a fully isolated, never-called engine).
+      @local_inferencer = LocalInferencer.new(
+        model_registry: model_registry, method_resolver: @method_resolver, method_analyzer: @method_analyzer
+      )
       @route_registry = route_registry
       @model_registry = model_registry
       @workspace_root = workspace_root
@@ -61,6 +77,8 @@ module Rslsp
       @agent_manager = nil
       @agent_restart_mutex = Mutex.new
       @file_summaries = {}
+      @method_symbol_ids_by_uri = {}
+      @method_tracking_mutex = Mutex.new
       @shutdown_received = false
       @signatures = load_signatures_environment
       @query_service = Semantic::QueryService.new(
@@ -192,6 +210,7 @@ module Rslsp
       # stale (docs/design/tasks/008.6-agent-and-index-hardening.md).
       @workspace_index.remove_file(uri)
       @hierarchy_index.remove_file(uri)
+      untrack_methods(uri)
 
       path = UriUtil.to_path(uri)
       reindex_from_disk(uri) if path && File.file?(path)
@@ -200,11 +219,44 @@ module Rslsp
     def reindex(document)
       summary = @parser_service.summarize(document)
       @file_summaries[document.uri] = summary
-      @hierarchy_index.replace_file(summary) if @workspace_index.replace_file(summary)
+      if @workspace_index.replace_file(summary)
+        @hierarchy_index.replace_file(summary)
+        track_methods(document.uri, summary)
+      end
     rescue StandardError => e
       # Parsing must never take the server down: keep the previous summary
       # (if any) and let static features degrade gracefully for this file.
       @logger.error("failed to summarize #{document.uri}: #{e.class}: #{e.message}")
+    end
+
+    # MethodSummaryStore's cache (Task 010, wired into resolution by Task
+    # 013) is keyed by SymbolId, not by file, so it needs its own
+    # invalidation trigger independent of WorkspaceIndex/HierarchyIndex —
+    # every method a uri declared *before* this replace must be
+    # invalidated (and, transitively, everything that depended on it),
+    # or an edited method body would keep returning its stale cached
+    # return type indefinitely. Deliberately invalidates on every replace
+    # rather than diffing old/new declarations for real changes: matching
+    # HierarchyIndex's own "always a full swap" policy, correctness over
+    # cache-hit-rate here.
+    def track_methods(uri, summary)
+      symbol_ids = method_symbol_ids_in(summary)
+      previous = @method_tracking_mutex.synchronize do
+        prior = @method_symbol_ids_by_uri[uri]
+        @method_symbol_ids_by_uri[uri] = symbol_ids
+        prior
+      end
+      @method_summary_store.invalidate(previous) if previous && !previous.empty?
+    end
+
+    def untrack_methods(uri)
+      previous = @method_tracking_mutex.synchronize { @method_symbol_ids_by_uri.delete(uri) }
+      @method_summary_store.invalidate(previous) if previous && !previous.empty?
+    end
+
+    def method_symbol_ids_in(summary)
+      summary.declarations.select { |d| %i[instance_method singleton_method].include?(d.symbol_id.kind) }
+             .map(&:symbol_id)
     end
 
     # Cold Index (docs/design/tasks/008.5-runtime-and-index-corrections.md):
@@ -311,7 +363,9 @@ module Rslsp
       return { type: Types::UNKNOWN.to_s } unless document
 
       position = params.fetch(:position)
-      type = erb_view?(uri) ? explain_type_in_view(document, position) : @query_service.type_at(document, position)
+      query_context = build_query_context(uri, position)
+      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(document, position, budget: query_context.budget)
+      warn_if_stale(query_context)
       { type: type.to_s }
     end
 
@@ -319,11 +373,39 @@ module Rslsp
       uri.end_with?(".erb")
     end
 
-    def explain_type_in_view(document, position)
+    def explain_type_in_view(document, position, query_context = nil)
       ruby_source = Erb::RubyRegionExtractor.extract_ruby_source(document.text)
       synthetic = TextDocument.new(uri: document.uri, text: ruby_source, version: document.version, language_id: "ruby")
 
-      @query_service.type_at(synthetic, position, initial_env: ivars_for_view(document.uri))
+      @query_service.type_at(synthetic, position, initial_env: ivars_for_view(document.uri), budget: query_context&.budget)
+    end
+
+    # Task 013's QueryContext, actually constructed and consulted (a
+    # follow-up review of Tasks 009-013 found it defined to match the
+    # design doc's interface but never instantiated anywhere) — captures
+    # each generation-bearing index's state *before* a query runs, so
+    # #warn_if_stale can tell afterward whether a concurrent background
+    # thread (ColdIndexer, the Runtime Agent) mutated it mid-computation.
+    # `budget` stays nil (LocalInferencer's own default) for now; the
+    # field exists so a future caller with an actual timeout need can set
+    # it per-request without changing this plumbing.
+    def build_query_context(uri, position)
+      Semantic::QueryContext.new(
+        uri: uri, position: position,
+        workspace_generation: @workspace_index.generation, signature_generation: @signatures.generation
+      )
+    end
+
+    # Only logged, not surfaced to the client -- LSP's hover/explainType
+    # responses have no standard "this result may be stale" field, and a
+    # result computed from an index that changed mid-query is still very
+    # likely useful (usually, the change was unrelated to what was being
+    # queried). This is observability, not a correctness guarantee.
+    def warn_if_stale(query_context)
+      return unless query_context.stale?(workspace_generation: @workspace_index.generation,
+                                          signature_generation: @signatures.generation)
+
+      @logger.warn("query for #{query_context.uri} at #{query_context.position} became stale mid-computation")
     end
 
     # No caching here by design: recomputed fresh from the controller's
@@ -642,6 +724,7 @@ module Rslsp
         if change.fetch(:type) == FILE_CHANGE_DELETED
           @workspace_index.remove_file(uri)
           @hierarchy_index.remove_file(uri)
+          untrack_methods(uri)
           @file_summaries.delete(uri)
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
@@ -712,7 +795,11 @@ module Rslsp
       document = TextDocument.new(uri: uri, text: File.read(path, encoding: Encoding::UTF_8), version: nil,
                                    language_id: "ruby")
       summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
-      @hierarchy_index.replace_file(summary) if @workspace_index.replace_file(summary)
+      if @workspace_index.replace_file(summary)
+        @hierarchy_index.replace_file(summary)
+        @file_summaries[uri] = summary
+        track_methods(uri, summary)
+      end
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
     end
@@ -946,7 +1033,9 @@ module Rslsp
       return empty_hover unless document
 
       position = params.fetch(:position)
-      type = erb_view?(uri) ? explain_type_in_view(document, position) : @query_service.type_at(document, position)
+      query_context = build_query_context(uri, position)
+      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(document, position, budget: query_context.budget)
+      warn_if_stale(query_context)
       lines = hover_lines(document, position, type)
       return empty_hover if lines.empty?
 

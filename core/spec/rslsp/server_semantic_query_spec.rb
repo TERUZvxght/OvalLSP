@@ -90,4 +90,40 @@ RSpec.describe "Rslsp::Server semantic query integration (Task 013)" do
     signature = sent_messages.first[:result][:signatures].first
     expect(signature[:label]).to eq("build(name, count)")
   end
+
+  # Wiring MethodAnalyzer's return-type inference into LocalInferencer
+  # (the Finding-1 fix above) needs its own cache invalidation: without
+  # it, editing a method's body would keep hovering its *stale* return
+  # type indefinitely, since MethodSummaryStore caches by SymbolId and
+  # nothing else would ever tell it the body changed.
+  it "reflects an edited method body's new return type on the next hover, not a stale cached one" do
+    source = "class Widget\n  def build\n    1\n  end\nend\n\nWidget.new.build\n"
+    input =
+      did_open("file:///widget.rb", source) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "rslsp/explainType",
+        params: { textDocument: { uri: "file:///widget.rb" }, position: { line: 6, character: 13 } }
+      ) +
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didChange",
+        params: {
+          textDocument: { uri: "file:///widget.rb", version: 2 },
+          contentChanges: [{ text: "class Widget\n  def build\n    \"str\"\n  end\nend\n\nWidget.new.build\n" }]
+        }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "rslsp/explainType",
+        params: { textDocument: { uri: "file:///widget.rb" }, position: { line: 6, character: 13 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    messages = sent_messages
+    before_type = messages.find { |m| m[:id] == 1 }[:result][:type]
+    after_type = messages.find { |m| m[:id] == 2 }[:result][:type]
+
+    expect(before_type).to eq("Integer")
+    expect(after_type).to eq("String")
+  end
 end
