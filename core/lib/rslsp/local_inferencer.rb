@@ -182,6 +182,18 @@ module Rslsp
         locate_in_conditional(node, offset, env)
       when Prism::DefNode
         contains?(node.location, offset) ? locate(node.body, offset, {}) : Types::UNKNOWN
+      when Prism::ClassNode, Prism::ModuleNode, Prism::SingletonClassNode
+        # A class/module body (and `class << self`) is its own fresh local
+        # scope, just like a `def` body -- verified live (`class << self`
+        # cannot see an enclosing class body's locals). Without this case,
+        # `locate` had no way to descend past the *first* class/module in
+        # a file at all: every real Ruby file wraps its actual code in at
+        # least one `class`/`module`, so #infer_at only ever worked for
+        # bare top-level statements before this fix -- found while
+        # building Task 014's reference resolution, which is the first
+        # thing to query #infer_at against realistic (class-nested)
+        # source rather than deliberately top-level test fixtures.
+        contains?(node.location, offset) ? locate(node.body, offset, {}) : Types::UNKNOWN
       else
         eval_type(node, env)
       end

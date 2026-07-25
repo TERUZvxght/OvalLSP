@@ -14,6 +14,50 @@ RSpec.describe Rslsp::LocalInferencer do
     expect(type).to eq(Rslsp::Types::Nominal.new(name: "User"))
   end
 
+  # Found while building Task 014's reference resolution, the first thing
+  # to query #infer_at against realistic (class-nested) source instead of
+  # deliberately top-level test fixtures: #locate had no case for
+  # Prism::ClassNode/ModuleNode/SingletonClassNode at all, so it could
+  # never descend past the *first* class/module wrapping the query
+  # position -- meaning #infer_at only ever worked for bare top-level
+  # statements. Since virtually every real Ruby file wraps its code in at
+  # least one class/module, this made Hover/Completion/Definition/
+  # SignatureHelp (all built across Tasks 004-013 and reviewed 3 times)
+  # silently non-functional for realistic source the whole time.
+  describe "positions nested inside a class/module body (found during Task 014)" do
+    it "resolves a local variable's type inside a method nested in a class" do
+      source = "class Foo\n  def bar\n    x = 1\n    x\n  end\nend\n"
+
+      expect(infer(source, line: 3, character: 4).to_s).to eq("Integer")
+    end
+
+    it "resolves through a module body" do
+      source = "module Foo\n  def self.bar\n    x = User.new\n    x\n  end\nend\n"
+
+      expect(infer(source, line: 3, character: 4)).to eq(Rslsp::Types::Nominal.new(name: "User"))
+    end
+
+    it "resolves through nested class/module namespaces" do
+      source = "module Outer\n  class Inner\n    def bar\n      x = 1\n      x\n    end\n  end\nend\n"
+
+      expect(infer(source, line: 4, character: 6).to_s).to eq("Integer")
+    end
+
+    it "resolves through a `class << self` body" do
+      source = "class Foo\n  class << self\n    def bar\n      x = 1\n      x\n    end\n  end\nend\n"
+
+      expect(infer(source, line: 4, character: 6).to_s).to eq("Integer")
+    end
+
+    it "does not leak an outer class body's locals into a nested `class << self` body's fresh scope" do
+      # Verified against real Ruby: `class << self` cannot see an
+      # enclosing class body's own locals.
+      source = "class Foo\n  x = 1\n  class << self\n    x\n  end\nend\n"
+
+      expect(infer(source, line: 3, character: 4)).to eq(Rslsp::Types::UNKNOWN)
+    end
+  end
+
   describe "non-ASCII text preceding the query position (Task 008.5)" do
     it "does not let a multibyte comment/string on earlier lines shift node selection" do
       source = <<~RUBY
