@@ -47,6 +47,17 @@ module Rslsp
     # the secret, not preserve exactly how the label was capitalized.
     BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9\-._~+\/]+=*/i
 
+    # Known, accepted gap (noted by review, not fixed in this pass):
+    # `Authorization: Basic <base64>` is never redacted -- there's no
+    # pattern here for it, unlike Bearer. A 401 from an HTTP client
+    # commonly echoes the request's own Authorization header verbatim
+    # into its exception text, so this is a real, plausible leak path,
+    # just a narrower one than the connection-string/bearer-token cases
+    # (Basic-Auth-over-plain-HTTP is itself already a security
+    # anti-pattern in whatever code produced it). Worth a dedicated
+    # pattern in a future pass if this class of leak turns out to matter
+    # in practice.
+
     # `scheme://user:password@host` -- a DB connection string
     # (`postgres://user:pass@host/db`), a Redis URL, an HTTP Basic-Auth
     # URL, etc. Found missing by an independent review of this task: the
