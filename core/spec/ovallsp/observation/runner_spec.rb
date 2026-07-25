@@ -27,11 +27,30 @@ RSpec.describe Ovallsp::Observation::Runner do
   end
 
   # Never leave a stray `sleep 120` behind if the expectation above it
-  # failed (i.e. exactly when the process is still running).
+  # failed (i.e. exactly when the process is still running). Signals the
+  # leftover's whole group, because the shape being asserted about is a
+  # wrapper *plus* its grandchild -- killing the recorded pid alone would
+  # itself leak the wrapper on every failure.
   def kill_leftover(pid)
-    Process.kill("KILL", pid) if pid
-  rescue Errno::ESRCH
+    return unless pid
+
+    Process.kill("KILL", -Process.getpgid(pid))
+  rescue Errno::ESRCH, Errno::EPERM
     nil
+  end
+
+  # Blocks until the wrapper fixture has recorded its grandchild's pid,
+  # so a test that must act "while the run is genuinely in flight" never
+  # races the child's startup.
+  def await_grandchild_pid(pid_file, timeout: 10)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+    loop do
+      return Integer(File.read(pid_file))
+    rescue StandardError
+      raise "fixture never recorded its grandchild pid" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+
+      sleep 0.02
+    end
   end
 
   it "observes a real, separately-spawned Ruby process running the workspace's own test command" do
@@ -79,6 +98,36 @@ RSpec.describe Ovallsp::Observation::Runner do
     pid_file = File.join(Dir.mktmpdir("ovallsp-observation-pgroup"), "grandchild.pid")
     runner.run(command: "ruby", args: ["hang_with_child.rb", pid_file], workspace_root: fixtures_root,
                timeout_seconds: 2)
+
+    grandchild = Integer(File.read(pid_file))
+    expect(process_gone?(grandchild)).to be(true)
+  ensure
+    kill_leftover(grandchild)
+  end
+
+  # Found by an independent review (round 10) of Task 022.2, and the
+  # other half of the leak round 9 fixed above. Timing out is not the
+  # only way control leaves #spawn_and_collect with the child still
+  # running, and every other way left the workspace's whole test tree
+  # orphaned onto init forever. Interrupt is the reachable one: #run
+  # rescues `StandardError` on purpose (round 9 -- a Ctrl-C must really
+  # kill the editor's server rather than be logged as "no evidence"), so
+  # a Ctrl-C arriving while Runner blocks waiting on the test command
+  # propagates past every rescue in the class. Round 9's own `pgroup:
+  # true` is what makes it unconditional: the child used to share Core's
+  # process group, so a terminal delivered it the same SIGINT by
+  # accident, and under an editor (`--stdio`, no controlling tty) there
+  # was no such delivery even then.
+  it "kills the workspace's whole test tree when the wait is interrupted rather than timing out" do
+    pid_file = File.join(Dir.mktmpdir("ovallsp-observation-interrupt"), "grandchild.pid")
+    allow(Process).to receive(:waitpid2) do
+      await_grandchild_pid(pid_file) # only interrupt once the tree genuinely exists
+      raise Interrupt
+    end
+
+    expect do
+      runner.run(command: "ruby", args: ["hang_with_child.rb", pid_file], workspace_root: fixtures_root)
+    end.to raise_error(Interrupt)
 
     grandchild = Integer(File.read(pid_file))
     expect(process_gone?(grandchild)).to be(true)

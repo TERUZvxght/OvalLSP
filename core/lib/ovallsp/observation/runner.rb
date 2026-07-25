@@ -179,13 +179,48 @@ module Ovallsp
       # unsupervised forever, holding DB connections, ports and CPU, with
       # nothing left that knows its pid. Verified before the fix by
       # timing out a wrapper that had spawned a `sleep 300` grandchild:
-      # the grandchild outlived the kill. Only the *timeout* path signals
-      # the group -- a command that exits normally having deliberately
-      # backgrounded something is its own business, not Core's to reap.
+      # the grandchild outlived the kill. A command that exits *normally*
+      # having deliberately backgrounded something is its own business,
+      # not Core's to reap -- the group is only ever signalled when the
+      # child is still ours (see `settled` below).
+      #
+      # `settled`/the `ensure` are the other half of that guarantee
+      # (found by an independent review, round 10). Round 9 covered the
+      # timeout path, but timing out is not the only way control leaves
+      # this method with the child still running, and every other way
+      # leaked the workspace's entire test tree -- reparented to init,
+      # holding its DB connections, ports and CPU forever, with nothing
+      # left that knows its pid. The reachable one is Interrupt: #run's
+      # rescue is deliberately `StandardError`, so a Ctrl-C arriving
+      # while this method blocks in #wait_for_exit propagates straight
+      # out (round 9 documented that as required -- the editor's server
+      # must actually die), past a rescue that never sees it. Before
+      # round 9 the kernel happened to paper over this in a terminal:
+      # the child shared Core's process group, so the tty delivered the
+      # same SIGINT to it. `pgroup: true` deliberately ends that
+      # membership, which makes the leak unconditional rather than
+      # merely likely -- and under an editor (`--stdio`, no controlling
+      # tty) there was never any such delivery to begin with. Errno::EPERM
+      # out of #kill, or any other non-ESRCH signal failure, lands the
+      # same way. Guarding on "did the wait settle" rather than on
+      # Interrupt specifically covers the class, per this repo's
+      # discipline.
+      #
+      # The guard is also what keeps #kill's negative-pid signal safe.
+      # #wait_for_exit only returns normally once the child is no longer
+      # ours (a Process::Status means we reaped it, `:unknown` means
+      # ECHILD, `nil` means #kill already reaped it), and a reaped pid is
+      # free for the kernel to reuse -- so signalling `-pid` after that
+      # point could hit an unrelated process group. Firing only when the
+      # wait did *not* settle means the child is always still unreaped
+      # here, and an unreaped child holds its pid (as a zombie at worst),
+      # so no other process or group can have acquired that id yet.
       def spawn_and_collect(command, args, workspace_root, env, output_path, log_path, timeout_seconds)
+        settled = false
         pid = Process.spawn(env, command, *Array(args),
                             chdir: workspace_root, out: log_path, err: log_path, pgroup: true)
         status = wait_for_exit(pid, timeout_seconds)
+        settled = true
         return nil if status.nil?
 
         results = read_results(output_path)
@@ -196,6 +231,8 @@ module Ovallsp
       rescue StandardError => e
         @logger.error("observation runner failed: #{e.class}: #{e.message}")
         nil
+      ensure
+        kill(pid) if pid && !settled
       end
 
       # A non-zero exit *and* nothing observed is the shape of "the test
@@ -240,17 +277,35 @@ module Ovallsp
       # Signals the child's whole process group (negative pid -- the
       # group #spawn_and_collect's `pgroup: true` created, whose id is
       # the child's own pid), not just the child, so a wrapper's forked
-      # test suite dies with it; see #spawn_and_collect's own docs. Falls
-      # back to the bare pid if the group is already gone but the child
-      # somehow isn't, and still reaps the child either way.
+      # test suite dies with it; see #spawn_and_collect's own docs for
+      # why `-pid` cannot collide with an unrelated group. Falls back to
+      # the bare pid if the group is already gone but the child somehow
+      # isn't.
+      #
+      # Never raises, and always reaps: one of its two call sites is
+      # #spawn_and_collect's own `ensure`, where an exception escaping
+      # here would *replace* the Interrupt (or other exception) currently
+      # propagating -- silently converting "the user Ctrl-C'd the server"
+      # into an unrelated Errno. And the reap moved into an `ensure` of
+      # its own because it previously sat after the kill on the happy
+      # path only: had both kills raised ESRCH, Core would have kept the
+      # child as a zombie for the rest of the session, since nothing else
+      # tracks that pid.
       def kill(pid)
         begin
           Process.kill("KILL", -pid)
         rescue Errno::ESRCH
           Process.kill("KILL", pid)
         end
+      rescue StandardError
+        nil
+      ensure
+        reap(pid)
+      end
+
+      def reap(pid)
         Process.waitpid(pid)
-      rescue Errno::ESRCH, Errno::ECHILD
+      rescue StandardError
         nil
       end
 
