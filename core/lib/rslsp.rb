@@ -61,6 +61,9 @@ require_relative "rslsp/observation/fingerprint"
 require_relative "rslsp/observation/store"
 require_relative "rslsp/observation/collector"
 require_relative "rslsp/observation/runner"
+require_relative "rslsp/cache/key"
+require_relative "rslsp/cache/store"
+require_relative "rslsp/benchmark/cold_index_benchmark"
 require_relative "rslsp/server"
 
 module Rslsp

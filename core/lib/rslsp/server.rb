@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "set"
+require "digest"
 require_relative "io/framed_reader"
 require_relative "io/framed_writer"
 require_relative "document_store"
@@ -615,16 +616,66 @@ module Rslsp
       hierarchy_index = @hierarchy_index
       document_store = @document_store
       logger = @logger
+      cache_store = build_cache_store
 
       @cold_indexing = true
       Thread.new do
         ColdIndexer.new(root: root, parser_service: parser_service, workspace_index: workspace_index,
-                        hierarchy_index: hierarchy_index, document_store: document_store, logger: logger).run
+                        hierarchy_index: hierarchy_index, document_store: document_store, logger: logger,
+                        cache_store: cache_store).run
       rescue StandardError => e
         logger.error("cold index failed: #{e.class}: #{e.message}")
       ensure
         @cold_indexing = false
       end
+    end
+
+    # Task 021: one persistent, on-disk FileSummary cache per distinct
+    # (schema, Ruby, Prism, workspace, Gemfile.lock, RBS, settings)
+    # combination -- see Cache::Key's own docs for why folding all of
+    # that into one directory name is enough to make every one of those
+    # dimensions "just work" as an invalidation trigger, with no
+    # migration code needed. A user-level cache root (not inside the
+    # workspace itself) survives a workspace being deleted and
+    # recreated, and never needs its own .gitignore entry.
+    def build_cache_store
+      root = ENV["XDG_CACHE_HOME"].then { |xdg| xdg && !xdg.empty? ? xdg : File.join(Dir.home, ".cache") }
+      digest = Cache::Key.workspace_digest(
+        workspace_root: @workspace_root, gemfile_lock_digest: gemfile_lock_digest, rbs_digest: rbs_digest,
+        settings_digest: nil
+      )
+      Cache::Store.new(cache_dir: File.join(root, "rslsp", digest))
+    rescue StandardError => e
+      @logger.error("failed to initialize persistent cache; continuing without one: #{e.class}: #{e.message}")
+      Cache::Store.new(cache_dir: nil)
+    end
+
+    def gemfile_lock_digest
+      path = File.join(@workspace_root, "Gemfile.lock")
+      return nil unless File.file?(path)
+
+      Digest::SHA256.file(path).hexdigest
+    rescue StandardError
+      nil
+    end
+
+    # No real RBS content-hash source is exposed by Signatures::Environment
+    # itself (its own #generation is a load-order counter, not stable
+    # across process restarts, so it can't be used as a cache-key
+    # component) -- approximated from the mtime+size of every file that
+    # could actually change what gets loaded (`sig/**/*.rbs`,
+    # `rbs_collection.lock.yaml`), cheap enough to compute on every
+    # startup without itself becoming a performance problem.
+    def rbs_digest
+      candidates = Dir.glob(File.join(@workspace_root, "sig", "**", "*.rbs")).sort
+      lockfile = File.join(@workspace_root, "rbs_collection.lock.yaml")
+      candidates << lockfile if File.file?(lockfile)
+      return nil if candidates.empty?
+
+      fingerprint = candidates.map { |f| "#{f}:#{File.mtime(f).to_i}:#{File.size(f)}" }.join("|")
+      Digest::SHA256.hexdigest(fingerprint)
+    rescue StandardError
+      nil
     end
 
     # Best-effort: an RBS/Gem load failure must never block server startup

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "set"
+require "digest"
 require_relative "text_document"
 require_relative "uri_util"
 
@@ -33,7 +34,7 @@ module Rslsp
     DEFAULT_EXCLUDED_PATHS = ["vendor/bundle", "public/assets"].freeze
 
     def initialize(root:, parser_service:, workspace_index:, document_store:, logger:, hierarchy_index: nil,
-                   excluded_dirs: DEFAULT_EXCLUDED_DIRS, excluded_paths: DEFAULT_EXCLUDED_PATHS,
+                   cache_store: nil, excluded_dirs: DEFAULT_EXCLUDED_DIRS, excluded_paths: DEFAULT_EXCLUDED_PATHS,
                    included_extensions: DEFAULT_INCLUDED_EXTENSIONS)
       @root = File.expand_path(root)
       @root_real = safe_realpath(@root) || @root
@@ -42,6 +43,7 @@ module Rslsp
       @hierarchy_index = hierarchy_index
       @document_store = document_store
       @logger = logger
+      @cache_store = cache_store
       @excluded_dirs = excluded_dirs
       @excluded_paths = excluded_paths
       @included_extensions = included_extensions
@@ -134,12 +136,34 @@ module Rslsp
       # (docs/design/tasks/008.6-agent-and-index-hardening.md).
       return if @document_store.fetch(uri: uri)
 
+      raw_source = source_for(path)
+      parsed = cached_or_parsed_summary(uri, path, raw_source)
+
       read_sequence = @workspace_index.next_read_sequence
-      document = TextDocument.new(uri: uri, text: source_for(path), version: nil, language_id: "ruby")
-      summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
+      summary = parsed.with(source: :disk, read_sequence: read_sequence)
       @hierarchy_index&.replace_file(summary) if @workspace_index.replace_file(summary)
     rescue StandardError => e
       @logger.error("cold index: failed to index #{path}: #{e.class}: #{e.message}")
+    end
+
+    # "Cache格納結果とcold解析結果が意味的に一致する" (Task 021): a cache
+    # hit is only ever used when its *own* stored `content_hash` matches
+    # the file's current content exactly -- computed here, once, and
+    # reused for both the cache-validity check and (on a miss)
+    # ParserService#summarize's own identical hash, rather than reading
+    # the file twice. `content_hash` is always keyed on the *raw*
+    # (pre-ERB-extraction) source, matching FileSummary's own documented
+    # contract, so this comparison is exactly the same check
+    # WorkspaceIndex's own no-op-skip logic already relies on elsewhere.
+    def cached_or_parsed_summary(uri, path, raw_source)
+      content_hash = Digest::SHA256.hexdigest(raw_source)
+      cached = @cache_store&.load(path)
+      return cached if cached && cached.content_hash == content_hash
+
+      document = TextDocument.new(uri: uri, text: raw_source, version: nil, language_id: "ruby")
+      summary = @parser_service.summarize(document)
+      @cache_store&.save(path, summary)
+      summary
     end
 
     # ERB extraction itself now happens inside ParserService#summarize,

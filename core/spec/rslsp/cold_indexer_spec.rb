@@ -215,4 +215,101 @@ RSpec.describe Rslsp::ColdIndexer do
       expect(class_declared?("User")).to be(true)
     end
   end
+
+  describe "persistent cache (Task 021)" do
+    def run_indexer_with_cache(root, cache_store)
+      described_class.new(
+        root: root, parser_service: parser_service, workspace_index: workspace_index,
+        document_store: document_store, logger: logger, cache_store: cache_store
+      ).run
+    end
+
+    it "produces the same declarations on a warm (cached) run as on the cold run that populated the cache" do
+      Dir.mktmpdir do |dir|
+        Dir.mktmpdir do |cache_dir|
+          write(dir, "app/models/user.rb", "class User\n  def name\n  end\nend\n")
+          cache_store = Rslsp::Cache::Store.new(cache_dir: cache_dir)
+
+          run_indexer_with_cache(dir, cache_store)
+          cold_declarations = workspace_index.find_by_simple_name("User")
+
+          warm_workspace_index = Rslsp::WorkspaceIndex.new
+          warm_document_store = Rslsp::DocumentStore.new
+          described_class.new(
+            root: dir, parser_service: parser_service, workspace_index: warm_workspace_index,
+            document_store: warm_document_store, logger: logger, cache_store: cache_store
+          ).run
+          warm_declarations = warm_workspace_index.find_by_simple_name("User")
+
+          expect(warm_declarations).to eq(cold_declarations)
+        end
+      end
+    end
+
+    it "does not re-parse a file whose content hasn't changed since it was cached" do
+      Dir.mktmpdir do |dir|
+        Dir.mktmpdir do |cache_dir|
+          write(dir, "app/models/user.rb", "class User\nend\n")
+          cache_store = Rslsp::Cache::Store.new(cache_dir: cache_dir)
+          run_indexer_with_cache(dir, cache_store)
+
+          allow(parser_service).to receive(:summarize).and_call_original
+          run_indexer_with_cache(dir, cache_store)
+
+          expect(parser_service).not_to have_received(:summarize)
+        end
+      end
+    end
+
+    it "re-parses (and re-caches) a file whose content changed since it was cached" do
+      Dir.mktmpdir do |dir|
+        Dir.mktmpdir do |cache_dir|
+          write(dir, "app/models/user.rb", "class User\nend\n")
+          cache_store = Rslsp::Cache::Store.new(cache_dir: cache_dir)
+          run_indexer_with_cache(dir, cache_store)
+
+          write(dir, "app/models/user.rb", "class User\n  class Renamed\n  end\nend\n")
+          run_indexer_with_cache(dir, cache_store)
+
+          expect(class_declared?("Renamed")).to be(true)
+        end
+      end
+    end
+
+    it "never persists an open document's content -- Cold Index already skips indexing an open uri at all" do
+      Dir.mktmpdir do |dir|
+        Dir.mktmpdir do |cache_dir|
+          path = write(dir, "app/models/user.rb", "class User\nend\n")
+          uri = Rslsp::UriUtil.from_path(path)
+          document_store.open(uri: uri, text: "class User\n  # unsaved edit\nend\n", version: 1, language_id: "ruby")
+          cache_store = Rslsp::Cache::Store.new(cache_dir: cache_dir)
+
+          run_indexer_with_cache(dir, cache_store)
+
+          expect(cache_store.load(path)).to be_nil
+        end
+      end
+    end
+
+    it "recovers from a corrupted cache entry by re-parsing, without raising" do
+      Dir.mktmpdir do |dir|
+        Dir.mktmpdir do |cache_dir|
+          write(dir, "app/models/user.rb", "class User\nend\n")
+          cache_store = Rslsp::Cache::Store.new(cache_dir: cache_dir)
+          run_indexer_with_cache(dir, cache_store)
+          Dir.glob(File.join(cache_dir, "*.cache")).each { |f| File.write(f, "corrupted") }
+
+          fresh_workspace_index = Rslsp::WorkspaceIndex.new
+          expect do
+            described_class.new(
+              root: dir, parser_service: parser_service, workspace_index: fresh_workspace_index,
+              document_store: Rslsp::DocumentStore.new, logger: logger, cache_store: cache_store
+            ).run
+          end.not_to raise_error
+
+          expect(fresh_workspace_index.find_by_simple_name("User")).not_to be_empty
+        end
+      end
+    end
+  end
 end
