@@ -32,6 +32,7 @@ module Rslsp
         @diagnostics = []
         @method_cache = {}
         @ancestor_cache = {}
+        @member_name_cache = {}
         @rbs_environment = nil
         @definition_builder = nil
       end
@@ -59,6 +60,7 @@ module Rslsp
           @diagnostics = diagnostics
           @method_cache = {}
           @ancestor_cache = {}
+          @member_name_cache = {}
           @generation += 1
         end
       end
@@ -104,6 +106,18 @@ module Rslsp
       # loaded environment.
       def ancestors(type_name)
         @mutex.synchronize { @ancestor_cache[type_name] ||= compute_ancestors(type_name) }
+      end
+
+      # Every method name (including inherited ones) starting with
+      # `prefix`, for completion against a receiver whose type has no
+      # source declaration to complete against (Task 013's "RBS/Gem
+      # methods" completion source) — [] if the type isn't known.
+      def member_names(type_name, prefix: "", singleton: false)
+        @mutex.synchronize do
+          key = [type_name, singleton]
+          names = (@member_name_cache[key] ||= compute_member_names(type_name, singleton))
+          names.select { |name| name.start_with?(prefix) }
+        end
       end
 
       private
@@ -207,6 +221,18 @@ module Rslsp
         }
       rescue StandardError
         nil
+      end
+
+      def compute_member_names(type_name_string, singleton)
+        type_name = rbs_type_name(type_name_string)
+        return [] unless type_name
+
+        definition = build_definition(type_name, singleton: singleton)
+        return [] unless definition
+
+        definition.methods.keys.map(&:to_s).sort
+      rescue StandardError
+        []
       end
 
       def compute_ancestors(type_name_string)

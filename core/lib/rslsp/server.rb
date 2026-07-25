@@ -14,6 +14,10 @@ require_relative "routes/controller_naming"
 require_relative "erb/ruby_region_extractor"
 require_relative "rails_bootstrap"
 require_relative "cold_indexer"
+require_relative "semantic/hierarchy_index"
+require_relative "semantic/method_resolver"
+require_relative "semantic/query_service"
+require_relative "signatures/environment"
 
 module Rslsp
   # LSP transport + request router. Task 001 scope: initialize/initialized,
@@ -47,6 +51,8 @@ module Rslsp
       @document_store = DocumentStore.new
       @parser_service = ParserService.new
       @workspace_index = WorkspaceIndex.new
+      @hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: @workspace_index)
+      @method_resolver = Semantic::MethodResolver.new(workspace_index: @workspace_index, hierarchy_index: @hierarchy_index)
       @local_inferencer = LocalInferencer.new(model_registry: model_registry)
       @route_registry = route_registry
       @model_registry = model_registry
@@ -56,6 +62,11 @@ module Rslsp
       @agent_restart_mutex = Mutex.new
       @file_summaries = {}
       @shutdown_received = false
+      @signatures = load_signatures_environment
+      @query_service = Semantic::QueryService.new(
+        local_inferencer: @local_inferencer, method_resolver: @method_resolver, model_registry: @model_registry,
+        signatures: @signatures, workspace_index: @workspace_index
+      )
     end
 
     # Runs the read/dispatch loop until `exit` is received or the input
@@ -100,7 +111,7 @@ module Rslsp
       when "textDocument/didClose"
         handle_did_close(message[:params])
       when "textDocument/hover"
-        respond(id, hover_result)
+        respond(id, hover_result(message[:params]))
       when "textDocument/documentSymbol"
         respond(id, document_symbol_result(message[:params]))
       when "textDocument/definition"
@@ -180,6 +191,7 @@ module Rslsp
       # a still-buffer-sourced existing entry and be silently rejected as
       # stale (docs/design/tasks/008.6-agent-and-index-hardening.md).
       @workspace_index.remove_file(uri)
+      @hierarchy_index.remove_file(uri)
 
       path = UriUtil.to_path(uri)
       reindex_from_disk(uri) if path && File.file?(path)
@@ -188,7 +200,7 @@ module Rslsp
     def reindex(document)
       summary = @parser_service.summarize(document)
       @file_summaries[document.uri] = summary
-      @workspace_index.replace_file(summary)
+      @hierarchy_index.replace_file(summary) if @workspace_index.replace_file(summary)
     rescue StandardError => e
       # Parsing must never take the server down: keep the previous summary
       # (if any) and let static features degrade gracefully for this file.
@@ -206,15 +218,30 @@ module Rslsp
       root = @workspace_root
       parser_service = @parser_service
       workspace_index = @workspace_index
+      hierarchy_index = @hierarchy_index
       document_store = @document_store
       logger = @logger
 
       Thread.new do
         ColdIndexer.new(root: root, parser_service: parser_service, workspace_index: workspace_index,
-                        document_store: document_store, logger: logger).run
+                        hierarchy_index: hierarchy_index, document_store: document_store, logger: logger).run
       rescue StandardError => e
         logger.error("cold index failed: #{e.class}: #{e.message}")
       end
+    end
+
+    # Best-effort: an RBS/Gem load failure must never block server startup
+    # (docs/design/tasks/012-rbs-rbi-and-external-signatures.md "RBS/RBIロード
+    # 失敗でRuby source解析を停止しない") — every downstream consumer already
+    # treats a nil/empty Signatures::Environment as "no signature results",
+    # never as an error.
+    def load_signatures_environment
+      env = Signatures::Environment.new
+      env.load(workspace_root: @workspace_root)
+      env
+    rescue StandardError => e
+      @logger.error("failed to load RBS signatures: #{e.class}: #{e.message}")
+      env
     end
 
     # Starts the Runtime Agent on a background thread — never the request
@@ -284,7 +311,7 @@ module Rslsp
       return { type: Types::UNKNOWN.to_s } unless document
 
       position = params.fetch(:position)
-      type = erb_view?(uri) ? explain_type_in_view(document, position) : @local_inferencer.infer_at(document, position)
+      type = erb_view?(uri) ? explain_type_in_view(document, position) : @query_service.type_at(document, position)
       { type: type.to_s }
     end
 
@@ -296,7 +323,7 @@ module Rslsp
       ruby_source = Erb::RubyRegionExtractor.extract_ruby_source(document.text)
       synthetic = TextDocument.new(uri: document.uri, text: ruby_source, version: document.version, language_id: "ruby")
 
-      @local_inferencer.infer_at(synthetic, position, initial_env: ivars_for_view(document.uri))
+      @query_service.type_at(synthetic, position, initial_env: ivars_for_view(document.uri))
     end
 
     # No caching here by design: recomputed fresh from the controller's
@@ -379,8 +406,18 @@ module Rslsp
       document = @document_store.fetch(uri: uri)
       return [] unless document
 
-      word = word_at_position(document, params.fetch(:position))
+      position = params.fetch(:position)
+      word = word_at_position(document, position)
       return [] unless word
+
+      # A receiver-qualified call (Task 013) resolves through the type
+      # engine first — it's a real answer, not a name-heuristic guess —
+      # falling through to the lexical/route-helper heuristics either
+      # when there's no receiver at all (a bare class/constant reference)
+      # or the type engine found nothing for it.
+      receiver_type = receiver_type_before_dot(document, position)
+      typed = receiver_type ? @query_service.definitions_of(receiver_type, word) : []
+      return typed unless typed.empty?
 
       lexical = @workspace_index.find_by_simple_name(word).map { |match| { uri: match[:uri], range: match[:range] } }
       (lexical + route_helper_definitions(word)).uniq
@@ -420,31 +457,61 @@ module Rslsp
       locations
     end
 
+    # LSP CompletionItemKind values used below: Function=3, Method=2,
+    # Field=5, Property=10.
+    COMPLETION_KIND = { source: 2, model_column: 5, model_association: 10, signature: 2 }.freeze
+
+    # Route helper completion (Task 006) is unconditional-on-nonempty-
+    # prefix, unioned with QueryService member completion (Task 013) when
+    # the cursor sits right after `receiver.` — the two candidate sources
+    # answer genuinely different questions (a bare identifier vs. a
+    # receiver's members) and neither should suppress the other.
     def completion_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       document = @document_store.fetch(uri: uri)
       return [] unless document
 
-      prefix = word_prefix_at_position(document, params.fetch(:position))
-      return [] if prefix.empty?
+      position = params.fetch(:position)
+      prefix = word_prefix_at_position(document, position)
 
-      @route_registry.completion_names(prefix).map do |name|
-        { label: name, kind: 3 } # LSP CompletionItemKind::Function
+      route_items = prefix.empty? ? [] : @route_registry.completion_names(prefix).map { |name| { label: name, kind: 3 } }
+      route_items + member_completion_items(document, position, prefix)
+    end
+
+    def member_completion_items(document, position, prefix)
+      receiver_type = receiver_type_before_dot(document, position)
+      return [] unless receiver_type
+
+      @query_service.members_of(receiver_type, prefix: prefix).map do |member|
+        { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s }
       end
     end
 
     # Finds the call whose argument list the cursor is inside by scanning
     # backward for an unmatched `(`, then reads the identifier immediately
-    # before it. Good enough for the common `post_path(|)` shape signature
-    # help actually needs to handle; it doesn't try to track nested calls.
+    # before it, and (Task 013) the receiver just before *that*, if any —
+    # "route/通常method/RBSでSignature Helpが統一的に動く": a route helper
+    # call is tried first (it has no Types receiver at all to look up
+    # through QueryService), then an ordinary/RBS method call through
+    # QueryService#signatures_of.
     def signature_help_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       document = @document_store.fetch(uri: uri)
       return { signatures: [] } unless document
 
-      method_name = enclosing_call_name(document, params.fetch(:position))
-      helper = method_name && @route_registry.find_by_method_name(method_name)
-      return { signatures: [] } unless helper
+      position = params.fetch(:position)
+      method_name = enclosing_call_name(document, position)
+      return { signatures: [] } unless method_name
+
+      route_signature = route_signature_help(method_name)
+      return route_signature if route_signature
+
+      method_signature_help(document, position, method_name)
+    end
+
+    def route_signature_help(method_name)
+      helper = @route_registry.find_by_method_name(method_name)
+      return nil unless helper
 
       # `method_name` is exactly what the user typed (`post_path` or
       # `post_url` -- #find_by_method_name resolves both back to the same
@@ -464,7 +531,28 @@ module Rslsp
       }
     end
 
+    def method_signature_help(document, position, method_name)
+      call_start = call_name_position(document, position)
+      receiver_type = call_start && receiver_type_before_dot(document, call_start)
+      return { signatures: [] } unless receiver_type
+
+      signatures = @query_service.signatures_of(receiver_type, method_name)
+      { signatures: signatures }
+    end
+
     def enclosing_call_name(document, position)
+      range = enclosing_call_name_range(document, position)
+      return nil unless range
+
+      document.text[range]
+    end
+
+    # The char-offset Range of the identifier immediately before the
+    # unmatched `(` enclosing `position`, or nil if there isn't one —
+    # shared by #enclosing_call_name (which just wants the text) and
+    # #call_name_position (Task 013, which needs the *position* to look
+    # up a receiver before it).
+    def enclosing_call_name_range(document, position)
       text = document.text
       idx = document.position_to_char_offset(position) - 1
       idx -= 1 while idx >= 0 && text[idx] != "("
@@ -475,7 +563,34 @@ module Rslsp
       name_start -= 1 while name_start.positive? && word_char?(text[name_start - 1])
       return nil if name_start == name_end
 
-      text[name_start...name_end]
+      name_start...name_end
+    end
+
+    def call_name_position(document, position)
+      range = enclosing_call_name_range(document, position)
+      range && document.char_offset_to_position(range.begin)
+    end
+
+    # If `position` sits on an identifier immediately preceded by `.`
+    # (`receiver.|method`, cursor anywhere in "method"), returns the
+    # receiver expression's own type — computed by querying #type_at
+    # exactly at the `.`'s position, which #infer_at resolves to whatever
+    # node the `.` falls inside (the receiver, never the call itself).
+    # This is the one piece of position math Hover/Completion/Signature
+    # Help all share, which is what actually makes Task 013's "同一式に
+    # ついてHoverとCompletionが同じreceiver型を利用する" true rather than
+    # just documented.
+    def receiver_type_before_dot(document, position)
+      text = document.text
+      offset = document.position_to_char_offset(position)
+
+      left = offset
+      left -= 1 while left > 0 && word_char?(text[left - 1])
+      return nil if left.zero? || text[left - 1] != "."
+
+      dot_position = document.char_offset_to_position(left - 1)
+      type = @query_service.type_at(document, dot_position)
+      type == Types::UNKNOWN ? nil : type
     end
 
     def word_at_position(document, position)
@@ -526,6 +641,7 @@ module Rslsp
         uri = change.fetch(:uri)
         if change.fetch(:type) == FILE_CHANGE_DELETED
           @workspace_index.remove_file(uri)
+          @hierarchy_index.remove_file(uri)
           @file_summaries.delete(uri)
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
@@ -596,7 +712,7 @@ module Rslsp
       document = TextDocument.new(uri: uri, text: File.read(path, encoding: Encoding::UTF_8), version: nil,
                                    language_id: "ruby")
       summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
-      @workspace_index.replace_file(summary)
+      @hierarchy_index.replace_file(summary) if @workspace_index.replace_file(summary)
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
     end
@@ -810,7 +926,7 @@ module Rslsp
           documentSymbolProvider: true,
           definitionProvider: true,
           workspaceSymbolProvider: true,
-          completionProvider: { triggerCharacters: [] },
+          completionProvider: { triggerCharacters: ["."] },
           signatureHelpProvider: { triggerCharacters: ["("] }
         },
         serverInfo: {
@@ -820,13 +936,65 @@ module Rslsp
       }
     end
 
-    def hover_result
-      {
-        contents: {
-          kind: "plaintext",
-          value: "RSLSP connected"
-        }
-      }
+    # Task 013: a real, type-engine-backed hover. Deliberately conservative
+    # about what it shows — "情報不足時は断定的な表示を避ける"
+    # (docs/design/tasks/013-unified-semantic-query-and-lsp-integration.md):
+    # an unresolved expression gets an empty hover, never a guessed one.
+    def hover_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = @document_store.fetch(uri: uri)
+      return empty_hover unless document
+
+      position = params.fetch(:position)
+      type = erb_view?(uri) ? explain_type_in_view(document, position) : @query_service.type_at(document, position)
+      lines = hover_lines(document, position, type)
+      return empty_hover if lines.empty?
+
+      { contents: { kind: "plaintext", value: lines.join("\n") } }
+    end
+
+    def empty_hover
+      { contents: { kind: "plaintext", value: "" } }
+    end
+
+    # Same #receiver_type_before_dot Completion/Definition already use
+    # (Task 013's "同一式についてHoverとCompletionが同じreceiver型を利用す
+    # る"): when the cursor sits on a receiver-qualified method call, the
+    # extra Origin/Defined lines come from the exact same #members_of /
+    # #definitions_of a completion or go-to-definition request for the
+    # identical position would use. The overall expression type may still
+    # be Unknown even when its origin/definition are known (LocalInferencer
+    # doesn't chase a source method's own body to infer its return type),
+    # so this only omits the "-> Type" line for Unknown, rather than
+    # discarding a hover that otherwise has real content to show.
+    def hover_lines(document, position, type)
+      lines = type == Types::UNKNOWN ? [] : [type.to_s]
+
+      word = word_at_position(document, position)
+      # Skipped for .erb views: #receiver_type_before_dot queries #type_at
+      # directly against `document`, which only works for a plain Ruby
+      # buffer -- an .erb view needs the synthetic-source/ivar-seeded path
+      # #explain_type_in_view already used just above for `type` itself.
+      receiver_type = word && !erb_view?(document.uri) && receiver_type_before_dot(document, position)
+      if receiver_type
+        origin = hover_origin(receiver_type, word)
+        lines << "Origin: #{origin}" if origin
+
+        location = @query_service.definitions_of(receiver_type, word).first
+        lines << "Defined: #{location[:uri]}:#{location[:range][:start][:line] + 1}" if location
+      end
+
+      lines
+    end
+
+    HOVER_ORIGIN_LABEL = {
+      source: "source declaration", model_column: "Active Record column",
+      model_association: "Active Record association", signature: "RBS/Gem signature"
+    }.freeze
+
+    def hover_origin(receiver_type, word)
+      member = @query_service.members_of(receiver_type, prefix: word).find { |m| m.name == word }
+      member && HOVER_ORIGIN_LABEL[member.origin]
     end
 
     def respond(id, result)

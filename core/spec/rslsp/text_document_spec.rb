@@ -76,4 +76,36 @@ RSpec.describe Rslsp::TextDocument do
       expect(doc.position_to_byte_offset({ line: 0, character: 5 })).to eq(text.bytesize)
     end
   end
+
+  describe "#char_offset_to_position (Task 013)" do
+    it "round-trips through #position_to_char_offset for pure ASCII text" do
+      doc = document("user.company\nnext_line\n")
+      pos = { line: 0, character: 4 } # the "." in "user.company"
+
+      offset = doc.position_to_char_offset(pos)
+
+      expect(doc.char_offset_to_position(offset)).to eq(pos)
+    end
+
+    it "finds the correct line for an offset on a later line" do
+      doc = document("user.company\nnext_line\n")
+
+      expect(doc.char_offset_to_position(13)).to eq({ line: 1, character: 0 })
+    end
+
+    it "accounts for a multibyte character earlier in the line, reporting UTF-16 units, not char count" do
+      doc = document("日本語.foo\n")
+
+      expect(doc.char_offset_to_position(3)).to eq({ line: 0, character: 3 }) # the "." right after 日本語
+    end
+
+    it "round-trips through an astral character (emoji) earlier on the line" do
+      doc = document("😀.foo\n")
+      pos = { line: 0, character: 2 } # the "." right after the emoji (2 UTF-16 units)
+
+      offset = doc.position_to_char_offset(pos)
+
+      expect(doc.char_offset_to_position(offset)).to eq(pos)
+    end
+  end
 end

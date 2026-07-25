@@ -43,8 +43,32 @@ RSpec.describe Rslsp::Server do
     expect(messages[0]).to include(id: 1)
     expect(messages[0][:result][:capabilities][:hoverProvider]).to eq(true)
     expect(messages[1]).to include(id: 2)
-    expect(messages[1][:result][:contents][:value]).to eq("RSLSP connected")
+    # A document that was never opened has nothing to hover -- an empty,
+    # non-committal result rather than a guess (Task 013).
+    expect(messages[1][:result][:contents][:value]).to eq("")
     expect(messages[2]).to include(id: 3, result: nil)
+  end
+
+  it "answers textDocument/hover with the inferred type, plus origin/definition for a receiver-qualified call (Task 013)" do
+    input =
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: {
+          textDocument: { uri: "file:///widget.rb", text: "class Widget\n  def build\n  end\nend\n\nWidget.new.build\n",
+                           version: 1, languageId: "ruby" }
+        }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/hover",
+        params: { textDocument: { uri: "file:///widget.rb" }, position: { line: 5, character: 13 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    value = sent_messages.first[:result][:contents][:value]
+    expect(value).to include("Origin: source declaration")
+    expect(value).to include("Defined: file:///widget.rb:2")
   end
 
   it "tracks document versions through didOpen/didChange" do

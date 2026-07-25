@@ -69,6 +69,21 @@ module Rslsp
       line_start + self.class.byte_offset_for_utf16(line_content(line_index), character)
     end
 
+    # The inverse of #position_to_char_offset — given a Ruby character
+    # offset into `@text`, returns the LSP `{ line:, character: }`
+    # position (UTF-16 code units) it corresponds to. Task 013 needs this
+    # to turn a text-scan result (e.g. "the offset of the `.` just before
+    # the cursor") back into a position #infer_at can query, the same way
+    # #word_at_position already scans in char-offset space for other
+    # purposes.
+    def char_offset_to_position(char_offset)
+      line_index = @line_offsets.bsearch_index { |start| start > char_offset }
+      line_index = line_index ? line_index - 1 : @line_offsets.length - 1
+      line_start = @line_offsets[line_index]
+
+      { line: line_index, character: utf16_offset_within_line(line_index, char_offset - line_start) }
+    end
+
     def self.char_offset_for_utf16(line, utf16_offset)
       return 0 if utf16_offset <= 0
 
@@ -110,6 +125,16 @@ module Rslsp
       start = @line_offsets[line_index]
       finish = line_index + 1 < @line_offsets.length ? @line_offsets[line_index + 1] : @text.length
       @text[start...finish].sub(/\r?\n\z/, "")
+    end
+
+    def utf16_offset_within_line(line_index, char_offset_in_line)
+      units = 0
+      line_content(line_index).each_char.with_index do |char, idx|
+        break if idx >= char_offset_in_line
+
+        units += self.class.utf16_unit_count(char)
+      end
+      units
     end
 
     def compute_line_offsets(text)

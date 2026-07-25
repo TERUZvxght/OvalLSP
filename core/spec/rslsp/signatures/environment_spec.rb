@@ -62,6 +62,20 @@ RSpec.describe Rslsp::Signatures::Environment do
     end
   end
 
+  describe "#member_names" do
+    before { environment.load(workspace_root: nil) }
+
+    it "lists every method (including inherited ones) starting with the given prefix" do
+      names = environment.member_names("::String", prefix: "up")
+
+      expect(names).to include("upcase", "upcase!", "upto")
+    end
+
+    it "returns [] for a type unknown to the loaded environment" do
+      expect(environment.member_names("::TotallyUnknownType", prefix: "")).to eq([])
+    end
+  end
+
   describe "project sig/" do
     it "loads a project's sig/ directory and its methods take priority as project-authored signatures" do
       environment.load(workspace_root: File.join(fixtures_root, "project_workspace"))

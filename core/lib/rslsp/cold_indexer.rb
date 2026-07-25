@@ -32,13 +32,14 @@ module Rslsp
     DEFAULT_EXCLUDED_DIRS = %w[.git node_modules vendor tmp log coverage storage].freeze
     DEFAULT_EXCLUDED_PATHS = ["vendor/bundle", "public/assets"].freeze
 
-    def initialize(root:, parser_service:, workspace_index:, document_store:, logger:,
+    def initialize(root:, parser_service:, workspace_index:, document_store:, logger:, hierarchy_index: nil,
                    excluded_dirs: DEFAULT_EXCLUDED_DIRS, excluded_paths: DEFAULT_EXCLUDED_PATHS,
                    included_extensions: DEFAULT_INCLUDED_EXTENSIONS)
       @root = File.expand_path(root)
       @root_real = safe_realpath(@root) || @root
       @parser_service = parser_service
       @workspace_index = workspace_index
+      @hierarchy_index = hierarchy_index
       @document_store = document_store
       @logger = logger
       @excluded_dirs = excluded_dirs
@@ -136,7 +137,7 @@ module Rslsp
       read_sequence = @workspace_index.next_read_sequence
       document = TextDocument.new(uri: uri, text: source_for(path), version: nil, language_id: "ruby")
       summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
-      @workspace_index.replace_file(summary)
+      @hierarchy_index&.replace_file(summary) if @workspace_index.replace_file(summary)
     rescue StandardError => e
       @logger.error("cold index: failed to index #{path}: #{e.class}: #{e.message}")
     end
