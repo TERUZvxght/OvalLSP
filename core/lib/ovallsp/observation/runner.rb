@@ -3,6 +3,7 @@
 require "tempfile"
 require "timeout"
 require_relative "observed_signature"
+require_relative "../bundle_environment"
 
 module Ovallsp
   module Observation
@@ -28,14 +29,22 @@ module Ovallsp
       # as both cwd and the Collector's own workspace-path filter root.
       # Returns an Array of ObservedSignature (possibly empty) -- never
       # raises.
-      def run(command:, args:, workspace_root:, timeout_seconds: DEFAULT_TIMEOUT_SECONDS)
+      #
+      # `env_source:` (default: the real `ENV`) is the environment
+      # BundleEnvironment.for_workspace reads Core's own Bundler/RubyGems
+      # pollution *from* -- production always leaves it as the default;
+      # it exists so a test can simulate "what if Core's own process had X
+      # polluted" with a plain Hash, without ever mutating global ENV
+      # (mirrors RailsBootstrap.start's own `env_source:`).
+      def run(command:, args:, workspace_root:, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, env_source: ENV)
         run_id = "#{Time.now.to_f}-#{Process.pid}-#{rand(1_000_000)}"
         output_file = Tempfile.new(["ovallsp-observation", ".marshal"])
         log_file = Tempfile.new(["ovallsp-observation", ".log"])
         output_file.close
         log_file.close
 
-        env = harness_env(workspace_root: workspace_root, output_path: output_file.path, run_id: run_id)
+        env = harness_env(workspace_root: workspace_root, output_path: output_file.path, run_id: run_id,
+                          env_source: env_source)
         results = spawn_and_collect(command, args, workspace_root, env, output_file.path, log_file.path, timeout_seconds)
         results || []
       ensure
@@ -45,13 +54,44 @@ module Ovallsp
 
       private
 
-      def harness_env(workspace_root:, output_path:, run_id:)
-        {
+      # The command spawned here is the *workspace's* own test command --
+      # in practice literally `bundle exec rspec` (see #run's own docs) --
+      # so it is a second instance of exactly the boundary the Runtime
+      # Agent's own spawn already goes through: Core and the analyzed
+      # workspace are two entirely separate Bundle graphs, and Core's own
+      # BUNDLE_GEMFILE/BUNDLE_PATH/BUNDLER_SETUP/BUNDLER_VERSION,
+      # bundle-exec-derived GEM_HOME/GEM_PATH, PATH/MANPATH entries and
+      # RUBYLIB/RUBYOPT injections must not leak into it (see
+      # BundleEnvironment's own docs).
+      #
+      # Found by an independent review (round 5) of Task 022.2: rounds 1-4
+      # hardened BundleEnvironment itself and wired it into
+      # RailsBootstrap.start, but this sibling spawn site still built its
+      # env as bare overrides on top of a fully inherited ENV, so the
+      # workspace's own `bundle exec rspec` resolved against *Core's*
+      # Gemfile/gem install (and, per the round-4 PATH finding, resolved
+      # the bare command name `bundle` out of Core's own bundle bin dir).
+      # The old RUBYOPT line made it worse rather than merely missing it:
+      # it explicitly *propagated* Core's raw `ENV["RUBYOPT"]`, i.e. the
+      # `-r<core bundler>/setup` `bundle exec` injects, which runs
+      # `Bundler.setup` against Core's Gemfile before the workspace's own
+      # test command has a say.
+      #
+      # RUBYOPT is composed from the *isolated* value (Core's
+      # bundler/setup flag already stripped by BundleEnvironment, any other
+      # legitimate flag preserved) rather than from `env_source` directly.
+      # The harness itself only ever uses `require_relative`, so it needs
+      # nothing from Core's bundle to load.
+      def harness_env(workspace_root:, output_path:, run_id:, env_source:)
+        base = Ovallsp::BundleEnvironment.for_workspace(workspace_root, env: env_source)
+        rubyopt = [base["RUBYOPT"], "-r#{HARNESS_PATH}"].compact.reject(&:empty?).join(" ")
+
+        base.merge(
           "OvalLSP_OBSERVATION_WORKSPACE_ROOT" => File.realpath(workspace_root),
           "OvalLSP_OBSERVATION_OUTPUT_PATH" => output_path,
           "OvalLSP_OBSERVATION_RUN_ID" => run_id,
-          "RUBYOPT" => [ENV["RUBYOPT"], "-r#{HARNESS_PATH}"].compact.join(" ")
-        }
+          "RUBYOPT" => rubyopt
+        )
       end
 
       # Never lets the spawned process inherit this process' real

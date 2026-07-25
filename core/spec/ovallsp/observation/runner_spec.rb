@@ -33,6 +33,66 @@ RSpec.describe Ovallsp::Observation::Runner do
     expect(results).to eq([])
   end
 
+  # Task 022.2 (found by an independent review, round 5): the command
+  # spawned here is the *workspace's* own test command -- in practice
+  # `bundle exec rspec` -- so it is a second instance of the exact Bundler
+  # boundary RailsBootstrap.start already goes through. Before this fix
+  # #harness_env returned four bare overrides on top of a fully inherited
+  # ENV, so Core's own BUNDLE_GEMFILE/BUNDLE_PATH/BUNDLER_SETUP/
+  # BUNDLER_VERSION, bundle-exec-derived GEM_HOME/GEM_PATH and PATH entry
+  # all leaked into the workspace's separate Bundle graph.
+  describe "Bundler boundary isolation (Task 022.2)" do
+    let(:polluted_env) do
+      {
+        "BUNDLE_GEMFILE" => "/repo/core/Gemfile",
+        "BUNDLE_PATH" => "/tmp/core-only-bundle",
+        "BUNDLER_SETUP" => "/repo/core/.bundle/bundler/setup",
+        "BUNDLER_VERSION" => Bundler::VERSION,
+        "GEM_HOME" => "/tmp/core-only-bundle/ruby/3.4.0",
+        "GEM_PATH" => "",
+        "PATH" => "/tmp/core-only-bundle/ruby/3.4.0/bin:/usr/bin:/bin",
+        "RUBYOPT" => "-W2 -r/repo/core/.bundle/bundler/setup"
+      }
+    end
+
+    # Captures the env Hash actually handed to Process.spawn, without
+    # running anything.
+    def captured_spawn_env(workspace_root, env_source)
+      captured = nil
+      allow(Process).to receive(:spawn).and_wrap_original do |original, env, *|
+        captured = env
+        original.call(RbConfig.ruby, "-e", "") # a real, immediately-exiting child, so #wait_with_timeout still works
+      end
+      runner.run(command: "ruby", args: [], workspace_root: workspace_root, env_source: env_source)
+      captured
+    end
+
+    it "spawns the workspace's test command through BundleEnvironment, not on top of Core's raw ENV" do
+      env = captured_spawn_env(fixtures_root, polluted_env)
+
+      expect(env).to include(Ovallsp::BundleEnvironment.for_workspace(fixtures_root, env: polluted_env)
+                                                       .reject { |k, _| k == "RUBYOPT" })
+    end
+
+    it "does not leak Core's bundle-exec bin directory onto the workspace test command's PATH" do
+      env = captured_spawn_env(fixtures_root, polluted_env)
+
+      expect(env["PATH"].split(File::PATH_SEPARATOR)).to eq(%w[/usr/bin /bin])
+    end
+
+    # The old implementation didn't merely fail to strip this -- it
+    # explicitly re-propagated `ENV["RUBYOPT"]` verbatim, so Core's own
+    # `bundler/setup` was auto-required (running Bundler.setup against
+    # Core's Gemfile) inside the workspace's test process.
+    it "injects the harness into RUBYOPT without carrying Core's own bundler/setup flag" do
+      env = captured_spawn_env(fixtures_root, polluted_env)
+
+      flags = env["RUBYOPT"].split(" ")
+      expect(flags).to include("-W2", "-r#{Ovallsp::Observation::Runner::HARNESS_PATH}")
+      expect(flags).not_to include(a_string_ending_with("bundler/setup"))
+    end
+  end
+
   it "never lets the spawned process' stdout/stderr reach this process' own real stdio" do
     captured = Tempfile.new("ovallsp-observation-runner-stdio")
     original_stdout_fd = STDOUT.dup
