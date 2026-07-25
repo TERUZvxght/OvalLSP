@@ -61,9 +61,10 @@ module Rslsp
       @hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: @workspace_index)
       @method_resolver = Semantic::MethodResolver.new(workspace_index: @workspace_index, hierarchy_index: @hierarchy_index)
       @method_summary_store = Semantic::MethodSummaryStore.new
+      @generated_method_index = Semantic::GeneratedMethodIndex.new
       @method_analyzer = Semantic::MethodAnalyzer.new(
         workspace_index: @workspace_index, method_resolver: @method_resolver, summary_store: @method_summary_store,
-        model_registry: model_registry
+        model_registry: model_registry, generated_method_index: @generated_method_index
       )
       # method_resolver/method_analyzer let a plain (non-Active-Record)
       # method call chain keep resolving past its first hop instead of
@@ -229,6 +230,7 @@ module Rslsp
       @workspace_index.remove_file(uri)
       @hierarchy_index.remove_file(uri)
       @reference_index.remove_file(uri)
+      @generated_method_index.remove_file(uri)
       invalidate_method_summaries(previous_declarations)
       clear_diagnostics(uri)
 
@@ -244,6 +246,7 @@ module Rslsp
         @hierarchy_index.replace_file(summary)
         invalidate_method_summaries(previous_declarations)
         index_references(document.uri, document, summary)
+        @generated_method_index.replace_file(uri: document.uri, facts: summary.generated_method_facts)
         publish_diagnostics(document)
       end
     rescue StandardError => e
@@ -935,6 +938,7 @@ module Rslsp
           @workspace_index.remove_file(uri)
           @hierarchy_index.remove_file(uri)
           @reference_index.remove_file(uri)
+          @generated_method_index.remove_file(uri)
           invalidate_method_summaries(previous_declarations)
           @file_summaries.delete(uri)
         elsif @document_store.fetch(uri: uri).nil?
@@ -1012,6 +1016,7 @@ module Rslsp
         @file_summaries[uri] = summary
         invalidate_method_summaries(previous_declarations)
         index_references(uri, document, summary)
+        @generated_method_index.replace_file(uri: uri, facts: summary.generated_method_facts)
       end
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")

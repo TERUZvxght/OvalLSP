@@ -9,9 +9,11 @@ require_relative "index/declaration"
 require_relative "index/ancestor_fact"
 require_relative "index/alias_fact"
 require_relative "index/reference_candidate"
+require_relative "index/generated_method_fact"
 require_relative "index/file_summary"
 require_relative "index/source_location"
 require_relative "erb/ruby_region_extractor"
+require_relative "types"
 
 module Rslsp
   # Parses a document with Prism and extracts class/module/method/constant
@@ -56,7 +58,8 @@ module Rslsp
         diagnostics: result.errors.map { |error| to_diagnostic(error, lines) },
         ancestor_facts: visitor.ancestor_facts,
         alias_facts: visitor.alias_facts,
-        reference_candidates: visitor.reference_candidates
+        reference_candidates: visitor.reference_candidates,
+        generated_method_facts: visitor.generated_method_facts
       )
     end
 
@@ -88,7 +91,13 @@ module Rslsp
       # lexical-body form.
       ANCESTOR_RELATIONS = { include: :include, prepend: :prepend, extend: :extend }.freeze
 
-      attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates
+      attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates, :generated_method_facts
+
+      # Task 017's priority-ordered DSL list, scoped to the three this
+      # task actually implements (enum/scope/delegate) -- attribute/
+      # store_accessor/has_one/polymorphic/Concern/helper_method/mailer-
+      # job entry points are explicitly deferred (docs/design/tasks/017-rails-dsl-extension.md).
+      GENERATED_METHOD_DSLS = %i[enum scope delegate].freeze
 
       def initialize(lines)
         super()
@@ -97,6 +106,7 @@ module Rslsp
         @ancestor_facts = []
         @alias_facts = []
         @reference_candidates = []
+        @generated_method_facts = []
         @owner_stack = []
         @singleton_context_stack = [false]
         @visibility_stack = [:public]
@@ -166,6 +176,7 @@ module Rslsp
           update_visibility(node) if node.arguments.nil?
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
+          record_generated_methods(node) if current_owner && GENERATED_METHOD_DSLS.include?(node.name)
         end
         record_method_call_candidate(node)
         super
@@ -340,6 +351,120 @@ module Rslsp
           singleton: @singleton_context_stack.last,
           location: Index::SourceLocation.to_range(node.location, @lines)
         )
+      end
+
+      def record_generated_methods(node)
+        case node.name
+        when :enum then record_enum(node)
+        when :scope then record_scope(node)
+        when :delegate then record_delegate(node)
+        end
+      end
+
+      # `enum status: { active: 0, archived: 1 }` (keyword form) or
+      # `enum :status, { active: 0 }` / `enum :status, %i[active archived]`
+      # (positional forms). Generates only the `#{value}?` predicate
+      # methods -- "enum" DSL requirements list `predicate/bang/scopes`
+      # in full, but predicates are the highest-value, most-used subset,
+      # and this task's own priority list explicitly puts `enum` above
+      # everything else it covers; bang methods and per-value scopes are
+      # deferred.
+      def record_enum(node)
+        return unless node.arguments
+
+        enum_value_names(node).each do |value_name|
+          add_generated_method(
+            node: node, name: "#{value_name}?", kind: :instance_method,
+            return_type: Types::Nominal.new(name: "Boolean"), origin: :enum, metadata: { value: value_name }
+          )
+        end
+      end
+
+      def enum_value_names(node)
+        first = node.arguments.arguments.first
+        values_node =
+          if first.is_a?(Prism::KeywordHashNode)
+            first.elements.first&.value
+          else
+            node.arguments.arguments[1]
+          end
+
+        case values_node
+        when Prism::HashNode then values_node.elements.filter_map { |e| symbol_name(e.key) }
+        when Prism::ArrayNode then values_node.elements.filter_map { |e| symbol_name(e) }
+        else []
+        end
+      end
+
+      # `scope :active, -> { where(active: true) }` -- the scope body
+      # itself is never analyzed ("dynamic body内部型の断定はしない"); only
+      # its name and the fact that it returns `Relation[Model]` are
+      # statically knowable.
+      def record_scope(node)
+        return unless node.arguments
+
+        name = symbol_name(node.arguments.arguments.first)
+        return unless name
+
+        return_type = Types::Generic.new(name: "Relation", type_arg: Types::Nominal.new(name: simple_owner_name))
+        add_generated_method(node: node, name: name, kind: :singleton_method, return_type: return_type, origin: :scope)
+      end
+
+      # `delegate :name, :age, to: :company, prefix: true, allow_nil: true`.
+      # The generated method's own return type isn't resolved here (that
+      # needs the *target*'s association/column facts, which aren't known
+      # until Model registry data is available) -- `Types::UNKNOWN` plus
+      # `to:`/delegated-name metadata lets LocalInferencer/MethodAnalyzer
+      # resolve it later, the same deferred-resolution split Task 013's
+      # RBS/Signature layer already uses.
+      def record_delegate(node)
+        return unless node.arguments
+
+        keyword_hash = node.arguments.arguments.find { |a| a.is_a?(Prism::KeywordHashNode) }
+        return unless keyword_hash
+
+        target = delegate_option(keyword_hash, "to")
+        return unless target
+
+        prefix = truthy_option?(keyword_hash, "prefix")
+        allow_nil = truthy_option?(keyword_hash, "allow_nil")
+        method_names = node.arguments.arguments.take_while { |a| !a.is_a?(Prism::KeywordHashNode) }
+                            .filter_map { |a| symbol_name(a) }
+
+        method_names.each do |delegated_name|
+          generated_name = prefix ? "#{target}_#{delegated_name}" : delegated_name
+          add_generated_method(
+            node: node, name: generated_name, kind: :instance_method, return_type: Types::UNKNOWN, origin: :delegate,
+            metadata: { to: target, delegated_name: delegated_name, allow_nil: allow_nil }
+          )
+        end
+      end
+
+      def delegate_option(keyword_hash, key)
+        assoc = keyword_hash.elements.find { |e| symbol_name(e.key) == key }
+        assoc && symbol_name(assoc.value)
+      end
+
+      def truthy_option?(keyword_hash, key)
+        assoc = keyword_hash.elements.find { |e| symbol_name(e.key) == key }
+        assoc&.value.is_a?(Prism::TrueNode)
+      end
+
+      def add_generated_method(node:, name:, kind:, return_type:, origin:, metadata: {})
+        symbol_id = Index::SymbolId.new(kind: kind, owner: current_owner, name: name, discriminator: nil)
+        location = Index::SourceLocation.to_range(node.location, @lines)
+
+        @declarations << Index::Declaration.new(
+          symbol_id: symbol_id, location: location, visibility: :public, parameters: [], origin: :generated
+        )
+        @generated_method_facts << Index::GeneratedMethodFact.new(
+          owner: current_owner, name: name, kind: kind, return_type: return_type, source_location: location,
+          origin: origin, confidence: :high, metadata: metadata
+        )
+      end
+
+      def simple_owner_name
+        current_owner.to_s.split("::").last
       end
 
       # A dynamic superclass/module expression (`Class.new`, a local

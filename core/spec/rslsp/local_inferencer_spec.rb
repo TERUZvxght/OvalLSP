@@ -58,6 +58,73 @@ RSpec.describe Rslsp::LocalInferencer do
     end
   end
 
+  # Found while building Task 017: #eval_call's `node.receiver.nil?`
+  # branch left `receiver_type` as nil for an implicit-self call
+  # (`active?` inside a method body, not `widget.active?`), so
+  # #resolve_call never even tried #resolve_instance_level for it -- the
+  # single most common shape of method call in real Ruby (calling a
+  # sibling/private method from within the same class) never resolved to
+  # anything through #infer_at, the same class of gap as the ClassNode/
+  # ModuleNode fix above, one level deeper.
+  describe "implicit-self method calls (found during Task 017)" do
+    def wired_inferencer
+      workspace_index = Rslsp::WorkspaceIndex.new
+      hierarchy_index = Rslsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      method_resolver = Rslsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
+      method_analyzer = Rslsp::Semantic::MethodAnalyzer.new(
+        workspace_index: workspace_index, method_resolver: method_resolver, summary_store: Rslsp::Semantic::MethodSummaryStore.new
+      )
+      [workspace_index, hierarchy_index, described_class.new(method_resolver: method_resolver, method_analyzer: method_analyzer)]
+    end
+
+    def index(workspace_index, hierarchy_index, source, uri: "file:///a.rb")
+      document = Rslsp::TextDocument.new(uri: uri, text: source, version: 1, language_id: "ruby")
+      summary = Rslsp::ParserService.new.summarize(document)
+      workspace_index.replace_file(summary)
+      hierarchy_index.replace_file(summary)
+      document
+    end
+
+    it "resolves an implicit-self call to a sibling instance method's own return type" do
+      workspace_index, hierarchy_index, inferencer = wired_inferencer
+      source = "class Widget\n  def a\n    1\n  end\n\n  def b\n    a\n  end\nend\n"
+      document = index(workspace_index, hierarchy_index, source)
+
+      type = inferencer.infer_at(document, { line: 6, character: 4 }) # inside "a" on the call site
+
+      expect(type.to_s).to eq("Integer")
+    end
+
+    it "resolves an implicit-self call inside a `def self.x` singleton method" do
+      workspace_index, hierarchy_index, inferencer = wired_inferencer
+      source = "class Widget\n  def self.a\n    1\n  end\n\n  def self.b\n    a\n  end\nend\n"
+      document = index(workspace_index, hierarchy_index, source)
+
+      type = inferencer.infer_at(document, { line: 6, character: 4 })
+
+      expect(type.to_s).to eq("Integer")
+    end
+
+    it "resolves an explicit constant-receiver call to an ordinary (non-Active-Record) singleton method" do
+      workspace_index, hierarchy_index, inferencer = wired_inferencer
+      source = "class Widget\n  def self.build\n    1\n  end\nend\n\nWidget.build\n"
+      document = index(workspace_index, hierarchy_index, source)
+
+      type = inferencer.infer_at(document, { line: 6, character: 8 })
+
+      expect(type.to_s).to eq("Integer")
+    end
+
+    it "still resolves Unknown for an implicit-self call at true top level (no enclosing class)" do
+      workspace_index, hierarchy_index, inferencer = wired_inferencer
+      document = index(workspace_index, hierarchy_index, "some_bare_call\n")
+
+      type = inferencer.infer_at(document, { line: 0, character: 0 })
+
+      expect(type).to eq(Rslsp::Types::UNKNOWN)
+    end
+  end
+
   describe "non-ASCII text preceding the query position (Task 008.5)" do
     it "does not let a multibyte comment/string on earlier lines shift node selection" do
       source = <<~RUBY

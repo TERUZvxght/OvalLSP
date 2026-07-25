@@ -268,4 +268,83 @@ RSpec.describe Rslsp::Semantic::MethodAnalyzer do
     expect(summary.confidence).to eq(:high)
     expect(summary.generation).to be_a(Integer)
   end
+
+  describe "Rails DSL generated methods (Task 017)" do
+    let(:generated_method_index) { Rslsp::Semantic::GeneratedMethodIndex.new }
+    let(:model_registry) { Rslsp::Models::ModelRegistry.new }
+    subject(:analyzer) do
+      described_class.new(workspace_index: workspace_index, method_resolver: method_resolver, summary_store: summary_store,
+                           model_registry: model_registry, generated_method_index: generated_method_index)
+    end
+
+    def index_generated_source(text, uri: "file:///a.rb")
+      summary = index_source(text, uri: uri)
+      generated_method_index.replace_file(uri: uri, facts: summary.generated_method_facts)
+      summary
+    end
+
+    it "returns an enum predicate's return type directly from the fact, without a real method body" do
+      index_generated_source("class Widget\n  enum status: { active: 0, archived: 1 }\nend\n")
+
+      summary = analyzer.summarize(symbol_id: method_symbol("::Widget", "active?"))
+
+      expect(summary.return_type.to_s).to eq("Boolean")
+      expect(summary.confidence).to eq(:high)
+      expect(summary.status).to eq(:complete)
+    end
+
+    it "returns Relation[Model] for a scope" do
+      index_generated_source("class Widget\n  scope :active, -> { where(active: true) }\nend\n")
+
+      summary = analyzer.summarize(symbol_id: method_symbol("::Widget", "active", singleton: true))
+
+      expect(summary.return_type.to_s).to eq("Relation[Widget]")
+    end
+
+    it "resolves a delegate's return type by chasing its target association's column" do
+      model_registry.register_from_agent_response(
+        "Widget",
+        { tableName: "widgets", partial: false, columns: [],
+          associations: [{ name: "company", macro: "belongs_to", className: "Company", optional: false }] }
+      )
+      model_registry.register_from_agent_response(
+        "Company",
+        { tableName: "companies", partial: false, columns: [{ name: "name", type: "string", null: false }],
+          associations: [] }
+      )
+      index_generated_source("class Widget\n  delegate :name, to: :company\nend\n")
+
+      summary = analyzer.summarize(symbol_id: method_symbol("::Widget", "name"))
+
+      expect(summary.return_type).to eq(Rslsp::Types::Nominal.new(name: "String"))
+    end
+
+    it "unions nil into a delegate's return type when allow_nil: true" do
+      model_registry.register_from_agent_response(
+        "Widget",
+        { tableName: "widgets", partial: false, columns: [],
+          associations: [{ name: "company", macro: "belongs_to", className: "Company", optional: true }] }
+      )
+      model_registry.register_from_agent_response(
+        "Company",
+        { tableName: "companies", partial: false, columns: [{ name: "name", type: "string", null: false }],
+          associations: [] }
+      )
+      index_generated_source("class Widget\n  delegate :name, to: :company, allow_nil: true\nend\n")
+
+      summary = analyzer.summarize(symbol_id: method_symbol("::Widget", "name"))
+
+      expect(summary.return_type).to eq(
+        Rslsp::Types.normalize_union([Rslsp::Types::Nominal.new(name: "String"), Rslsp::Types::NIL])
+      )
+    end
+
+    it "widens a delegate to Unknown when its target isn't a known association" do
+      index_generated_source("class Widget\n  delegate :name, to: :nonexistent_thing\nend\n")
+
+      summary = analyzer.summarize(symbol_id: method_symbol("::Widget", "name"))
+
+      expect(summary.return_type).to eq(Rslsp::Types::UNKNOWN)
+    end
+  end
 end

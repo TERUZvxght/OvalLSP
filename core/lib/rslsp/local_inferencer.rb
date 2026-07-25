@@ -89,6 +89,7 @@ module Rslsp
       result = Prism.parse(document.text)
       @steps = 0
       @step_budget = max_steps || @max_steps
+      @self_type_stack = []
 
       locate(result.value.statements, offset, initial_env.dup)
     rescue BudgetExceeded, StandardError
@@ -107,6 +108,7 @@ module Rslsp
 
       @steps = 0
       @step_budget = @max_steps
+      @self_type_stack = [Types::Nominal.new(name: owner_name.to_s.split("::").last)]
       env = {}
       eval_type(method_node.body, env)
       # Symbol-keyed (":@user", not "@user") to match how Prism names
@@ -181,8 +183,8 @@ module Rslsp
       when Prism::IfNode, Prism::UnlessNode
         locate_in_conditional(node, offset, env)
       when Prism::DefNode
-        contains?(node.location, offset) ? locate(node.body, offset, {}) : Types::UNKNOWN
-      when Prism::ClassNode, Prism::ModuleNode, Prism::SingletonClassNode
+        locate_in_def(node, offset)
+      when Prism::ClassNode, Prism::ModuleNode
         # A class/module body (and `class << self`) is its own fresh local
         # scope, just like a `def` body -- verified live (`class << self`
         # cannot see an enclosing class body's locals). Without this case,
@@ -193,10 +195,55 @@ module Rslsp
         # building Task 014's reference resolution, which is the first
         # thing to query #infer_at against realistic (class-nested)
         # source rather than deliberately top-level test fixtures.
-        contains?(node.location, offset) ? locate(node.body, offset, {}) : Types::UNKNOWN
+        locate_in_namespace(node, offset)
+      when Prism::SingletonClassNode
+        locate_in_singleton_class(node, offset)
       else
         eval_type(node, env)
       end
+    end
+
+    # `self` inside the class/module body being entered -- pushed onto
+    # @self_type_stack for the duration of the descent so an implicit-
+    # self call anywhere inside (`active?`, not `widget.active?`) can
+    # resolve against it. Found missing while building Task 017: without
+    # this, #eval_call's `node.receiver.nil?` case had no receiver type
+    # to resolve against at all and silently fell through to Unknown --
+    # meaning *every* bare method call inside a method body (the single
+    # most common shape of call in real Ruby) never resolved, the same
+    # class of gap as the ClassNode/ModuleNode fix above, just one level
+    # deeper.
+    def locate_in_namespace(node, offset)
+      return Types::UNKNOWN unless contains?(node.location, offset)
+
+      @self_type_stack.push(Types::Nominal.new(name: node.constant_path.full_name))
+      locate(node.body, offset, {})
+    ensure
+      @self_type_stack.pop
+    end
+
+    # `class << self` -- unlike ClassNode/ModuleNode, Prism::SingletonClassNode
+    # has no `constant_path` (it reopens `self`'s own singleton class, not
+    # a named constant), so self inside it is `ClassOf[enclosing self]`,
+    # the same value `def self.x` already computes.
+    def locate_in_singleton_class(node, offset)
+      return Types::UNKNOWN unless contains?(node.location, offset)
+
+      @self_type_stack.push(Types::Generic.new(name: "ClassOf", type_arg: @self_type_stack.last))
+      locate(node.body, offset, {})
+    ensure
+      @self_type_stack.pop
+    end
+
+    def locate_in_def(node, offset)
+      return Types::UNKNOWN unless contains?(node.location, offset)
+
+      singleton = node.receiver.is_a?(Prism::SelfNode)
+      enclosing_self = @self_type_stack.last
+      @self_type_stack.push(singleton ? Types::Generic.new(name: "ClassOf", type_arg: enclosing_self) : enclosing_self)
+      locate(node.body, offset, {})
+    ensure
+      @self_type_stack.pop
     end
 
     # A position inside a block (its parameter list or its body) needs its
@@ -322,7 +369,12 @@ module Rslsp
     end
 
     def eval_call(node, env)
-      receiver_type = node.receiver && eval_type(node.receiver, env)
+      # An implicit-self call (`active?`, not `widget.active?`) resolves
+      # against whatever @self_type_stack was pushed to when #locate
+      # descended into the enclosing class/module and def -- nil at true
+      # top level (no enclosing class), which correctly leaves the call
+      # unresolved rather than guessing.
+      receiver_type = node.receiver ? eval_type(node.receiver, env) : @self_type_stack.last
       base = resolve_call(node, receiver_type, env)
 
       node.respond_to?(:safe_navigation?) && node.safe_navigation? ? Types.normalize_union([base, Types::NIL]) : base
@@ -333,8 +385,20 @@ module Rslsp
         return Types::Nominal.new(name: node.receiver.full_name)
       end
 
-      class_level = constant_receiver?(node.receiver) && resolve_class_level_finder(node.receiver.full_name, node.name)
-      return class_level if class_level
+      if constant_receiver?(node.receiver)
+        class_level = resolve_class_level_finder(node.receiver.full_name, node.name)
+        return class_level if class_level
+
+        # `Widget.some_class_method` -- an ordinary (non-Active-Record)
+        # singleton method call, e.g. Task 017's `scope` (which declares
+        # its generated method with kind: :singleton_method). Tried after
+        # the AR class-level finder specifically fails, not unconditionally,
+        # so a real Active Record finder never gets shadowed by a same-
+        # named source declaration.
+        singleton_method = resolve_source_method_member(Types::Nominal.new(name: node.receiver.full_name), node.name,
+                                                          singleton: true)
+        return singleton_method if singleton_method
+      end
 
       generic = receiver_type && resolve_generic_call(node, receiver_type, env)
       return generic if generic
@@ -411,7 +475,17 @@ module Rslsp
       when Types::Nominal
         resolve_model_member(receiver_type.name, method_name) || resolve_source_method_member(receiver_type, method_name)
       when Types::Generic
-        resolve_relation_member(receiver_type, method_name)
+        # "ClassOf[Widget]" is @self_type_stack's own representation of
+        # `self` inside a `def self.x` (matching Semantic::MethodAnalyzer's
+        # `self_type_for` convention) -- an implicit-self call there
+        # (`some_other_class_method`, not `Widget.some_other_class_method`)
+        # needs singleton-mode resolution, same as an explicit constant
+        # receiver gets in #resolve_call.
+        if receiver_type.name == "ClassOf"
+          resolve_source_method_member(receiver_type.type_arg, method_name, singleton: true)
+        else
+          resolve_relation_member(receiver_type, method_name)
+        end
       when Types::Union
         resolve_union_member(receiver_type, method_name)
       end
@@ -429,10 +503,11 @@ module Rslsp
     # absent (most unit tests, anything predating Task 013's Server
     # wiring) just skips this and falls through to Unknown, exactly as
     # before this method existed.
-    def resolve_source_method_member(receiver_type, method_name)
+    def resolve_source_method_member(receiver_type, method_name, singleton: false)
       return nil unless @method_resolver && @method_analyzer
 
-      candidate = @method_resolver.resolve(receiver_type: receiver_type, name: method_name).min_by(&:lookup_rank)
+      candidate = @method_resolver.resolve(receiver_type: receiver_type, name: method_name, context: { singleton: singleton })
+                                   .min_by(&:lookup_rank)
       return nil unless candidate
 
       @method_analyzer.summarize(symbol_id: candidate.symbol_id).return_type

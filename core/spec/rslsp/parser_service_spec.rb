@@ -253,4 +253,70 @@ RSpec.describe Rslsp::ParserService do
     expect(params.map(&:kind)).to eq(%i[required optional rest keyword keyword_optional keyrest block])
     expect(params.map(&:name)).to eq(%w[a b rest k ok kw blk])
   end
+
+  describe "Rails DSL generated methods (Task 017)" do
+    def generated(summary) = summary.generated_method_facts
+
+    it "generates a predicate method per enum value, keyword-argument form" do
+      summary = service.summarize(document("class Widget\n  enum status: { active: 0, archived: 1 }\nend\n"))
+
+      expect(generated(summary)).to contain_exactly(
+        have_attributes(owner: "::Widget", name: "active?", kind: :instance_method, origin: :enum,
+                         return_type: Rslsp::Types::Nominal.new(name: "Boolean")),
+        have_attributes(owner: "::Widget", name: "archived?", kind: :instance_method, origin: :enum)
+      )
+    end
+
+    it "generates a predicate method per enum value, positional-array form" do
+      summary = service.summarize(document("class Widget\n  enum :status, %i[active archived]\nend\n"))
+
+      expect(generated(summary).map(&:name)).to contain_exactly("active?", "archived?")
+    end
+
+    it "also records the enum-generated methods as ordinary Declarations (origin: :generated)" do
+      summary = service.summarize(document("class Widget\n  enum status: { active: 0 }\nend\n"))
+
+      decl = summary.declarations.find { |d| d.symbol_id.name == "active?" }
+      expect(decl.origin).to eq(:generated)
+      expect(decl.symbol_id.owner).to eq("::Widget")
+    end
+
+    it "generates a singleton method returning Relation[Model] for scope" do
+      summary = service.summarize(document("class Widget\n  scope :active, -> { where(active: true) }\nend\n"))
+
+      expect(generated(summary)).to contain_exactly(
+        have_attributes(
+          owner: "::Widget", name: "active", kind: :singleton_method, origin: :scope,
+          return_type: Rslsp::Types::Generic.new(name: "Relation", type_arg: Rslsp::Types::Nominal.new(name: "Widget"))
+        )
+      )
+    end
+
+    it "generates a delegate method per delegated name, with metadata for later return-type resolution" do
+      summary = service.summarize(document("class Widget\n  delegate :name, :age, to: :company\nend\n"))
+
+      expect(generated(summary)).to contain_exactly(
+        have_attributes(name: "name", origin: :delegate, metadata: { to: "company", delegated_name: "name", allow_nil: false }),
+        have_attributes(name: "age", origin: :delegate, metadata: { to: "company", delegated_name: "age", allow_nil: false })
+      )
+    end
+
+    it "prefixes the delegated method name when prefix: true" do
+      summary = service.summarize(document("class Widget\n  delegate :name, to: :company, prefix: true\nend\n"))
+
+      expect(generated(summary).map(&:name)).to eq(["company_name"])
+    end
+
+    it "records allow_nil: true in metadata" do
+      summary = service.summarize(document("class Widget\n  delegate :name, to: :company, allow_nil: true\nend\n"))
+
+      expect(generated(summary).first.metadata[:allow_nil]).to be(true)
+    end
+
+    it "does not recognize enum/scope/delegate written outside any class/module body" do
+      summary = service.summarize(document("enum status: { active: 0 }\n"))
+
+      expect(generated(summary)).to be_empty
+    end
+  end
 end

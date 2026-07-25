@@ -37,11 +37,12 @@ module Rslsp
       Flow = Struct.new(:type, :terminated)
       private_constant :Flow
 
-      def initialize(workspace_index:, method_resolver:, summary_store:, model_registry: nil)
+      def initialize(workspace_index:, method_resolver:, summary_store:, model_registry: nil, generated_method_index: nil)
         @workspace_index = workspace_index
         @method_resolver = method_resolver
         @summary_store = summary_store
         @model_registry = model_registry
+        @generated_method_index = generated_method_index
       end
 
       # `context` accepts `in_progress:` (a Set of SymbolIds currently
@@ -70,7 +71,7 @@ module Rslsp
         self_type = self_type_for(symbol_id)
 
         results = declarations.map do |(_uri, decl)|
-          analyze_declaration(decl, self_type, nested_in_progress, depth, budget)
+          analyze_declaration(symbol_id, decl, self_type, nested_in_progress, depth, budget)
         end
 
         summary = build_summary(symbol_id, declarations, results)
@@ -112,7 +113,17 @@ module Rslsp
       DeclResult = Struct.new(:type, :dependencies, :confidence, :status)
       private_constant :DeclResult
 
-      def analyze_declaration(declaration, self_type, in_progress, depth, budget)
+      # Task 017: a `declaration.origin == :generated` (a `enum`/`scope`/
+      # `delegate`-produced method, per ParserService's synthetic
+      # Declaration) never has real body_source to analyze -- its return
+      # type comes from GeneratedMethodIndex instead, checked here first
+      # rather than falling through to the `unless declaration.body_source`
+      # guard below (which would otherwise widen it to Unknown/:partial,
+      # discarding a fact we actually have).
+      def analyze_declaration(symbol_id, declaration, self_type, in_progress, depth, budget)
+        generated = @generated_method_index&.fact_for(symbol_id)
+        return DeclResult.new(resolved_generated_return_type(generated), [], generated.confidence, :complete) if generated
+
         return DeclResult.new(Types::UNKNOWN, [], :low, :partial) unless declaration.body_source
 
         result = Prism.parse(declaration.body_source)
@@ -132,6 +143,47 @@ module Rslsp
         overall_type = Types.normalize_union([outcome.type, *ctx[:returns]])
 
         DeclResult.new(overall_type, ctx[:dependencies].uniq, ctx[:degraded] ? :low : :high, ctx[:nested_status] || :complete)
+      end
+
+      # `enum`/`scope` already carry their real return type directly on
+      # the fact; `delegate` deliberately doesn't (ParserService has no
+      # access to Model registry facts at parse time) -- resolved here,
+      # lazily, once @model_registry's association/column data is
+      # actually available.
+      def resolved_generated_return_type(fact)
+        return fact.return_type unless fact.origin == :delegate
+
+        resolve_delegate_return_type(fact)
+      end
+
+      # `delegate :name, to: :company` -- resolves by chasing `to:`'s
+      # target through @model_registry the same way an ordinary
+      # `company.name` association/column access would: `to:` must
+      # itself be a known association on the delegating model, and the
+      # delegated attribute must be a known column or association on
+      # *that* model. Anything this can't establish statically (the
+      # target isn't a real model association, the delegated name isn't
+      # a real column/association on it, no Model registry data at all)
+      # widens to Unknown rather than guessing.
+      def resolve_delegate_return_type(fact)
+        return Types::UNKNOWN unless @model_registry
+
+        owner_name = fact.owner.to_s.split("::").last
+        association = @model_registry.association(owner_name, fact.metadata[:to])
+        return Types::UNKNOWN unless association
+
+        target_model = association.class_name
+        delegated_name = fact.metadata[:delegated_name]
+        type =
+          if (column = @model_registry.column(target_model, delegated_name))
+            base = Types::Nominal.new(name: column.ruby_type)
+            column.nullable ? Types.normalize_union([base, Types::NIL]) : base
+          elsif (nested = @model_registry.association(target_model, delegated_name))
+            Types::Nominal.new(name: nested.class_name)
+          end
+        return Types::UNKNOWN unless type
+
+        fact.metadata[:allow_nil] ? Types.normalize_union([type, Types::NIL]) : type
       end
 
       def self_type_for(symbol_id)

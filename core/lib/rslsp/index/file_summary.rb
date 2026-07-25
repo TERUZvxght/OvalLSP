@@ -43,12 +43,21 @@ module Rslsp
     #   file's declarations are known. Kept separate from `declarations`
     #   the same way ancestor_facts is: a reference candidate describes a
     #   *usage* site, not a thing being declared.
+    # - generated_method_facts (Task 017): recognized Rails DSL macros
+    #   (`enum`, `scope`, `delegate`) in this file, normalized to
+    #   Index::GeneratedMethodFact. Each one is paired with a synthetic
+    #   Declaration (also in `declarations`, `origin: :generated`) so
+    #   completion/hover-existence/definition already work through the
+    #   ordinary WorkspaceIndex/MethodResolver path; this field exists
+    #   purely for what a Declaration can't carry -- return type and
+    #   DSL-specific metadata.
     FileSummary = Data.define(:uri, :content_hash, :document_version, :declarations, :diagnostics, :source,
-                               :read_sequence, :ancestor_facts, :alias_facts, :reference_candidates) do
+                               :read_sequence, :ancestor_facts, :alias_facts, :reference_candidates,
+                               :generated_method_facts) do
       def initialize(source: :buffer, read_sequence: 0, ancestor_facts: [], alias_facts: [], reference_candidates: [],
-                      **rest)
+                      generated_method_facts: [], **rest)
         super(source: source, read_sequence: read_sequence, ancestor_facts: ancestor_facts, alias_facts: alias_facts,
-              reference_candidates: reference_candidates, **rest)
+              reference_candidates: reference_candidates, generated_method_facts: generated_method_facts, **rest)
       end
     end
   end
