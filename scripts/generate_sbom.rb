@@ -4,14 +4,18 @@
 # Generates docs/SBOM.md -- a dependency + license manifest for exactly what
 # a packaged VSIX ships to an end user: core/'s own runtime gem dependencies
 # (vendored into vscode/core/vendor/bundle by vscode/scripts/copy-core.js,
-# per ADR-0004) and vscode/'s own npm *production* dependency.
+# per ADR-0004) and vscode/'s own npm production dependency closure --
+# vscode-languageclient plus every one of *its* production-flagged
+# transitive dependencies (vscode-jsonrpc, semver, a nested minimatch, ...),
+# not just the one direct dependency named in package.json.
 #
 # Deliberately excludes development-only dependencies (rspec, benchmark,
 # @vscode/vsce, mocha, typescript, ...) -- those never ship in the VSIX, so
 # listing them in a *runtime* SBOM would misrepresent what end users
 # actually receive and run. Run manually via `ruby scripts/generate_sbom.rb`
-# whenever core/rslsp.gemspec's or vscode/package.json's dependency list
-# changes; not run automatically by CI/tests (RELEASE_CHECKLIST.md item 8).
+# whenever core/rslsp.gemspec's, core/Gemfile.lock's, or
+# vscode/package-lock.json's production dependency set changes; not run
+# automatically by CI/tests (RELEASE_CHECKLIST.md item 8).
 
 require "bundler"
 require "json"
