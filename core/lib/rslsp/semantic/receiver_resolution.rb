@@ -60,35 +60,30 @@ module Rslsp
       # the top level -- verified live: a bare `Bar` referenced from
       # inside `module Api; class Bar; ...; end; end`'s own methods
       # resolves to `Api::Bar` itself (via `Api`'s own constant table),
-      # never the unrelated top-level `Bar`, even when both exist.
-      # Approximated here (real Module.nesting also depends on
-      # compact-vs-nested class-opening syntax, which ParserService's
-      # single-owner-per-level @owner_stack doesn't distinguish) by
-      # trying "<owner>::Bar", then each of the owner's own enclosing
-      # namespaces in turn, before WorkspaceIndex#resolve_type_name's
-      # raw/global "先勝ち" heuristic fallback -- found missing by the
-      # Task 014-018 independent review's follow-up pass via a live
-      # repro of exactly that shape.
+      # never the unrelated top-level `Bar`, even when both exist. Uses
+      # `candidate.lexical_nesting` -- ParserService's own captured
+      # `Module.nesting` equivalent -- rather than re-deriving it from
+      # `candidate.owner`'s dotted string: an earlier version of this fix
+      # did that (`owner.split("::")`), which can't tell a
+      # `module Api; class Bar` nesting (real nesting: `[Api::Bar, Api]`,
+      # two frames) apart from a compact `class Api::Bar` (real nesting:
+      # `[Api::Bar]` *only* -- compact syntax does NOT implicitly add the
+      # outer segment to nesting), even though `owner` is the identical
+      # string ("::Api::Bar") either way -- found live by the Task
+      # 014-018 independent review's third pass. Tries
+      # "<innermost nesting frame>::Bar", then each enclosing frame in
+      # turn, before WorkspaceIndex#resolve_type_name's raw/global
+      # "先勝ち" heuristic fallback.
       def resolve_explicit_receiver_name(workspace_index, candidate)
         raw = canonical_receiver_name(candidate.receiver)
         return raw if candidate.receiver.to_s.start_with?("::")
 
-        lexical_scope_chain(candidate.owner).each do |scope|
+        Array(candidate.lexical_nesting).each do |scope|
           qualified = "#{scope}::#{raw}"
           resolved = workspace_index.resolve_type_name(qualified)
           return canonical_receiver_name(resolved) if resolved && canonical_receiver_name(resolved) == canonical_receiver_name(qualified)
         end
         raw
-      end
-
-      # `owner` ("::Api::Bar") -> ["::Api::Bar", "::Api"], innermost
-      # first -- the enclosing-namespace walk #resolve_explicit_receiver_name
-      # tries before giving up and using the raw, unqualified name.
-      def lexical_scope_chain(owner)
-        return [] unless owner
-
-        segments = canonical_receiver_name(owner).split("::")
-        (segments.length - 1).downto(0).map { |i| "::#{segments.first(i + 1).join('::')}" }
       end
     end
   end

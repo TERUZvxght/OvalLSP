@@ -174,7 +174,7 @@ module Rslsp
 
       def fork_plugin_child(writer)
         Process.fork do
-          redirect_child_stdio
+          isolate_child_io(writer)
           result = begin
             { ok: true, result: yield }
           rescue Exception => e # rubocop:disable Lint/RescueException -- a plugin's own code, isolated in this child, may raise anything at all; none of it may ever propagate past this process boundary
@@ -195,26 +195,49 @@ module Rslsp
         end
       end
 
-      # `Process.fork` duplicates the parent's whole fd table, including
-      # fd 1/2 -- in `--stdio` mode fd 1 *is* the live LSP JSON-RPC
-      # transport (bin/rslsp: `Server.new(..., output: $stdout)`), so
-      # without this, any raw `STDOUT.write`/`puts`/`$stderr.puts` a
-      # plugin's own top-level code happens to do lands directly in the
-      # protocol stream sent to the editor, corrupting it -- found by
-      # the Task 014-018 independent review's follow-up pass via a live
-      # repro (a plugin writing straight to `STDOUT`). The exact same
-      # class of leak Task 008.6-1 already closed for the Runtime
-      # Agent's own child process ("a raw fd-1 write, not just
-      # $stdout/STDOUT"); `IO#reopen` dup2s the real fd, so this closes
-      # both the raw-fd path and the Ruby-level global path in one call.
-      # Only ever runs inside the forked child -- must never touch the
-      # parent's real stdio.
-      def redirect_child_stdio
-        devnull = File.open(File::NULL, "w")
-        STDOUT.reopen(devnull)
-        STDERR.reopen(devnull)
-        $stdout.reopen(devnull) unless $stdout.equal?(STDOUT)
-        $stderr.reopen(devnull) unless $stderr.equal?(STDERR)
+      # `Process.fork` duplicates the parent's *entire* fd table, not
+      # just fd 1/2 -- reopening only STDOUT/STDERR (an earlier version
+      # of this fix) closed the specific leak that had been reported
+      # (in `--stdio` mode fd 1 *is* the live LSP JSON-RPC transport,
+      # bin/rslsp: `Server.new(..., output: $stdout)`) but left every
+      # *other* IO object the parent happens to hold open -- e.g.
+      # AgentProcessManager's own `@stdin_write`/`@stdout_read`/
+      # `@stderr_read` pipes to a live Rails Runtime Agent
+      # (agent_process_manager.rb `#spawn_process`) -- reachable from a
+      # plugin with zero `require`s via `ObjectSpace.each_object(::IO)`.
+      # Found live by the Task 014-018 independent review's second
+      # follow-up pass: a plugin walking every open IO object in
+      # ObjectSpace and writing to whichever ones weren't fd 0/1/2 could
+      # corrupt or hijack the Agent's own JSON-RPC channel exactly the
+      # way the original bug corrupted the editor-facing one. Fixed at
+      # the actual architectural root this time: enumerate and close
+      # every IO object the child inherited except the ones it legitimately
+      # needs (redirected stdin/stdout/stderr, and the result pipe
+      # `writer`) -- not just whichever specific fd the last report
+      # happened to name. Only ever runs inside the forked child -- must
+      # never touch the parent's real IO objects (this is why it takes
+      # `writer` as an explicit keep-alive rather than discovering it via
+      # ObjectSpace, which would also see it).
+      def isolate_child_io(writer)
+        devnull_r = File.open(File::NULL, "r")
+        devnull_w = File.open(File::NULL, "w")
+        STDIN.reopen(devnull_r)
+        STDOUT.reopen(devnull_w)
+        STDERR.reopen(devnull_w)
+        $stdin.reopen(devnull_r) unless $stdin.equal?(STDIN)
+        $stdout.reopen(devnull_w) unless $stdout.equal?(STDOUT)
+        $stderr.reopen(devnull_w) unless $stderr.equal?(STDERR)
+
+        keep = [STDIN, STDOUT, STDERR, devnull_r, devnull_w, writer]
+        ObjectSpace.each_object(::IO) do |io|
+          next if keep.any? { |kept| kept.equal?(io) }
+
+          begin
+            io.close unless io.closed?
+          rescue StandardError
+            nil
+          end
+        end
       rescue StandardError
         nil
       end

@@ -512,6 +512,19 @@ module Rslsp
         @owner_stack.last
       end
 
+      # Real Ruby `Module.nesting`, innermost first. `@owner_stack` gets
+      # exactly one push per lexical class/module *opening* (#visit_namespace
+      # is called once per ClassNode/ModuleNode, regardless of whether it
+      # was written in nested form, `module Foo; class Bar`, two pushes,
+      # or compact form, `class Foo::Bar`, one push with the whole
+      # compound name) -- which happens to already match real Ruby's own
+      # nesting-depth-follows-textual-nesting rule exactly, so no extra
+      # bookkeeping is needed beyond capturing this stack, reversed, at
+      # the moment a reference is recorded.
+      def current_lexical_nesting
+        @owner_stack.reverse
+      end
+
       def next_scope_id
         @scope_counter += 1
       end
@@ -523,7 +536,8 @@ module Rslsp
       def record_reference(kind, name, location, scope_id: nil)
         @reference_candidates << Index::ReferenceCandidate.new(
           kind: kind, name: name, location: Index::SourceLocation.to_range(location, @lines), scope_id: scope_id,
-          owner: current_owner, singleton: @singleton_context_stack.last, receiver: nil
+          owner: current_owner, singleton: @singleton_context_stack.last, receiver: nil,
+          lexical_nesting: current_lexical_nesting
         )
       end
 
@@ -551,7 +565,8 @@ module Rslsp
 
         @reference_candidates << Index::ReferenceCandidate.new(
           kind: :method_call, name: node.name.to_s, location: Index::SourceLocation.to_range(node.message_loc, @lines),
-          scope_id: nil, owner: current_owner, singleton: singleton, receiver: receiver
+          scope_id: nil, owner: current_owner, singleton: singleton, receiver: receiver,
+          lexical_nesting: current_lexical_nesting
         )
       end
 

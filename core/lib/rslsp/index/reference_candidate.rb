@@ -30,6 +30,22 @@ module Rslsp
     #   `{ position: }` Hash (an LSP position, the exact spot
     #   ReferenceResolver should query for the receiver expression's own
     #   type) for anything else. `nil` for every other kind.
-    ReferenceCandidate = Data.define(:kind, :name, :location, :scope_id, :owner, :singleton, :receiver)
+    # - lexical_nesting: the real Ruby `Module.nesting` at this reference's
+    #   position, innermost first (e.g. `["::Api::Bar", "::Api"]` for a
+    #   reference inside `module Api; class Bar; ...; end; end`'s own
+    #   body) — used to resolve an *explicit*, unqualified constant
+    #   receiver (`Bar.foo`) the same way real Ruby does: by walking
+    #   enclosing lexical scopes outward, not by naively re-splitting
+    #   `owner`'s dotted string (which can't tell a `module Api; class Bar`
+    #   nesting apart from a compact `class Api::Bar`, whose own real
+    #   nesting is `["::Api::Bar"]` only — Ruby's compact class-opening
+    #   syntax does NOT implicitly add the outer segment to nesting, even
+    #   though `owner` looks identical either way). `[]` for a top-level
+    #   reference. See Semantic::ReceiverResolution.
+    ReferenceCandidate = Data.define(:kind, :name, :location, :scope_id, :owner, :singleton, :receiver, :lexical_nesting) do
+      def initialize(lexical_nesting: [], **rest)
+        super(lexical_nesting: lexical_nesting, **rest)
+      end
+    end
   end
 end

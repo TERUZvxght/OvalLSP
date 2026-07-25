@@ -24,6 +24,7 @@ RSpec.describe Rslsp::Plugins::Loader do
     Rslsp::Plugins.clear_registration("rslsp-monkeypatching")
     Rslsp::Plugins.clear_registration("rslsp-stdout-writer")
     Rslsp::Plugins.clear_registration("rslsp-monkeypatching-runtime")
+    Rslsp::Plugins.clear_registration("rslsp-io-scavenger")
   end
 
   describe "#load_static" do
@@ -139,6 +140,36 @@ RSpec.describe Rslsp::Plugins::Loader do
       expect(contexts.size).to eq(1)
       captured.rewind
       expect(captured.read).not_to include("EVIL-EVIL-LSP-PROTOCOL-CORRUPTION")
+    end
+
+    it "never lets a plugin reach any OTHER IO object the parent happens to have open -- not just fd 1/2" do
+      # Found by the Task 014-018 independent review's third pass:
+      # Process.fork hands the child the parent's *entire* fd table, so
+      # a plugin doesn't need to write to a known fd (STDOUT/STDERR) to
+      # corrupt something -- any IO object the parent has open (e.g.
+      # AgentProcessManager's own pipes to a live Rails Runtime Agent)
+      # is reachable via ObjectSpace with zero requires. Stands in for
+      # that scenario with an ordinary pipe held open in this process.
+      stand_in_reader, stand_in_writer = ::IO.pipe
+
+      # The fixture writes to every open IO it can find via ObjectSpace,
+      # indiscriminately -- including, harmlessly, its own legitimate
+      # result-reporting pipe, which just means *this* plugin's own
+      # result comes back corrupted (already handled gracefully:
+      # #load_static simply contributes nothing for it, the same as any
+      # other plugin failure). What matters for this test is only
+      # whether the write reached the unrelated *stand-in* pipe below.
+      loader.load_static([manifest_path("io_scavenger")])
+
+      stand_in_writer.close
+      leaked = begin
+        Timeout.timeout(0.2) { stand_in_reader.read }
+      rescue Timeout::Error
+        ""
+      end
+      stand_in_reader.close
+
+      expect(leaked).not_to include("EVIL-VIA-OBJECTSPACE")
     end
   end
 

@@ -171,6 +171,43 @@ RSpec.describe Rslsp::Diagnostics::Engine do
       expect(findings.map(&:code)).not_to include("unknown-method")
     end
 
+    it "still flags a genuinely unknown call inside a compact-nested class, rather than over-matching it against an unrelated same-named nested class" do
+      # Found by the Task 014-018 independent review's third pass: real
+      # Ruby's Module.nesting differs between `module Api; class Bar` (two
+      # frames: [Api::Bar, Api]) and compact `class Api::V1::Thing`, whose
+      # own nesting is `[Api::V1::Thing]` *only* -- it does NOT implicitly
+      # include `Api::V1` or `Api`. So a bare `Bar` referenced from inside
+      # `class Api::V1::Thing`'s own methods must NOT resolve via `Api`
+      # the way it would from inside a *nested*-form `module Api; class
+      # Bar`'s own body -- it should fall through to the closed top-level
+      # `Bar`, which genuinely has no `totally_bogus_method`. Verified
+      # live with real `ruby -e` (raises NoMethodError on the top-level
+      # Bar, not Api::Bar) before writing this test.
+      document = index(<<~RUBY)
+        class Bar
+          def known_method
+          end
+        end
+
+        module Api
+          class Bar < SomeExternalGemBaseClass
+            def known_method
+            end
+          end
+        end
+
+        class Api::V1::Thing
+          def self.show
+            Bar.totally_bogus_method
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).to include("unknown-method")
+    end
+
     it "does not flag any call at all when Signatures::Environment isn't available" do
       document = index("class Widget\n  def show\n    puts \"hi\"\n  end\nend\n")
 
