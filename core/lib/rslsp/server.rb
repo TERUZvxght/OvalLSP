@@ -98,6 +98,9 @@ module Rslsp
       @diagnostics_mode = :safe
       @rename_planner = Rename::Planner.new(workspace_index: @workspace_index, reference_index: @reference_index)
       @plugin_loader = Plugins::Loader.new(logger: @logger)
+      @observation_store = Observation::Store.new
+      @observation_runner = Observation::Runner.new(logger: @logger)
+      @observation_test_command = nil
     end
 
     # Runs the read/dispatch loop until `exit` is received or the input
@@ -126,6 +129,7 @@ module Rslsp
       case method
       when "initialize"
         @diagnostics_mode = diagnostics_mode_from(message[:params])
+        @observation_test_command = observation_test_command_from(message[:params])
         respond(id, initialize_result)
         load_static_plugins(message[:params])
         start_cold_index
@@ -165,6 +169,12 @@ module Rslsp
         respond(id, prepare_rename_result(message[:params]))
       when "textDocument/rename"
         respond(id, rename_result(message[:params]))
+      when "rslsp/runObservedTests"
+        respond(id, run_observed_tests_result(message[:params]))
+      when "rslsp/clearObservedTypes"
+        respond(id, clear_observed_types_result(message[:params]))
+      when "rslsp/showTypeEvidence"
+        respond(id, show_type_evidence_result(message[:params]))
       else
         handle_unknown_method(method, id)
       end
@@ -250,6 +260,7 @@ module Rslsp
         invalidate_method_summaries(previous_declarations)
         index_references(document.uri, document, summary)
         @generated_method_index.replace_file(uri: document.uri, facts: summary.generated_method_facts)
+        invalidate_stale_observations
         publish_diagnostics(document)
       end
     rescue StandardError => e
@@ -305,6 +316,105 @@ module Rslsp
       options = params && params[:initializationOptions]
       mode = options.is_a?(Hash) ? options[:diagnosticsMode] : nil
       Diagnostics::Engine::MODES.include?(mode&.to_sym) ? mode.to_sym : :safe
+    end
+
+    DEFAULT_OBSERVATION_TEST_COMMAND = %w[bundle exec rspec].freeze
+
+    def observation_test_command_from(params)
+      options = params && params[:initializationOptions]
+      command = options.is_a?(Hash) ? options[:observationTestCommand] : nil
+      valid_test_command?(command) ? command : DEFAULT_OBSERVATION_TEST_COMMAND
+    end
+
+    def valid_test_command?(command)
+      command.is_a?(Array) && !command.empty? && command.all? { |part| part.is_a?(String) }
+    end
+
+    # Task 019, `RSLSP: Run Tests with Type Observation` -- explicit
+    # opt-in only, never triggered by anything else this Server does on
+    # its own ("opt-in時だけ観測runnerが起動する"). Synchronous: a real
+    # test suite run can take anywhere from seconds to minutes, and this
+    # request's whole point is to run one, so unlike every other request
+    # this Server answers, blocking the LSP loop for its duration is the
+    # expected, accepted cost of what the user explicitly asked for --
+    # the client is expected to show its own "running…" affordance for
+    # the request's duration, not to expect a fast reply.
+    def run_observed_tests_result(params)
+      override = params.is_a?(Hash) ? params[:testCommand] : nil
+      command = valid_test_command?(override) ? override : @observation_test_command
+
+      results = @observation_runner.run(command: command.first, args: command[1..], workspace_root: @workspace_root)
+      @observation_store.replace_run(results)
+      invalidate_stale_observations
+
+      { sampleCount: results.sum(&:samples), methodCount: results.size }
+    end
+
+    def clear_observed_types_result(_params)
+      @observation_store.clear
+      nil
+    end
+
+    # Task 019, `RSLSP: Show Type Evidence` -- deliberately its own
+    # request rather than folded into `rslsp/explainType`'s own response
+    # shape: several existing specs assert `explainType`'s result via
+    # exact Hash equality (`{type: "..."}`), so adding a field there
+    # unconditionally would break every one of them for a feature most
+    # callers never opt into.
+    def show_type_evidence_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = @document_store.fetch(uri: uri)
+      summary = @file_summaries[uri]
+      return nil unless document && summary
+
+      symbol_id = reference_symbol_id_at(document, summary, uri, params.fetch(:position)) ||
+                  declaration_symbol_id_at(summary, params.fetch(:position))
+      return nil unless symbol_id
+
+      evidence = @observation_store.evidence_for(symbol_id)
+      return nil unless evidence
+
+      {
+        parameterTypes: evidence.parameter_types.map(&:to_s), returnType: evidence.return_type.to_s,
+        samples: evidence.samples, confidence: "low"
+      }
+    end
+
+    # "code fingerprint変更時に古い観測をstale化する" / "source変更後に
+    # 古い観測を使用しない" -- run on every successful #reindex, so an
+    # edit to a method that was previously observed drops its (now
+    # possibly-inaccurate) evidence immediately, not just the next time
+    # someone happens to ask for it. The empty-store check keeps this
+    # exactly zero-cost on the overwhelmingly common path (observation
+    # is opt-in and off by default -- "observation disabled by default"),
+    # not just cheap: no file I/O at all happens unless at least one
+    # method has ever actually been observed.
+    def invalidate_stale_observations
+      symbol_ids = @observation_store.tracked_symbol_ids
+      return if symbol_ids.empty?
+
+      fingerprints = symbol_ids.to_h { |symbol_id| [symbol_id, current_observation_fingerprint(symbol_id)] }
+      @observation_store.invalidate_changed(fingerprints)
+    end
+
+    def current_observation_fingerprint(symbol_id)
+      uri, declaration = @workspace_index.declarations_with_uri(symbol_id).first
+      return nil unless uri
+
+      line = declaration.location[:start][:line] + 1
+
+      # "Open Buffer優先" (WorkspaceIndex, Task 008.6-3) applies here
+      # too: an unsaved edit must invalidate stale evidence immediately,
+      # which reading only the on-disk file (below) could never see.
+      document = @document_store.fetch(uri: uri)
+      return Observation::Fingerprint.for_content_and_line(document.text, line) if document
+
+      path = UriUtil.to_path(uri)
+      return nil unless path && File.file?(path)
+
+      Observation::Fingerprint.for_file_and_line(path, line)
+    rescue StandardError
+      nil
     end
 
     # Task 018: loads only manifests the client explicitly lists in

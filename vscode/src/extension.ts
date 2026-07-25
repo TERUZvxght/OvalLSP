@@ -64,6 +64,98 @@ function startClientForFolder(
   return client;
 }
 
+// Task 019: opt-in runtime type observation. Every command here resolves
+// the client from the *active editor's* workspace folder — there's no
+// single "the" client once multiple folders are open — and each request
+// is entirely a no-op server-side unless the user explicitly invoked one
+// of these commands first ("opt-in時だけ観測runnerが起動する").
+function clientForActiveEditor(outputChannel: vscode.OutputChannel): LanguageClient | undefined {
+  const uri = vscode.window.activeTextEditor?.document.uri;
+  const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : vscode.workspace.workspaceFolders?.[0];
+  if (!folder) {
+    void vscode.window.showWarningMessage('RSLSP: no workspace folder is open.');
+    return undefined;
+  }
+
+  const client = clients.get(folder.uri.toString());
+  if (!client) {
+    outputChannel.appendLine(`RSLSP: no running Core Server for ${folder.name}.`);
+  }
+  return client;
+}
+
+function registerObservationCommands(context: vscode.ExtensionContext, outputChannel: vscode.OutputChannel): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand('rslsp.observation.runTests', async () => {
+      const client = clientForActiveEditor(outputChannel);
+      if (!client) {
+        return;
+      }
+
+      const testCommand = vscode.workspace.getConfiguration('rslsp').get<string[] | null>('observation.testCommand');
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'RSLSP: running tests with type observation…' },
+        async () => {
+          try {
+            const result = await client.sendRequest<{ sampleCount: number; methodCount: number }>(
+              'rslsp/runObservedTests',
+              testCommand && testCommand.length > 0 ? { testCommand } : {}
+            );
+            void vscode.window.showInformationMessage(
+              `RSLSP: observed ${result.methodCount} method(s) across ${result.sampleCount} call(s).`
+            );
+          } catch (err) {
+            void vscode.window.showErrorMessage(`RSLSP: observation run failed: ${err}`);
+          }
+        }
+      );
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('rslsp.observation.clearTypes', async () => {
+      const client = clientForActiveEditor(outputChannel);
+      if (!client) {
+        return;
+      }
+
+      await client.sendRequest('rslsp/clearObservedTypes', {});
+      void vscode.window.showInformationMessage('RSLSP: cleared observed types.');
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('rslsp.observation.showEvidence', async () => {
+      const client = clientForActiveEditor(outputChannel);
+      const editor = vscode.window.activeTextEditor;
+      if (!client || !editor) {
+        return;
+      }
+
+      const params = {
+        textDocument: { uri: client.code2ProtocolConverter.asUri(editor.document.uri) },
+        position: client.code2ProtocolConverter.asPosition(editor.selection.active)
+      };
+      const evidence = await client.sendRequest<{
+        parameterTypes: string[];
+        returnType: string;
+        samples: number;
+        confidence: string;
+      } | null>('rslsp/showTypeEvidence', params);
+
+      if (!evidence) {
+        void vscode.window.showInformationMessage('RSLSP: no observed type evidence at this position.');
+        return;
+      }
+
+      void vscode.window.showInformationMessage(
+        `RSLSP (${evidence.confidence} confidence, ${evidence.samples} sample(s)): ` +
+          `(${evidence.parameterTypes.join(', ')}) -> ${evidence.returnType}`
+      );
+    })
+  );
+}
+
 function stopClient(key: string): Thenable<void> {
   watchers.get(key)?.dispose();
   watchers.delete(key);
@@ -84,6 +176,8 @@ export function activate(context: vscode.ExtensionContext): void {
   if (config.get<boolean>('enabled') === false) {
     return;
   }
+
+  registerObservationCommands(context, outputChannel);
 
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const key = folder.uri.toString();

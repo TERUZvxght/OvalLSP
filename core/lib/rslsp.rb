@@ -55,6 +55,12 @@ require_relative "rslsp/rails_bootstrap"
 require_relative "rslsp/routes/route_registry"
 require_relative "rslsp/routes/controller_naming"
 require_relative "rslsp/erb/ruby_region_extractor"
+require_relative "rslsp/observation/observed_signature"
+require_relative "rslsp/observation/type_normalizer"
+require_relative "rslsp/observation/fingerprint"
+require_relative "rslsp/observation/store"
+require_relative "rslsp/observation/collector"
+require_relative "rslsp/observation/runner"
 require_relative "rslsp/server"
 
 module Rslsp

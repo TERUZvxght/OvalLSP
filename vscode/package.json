@@ -46,9 +46,34 @@
           ],
           "default": null,
           "description": "Path to the rslsp Core Server entrypoint. Defaults to the bundled core/bin/rslsp script."
+        },
+        "rslsp.observation.testCommand": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "default": null,
+          "description": "Command used by 'RSLSP: Run Tests with Type Observation', e.g. [\"bundle\", \"exec\", \"rspec\"]. Defaults to the Core Server's own default (bundle exec rspec)."
         }
       }
-    }
+    },
+    "commands": [
+      {
+        "command": "rslsp.observation.runTests",
+        "title": "RSLSP: Run Tests with Type Observation"
+      },
+      {
+        "command": "rslsp.observation.clearTypes",
+        "title": "RSLSP: Clear Observed Types"
+      },
+      {
+        "command": "rslsp.observation.showEvidence",
+        "title": "RSLSP: Show Type Evidence"
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc -p .",
