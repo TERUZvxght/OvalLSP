@@ -41,8 +41,23 @@ module Ovallsp
     # `command`/`args` are overridable so tests can point this at the
     # rails_minimal fixture instead of the real `bundle exec ruby boot.rb`
     # invocation this defaults to.
+    #
+    # `on_manager_created`, if given, is invoked synchronously with the
+    # freshly-constructed AgentProcessManager the moment it exists --
+    # *before* the blocking `manager.start` call below runs at all. #start
+    # can block for real seconds (an actual Rails boot) to `hello_timeout`
+    # seconds (an unresponsive one), and this module's own docs already
+    # say the caller runs #start on a background thread for exactly that
+    # reason -- without this hook, a Server wanting to cancel that
+    # background thread (process shutdown, an RSpec example ending) has no
+    # way to reach the manager until this method eventually returns.
+    # Server uses it to register the manager with its own
+    # BackgroundTasks#track_manager immediately, so #stop can be called on
+    # it (terminating any already-spawned child process, or preventing one
+    # from ever spawning) regardless of exactly how far the handshake
+    # below has gotten.
     def start(root:, logger:, route_registry:, model_registry:, hello_timeout: 60, command: nil, args: nil,
-              on_unavailable: nil)
+              on_unavailable: nil, on_manager_created: nil)
       env = {}
       if command.nil?
         return nil unless rails_app?(root)
@@ -65,6 +80,7 @@ module Ovallsp
 
       manager = AgentProcessManager.new(command: command, args: args, chdir: root, logger: logger,
                                          hello_timeout: hello_timeout, env: env, on_unavailable: on_unavailable)
+      on_manager_created&.call(manager)
       status = manager.start
 
       if status == :ready

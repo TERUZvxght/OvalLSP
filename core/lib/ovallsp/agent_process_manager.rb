@@ -49,6 +49,12 @@ module Ovallsp
       @request_mutex = Mutex.new
       @status_mutex = Mutex.new
       @terminate_mutex = Mutex.new
+      # Set by #stop when called before #start has (or may not yet have)
+      # spawned a process -- see #start's own comment for why this needs
+      # to be checked *inside* the same @terminate_mutex critical section
+      # that #spawn_process itself runs in, rather than as a plain
+      # unsynchronized flag read.
+      @cancelled = false
     end
 
     attr_reader :status, :hello_result, :pid
@@ -60,11 +66,38 @@ module Ovallsp
     # Spawns the Agent and blocks for up to `hello_timeout` seconds waiting
     # for agent/hello to succeed. Returns the resulting status; never
     # raises even if the Agent never starts.
+    #
+    # #spawn_process itself runs inside @terminate_mutex, the same lock
+    # #stop's cancellation path uses (see #stop) -- so #start and a
+    # concurrent #stop can never interleave in a way that spawns a process
+    # #stop already decided nothing should ever spawn: either #stop wins
+    # the race (sets @cancelled first; this method sees it under the same
+    # lock and returns :static_only without ever spawning) or #start's own
+    # spawn wins it (completes first; #stop then sees @pid already set
+    # under the same lock and terminates the process it just spawned).
+    # Found necessary by Server#run needing to cancel a Runtime Agent
+    # bootstrap thread that may not have reached #start yet at all --
+    # Server hands #stop a manager reference the moment it's constructed
+    # (RailsBootstrap.start's on_manager_created:), well before this
+    # method necessarily runs.
     def start
       return @status unless @status == :not_started
 
-      spawn_process
-      @status = :starting
+      spawned = @terminate_mutex.synchronize do
+        if @cancelled
+          false
+        else
+          spawn_process
+          true
+        end
+      end
+
+      unless spawned
+        @logger.warn("runtime agent start cancelled before the process was spawned")
+        return set_status(:static_only)
+      end
+
+      set_status(:starting)
       register_exit_hook
 
       response = request("agent/hello",
@@ -73,7 +106,7 @@ module Ovallsp
 
       if response && response[:result] && compatible_protocol_version?(response[:result][:protocolVersion])
         @hello_result = response[:result]
-        @status = :ready
+        set_status(:ready)
       elsif response && response[:result]
         # Task 022: "major不一致は接続拒否" -- Core and the Agent it just
         # spawned ship together (same gem, same install), so in practice
@@ -86,18 +119,18 @@ module Ovallsp
           "runtime agent protocol version mismatch (agent=#{response[:result][:protocolVersion].inspect}, " \
           "core expects #{RuntimeAgent::Agent::PROTOCOL_VERSION}); refusing to use it, falling back to static-only mode"
         )
-        @status = :static_only
+        set_status(:static_only)
         terminate_process
       else
         @logger.warn("agent/hello did not complete in time; falling back to static-only mode")
-        @status = :static_only
+        set_status(:static_only)
         terminate_process
       end
 
       @status
     rescue StandardError => e
       @logger.error("failed to start runtime agent: #{e.class}: #{e.message}")
-      @status = :static_only
+      set_status(:static_only)
       terminate_process
       @status
     end
@@ -168,12 +201,58 @@ module Ovallsp
     # (docs/design/tasks/008.6-agent-and-index-hardening.md) — a
     # deliberate stop is a stronger, terminal signal than a mere
     # unavailability degrade.
+    # Deliberately does NOT bail out early just because @pid is still nil
+    # (a never-spawned, or not-yet-spawned, manager) -- unlike the earlier
+    # version of this method. #stop is Server's one cancellation primitive
+    # for a manager at *any* lifecycle stage, including "constructed but
+    # #start hasn't run yet" and "#start is currently blocked mid
+    # agent/hello handshake", both of which have @pid nil or set but no
+    # completed handshake. Only a fully :ready manager gets the polite
+    # `agent/shutdown` RPC first -- for :not_started/:starting/
+    # :static_only there's nothing coherent to ask (the Agent, if even
+    # spawned yet, hasn't finished its own handshake), and attempting the
+    # request would only block waiting for @request_mutex, which #start's
+    # own in-flight hello request already holds until *its* timeout
+    # elapses -- not a deadlock (the wait is bounded, by hello_timeout),
+    # but exactly what let a mid-bootstrap #stop call block for the full
+    # hello_timeout instead of cancelling promptly.
+    #
+    # The teardown itself runs inside `ensure`, not inline after the
+    # `agent/shutdown` request -- found necessary by an independent
+    # review: Server's BackgroundTasks#shutdown runs #stop on its own
+    # short-lived thread so one stuck manager can't block the rest of
+    # shutdown forever (see BackgroundTasks#shutdown), and bounds that
+    # thread with a plain `Thread#kill` if #stop itself doesn't return in
+    # time. A #stop that ran `request(...)` *then* `terminate_process` as
+    # two separate top-level statements could be killed *between* them --
+    # after the polite RPC attempt, but before the process was ever
+    # actually torn down -- leaving the child Agent process running with
+    # nothing left anywhere that will ever call #stop on it again. MRI
+    # runs pending `ensure` blocks while unwinding a killed thread (the
+    # same guarantee Mutex#synchronize's own internal unlock-on-exit
+    # already relies on elsewhere in this class), so putting teardown in
+    # `ensure` here means it happens even if this method's calling thread
+    # is killed while still blocked inside the `agent/shutdown` request.
     def stop(timeout: 3)
-      return if @status == :stopped || @pid.nil?
+      return if @status == :stopped
 
-      request("agent/shutdown", {}, timeout: timeout) unless @status == :static_only
-      terminate_process
-      @status_mutex.synchronize { @status = :stopped }
+      begin
+        request("agent/shutdown", {}, timeout: timeout) if @status == :ready
+      ensure
+        # Same lock #start's own spawn decision runs under (see #start's
+        # comment) -- guarantees this either (a) sets @cancelled before
+        # #start ever spawns, so #start never spawns at all, (b) runs
+        # after #start's spawn already completed, sees @pid set, and
+        # terminates the process #start just spawned, or (c) tears down a
+        # process that was already fully spawned and :ready. No
+        # interleaving, and no interruption of this method itself, can
+        # leave a spawned process that this never tears down.
+        @terminate_mutex.synchronize do
+          @cancelled = true
+          terminate_process_locked if @pid
+        end
+        @status_mutex.synchronize { @status = :stopped }
+      end
     end
 
     def alive?
@@ -186,6 +265,23 @@ module Ovallsp
     end
 
     private
+
+    # Every #start-side status transition goes through here rather than a
+    # plain `@status = ...` -- guards against a concurrent #stop's own
+    # `:stopped` write (see #stop's comment: an explicit stop is meant to
+    # "unconditionally win" as a terminal signal) being silently
+    # overwritten by a #start that was already mid-flight when #stop ran.
+    # No process is ever left running either way (#stop already tore it
+    # down before writing :stopped), but without this guard @status itself
+    # could misreport what actually happened. Found by an independent
+    # review.
+    def set_status(new_status)
+      @status_mutex.synchronize do
+        break @status if @status == :stopped
+
+        @status = new_status
+      end
+    end
 
     # Every read-style request (agent/status, agent/snapshot, agent/model,
     # agent/reload) shares the same failure contract: not ready -> nil

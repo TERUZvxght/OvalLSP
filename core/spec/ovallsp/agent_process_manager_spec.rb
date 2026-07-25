@@ -23,6 +23,13 @@ RSpec.describe Ovallsp::AgentProcessManager do
     @manager&.stop
   end
 
+  def process_alive?(pid)
+    Process.kill(0, pid)
+    true
+  rescue Errno::ESRCH, Errno::EPERM
+    false
+  end
+
   it "receives the fixture app's Rails root and version via agent/hello" do
     @manager = build_manager
     status = @manager.start
@@ -167,6 +174,109 @@ RSpec.describe Ovallsp::AgentProcessManager do
 
     expect(@manager.alive?).to be(false)
     expect { Process.kill(0, pid) }.to raise_error(Errno::ESRCH)
+  end
+
+  # Server's BackgroundTasks#shutdown runs #stop on its own short-lived
+  # thread and Thread#kills it if it doesn't return in time (found
+  # necessary because #stop's `agent/shutdown` RPC has no bound of its
+  # own beyond @request_mutex -- it can block for as long as some other,
+  # unrelated in-flight request already holds that mutex, e.g. a real 30s
+  # #fetch_all_models round trip). An independent review found that
+  # killing #stop's thread while it was still blocked *acquiring*
+  # @request_mutex (never having reached #terminate_process at all) left
+  # the real spawned child process running -- #stop's teardown must run
+  # even when #stop itself is interrupted this way, not only when it
+  # returns normally. This drives that exact interleaving against a real
+  # spawned process, not a duck-typed fake (which can't observe whether
+  # #terminate_process, specifically, actually ran).
+  it "still reaps the real child process if #stop's own thread is killed while blocked waiting for another in-flight request's mutex" do
+    @manager = build_manager
+    status = @manager.start
+    expect(status).to eq(:ready)
+    pid = @manager.pid
+
+    # Models "some other request is already using @request_mutex" by
+    # holding it directly from this thread, rather than needing a genuine
+    # slow round trip to the fixture Agent.
+    request_mutex = @manager.instance_variable_get(:@request_mutex)
+    request_mutex.lock
+    stop_thread = nil
+
+    # If the "genuinely blocked" assertion below ever fails, everything
+    # after it -- killing/joining stop_thread, unlocking request_mutex --
+    # would otherwise be skipped, leaving a thread blocked forever on a
+    # mutex nothing would ever unlock again for the rest of this RSpec
+    # process: precisely the leaked-background-thread shape this whole
+    # change set exists to eliminate (found by an independent review).
+    begin
+      stop_thread = Thread.new { @manager.stop(timeout: 30) }
+
+      # Deterministic proof #stop is genuinely blocked trying to acquire
+      # @request_mutex (not merely not yet scheduled to run at all)
+      # before killing it -- a thread blocked on Mutex#lock reports
+      # "sleep".
+      expect(wait_until { stop_thread.status == "sleep" }).to be(true)
+    ensure
+      stop_thread&.kill
+      stop_thread&.join(2)
+      request_mutex.unlock if request_mutex.owned?
+    end
+
+    # #stop's own teardown (guaranteed via `ensure`, see its own docs)
+    # can still be finishing on the killed thread's own unwind after
+    # #kill/#join return -- BackgroundTasks#shutdown's docs are explicit
+    # that it doesn't wait for this itself, so neither does this
+    # assertion; it polls instead of asserting immediately.
+    expect(wait_until(timeout: 5) { !process_alive?(pid) }).to be(true)
+  end
+
+  # Task 022 background-task lifecycle: Server hands #stop a manager
+  # reference the moment it's constructed (RailsBootstrap.start's
+  # on_manager_created:), which can be well before -- or, in principle,
+  # concurrently with -- #start ever actually runs. #stop must be a real
+  # cancellation primitive at that stage, not merely a no-op that leaves
+  # #start free to spawn a process moments later with nothing left to stop
+  # it.
+  it "cancels a manager whose #stop was called before #start ever ran -- #start never spawns anything" do
+    @manager = build_manager
+    @manager.stop
+
+    # #start's own early guard (`return @status unless @status ==
+    # :not_started`) already short-circuits once #stop has set :stopped,
+    # so #start returns :stopped here without even reaching its own
+    # @cancelled check -- covered by that guard alone. The @cancelled flag
+    # this test really exists to cover matters for the narrower race where
+    # #start's spawn decision is *already in flight* (inside its own
+    # @terminate_mutex critical section) at the moment #stop runs; that
+    # interleaving can't be forced deterministically from a single-process
+    # test, so this asserts the observable *outcome* both paths must
+    # share: whatever #start returns, it never actually spawns a process.
+    status = @manager.start
+
+    expect(status).to eq(:stopped)
+    expect(@manager.pid).to be_nil
+    expect(@manager.alive?).to be(false)
+  end
+
+  it "leaves #status at :stopped (not :not_started) after #stop on a manager that was never started, and a later #start is a no-op" do
+    @manager = build_manager
+
+    @manager.stop
+    expect(@manager.status).to eq(:stopped)
+
+    # #start's own early guard (`return @status unless @status ==
+    # :not_started`) means a manager already cancelled this way can never
+    # be started later by a stray #start call -- :stopped is terminal.
+    expect(@manager.start).to eq(:stopped)
+    expect(@manager.pid).to be_nil
+  end
+
+  it "is safe to call #stop twice on a manager that was never started (idempotent)" do
+    @manager = build_manager
+
+    expect { @manager.stop }.not_to raise_error
+    expect { @manager.stop }.not_to raise_error
+    expect(@manager.status).to eq(:stopped)
   end
 
   it "always ends at :stopped after #stop, never :static_only, however the reader thread's concurrent EOF write interleaves (Task 008.6)" do

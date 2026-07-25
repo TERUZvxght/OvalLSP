@@ -14,6 +14,7 @@ require_relative "routes/route_registry"
 require_relative "routes/controller_naming"
 require_relative "erb/ruby_region_extractor"
 require_relative "rails_bootstrap"
+require_relative "background_tasks"
 require_relative "cold_indexer"
 require_relative "semantic/hierarchy_index"
 require_relative "semantic/method_resolver"
@@ -53,7 +54,7 @@ module Ovallsp
 
     def initialize(input:, output:, logger:, route_registry: Routes::RouteRegistry.new,
                    model_registry: Models::ModelRegistry.new, workspace_root: Dir.pwd,
-                   agent_bootstrap: RailsBootstrap)
+                   agent_bootstrap: RailsBootstrap, background_task_shutdown_timeout: BackgroundTasks::DEFAULT_SHUTDOWN_TIMEOUT)
       @reader = Ovallsp::IO::FramedReader.new(input)
       @writer = Ovallsp::IO::FramedWriter.new(output)
       @logger = logger
@@ -104,11 +105,21 @@ module Ovallsp
       @observation_test_command = nil
       @cold_indexing = false
       @agent_supervisor = AgentSupervisor.new
+      @background_tasks = BackgroundTasks.new(shutdown_timeout: background_task_shutdown_timeout)
     end
 
     # Runs the read/dispatch loop until `exit` is received or the input
     # stream closes. Returns the process exit code the LSP spec expects:
     # 0 if `shutdown` preceded `exit`, 1 otherwise.
+    #
+    # `ensure shutdown_background_tasks` runs on every exit path -- EOF
+    # (client disconnected without a clean shutdown/exit), a normal
+    # `exit`, or an exception escaping the loop -- so a Runtime Agent
+    # bootstrap thread (or any other background thread Server owns) never
+    # outlives #run itself. Found necessary by a leaked bootstrap thread
+    # surviving past the end of the RSpec example that started it and
+    # touching that example's already-torn-down RSpec doubles from inside
+    # a *later* example (spec/ovallsp/server_workspace_trust_spec.rb).
     def run
       loop do
         message = begin
@@ -121,9 +132,61 @@ module Ovallsp
       end
 
       @shutdown_received ? 0 : 1
+    ensure
+      shutdown_background_tasks
     end
 
     private
+
+    # Idempotent (BackgroundTasks#shutdown itself no-ops on a second
+    # call), bounded (never an unlimited #join -- see BackgroundTasks),
+    # and must never raise out of #run's `ensure` -- a cleanup failure is
+    # logged and swallowed, not left to crash the whole process on its way
+    # out.
+    def shutdown_background_tasks
+      @background_tasks.shutdown
+    rescue StandardError => e
+      begin
+        @logger.error("error during background task shutdown: #{e.class}: #{e.message}")
+      rescue StandardError
+        nil
+      end
+    end
+
+    # The one place `bootstrap.start`'s return value is trusted: contract
+    # is "an object responding to #ready?/#stop, or nil"
+    # (docs/design/tasks/022-compatibility-resilience-and-release.md).
+    # A test double, or a future bootstrap implementation, that returns
+    # something else (a Symbol, an Integer -- `sleep`'s own return value
+    # bit a real bug in this codebase's own spec fixtures once) must not
+    # crash whatever thread happens to call `#ready?` on it next; it
+    # degrades to static-only instead, the same outcome as a genuine
+    # bootstrap failure. This check is a boundary safety net, not a
+    # substitute for the thread-lifecycle fix above -- it doesn't change
+    # when or whether a bootstrap thread gets reclaimed, only what happens
+    # to whatever value it happened to produce.
+    def coerce_agent_manager(candidate)
+      return nil if candidate.nil?
+      return candidate if candidate.respond_to?(:stop)
+
+      @logger.error(
+        "Runtime Agent bootstrap returned a #{candidate.class} instead of nil or an object responding to " \
+        "#stop; treating this as a contract violation and falling back to static-only mode"
+      )
+      nil
+    end
+
+    # A plain `manager&.ready?` isn't safe here: #coerce_agent_manager's
+    # minimal contract check only requires #stop, and several existing
+    # test doubles across this codebase intentionally model a manager that
+    # implements #stop but not #ready? -- and the underlying reported bug
+    # was exactly a NoMethodError from calling #ready? on a value that
+    # didn't have it (there, an Integer that failed #coerce_agent_manager's
+    # check too, but the same guard belongs here as well since a
+    # #stop-only manager legitimately passes that check).
+    def agent_manager_ready?(manager)
+      manager.respond_to?(:ready?) && manager.ready?
+    end
 
     def dispatch(message)
       method = message[:method]
@@ -330,7 +393,7 @@ module Ovallsp
       state =
         if @cold_indexing
           "indexing"
-        elsif @agent_manager&.ready?
+        elsif agent_manager_ready?(@agent_manager)
           "ready-rails"
         elsif @agent_manager
           "agent-unavailable"
@@ -625,7 +688,7 @@ module Ovallsp
       cache_store = build_cache_store
 
       @cold_indexing = true
-      Thread.new do
+      @background_tasks.track_thread(Thread.new do
         ColdIndexer.new(root: root, parser_service: parser_service, workspace_index: workspace_index,
                         hierarchy_index: hierarchy_index, document_store: document_store, logger: logger,
                         cache_store: cache_store).run
@@ -633,7 +696,7 @@ module Ovallsp
         logger.error("cold index failed: #{e.class}: #{e.message}")
       ensure
         @cold_indexing = false
-      end
+      end)
     end
 
     # Task 021: one persistent, on-disk FileSummary cache per distinct
@@ -725,21 +788,55 @@ module Ovallsp
       route_registry = @route_registry
       model_registry = @model_registry
       mutex = @agent_restart_mutex
+      background_tasks = @background_tasks
 
-      Thread.new do
+      thread = Thread.new do
         # Serialized on the same mutex #restart_agent uses: an extremely
         # fast client could in principle fire a file-change restart before
         # this initial bootstrap finishes, and without sharing the lock,
         # both writes to @agent_manager could interleave the same way
         # described in #restart_agent's comment.
         mutex.synchronize do
-          @agent_manager = bootstrap.start(root: root, logger: logger, route_registry: route_registry,
-                                            model_registry: model_registry, on_unavailable: method(:handle_agent_unavailable))
+          manager = bootstrap.start(
+            root: root, logger: logger, route_registry: route_registry, model_registry: model_registry,
+            on_unavailable: method(:handle_agent_unavailable),
+            # Registers the manager with BackgroundTasks the moment it
+            # exists -- before `bootstrap.start`'s own blocking hello
+            # handshake even begins -- so Server#shutdown_background_tasks
+            # can reach and cancel it even if this whole method call never
+            # returns (a real Rails boot can take tens of seconds; an
+            # unresponsive one takes up to hello_timeout). Deliberately
+            # does NOT assign @agent_manager here (found by an independent
+            # review): doing so made #status_result/#with_ready_agent see
+            # a non-nil, not-yet-ready manager for the entire boot and
+            # report "agent-unavailable" (defined elsewhere as "attempted
+            # but not currently responding") for what's actually just
+            # normal, in-progress startup. @agent_manager is only ever
+            # assigned its final value below, once #start has actually
+            # returned -- exactly the pre-this-fix timing. BackgroundTasks
+            # tracks (and can cancel) the manager independently of
+            # whatever Server's own @agent_manager ivar currently holds.
+            on_manager_created: ->(created) { background_tasks.track_manager(created) }
+          )
+          # Coerced *before* tracking (not after): #coerce_agent_manager is
+          # the one place a return-value-contract violation gets caught,
+          # and tracking a value that failed that check (an Integer, say)
+          # would just pollute BackgroundTasks' registry with something
+          # #shutdown's own `manager.stop` call has to rescue around,
+          # never usefully call. #track_manager is idempotent by identity,
+          # so re-tracking the same (valid) manager here is a harmless
+          # no-op when the bootstrap already called on_manager_created
+          # above -- and is the only registration at all for a bootstrap
+          # (real or test double) that doesn't call that hook, closing the
+          # gap where such a manager would never be reachable from
+          # #shutdown_background_tasks (found by an independent review).
+          @agent_manager = background_tasks.track_manager(coerce_agent_manager(manager))
         end
-        @agent_supervisor.record_success if @agent_manager&.ready?
+        @agent_supervisor.record_success if agent_manager_ready?(@agent_manager)
       rescue StandardError => e
         logger.error("Runtime Agent bootstrap failed: #{e.class}: #{e.message}")
       end
+      background_tasks.track_thread(thread)
     end
 
     # Task 022: called (on whichever thread AgentProcessManager's own
@@ -761,10 +858,14 @@ module Ovallsp
       end
 
       @logger.warn("runtime agent became unavailable (#{reason}); retrying in #{delay}s")
-      Thread.new do
+      # Tracked so shutdown can reclaim it -- it owns no subprocess of its
+      # own (unlike the bootstrap/restart threads), so BackgroundTasks#shutdown
+      # killing it outright once its bounded join expires is safe: no
+      # scheduled restart ever fires after Server#run has already exited.
+      @background_tasks.track_thread(Thread.new do
         sleep delay
         restart_agent
-      end
+      end)
     end
 
     def workspace_trusted?(params)
@@ -1375,7 +1476,7 @@ module Ovallsp
     # reflects whatever this change was — but it's still logged since
     # "usually" isn't "always".
     def with_ready_agent(path)
-      if @agent_manager&.ready?
+      if agent_manager_ready?(@agent_manager)
         yield
       elsif @agent_manager
         @logger.warn("skipping Runtime Agent refresh for #{path}: agent not ready (status=#{@agent_manager.status})")
@@ -1419,7 +1520,7 @@ module Ovallsp
       logger = @logger
       mutex = @agent_restart_mutex
 
-      Thread.new do
+      @background_tasks.track_thread(Thread.new do
         next unless agent_manager.reload(sections: ["routes"])
 
         snapshot = agent_manager.fetch_snapshot(sections: ["routes"])
@@ -1435,7 +1536,7 @@ module Ovallsp
         end
       rescue StandardError => e
         logger.error("failed to refresh routes after routes.rb change: #{e.class}: #{e.message}")
-      end
+      end)
     end
 
     # Asks the Agent to reload models first (Rails' own autoloader
@@ -1459,7 +1560,7 @@ module Ovallsp
       logger = @logger
       mutex = @agent_restart_mutex
 
-      Thread.new do
+      @background_tasks.track_thread(Thread.new do
         agent_manager.reload(sections: ["models"])
 
         names.each do |name|
@@ -1478,7 +1579,7 @@ module Ovallsp
         end
       rescue StandardError => e
         logger.error("failed to refresh models #{names.to_a.join(', ')}: #{e.class}: #{e.message}")
-      end
+      end)
     end
 
     # A migration, `db/schema.rb`, or `db/structure.sql` change can alter
@@ -1498,7 +1599,7 @@ module Ovallsp
       logger = @logger
       mutex = @agent_restart_mutex
 
-      Thread.new do
+      @background_tasks.track_thread(Thread.new do
         agent_manager.reload(sections: ["models"])
 
         models = agent_manager.fetch_all_models
@@ -1515,7 +1616,7 @@ module Ovallsp
         end
       rescue StandardError => e
         logger.error("failed to refresh models after a schema change: #{e.class}: #{e.message}")
-      end
+      end)
     end
 
     # Gemfile.lock and initializer changes can alter what's loaded at boot
@@ -1543,17 +1644,29 @@ module Ovallsp
       model_registry = @model_registry
       logger = @logger
       mutex = @agent_restart_mutex
+      background_tasks = @background_tasks
 
-      Thread.new do
+      thread = Thread.new do
         mutex.synchronize do
           @agent_manager&.stop
-          @agent_manager = bootstrap.start(root: root, logger: logger, route_registry: route_registry,
-                                            model_registry: model_registry, on_unavailable: method(:handle_agent_unavailable))
+          manager = bootstrap.start(
+            root: root, logger: logger, route_registry: route_registry, model_registry: model_registry,
+            on_unavailable: method(:handle_agent_unavailable),
+            # See #maybe_start_agent's identical hook for why this
+            # deliberately does not assign @agent_manager itself -- only
+            # registers the manager with BackgroundTasks so it can be
+            # reached/cancelled independently of whatever @agent_manager
+            # currently holds (still the just-#stop-ped old manager, at
+            # this point).
+            on_manager_created: ->(created) { background_tasks.track_manager(created) }
+          )
+          @agent_manager = background_tasks.track_manager(coerce_agent_manager(manager))
         end
-        @agent_supervisor.record_success if @agent_manager&.ready?
+        @agent_supervisor.record_success if agent_manager_ready?(@agent_manager)
       rescue StandardError => e
         logger.error("failed to restart runtime agent: #{e.class}: #{e.message}")
       end
+      background_tasks.track_thread(thread)
     end
 
     def initialize_result
