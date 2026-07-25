@@ -23,7 +23,7 @@ RSpec.describe "Rslsp::Server semantic query integration (Task 013)" do
     messages = []
     loop { messages << reader.read_message }
   rescue Rslsp::IO::FramedReader::EOF
-    messages
+    messages.reject { |m| m[:method] == "textDocument/publishDiagnostics" }
   end
 
   def did_open(uri, text)

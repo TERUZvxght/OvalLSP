@@ -19,7 +19,7 @@ RSpec.describe "Rslsp::Server didClose index consistency (Task 008.5)" do
     messages = []
     loop { messages << reader.read_message }
   rescue Rslsp::IO::FramedReader::EOF
-    messages
+    messages.reject { |m| m[:method] == "textDocument/publishDiagnostics" }
   end
 
   def run_server(input_string, workspace_root: Dir.mktmpdir)

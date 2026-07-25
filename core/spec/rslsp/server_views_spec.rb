@@ -26,7 +26,7 @@ RSpec.describe "Rslsp::Server controller-to-view instance variable propagation (
     messages = []
     loop { messages << reader.read_message }
   rescue Rslsp::IO::FramedReader::EOF
-    messages
+    messages.reject { |m| m[:method] == "textDocument/publishDiagnostics" }
   end
 
   def open(uri, text, language_id: "ruby")

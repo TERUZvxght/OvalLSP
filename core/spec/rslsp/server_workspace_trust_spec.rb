@@ -36,7 +36,7 @@ RSpec.describe "Rslsp::Server workspace trust gating" do
     messages = []
     loop { messages << reader.read_message }
   rescue Rslsp::IO::FramedReader::EOF
-    messages
+    messages.reject { |m| m[:method] == "textDocument/publishDiagnostics" }
   end
 
   it "starts the Runtime Agent bootstrap when the workspace is explicitly trusted" do

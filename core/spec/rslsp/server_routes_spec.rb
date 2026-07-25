@@ -28,7 +28,7 @@ RSpec.describe "Rslsp::Server route helper support" do
     messages = []
     loop { messages << reader.read_message }
   rescue Rslsp::IO::FramedReader::EOF
-    messages
+    messages.reject { |m| m[:method] == "textDocument/publishDiagnostics" }
   end
 
   let(:post_registry) do

@@ -21,7 +21,7 @@ RSpec.describe Rslsp::Server do
     messages = []
     loop { messages << reader.read_message }
   rescue Rslsp::IO::FramedReader::EOF
-    messages
+    messages.reject { |m| m[:method] == "textDocument/publishDiagnostics" }
   end
 
   it "completes the initialize handshake and reports hover/shutdown/exit results" do

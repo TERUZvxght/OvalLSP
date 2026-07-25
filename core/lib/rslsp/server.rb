@@ -22,6 +22,7 @@ require_relative "semantic/query_context"
 require_relative "semantic/query_service"
 require_relative "semantic/reference_index"
 require_relative "semantic/reference_resolver"
+require_relative "diagnostics/engine"
 require_relative "signatures/environment"
 
 module Rslsp
@@ -90,6 +91,8 @@ module Rslsp
         workspace_index: @workspace_index, method_resolver: @method_resolver, local_inferencer: @local_inferencer,
         model_registry: @model_registry, route_registry: @route_registry
       )
+      @diagnostics_engine = Diagnostics::Engine.new
+      @diagnostics_mode = :safe
     end
 
     # Runs the read/dispatch loop until `exit` is received or the input
@@ -117,6 +120,7 @@ module Rslsp
 
       case method
       when "initialize"
+        @diagnostics_mode = diagnostics_mode_from(message[:params])
         respond(id, initialize_result)
         start_cold_index
         maybe_start_agent(message[:params])
@@ -220,6 +224,7 @@ module Rslsp
       @hierarchy_index.remove_file(uri)
       @reference_index.remove_file(uri)
       invalidate_method_summaries(previous_declarations)
+      clear_diagnostics(uri)
 
       path = UriUtil.to_path(uri)
       reindex_from_disk(uri) if path && File.file?(path)
@@ -233,11 +238,61 @@ module Rslsp
         @hierarchy_index.replace_file(summary)
         invalidate_method_summaries(previous_declarations)
         index_references(document.uri, document, summary)
+        publish_diagnostics(document)
       end
     rescue StandardError => e
       # Parsing must never take the server down: keep the previous summary
       # (if any) and let static features degrade gracefully for this file.
       @logger.error("failed to summarize #{document.uri}: #{e.class}: #{e.message}")
+    end
+
+    # Task 015: computed and published synchronously, in the same dispatch
+    # turn that already owns `document`'s current version -- there's no
+    # background/async gap for a result to go stale in, so "stale document
+    # versionのdiagnosticをpublishしない" holds by construction rather than
+    # needing its own generation check. Only wired into the didOpen/
+    # didChange path (buffer content the client can actually see) --
+    # #reindex_from_disk (files nobody has open) doesn't publish, since
+    # there's no LSP client-side buffer to attach the notification to
+    # meaningfully.
+    def publish_diagnostics(document)
+      context = diagnostics_semantic_context
+      findings = @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
+      @writer.write_message(
+        jsonrpc: JSONRPC_VERSION, method: "textDocument/publishDiagnostics",
+        params: { uri: document.uri, version: document.version, diagnostics: findings.map { |f| to_lsp_diagnostic(f) } }
+      )
+    rescue StandardError => e
+      @logger.error("failed to compute diagnostics for #{document.uri}: #{e.class}: #{e.message}")
+    end
+
+    def clear_diagnostics(uri)
+      @writer.write_message(
+        jsonrpc: JSONRPC_VERSION, method: "textDocument/publishDiagnostics", params: { uri: uri, diagnostics: [] }
+      )
+    end
+
+    DIAGNOSTIC_SEVERITY = { error: 1, warning: 2, information: 3, hint: 4 }.freeze
+
+    def to_lsp_diagnostic(finding)
+      {
+        range: finding.range, severity: DIAGNOSTIC_SEVERITY.fetch(finding.severity, 2), code: finding.code,
+        source: "rslsp", message: finding.message, relatedInformation: finding.related_information
+      }
+    end
+
+    def diagnostics_semantic_context
+      Diagnostics::SemanticContext.new(
+        workspace_index: @workspace_index, hierarchy_index: @hierarchy_index, method_resolver: @method_resolver,
+        local_inferencer: @local_inferencer, model_registry: @model_registry, route_registry: @route_registry,
+        signatures: @signatures, generation: @workspace_index.generation
+      )
+    end
+
+    def diagnostics_mode_from(params)
+      options = params && params[:initializationOptions]
+      mode = options.is_a?(Hash) ? options[:diagnosticsMode] : nil
+      Diagnostics::Engine::MODES.include?(mode&.to_sym) ? mode.to_sym : :safe
     end
 
     # Task 014: resolves this file's raw reference candidates (Prism-level

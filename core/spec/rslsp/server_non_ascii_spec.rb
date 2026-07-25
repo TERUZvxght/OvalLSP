@@ -30,7 +30,7 @@ RSpec.describe "Rslsp::Server non-ASCII position handling (Task 008.5)" do
     messages = []
     loop { messages << reader.read_message }
   rescue Rslsp::IO::FramedReader::EOF
-    messages
+    messages.reject { |m| m[:method] == "textDocument/publishDiagnostics" }
   end
 
   # The exact fixture content Task 008.5 specifies: a Japanese comment, a
