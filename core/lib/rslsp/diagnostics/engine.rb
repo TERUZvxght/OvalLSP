@@ -4,6 +4,7 @@ require_relative "finding"
 require_relative "semantic_context"
 require_relative "../parser_service"
 require_relative "../semantic/reference_resolver"
+require_relative "../semantic/receiver_resolution"
 require_relative "../types"
 require_relative "../index/symbol_id"
 
@@ -140,29 +141,16 @@ module Rslsp
         end
       end
 
-      # Duplicated (deliberately small) from Semantic::ReferenceResolver's
-      # own private #receiver_type_for rather than exposing it: Engine
-      # only needs the receiver's *type*, not a full resolved Reference,
-      # to decide whether an unresolved candidate is even eligible for
-      # the closed-receiver check below.
-      #
-      # Must stay in sync with ReferenceResolver#canonical_receiver_name:
-      # strip only the leading "::", never an inner namespace segment --
-      # collapsing to the simple name here caused exactly the false
-      # positive the Task 014-018 independent review reproduced live (a
-      # closed top-level `Bar` plus an open `Api::Bar`; querying inside
-      # `Api::Bar` incorrectly resolved the receiver to the *wrong*,
-      # unrelated top-level `Bar`, flagging a legitimately-unresolvable
-      # external-gem method as "unknown method").
+      # Delegates to Semantic::ReceiverResolution rather than keeping its
+      # own copy of this logic: an earlier version duplicated it ad hoc
+      # ("deliberately small"), and the Task 014-018 independent review
+      # found the SAME namespace-collapsing false-positive bug in both
+      # copies at once -- exactly the drift duplicating this logic
+      # invites. Engine only needs the receiver's *type*, not a full
+      # resolved Reference, to decide whether an unresolved candidate is
+      # even eligible for the closed-receiver check below.
       def receiver_type_for(document, candidate, context)
-        case candidate.receiver
-        when nil
-          candidate.owner && Types::Nominal.new(name: candidate.owner.to_s.delete_prefix("::"))
-        when Hash
-          context.local_inferencer.infer_at(document, candidate.receiver.fetch(:position))
-        else
-          Types::Nominal.new(name: candidate.receiver.to_s.delete_prefix("::"))
-        end
+        Semantic::ReceiverResolution.receiver_type_for(context.workspace_index, document, candidate, context.local_inferencer)
       end
 
       # "closed" means every ancestor is either a workspace-declared type

@@ -140,6 +140,37 @@ RSpec.describe Rslsp::Diagnostics::Engine do
       expect(findings.map(&:code)).not_to include("unknown-method")
     end
 
+    it "does not flag an explicit same-named constant call inside a nested namespace as unknown, when it lexically resolves to the enclosing class itself" do
+      # Found by the Task 014-018 independent review's follow-up pass:
+      # the earlier fix only handled the *implicit*-self shape of this
+      # false positive (`ReceiverResolution`'s owner-only fast path) --
+      # an *explicit* bare receiver (`Bar.foo`, not just `foo`) written
+      # inside `Api::Bar`'s own body needs the same real-Ruby lexical
+      # nesting behavior: a bare `Bar` referenced from inside
+      # `module Api; class Bar; ...; end; end` resolves to `Api::Bar`
+      # itself (via `Api`'s own constant table), never an unrelated
+      # top-level `Bar`, even when both exist -- verified live with a
+      # real `ruby -e` probe before writing this test.
+      document = index(<<~RUBY)
+        class Bar
+          def known_method
+          end
+        end
+
+        module Api
+          class Bar < SomeExternalGemBaseClass
+            def self.show
+              Bar.mystery_call_from_the_gem
+            end
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).not_to include("unknown-method")
+    end
+
     it "does not flag any call at all when Signatures::Environment isn't available" do
       document = index("class Widget\n  def show\n    puts \"hi\"\n  end\nend\n")
 

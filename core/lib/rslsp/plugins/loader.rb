@@ -149,7 +149,21 @@ module Rslsp
       # at all.
       def run_isolated(name)
         reader, writer = ::IO.pipe
-        pid = fork_plugin_child(writer) { yield }
+        pid =
+          begin
+            fork_plugin_child(writer) { yield }
+          rescue StandardError, NotImplementedError => e
+            # Process.fork itself failing (no fork(2) on this platform/
+            # runtime, ENOMEM, ...) is an environmental failure, not
+            # anything the plugin's own code did -- still must degrade
+            # to "this plugin contributes nothing" rather than raising
+            # out of #load_static/#load_runtime, the same "one broken
+            # plugin must never take Core down" invariant every other
+            # failure mode here already honors.
+            reader.close
+            writer.close
+            return apply_isolation_result(name, { ok: false, error: "#{e.class}: #{e.message}" })
+          end
         writer.close
 
         payload = read_isolated_result(reader, pid)
@@ -160,6 +174,7 @@ module Rslsp
 
       def fork_plugin_child(writer)
         Process.fork do
+          redirect_child_stdio
           result = begin
             { ok: true, result: yield }
           rescue Exception => e # rubocop:disable Lint/RescueException -- a plugin's own code, isolated in this child, may raise anything at all; none of it may ever propagate past this process boundary
@@ -178,6 +193,30 @@ module Rslsp
           writer.close
           Kernel.exit!(0)
         end
+      end
+
+      # `Process.fork` duplicates the parent's whole fd table, including
+      # fd 1/2 -- in `--stdio` mode fd 1 *is* the live LSP JSON-RPC
+      # transport (bin/rslsp: `Server.new(..., output: $stdout)`), so
+      # without this, any raw `STDOUT.write`/`puts`/`$stderr.puts` a
+      # plugin's own top-level code happens to do lands directly in the
+      # protocol stream sent to the editor, corrupting it -- found by
+      # the Task 014-018 independent review's follow-up pass via a live
+      # repro (a plugin writing straight to `STDOUT`). The exact same
+      # class of leak Task 008.6-1 already closed for the Runtime
+      # Agent's own child process ("a raw fd-1 write, not just
+      # $stdout/STDOUT"); `IO#reopen` dup2s the real fd, so this closes
+      # both the raw-fd path and the Ruby-level global path in one call.
+      # Only ever runs inside the forked child -- must never touch the
+      # parent's real stdio.
+      def redirect_child_stdio
+        devnull = File.open(File::NULL, "w")
+        STDOUT.reopen(devnull)
+        STDERR.reopen(devnull)
+        $stdout.reopen(devnull) unless $stdout.equal?(STDOUT)
+        $stderr.reopen(devnull) unless $stderr.equal?(STDERR)
+      rescue StandardError
+        nil
       end
 
       def read_isolated_result(reader, pid)

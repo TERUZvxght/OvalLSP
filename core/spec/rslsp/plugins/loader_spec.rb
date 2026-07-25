@@ -22,6 +22,8 @@ RSpec.describe Rslsp::Plugins::Loader do
     Rslsp::Plugins.clear_registration("rslsp-malformed-fact")
     Rslsp::Plugins.clear_registration("rslsp-runtime-example")
     Rslsp::Plugins.clear_registration("rslsp-monkeypatching")
+    Rslsp::Plugins.clear_registration("rslsp-stdout-writer")
+    Rslsp::Plugins.clear_registration("rslsp-monkeypatching-runtime")
   end
 
   describe "#load_static" do
@@ -115,6 +117,29 @@ RSpec.describe Rslsp::Plugins::Loader do
       # process, every SymbolId in Core would now report this string.
       expect(symbol_id.to_s).not_to eq("MONKEYPATCHED_BY_PLUGIN")
     end
+
+    it "never lets a plugin's raw STDOUT/STDERR writes reach this process' real stdio -- fd 1 is the live LSP transport in --stdio mode" do
+      require "tempfile"
+      captured = Tempfile.new("rslsp-plugin-stdio-leak")
+      original_stdout_fd = STDOUT.dup
+      original_stderr_fd = STDERR.dup
+      contexts = nil
+      begin
+        STDOUT.reopen(captured.path, "w")
+        STDERR.reopen(captured.path, "w")
+
+        contexts = loader.load_static([manifest_path("stdout_writer")])
+      ensure
+        STDOUT.reopen(original_stdout_fd)
+        STDERR.reopen(original_stderr_fd)
+        original_stdout_fd.close
+        original_stderr_fd.close
+      end
+
+      expect(contexts.size).to eq(1)
+      captured.rewind
+      expect(captured.read).not_to include("EVIL-EVIL-LSP-PROTOCOL-CORRUPTION")
+    end
   end
 
   describe "#load_runtime" do
@@ -129,6 +154,16 @@ RSpec.describe Rslsp::Plugins::Loader do
 
       expect(contexts.size).to eq(1)
       expect(contexts.first.snapshot_sections.keys).to eq(["example"])
+    end
+
+    it "isolates a runtime plugin's top-level code in a separate process, same as a static plugin" do
+      symbol_id = Rslsp::Index::SymbolId.new(kind: :class, owner: nil, name: "::Whatever", discriminator: nil)
+
+      contexts = loader.load_runtime([manifest_path("monkeypatching_runtime")], trusted: true)
+
+      expect(contexts.size).to eq(1)
+      expect(contexts.first.snapshot_sections.keys).to eq(["example"])
+      expect(symbol_id.to_s).not_to eq("MONKEYPATCHED_BY_RUNTIME_PLUGIN")
     end
   end
 end
