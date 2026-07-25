@@ -61,4 +61,22 @@ RSpec.describe "Rslsp::Server plugin loading (Task 018)" do
 
     expect { build_server(input).run }.not_to raise_error
   end
+
+  it "drops a malformed plugin declaration instead of crashing the whole Server on it" do
+    # Defense in depth for the Task 014-018 independent review's fourth
+    # finding: Plugins::Loader's own isolation is what stops a plugin
+    # from forging cross-process data in the first place, but nothing
+    # downstream re-validated the shape of what a plugin returns before
+    # this fix -- a malformed fact (missing :symbol_id, or one that
+    # isn't a real Index::SymbolId) reaching WorkspaceIndex used to raise
+    # an ordinary NoMethodError with no rescue anywhere between here and
+    # #run, killing the whole Server process on what should be "one
+    # broken plugin contributes nothing".
+    server = build_server(frame(jsonrpc: "2.0", method: "exit", params: nil))
+    context = Rslsp::Plugins::StaticContext.new("bad-plugin").tap do |c|
+      c.restore_declarations([{ not_a_real_declaration: "forged" }])
+    end
+
+    expect { server.send(:apply_plugin_context, context) }.not_to raise_error
+  end
 end

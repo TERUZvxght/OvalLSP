@@ -333,16 +333,41 @@ module Rslsp
     def apply_plugin_context(context)
       return if context.declarations.empty?
 
+      valid_facts, invalid_count = partition_plugin_facts(context.declarations)
+      @logger.warn("plugin #{context.plugin_name}: dropped #{invalid_count} malformed declaration(s)") if invalid_count.positive?
+      return if valid_facts.empty?
+
       uri = "plugin://#{context.plugin_name}"
-      declarations = context.declarations.map { |fact| plugin_declaration(fact) }
+      declarations = valid_facts.map { |fact| plugin_declaration(fact) }
       summary = Index::FileSummary.new(
         uri: uri, content_hash: uri, document_version: nil, declarations: declarations, diagnostics: []
       )
 
       @workspace_index.replace_file(summary)
       @hierarchy_index.replace_file(summary)
-      facts = context.declarations.filter_map { |fact| plugin_generated_fact(fact) }
+      facts = valid_facts.filter_map { |fact| plugin_generated_fact(fact) }
       @generated_method_index.replace_file(uri: uri, facts: facts) unless facts.empty?
+    end
+
+    # `context.declarations` crossed a process boundary as Marshaled,
+    # plain data (Plugins::Loader) -- everything downstream of this
+    # point (WorkspaceIndex, HierarchyIndex, GeneratedMethodIndex) trusts
+    # its shape unconditionally and raises on anything else (e.g.
+    # WorkspaceIndex#simple_name calling `.name` on a nil symbol_id).
+    # A plugin's own file already can't corrupt this process directly
+    # (Loader's fork-based isolation), but nothing between "a plugin
+    # returned this Hash" and "this Hash reaches WorkspaceIndex" ever
+    # re-validates its shape -- a bug in a plugin's own
+    # #register_declarations call, or any future gap in Loader's
+    # isolation, would otherwise crash the whole Server on an ordinary
+    # `NoMethodError`/`TypeError` with no rescue anywhere between here
+    # and #run. Filtering here keeps the same "one broken plugin
+    # contributes nothing, logged, never brings Core down" contract every
+    # other plugin failure mode already gets, instead of trusting
+    # cross-process data implicitly.
+    def partition_plugin_facts(facts)
+      valid = facts.select { |fact| fact.is_a?(Hash) && fact[:symbol_id].is_a?(Index::SymbolId) }
+      [valid, facts.size - valid.size]
     end
 
     def plugin_declaration(fact)

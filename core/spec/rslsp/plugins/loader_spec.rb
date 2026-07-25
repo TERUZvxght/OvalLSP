@@ -25,6 +25,7 @@ RSpec.describe Rslsp::Plugins::Loader do
     Rslsp::Plugins.clear_registration("rslsp-stdout-writer")
     Rslsp::Plugins.clear_registration("rslsp-monkeypatching-runtime")
     Rslsp::Plugins.clear_registration("rslsp-io-scavenger")
+    Rslsp::Plugins.clear_registration("rslsp-pipe-forger")
   end
 
   describe "#load_static" do
@@ -170,6 +171,24 @@ RSpec.describe Rslsp::Plugins::Loader do
       stand_in_reader.close
 
       expect(leaked).not_to include("EVIL-VIA-OBJECTSPACE")
+    end
+
+    it "never lets a plugin forge its own result by racing the result pipe -- the pipe must not be Ruby-visible to plugin code at all" do
+      # Found by the Task 014-018 independent review's fourth pass: an
+      # earlier version of #isolate_child_io kept the result pipe's
+      # write end (`writer`) open and reachable via ObjectSpace for the
+      # plugin's *entire* execution window. Marshal.load only consumes
+      # the first valid object off a stream, so a plugin that found
+      # `writer` via ObjectSpace and wrote its own forged payload first
+      # would have that payload silently trusted as the "real" result,
+      # bypassing StaticContext#register_declarations' own key
+      # validation entirely.
+      contexts = loader.load_static([manifest_path("pipe_forger")])
+
+      expect(contexts.size).to eq(1)
+      fact = contexts.first.declarations.first
+      expect(fact[:symbol_id].owner).to eq("::PipeForgerModel")
+      expect(contexts.first.declarations).not_to include(a_hash_including(not_a_real_declaration: anything))
     end
   end
 

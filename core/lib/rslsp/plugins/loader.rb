@@ -174,25 +174,38 @@ module Rslsp
 
       def fork_plugin_child(writer)
         Process.fork do
-          isolate_child_io(writer)
+          result_fd = isolate_child_io(writer)
           result = begin
             { ok: true, result: yield }
           rescue Exception => e # rubocop:disable Lint/RescueException -- a plugin's own code, isolated in this child, may raise anything at all; none of it may ever propagate past this process boundary
             { ok: false, error: "#{e.class}: #{e.message}" }
           end
-          begin
-            writer.write(Marshal.dump(result))
-          rescue StandardError => e
-            # The result itself couldn't be Marshaled (e.g. a plugin
-            # somehow returned an object holding a Proc/IO/etc.) --
-            # report that specific failure instead of leaving the parent
-            # to time out waiting for output that will never arrive.
-            writer.write(Marshal.dump({ ok: false, error: "result could not be serialized: #{e.class}: #{e.message}" }))
-          end
+          deliver_result(result_fd, result)
         ensure
-          writer.close
           Kernel.exit!(0)
         end
+      end
+
+      # Reconnects a plain fd number (see #isolate_child_io -- no live
+      # Ruby IO object references it before this point, precisely so the
+      # plugin's own code, which already ran by the time this is called,
+      # never had one to find) to a writable IO just long enough to
+      # deliver the Marshaled result, then closes it.
+      def deliver_result(result_fd, result)
+        return unless result_fd
+
+        io = ::IO.new(result_fd, "w")
+        begin
+          io.write(Marshal.dump(result))
+        rescue StandardError => e
+          # The result itself couldn't be Marshaled (e.g. a plugin
+          # somehow returned an object holding a Proc/IO/etc.) --
+          # report that specific failure instead of leaving the parent
+          # to time out waiting for output that will never arrive.
+          io.write(Marshal.dump({ ok: false, error: "result could not be serialized: #{e.class}: #{e.message}" }))
+        end
+      ensure
+        io&.close
       end
 
       # `Process.fork` duplicates the parent's *entire* fd table, not
@@ -205,19 +218,45 @@ module Rslsp
       # `@stderr_read` pipes to a live Rails Runtime Agent
       # (agent_process_manager.rb `#spawn_process`) -- reachable from a
       # plugin with zero `require`s via `ObjectSpace.each_object(::IO)`.
-      # Found live by the Task 014-018 independent review's second
-      # follow-up pass: a plugin walking every open IO object in
-      # ObjectSpace and writing to whichever ones weren't fd 0/1/2 could
-      # corrupt or hijack the Agent's own JSON-RPC channel exactly the
-      # way the original bug corrupted the editor-facing one. Fixed at
-      # the actual architectural root this time: enumerate and close
-      # every IO object the child inherited except the ones it legitimately
-      # needs (redirected stdin/stdout/stderr, and the result pipe
-      # `writer`) -- not just whichever specific fd the last report
-      # happened to name. Only ever runs inside the forked child -- must
-      # never touch the parent's real IO objects (this is why it takes
-      # `writer` as an explicit keep-alive rather than discovering it via
-      # ObjectSpace, which would also see it).
+      #
+      # A later pass of the same review found that keeping `writer`
+      # itself open and Ruby-visible for the plugin's *entire* execution
+      # window (an earlier version of this method) was itself exploitable:
+      # a plugin could find `writer` the exact same way via ObjectSpace
+      # and write its own forged `Marshal.dump({ok: true, result: ...})`
+      # payload to it *before* #deliver_result's own write runs --
+      # `Marshal.load` only consumes the first valid object off a
+      # stream, so whichever payload arrived first silently won, letting
+      # a plugin fabricate arbitrary, unvalidated "results" the loader
+      # would trust completely (reproduced live: a forged payload of
+      # bogus declarations reached WorkspaceIndex and crashed the whole
+      # Server process, defeating the entire "one broken plugin must
+      # never take Core down" invariant this class exists for).
+      #
+      # Fixed by never letting plugin code run while any live Ruby IO
+      # object references the result channel at all: the write end is
+      # duplicated to a fresh fd, both the original `writer` and the
+      # dup'd wrapper are closed at the Ruby level (`autoclose = false`
+      # on the dup means closing the *wrapper* does not close the
+      # underlying fd), and only the bare fd *number* -- invisible to
+      # `ObjectSpace.each_object(::IO)`, which enumerates live objects,
+      # not raw descriptors -- survives in a local variable across
+      # `yield`. #deliver_result reconstructs a real IO from that number
+      # only after the plugin's own code has already finished running.
+      # (A plugin could still, in principle, brute-force-guess the fd
+      # number and call `IO.for_fd` itself -- there is no way to hide a
+      # POSIX fd from code running in the same process against a
+      # deliberate scan of the whole fd space -- but that is a
+      # fundamentally different, far higher bar than "ask ObjectSpace,
+      # get a list handed to you", and genuinely eliminating it would
+      # require OS-level sandboxing (seccomp/namespaces) this project
+      # doesn't otherwise use anywhere.)
+      #
+      # Returns the raw result fd number (or nil if isolation itself
+      # failed, in which case #deliver_result is a no-op and the parent
+      # simply times out / sees EOF like any other unresponsive plugin).
+      # Only ever runs inside the forked child -- must never touch the
+      # parent's real IO objects.
       def isolate_child_io(writer)
         devnull_r = File.open(File::NULL, "r")
         devnull_w = File.open(File::NULL, "w")
@@ -228,7 +267,13 @@ module Rslsp
         $stdout.reopen(devnull_w) unless $stdout.equal?(STDOUT)
         $stderr.reopen(devnull_w) unless $stderr.equal?(STDERR)
 
-        keep = [STDIN, STDOUT, STDERR, devnull_r, devnull_w, writer]
+        dup_writer = writer.dup
+        dup_writer.autoclose = false
+        result_fd = dup_writer.fileno
+        writer.close
+        dup_writer.close
+
+        keep = [STDIN, STDOUT, STDERR, devnull_r, devnull_w]
         ObjectSpace.each_object(::IO) do |io|
           next if keep.any? { |kept| kept.equal?(io) }
 
@@ -238,6 +283,8 @@ module Rslsp
             nil
           end
         end
+
+        result_fd
       rescue StandardError
         nil
       end
