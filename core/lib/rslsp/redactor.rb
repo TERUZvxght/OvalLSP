@@ -47,16 +47,16 @@ module Rslsp
     # the secret, not preserve exactly how the label was capitalized.
     BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9\-._~+\/]+=*/i
 
-    # Known, accepted gap (noted by review, not fixed in this pass):
-    # `Authorization: Basic <base64>` is never redacted -- there's no
-    # pattern here for it, unlike Bearer. A 401 from an HTTP client
-    # commonly echoes the request's own Authorization header verbatim
-    # into its exception text, so this is a real, plausible leak path,
-    # just a narrower one than the connection-string/bearer-token cases
-    # (Basic-Auth-over-plain-HTTP is itself already a security
-    # anti-pattern in whatever code produced it). Worth a dedicated
-    # pattern in a future pass if this class of leak turns out to matter
-    # in practice.
+    # `Authorization: Basic <base64>` -- previously a known, accepted gap
+    # (BEARER_PATTERN had no counterpart for this shape). A 401 from an
+    # HTTP client commonly echoes the request's own Authorization header
+    # verbatim into its exception text, so this is a real, plausible leak
+    # path, just a narrower one than the connection-string/bearer-token
+    # cases (Basic-Auth-over-plain-HTTP is itself already a security
+    # anti-pattern in whatever code produced it). Same base64/padding
+    # character class as BEARER_PATTERN, since both carry base64-encoded
+    # payloads.
+    BASIC_AUTH_PATTERN = /\bBasic\s+[A-Za-z0-9\-._~+\/]+=*/i
 
     # `scheme://user:password@host` -- a DB connection string
     # (`postgres://user:pass@host/db`), a Redis URL, an HTTP Basic-Auth
@@ -113,6 +113,7 @@ module Rslsp
       # "Bearer" as its "value" and leaving the actual token after it
       # completely unredacted.
       text = text.gsub(BEARER_PATTERN, "Bearer [REDACTED]")
+      text = text.gsub(BASIC_AUTH_PATTERN, "Basic [REDACTED]")
       text = text.gsub(URL_USERINFO_PATTERN) { "#{Regexp.last_match(:prefix)}#{Regexp.last_match(:user)}:[REDACTED]@" }
       text = text.gsub(KNOWN_SECRET_PATTERN, "[REDACTED]")
       text = text.gsub(CREDENTIAL_KEY_PATTERN) { "#{Regexp.last_match(:key)}#{Regexp.last_match(:sep)}[REDACTED]" }

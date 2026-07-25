@@ -114,6 +114,20 @@ RSpec.describe Rslsp::Redactor do
       expect(hash_redacted).to include("postgres://user:[REDACTED]@host.internal:5432/db")
       expect(hash_redacted).not_to include("pa#ss")
     end
+
+    # Closes the previously-documented, deliberately-accepted gap noted in
+    # redactor.rb: a 401 from an HTTP client commonly echoes the request's
+    # own Authorization header verbatim into its exception text, and
+    # Basic-Auth-over-plain-HTTP is a real, if narrower, leak path than
+    # Bearer tokens or connection-string passwords.
+    it "redacts a Basic authorization credential regardless of the label's capitalization" do
+      expect(described_class.redact("Authorization: Basic dXNlcm5hbWU6cGFzc3dvcmQ=")).to eq(
+        "Authorization: Basic [REDACTED]"
+      )
+      expect(described_class.redact("Authorization: basic dXNlcm5hbWU6cGFzc3dvcmQ=")).not_to include(
+        "dXNlcm5hbWU6cGFzc3dvcmQ="
+      )
+    end
   end
 
   describe ".redact_generic_tokens" do

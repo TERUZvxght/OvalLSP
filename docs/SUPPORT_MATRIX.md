@@ -41,7 +41,7 @@ Agentは起動せず静的解析のみで動作する — これは"unsupported"
 
 | バージョン | 区分 | 根拠 |
 |---|---|---|
-| stable current | best effort | `vscode/package.json`の`engines.vscode: ^1.85.0`で宣言。実機でのMarketplace検証は未実施 |
+| stable current | best effort | `vscode/package.json`の`engines.vscode: ^1.85.0`で宣言。実機でのインストール(`vsce package`→`code --install-extension`→`--uninstall-extension`)は検証済み(このマシンにインストール済みのVS Codeビルドに対してのみ)。Marketplaceへの実際の公開・そこ経由でのインストールは未実施 |
 | stable previous | 未検証 | — |
 
 ## Remote/リモート環境
