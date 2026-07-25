@@ -151,7 +151,8 @@ module Rslsp
           visibility: singleton ? nil : @visibility_stack.last,
           parameters: extract_parameters(node.parameters),
           origin: :source,
-          body_source: node.body&.slice
+          body_source: node.body&.slice,
+          name_location: Index::SourceLocation.to_range(node.name_loc, @lines)
         )
 
         @scope_stack.push(next_scope_id)
@@ -246,7 +247,8 @@ module Rslsp
           location: Index::SourceLocation.to_range(node.location, @lines),
           visibility: nil,
           parameters: [],
-          origin: :source
+          origin: :source,
+          name_location: Index::SourceLocation.to_range(node.name_loc, @lines)
         )
 
         super
@@ -263,7 +265,8 @@ module Rslsp
           location: Index::SourceLocation.to_range(node.location, @lines),
           visibility: nil,
           parameters: [],
-          origin: :source
+          origin: :source,
+          name_location: Index::SourceLocation.to_range(node.constant_path.location, @lines)
         )
 
         record_superclass(node, absolute_name) if node.is_a?(Prism::ClassNode)

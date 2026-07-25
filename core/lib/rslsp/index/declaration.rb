@@ -17,9 +17,17 @@ module Rslsp
     #   even be open — see WorkspaceIndex's disk-sourced entries). Standalone
     #   and self-contained: re-parsing this slice alone via Prism produces a
     #   valid AST even though it was extracted from inside a `def`.
-    Declaration = Data.define(:symbol_id, :location, :visibility, :parameters, :origin, :body_source) do
-      def initialize(body_source: nil, **rest)
-        super(body_source: body_source, **rest)
+    # - name_location (Task 016): the identifier's own narrow range --
+    #   `location` spans the *whole* declaration (`class Foo\n...\nend`,
+    #   `def bar\n...\nend`, `FOO = 1`), which is correct for
+    #   documentSymbol/folding/"Defined: file:line" but would be a
+    #   catastrophic edit range for a rename (replacing an entire class
+    #   body with just its new name). nil for anything Rename::Planner
+    #   never needs to edit in place (a declaration whose identifier span
+    #   isn't tracked separately).
+    Declaration = Data.define(:symbol_id, :location, :visibility, :parameters, :origin, :body_source, :name_location) do
+      def initialize(body_source: nil, name_location: nil, **rest)
+        super(body_source: body_source, name_location: name_location, **rest)
       end
     end
   end

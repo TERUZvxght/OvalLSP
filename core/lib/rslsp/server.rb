@@ -23,6 +23,7 @@ require_relative "semantic/query_service"
 require_relative "semantic/reference_index"
 require_relative "semantic/reference_resolver"
 require_relative "diagnostics/engine"
+require_relative "rename/planner"
 require_relative "signatures/environment"
 
 module Rslsp
@@ -93,6 +94,7 @@ module Rslsp
       )
       @diagnostics_engine = Diagnostics::Engine.new
       @diagnostics_mode = :safe
+      @rename_planner = Rename::Planner.new(workspace_index: @workspace_index, reference_index: @reference_index)
     end
 
     # Runs the read/dispatch loop until `exit` is received or the input
@@ -155,6 +157,10 @@ module Rslsp
         respond(id, signature_help_result(message[:params]))
       when "textDocument/references"
         respond(id, references_result(message[:params]))
+      when "textDocument/prepareRename"
+        respond(id, prepare_rename_result(message[:params]))
+      when "textDocument/rename"
+        respond(id, rename_result(message[:params]))
       else
         handle_unknown_method(method, id)
       end
@@ -670,6 +676,68 @@ module Rslsp
       [range[:end][:line] - range[:start][:line], range[:end][:character] - range[:start][:character]]
     end
 
+    # Task 016: LSP `textDocument/prepareRename` -- answers whether the
+    # symbol under the cursor can be renamed at all, and what range/
+    # placeholder the editor should show while the user types the new
+    # name. Returning nil (a null LSP result) tells the client to refuse
+    # the rename UI outright, before the user even gets to type anything
+    # -- used for generated Rails methods and positions with nothing
+    # renameable under the cursor.
+    def prepare_rename_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = @document_store.fetch(uri: uri)
+      summary = @file_summaries[uri]
+      return nil unless document && summary
+
+      symbol_id, range = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
+      return nil unless symbol_id
+
+      result = @rename_planner.prepare(symbol_id)
+      return nil unless result
+
+      { range: range, placeholder: result[:placeholder] }
+    end
+
+    # Task 016: LSP `textDocument/rename`. A refused Rename::Plan
+    # (`confirmed_edits: []`) responds with a null WorkspaceEdit -- the
+    # client shows nothing happened -- rather than an error response;
+    # the refusal reason still goes to the log for anyone debugging why.
+    def rename_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = @document_store.fetch(uri: uri)
+      summary = @file_summaries[uri]
+      return nil unless document && summary
+
+      symbol_id, = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
+      return nil unless symbol_id
+
+      plan = @rename_planner.plan(symbol_id, new_name: params.fetch(:newName), generation: @workspace_index.generation)
+      if plan.confirmed_edits.empty?
+        @logger.warn("rename refused for #{symbol_id.inspect}: #{plan.warnings.join('; ')}") unless plan.warnings.empty?
+        return nil
+      end
+
+      { changes: plan.confirmed_edits.group_by { |e| e[:uri] }
+                      .transform_values { |edits| edits.map { |e| { range: e[:range], newText: e[:new_text] } } } }
+    end
+
+    # Shared by prepareRename/rename: the same candidate-or-declaration
+    # lookup #references_result uses (Task 014), but also returning the
+    # exact range the resolved symbol was found at -- prepareRename needs
+    # it to tell the client what to highlight/select.
+    def symbol_id_and_range_at(document, summary, uri, position)
+      candidate = summary.reference_candidates.find { |c| position_within?(c.location, position) }
+      if candidate
+        resolved = @reference_resolver.resolve(document, [candidate], uri: uri, generation: @reference_index.generation).first
+        return [resolved.symbol_id, candidate.location] if resolved
+      end
+
+      declaration = summary.declarations.select { |d| position_within?(d.location, position) }.min_by { |d| range_span(d.location) }
+      return [nil, nil] unless declaration
+
+      [declaration.symbol_id, declaration.name_location || declaration.location]
+    end
+
     def position_within?(range, position)
       start = range[:start]
       finish = range[:end]
@@ -1158,6 +1226,7 @@ module Rslsp
           documentSymbolProvider: true,
           definitionProvider: true,
           referencesProvider: true,
+          renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
           completionProvider: { triggerCharacters: ["."] },
           signatureHelpProvider: { triggerCharacters: ["("] }
