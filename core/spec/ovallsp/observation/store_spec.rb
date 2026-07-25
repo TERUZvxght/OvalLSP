@@ -32,6 +32,21 @@ RSpec.describe Ovallsp::Observation::Store do
     expect(store.evidence_for(sym("bar"))).not_to be_nil
   end
 
+  # Found by an independent review (round 8) of Task 022.2. `nil` is
+  # Observation::Runner#run's "this run produced no outcome at all"
+  # sentinel, and `nil.to_h { ... }` is a legal `{}` in Ruby -- so
+  # `replace_run(nil)` silently emptied the store and bumped the
+  # generation instead of failing. Round 7 guarded the single call site in
+  # Server; the store's own contract stayed unenforced, leaving this
+  # silently-destructive behaviour one new caller away.
+  it "rejects a non-Array run loudly instead of silently emptying the store" do
+    store.replace_run([signature("foo")])
+
+    expect { store.replace_run(nil) }.to raise_error(ArgumentError, /expects an Array/)
+    expect(store.evidence_for(sym("foo"))).not_to be_nil
+    expect(store.generation).to eq(1)
+  end
+
   it "bumps generation on every #replace_run" do
     expect { store.replace_run([signature("foo")]) }.to change(store, :generation).by(1)
   end

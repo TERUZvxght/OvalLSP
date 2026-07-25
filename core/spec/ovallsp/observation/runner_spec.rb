@@ -56,6 +56,34 @@ RSpec.describe Ovallsp::Observation::Runner do
     expect(runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)).to be_nil
   end
 
+  # The sibling of the test above, covering #read_results' *other*
+  # untrusted-payload branch: a payload that deserializes perfectly well
+  # but isn't an Array of ObservedSignature (a version skew, a stale
+  # result file from an older Core) never reaches the rescue the corrupt
+  # case does, so "corrupt" coverage alone doesn't imply it.
+  it "returns nil, not an empty array, when the result payload deserializes to the wrong shape" do
+    allow(File).to receive(:binread).and_call_original
+    allow(File).to receive(:binread).with(a_string_including("ovallsp-observation"))
+                                    .and_return(Marshal.dump({ "not" => "signatures" }))
+
+    expect(runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)).to be_nil
+  end
+
+  # Found by an independent review (round 8) of Task 022.2, and the same
+  # harm round 7 fixed for every other failure mode -- still reachable
+  # through the one door left open. Harness#dump always writes
+  # `Marshal.dump(results)` (4 bytes even for zero observations), so a
+  # zero-byte result file means the harness never ran at all. That is the
+  # normal shape of an ordinary configuration -- a non-Ruby test command,
+  # a wrapper that re-execs with a sanitized env, a Spring-style preloader
+  # -- and every one of them exits *zero*, so the exit-status check can't
+  # catch it. `return [] if raw.empty?` therefore handed Server a trusted
+  # empty run: a full Store#replace_run generation swap destroying every
+  # signature the user had accumulated.
+  it "returns nil, not an empty array, when the command exits cleanly but the harness never wrote results" do
+    expect(runner.run(command: "ruby", args: ["no_harness_output.rb"], workspace_root: fixtures_root)).to be_nil
+  end
+
   # The other half of the same distinction -- the fix must not collapse
   # into "always nil". A command that exits cleanly having observed
   # nothing is a completed run with zero evidence, and Server is supposed

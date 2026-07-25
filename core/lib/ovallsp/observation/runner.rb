@@ -37,7 +37,10 @@ module Ovallsp
       # could be obtained at all: Core couldn't even start the command
       # (a deleted/renamed workspace, a command that isn't on PATH), the
       # command was killed on timeout, it exited non-zero having
-      # produced no evidence, or its result file came back corrupt.
+      # produced no evidence, or its result file came back corrupt or
+      # was never written at all (see #read_results -- an empty file
+      # means the harness never ran, however cleanly the command itself
+      # exited).
       #
       # `nil` and `[]` are deliberately different values rather than
       # both flattened to `[]` (found by an independent review, round 7).
@@ -170,6 +173,18 @@ module Ovallsp
       # conflated. A non-zero exit that still produced evidence is left
       # alone: an ordinary red test suite exits non-zero and its
       # observations are perfectly good evidence.
+      #
+      # `:unknown` (the child was reaped out from under us, so its exit
+      # status is genuinely unavailable) is deliberately *not* treated as
+      # a failure, and that is safe only because of #read_results'
+      # empty-file rule: an empty `results` here can only have come from a
+      # Marshal payload Harness' own at_exit hook wrote, i.e. the test
+      # process demonstrably ran to completion under observation and
+      # observed nothing. That written payload is stronger evidence than
+      # the exit code we couldn't read. Were an empty *file* still to
+      # reach here as `[]` (pre-round-8), `:unknown` would additionally
+      # mean "we know nothing at all, so assume success and wipe the
+      # store".
       def failed_without_evidence?(status, results)
         return false unless results.empty?
         return false if status == :unknown
@@ -197,14 +212,38 @@ module Ovallsp
         nil
       end
 
-      # `[]` only for the one genuinely-empty case (the harness ran and
-      # wrote nothing at all); `nil` -- "no outcome", per #run's docs --
-      # for a result file that exists but can't be trusted, so a corrupt
-      # or truncated Marshal payload never masquerades as "the suite
-      # observed zero methods" and wipes the store.
+      # `[]` -- "the suite ran and genuinely observed nothing" -- only
+      # ever comes from a Marshal payload Harness itself wrote; `nil` --
+      # "no outcome", per #run's docs -- for anything else, so neither a
+      # corrupt/truncated payload nor a result file the harness never got
+      # to write masquerades as "the suite observed zero methods" and
+      # wipes the store.
+      #
+      # An *empty* file is specifically the latter, not the former (found
+      # by an independent review, round 8). Harness#dump always writes
+      # `Marshal.dump(results)` from its at_exit hook, which is 4 bytes
+      # even for zero observations, so a zero-byte file means the harness
+      # never ran to completion at all -- and it is the *normal* shape of
+      # a perfectly ordinary configuration, not an exotic crash: a test
+      # command that isn't a Ruby process (`make test`, `npm test`,
+      # `docker compose run ...`), a wrapper script that re-execs with a
+      # sanitized environment (dropping the `-r<harness>` RUBYOPT this
+      # class injects), or a Spring/Zeus-style preloader whose client
+      # hands the run to an already-running server process and exits 0
+      # having loaded nothing. Every one of those exits *zero*, so
+      # #failed_without_evidence? sees a clean exit and the old `return []
+      # if raw.empty?` handed Server a trusted empty run -- a full
+      # Store#replace_run generation swap that destroyed every signature
+      # the user had accumulated, reported as an ordinary
+      # `methodCount: 0`. That is the identical conflation round 7 fixed
+      # for the other failure modes, still reachable through the
+      # empty-file door.
       def read_results(output_path)
         raw = File.binread(output_path)
-        return [] if raw.empty?
+        if raw.empty?
+          @logger.error("observation runner produced no results file -- the harness never ran in the test command")
+          return nil
+        end
 
         results = Marshal.load(raw)
         return results if results.is_a?(Array) && results.all? { |r| r.is_a?(ObservedSignature) }

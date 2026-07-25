@@ -38,7 +38,23 @@ module Ovallsp
       # `run` is an Array of ObservedSignature -- replaces every
       # previously-stored signature wholesale (not merged with the prior
       # run), matching one call to the observation runner.
+      #
+      # A non-Array is rejected loudly rather than tolerated, because the
+      # one value a caller is realistically going to pass by mistake --
+      # Observation::Runner#run's `nil`, its "this run produced no
+      # outcome at all" sentinel -- would otherwise be *silently
+      # destructive* rather than an error: `nil.to_h { ... }` is a
+      # perfectly legal `{}` in Ruby, so `replace_run(nil)` would quietly
+      # empty the store and bump the generation, which is precisely the
+      # damage round 7's Server-side nil guard exists to prevent. Keeping
+      # that invariant only at the single call site leaves the store's own
+      # contract unenforced and this class of bug one new caller away
+      # (found by an independent review, round 8).
       def replace_run(run)
+        unless run.is_a?(Array)
+          raise ArgumentError, "replace_run expects an Array of ObservedSignature, got #{run.class}"
+        end
+
         @mutex.synchronize do
           @by_symbol = run.to_h { |signature| [signature.symbol_id, signature] }
           @generation += 1
