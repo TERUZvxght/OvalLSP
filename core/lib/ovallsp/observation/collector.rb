@@ -30,7 +30,10 @@ module Ovallsp
         @workspace_root = File.realpath(workspace_root)
         @mutex = Mutex.new
         @aggregates = {}
-        @stacks = Hash.new { |h, k| h[k] = [] }
+        # Per-instance so two Collectors in one process can't share a
+        # stack; see #current_stack for why this is fiber-local storage
+        # rather than a Hash this object owns.
+        @stack_key = :"ovallsp_observation_stack_#{object_id}"
         # `[defined_class, method_id]` -> the workspace-eligibility check,
         # symbol_id, fingerprint (re-hashes the *whole* source file --
         # deliberately coarse, see Fingerprint's own docs), and parameter
@@ -85,19 +88,50 @@ module Ovallsp
         nil
       end
 
+      # Pushes an entry for *every* `:call`, not only for the ones being
+      # recorded -- the frame slot is simply nil for a method outside the
+      # workspace (found by an independent review, round 20).
+      #
+      # Pushing only workspace calls while #handle_return popped on every
+      # `:return` left the stack unbalanced by construction, and TracePoint
+      # fires `:call`/`:return` for every *Ruby-defined* method, gem and
+      # stdlib included. So the first non-workspace Ruby method a workspace
+      # method called -- `n.to_s` is C and invisible, but any
+      # ActiveRecord/ActiveSupport/rspec helper is not, which in a real
+      # Rails app is essentially every method body -- returned first and
+      # popped the *caller's* frame, recording the callee's return value
+      # against the caller's symbol_id. The workspace method's own
+      # `:return` then found an empty stack and recorded nothing at all.
+      #
+      # Reproduced before the fix on a two-file workspace: `App2#label`,
+      # which calls one non-workspace method and then returns `n.to_s`,
+      # was recorded with `return=Array` (the callee's value) instead of
+      # `String`. That evidence is what Server#show_type_evidence and
+      # LocalInferencer hand the user as observed types, so the feature
+      # was reporting a confidently wrong type for the majority of real
+      # methods rather than merely observing fewer of them.
+      #
+      # Every entry now carries the identity of the method it belongs to
+      # and #unwind_to pops by *matching* that identity rather than
+      # trusting position, which additionally makes the stack self-healing
+      # -- see its own docs for the two ways TracePoint legitimately
+      # delivers a `:return` with no `:call` of its own to match.
       def handle_call(tp)
-        info = cached_method_info(tp)
-        return unless info
-
-        param_types = positional_param_types(tp, info[:param_names])
-        current_stack.push(Frame.new(info[:symbol_id], info[:fingerprint], param_types))
+        key, info = cached_method_info(tp)
+        frame = info && Frame.new(info[:symbol_id], info[:fingerprint],
+                                  positional_param_types(tp, info[:param_names]))
+        current_stack.push(key, frame)
       end
 
+      # Returns `[key, info]`, where `key` is the `[defined_class,
+      # method_id]` identity #handle_call pushes and #unwind_to matches on.
+      # The key is handed back rather than rebuilt per call site because
+      # the cache lookup has to allocate it anyway.
       def cached_method_info(tp)
         key = [tp.defined_class, tp.method_id]
-        return @method_cache[key] if @method_cache.key?(key)
+        return [key, @method_cache[key]] if @method_cache.key?(key)
 
-        @method_cache[key] = compute_method_info(tp)
+        [key, @method_cache[key] = compute_method_info(tp)]
       end
 
       def compute_method_info(tp)
@@ -115,20 +149,71 @@ module Ovallsp
       end
 
       def handle_return(tp)
-        frame = current_stack.pop
+        frame = unwind_to(tp)
         return unless frame
 
         record(frame, return_type: TypeNormalizer.normalize(tp.return_value))
       end
 
-      # No :return event ever fires for a call that raised instead --
-      # the call still happened (and its argument types still count
-      # toward evidence), but it contributed no return value at all, so
-      # nothing is added to the return-type union for this call
+      # Pops the entry belonging to the method this `:return`/`:raise`
+      # event is actually for, discarding anything still stacked above it,
+      # and returns its frame (nil when that method wasn't one being
+      # recorded). Returns nil, leaving the stack untouched, when no entry
+      # matches at all.
+      #
+      # Matching rather than a bare `pop` is what makes the stack
+      # self-healing, and both ways it can legitimately desynchronize are
+      # reachable in an ordinary suite:
+      #
+      # 1. Calls already in flight when #start ran. Harness installs this
+      #    from a `-r` require, so every frame between `main` and that
+      #    require -- RubyGems' and Bundler's own loaders, at minimum --
+      #    fires a `:return` whose `:call` predates the TracePoint. A bare
+      #    `pop` treated each of those as "the innermost recorded call
+      #    just returned".
+      # 2. An exception unwinding several frames. `:raise` fires once, at
+      #    the raise site; the frames it unwinds past never get a `:return`
+      #    of their own, so they stay stacked until something below them
+      #    returns. Slicing everything above the match is what clears them.
+      #
+      # The match is at the top of the stack on the overwhelmingly common
+      # path (call returns, nothing intervened), so the scan is O(1) there
+      # and only walks on the two paths above.
+      def unwind_to(tp)
+        stack = current_stack
+        defined_class = tp.defined_class
+        method_id = tp.method_id
+
+        index = stack.size - 2
+        while index >= 0
+          key = stack[index]
+          if key[0].equal?(defined_class) && key[1] == method_id
+            frame = stack[index + 1]
+            stack.slice!(index, stack.size - index)
+            return frame
+          end
+          index -= 2
+        end
+        nil
+      end
+
+      # A call that raised contributes no return value at all -- the call
+      # still happened, and its argument types still count toward
+      # evidence, but nothing is added to its return-type union
       # ("1回しか観測されていない型を網羅的型と断定しない" -- a call that
       # never returned must never contribute a fabricated return type).
+      #
+      # `:raise` fires at the *raise site*, which is not necessarily the
+      # method whose evidence is being closed out, and the frames the
+      # exception then unwinds past never get a `:return` of their own --
+      # so the entry this closes is found by identity (#unwind_to), not by
+      # popping whatever happens to be on top. Before round 20 that bare
+      # pop closed out the wrong method: a raise inside a non-workspace
+      # callee recorded its *caller* as "returned nothing", and the
+      # caller's own later `:return` (it may perfectly well rescue and
+      # carry on) then had no frame left to record against at all.
       def handle_raise(tp)
-        frame = current_stack.pop
+        frame = unwind_to(tp)
         return unless frame
 
         record(frame, return_type: nil)
@@ -148,8 +233,40 @@ module Ovallsp
         end
       end
 
+      # Fiber-local storage, not a `Hash` this object keys by
+      # `Thread.current.object_id` (found by an independent review, round
+      # 20 -- the same unbounded-registry class rounds 17/18 fixed in
+      # AgentProcessManager, here in the code that runs inside the *user's
+      # own test-suite process*).
+      #
+      # The Hash was three separate defects at once:
+      #
+      # 1. Unbounded growth. Nothing ever removed a thread's entry, so
+      #    every thread that ever executed one Ruby method left a
+      #    permanent entry -- plus any frames stranded on it by an
+      #    exception -- for the whole run. `object_id` is a monotonic
+      #    counter in modern CRuby, never reused, so a suite that churns
+      #    threads (system/Capybara tests, parallel workers, any app that
+      #    forks work off per request) grows this monotonically with
+      #    nothing that would ever reclaim it.
+      # 2. Unsynchronized cross-thread mutation. `@mutex` guards
+      #    `@aggregates` only, while this Hash was written from every
+      #    traced thread -- including its default block's own `h[k] = []`
+      #    insert. CRuby's GVL happens to make that survivable today;
+      #    nothing else does, and this codebase's own AgentSupervisor spec
+      #    is explicit that "no other Ruby implementation is obligated to
+      #    avoid" such an interleaving.
+      # 3. Fibers shared one stack per thread. A Fiber has its own call
+      #    stack, so an Enumerator or async library switching fibers
+      #    mid-call interleaved two unrelated call stacks into one array.
+      #
+      # Fiber-local storage fixes all three structurally rather than
+      # patching any one of them: the stack is reachable only from the
+      # fiber it belongs to, so it is inherently unshared (no lock needed,
+      # no fiber crosstalk) and it is reclaimed with that fiber (no
+      # registry to prune).
       def current_stack
-        @stacks[Thread.current.object_id]
+        Thread.current[@stack_key] ||= []
       end
 
       def defined_method(tp)
