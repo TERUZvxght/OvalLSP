@@ -411,6 +411,112 @@ RSpec.describe Ovallsp::Observation::Collector do
     expect(owners).not_to include("::ObservationNeighbor::Outsider")
   end
 
+  # The boundary check builds its prefix as `"#{root}#{File::SEPARATOR}"`,
+  # which would double the separator (and so match nothing at all) for a
+  # root handed in with a trailing one. It doesn't, because `#initialize`
+  # normalizes through `File.realpath` first -- which is a load-bearing
+  # reason for that call, not just symlink resolution, and is what this
+  # pins (round 25).
+  it "normalizes a workspace root given with a trailing separator" do
+    trailing = described_class.new(workspace_root: "#{workspace_root}#{File::SEPARATOR}")
+    trailing.start
+    ObservationFixture::Widget.new.combine("a", "b")
+    trailing.stop
+
+    expect(trailing.results(run_id: "r1").map { |r| r.symbol_id.owner })
+      .to include("::ObservationFixture::Widget")
+  end
+
+  # Found by an independent review (round 25), and the same shape as rounds
+  # 20-22 and 24: not lost evidence but confidently wrong evidence, fired by
+  # ordinary application code.
+  #
+  # `#defined_method` resolved the executing frame's definition with
+  # `tp.defined_class.instance_method(tp.method_id)`. That answers "what
+  # would dispatch find starting here", not "what is this frame" -- and the
+  # two differ for exactly one construct, `prepend`, which puts a module
+  # *ahead of* a class in that class's own ancestor chain. So for the frame
+  # CRuby reports as `defined_class = Patched`, the lookup handed back the
+  # prepended wrapper's method, and the containment test, the fingerprint
+  # and the parameter-name list all described the wrong definition.
+  #
+  # `prepend` is not exotic: it is how ActiveSupport and every
+  # instrumentation/APM gem patch application code, and how applications
+  # patch gems back.
+  describe "a prepended module is not the frame's own definition (round 25)" do
+    let(:sample_classes_digest) do
+      Ovallsp::Observation::Fingerprint.file_digest(
+        File.expand_path("../../fixtures/observation/sample_classes.rb", __dir__)
+      )
+    end
+
+    # Pre-fix this signature was absent from the results entirely: the
+    # lookup found ObservationNeighbor::Instrumentation#perform, whose
+    # source_location is outside the workspace root, so a workspace method
+    # a gem had prepended into was silently dropped from the whole run.
+    it "records a workspace method a non-workspace module is prepended into" do
+      collector.start
+      ObservationFixture::Patched.new.perform("hello")
+      collector.stop
+
+      signature = collector.results(run_id: "r1").find do |r|
+        r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::Patched", name: "perform")
+      end
+
+      expect(signature).not_to be_nil
+      # One slot, its own -- not the two-parameter wrapper's. Pre-fix, a
+      # method with a *different* prepended wrapper reported the wrapper's
+      # slot count, both slots Types::UNKNOWN, since the wrapper's parameter
+      # names do not resolve in the real frame's binding.
+      expect(signature.parameter_types).to eq([Ovallsp::Types::Nominal.new(name: "String")])
+      expect(signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
+      # Fingerprinted against its own source file, not the prepended
+      # wrapper's -- Store#invalidate_changed compares this against the
+      # digest of the file the *declaration* lives in, so a wrapper's digest
+      # here means edits to the real method never invalidate its evidence.
+      expect(signature.code_fingerprint).to start_with(sample_classes_digest)
+    end
+
+    it "does not record a non-workspace method the workspace prepends a module into" do
+      collector.start
+      ObservationNeighbor::Service.new.call("x")
+      collector.stop
+
+      owners = collector.results(run_id: "r1").map { |r| r.symbol_id.owner }
+
+      # The gem's own method: reached through a class the workspace patched,
+      # so pre-fix the lookup found the workspace's patch module and the gem
+      # method was collected and reported as the user's own evidence --
+      # round 24's containment defect again, by a different route.
+      expect(owners).not_to include("::ObservationNeighbor::Service")
+      # ...while the workspace's own patch module is still real workspace
+      # code and must survive, so the fix cannot be "ignore anything
+      # prepend-shaped".
+      expect(owners).to include("::ObservationFixture::ServicePatch")
+    end
+  end
+
+  # Also round 25. Ruby permits the same name in two positional slots and
+  # binds only the first, so reading each slot back by name through
+  # `Binding#local_variable_get` answered every one of them with the same
+  # value. Measured pre-fix on `pair(1, "s")`: `[Integer, Integer]` -- a
+  # confidently wrong class for a slot plainly holding a String.
+  it "reports no type, rather than the wrong one, for a positional slot whose name is shadowed" do
+    collector.start
+    ObservationFixture::RepeatedParamNames.new.pair(1, "s")
+    collector.stop
+
+    signature = collector.results(run_id: "r1").find do |r|
+      r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::RepeatedParamNames", name: "pair")
+    end
+
+    expect(signature).not_to be_nil
+    # Both slots are kept, so every later slot stays at its own position --
+    # they just carry no evidence, which is this module's stated preference
+    # over fabricating one.
+    expect(signature.parameter_types).to eq([Ovallsp::Types::UNKNOWN, Ovallsp::Types::UNKNOWN])
+  end
+
   # Same round: the per-thread call stacks lived in a plain `Hash` keyed by
   # `Thread.current.object_id` that nothing ever pruned, in code that runs
   # inside the *user's own test-suite process* for the whole length of

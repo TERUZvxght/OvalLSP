@@ -13,4 +13,26 @@ module ObservationNeighbor
       n.to_s
     end
   end
+
+  # Stands in for an instrumentation/patching gem: something outside the
+  # workspace that `prepend`s itself into one of the workspace's own
+  # classes (ObservationFixture::Patched). Deliberately a *different
+  # arity* and different parameter names from the method it wraps, so
+  # describing the wrong one of the two is visible in the recorded
+  # signature rather than coincidental. See collector_spec.rb's round-25
+  # examples.
+  module Instrumentation
+    def perform(gem_arg, gem_extra = :instrumented)
+      super(gem_arg)
+    end
+  end
+
+  # The other direction: a gem class the *workspace* prepends a module
+  # into (ObservationFixture::ServicePatch). Its own method is gem code
+  # and must never be collected, however the workspace patches it.
+  class Service
+    def call(gem_name)
+      "gem:#{gem_name}"
+    end
+  end
 end

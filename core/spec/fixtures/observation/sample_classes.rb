@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# Stands in for the workspace's Gemfile dependencies: the classes and
+# modules below are patched together with the ones in
+# spec/fixtures/observation_neighbor, which lives *outside* the workspace
+# root these fixtures represent.
+require_relative "../observation_neighbor/neighbor"
+
 module ObservationFixture
   class Widget
     def combine(a, b)
@@ -188,6 +194,40 @@ module ObservationFixture
   class OverridingRegistry < Registry
     def self.register(name)
       super(name, :default)
+    end
+  end
+
+  # `prepend` is the one construct that makes `defined_class` and
+  # "whatever `defined_class.instance_method(id)` resolves to" different
+  # methods, because it inserts a module *ahead of* a class in that class's
+  # own ancestor chain (round 25). This is the workspace class a gem
+  # prepends into -- the ordinary shape of every instrumentation gem and of
+  # ActiveSupport's own patching.
+  class Patched
+    def perform(workspace_arg)
+      "done:#{workspace_arg}"
+    end
+  end
+  Patched.prepend(ObservationNeighbor::Instrumentation)
+
+  # The mirror image: a module the workspace prepends into a *gem's* class.
+  # This module is workspace code and must be collected; the gem method it
+  # calls `super` into must not be, even though the lookup starting from
+  # the gem class now finds this file.
+  module ServicePatch
+    def call(workspace_name, workspace_extra = :tagged)
+      super(workspace_name)
+    end
+  end
+  ObservationNeighbor::Service.prepend(ServicePatch)
+
+  # Two positional parameters that share a name. Ruby allows this and binds
+  # only the *first* one, so a by-name `local_variable_get` lookup answers
+  # both slots with the same value -- reporting the wrong class for every
+  # slot but the first (round 25).
+  class RepeatedParamNames
+    def pair(_, _)
+      "paired"
     end
   end
 

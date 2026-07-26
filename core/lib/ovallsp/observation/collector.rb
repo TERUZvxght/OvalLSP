@@ -287,8 +287,46 @@ module Ovallsp
         Thread.current[@stack_key] ||= CallStackMachine.new
       end
 
+      # The definition the executing frame actually *is* -- the one whose
+      # `owner` is `tp.defined_class` itself, never merely the one dispatch
+      # would find starting from it.
+      #
+      # `Module#instance_method` answers the second question, and the two
+      # diverge for exactly one construct: `prepend`, which inserts a module
+      # *ahead of* a class in that class's own ancestor chain. So for the
+      # frame CRuby reports as `defined_class = Patched`, a bare
+      # `Patched.instance_method(:perform)` hands back the prepended
+      # wrapper's method instead, and everything #compute_method_info
+      # derives from it -- the workspace-containment test, the source-file
+      # fingerprint and the parameter-name list -- describes the wrong
+      # definition (round 25). Measured, all three ways at once:
+      #
+      # - A gem prepending into a workspace class (`Module#prepend` is how
+      #   ActiveSupport and every instrumentation gem patch app code) made
+      #   #workspace_method? read the *gem's* source_location, so the app's
+      #   own method was silently dropped from the run entirely.
+      # - The workspace prepending into a gem's class made the same test
+      #   read the *workspace's* source_location, so the gem's method was
+      #   collected and reported as the user's own evidence -- round 24's
+      #   containment defect again, reached by a different route.
+      # - The parameter-name list and fingerprint came from the wrapper, so
+      #   a one-parameter method was reported with the wrapper's two
+      #   parameter slots (both Types::UNKNOWN, since the names don't
+      #   resolve in the real frame's binding) and fingerprinted against a
+      #   file whose edits Store#invalidate_changed would then track instead
+      #   of its own.
+      #
+      # Walking `#super_method` down to the owner that matches restores the
+      # premise structurally: this is a pure function of `[defined_class,
+      # method_id]` (@method_cache's key), as every field derived from it
+      # must be. A frame whose definition cannot be resolved this way yields
+      # no evidence at all rather than the wrong method's -- this module's
+      # stated preference for under-collection over fabrication.
       def defined_method(tp)
-        tp.defined_class.instance_method(tp.method_id)
+        owner = tp.defined_class
+        method_obj = owner.instance_method(tp.method_id)
+        method_obj = method_obj.super_method while method_obj && method_obj.owner != owner
+        method_obj
       rescue StandardError
         nil
       end
@@ -388,8 +426,25 @@ module Ovallsp
       # invariant per method -- is computed once and cached, while the
       # actual argument *values* (which must be read fresh from each
       # call's own binding) stay per-call.
+      #
+      # A `nil` entry means "this slot exists but cannot be read by name",
+      # which #positional_param_types below degrades to Types::UNKNOWN --
+      # deliberately keeping the slot rather than dropping it, so every
+      # later slot stays at its own position.
+      #
+      # Two shapes produce one. A destructuring parameter (`def m(a, (b,
+      # c))`) has no name at all. And a name repeated across slots (`def
+      # m(_, _)`, which Ruby permits) binds only the *first* occurrence, so
+      # `local_variable_get` answers every one of those slots with the same
+      # value: measured pre-fix, `m(1, "s")` reported `[Integer, Integer]`
+      # -- the wrong class for a slot that plainly holds a String (round
+      # 25). The value is genuinely unavailable for the shadowed slots, so
+      # they degrade to UNKNOWN rather than being guessed, this module's
+      # stated preference for under-collection over fabrication.
       def positional_param_names(method_obj)
-        method_obj.parameters.select { |(kind, _)| %i[req opt].include?(kind) }.map { |(_, name)| name }
+        names = method_obj.parameters.select { |(kind, _)| %i[req opt].include?(kind) }.map { |(_, name)| name }
+        repeated = names.tally.select { |name, count| name && count > 1 }.keys.to_set
+        names.map { |name| repeated.include?(name) ? nil : name }
       rescue StandardError
         []
       end
