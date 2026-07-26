@@ -441,10 +441,31 @@ module Ovallsp
       # 25). The value is genuinely unavailable for the shadowed slots, so
       # they degrade to UNKNOWN rather than being guessed, this module's
       # stated preference for under-collection over fabrication.
+      #
+      # The repeat has to be counted over the *whole* parameter list, not
+      # over the req/opt slots this method returns (round 26). The property
+      # that makes a by-name read safe is "this slot is the only parameter
+      # with this name" -- a fact about the declaration -- whereas counting
+      # within the filtered list asks it only of the projection, and the two
+      # differ whenever the duplicate is a kind that gets filtered out.
+      # Ruby rejects duplicate parameter names except `_`-prefixed ones, so
+      # the reachable shapes all involve one of those, and `*rest`/`**kw`/
+      # `&blk`/`key:` are exactly the kinds dropped here. Measured on
+      # `def m(*_a, _a)` -- legal Ruby, and the rest parameter binds first
+      # because it is declared first -- `m(1, 2, "tail")` reported `[Array]`
+      # for the one slot it lists, the trailing required parameter, which
+      # plainly holds a String. Same family as round 25's own finding and as
+      # rounds 20-22: not lost evidence but confidently wrong evidence.
       def positional_param_names(method_obj)
-        names = method_obj.parameters.select { |(kind, _)| %i[req opt].include?(kind) }.map { |(_, name)| name }
-        repeated = names.tally.select { |name, count| name && count > 1 }.keys.to_set
-        names.map { |name| repeated.include?(name) ? nil : name }
+        parameters = method_obj.parameters
+        repeated = parameters.map { |(_, name)| name }.tally.select { |name, count| name && count > 1 }.keys.to_set
+        parameters.each_with_object([]) do |(kind, name), slots|
+          next unless %i[req opt].include?(kind)
+
+          # `nil` keeps the slot but marks it unreadable -- never dropped,
+          # or every later slot would shift out of its own position.
+          slots << (repeated.include?(name) ? nil : name)
+        end
       rescue StandardError
         []
       end

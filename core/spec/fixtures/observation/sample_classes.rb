@@ -229,6 +229,27 @@ module ObservationFixture
     def pair(_, _)
       "paired"
     end
+
+    # The same collision reached across a parameter-*kind* boundary (round
+    # 26). `*rest` is dropped from the flat positional list, so counting
+    # repeats within that list never sees this one -- but Ruby binds the
+    # leftmost declaration, and here that is the rest parameter, so reading
+    # the trailing required slot by name answers with the rest Array. Its
+    # own value is a String, so a wrong class is visible rather than
+    # coincidental.
+    def trailing_after_rest(*_a, _a)
+      _a
+    end
+
+    # No collision at all, just a `*rest` in the middle. Every positional
+    # name here resolves to its own value, so this is the control that keeps
+    # the fix above from being written as "blank every slot of any method
+    # that has a rest parameter" -- and it is also where round 25's
+    # documented, deliberate index imprecision is pinned so it cannot
+    # silently get worse.
+    def rest_between(a, *rest, b)
+      [a, rest, b]
+    end
   end
 
   class Widget

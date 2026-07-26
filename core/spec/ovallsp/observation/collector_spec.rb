@@ -517,6 +517,64 @@ RSpec.describe Ovallsp::Observation::Collector do
     expect(signature.parameter_types).to eq([Ovallsp::Types::UNKNOWN, Ovallsp::Types::UNKNOWN])
   end
 
+  # Found by an independent review (round 26): round 25's fix counted the
+  # repeat within the req/opt list it returns rather than over the whole
+  # declaration, so a name shared with a parameter of a *filtered-out* kind
+  # (`*rest`, `**kw`, `&blk`, `key:`) was still read by name. Ruby binds the
+  # leftmost declaration, so when the duplicate is declared first -- which
+  # only `*rest` can be, since every other filtered kind must follow the
+  # positional slots -- the read answers with that parameter's value instead.
+  #
+  # Measured pre-fix on `trailing_after_rest(1, 2, "the-real-tail")`:
+  # `[Array]` for the one slot reported, the trailing required parameter,
+  # which plainly holds a String. Round 25's family exactly, one kind
+  # boundary over.
+  it "reports no type for a positional slot whose name is shadowed by a rest parameter" do
+    collector.start
+    ObservationFixture::RepeatedParamNames.new.trailing_after_rest(1, 2, "the-real-tail")
+    collector.stop
+
+    signature = collector.results(run_id: "r1").find do |r|
+      r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::RepeatedParamNames", name: "trailing_after_rest")
+    end
+
+    expect(signature).not_to be_nil
+    expect(signature.parameter_types).to eq([Ovallsp::Types::UNKNOWN])
+  end
+
+  # The control for the example above -- a `*rest` with no name collision
+  # around it -- so the fix cannot be written as "blank every positional slot
+  # of any method that has a rest parameter", which the example above alone
+  # would accept.
+  #
+  # It doubles as the pin for the one imprecision round 25 documented as
+  # deliberate and left in place: `ObservedSignature#parameter_types` has no
+  # representation for rest parameters at all, so a req/opt parameter that
+  # *follows* one is reported at the index it occupies after rest parameters
+  # are dropped, not at its index in the declaration. `b` is declared third
+  # and reported second. Each slot's *type* is still its own -- this is an
+  # index shift, never a wrong class -- and no consumer joins the list
+  # positionally against a declaration (`ovallsp/showTypeEvidence` renders it
+  # as text; see Server#type_evidence_response). Asserted here rather than
+  # only described in prose so that widening it into a wrong *type* would
+  # fail rather than pass quietly.
+  it "reports each positional slot's own type around a rest parameter, shifting only the index" do
+    collector.start
+    ObservationFixture::RepeatedParamNames.new.rest_between(1, :x, :y, "the-real-tail")
+    collector.stop
+
+    signature = collector.results(run_id: "r1").find do |r|
+      r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::RepeatedParamNames", name: "rest_between")
+    end
+
+    expect(signature).not_to be_nil
+    # `a` (Integer) and `b` (String) -- `b`'s own class, at index 1 rather
+    # than its declared index 2. Never [Integer, Array].
+    expect(signature.parameter_types).to eq(
+      [Ovallsp::Types::Nominal.new(name: "Integer"), Ovallsp::Types::Nominal.new(name: "String")]
+    )
+  end
+
   # Same round: the per-thread call stacks lived in a plain `Hash` keyed by
   # `Thread.current.object_id` that nothing ever pruned, in code that runs
   # inside the *user's own test-suite process* for the whole length of
