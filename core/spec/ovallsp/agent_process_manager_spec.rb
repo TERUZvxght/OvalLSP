@@ -346,6 +346,140 @@ RSpec.describe Ovallsp::AgentProcessManager do
     expect(@manager.status).to eq(:stopped)
   end
 
+  # Found by an independent review (round 17). #register_exit_hook ran
+  # `at_exit { stop }` once per successful #start, and an at_exit block is
+  # unregisterable and lives for the whole process -- so every manager Core
+  # ever started stayed strongly reachable forever, along with everything
+  # it transitively holds (@inbox and its contents, the FramedWriter, the
+  # dead reader/stderr Threads, @env, @hello_result), long after #stop had
+  # torn its process down and every other reference had been dropped.
+  #
+  # Server builds a *fresh* manager on every Gemfile.lock /
+  # config/initializers change, every `OvalLSP: Restart Rails Agent`, and
+  # every crash-loop retry -- and a success resets that streak, so nothing
+  # bounds the count over a long session. It also made
+  # BackgroundTasks#track_manager's own terminal-status pruning
+  # decorative: dropping that registry's reference frees nothing while
+  # at_exit holds a stronger one.
+  #
+  # The control case below is what makes this a leak rather than a
+  # property of the test: a manager whose spawn failed *before*
+  # #register_exit_hook was reached collects normally under the identical
+  # allocate-drop-GC shape.
+  describe "exit-hook retention" do
+    # Enough that "every manager ever started" is unmistakable against the
+    # at-most-one GC-cycle straggler documented below, small enough that
+    # the example still spawns its real Agents in a couple of seconds.
+    def churn_count = 8
+
+    # Two transient, non-leak references have to be settled before the
+    # measurement means anything, or this spec is flaky rather than
+    # load-bearing:
+    #
+    # 1. MRI's stack scanning is *conservative*, so managers allocated on
+    #    this example's own stack stay reachable through stale machine-word
+    #    slots for an arbitrary while afterwards (observed: 2 of 8
+    #    surviving three GC passes with the fix in place). Churning on a
+    #    throwaway thread and joining it removes that stack entirely.
+    # 2. A manager's own teardown outlives its #stop by a moment: the
+    #    reader thread's `kill` is asynchronous, and its EOF path spawns
+    #    `Thread.new { terminate_process }` (see #mark_unavailable). Either
+    #    thread's block closes over the manager, and a thread that hasn't
+    #    finished unwinding is still on the VM's thread list. Waiting for
+    #    the thread count to return to where it started covers both without
+    #    naming either.
+    #
+    # What survives the GC after that survives because something genuinely
+    # still refers to it -- which is the question being asked.
+    def churn_on_a_dead_stack(&block)
+      before = Thread.list.size
+      Thread.new(&block).join
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 5
+      sleep 0.02 while Thread.list.size > before && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+      3.times { GC.start }
+      ObjectSpace.each_object(described_class).count
+    end
+
+    def churn_started_managers(count)
+      count.times do
+        manager = build_manager
+        expect(manager.start).to eq(:ready)
+        manager.stop
+        # #terminate_process_locked's `@reader_thread&.kill` is
+        # asynchronous, and a Thread that hasn't finished unwinding is
+        # still on the VM's thread list -- holding its own block, which
+        # closes over the manager. That is a genuine but strictly
+        # transient reference (observed as exactly one surviving manager
+        # per run, the most recent), and waiting it out here keeps this
+        # spec measuring the permanent retention it is actually about.
+        manager.instance_variable_get(:@reader_thread)&.join(2)
+      end
+    end
+
+    def churn_unspawnable_managers(count)
+      count.times do
+        manager = described_class.new(
+          command: File.join(fixture_root, "no-such-command-#{rand(1_000_000)}"),
+          args: [], chdir: fixture_root, logger: logger, hello_timeout: 1
+        )
+        expect(manager.start).to eq(:static_only)
+      end
+    end
+
+    it "does not pin every manager it ever started for the life of the process" do
+      baseline = churn_on_a_dead_stack { nil }
+      control = churn_on_a_dead_stack { churn_unspawnable_managers(churn_count) } - baseline
+      retained = churn_on_a_dead_stack { churn_started_managers(churn_count) } - baseline - control
+
+      # The control anchors the measurement: whatever this environment's
+      # GC does with the churn shape itself, *starting* a manager must not
+      # make it worse. Pre-fix, `retained` is exactly `churn_count` -- every
+      # manager ever started, pinned by its own at_exit block, forever.
+      #
+      # The bound is 1 rather than 0 for a reason established by
+      # measurement, not slack: the single most recently torn-down manager
+      # is still reachable from its own finished reader/stderr threads'
+      # Fiber and block Procs, which are themselves unreachable garbage the
+      # GC simply frees on a later cycle (traced with
+      # ObjectSpace.reachable_objects_from: the survivor's only retainers
+      # are one Fiber and two Procs, and it is always at most one manager).
+      # What matters is that retention does not scale with `churn_count`.
+      expect(control).to be_zero
+      expect(retained).to be <= 1
+    end
+
+    # The hook is not optional -- it is the last-resort guarantee that a
+    # spawned Agent child dies when Core exits without Server#shutdown ever
+    # running -- so the leak fix must not have quietly removed it. Drives
+    # the registered hook's body directly rather than actually exiting.
+    it "still stops a live, registered manager when the process-wide exit hook fires" do
+      @manager = build_manager
+      expect(@manager.start).to eq(:ready)
+      pid = @manager.pid
+      expect(process_alive?(pid)).to be(true)
+
+      described_class.stop_registered_at_exit
+
+      expect(@manager.status).to eq(:stopped)
+      expect(@manager.pid).to be_nil
+      expect(process_alive?(pid)).to be(false)
+    end
+
+    # A manager that has already been #stop-ped owns nothing the exit hook
+    # could still have to tear down, and must not be kept visitable (nor
+    # reachable) by it.
+    it "deregisters a manager once it has been stopped" do
+      @manager = build_manager
+      expect(@manager.start).to eq(:ready)
+      registry = described_class.instance_variable_get(:@exit_registry)
+      expect(registry.keys).to include(@manager)
+
+      @manager.stop
+
+      expect(registry.keys).not_to include(@manager)
+    end
+  end
+
   # Server's BackgroundTasks#shutdown runs #stop on its own short-lived
   # thread and Thread#kills it if it doesn't return in time (found
   # necessary because #stop's `agent/shutdown` RPC has no bound of its

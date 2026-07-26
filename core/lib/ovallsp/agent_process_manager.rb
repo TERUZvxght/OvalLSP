@@ -25,6 +25,98 @@ module Ovallsp
   class AgentProcessManager
     STATUSES = %i[not_started starting ready static_only stopped].freeze
 
+    # One process-wide exit hook over a *weak* registry, rather than one
+    # `at_exit { stop }` per manager (found by an independent review,
+    # round 17).
+    #
+    # The hook itself is not optional -- it is the last-resort guarantee
+    # that a spawned Agent child dies when Core exits without
+    # Server#shutdown ever running. What was wrong was its *shape*:
+    # #register_exit_hook ran once per successful #start, and an at_exit
+    # block is unregisterable and lives for the whole process, so each one
+    # pinned its manager -- and everything the manager transitively holds
+    # (@inbox and whatever is still queued in it, the FramedWriter, the
+    # dead reader/stderr Thread objects, @env, @hello_result) -- strongly,
+    # forever, long after #stop had torn the process down and every other
+    # reference had been dropped.
+    #
+    # That is unbounded growth on an ordinary editing session, not an
+    # exotic path: Server#maybe_restart_agent builds a *fresh* manager on
+    # every Gemfile.lock / config/initializers change (Server#restart_agent),
+    # plus every `OvalLSP: Restart Rails Agent`, plus every crash-loop
+    # retry AgentSupervisor schedules -- and a success resets that streak,
+    # so the count over a day is bounded by nothing at all.
+    #
+    # It also made BackgroundTasks#track_manager's own pruning decorative.
+    # That method deliberately drops managers in a terminal status "for the
+    # same unbounded-growth reason as #track_thread" -- but dropping the
+    # registry's reference frees nothing while at_exit still holds a
+    # strictly stronger one. Measured: 8 started-then-#stop-ped managers,
+    # every other reference dropped, three GC passes -- all 8 alive. The
+    # same 8 with a spawn that failed before #register_exit_hook was
+    # reached -- 0 alive.
+    #
+    # So: the registry holds managers weakly (a manager nothing else refers
+    # to is collectable exactly as it would be with no hook at all), #stop
+    # deregisters explicitly (a stopped manager has nothing left to tear
+    # down at exit, so it need not even be visited), and the at_exit block
+    # is installed once, on first use, guarded by the same mutex.
+    #
+    # Weak is safe here -- it cannot drop a manager whose child is still
+    # running -- and that rests on a property this class does not own
+    # alone, so it is worth stating: every manager that has ever spawned a
+    # process is strongly held by BackgroundTasks' own @managers registry
+    # from the moment it is *constructed* (Server passes
+    # RailsBootstrap.start an `on_manager_created:` hook that calls
+    # #track_manager before #start's blocking hello handshake even begins).
+    # The one thing that drops it from there is #track_manager's pruning of
+    # terminal statuses -- :stopped, which only #stop produces and which
+    # tears the process down first, and :static_only, which every path into
+    # (#start's failure branches, #mark_unavailable) reaches only via
+    # #terminate_process. In other words a manager becomes weakly-held
+    # exactly when it no longer owns a child, which is the condition under
+    # which the exit hook has nothing to do for it anyway. Anything that
+    # ever makes :static_only reachable *without* teardown having run --
+    # round 15 fixed the last such path, a raising `Process.spawn` -- would
+    # break that argument, not merely leak descriptors.
+    EXIT_REGISTRY_MUTEX = Mutex.new
+    @exit_registry = ObjectSpace::WeakMap.new
+    @exit_hook_installed = false
+
+    class << self
+      def register_for_exit(manager)
+        EXIT_REGISTRY_MUTEX.synchronize do
+          @exit_registry[manager] = true
+          next if @exit_hook_installed
+
+          @exit_hook_installed = true
+          at_exit { stop_registered_at_exit }
+        end
+      end
+
+      def unregister_for_exit(manager)
+        EXIT_REGISTRY_MUTEX.synchronize { @exit_registry.delete(manager) }
+      end
+
+      # Iterates a snapshot taken under the lock rather than the live map,
+      # and holds no lock while stopping -- #stop's own deregistration
+      # takes the same mutex, and #stop can additionally take seconds
+      # (a polite agent/shutdown RPC, then SIGTERM, then SIGKILL).
+      #
+      # Total, for the reason every other cleanup path in Core is: one
+      # manager whose #stop raises must not skip the teardown of the
+      # managers after it, and must not turn process exit into a crash.
+      # #stop already guarantees its own teardown via `ensure`, so this
+      # rescue is a backstop, not the mechanism.
+      def stop_registered_at_exit
+        EXIT_REGISTRY_MUTEX.synchronize { @exit_registry.keys }.each do |manager|
+          manager.stop
+        rescue StandardError
+          nil
+        end
+      end
+    end
+
     def initialize(command:, args: [], chdir:, logger:, hello_timeout: 10, core_version: Ovallsp::VERSION, env: {},
                    on_unavailable: nil)
       @command = command
@@ -253,6 +345,13 @@ module Ovallsp
           terminate_process_locked if @pid
         end
         @status_mutex.synchronize { @status = :stopped }
+        # Last, deliberately: the exit-time registry is the safety net for
+        # "this manager still owns a child process", so it must only be
+        # given up once the teardown above has actually run. Doing it
+        # first would open a window in which a Thread#kill of this method's
+        # own thread (BackgroundTasks#reclaim_batch does exactly that) left
+        # a live child with nothing anywhere still tracking it.
+        self.class.unregister_for_exit(self)
       end
     end
 
@@ -626,7 +725,7 @@ module Ovallsp
     end
 
     def register_exit_hook
-      at_exit { stop }
+      self.class.register_for_exit(self)
     end
   end
 end
