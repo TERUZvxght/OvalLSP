@@ -234,6 +234,89 @@ RSpec.describe Ovallsp::Observation::Collector do
     end
   end
 
+  # Found by an independent review (round 22), in the same file and with
+  # the same shape as rounds 20 and 21: not lost evidence but a
+  # confidently wrong type, fired by ordinary application code.
+  #
+  # `:raise` is attributed by CRuby to the innermost Ruby frame the raise
+  # occurred in, whether or not the exception ever unwinds that frame --
+  # a method that rescues its own raise is reported exactly like one that
+  # dies of it. Rounds 20 and 21 both still *closed out* that frame on
+  # `:raise`, so a guard clause, a raise inside a block, or the Rails
+  # `transaction { raise Rollback }` idiom threw the live frame away and
+  # the method's real `:return` matched nothing. A method observed on
+  # both paths then reported only the non-raising one's type.
+  describe "raises the raising method itself survives (round 22)" do
+    def signature_for(collector, name)
+      collector.results(run_id: "r1").find do |r|
+        r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::Widget", name: name)
+      end
+    end
+
+    it "records the return type of a method that rescues a raise from its own body" do
+      collector.start
+      ObservationFixture::Widget.new.guarded(false)
+      collector.stop
+
+      signature = signature_for(collector, "guarded")
+
+      expect(signature).not_to be_nil
+      expect(signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "Symbol"))
+      expect(signature.samples).to eq(1)
+    end
+
+    it "unions both paths of a guard clause instead of reporting only the non-raising one" do
+      collector.start
+      ObservationFixture::Widget.new.guarded(true)
+      ObservationFixture::Widget.new.guarded(false)
+      collector.stop
+
+      signature = signature_for(collector, "guarded")
+
+      expect(signature.return_type).to eq(
+        Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "String"), Ovallsp::Types::Nominal.new(name: "Symbol")])
+      )
+      expect(signature.samples).to eq(2)
+    end
+
+    # A raise inside a block is attributed to the frame that *wrote* the
+    # block, so closing that frame out also discarded every frame stacked
+    # above it -- here a second workspace method, alive and about to
+    # return a String of its own.
+    it "records both the block's own frame and the workspace frames stacked above it" do
+      collector.start
+      ObservationFixture::Widget.new.raises_in_yielded_block
+      collector.stop
+
+      expect(signature_for(collector, "raises_in_yielded_block")&.return_type)
+        .to eq(Ovallsp::Types::Nominal.new(name: "String"))
+      expect(signature_for(collector, "yielding_rescuer")&.return_type)
+        .to eq(Ovallsp::Types::Nominal.new(name: "String"))
+    end
+
+    # The invariant the fix must not break, in both orders: a genuine
+    # `nil` return and an abandoned frame's fabricated one are the same
+    # event, so the classification has to be per call, not per method.
+    %i[raise_first nil_first].each do |order|
+      it "classifies a genuine nil and an unwound frame's fake nil per call (#{order})" do
+        widget = ObservationFixture::Widget.new
+        collector.start
+        calls = order == :raise_first ? [false, true] : [true, false]
+        calls.each do |ok|
+          widget.nil_or_outside_raise(ok)
+        rescue RuntimeError
+          nil
+        end
+        collector.stop
+
+        signature = signature_for(collector, "nil_or_outside_raise")
+
+        expect(signature.samples).to eq(2)
+        expect(signature.return_type).to eq(Ovallsp::Types::NIL)
+      end
+    end
+  end
+
   # Same round: the per-thread call stacks lived in a plain `Hash` keyed by
   # `Thread.current.object_id` that nothing ever pruned, in code that runs
   # inside the *user's own test-suite process* for the whole length of

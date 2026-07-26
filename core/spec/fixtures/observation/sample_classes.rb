@@ -60,5 +60,46 @@ module ObservationFixture
     def nil_returner
       nil
     end
+
+    # The guard-clause idiom: the raise is written in this method's *own*
+    # body, so CRuby attributes the `:raise` to this frame even though the
+    # frame is alive and about to return normally. Observed on both paths
+    # its return type is genuinely `String | Symbol` -- round 22's finding
+    # is that only `String` was reported, the raising path's real return
+    # having been thrown away with the frame.
+    def guarded(ok)
+      raise ArgumentError, "not ok" unless ok
+
+      ok.to_s
+    rescue ArgumentError
+      :fallback
+    end
+
+    # Same `:raise`-on-a-live-frame shape, reached the way Rails reaches it
+    # (`transaction { raise Rollback }`): the raise is inside a block this
+    # method passes to another method, so it is attributed to *this* frame,
+    # not the callee's. #yielding_rescuer is a workspace method too, and
+    # sits between the raise site and this one -- pre-fix it was discarded
+    # as collateral, since closing out a frame also drops everything
+    # stacked above it.
+    def raises_in_yielded_block
+      yielding_rescuer { raise "from the block" }
+    end
+
+    def yielding_rescuer
+      yield
+    rescue RuntimeError
+      "inner rescued"
+    end
+
+    # Returns `nil` for real on one path and never returns at all on the
+    # other, where the raise comes from a non-workspace callee. The `nil`
+    # must be recorded, the abandoned frame's fabricated `nil` must not --
+    # and the two are indistinguishable at the `:return` event itself.
+    def nil_or_outside_raise(ok)
+      ObservationOutside.raising_helper unless ok
+
+      nil
+    end
   end
 end

@@ -62,6 +62,23 @@ module Ovallsp
         # duplicated concurrent write can cost is recomputing one entry.
         # A lock on the `:call` path would be paid by every traced call
         # in the user's suite to buy nothing.
+        #
+        # Also deliberately never invalidated, checked in round 22. A
+        # `method_id` is an interned Symbol, so redefining a method
+        # (`class_eval { def m; end }` over an already-observed `m`)
+        # reuses this exact key and keeps serving the *old* definition's
+        # symbol_id, fingerprint and parameter names. The symbol_id is
+        # `[kind, owner, name]` and so is unchanged by any redefinition,
+        # and a stale parameter-name list degrades to Types::UNKNOWN
+        # (#positional_param_types rescues the failed
+        # `local_variable_get`) -- i.e. under-collection, which is this
+        # module's stated preference. `prepend` and `alias_method`, the
+        # two ways real code patches a method, both produce a *different*
+        # `defined_class`/`method_id` and so a different key, and the
+        # observation run is a single short-lived process. Invalidating
+        # would mean an `instance_method(...).source_location` on every
+        # traced `:call`, paid by the whole suite, to correct a case that
+        # only ever loses evidence.
         @method_cache = {}
       end
 
@@ -181,7 +198,8 @@ module Ovallsp
       # independent review, round 21; verified on ruby 3.4.7).
       #
       # Round 20's `:raise` handling only closed out the frame of the
-      # method the raise happened *in*. Every frame between that one and
+      # method the raise happened *in* (round 22 removed that close-out
+      # entirely -- see #handle_raise). Every frame between that one and
       # whichever frame rescues is abandoned without a `:raise` of its
       # own, and each of those still gets this `nil`-valued `:return`. So
       # `def find_it; Model.find(id); end`, a method that on this call
@@ -208,13 +226,23 @@ module Ovallsp
       # documented policy is that under-collecting beats fabricating --
       # Store's authority policy already treats a missing return type as
       # "no confirmed evidence", never as "returns nothing" -- and the
-      # sample is still counted either way. `throw`/`break`/a non-local
-      # `return` out of a block abandon a frame the same way with no
-      # event of any kind to key on; distinguishing those would need
-      # `:c_call`/`:b_return` in the TracePoint, which fire for every C
-      # method and every block return respectively and would not survive
-      # this module's own overhead budget (overhead_spec.rb). They stay
-      # uncorrected, and are far rarer in application code than a raise.
+      # sample is still counted either way.
+      #
+      # The opposite residue -- a frame abandoned with no `:raise` at all,
+      # whose fabricated `nil` therefore still gets trusted -- is real and
+      # deliberately uncorrected, because CRuby offers nothing to key on.
+      # `throw`, `break`, and a non-local `return` out of a block all end
+      # a frame with the same bare `nil`-valued `:return` and no other
+      # event (verified on ruby 3.4.7), and so does `Thread#kill` on a
+      # thread parked inside a workspace method -- measured in round 22:
+      # `call`, then `return ret=nil`, no `:raise` anywhere on that
+      # thread. Distinguishing any of them would need `:c_call`/
+      # `:b_return` in the TracePoint, which fire for every C method and
+      # every block return respectively and would not survive this
+      # module's own overhead budget (overhead_spec.rb). All four are far
+      # rarer in application code than a raise, and all four are bounded
+      # to one fabricated `nil` in one method's union rather than the
+      # systematic misreporting rounds 20-22 each fixed.
       def return_type_for(tp, frame)
         value = tp.return_value
         return TypeNormalizer.normalize(value) unless value.nil?
@@ -223,11 +251,13 @@ module Ovallsp
         Types::NIL
       end
 
-      # Pops the entry belonging to the method this `:return`/`:raise`
-      # event is actually for, discarding anything still stacked above it,
-      # and returns its frame (nil when that method wasn't one being
+      # Pops the entry belonging to the method this `:return` event is
+      # actually for, discarding anything still stacked above it, and
+      # returns its frame (nil when that method wasn't one being
       # recorded). Returns nil, leaving the stack untouched, when no entry
-      # matches at all.
+      # matches at all. `:return` is the only caller: round 22 made it the
+      # single close-out path, since CRuby fires one for every `:call`,
+      # abandoned frames included.
       #
       # Matching rather than a bare `pop` is what makes the stack
       # self-healing, and both ways it can legitimately desynchronize are
@@ -265,34 +295,55 @@ module Ovallsp
         nil
       end
 
-      # A call that raised contributes no return value at all -- the call
-      # still happened, and its argument types still count toward
-      # evidence, but nothing is added to its return-type union
-      # ("1回しか観測されていない型を網羅的型と断定しない" -- a call that
-      # never returned must never contribute a fabricated return type).
+      # `:raise` closes out no frame at all. It only bumps the epoch
+      # #return_type_for consults, because a raise is not evidence that
+      # any frame ended -- only that a `nil` return seen later might be
+      # fabricated (found by an independent review, round 22).
       #
-      # `:raise` fires at the *raise site*, which is not necessarily the
-      # method whose evidence is being closed out, and the frames the
-      # exception then unwinds past never get a `:return` of their own --
-      # so the entry this closes is found by identity (#unwind_to), not by
-      # popping whatever happens to be on top. Before round 20 that bare
-      # pop closed out the wrong method: a raise inside a non-workspace
-      # callee recorded its *caller* as "returned nothing", and the
-      # caller's own later `:return` (it may perfectly well rescue and
-      # carry on) then had no frame left to record against at all.
-      def handle_raise(tp)
-        # Bumped before anything can return early (a raise inside a
-        # non-workspace method matches no recorded frame, and is exactly
-        # the case that unwinds workspace frames above it), and bumped
-        # for every raise rather than only for recorded ones, because
-        # what the epoch has to answer is "could an exception have
-        # abandoned this frame", not "did we record the raiser".
+      # Rounds 20 and 21 both still had this event *pop and record* the
+      # frame of the method the raise was attributed to, on the premise
+      # that such a method never returns. CRuby says otherwise: `:raise`
+      # is attributed to the innermost Ruby frame the raise occurred in,
+      # whether or not the exception ever unwinds that frame, and a
+      # method that rescues its own raise is reported exactly like one
+      # that dies of it (verified on ruby 3.4.7). All three of these fire
+      # `raise Widget#m` and then `return Widget#m` with the real value:
+      #
+      #   def m; raise Bad unless ok?; "hit"; rescue Bad; "miss"; end
+      #   def m; xs.each { raise Stop }; "done"; rescue Stop; "done"; end
+      #   def m; Model.transaction { raise Rollback }; "after"; end
+      #
+      # -- a guard clause, a raise inside a block, and the Rails
+      # `transaction`/`Rollback` idiom, i.e. ordinary application code
+      # rather than an edge case. Popping at `:raise` threw that frame
+      # away, so the real `:return` matched nothing and the method's
+      # actual return type was discarded. Worse than losing it outright:
+      # a method observed on both paths reported only the non-raising
+      # one, so `def fetch(id); raise Missing unless ok; User.find(id);
+      # rescue Missing; NullUser.new; end` was reported as returning
+      # `User`, never `User | NullUser` -- a union that is confidently
+      # wrong rather than merely incomplete, which is what
+      # `ovallsp/showTypeEvidence` then hands the user. And because
+      # #unwind_to discards everything stacked above its match, the
+      # frames *between* the raise site and that method -- other
+      # workspace methods, still perfectly alive -- were discarded with
+      # it.
+      #
+      # Nothing is lost by not popping here: CRuby fires exactly one
+      # `:return` for every `:call`, abandoned frames included (an
+      # exception unwinding a->b->c produces `return c`, `return b`,
+      # `return a`, all with `ret=nil`). So `:return` is the single
+      # authoritative close-out for every frame, it keeps the stack
+      # balanced by construction, and round 21's epoch check is already
+      # what tells an abandoned frame's `nil` from a real one. Removing
+      # the second close-out path also removes the double-count it made
+      # possible, where a raise popped one invocation of a recursive
+      # method and its `:return` then closed out the next one down.
+      def handle_raise(_tp)
+        # Bumped for every raise rather than only for recorded ones,
+        # because what the epoch has to answer is "could an exception
+        # have abandoned this frame", not "did we record the raiser".
         Thread.current[@raise_epoch_key] = current_raise_epoch + 1
-
-        frame = unwind_to(tp)
-        return unless frame
-
-        record(frame, return_type: nil)
       end
 
       def record(frame, return_type:)
