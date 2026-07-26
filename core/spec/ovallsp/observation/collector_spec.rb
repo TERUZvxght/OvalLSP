@@ -162,6 +162,78 @@ RSpec.describe Ovallsp::Observation::Collector do
     end
   end
 
+  # Found by an independent review (round 21). CRuby fires a `:return`
+  # event for a method an exception unwound past -- one that never
+  # returned at all -- and reports its `return_value` as `nil`, which at
+  # the event itself is indistinguishable from a method that genuinely
+  # evaluated to `nil`. Round 20's `:raise` handling only closed out the
+  # frame of the method the raise happened *in*; every frame between that
+  # one and whichever frame rescues was recorded as "returns nil".
+  #
+  # Same shape as round 20 and worse than losing evidence: `nil` in an
+  # observed return union is precisely the signal a user acts on, and
+  # `ovallsp/showTypeEvidence` hands it over verbatim as
+  # `returnType: "String | nil"` for a method whose every observed call
+  # raised instead of returning.
+  describe "returns fabricated by an exception unwinding a frame (round 21)" do
+    def signature_for(collector, name)
+      collector.results(run_id: "r1").find do |r|
+        r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::Widget", name: name)
+      end
+    end
+
+    it "records no return type for a method a non-workspace raise unwound past" do
+      collector.start
+      begin
+        ObservationFixture::Widget.new.propagates_outside_raise(7)
+      rescue RuntimeError
+        nil
+      end
+      collector.stop
+
+      signature = signature_for(collector, "propagates_outside_raise")
+
+      expect(signature).not_to be_nil
+      expect(signature.samples).to eq(1)
+      expect(signature.return_type).to eq(Ovallsp::Types::UNKNOWN)
+    end
+
+    # The other direction: a genuine `nil` return is real evidence and
+    # must survive. Both of these pass *before* the fix as well -- they
+    # are here so the fix can't be made by simply distrusting every `nil`
+    # (or every `nil` after any raise), which would silently delete the
+    # single most useful thing this feature observes.
+    it "still records a genuine nil return made after an earlier raise has been rescued" do
+      collector.start
+      begin
+        ObservationFixture::Widget.new.boom
+      rescue RuntimeError
+        nil
+      end
+      ObservationFixture::Widget.new.maybe_nil(false)
+      collector.stop
+
+      signature = signature_for(collector, "maybe_nil")
+
+      expect(signature.return_type).to eq(Ovallsp::Types::NIL)
+    end
+
+    it "still records a genuine nil return made from an ensure body mid-unwind" do
+      collector.start
+      begin
+        ObservationFixture::Widget.new.ensure_calls_nil_returner
+      rescue RuntimeError
+        nil
+      end
+      collector.stop
+
+      signature = signature_for(collector, "nil_returner")
+
+      expect(signature).not_to be_nil
+      expect(signature.return_type).to eq(Ovallsp::Types::NIL)
+    end
+  end
+
   # Same round: the per-thread call stacks lived in a plain `Hash` keyed by
   # `Thread.current.object_id` that nothing ever pruned, in code that runs
   # inside the *user's own test-suite process* for the whole length of

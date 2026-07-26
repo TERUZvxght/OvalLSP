@@ -23,7 +23,11 @@ module Ovallsp
     # names' string contents, SQL, env vars, or file contents ("保存禁止"
     # -- docs/design/tasks/019-runtime-observation.md).
     class Collector
-      Frame = Struct.new(:symbol_id, :fingerprint, :param_types)
+      # `raise_epoch` is the value of #current_raise_epoch when this frame
+      # was pushed; #return_type_for compares it against the epoch at
+      # `:return` time to tell a real `nil` return from a frame CRuby
+      # abandoned because an exception unwound it (see its own docs).
+      Frame = Struct.new(:symbol_id, :fingerprint, :param_types, :raise_epoch)
       private_constant :Frame
 
       def initialize(workspace_root:)
@@ -34,6 +38,10 @@ module Ovallsp
         # stack; see #current_stack for why this is fiber-local storage
         # rather than a Hash this object owns.
         @stack_key = :"ovallsp_observation_stack_#{object_id}"
+        # Counts `:raise` events on this fiber; see #return_type_for.
+        # Fiber-local for exactly the reason the stack is: an exception
+        # raised on one fiber never unwinds another's frames.
+        @raise_epoch_key = :"ovallsp_observation_raise_epoch_#{object_id}"
         # `[defined_class, method_id]` -> the workspace-eligibility check,
         # symbol_id, fingerprint (re-hashes the *whole* source file --
         # deliberately coarse, see Fingerprint's own docs), and parameter
@@ -44,6 +52,16 @@ module Ovallsp
         # pay for thousands of redundant full-file hashes; caught by
         # this module's own overhead regression test
         # (spec/ovallsp/observation/overhead_spec.rb).
+        #
+        # Deliberately neither pruned nor mutex-guarded, unlike the call
+        # stacks below (round 20) -- checked again in round 21 and left
+        # alone on purpose. It is bounded by construction (one entry per
+        # method that actually exists in the process, not per call, per
+        # thread, or per run), and it is a pure memoization of a
+        # deterministic function of its own key, so the worst a lost or
+        # duplicated concurrent write can cost is recomputing one entry.
+        # A lock on the `:call` path would be paid by every traced call
+        # in the user's suite to buy nothing.
         @method_cache = {}
       end
 
@@ -119,7 +137,8 @@ module Ovallsp
       def handle_call(tp)
         key, info = cached_method_info(tp)
         frame = info && Frame.new(info[:symbol_id], info[:fingerprint],
-                                  positional_param_types(tp, info[:param_names]))
+                                  positional_param_types(tp, info[:param_names]),
+                                  current_raise_epoch)
         current_stack.push(key, frame)
       end
 
@@ -152,7 +171,56 @@ module Ovallsp
         frame = unwind_to(tp)
         return unless frame
 
-        record(frame, return_type: TypeNormalizer.normalize(tp.return_value))
+        record(frame, return_type: return_type_for(tp, frame))
+      end
+
+      # CRuby fires a `:return` event for a method that never returned at
+      # all -- one an exception unwound past -- and reports its
+      # `return_value` as `nil`, indistinguishable at the event itself
+      # from a method that genuinely evaluated to `nil` (found by an
+      # independent review, round 21; verified on ruby 3.4.7).
+      #
+      # Round 20's `:raise` handling only closed out the frame of the
+      # method the raise happened *in*. Every frame between that one and
+      # whichever frame rescues is abandoned without a `:raise` of its
+      # own, and each of those still gets this `nil`-valued `:return`. So
+      # `def find_it; Model.find(id); end`, a method that on this call
+      # raised RecordNotFound and returned nothing, was recorded as
+      # "returns nil" -- and `nil` in an observed return union is exactly
+      # the signal a user acts on, surfaced verbatim by
+      # `ovallsp/showTypeEvidence` (`returnType: "User | nil"`). That
+      # breaks this module's own stated contract ("a call that never
+      # returned must never contribute a fabricated return type"), which
+      # before this round held only for a method that raised *directly*.
+      #
+      # A non-nil `return_value` proves a normal return -- an abandoned
+      # frame's is always `nil` -- so only a `nil` needs qualifying, and
+      # it is trusted exactly when no `:raise` happened on this fiber
+      # during the frame's own lifetime. Frames pushed *after* the raise
+      # (an `ensure` body's own calls, which run mid-unwind) carry the
+      # current epoch and so stay trusted, which a plain "an exception is
+      # in flight" flag would have got wrong.
+      #
+      # Accepted, deliberately one-directional residue: a frame that was
+      # already on the stack when some exception was raised and rescued
+      # below it, and that then genuinely returns `nil`, loses that one
+      # `nil` observation (`def f; g rescue nil; end`). This module's
+      # documented policy is that under-collecting beats fabricating --
+      # Store's authority policy already treats a missing return type as
+      # "no confirmed evidence", never as "returns nothing" -- and the
+      # sample is still counted either way. `throw`/`break`/a non-local
+      # `return` out of a block abandon a frame the same way with no
+      # event of any kind to key on; distinguishing those would need
+      # `:c_call`/`:b_return` in the TracePoint, which fire for every C
+      # method and every block return respectively and would not survive
+      # this module's own overhead budget (overhead_spec.rb). They stay
+      # uncorrected, and are far rarer in application code than a raise.
+      def return_type_for(tp, frame)
+        value = tp.return_value
+        return TypeNormalizer.normalize(value) unless value.nil?
+        return nil unless frame.raise_epoch == current_raise_epoch
+
+        Types::NIL
       end
 
       # Pops the entry belonging to the method this `:return`/`:raise`
@@ -213,6 +281,14 @@ module Ovallsp
       # caller's own later `:return` (it may perfectly well rescue and
       # carry on) then had no frame left to record against at all.
       def handle_raise(tp)
+        # Bumped before anything can return early (a raise inside a
+        # non-workspace method matches no recorded frame, and is exactly
+        # the case that unwinds workspace frames above it), and bumped
+        # for every raise rather than only for recorded ones, because
+        # what the epoch has to answer is "could an exception have
+        # abandoned this frame", not "did we record the raiser".
+        Thread.current[@raise_epoch_key] = current_raise_epoch + 1
+
         frame = unwind_to(tp)
         return unless frame
 
@@ -267,6 +343,12 @@ module Ovallsp
       # registry to prune).
       def current_stack
         Thread.current[@stack_key] ||= []
+      end
+
+      # Fiber-local for the same reason, and an Integer rather than a
+      # collection, so it needs no pruning of its own.
+      def current_raise_epoch
+        Thread.current[@raise_epoch_key] || 0
       end
 
       def defined_method(tp)
