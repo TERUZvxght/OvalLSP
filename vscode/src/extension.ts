@@ -7,6 +7,8 @@ import {
 } from 'vscode-languageclient/node';
 import { resolveServerConfig } from './serverConfig';
 import { resolveRuby, RubyResolution } from './rubyResolver';
+import { checkBundledCoreCompatibility } from './platformCompatibility';
+import { WATCHED_FILES_GLOB } from './watchedFiles';
 
 const clients = new Map<string, LanguageClient>();
 const watchers = new Map<string, vscode.FileSystemWatcher>();
@@ -71,9 +73,19 @@ function startClientForFolder(
   // "Gemfile.lock -> Core/Agent full restart"). Without this pattern
   // covering it, that server-side restart logic would exist but never
   // actually run.
-  const watcher = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(folder, '**/{*.rb,*.erb,Gemfile.lock}')
-  );
+  //
+  // `db/structure.sql` is included alongside `Gemfile.lock` for the same
+  // reason: Server#server.rb already treats it (and `db/schema.rb`,
+  // matched by the `*.rb` glob above) as a schema-wide change that
+  // invalidates every Active Record model's column/association facts
+  // (see its own "db/schema.rb/structure.sql -> refresh_all_models"
+  // comment) — but a Rails app configured for the SQL schema-dump format
+  // (`config.active_record.schema_format = :sql`) never touches
+  // `schema.rb` at all, so without this entry here, an external change to
+  // `structure.sql` (a migration run outside the editor, a branch switch)
+  // never reached the server, and that whole invalidation path was
+  // silently dead for every such app.
+  const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(folder, WATCHED_FILES_GLOB));
   watchers.set(folder.uri.toString(), watcher);
 
   const clientOptions: LanguageClientOptions = {
@@ -96,7 +108,30 @@ function startClientForFolder(
   };
 
   const client = new LanguageClient('ovallsp', `OvalLSP (${folder.name})`, serverOptions, clientOptions);
-  client.start().then(undefined, (err) => outputChannel.appendLine(`failed to start Core Server: ${err}`));
+
+  // ADR-0005: checked *before* Core is actually spawned, not after --
+  // `core/bin/ovallsp` itself already refuses to load an incompatible
+  // vendor/bundle (Ovallsp::VendorCompatibility), but running the same
+  // check here first means an incompatible Ruby/VSIX combination is
+  // reported as a clear message in this extension's own OutputChannel
+  // and an error notification, rather than only surfacing however Core
+  // happens to degrade (working via system gems, or failing to load
+  // prism/rbs at all) after the fact. Still starts Core regardless of the
+  // outcome -- Core's own check is what actually decides whether the
+  // vendor payload gets used, and a Ruby with its own separately-installed
+  // prism/rbs is a legitimate, fully-working combination this check has
+  // no way to rule out in advance.
+  void checkBundledCoreCompatibility(context.extensionPath, resolvedRubyCommand).then((compatibility) => {
+    if (!compatibility.compatible) {
+      outputChannel.appendLine(`OvalLSP: ${compatibility.reason}`);
+      void vscode.window.showErrorMessage(
+        `OvalLSP: the Ruby interpreter selected for ${folder.name} is incompatible with this VSIX's bundled ` +
+          'native dependencies. See the OvalLSP output channel for details.'
+      );
+    }
+    client.start().then(undefined, (err) => outputChannel.appendLine(`failed to start Core Server: ${err}`));
+  });
+
   return client;
 }
 

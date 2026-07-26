@@ -5,6 +5,7 @@
   "version": "0.0.1",
   "publisher": "ovallsp",
   "private": true,
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -108,10 +109,13 @@
     "compile": "tsc -p .",
     "watch": "tsc -p . --watch",
     "test:unit": "npm run compile && mocha out/test/unit/**/*.js",
-    "test:integration": "npm run compile && node ./out/test/integration/runTest.js",
+    "ensure-core-absent": "node scripts/ensure-core-absent.js",
+    "test:integration": "npm run ensure-core-absent && npm run compile && node ./out/test/integration/runTest.js",
+    "test:integration:packaged": "npm run copy-core && npm run compile && node ./out/test/integration/runTest.js",
     "test": "npm run test:unit",
     "copy-core": "node scripts/copy-core.js",
-    "package": "npm run copy-core && npm run compile && vsce package --allow-missing-repository --skip-license"
+    "copy-core:allow-missing-vendor": "node scripts/copy-core.js --allow-missing-vendor",
+    "package": "npm run copy-core && npm run compile && vsce package --allow-missing-repository"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"

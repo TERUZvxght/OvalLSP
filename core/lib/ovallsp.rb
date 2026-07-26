@@ -3,6 +3,7 @@
 require "json"
 
 require_relative "ovallsp/version"
+require_relative "ovallsp/vendor_compatibility"
 require_relative "ovallsp/logger"
 require_relative "ovallsp/io/framed_reader"
 require_relative "ovallsp/io/framed_writer"

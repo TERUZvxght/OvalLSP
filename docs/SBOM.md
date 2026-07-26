@@ -14,8 +14,10 @@ is intentionally excluded.
 
 | Ecosystem | Package | Version | License |
 |---|---|---|---|
+| RubyGems | logger | 1.7.0 | Ruby |
 | RubyGems | prism | 1.9.0 | MIT |
 | RubyGems | rbs | 4.0.3 | BSD-2-Clause |
+| RubyGems | tsort | 0.2.0 | Ruby |
 | npm | balanced-match | 1.0.2 | MIT |
 | npm | brace-expansion | 2.1.2 | MIT |
 | npm | minimatch | 5.1.9 | ISC |

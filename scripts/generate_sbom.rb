@@ -26,19 +26,55 @@ def gem_rows
   Bundler.with_unbundled_env do
     Dir.chdir(File.join(ROOT, "core")) do
       lockfile = Bundler::LockfileParser.new(Bundler.read_file("Gemfile.lock"))
-      runtime_dep_names = Gem::Specification.load(File.join(ROOT, "core", "ovallsp.gemspec"))
-                                             .dependencies
-                                             .select { |d| d.type == :runtime }
-                                             .map(&:name)
+      specs_by_name = lockfile.specs.each_with_object({}) { |spec, h| h[spec.name] = spec }
 
-      lockfile.specs
-              .select { |spec| runtime_dep_names.include?(spec.name) }
-              .sort_by(&:name)
-              .map do |spec|
-        installed = Gem::Specification.find_all_by_name(spec.name, spec.version).first
-        license = installed&.license || installed&.licenses&.first || "unknown"
-        { name: spec.name, version: spec.version.to_s, license: license, ecosystem: "RubyGems" }
+      direct_runtime_dep_names = Gem::Specification.load(File.join(ROOT, "core", "ovallsp.gemspec"))
+                                                     .dependencies
+                                                     .select { |d| d.type == :runtime }
+                                                     .map(&:name)
+
+      # The full *transitive* runtime closure, not just ovallsp.gemspec's
+      # own direct dependencies -- a gem this project depends on directly
+      # can itself have runtime dependencies of its own (rbs depends on
+      # logger and tsort; see core/Gemfile.lock), and every one of those is
+      # vendored into vendor/bundle by vscode/scripts/copy-core.js and
+      # loaded at runtime exactly as much as prism/rbs themselves are.
+      # Reading only the gemspec's direct list previously produced an SBOM
+      # naming 2 gems (prism, rbs) against an actually-vendored set of 4
+      # (prism, rbs, logger, tsort) -- found reviewing packaging/release
+      # readiness. Walked via the *lockfile's* own dependency graph (each
+      # spec's `#dependencies`), not gemspecs read off this machine's
+      # installed gems, so the closure reflects exactly what
+      # Gemfile.lock resolved and vendor/bundle actually contains,
+      # regardless of what else happens to be installed locally.
+      closure_names = []
+      queue = direct_runtime_dep_names.dup
+      until queue.empty?
+        name = queue.shift
+        next if closure_names.include?(name)
+
+        closure_names << name
+        spec = specs_by_name[name]
+        next unless spec
+
+        queue.concat(spec.dependencies.map(&:name))
       end
+
+      closure_names
+        .filter_map { |name| specs_by_name[name] }
+        .sort_by(&:name)
+        .map do |spec|
+          installed = Gem::Specification.find_all_by_name(spec.name, spec.version).first
+          # License metadata's source of truth is the *packaged* gemspec
+          # (what actually ships in the VSIX), not whatever happens to be
+          # installed on the machine generating this report -- an
+          # `installed` lookup that finds nothing (or a locally-patched/
+          # different-version install) must degrade to "unknown" rather
+          # than silently reporting a different release's license or
+          # raising.
+          license = installed&.license || installed&.licenses&.first || "unknown"
+          { name: spec.name, version: spec.version.to_s, license: license, ecosystem: "RubyGems" }
+        end
     end
   end
 end
