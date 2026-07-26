@@ -416,6 +416,35 @@ RSpec.describe Ovallsp::AgentProcessManager do
       end
     end
 
+    # A manager whose Agent was killed out from under Core: the reader
+    # thread sees EOF, #mark_unavailable degrades it to :static_only and
+    # tears the process down on a thread of its own -- and #stop is never
+    # called, so #unregister_for_exit never runs. Weakness is the *only*
+    # thing that can get such a manager out of the registry.
+    def churn_crashed_managers(count)
+      count.times do
+        manager = build_manager
+        expect(manager.start).to eq(:ready)
+        Process.kill("KILL", manager.pid)
+
+        wait_for(5) { manager.status == :static_only }
+        expect(manager.status).to eq(:static_only)
+        # #mark_unavailable runs #terminate_process on a thread of its own
+        # here (`from_reader_thread: true`), and that thread's block closes
+        # over the manager -- a genuine but transient reference, waited out
+        # for the same reason #churn_started_managers waits out the reader
+        # thread's own `kill`.
+        wait_for(5) { manager.pid.nil? }
+        manager.instance_variable_get(:@reader_thread)&.join(2)
+        manager.instance_variable_get(:@stderr_thread)&.join(2)
+      end
+    end
+
+    def wait_for(timeout)
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+      sleep 0.02 until yield || Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+    end
+
     def churn_unspawnable_managers(count)
       count.times do
         manager = described_class.new(
@@ -463,6 +492,38 @@ RSpec.describe Ovallsp::AgentProcessManager do
       expect(@manager.status).to eq(:stopped)
       expect(@manager.pid).to be_nil
       expect(process_alive?(pid)).to be(false)
+    end
+
+    # The *other* half of round 17's fix, and the half nothing else here
+    # guards (found by an independent review, round 18): the registry holds
+    # its managers weakly, so a manager nothing else refers to is
+    # collectable exactly as it would be with no exit hook at all.
+    #
+    # Every other example in this block is satisfied by #stop's explicit
+    # #unregister_for_exit alone -- swap `ObjectSpace::WeakMap.new` for a
+    # plain `{}` and the whole file still passes, silently restoring an
+    # accumulate-forever registry through a different door (measured: 29
+    # examples, 0 failures with a strong Hash). That is the same
+    # "the fix shipped, its own regression test didn't guard it" shape
+    # rounds 12 and 14 were already re-opened for.
+    #
+    # #stop is deliberately never called here, because #stop is precisely
+    # what the strong-registry variant gets away with. A crashed Agent is
+    # the reachable production shape of that: #mark_unavailable degrades
+    # the manager to :static_only without any #stop, and
+    # BackgroundTasks#track_manager then *prunes* it as terminal, dropping
+    # the last strong reference anything else held.
+    it "does not retain a manager that crashed and was never #stop-ped" do
+      registry = described_class.instance_variable_get(:@exit_registry)
+      before = registry.keys.size
+
+      churn_on_a_dead_stack { churn_crashed_managers(churn_count) }
+
+      # Bounded by 1, not 0, for the reason the example above documents:
+      # the most recently torn-down manager can still be reachable from its
+      # own finished threads' Fiber/Procs for a cycle. What must not happen
+      # is retention scaling with `churn_count`.
+      expect(registry.keys.size - before).to be <= 1
     end
 
     # A manager that has already been #stop-ped owns nothing the exit hook
