@@ -74,31 +74,82 @@ module Ovallsp
         #
         # Deliberately neither pruned nor mutex-guarded, unlike the call
         # stacks below (round 20) -- checked again in round 21 and left
-        # alone on purpose. It is bounded by construction (one entry per
-        # method that actually exists in the process, not per call, per
-        # thread, or per run), and it is a pure memoization of a
-        # deterministic function of its own key, so the worst a lost or
-        # duplicated concurrent write can cost is recomputing one entry.
-        # A lock on the `:call` path would be paid by every traced call
-        # in the user's suite to buy nothing.
+        # alone on purpose. It is a pure memoization of a deterministic
+        # function of its own key, so the worst a lost or duplicated
+        # concurrent write can cost is recomputing one entry. A lock on
+        # the `:call` path would be paid by every traced call in the
+        # user's suite to buy nothing.
         #
-        # Also deliberately never invalidated, checked in round 22. A
-        # `method_id` is an interned Symbol, so redefining a method
-        # (`class_eval { def m; end }` over an already-observed `m`)
-        # reuses this exact key and keeps serving the *old* definition's
-        # symbol_id, fingerprint and parameter names. The symbol_id is
-        # `[kind, owner, name]` and so is unchanged by any redefinition,
-        # and a stale parameter-name list degrades to Types::UNKNOWN
+        # Not pruning is only defensible because nothing here *retains*
+        # what it caches. An earlier version of this comment claimed the
+        # cache was "bounded by construction -- one entry per method that
+        # actually exists in the process, not per call, per thread, or per
+        # run". That was the same unverified "bounded by construction"
+        # claim rounds 17/18 fixed for AgentProcessManager's exit registry
+        # and round 20 fixed for the per-thread stack registry one method
+        # below, and round 31 measured it false for exactly the same
+        # reason: a plain Hash keyed by `[defined_class, method_id]` holds
+        # `defined_class` *strongly*, so the real bound is one entry per
+        # `Module` object a method was ever called on -- and Module
+        # objects are created at *runtime*, per example, by everything a
+        # real suite does constantly (rspec-mocks defines a stubbed method
+        # on each double's own singleton class; `stub_const` with
+        # `Class.new`; `Struct.new`/`Data.define` inside a method;
+        # `def obj.x`; a Zeitwerk reload replacing every model class).
+        #
+        # Measured on 20,000 objects each given a singleton method inside
+        # one run: all 20,000 were still live after three full GCs, versus
+        # 0 with no Collector installed, and dropped to 0 the instant the
+        # Collector itself was dropped -- the cache key was their only
+        # retainer. The entry need not even buy anything: the same churn
+        # with the classes defined *outside* the workspace produced 3,004
+        # entries whose cached value is `nil`, against an empty
+        # `@aggregates`. This is a leak in the *user's own test-suite
+        # process*, which this class exists to ride along in without
+        # destabilizing.
+        #
+        # So the cache holds its `defined_class` weakly
+        # (`ObjectSpace::WeakKeyMap` -- the same tool and the same
+        # reasoning as AgentProcessManager's `@exit_registry`), in two
+        # levels, `defined_class` -> `{method_id => info}`, because the
+        # weak key has to be the collectable object itself rather than an
+        # `Array` wrapping it. An entry now disappears exactly when the
+        # class it describes does, which is "hold nothing that isn't
+        # already needed" (I8) rather than a pruning mechanism bolted on
+        # -- rounds 17/18's established preference. The inner value
+        # deliberately references nothing that could reach the key back (a
+        # symbol_id of Strings, a digest String, a list of Symbols), or
+        # the weakness would be decorative. Lookup semantics are
+        # unchanged: `WeakKeyMap` matches keys by `hash`/`eql?`, exactly
+        # as the `Array` key's own element comparison did (measured: a
+        # class pair overriding both collides identically under either).
+        #
+        # Also deliberately never invalidated, checked in round 22 and
+        # re-measured in round 31. A `method_id` is an interned Symbol, so
+        # redefining a method (`class_eval { def m; end }` over an
+        # already-observed `m`) reuses this exact key and keeps serving
+        # the *old* definition's symbol_id, fingerprint and parameter
+        # names. The symbol_id is `[kind, owner, name]` and so is
+        # unchanged by any redefinition. What the stale parameter-name
+        # list costs was previously stated as "degrades to Types::UNKNOWN
         # (#positional_param_types rescues the failed
-        # `local_variable_get`) -- i.e. under-collection, which is this
-        # module's stated preference. `prepend` and `alias_method`, the
-        # two ways real code patches a method, both produce a *different*
-        # `defined_class`/`method_id` and so a different key, and the
-        # observation run is a single short-lived process. Invalidating
-        # would mean an `instance_method(...).source_location` on every
-        # traced `:call`, paid by the whole suite, to correct a case that
-        # only ever loses evidence.
-        @method_cache = {}
+        # `local_variable_get`)", together with a claim that `prepend` and
+        # `alias_method` both dodge this by producing a different key.
+        # Half of that is wrong. `prepend` does produce a different
+        # `defined_class` (row 14b). `alias_method` does not: `tp.method_id`
+        # is the name a method was *defined* as, so an `alias_method_chain`
+        # patch -- `alias_method :m_without_x, :m` then a new `def m` -- has
+        # every frame, under both names, report `method_id == :m` and reuse
+        # this key. Measured on a 1-arg `m` observed once and then replaced
+        # by a 2-arg `m`: one aggregate, `samples: 5`, and *one* parameter
+        # slot, not two -- the stale list is missing a slot rather than
+        # blanking one, and the aliased-away original's own calls merge
+        # into it. That is under-collection, this module's stated
+        # preference, and it stays table row 14's deliberate scope limit
+        # (see the design doc) rather than becoming a fix here -- but it is
+        # recorded as what actually happens rather than as a case that
+        # cannot arise.
+        @method_cache = ObjectSpace::WeakKeyMap.new
       end
 
       def start
@@ -165,13 +216,38 @@ module Ovallsp
 
       # Returns `[key, info]`, where `key` is the `[defined_class,
       # method_id]` identity #handle_call pushes and #handle_return matches
-      # on. The key is handed back rather than rebuilt per call site
-      # because the cache lookup has to allocate it anyway.
+      # on. That stack key stays an `Array` -- it is only ever compared,
+      # and never outlives its frame -- while `@method_cache` indexes the
+      # two parts separately so the `Module` half can be held weakly (see
+      # its docs).
+      #
+      # `compute_method_info` raising must stay *un*-memoized, and does:
+      # the per-class Hash is inserted first, the assignment into it never
+      # runs, so the method_id is simply absent and the next call
+      # recomputes and re-raises. That is load-bearing rather than
+      # incidental -- CallStackMachine#pop_matching's top-only rule relies
+      # on a key being untracked *deterministically*, so that the `:return`
+      # for a push #handle_call skipped can never collide with a live frame
+      # carrying the same key (round 20's shape; re-verified round 31).
       def cached_method_info(tp)
-        key = [tp.defined_class, tp.method_id]
-        return [key, @method_cache[key]] if @method_cache.key?(key)
+        defined_class = tp.defined_class
+        method_id = tp.method_id
+        key = [defined_class, method_id]
+        # `WeakKeyMap` raises ArgumentError for a key that cannot be
+        # garbage collected (an immediate). Such a raise would land on the
+        # `:call` path, where #handle's blanket rescue turns it into a
+        # *skipped push* -- so the precondition is enforced here and
+        # degrades to "compute without caching", never to a raise. Every
+        # `:call`/`:return` this subscribes to reports a Module, so it
+        # costs nothing real; it exists so the cache's own precondition is
+        # checked rather than assumed.
+        return [key, compute_method_info(tp)] unless defined_class.is_a?(Module)
 
-        [key, @method_cache[key] = compute_method_info(tp)]
+        per_class = @method_cache[defined_class]
+        return [key, per_class[method_id]] if per_class&.key?(method_id)
+
+        per_class ||= (@method_cache[defined_class] = {})
+        [key, per_class[method_id] = compute_method_info(tp)]
       end
 
       def compute_method_info(tp)

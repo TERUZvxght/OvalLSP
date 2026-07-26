@@ -907,4 +907,89 @@ RSpec.describe Ovallsp::Observation::Collector do
       expect(fiber_worker_signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
     end
   end
+
+  # Round 31. The per-method cache's own docs used to claim it was
+  # "bounded by construction -- one entry per method that actually exists
+  # in the process, not per call, per thread, or per run". It was keyed by
+  # `[defined_class, method_id]` in a plain Hash, which holds
+  # `defined_class` strongly, so the real bound was "one entry per Module
+  # object a method was ever called on" -- and Modules are created at
+  # runtime, per example, by everything a real suite does (see the
+  # fixture's own docs).
+  #
+  # This is the same unbounded-registry shape rounds 17/18 fixed for
+  # AgentProcessManager's exit registry and round 20 fixed for the
+  # per-thread stack registry in this very class, and it is measured the
+  # same way that one is: churn on a stack that is then discarded, then
+  # ask ObjectSpace what survived. What must not happen is retention that
+  # scales with the churn count.
+  describe "the per-method cache does not retain the classes it describes (round 31)" do
+    CHURN_COUNT = 200
+
+    # The churn runs on a Thread that has finished, so no live machine
+    # stack still refers to the last object created -- the same technique
+    # agent_process_manager_spec.rb established for this measurement.
+    def churn_on_a_dead_stack
+      Thread.new { yield }.join
+      3.times { GC.start(full_mark: true, immediate_sweep: true) }
+    end
+
+    def live_holders = ObjectSpace.each_object(ObservationFixture::ChurnHolder).count
+
+    def live_classes = ObjectSpace.each_object(Class).count
+
+    def signature_for(collector, name)
+      collector.results(run_id: "r1").find do |r|
+        r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::Widget", name: name)
+      end
+    end
+
+    it "lets an object given a singleton method inside an observed run be collected" do
+      widget = ObservationFixture::Widget.new
+      churn_on_a_dead_stack { nil }
+      baseline = live_holders
+
+      collector.start
+      churn_on_a_dead_stack { CHURN_COUNT.times { widget.churn_singleton_method } }
+      collector.stop
+      churn_on_a_dead_stack { nil }
+
+      # `collector` is deliberately still referenced here: its cache is
+      # the only thing that could be retaining these. Pre-fix this is
+      # exactly CHURN_COUNT -- every object that was ever handed a
+      # singleton method, pinned through its singleton class by the cache
+      # key, for the rest of the user's suite.
+      expect(live_holders - baseline).to be <= 1
+    end
+
+    it "lets a class created inside an observed run be collected" do
+      widget = ObservationFixture::Widget.new
+      churn_on_a_dead_stack { nil }
+      baseline = live_classes
+
+      collector.start
+      churn_on_a_dead_stack { CHURN_COUNT.times { widget.churn_anonymous_class } }
+      collector.stop
+      churn_on_a_dead_stack { nil }
+
+      # Loose relative to CHURN_COUNT (the VM creates and drops classes of
+      # its own during any of this) but far below it: pre-fix the delta is
+      # CHURN_COUNT itself, because not one of them can ever be freed.
+      expect(live_classes - baseline).to be < (CHURN_COUNT / 4)
+    end
+
+    it "still memoizes, so the churn above is not bought by recomputing per call" do
+      widget = ObservationFixture::Widget.new
+      collector.start
+      5.times { widget.combine("a", "b") }
+      collector.stop
+
+      # One aggregate, five samples: the cache is still answering for the
+      # same `[defined_class, method_id]` across repeated calls rather
+      # than having been removed to fix the retention.
+      expect(signature_for(collector, "combine").samples).to eq(5)
+      cache = collector.instance_variable_get(:@method_cache)
+      expect(cache[ObservationFixture::Widget]).to have_key(:combine)
+    end
+  end
 end

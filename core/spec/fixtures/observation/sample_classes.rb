@@ -368,5 +368,32 @@ module ObservationFixture
         combine("main", "interleaved") # runs on the *main* fiber's own stack, between resumes
       end
     end
+
+    # Round 31. Classes created at *runtime*, which is what a real suite
+    # does constantly: rspec-mocks defines a stubbed method on each
+    # double's own singleton class, `stub_const` takes a fresh
+    # `Class.new`, `Struct.new`/`Data.define` get called inside methods,
+    # and a Zeitwerk reload replaces every model class. Collector's
+    # per-method cache is indexed by the frame's `defined_class`, so
+    # holding that index strongly pins every one of these for the whole
+    # run -- and through a singleton class, the object it is attached to
+    # as well.
+    #
+    # Both return a value of their own so the churn is a normal, fully
+    # traced call rather than something the collector might skip.
+    def churn_anonymous_class
+      Class.new { def churned(n) = n.to_s }.new.churned(1)
+    end
+
+    def churn_singleton_method
+      holder = ChurnHolder.new
+      def holder.churned(n) = n.to_s
+      holder.churned(1)
+    end
   end
+
+  # Nothing but a countable identity for the churn above: a spec can ask
+  # ObjectSpace how many instances survived without the noise of counting
+  # every Class in the VM.
+  class ChurnHolder; end
 end
