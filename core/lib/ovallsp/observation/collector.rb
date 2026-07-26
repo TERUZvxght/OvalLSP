@@ -35,6 +35,10 @@ module Ovallsp
     class Collector
       def initialize(workspace_root:)
         @workspace_root = File.realpath(workspace_root)
+        # Precomputed so #workspace_method? tests containment on a path
+        # *component* boundary rather than a bare string prefix -- see its
+        # own docs (round 24).
+        @workspace_prefix = "#{@workspace_root}#{File::SEPARATOR}"
         @mutex = Mutex.new
         @aggregates = {}
         # One CallStackMachine per fiber -- see #current_stack for why
@@ -45,12 +49,28 @@ module Ovallsp
         # symbol_id, fingerprint (re-hashes the *whole* source file --
         # deliberately coarse, see Fingerprint's own docs), and parameter
         # name list -- every one of which is invariant across repeated
-        # calls to the *same* method within one run. Recomputing this
+        # calls to the *same* method within one run. That invariant is a
+        # real precondition, not a comment: round 24 found symbol_id
+        # violating it for singleton methods (it was derived from the
+        # receiver, `tp.self`, which is not part of this key), so the
+        # first receiver to call an inherited class method decided how
+        # every later caller's evidence was filed. #symbol_id_for's own
+        # docs carry that story; anything added here must likewise be a
+        # function of `[defined_class, method_id]` alone.
+        #
+        # Recomputing this
         # (in particular the SHA256 file digest) on every single `:call`
         # event made a tight loop calling one method thousands of times
-        # pay for thousands of redundant full-file hashes; caught by
-        # this module's own overhead regression test
-        # (spec/ovallsp/observation/overhead_spec.rb).
+        # pay for thousands of redundant full-file hashes.
+        #
+        # Pinned by overhead_spec.rb's "hashes a traced method's source
+        # file once per method, not once per call", which counts digests
+        # rather than timing them. An earlier version of this comment
+        # credited that file's *timing* example instead; round 24 measured
+        # it and found deleting this cache leaves that example 50x inside
+        # its (deliberately loose) bound, so nothing pinned the cache at
+        # all -- the shape round 23 found for #pop_matching, in this same
+        # class.
         #
         # Deliberately neither pruned nor mutex-guarded, unlike the call
         # stacks below (round 20) -- checked again in round 21 and left
@@ -277,19 +297,65 @@ module Ovallsp
       # workspace root -- not merely called from workspace test code, so
       # a Gem/stdlib method invoked from a workspace spec is correctly
       # excluded ("workspace外Gemイベントを既定で収集しない").
+      #
+      # The containment test must be on a path *component* boundary, not a
+      # bare string prefix (round 24). A bare `start_with?(@workspace_root)`
+      # accepts any sibling directory whose name merely begins with the
+      # root's -- `/srv/app` matched `/srv/application/lib/x.rb` -- and
+      # every method defined there was then collected and reported as the
+      # user's own workspace evidence, which is exactly what this filter
+      # exists to prevent. Vendored gems (`/srv/app-vendor`), a sibling
+      # engine, or a checkout beside the workspace all hit it. This is the
+      # same path-boundary class review rounds 1-2 fixed in
+      # BundleEnvironment's chruby/RVM handling, and ColdIndexer's
+      # #real_path_stays_inside_root? already uses this exact idiom.
       def workspace_method?(method_obj)
         file, = method_obj.source_location
         return false unless file
 
-        File.realpath(file).start_with?(@workspace_root)
+        real_path = File.realpath(file)
+        real_path == @workspace_root || real_path.start_with?(@workspace_prefix)
       rescue StandardError
         false
       end
 
+      # The owner of a singleton method is the object its singleton class
+      # is *attached to* -- the class the `def self.x` was written in --
+      # never `tp.self`, the receiver the call was dispatched through.
+      #
+      # Those differ for every inherited class method (`Child.build` where
+      # `build` is defined on `Base`: `tp.defined_class` is
+      # `#<Class:Base>`, `tp.self` is `Child`) and for every `super`
+      # between two singleton methods (both frames report `tp.self ==
+      # Child`). Reading `tp.self` was wrong three ways at once, found by
+      # an independent review (round 24):
+      #
+      # 1. It contradicted the static index, which declares `def self.x`
+      #    under the class it is lexically written in (ParserService's
+      #    #visit_def_node) -- so the observed evidence was filed under a
+      #    symbol_id no declaration ever matches.
+      # 2. It made symbol_id a function of the *receiver* while
+      #    `@method_cache` is keyed by `[defined_class, method_id]`, whose
+      #    own docs above assert every cached field is invariant per key.
+      #    It wasn't: the first receiver to call an inherited class method
+      #    won, and every sibling subclass's evidence was then recorded
+      #    against it. `Base.build` observed after `Child.build` was
+      #    reported as `Child.build`.
+      # 3. Under `super` it collapsed two genuinely different methods into
+      #    one symbol_id, unioning their parameter lists position-wise.
+      #    Measured on `Child.build(a) = super(a, :default)`: one
+      #    signature, `parameter_types` = `[Integer, Symbol]` -- a second
+      #    positional parameter `Child.build` does not have.
+      #
+      # #attached_object is a pure function of `defined_class`, which both
+      # restores the cache's premise structurally and makes the attribution
+      # agree with the index. A singleton class attached to a plain object
+      # (`def obj.x`) still yields no symbol_id, as before.
       def symbol_id_for(tp)
         defined_class = tp.defined_class
         if singleton_class?(defined_class)
-          owner_name = tp.self.is_a?(Module) ? tp.self.name : nil
+          attached = defined_class.attached_object
+          owner_name = attached.is_a?(Module) ? attached.name : nil
           return nil unless owner_name
 
           Index::SymbolId.new(kind: :singleton_method, owner: "::#{owner_name}", name: tp.method_id.to_s, discriminator: nil)

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../../fixtures/observation/sample_classes"
+require_relative "../../fixtures/observation_neighbor/neighbor"
 
 # Deliberately defined *here* rather than under spec/fixtures/observation:
 # this file is outside the workspace root the collector under test is
@@ -315,6 +316,99 @@ RSpec.describe Ovallsp::Observation::Collector do
         expect(signature.return_type).to eq(Ovallsp::Types::NIL)
       end
     end
+  end
+
+  # Found by an independent review (round 24), in the same file and with
+  # the same shape as rounds 20-22: not lost evidence but confidently
+  # wrong evidence, fired by ordinary application code -- here the
+  # `class ApplicationService; def self.call; end; end` + subclasses idiom
+  # that every Rails app has several of.
+  #
+  # `#symbol_id_for` derived a singleton method's owner from `tp.self`,
+  # the receiver the call was *dispatched through*, rather than from the
+  # class the method is *defined on*. Those differ for every inherited
+  # class method and for every `super` between two singleton methods.
+  #
+  # It also silently broke `@method_cache`'s stated premise (its own docs
+  # assert every cached field is a function of `[defined_class,
+  # method_id]`), which is what makes the misattribution stick for the
+  # whole run rather than just for one call.
+  describe "a singleton method's owner is where it is defined, not the receiver (round 24)" do
+    def singleton_for(collector, owner, name)
+      collector.results(run_id: "r1").find do |r|
+        r.symbol_id == sym(kind: :singleton_method, owner: owner, name: name)
+      end
+    end
+
+    # Order matters, and that is the point: pre-fix the *first* receiver to
+    # reach the method won the cache entry, and every later caller's
+    # evidence was filed against it.
+    %i[subclass_first base_first].each do |order|
+      it "files an inherited class method under its defining class regardless of call order (#{order})" do
+        collector.start
+        if order == :subclass_first
+          ObservationFixture::SubRegistry.register("a", "b")
+          ObservationFixture::Registry.register(:c, :d)
+        else
+          ObservationFixture::Registry.register(:c, :d)
+          ObservationFixture::SubRegistry.register("a", "b")
+        end
+        collector.stop
+
+        expect(singleton_for(collector, "::ObservationFixture::SubRegistry", "register")).to be_nil
+        signature = singleton_for(collector, "::ObservationFixture::Registry", "register")
+        expect(signature).not_to be_nil
+        expect(signature.samples).to eq(2)
+      end
+    end
+
+    # `super` between two singleton methods: one call, two frames, both
+    # reporting `tp.self == OverridingRegistry`. Pre-fix they collapsed
+    # into a single symbol_id whose `parameter_types` was the position-wise
+    # union of two different parameter lists -- reporting a second
+    # positional parameter `OverridingRegistry.register` does not have, and
+    # leaving `Registry.register` with no evidence at all.
+    it "keeps a super-calling override and the method it calls as two separate symbols" do
+      collector.start
+      ObservationFixture::OverridingRegistry.register("x")
+      collector.stop
+
+      override = singleton_for(collector, "::ObservationFixture::OverridingRegistry", "register")
+      parent = singleton_for(collector, "::ObservationFixture::Registry", "register")
+
+      expect(override).not_to be_nil
+      expect(override.parameter_types).to eq([Ovallsp::Types::Nominal.new(name: "String")])
+      expect(override.samples).to eq(1)
+
+      expect(parent).not_to be_nil
+      expect(parent.parameter_types).to eq(
+        [Ovallsp::Types::Nominal.new(name: "String"), Ovallsp::Types::Nominal.new(name: "Symbol")]
+      )
+      expect(parent.samples).to eq(1)
+    end
+  end
+
+  # Also round 24, and the same class of bug review rounds 1-2 fixed in
+  # BundleEnvironment: `#workspace_method?` tested containment with a bare
+  # `start_with?(@workspace_root)`, so any sibling directory whose name
+  # merely *begins with* the workspace root's name was treated as inside
+  # it. Every method defined there was collected and reported as the
+  # user's own workspace evidence -- the exact thing this filter exists to
+  # prevent ("workspace外Gemイベントを既定で収集しない"). A vendored gem
+  # dir (`app-vendor` next to `app`), a sibling engine, or any adjacent
+  # checkout hits it.
+  it "treats the workspace root as a path boundary, not a string prefix" do
+    # spec/fixtures/observation_neighbor is a *sibling* of the collector's
+    # workspace root (spec/fixtures/observation) whose path begins with it.
+    expect(File.dirname(ObservationNeighbor::Outsider.instance_method(:helper).source_location.first))
+      .to start_with(workspace_root)
+
+    collector.start
+    ObservationNeighbor::Outsider.new.helper(1)
+    collector.stop
+
+    owners = collector.results(run_id: "r1").map { |r| r.symbol_id.owner }
+    expect(owners).not_to include("::ObservationNeighbor::Outsider")
   end
 
   # Same round: the per-thread call stacks lived in a plain `Hash` keyed by

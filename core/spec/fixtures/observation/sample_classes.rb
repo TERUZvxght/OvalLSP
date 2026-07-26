@@ -163,6 +163,34 @@ module ObservationFixture
     end
   end
 
+  # Singleton methods reached through inheritance and through `super`.
+  # For both, `tp.defined_class` is the singleton class of the class the
+  # method is *written in*, while `tp.self` is whichever class the call was
+  # dispatched through -- so deriving the owner from `tp.self` (round 24's
+  # finding) files the evidence under the wrong symbol, and does it
+  # differently depending on which receiver happened to call first.
+  class Registry
+    def self.register(name, scope)
+      "#{name}/#{scope}"
+    end
+  end
+
+  # Inherits .register unchanged: `Sub.register` and `Registry.register`
+  # are the same method, at the same source location, and must produce the
+  # same symbol_id no matter which is observed first.
+  class SubRegistry < Registry; end
+
+  # Overrides .register with a *different arity* and calls `super`, so one
+  # call produces two frames that both report `tp.self == OverridingRegistry`.
+  # Collapsing them into one symbol_id unions their parameter lists
+  # position-wise, inventing a second positional parameter this method does
+  # not have.
+  class OverridingRegistry < Registry
+    def self.register(name)
+      super(name, :default)
+    end
+  end
+
   class Widget
     # A Fiber suspending mid-call and later resuming (table row 15): the
     # fiber's own call stack must stay isolated from whatever else runs on
