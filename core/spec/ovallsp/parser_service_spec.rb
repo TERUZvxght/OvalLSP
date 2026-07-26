@@ -254,6 +254,45 @@ RSpec.describe Ovallsp::ParserService do
     expect(params.map(&:name)).to eq(%w[a b rest k ok kw blk])
   end
 
+  # Found by an independent review (round 28). A destructuring parameter is a
+  # `Prism::MultiTargetNode`, which has no `#name` at all, and
+  # #extract_parameters read `#name` off every entry in `requireds`. The
+  # NoMethodError propagated out of #summarize, so the failure was never a
+  # degraded parameter list -- it was the loss of the *whole file*: no
+  # FileSummary at all, every declaration in it gone from the index, and
+  # hover/definition/completion/diagnostics dark for it. Measured against a
+  # real workspace file, Server logged `cold index: failed to index <file>:
+  # NoMethodError: undefined method 'name' for an instance of
+  # Prism::MultiTargetNode` and indexed none of it.
+  #
+  # `other` is here specifically so the example fails on the *collateral*
+  # loss rather than only on the one method's parameter list.
+  it "indexes a whole file containing a method with a destructuring parameter" do
+    source = "class A\n  def m(a, (b, c))\n  end\n\n  def other\n  end\nend\n"
+
+    summary = service.summarize(document(source))
+
+    expect(summary.declarations.map { |d| d.symbol_id.name }).to eq(%w[::A m other])
+    params = summary.declarations.find { |d| d.symbol_id.name == "m" }.parameters
+    # The nameless slot is kept, never dropped -- dropping it would shift
+    # every later parameter out of its own position. `nil` is already an
+    # ordinary shape here (an anonymous `*`/`**`/`&` produces one too).
+    expect(params.map(&:kind)).to eq(%i[required required])
+    expect(params.map(&:name)).to eq(["a", nil])
+  end
+
+  # Same round, same method: `posts` -- the required parameters that follow a
+  # `*rest` -- were never read at all, so a parameter that plainly exists was
+  # reported as not existing and signature help rendered `m(a, rest)`.
+  it "captures a required parameter that follows a rest parameter" do
+    source = "def m(a, *rest, b, k: 1, &blk); end\n"
+
+    params = service.summarize(document(source)).declarations.first.parameters
+
+    expect(params.map(&:name)).to eq(%w[a rest b k blk])
+    expect(params.map(&:kind)).to eq(%i[required rest required keyword_optional block])
+  end
+
   describe "Rails DSL generated methods (Task 017)" do
     def generated(summary) = summary.generated_method_facts
 

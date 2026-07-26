@@ -575,6 +575,53 @@ RSpec.describe Ovallsp::Observation::Collector do
     )
   end
 
+  # Found by an independent review (round 28), and the same family a third
+  # time: round 25 counted the repeat inside the projection, round 26 widened
+  # it to the whole `#parameters` list -- but `#parameters` is itself an
+  # incomplete description of the declaration. A destructuring parameter is
+  # reported as a bare `[:req]` with no name, and the names it binds are
+  # reported nowhere at all, so no tally over that list can ever see a
+  # collision hiding inside one.
+  #
+  # Ruby binds the rightmost declaration, so the destructured `_` wins.
+  # Measured pre-fix on `shadowed_by_destructure(42, ["x", "y"])`:
+  # `[String, Unknown]` -- a confidently wrong class for a slot 0 that
+  # plainly holds an Integer.
+  it "reports no type for a positional slot whose name is shadowed inside a destructuring parameter" do
+    collector.start
+    ObservationFixture::RepeatedParamNames.new.shadowed_by_destructure(42, ["x", "y"])
+    collector.stop
+
+    signature = collector.results(run_id: "r1").find do |r|
+      r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::RepeatedParamNames",
+                         name: "shadowed_by_destructure")
+    end
+
+    expect(signature).not_to be_nil
+    # Slot 1 is the destructuring parameter itself, which has never had a
+    # name to read; slot 0 is the one that changed, from String to Unknown.
+    expect(signature.parameter_types).to eq([Ovallsp::Types::UNKNOWN, Ovallsp::Types::UNKNOWN])
+  end
+
+  # The control for the example above, so the fix cannot be written as "blank
+  # every positional slot of any method that destructures" -- which would pay
+  # for one unreachable collision by discarding every method that uses a
+  # destructuring parameter at all. `kept` is not `_`-prefixed, so Ruby's own
+  # duplicate-name rule already proves nothing else can bind it.
+  it "still reports a non-underscore slot's own type alongside a destructuring parameter" do
+    collector.start
+    ObservationFixture::RepeatedParamNames.new.clean_destructure(42, ["x", "y"])
+    collector.stop
+
+    signature = collector.results(run_id: "r1").find do |r|
+      r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::RepeatedParamNames",
+                         name: "clean_destructure")
+    end
+
+    expect(signature).not_to be_nil
+    expect(signature.parameter_types).to eq([Ovallsp::Types::Nominal.new(name: "Integer"), Ovallsp::Types::UNKNOWN])
+  end
+
   # Found by an independent review (round 27). Unlike rounds 20-26, which all
   # lived in how a single call's evidence is *derived*, this one is in how
   # calls are *aggregated*: `#record` sized an aggregate's per-slot Array

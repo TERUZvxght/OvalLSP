@@ -493,18 +493,57 @@ module Ovallsp
       # for the one slot it lists, the trailing required parameter, which
       # plainly holds a String. Same family as round 25's own finding and as
       # rounds 20-22: not lost evidence but confidently wrong evidence.
+      #
+      # Counting over the whole `#parameters` list is still not the same as
+      # counting over the *declaration*, because `#parameters` is incomplete
+      # by design (round 28). A destructuring parameter is reported as a bare
+      # `[:req]` with no name at all, and the names it binds -- ordinary
+      # method-body locals, indistinguishable at the binding from a
+      # positional slot's own -- are never reported anywhere. So a name this
+      # tally sees exactly once can still be bound a second time inside a
+      # destructure, and Ruby binds the *rightmost* such declaration.
+      # Measured on `def m(_, (_, _b))` -- two idioms real code uses
+      # constantly, legal together only because `_` is exempt from Ruby's
+      # duplicate-name rule -- `m(42, ["x", "y"])` reported `[String,
+      # Unknown]` for a slot 0 that plainly holds an Integer.
+      #
+      # Ruby rejects a duplicated parameter name at parse time unless it is
+      # `_`-prefixed, and it does so across the destructure boundary too
+      # (`def m(a, (a, b))` and `def m(a, (b, a))` are both SyntaxError), so
+      # a collision this list cannot see is reachable for exactly the
+      # `_`-prefixed names and no others. Those slots blank; every other name
+      # stays fully collected, which is what keeps the no-collision control
+      # (`def m(a, (b, c))`, whose slot 0 is still reported as Integer) from
+      # degrading along with them.
       def positional_param_names(method_obj)
         parameters = method_obj.parameters
         repeated = parameters.map { |(_, name)| name }.tally.select { |name, count| name && count > 1 }.keys.to_set
+        destructuring = parameters.any? { |(kind, name)| positional?(kind) && name.nil? }
         parameters.each_with_object([]) do |(kind, name), slots|
-          next unless %i[req opt].include?(kind)
+          next unless positional?(kind)
 
           # `nil` keeps the slot but marks it unreadable -- never dropped,
           # or every later slot would shift out of its own position.
-          slots << (repeated.include?(name) ? nil : name)
+          slots << (readable_by_name?(name, repeated, destructuring) ? name : nil)
         end
       rescue StandardError
         []
+      end
+
+      def positional?(kind)
+        kind == :req || kind == :opt
+      end
+
+      # A slot is readable by name only when this declaration binds that name
+      # in exactly one place. `repeated` settles that for every name
+      # `#parameters` actually reports; `destructuring` is the case where it
+      # reports none at all, and then only Ruby's own duplicate-name rule
+      # bounds which names the hidden second binding could be.
+      def readable_by_name?(name, repeated, destructuring)
+        return false unless name
+        return false if repeated.include?(name)
+
+        !(destructuring && name.start_with?("_"))
       end
 
       def positional_param_types(tp, param_names)

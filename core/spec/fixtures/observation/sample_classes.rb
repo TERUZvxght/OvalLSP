@@ -250,6 +250,34 @@ module ObservationFixture
     def rest_between(a, *rest, b)
       [a, rest, b]
     end
+
+    # The same collision again, this time reached across the one boundary
+    # `#parameters` refuses to describe at all (round 28). A destructuring
+    # parameter is reported as a bare `[:req]` with no name, and the names it
+    # binds are reported nowhere, so a tally over `#parameters` -- however
+    # wide -- sees `_` exactly once here and concludes the slot is readable.
+    # Ruby binds the *rightmost* declaration, which is the destructured one,
+    # so reading slot 0 by name answers with the first element of the second
+    # argument. Slot 0's own value is an Integer and that element a String,
+    # so a wrong class is visible rather than coincidental. `_` and a
+    # destructuring parameter are both everyday idioms; they are legal
+    # *together* only because `_`-prefixed names are exempt from Ruby's
+    # duplicate-name rule (`def m(a, (a, b))` is a SyntaxError).
+    #
+    # `_a` rather than a bare `_` -- both behave identically here, and bare
+    # `_` is the more everyday spelling, but only the prefixed form makes a
+    # fix narrowed to the single name `:_` fail rather than pass.
+    def shadowed_by_destructure(_a, (_a, _b))
+      [_a, _b]
+    end
+
+    # The control: the same destructuring shape with no collision in it, so
+    # the fix above cannot be written as "blank every slot of any method that
+    # destructures". `kept` is not `_`-prefixed and so cannot be the hidden
+    # second binding at all -- its own Integer must still be reported.
+    def clean_destructure(kept, (_x, _y))
+      [kept, _x, _y]
+    end
   end
 
   # Two *distinct* Class objects that both answer `#name` with

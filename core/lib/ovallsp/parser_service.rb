@@ -586,23 +586,61 @@ module Ovallsp
         end
       end
 
+      # Every positional slot the declaration has, in declaration order,
+      # named where a name exists.
+      #
+      # Two things this got wrong until round 28, both from the same
+      # assumption -- that a positional parameter always has a `#name` and
+      # always lives in `requireds`:
+      #
+      # 1. A *destructuring* parameter (`def m(a, (b, c))`) is a
+      #    `Prism::MultiTargetNode`, which has no `#name` at all, so reading
+      #    one raised `NoMethodError` out of `#summarize`. That is not a
+      #    degraded parameter list, it is the loss of the *entire file*: a
+      #    `#summarize` that raises produces no FileSummary, so every
+      #    declaration in that file disappears from the index and hover,
+      #    go-to-definition, completion and diagnostics all go dark for it.
+      #    Measured: a workspace file containing one such method was logged
+      #    as `cold index: failed to index <file>: NoMethodError: undefined
+      #    method 'name' for an instance of Prism::MultiTargetNode` and
+      #    contributed nothing. `LocalInferencer` already guards its own
+      #    block-parameter reads with `respond_to?(:name)` for exactly this
+      #    node; this path did not.
+      # 2. `posts` -- the required parameters that follow a `*rest`, as in
+      #    `def m(a, *rest, b)` -- were never read at all, so `b` was
+      #    reported as not existing (signature help rendered `m(a, rest)`).
       def extract_parameters(parameters_node)
         return [] unless parameters_node
 
         params = []
-        parameters_node.requireds.each { |p| params << param(p.name, :required) }
-        parameters_node.optionals.each { |p| params << param(p.name, :optional, p.value) }
-        params << param(parameters_node.rest.name, :rest) if parameters_node.rest.is_a?(Prism::RestParameterNode)
+        parameters_node.requireds.each { |p| params << param(parameter_name(p), :required) }
+        parameters_node.optionals.each { |p| params << param(parameter_name(p), :optional, p.value) }
+        if parameters_node.rest.is_a?(Prism::RestParameterNode)
+          params << param(parameter_name(parameters_node.rest), :rest)
+        end
+        parameters_node.posts.each { |p| params << param(parameter_name(p), :required) }
         parameters_node.keywords.each do |p|
           kind = p.is_a?(Prism::OptionalKeywordParameterNode) ? :keyword_optional : :keyword
-          params << param(p.name, kind, p.respond_to?(:value) ? p.value : nil)
+          params << param(parameter_name(p), kind, p.respond_to?(:value) ? p.value : nil)
         end
         if parameters_node.keyword_rest.is_a?(Prism::KeywordRestParameterNode)
-          params << param(parameters_node.keyword_rest.name, :keyrest)
+          params << param(parameter_name(parameters_node.keyword_rest), :keyrest)
         end
-        params << param(parameters_node.block.name, :block) if parameters_node.block
+        params << param(parameter_name(parameters_node.block), :block) if parameters_node.block
 
         params
+      end
+
+      # Not every parameter node carries a name, and asking one that doesn't
+      # is what took a whole file's index down (above). A `nil` name is
+      # already an ordinary, supported shape here -- an anonymous `*`/`**`/
+      # `&` produces one too, and every consumer already handles it
+      # (`MethodAnalyzer` guards on `if param.name`, `QueryService`'s
+      # signature label renders it as an empty segment) -- so the slot is
+      # kept rather than dropped, which is what keeps every later parameter
+      # at its own position.
+      def parameter_name(node)
+        node.name if node.respond_to?(:name)
       end
 
       def param(name, kind, default_node = nil)
