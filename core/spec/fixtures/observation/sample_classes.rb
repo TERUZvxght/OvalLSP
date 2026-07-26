@@ -101,5 +101,46 @@ module ObservationFixture
 
       nil
     end
+
+    # Direct recursion: CallStackMachine#pop_matching must close the
+    # *innermost* live invocation on each `:return`, not an outer one with
+    # the same key -- see its own docs (I3) and
+    # docs/design/tasks/022.2-collector-tracepoint-state-machine.md's
+    # table row 3.
+    def factorial(n)
+      return 1 if n <= 1
+
+      n * factorial(n - 1)
+    end
+
+    # Mutual recursion (table row 4): two different keys interleaved on
+    # the same fiber's stack, neither ever popping the other's frame.
+    def mutual_a(n)
+      return "a-base" if n <= 0
+
+      mutual_b(n - 1)
+    end
+
+    def mutual_b(n)
+      return 0.0 if n <= 0
+
+      mutual_a(n - 1)
+    end
+
+    # A Fiber suspending mid-call and later resuming (table row 15): the
+    # fiber's own call stack must stay isolated from whatever else runs on
+    # the same Thread while it's suspended.
+    def fiber_worker(steps)
+      fiber = Fiber.new do
+        steps.times { |i| Fiber.yield combine("f", i.to_s) }
+        "fiber-done"
+      end
+      loop do
+        result = fiber.resume
+        break result if result == "fiber-done"
+
+        combine("main", "interleaved") # runs on the *main* fiber's own stack, between resumes
+      end
+    end
   end
 end

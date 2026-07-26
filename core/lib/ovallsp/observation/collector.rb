@@ -4,6 +4,7 @@ require "set"
 require_relative "type_normalizer"
 require_relative "fingerprint"
 require_relative "observed_signature"
+require_relative "call_stack_machine"
 require_relative "../index/symbol_id"
 require_relative "../types"
 
@@ -22,26 +23,24 @@ module Ovallsp
     # #to_s), and whether the call happened at all. Never reads argument
     # names' string contents, SQL, env vars, or file contents ("保存禁止"
     # -- docs/design/tasks/019-runtime-observation.md).
+    #
+    # The `:call`/`:return`/`:raise` bookkeeping itself -- what to push,
+    # what to pop, what a `:raise` does and doesn't mean -- lives in
+    # CallStackMachine, not here; this class is purely the translation
+    # from real TracePoint events into that machine's inputs, plus
+    # method-info caching and aggregate recording. See
+    # docs/design/tasks/022.2-collector-tracepoint-state-machine.md for
+    # why that split exists and the invariants/transition table it
+    # documents.
     class Collector
-      # `raise_epoch` is the value of #current_raise_epoch when this frame
-      # was pushed; #return_type_for compares it against the epoch at
-      # `:return` time to tell a real `nil` return from a frame CRuby
-      # abandoned because an exception unwound it (see its own docs).
-      Frame = Struct.new(:symbol_id, :fingerprint, :param_types, :raise_epoch)
-      private_constant :Frame
-
       def initialize(workspace_root:)
         @workspace_root = File.realpath(workspace_root)
         @mutex = Mutex.new
         @aggregates = {}
-        # Per-instance so two Collectors in one process can't share a
-        # stack; see #current_stack for why this is fiber-local storage
-        # rather than a Hash this object owns.
+        # One CallStackMachine per fiber -- see #current_stack for why
+        # fiber-local storage, rather than a Hash this object owns, is
+        # what makes that isolation structural.
         @stack_key = :"ovallsp_observation_stack_#{object_id}"
-        # Counts `:raise` events on this fiber; see #return_type_for.
-        # Fiber-local for exactly the reason the stack is: an exception
-        # raised on one fiber never unwinds another's frames.
-        @raise_epoch_key = :"ovallsp_observation_raise_epoch_#{object_id}"
         # `[defined_class, method_id]` -> the workspace-eligibility check,
         # symbol_id, fingerprint (re-hashes the *whole* source file --
         # deliberately coarse, see Fingerprint's own docs), and parameter
@@ -123,46 +122,31 @@ module Ovallsp
         nil
       end
 
-      # Pushes an entry for *every* `:call`, not only for the ones being
-      # recorded -- the frame slot is simply nil for a method outside the
-      # workspace (found by an independent review, round 20).
-      #
-      # Pushing only workspace calls while #handle_return popped on every
-      # `:return` left the stack unbalanced by construction, and TracePoint
-      # fires `:call`/`:return` for every *Ruby-defined* method, gem and
-      # stdlib included. So the first non-workspace Ruby method a workspace
-      # method called -- `n.to_s` is C and invisible, but any
-      # ActiveRecord/ActiveSupport/rspec helper is not, which in a real
-      # Rails app is essentially every method body -- returned first and
-      # popped the *caller's* frame, recording the callee's return value
-      # against the caller's symbol_id. The workspace method's own
-      # `:return` then found an empty stack and recorded nothing at all.
-      #
-      # Reproduced before the fix on a two-file workspace: `App2#label`,
-      # which calls one non-workspace method and then returns `n.to_s`,
-      # was recorded with `return=Array` (the callee's value) instead of
-      # `String`. That evidence is what Server#show_type_evidence and
-      # LocalInferencer hand the user as observed types, so the feature
-      # was reporting a confidently wrong type for the majority of real
-      # methods rather than merely observing fewer of them.
-      #
-      # Every entry now carries the identity of the method it belongs to
-      # and #unwind_to pops by *matching* that identity rather than
-      # trusting position, which additionally makes the stack self-healing
-      # -- see its own docs for the two ways TracePoint legitimately
-      # delivers a `:return` with no `:call` of its own to match.
+      # Every observed `:call` becomes exactly one CallStackMachine#push,
+      # whether or not the method is one this Collector records -- see
+      # the machine's own docs (I2) for why an untracked method still
+      # needs a stack slot, and
+      # docs/design/tasks/022.2-collector-tracepoint-state-machine.md's
+      # transition table for the full reasoning this class used to carry
+      # inline before it was extracted (round 20's original finding).
       def handle_call(tp)
         key, info = cached_method_info(tp)
-        frame = info && Frame.new(info[:symbol_id], info[:fingerprint],
-                                  positional_param_types(tp, info[:param_names]),
-                                  current_raise_epoch)
-        current_stack.push(key, frame)
+        payload = info && call_payload(tp, info)
+        current_stack.push(key, payload)
+      end
+
+      def call_payload(tp, info)
+        {
+          symbol_id: info[:symbol_id],
+          fingerprint: info[:fingerprint],
+          param_types: positional_param_types(tp, info[:param_names])
+        }
       end
 
       # Returns `[key, info]`, where `key` is the `[defined_class,
-      # method_id]` identity #handle_call pushes and #unwind_to matches on.
-      # The key is handed back rather than rebuilt per call site because
-      # the cache lookup has to allocate it anyway.
+      # method_id]` identity #handle_call pushes and #handle_return matches
+      # on. The key is handed back rather than rebuilt per call site
+      # because the cache lookup has to allocate it anyway.
       def cached_method_info(tp)
         key = [tp.defined_class, tp.method_id]
         return [key, @method_cache[key]] if @method_cache.key?(key)
@@ -184,189 +168,75 @@ module Ovallsp
         }
       end
 
+      # `:return` is CallStackMachine's only close-out path (see its own
+      # docs, and the transition table's rows 1-4 and 7-12) -- every
+      # `:call` gets exactly one `:return` from CRuby, abandoned frames
+      # included, so matching by identity here is what keeps the stack
+      # balanced without `:raise` needing to pop anything itself.
       def handle_return(tp)
-        frame = unwind_to(tp)
-        return unless frame
+        frame = current_stack.pop_matching([tp.defined_class, tp.method_id])
+        return unless frame&.payload
 
-        record(frame, return_type: return_type_for(tp, frame))
+        record(frame.payload, return_type: return_type_for(tp, frame))
       end
 
-      # CRuby fires a `:return` event for a method that never returned at
-      # all -- one an exception unwound past -- and reports its
-      # `return_value` as `nil`, indistinguishable at the event itself
-      # from a method that genuinely evaluated to `nil` (found by an
-      # independent review, round 21; verified on ruby 3.4.7).
+      # CRuby fires a `:return` event, `return_value = nil`, for a method
+      # that never returned at all -- one an exception unwound past --
+      # indistinguishable at the event itself from a method that genuinely
+      # evaluated to `nil` (transition table row 7). A non-nil value
+      # always proves a normal return; only a `nil` needs qualifying,
+      # which is exactly what CallStackMachine's per-frame raise_epoch
+      # exists to do: trusted exactly when no `:raise` happened on this
+      # fiber during the frame's own lifetime (row 8's `ensure`-body case
+      # is why this is a per-frame epoch rather than a single "an
+      # exception is in flight" flag -- a call made *after* the raise
+      # carries the post-raise epoch and so stays trusted).
       #
-      # Round 20's `:raise` handling only closed out the frame of the
-      # method the raise happened *in* (round 22 removed that close-out
-      # entirely -- see #handle_raise). Every frame between that one and
-      # whichever frame rescues is abandoned without a `:raise` of its
-      # own, and each of those still gets this `nil`-valued `:return`. So
-      # `def find_it; Model.find(id); end`, a method that on this call
-      # raised RecordNotFound and returned nothing, was recorded as
-      # "returns nil" -- and `nil` in an observed return union is exactly
-      # the signal a user acts on, surfaced verbatim by
-      # `ovallsp/showTypeEvidence` (`returnType: "User | nil"`). That
-      # breaks this module's own stated contract ("a call that never
-      # returned must never contribute a fabricated return type"), which
-      # before this round held only for a method that raised *directly*.
-      #
-      # A non-nil `return_value` proves a normal return -- an abandoned
-      # frame's is always `nil` -- so only a `nil` needs qualifying, and
-      # it is trusted exactly when no `:raise` happened on this fiber
-      # during the frame's own lifetime. Frames pushed *after* the raise
-      # (an `ensure` body's own calls, which run mid-unwind) carry the
-      # current epoch and so stay trusted, which a plain "an exception is
-      # in flight" flag would have got wrong.
-      #
-      # Accepted, deliberately one-directional residue: a frame that was
-      # already on the stack when some exception was raised and rescued
-      # below it, and that then genuinely returns `nil`, loses that one
-      # `nil` observation (`def f; g rescue nil; end`). This module's
-      # documented policy is that under-collecting beats fabricating --
-      # Store's authority policy already treats a missing return type as
-      # "no confirmed evidence", never as "returns nothing" -- and the
-      # sample is still counted either way.
-      #
-      # The opposite residue -- a frame abandoned with no `:raise` at all,
-      # whose fabricated `nil` therefore still gets trusted -- is real and
-      # deliberately uncorrected, because CRuby offers nothing to key on.
-      # `throw`, `break`, and a non-local `return` out of a block all end
-      # a frame with the same bare `nil`-valued `:return` and no other
-      # event (verified on ruby 3.4.7), and so does `Thread#kill` on a
-      # thread parked inside a workspace method -- measured in round 22:
-      # `call`, then `return ret=nil`, no `:raise` anywhere on that
-      # thread. Distinguishing any of them would need `:c_call`/
-      # `:b_return` in the TracePoint, which fire for every C method and
-      # every block return respectively and would not survive this
-      # module's own overhead budget (overhead_spec.rb). All four are far
-      # rarer in application code than a raise, and all four are bounded
-      # to one fabricated `nil` in one method's union rather than the
-      # systematic misreporting rounds 20-22 each fixed.
+      # See the state-machine design doc's "what is not fixed" section
+      # for the two residues this still doesn't (and structurally cannot,
+      # short of tracing :c_call/:b_return) distinguish from a genuine
+      # `nil`: a frame the same method's own rescue swallowed, and a frame
+      # abandoned by throw/break/non-local-return/Thread#kill rather than
+      # a raise.
       def return_type_for(tp, frame)
         value = tp.return_value
         return TypeNormalizer.normalize(value) unless value.nil?
-        return nil unless frame.raise_epoch == current_raise_epoch
+        return nil unless frame.raise_epoch == current_stack.raise_epoch
 
         Types::NIL
       end
 
-      # Pops the entry belonging to the method this `:return` event is
-      # actually for, discarding anything still stacked above it, and
-      # returns its frame (nil when that method wasn't one being
-      # recorded). Returns nil, leaving the stack untouched, when no entry
-      # matches at all. `:return` is the only caller: round 22 made it the
-      # single close-out path, since CRuby fires one for every `:call`,
-      # abandoned frames included.
-      #
-      # Matching rather than a bare `pop` is what makes the stack
-      # self-healing, and both ways it can legitimately desynchronize are
-      # reachable in an ordinary suite:
-      #
-      # 1. Calls already in flight when #start ran. Harness installs this
-      #    from a `-r` require, so every frame between `main` and that
-      #    require -- RubyGems' and Bundler's own loaders, at minimum --
-      #    fires a `:return` whose `:call` predates the TracePoint. A bare
-      #    `pop` treated each of those as "the innermost recorded call
-      #    just returned".
-      # 2. An exception unwinding several frames. `:raise` fires once, at
-      #    the raise site; the frames it unwinds past never get a `:return`
-      #    of their own, so they stay stacked until something below them
-      #    returns. Slicing everything above the match is what clears them.
-      #
-      # The match is at the top of the stack on the overwhelmingly common
-      # path (call returns, nothing intervened), so the scan is O(1) there
-      # and only walks on the two paths above.
-      def unwind_to(tp)
-        stack = current_stack
-        defined_class = tp.defined_class
-        method_id = tp.method_id
-
-        index = stack.size - 2
-        while index >= 0
-          key = stack[index]
-          if key[0].equal?(defined_class) && key[1] == method_id
-            frame = stack[index + 1]
-            stack.slice!(index, stack.size - index)
-            return frame
-          end
-          index -= 2
-        end
-        nil
-      end
-
-      # `:raise` closes out no frame at all. It only bumps the epoch
-      # #return_type_for consults, because a raise is not evidence that
-      # any frame ended -- only that a `nil` return seen later might be
-      # fabricated (found by an independent review, round 22).
-      #
-      # Rounds 20 and 21 both still had this event *pop and record* the
-      # frame of the method the raise was attributed to, on the premise
-      # that such a method never returns. CRuby says otherwise: `:raise`
-      # is attributed to the innermost Ruby frame the raise occurred in,
-      # whether or not the exception ever unwinds that frame, and a
-      # method that rescues its own raise is reported exactly like one
-      # that dies of it (verified on ruby 3.4.7). All three of these fire
-      # `raise Widget#m` and then `return Widget#m` with the real value:
-      #
-      #   def m; raise Bad unless ok?; "hit"; rescue Bad; "miss"; end
-      #   def m; xs.each { raise Stop }; "done"; rescue Stop; "done"; end
-      #   def m; Model.transaction { raise Rollback }; "after"; end
-      #
-      # -- a guard clause, a raise inside a block, and the Rails
-      # `transaction`/`Rollback` idiom, i.e. ordinary application code
-      # rather than an edge case. Popping at `:raise` threw that frame
-      # away, so the real `:return` matched nothing and the method's
-      # actual return type was discarded. Worse than losing it outright:
-      # a method observed on both paths reported only the non-raising
-      # one, so `def fetch(id); raise Missing unless ok; User.find(id);
-      # rescue Missing; NullUser.new; end` was reported as returning
-      # `User`, never `User | NullUser` -- a union that is confidently
-      # wrong rather than merely incomplete, which is what
-      # `ovallsp/showTypeEvidence` then hands the user. And because
-      # #unwind_to discards everything stacked above its match, the
-      # frames *between* the raise site and that method -- other
-      # workspace methods, still perfectly alive -- were discarded with
-      # it.
-      #
-      # Nothing is lost by not popping here: CRuby fires exactly one
-      # `:return` for every `:call`, abandoned frames included (an
-      # exception unwinding a->b->c produces `return c`, `return b`,
-      # `return a`, all with `ret=nil`). So `:return` is the single
-      # authoritative close-out for every frame, it keeps the stack
-      # balanced by construction, and round 21's epoch check is already
-      # what tells an abandoned frame's `nil` from a real one. Removing
-      # the second close-out path also removes the double-count it made
-      # possible, where a raise popped one invocation of a recursive
-      # method and its `:return` then closed out the next one down.
+      # Advances this fiber's raise epoch and nothing else -- a `:raise`
+      # is not evidence that any particular frame has ended, only that a
+      # `nil` return observed later might be fabricated (transition table
+      # rows 7, 9, 10; CallStackMachine#note_raise's own docs for why this
+      # event must never pop).
       def handle_raise(_tp)
-        # Bumped for every raise rather than only for recorded ones,
-        # because what the epoch has to answer is "could an exception
-        # have abandoned this frame", not "did we record the raiser".
-        Thread.current[@raise_epoch_key] = current_raise_epoch + 1
+        current_stack.note_raise
       end
 
-      def record(frame, return_type:)
+      def record(payload, return_type:)
         @mutex.synchronize do
-          agg = @aggregates[frame.symbol_id] ||= {
-            param_type_sets: Array.new(frame.param_types.size) { Set.new },
+          agg = @aggregates[payload[:symbol_id]] ||= {
+            param_type_sets: Array.new(payload[:param_types].size) { Set.new },
             return_type_set: Set.new,
             samples: 0,
-            fingerprint: frame.fingerprint
+            fingerprint: payload[:fingerprint]
           }
-          frame.param_types.each_with_index { |type, index| agg[:param_type_sets][index] << type }
+          payload[:param_types].each_with_index { |type, index| agg[:param_type_sets][index] << type }
           agg[:return_type_set] << return_type if return_type
           agg[:samples] += 1
         end
       end
 
-      # Fiber-local storage, not a `Hash` this object keys by
-      # `Thread.current.object_id` (found by an independent review, round
-      # 20 -- the same unbounded-registry class rounds 17/18 fixed in
-      # AgentProcessManager, here in the code that runs inside the *user's
+      # One CallStackMachine per fiber, in fiber-local storage rather than
+      # a Hash this object owns keyed by `Thread.current.object_id`
+      # (found by an independent review, round 20 -- the same
+      # unbounded-registry class rounds 17/18 fixed in
+      # AgentProcessManager, here in code that runs inside the *user's
       # own test-suite process*).
       #
-      # The Hash was three separate defects at once:
+      # A registry Hash was three separate defects at once:
       #
       # 1. Unbounded growth. Nothing ever removed a thread's entry, so
       #    every thread that ever executed one Ruby method left a
@@ -388,18 +258,13 @@ module Ovallsp
       #    mid-call interleaved two unrelated call stacks into one array.
       #
       # Fiber-local storage fixes all three structurally rather than
-      # patching any one of them: the stack is reachable only from the
-      # fiber it belongs to, so it is inherently unshared (no lock needed,
-      # no fiber crosstalk) and it is reclaimed with that fiber (no
-      # registry to prune).
+      # patching any one of them: the stack (now a whole CallStackMachine,
+      # including its own raise-epoch counter -- see its docs) is
+      # reachable only from the fiber it belongs to, so it is inherently
+      # unshared (no lock needed, no fiber crosstalk) and it is reclaimed
+      # with that fiber (no registry to prune).
       def current_stack
-        Thread.current[@stack_key] ||= []
-      end
-
-      # Fiber-local for the same reason, and an Integer rather than a
-      # collection, so it needs no pruning of its own.
-      def current_raise_epoch
-        Thread.current[@raise_epoch_key] || 0
+        Thread.current[@stack_key] ||= CallStackMachine.new
       end
 
       def defined_method(tp)

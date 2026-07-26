@@ -366,4 +366,71 @@ RSpec.describe Ovallsp::Observation::Collector do
     expect { Class.new.new.instance_eval { 1 + 1 } }.not_to raise_error
     collector.stop
   end
+
+  # Real-code coverage for the CallStackMachine edge cases the redesign
+  # (docs/design/tasks/022.2-collector-tracepoint-state-machine.md) is
+  # explicit the abstract state machine has to handle even though its own
+  # spec exercises them without any real Ruby call shape at all
+  # (table rows 3-4 and 15).
+  describe "recursion and Fiber isolation (state-machine redesign)" do
+    def signature_for(collector, name)
+      collector.results(run_id: "r1").find do |r|
+        r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::Widget", name: name)
+      end
+    end
+
+    it "records direct recursion correctly, one sample per invocation" do
+      collector.start
+      ObservationFixture::Widget.new.factorial(4)
+      collector.stop
+
+      signature = signature_for(collector, "factorial")
+
+      expect(signature).not_to be_nil
+      expect(signature.samples).to eq(4) # factorial(4), (3), (2), (1)
+      expect(signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "Integer"))
+    end
+
+    it "records mutual recursion without either method's frame closing out the other's" do
+      widget = ObservationFixture::Widget.new
+      collector.start
+      # mutual_a(4): a(4)->b(3)->a(2)->b(1)->a(0) [a's own base case, String],
+      # passed through unchanged by every tail call above it -- a(4,2,0)
+      # and b(3,1) all return String.
+      widget.mutual_a(4)
+      # mutual_a(3): a(3)->b(2)->a(1)->b(0) [b's own base case, Float],
+      # passed through unchanged -- a(3,1) and b(2,0) all return Float.
+      widget.mutual_a(3)
+      collector.stop
+
+      a_signature = signature_for(collector, "mutual_a")
+      b_signature = signature_for(collector, "mutual_b")
+
+      expect(a_signature.samples).to eq(5) # a(4), a(2), a(0), a(3), a(1)
+      expect(b_signature.samples).to eq(4) # b(3), b(1), b(2), b(0)
+      union = Ovallsp::Types.normalize_union(
+        [Ovallsp::Types::Nominal.new(name: "String"), Ovallsp::Types::Nominal.new(name: "Float")]
+      )
+      expect(a_signature.return_type).to eq(union)
+      expect(b_signature.return_type).to eq(union)
+    end
+
+    it "keeps a suspended Fiber's call stack isolated from the main fiber's own calls made while it's suspended" do
+      collector.start
+      ObservationFixture::Widget.new.fiber_worker(2)
+      collector.stop
+
+      # Both `combine` calls made inside the Fiber body and the ones made
+      # on the main fiber between `resume`s must be attributed correctly
+      # -- a shared/corrupted stack would misattribute at least one of
+      # these four calls' return types or drop samples.
+      combine_signature = signature_for(collector, "combine")
+      fiber_worker_signature = signature_for(collector, "fiber_worker")
+
+      expect(combine_signature.samples).to eq(4) # 2 inside the Fiber, 2 on the main fiber
+      expect(combine_signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
+      expect(fiber_worker_signature).not_to be_nil
+      expect(fiber_worker_signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
+    end
+  end
 end
