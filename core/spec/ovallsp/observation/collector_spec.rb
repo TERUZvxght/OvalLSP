@@ -34,6 +34,30 @@ RSpec.describe Ovallsp::Observation::Collector do
     expect(signature.samples).to eq(1)
   end
 
+  # Table rows 5-6. `Collector` requests `:call`/`:return`/`:raise` only, so
+  # neither a C-implemented method nor a plain block yield produces an event
+  # at all. What has to hold is that the *absence* of those events cannot
+  # desync anything: the enclosing Ruby method's own pair is still delivered
+  # and still recorded, because nothing was ever pushed for the untraced
+  # calls in the first place.
+  it "records a method whose entire body is untraced C calls" do
+    collector.start
+    ObservationFixture::Widget.new.only_c_calls("abc")
+    collector.stop
+
+    signature = collector.results(run_id: "r1").find do |r|
+      r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::Widget", name: "only_c_calls")
+    end
+
+    expect(signature).not_to be_nil
+    expect(signature.parameter_types).to eq([Ovallsp::Types::Nominal.new(name: "String")])
+    expect(signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "Symbol"))
+    expect(signature.samples).to eq(1)
+    # The C calls contributed no frames of their own -- had any of
+    # #freeze/#upcase/#to_sym been pushed or popped, the count would differ.
+    expect(collector.results(run_id: "r1").map { |r| r.symbol_id.name }).to eq(["only_c_calls"])
+  end
+
   it "unions the return type across multiple calls, including nil" do
     collector.start
     ObservationFixture::Widget.new.maybe_nil(true)
@@ -764,6 +788,78 @@ RSpec.describe Ovallsp::Observation::Collector do
     expect(signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
   end
 
+  # `@mutex` guards `@aggregates` for both writers (#record, off the
+  # `:return` path) and readers (#results, which maps over the same Hash and
+  # over each aggregate's Sets). Nothing else in this class is shared across
+  # threads -- the call stacks are fiber-local by construction (see
+  # #current_stack) -- so this is the one place a genuinely concurrent
+  # interleaving is reachable, and the guarantee-scope table's "Threads:
+  # fully isolated" row rests on it.
+  #
+  # Unlike the thread-churn examples above, these threads run *at the same
+  # time* rather than being joined one at a time: readers iterate
+  # `@aggregates` (and the Sets inside it) while writers insert into both.
+  #
+  # What this example does and does not pin, stated explicitly rather than
+  # assumed -- the round-23 lesson in this same file. Measured by replacing
+  # both `@mutex.synchronize` blocks with a bare `if true`: this example
+  # stays **green**, at 40 and at 5,000 calls per writer. So it does not
+  # independently pin the mutex, and a future change must not read it as
+  # doing so. CRuby's GVL is why: it will not switch threads in the middle
+  # of the `Hash`/`Set` operations here, so neither the mid-iteration insert
+  # nor a lost `samples += 1` is reachable on this implementation. That is
+  # exactly the reasoning #current_stack's own docs already record for the
+  # old per-thread registry ("CRuby's GVL happens to make that survivable
+  # today; nothing else does"), and this codebase's AgentSupervisor spec is
+  # explicit that no other Ruby implementation is obligated to match it.
+  #
+  # What it is here for is the coverage that *is* reachable: that concurrent
+  # `#record`/`#results` traffic through a real TracePoint produces no
+  # escaped exception and loses no sample, on the one piece of state this
+  # class genuinely shares across threads.
+  it "records and reads concurrently from many threads without losing a sample or raising" do
+    writers = 8
+    readers = 3
+    calls_per_writer = 40
+    barrier = Queue.new
+    errors = Queue.new
+
+    collector.start
+    reader_threads = readers.times.map do
+      Thread.new do
+        barrier.pop
+        200.times { collector.results(run_id: "r1").each { |r| r.parameter_types.size } }
+      rescue StandardError => e
+        errors << e
+      end
+    end
+    writer_threads = writers.times.map do |i|
+      Thread.new do
+        barrier.pop
+        widget = ObservationFixture::Widget.new
+        calls_per_writer.times do
+          # Two different symbol_ids, so readers see `@aggregates` itself
+          # growing rather than only a Set inside one entry.
+          widget.combine("a", "b")
+          widget.only_c_calls("n#{i}")
+        end
+      rescue StandardError => e
+        errors << e
+      end
+    end
+    (writers + readers).times { barrier << :go }
+    (writer_threads + reader_threads).each(&:join)
+    collector.stop
+
+    expect(errors.size).to be_zero, "concurrent access raised: #{errors.pop.inspect if errors.size.positive?}"
+
+    combine = collector.results(run_id: "r1").find do |r|
+      r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::Widget", name: "combine")
+    end
+    expect(combine).not_to be_nil
+    expect(combine.samples).to eq(writers * calls_per_writer)
+  end
+
   it "does not raise even when TracePoint observes something Collector can't classify cleanly" do
     collector.start
     expect { Class.new.new.instance_eval { 1 + 1 } }.not_to raise_error
@@ -851,6 +947,49 @@ RSpec.describe Ovallsp::Observation::Collector do
       expect(outer).not_to be_nil
       expect(outer.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
       expect(outer.samples).to eq(1)
+    end
+
+    # The residue the round-30 fix deliberately leaves (the design doc's
+    # "fifth residue"), pinned so its *bound* is a tested property rather
+    # than a prose claim: when the unannounced `:return`'s key matches the
+    # top of the stack -- direct recursion, the recursive invocation being
+    # the one whose default raised -- no event distinguishes it from the
+    # live frame's own return, so that frame closes one event early.
+    #
+    # What must hold is that this degrades to under-collection and nothing
+    # worse: the parameter types recorded are the live frame's own and
+    # still correct, and the return type is *discarded* (Unknown) rather
+    # than fabricated as `nil`, because the raise epoch has already
+    # advanced and #return_type_for refuses it (I6). A regression that
+    # started trusting that `nil` would show up here as NilType.
+    it "discards, rather than fabricates, the return type of a recursive frame closed early by a raising default" do
+      collector.start
+      ObservationFixture::Widget.new.recur(1)
+      collector.stop
+
+      signature = signature_for(collector, "recur")
+
+      expect(signature).not_to be_nil
+      # Its own parameters, correctly read from its own binding.
+      expect(signature.parameter_types.first).to eq(Ovallsp::Types::Nominal.new(name: "Integer"))
+      # Discarded, not fabricated: emphatically not NilType.
+      expect(signature.return_type).to eq(Ovallsp::Types::UNKNOWN)
+      expect(signature.samples).to eq(1)
+    end
+
+    # Only the innermost invocation is affected, so a deeper recursion still
+    # reports the real return type -- this is what bounds the residue to one
+    # frame rather than to the method.
+    it "still reports the real return type from the recursive frames the raising default did not affect" do
+      collector.start
+      ObservationFixture::Widget.new.recur(5)
+      collector.stop
+
+      signature = signature_for(collector, "recur")
+
+      expect(signature).not_to be_nil
+      expect(signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "Symbol"))
+      expect(signature.samples).to eq(5)
     end
 
     it "records direct recursion correctly, one sample per invocation" do

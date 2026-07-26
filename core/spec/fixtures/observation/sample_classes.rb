@@ -16,6 +16,19 @@ module ObservationFixture
       flag ? "value" : nil
     end
 
+    # Table row 6: a method whose entire body is C-implemented calls.
+    # `Collector` subscribes to `:call`/`:return`/`:raise` only, so none of
+    # `#freeze`/`#upcase`/`#to_sym` fires an event of any kind -- and the
+    # *absence* of those events cannot desync the stack, because nothing
+    # pushes for them in the first place. What this pins is that this
+    # method's own `:call`/`:return` pair is still delivered and still
+    # recorded correctly (row 5's block case is pinned by
+    # #raises_in_yielded_block / #yielding_rescuer, which yield to blocks
+    # that likewise produce no `b_call`/`b_return` under this filter).
+    def only_c_calls(name)
+      name.freeze.upcase.to_sym
+    end
+
     def self.build(name)
       name
     end
@@ -153,6 +166,27 @@ module ObservationFixture
       unannounced_outer(n - 1)
     rescue RuntimeError
       "middle-string"
+    end
+
+    # The *recursive* form of the same shape, which is the one round 30
+    # left as a documented residue rather than fixing (the design doc's
+    # "fifth residue"). Here the unannounced `:return`'s key matches the
+    # top of the stack -- because the method is directly recursive and it
+    # is the recursive invocation whose default raised -- so it is
+    # indistinguishable from the live frame's own `:return` and closes that
+    # still-running frame one event early.
+    #
+    # The bound this pins is what the residue costs: the live frame's
+    # *parameter* types are its own and still correct, while its return
+    # value is *discarded* rather than fabricated, because the raise epoch
+    # has already advanced and #return_type_for refuses the `nil` (I6).
+    # Only the innermost invocation is affected, so a deeper call still
+    # reports the real return type from its unaffected frames.
+    def recur(n, _guard = (n.zero? ? boom_for_default : nil))
+      recur(n - 1)
+      :done
+    rescue RuntimeError
+      :done
     end
 
     # Mutual recursion (table row 4): two different keys interleaved on
