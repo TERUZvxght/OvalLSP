@@ -122,4 +122,36 @@ RSpec.describe Ovallsp::ChildProcess do
       expect(result).to be(true)
     end
   end
+
+  # The property that matters here is the one `Thread#join` does *not*
+  # have: it re-raises whatever exception killed the joined thread, in the
+  # joiner. Every caller of this joins a child's pipe-pump thread from a
+  # teardown path, so adopting that thread's exception means abandoning
+  # the rest of the teardown -- which is exactly what round 16 found
+  # AgentProcessManager#terminate_process_locked doing (see its own docs).
+  describe ".join_quietly" do
+    it "never adopts the exception that killed the joined thread" do
+      thread = Thread.new { sleep 60 }
+      thread.raise(Errno::EIO)
+
+      result = :unset
+      expect { result = described_class.join_quietly(thread, 2) }.not_to raise_error
+      expect(result).to be(true)
+    end
+
+    it "returns true for a thread that finished, and tolerates a nil thread" do
+      expect(described_class.join_quietly(Thread.new { nil }, 2)).to be(true)
+      expect(described_class.join_quietly(nil, 2)).to be(false)
+    end
+
+    it "is bounded: gives up on a thread that never finishes rather than blocking" do
+      thread = Thread.new { sleep 60 }
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      expect(described_class.join_quietly(thread, 0.2)).to be(false)
+      expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 2
+    ensure
+      thread&.kill
+    end
+  end
 end

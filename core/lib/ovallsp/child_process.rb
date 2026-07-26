@@ -1,10 +1,18 @@
 # frozen_string_literal: true
 
 module Ovallsp
-  # The two primitives every subprocess boundary in Core needs when it has
+  # The primitives every subprocess boundary in Core needs when it has
   # decided a child must die: signal it *totally* (never raising, and
-  # reporting whether the signal actually landed) and reap it *boundedly*
-  # (never blocking indefinitely, never leaving a permanent zombie).
+  # reporting whether the signal actually landed), reap it *boundedly*
+  # (never blocking indefinitely, never leaving a permanent zombie), and
+  # let go of the plumbing around it -- its pipe ends (#close_quietly,
+  # round 15) and its pump threads (#join_quietly, round 16) -- without
+  # either of those becoming the thing that aborts the teardown.
+  #
+  # One property unites all four: none of them may raise. Every call site
+  # is a cleanup path, most of them literally inside an `ensure`, where an
+  # escaping exception does not merely fail its own step -- it *replaces*
+  # the exception already propagating and skips every step after it.
   #
   # Extracted after an independent review (round 12) of Task 022.2 found
   # the same defect a third time, in a third hand-rolled copy. Round 11
@@ -77,6 +85,39 @@ module Ovallsp
       io.close unless io.nil? || io.closed?
     rescue StandardError
       nil
+    end
+
+    # Waits at most `timeout` seconds for a pipe-pump thread belonging to a
+    # child process (AgentProcessManager's stderr logger being the one such
+    # thread in Core) and never lets that wait be the thing that breaks
+    # teardown: `Thread#join` *re-raises whatever exception killed the
+    # joined thread, in the joiner*, so a pump thread that died on anything
+    # its own rescue list didn't enumerate hands its exception to the
+    # teardown path that was merely trying to wind it down. That is the
+    # third face of the same contract #signal and #close_quietly already
+    # carry -- and it is not hypothetical here: #log_stderr rescues only
+    # IOError/Errno::EBADF, while `IO#each_line` can raise Errno::EIO and
+    # the logger it calls per line can raise Errno::EPIPE/ENOSPC when the
+    # editor closes or fills Core's own stderr.
+    #
+    # BackgroundTasks#reclaim_batch had already learned exactly this
+    # (`safely { t.join(...) }`, so one bad thread can't stop the rest
+    # being reclaimed) without the lesson ever reaching this sibling
+    # boundary -- the same one-more-hand-rolled-copy shape that produced
+    # this module in round 12 (see the module docs).
+    #
+    # Returns true if the thread is finished by the time this returns --
+    # including finished *abnormally*, which is what the rescue below
+    # means: `join` raising is Ruby's way of reporting that the thread
+    # terminated on an exception, so it answers the same question as a
+    # normal return, not the opposite one. False means only "still running
+    # when `timeout` ran out" (or no thread at all). Never raises.
+    def join_quietly(thread, timeout)
+      return false if thread.nil?
+
+      !thread.join(timeout).nil?
+    rescue StandardError
+      true
     end
 
     # Signals the child's whole process group (negative pid -- the group a

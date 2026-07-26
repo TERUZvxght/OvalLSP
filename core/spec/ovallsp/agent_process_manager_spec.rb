@@ -278,6 +278,74 @@ RSpec.describe Ovallsp::AgentProcessManager do
     end
   end
 
+  # Found by an independent review (round 16). Round 15 made
+  # #spawn_process's cleanup `ensure`-based and introduced
+  # ChildProcess.close_quietly for it; #terminate_process_locked -- the
+  # *teardown* half, one method below -- was still a bare straight line
+  # (`io&.close`, `@reader_thread&.kill`, `@stderr_thread&.join(1)`,
+  # `@pid = nil`) in which any raise abandoned every step after it.
+  #
+  # `@stdin_write.close` raising Errno::EPIPE is not a contrivance of this
+  # stub: `IO#close` flushes first, and this fd is the write end of a pipe
+  # into a child we have just SIGTERM'd. A FramedWriter#write_message whose
+  # `flush` already hit EPIPE against a dead Agent is an expected, rescued
+  # event here (#request_locked logs it and returns nil -- that is what
+  # degrades the manager in the first place), and a failed flush leaves the
+  # buffer in place, so `close` retries it and raises again. Verified with a
+  # bare pipe on this machine's Ruby: flush -> EPIPE, close -> EPIPE.
+  #
+  # Pre-fix this reproduced end to end: the EPIPE escaped #stop from inside
+  # #stop's own `ensure` (the exact "an escaping Errno replaces the
+  # exception currently propagating" hazard ChildProcess exists to prevent),
+  # @status stayed :static_only, both remaining pipe ends stayed open --
+  # and `@pid = nil` never ran. The last of those is the serious one: a
+  # stale @pid is a number the kernel may hand to somebody else, and
+  # `at_exit { stop }` re-enters teardown at process exit and delivers
+  # SIGTERM/SIGKILL to whatever unrelated process inherited it.
+  it "completes teardown -- pipes, threads, and above all @pid -- when closing a pipe raises" do
+    @manager = build_manager
+    expect(@manager.start).to eq(:ready)
+    stdout_read = @manager.instance_variable_get(:@stdout_read)
+    stderr_read = @manager.instance_variable_get(:@stderr_read)
+    allow(@manager.instance_variable_get(:@stdin_write)).to receive(:close).and_raise(Errno::EPIPE)
+
+    expect { @manager.stop }.not_to raise_error
+
+    # A stale pid is the finding, not a detail: nothing may go on holding a
+    # signal target the kernel is free to reuse.
+    expect(@manager.pid).to be_nil
+    expect(@manager.status).to eq(:stopped)
+    expect(stdout_read).to be_closed
+    expect(stderr_read).to be_closed
+    expect(@manager.instance_variable_get(:@reader_thread)).not_to be_alive
+  end
+
+  # The other half of the same finding, and the reason the fix is an
+  # `ensure` rather than merely routing the closes through
+  # ChildProcess.close_quietly: `Thread#join` re-raises whatever exception
+  # killed the joined thread, *in the joiner*. #log_stderr rescues only
+  # IOError/Errno::EBADF, so a pump thread killed by anything else (
+  # `each_line` raising Errno::EIO; `@logger.info` raising Errno::EPIPE or
+  # ENOSPC once the editor has closed or filled Core's own stderr) hands
+  # its exception to the teardown that was merely winding it down -- and
+  # `@pid = nil`, the last statement of all, was the one that paid.
+  # BackgroundTasks#reclaim_batch had already learned this exact lesson
+  # (`safely { t.join(...) }`) without it reaching this sibling boundary.
+  it "completes teardown when the stderr pump thread dies of something its own rescue list never enumerated" do
+    @manager = build_manager
+    expect(@manager.start).to eq(:ready)
+    stderr_thread = @manager.instance_variable_get(:@stderr_thread)
+    # Kill the pump thread with an exception #log_stderr does not rescue,
+    # exactly as a failing logger write would, then let teardown join it.
+    stderr_thread.raise(Errno::EIO)
+    sleep 0.05 until !stderr_thread.alive?
+
+    expect { @manager.stop }.not_to raise_error
+
+    expect(@manager.pid).to be_nil
+    expect(@manager.status).to eq(:stopped)
+  end
+
   # Server's BackgroundTasks#shutdown runs #stop on its own short-lived
   # thread and Thread#kills it if it doesn't return in time (found
   # necessary because #stop's `agent/shutdown` RPC has no bound of its

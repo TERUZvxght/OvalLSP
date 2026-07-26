@@ -526,6 +526,57 @@ module Ovallsp
       @terminate_mutex.synchronize { terminate_process_locked }
     end
 
+    # Teardown itself is `ensure`-based and every step of it total (found by
+    # an independent review, round 16). Round 15 fixed the sibling method
+    # above -- #spawn_process, whose cleanup only ran when nothing had gone
+    # wrong -- and introduced ChildProcess.close_quietly for exactly the
+    # reason this method needed it too, without it ever reaching here: the
+    # *teardown* path was still a bare straight line of four steps, any one
+    # of which could raise and abandon all the ones after it.
+    #
+    # Two of the four can genuinely raise, and both are ordinary rather than
+    # exotic:
+    #
+    # 1. `@stdin_write.close`. `IO#close` flushes first, so a write that was
+    #    still sitting in Ruby's buffer is retried at close time -- and this
+    #    particular fd is the write end of a pipe into a child we have just
+    #    SIGTERM'd. FramedWriter#write_message's own `flush` raising
+    #    Errno::EPIPE against a dead Agent is *already* an expected, rescued
+    #    event (#request_locked logs it and returns nil, which is what
+    #    degrades the manager to :static_only in the first place) -- and a
+    #    failed flush leaves the buffer in place, so the very next `close`
+    #    raises EPIPE again, this time with nothing rescuing it. Verified
+    #    against this machine's Ruby with a bare pipe: flush -> EPIPE, then
+    #    close -> EPIPE.
+    # 2. `@stderr_thread.join`. Thread#join re-raises whatever exception
+    #    killed the joined thread, in the joiner. #log_stderr rescues only
+    #    IOError/Errno::EBADF, while `each_line` can raise Errno::EIO and
+    #    `@logger.info` can raise Errno::EPIPE/ENOSPC once the editor has
+    #    closed or filled Core's own stderr.
+    #
+    # What that cost, reproduced end to end before the fix (a real spawned
+    # Agent, `@stdin_write.close` raising EPIPE): the exception escaped
+    # #terminate_process, escaped #stop -- from inside #stop's own `ensure`,
+    # the precise "an escaping Errno *replaces* the exception currently
+    # propagating" hazard ChildProcess exists to prevent -- so @status never
+    # reached :stopped (it stayed :static_only), @stdout_read and
+    # @stderr_read were never closed, and, worst of the four, `@pid = nil`
+    # never ran.
+    #
+    # A stale non-nil @pid is not merely cosmetic bookkeeping: it is a pid
+    # the kernel is now free to hand to somebody else, and this class goes
+    # on using it as a signal target. #alive? answers `ChildProcess.signal(pid, 0)`
+    # about a stranger, and `at_exit { stop }` re-enters this method at
+    # process exit and delivers SIGTERM -- then SIGKILL, via #force_kill --
+    # to whatever unrelated process inherited that number. Losing an fd is
+    # the small half of this finding; signalling a stranger is the large one.
+    #
+    # The `if @pid` guard makes the `ensure` a no-op for the guarded early
+    # return above (where there is nothing to tear down), and @pid is nil'd
+    # first so that no later step can be the reason it survives -- exactly
+    # what went wrong here. Every remaining step is total in its own right
+    # (ChildProcess.close_quietly / .join_quietly, Thread#kill), so the
+    # block cannot itself become the new source of a replaced exception.
     def terminate_process_locked
       return unless @pid
 
@@ -540,11 +591,13 @@ module Ovallsp
       # escaped `at_exit { stop }` entirely.
       ChildProcess.signal(@pid, "TERM")
       wait_for_exit(2) || force_kill
-
-      [@stdin_write, @stdout_read, @stderr_read].each { |io| io&.close unless io&.closed? }
-      @reader_thread&.kill
-      @stderr_thread&.join(1)
-      @pid = nil
+    ensure
+      if @pid
+        @pid = nil
+        [@stdin_write, @stdout_read, @stderr_read].each { |io| ChildProcess.close_quietly(io) }
+        @reader_thread&.kill
+        ChildProcess.join_quietly(@stderr_thread, 1)
+      end
     end
 
     # Same total signal as above, plus a give-up that *detaches* rather
