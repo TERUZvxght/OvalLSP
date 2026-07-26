@@ -2,6 +2,9 @@
 
 class App
   def call
-    "ok"
+    name = "ok"
+    name
   end
 end
+
+App.new.call
