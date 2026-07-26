@@ -117,8 +117,17 @@ module Ovallsp
         @logger.error("observation runner could not start: #{e.class}: #{e.message}")
         nil
       ensure
-        output_file&.unlink
-        log_file&.unlink
+        # `close!`, not `unlink`: Tempfile#unlink only removes the directory
+        # entry and leaves the descriptor open, so the narrow path where the
+        # *second* `Tempfile.new` raises (a full or unwritable TMPDIR,
+        # Errno::EMFILE) used to strand the first one's fd until GC got to
+        # it -- the same "cleanup that only runs when nothing went wrong"
+        # shape round 15 found in AgentProcessManager#spawn_process, in the
+        # one method here that owns something other than a child process.
+        # On every ordinary path both files are already closed by then and
+        # `close!` just unlinks, exactly as before.
+        output_file&.close!
+        log_file&.close!
       end
 
       private

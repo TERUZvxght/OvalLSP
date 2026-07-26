@@ -371,7 +371,52 @@ module Ovallsp
       agent_protocol_version == RuntimeAgent::Agent::PROTOCOL_VERSION
     end
 
+    # The last straight-line-only cleanup path in Core (found by an
+    # independent review, round 15 -- the identical shape round 10 fixed in
+    # Observation::Runner#spawn_and_collect and round 14 fixed in
+    # Plugins::Loader#run_isolated, still live in the one remaining
+    # subprocess-owning method neither round touched).
+    #
+    # Every one of the six pipe ends this method opens used to be closed
+    # only *after* `Process.spawn` had already returned successfully -- the
+    # child's three ends explicitly here, the parent's three eventually by
+    # #terminate_process_locked, which bails out on `return unless @pid`.
+    # So a spawn that *raised* closed none of them: `@pid` stayed nil, the
+    # exception propagated to #start's rescue, #terminate_process no-op'd on
+    # the nil pid, and six descriptors leaked per attempt with nothing left
+    # anywhere that would ever close them. BackgroundTasks#track_manager
+    # then *prunes* the resulting :static_only manager, on the explicit
+    # grounds that "a manager that degraded to static-only already tore down
+    # its own process internally" -- true of every other failure path in
+    # #start, false of this one, and pruning drops the last reference that
+    # could ever have closed them deterministically.
+    #
+    # A raising `Process.spawn` is the plainest production shape there is,
+    # not exotica: Errno::ENOENT for a workspace whose `bundle`/`ruby` isn't
+    # on the resolved PATH (BundleEnvironment deliberately strips Core's own
+    # bundle bin dir out of it), or for a `chdir:` whose directory was
+    # renamed while the editor was open -- the same "workspace deleted
+    # mid-session" case round 6 fixed in Runner#run. Server retries through
+    # AgentSupervisor's backoff and again on every Gemfile.lock/initializer
+    # change, and a success resets the streak, so an intermittently-broken
+    # Agent leaks without bound. Measured before this fix: 50 failed starts
+    # leaked 300 descriptors, already past macOS' default 256 soft limit.
+    # Exhaustion then surfaces as Errno::EMFILE somewhere else entirely --
+    # `::IO.pipe` in Plugins::Loader#run_isolated is the case that file's
+    # own docs already call out as reachable in "a long-lived LSP process
+    # holding the transport, Agent pipes and index files".
+    #
+    # (GC does eventually close an unreferenced IO, which is why this
+    # decayed slowly rather than instantly. That is not a cleanup strategy:
+    # an IO object is a few dozen bytes, so leaking descriptors exerts
+    # essentially no allocation pressure and triggers no collection -- the
+    # fd limit is reached long before the heap notices.)
+    #
+    # `settled` rather than a rescue, for round 10's reason: a raise is not
+    # the only way control leaves here with pipes open. An Interrupt on the
+    # bootstrap thread lands the same way and must keep propagating.
     def spawn_process
+      settled = false
       stdin_read, @stdin_write = ::IO.pipe
       @stdout_read, stdout_write = ::IO.pipe
       @stderr_read, stderr_write = ::IO.pipe
@@ -381,13 +426,30 @@ module Ovallsp
         chdir: @chdir,
         in: stdin_read, out: stdout_write, err: stderr_write
       )
-      stdin_read.close
-      stdout_write.close
-      stderr_write.close
 
       @writer = Ovallsp::IO::FramedWriter.new(@stdin_write)
       @reader_thread = Thread.new { read_loop }
       @stderr_thread = Thread.new { log_stderr }
+      settled = true
+    ensure
+      # The child's own ends are ours to close on *every* path, not just the
+      # successful one -- once `Process.spawn` has dup'd them into the child
+      # they are pure leak here, and if it never got that far they are pure
+      # leak too.
+      [stdin_read, stdout_write, stderr_write].each { |io| ChildProcess.close_quietly(io) }
+      discard_parent_pipes unless settled
+    end
+
+    # Only ever runs when #spawn_process did not complete. `@pid` is
+    # deliberately left alone: if the spawn itself succeeded and something
+    # after it failed, the child is real and #start's rescue path still has
+    # to reach it through #terminate_process -- whose own pipe teardown is
+    # nil- and closed?-tolerant, so having run here first costs it nothing.
+    # A reader thread that was already started simply observes the closed
+    # pipe as EOF, which #read_loop treats as an ordinary end-of-stream.
+    def discard_parent_pipes
+      [@stdin_write, @stdout_read, @stderr_read].each { |io| ChildProcess.close_quietly(io) }
+      @stdin_write = @stdout_read = @stderr_read = @writer = nil
     end
 
     def read_loop

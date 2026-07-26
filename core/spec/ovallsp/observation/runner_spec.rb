@@ -273,6 +273,33 @@ RSpec.describe Ovallsp::Observation::Runner do
     expect(results).to be_nil
   end
 
+  # Found by an independent review (round 15) of Task 022.2, sweeping every
+  # resource-owning method in Core for the "cleanup only runs when nothing
+  # went wrong" shape rounds 10/14/15 found at the three subprocess sites.
+  # #run's `ensure` was already total, but `Tempfile#unlink` only removes
+  # the directory entry -- it leaves the descriptor open -- so when the
+  # *second* `Tempfile.new` raises (a full or unwritable TMPDIR,
+  # Errno::EMFILE), the first file's fd was stranded until GC happened to
+  # finalize it. Same fix as everywhere else: close on every path.
+  it "closes the result tempfile it already opened when creating the log tempfile fails" do
+    open_fd_count = -> { Dir.children("/dev/fd").size }
+
+    real_new = Tempfile.method(:new)
+    calls = 0
+    allow(Tempfile).to receive(:new) do |*args|
+      calls += 1
+      raise Errno::ENOSPC if calls.even?
+
+      real_new.call(*args)
+    end
+
+    before = open_fd_count.call
+    10.times { runner.run(command: "ruby", args: ["-e", "1"], workspace_root: fixtures_root) }
+    leaked = open_fd_count.call - before
+
+    expect(leaked).to eq(0), "#run stranded #{leaked} tempfile descriptor(s) across 10 failed starts"
+  end
+
   # Task 022.2 (found by an independent review, round 5): the command
   # spawned here is the *workspace's* own test command -- in practice
   # `bundle exec rspec` -- so it is a second instance of the exact Bundler

@@ -57,6 +57,28 @@ module Ovallsp
       false
     end
 
+    # Closes an IO (or nil, or an already-closed one) without ever raising
+    # -- the pipe-side counterpart to #signal's totality, and for the same
+    # reason: every caller here closes from inside an `ensure`, where an
+    # IOError/Errno escaping would *replace* the exception currently
+    # propagating (silently converting "the user Ctrl-C'd the server" into
+    # an unrelated Errno, or masking the Errno::ENOENT that explains why
+    # the spawn failed in the first place).
+    #
+    # Lives here rather than being re-derived per call site for exactly the
+    # reason #signal/#reap do: an independent review (round 15) found
+    # AgentProcessManager#spawn_process was the one subprocess-owning
+    # method in Core still doing every bit of its cleanup on the
+    # straight-line success path, leaking all six pipe ends whenever
+    # `Process.spawn` failed -- while Plugins::Loader, one file over, had
+    # had to grow a private `#close_quietly` of its own in round 14 to
+    # close the same hole. One contract, one place.
+    def close_quietly(io)
+      io.close unless io.nil? || io.closed?
+    rescue StandardError
+      nil
+    end
+
     # Signals the child's whole process group (negative pid -- the group a
     # `pgroup: true` spawn created, whose id is the child's own pid), so a
     # wrapper's forked work dies with it, falling back to the bare pid

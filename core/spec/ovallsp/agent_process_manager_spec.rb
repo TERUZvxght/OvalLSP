@@ -215,6 +215,43 @@ RSpec.describe Ovallsp::AgentProcessManager do
     expect(result).to be(false)
   end
 
+  # Found by an independent review (round 15) of Task 022.2, and
+  # byte-for-byte the shape round 10 fixed in Observation::Runner and round
+  # 14 fixed in Plugins::Loader: every bit of the cleanup #spawn_process
+  # owes sat on its straight-line success path, so a `Process.spawn` that
+  # *raised* closed none of the six pipe ends it had just opened. `@pid`
+  # stays nil on that path, so #start's rescue -> #terminate_process ->
+  # `return unless @pid` no-ops, and BackgroundTasks#track_manager then
+  # prunes the :static_only manager on the (here false) grounds that it
+  # "already tore down its own process internally" -- dropping the last
+  # reference that could ever close them deterministically.
+  #
+  # Counts real descriptors rather than inspecting ivars, because half the
+  # leak is in *locals* (the child's three ends) that no ivar assertion can
+  # see -- exactly how round 14's own regression tests came to guard only
+  # the kill half of round 14's fix and not the pipe-close half (see the
+  # matching loader spec, strengthened in the same pass). GC is deliberately
+  # never forced: it does eventually close an unreferenced IO, which is why
+  # this decayed slowly instead of instantly, but a few dozen bytes per
+  # leaked IO exerts no allocation pressure, so in a real session the fd
+  # limit arrives long before a collection does. Errno::ENOENT is the real
+  # production trigger (a workspace whose `bundle`/`ruby` isn't on the
+  # BundleEnvironment-sanitized PATH; a `chdir:` renamed mid-session).
+  it "closes every pipe it opened when the Agent process itself can't be spawned" do
+    open_fd_count = -> { Dir.children("/dev/fd").size }
+
+    allow(Process).to receive(:spawn).and_raise(Errno::ENOENT)
+
+    build_manager(hello_timeout: 1).start # warm up any lazily-opened fds first
+    before = open_fd_count.call
+    20.times { build_manager(hello_timeout: 1).start }
+    leaked = open_fd_count.call - before
+
+    # Six per attempt pre-fix (120); zero post-fix. The bound is loose
+    # enough that unrelated fd churn in the same process can't flake it.
+    expect(leaked).to be < 12, "#spawn_process leaked #{leaked} descriptors across 20 failed spawns"
+  end
+
   it "still tears down its pipes, reader thread and pid when the TERM signal itself fails to land" do
     @manager = build_manager
     expect(@manager.start).to eq(:ready)

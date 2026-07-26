@@ -268,11 +268,21 @@ RSpec.describe Ovallsp::Plugins::Loader do
     # (it allocates a thread). The leaked child is running arbitrary plugin
     # code -- here `sleep 60` -- so "leaked" means a live process plus an
     # unreapable pid for the rest of the LSP session, not just a zombie.
+    #
+    # Round 14's fix had two halves -- the child, and both pipe ends -- and
+    # as originally written this example only witnessed the first: with
+    # `ChildProcess.close_quietly(reader)`/`(writer)` deleted from the
+    # `ensure` and only the kill left, the entire loader spec still passed
+    # green while every failed load leaked a descriptor in a process whose
+    # own docs name Errno::EMFILE as reachable. Pinned below (round 15,
+    # stress-testing round 14's own regression test, the same way round 14
+    # stress-tested round 13's and round 13 stress-tested round 12's).
     it "kills and reaps the plugin child even when the read path fails in a way #guarded swallows" do
       forked = nil
       allow(Process).to receive(:fork).and_wrap_original { |original, &blk| forked = original.call(&blk) }
       allow(Timeout).to receive(:timeout).and_raise(Errno::EIO)
 
+      before_fds = Dir.children("/dev/fd").size
       contexts = :unset
       expect { contexts = loader.load_static([manifest_path("slow")]) }.not_to raise_error
 
@@ -281,6 +291,10 @@ RSpec.describe Ovallsp::Plugins::Loader do
       expect(forked).not_to be_nil
       expect(child_alive?(forked)).to be(false),
                                       "plugin child #{forked} survived #load_static -- nothing tracks its pid any more"
+      # Deliberately no GC.start: an unreferenced IO is eventually finalized,
+      # which would mask the leak here exactly as it masked it in production.
+      leaked = Dir.children("/dev/fd").size - before_fds
+      expect(leaked).to eq(0), "#run_isolated leaked #{leaked} descriptor(s) -- its pipe ends were never closed"
     ensure
       kill_leaked_child(forked)
     end

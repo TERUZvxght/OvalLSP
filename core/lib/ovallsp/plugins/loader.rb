@@ -287,19 +287,30 @@ module Ovallsp
         # what we failed to establish), so it must be signalled first, and
         # ChildProcess.reap then bounds the wait.
         #
-        # Closes go through #close_quietly because an IOError raised out of
-        # an `ensure` would *replace* the exception currently propagating --
-        # the same reason ChildProcess.signal is total, and the reason an
-        # Interrupt must survive this block intact.
-        close_quietly(reader)
-        close_quietly(writer)
+        # (Traced line by line in round 15 and left as-is, for the reason
+        # Observation::Runner#spawn_and_collect records about its own
+        # identical guard: an asynchronous Interrupt landing after
+        # #reap_finished_child has already reaped the child but before
+        # `settled = true` would make this signal an already-reaped pid.
+        # The window here is a little wider than Runner's -- it spans the
+        # empty check and `Marshal.load` -- but it still contains no
+        # blocking call, and reaching a live victim would additionally
+        # require the kernel to have recycled that exact pid inside it,
+        # which is tens of thousands of intervening spawns since pids are
+        # handed out monotonically. Closing it needs Thread.handle_interrupt
+        # around the read, which makes Ctrl-C itself less responsive: the
+        # same strictly-worse trade Runner declined in round 11.)
+        #
+        # Closes go through ChildProcess.close_quietly because an IOError
+        # raised out of an `ensure` would *replace* the exception currently
+        # propagating -- the same reason ChildProcess.signal is total, and
+        # the reason an Interrupt must survive this block intact. (It was a
+        # private helper here until round 15 found AgentProcessManager
+        # needed the identical primitive; it lives in ChildProcess now, with
+        # #signal and #reap, rather than being re-derived a second time.)
+        ChildProcess.close_quietly(reader)
+        ChildProcess.close_quietly(writer)
         kill_child(pid) if pid && !settled
-      end
-
-      def close_quietly(io)
-        io.close unless io.nil? || io.closed?
-      rescue StandardError
-        nil
       end
 
       def fork_plugin_child(writer)
@@ -479,6 +490,20 @@ module Ovallsp
       # whenever it did fire. ChildProcess.reap treats "somebody else
       # already reaped it" as success, so that payload is now parsed
       # instead. #guarded is the structural backstop this method never had.
+      #
+      # The escalation deliberately signals *after* the reap rather than
+      # before it (the opposite order from #kill_child), and that satisfies
+      # ChildProcess.signal_group's "the pid must still be unreaped"
+      # precondition rather than violating it: reaching the signal at all
+      # means ChildProcess.reap polled WNOHANG for its whole budget without
+      # the child ever exiting, so the child is still live and unreaped and
+      # its pid cannot have been recycled. (Process.detach's waiter thread
+      # could reap it in the microseconds between the last poll and the
+      # signal; that is the same asynchronous pid-recycle window round 11
+      # examined and accepted, and inverting the order would be strictly
+      # worse -- it would SIGKILL every well-behaved plugin child on the
+      # ordinary success path, when it genuinely *has* already been reaped.
+      # Traced and left as-is in round 15.)
       def reap_finished_child(pid)
         return if ChildProcess.reap(pid)
 
