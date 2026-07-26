@@ -22,7 +22,7 @@ RSpec.describe "Ovallsp::Server didClose index consistency (Task 008.5)" do
     messages.reject { |m| m[:method] == "textDocument/publishDiagnostics" }
   end
 
-  def run_server(input_string, workspace_root: Dir.mktmpdir)
+  def run_server(input_string, workspace_root: example_tmpdir("ovallsp-did-close"))
     server = Ovallsp::Server.new(
       input: StringIO.new(input_string), output: output, logger: logger, workspace_root: workspace_root
     )

@@ -126,11 +126,52 @@ module Ovallsp
         # one method here that owns something other than a child process.
         # On every ordinary path both files are already closed by then and
         # `close!` just unlinks, exactly as before.
-        output_file&.close!
-        log_file&.close!
+        #
+        # Each discard is *total* (found by an independent review, round
+        # 19). Round 15's lesson -- cleanup must not sit on the
+        # straight-line success path -- was applied here as an `ensure`,
+        # but the `ensure` *body* was itself left a bare two-step straight
+        # line, which is the same shape one level in: see #discard_quietly
+        # for what that costs. Cache::Store#save's own `ensure` already
+        # guards its single step this way; this was the last unguarded one
+        # in Core.
+        discard_quietly(output_file)
+        discard_quietly(log_file)
       end
 
       private
+
+      # `Tempfile#close!` is not total: `_close` is a real `IO#close`, and
+      # `unlink` rescues only Errno::ENOENT and Errno::EACCES, so
+      # Errno::EROFS (a TMPDIR remounted read-only, e.g. after the disk
+      # filled), EPERM (an immutable or append-only TMPDIR), EIO or EBUSY
+      # all escape it. Two distinct costs, both of them ones this repo has
+      # already paid at other boundaries:
+      #
+      # 1. It abandons every step after it in the `ensure`. `output_file`
+      #    raising means `log_file` is never closed *nor* unlinked -- one
+      #    leaked descriptor and one stranded on-disk file per attempt, in
+      #    the method Server runs for every `Run Tests with Type
+      #    Observation`, with nothing left that would ever clean either up
+      #    deterministically. Identical to round 15's finding in
+      #    AgentProcessManager#spawn_process and round 16's in its
+      #    teardown.
+      # 2. It escapes #run, whose contract is "Never raises" (see its own
+      #    docs) -- the contract round 6 was opened to make structural
+      #    rather than aspirational, and round 13 had to re-open for a
+      #    second method whose "never raises" still wasn't. A raise out of
+      #    an `ensure` is the worst version of that: it does not merely
+      #    add an exception, it *replaces* the one already propagating --
+      #    and #run deliberately lets Interrupt through (round 9: a Ctrl-C
+      #    must really kill the editor's server, not be logged as "this
+      #    run produced no evidence"), so the one exception this class is
+      #    most careful to preserve is exactly the one an Errno here would
+      #    silently convert into something else.
+      def discard_quietly(tempfile)
+        tempfile&.close!
+      rescue StandardError
+        nil
+      end
 
       # The command spawned here is the *workspace's* own test command --
       # in practice literally `bundle exec rspec` (see #run's own docs) --

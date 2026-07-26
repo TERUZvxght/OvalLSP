@@ -33,13 +33,53 @@ RSpec.describe Ovallsp::Benchmark::ColdIndexBenchmark do
     warn "[cold_index_benchmark] #{report.inspect}" if ENV["OvalLSP_BENCHMARK_VERBOSE"]
   end
 
-  it "reports a warm run's cache-hit path as no slower than the cold run that populated it, on a representative small corpus" do
-    report = described_class.new(logger: instance_double(Ovallsp::Logger, info: nil, warn: nil, error: nil)).run(file_count: 50)
+  # Was `expect(report[:warm_seconds]).to be <= (report[:cold_seconds] * 2)`,
+  # and it is a wall-clock ratio over roughly a tenth of a second of work,
+  # so a single scheduler hiccup during the warm pass fails it. Observed
+  # doing exactly that mid-review (round 19), on an otherwise-green full
+  # suite run under load, and then passing on the very next run of the same
+  # file -- the same flaky-by-construction shape as the mtime race in
+  # `spec/ovallsp/cache/store_spec.rb` that this repo's fix-in-place policy
+  # was written for.
+  #
+  # It also contradicted both the class under test and its own sibling
+  # example, each of which says in as many words that this benchmark is
+  # report-only and must "never fail the suite on a slow machine".
+  #
+  # Loosening the multiplier would only move the flake further out, so the
+  # timing assertion is gone entirely and what it was a *proxy* for is
+  # asserted directly: the warm pass must serve the whole corpus from the
+  # cache and re-parse nothing. That is a count, not a duration -- it is
+  # exactly the property that makes the warm run faster, it cannot be
+  # perturbed by machine load, and it fails loudly if the cache stops
+  # being consulted at all (a real regression the old ratio would have
+  # caught only on a quiet machine).
+  it "serves the whole corpus from the cache on the warm pass, re-parsing nothing" do
+    file_count = 50
+    parses_in_pass = 0
+    parses_per_pass = []
 
-    # A soft, generous check (not the design doc's own hard target) --
-    # the *direction* of the effect (cache genuinely helps, doesn't
-    # regress) is what's actually load-bearing here; exact multipliers
-    # are too machine-dependent for a hard assertion in this suite.
-    expect(report[:warm_seconds]).to be <= (report[:cold_seconds] * 2)
+    # ColdIndexer#run is single-threaded (it walks and indexes inline), so
+    # a plain counter is sound here without synchronization.
+    allow_any_instance_of(Ovallsp::ParserService).to receive(:summarize).and_wrap_original do |original, *args|
+      parses_in_pass += 1
+      original.call(*args)
+    end
+    allow_any_instance_of(Ovallsp::ColdIndexer).to receive(:run).and_wrap_original do |original|
+      original.call
+    ensure
+      parses_per_pass << parses_in_pass
+      parses_in_pass = 0
+    end
+
+    described_class.new(logger: instance_double(Ovallsp::Logger, info: nil, warn: nil, error: nil))
+                   .run(file_count: file_count)
+
+    # The benchmark makes exactly three passes: cold with no cache at all,
+    # a second cold pass that populates one, then the warm pass.
+    expect(parses_per_pass.size).to eq(3)
+    expect(parses_per_pass[0]).to eq(file_count)
+    expect(parses_per_pass[1]).to eq(file_count)
+    expect(parses_per_pass[2]).to be_zero
   end
 end

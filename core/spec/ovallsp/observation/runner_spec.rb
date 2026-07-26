@@ -99,7 +99,7 @@ RSpec.describe Ovallsp::Observation::Runner do
   # unsupervised forever, holding DB connections, ports and CPU with
   # nothing left that knew its pid.
   it "kills the hung command's whole process group, not just the wrapper it spawned" do
-    pid_file = File.join(Dir.mktmpdir("ovallsp-observation-pgroup"), "grandchild.pid")
+    pid_file = File.join(example_tmpdir("ovallsp-observation-pgroup"), "grandchild.pid")
     runner.run(command: "ruby", args: ["hang_with_child.rb", pid_file], workspace_root: fixtures_root,
                timeout_seconds: 2)
 
@@ -123,7 +123,7 @@ RSpec.describe Ovallsp::Observation::Runner do
   # accident, and under an editor (`--stdio`, no controlling tty) there
   # was no such delivery even then.
   it "kills the workspace's whole test tree when the wait is interrupted rather than timing out" do
-    pid_file = File.join(Dir.mktmpdir("ovallsp-observation-interrupt"), "grandchild.pid")
+    pid_file = File.join(example_tmpdir("ovallsp-observation-interrupt"), "grandchild.pid")
     allow(Process).to receive(:waitpid2) do
       await_grandchild_pid(pid_file) # only interrupt once the tree genuinely exists
       raise Interrupt
@@ -373,5 +373,83 @@ RSpec.describe Ovallsp::Observation::Runner do
 
     captured.rewind
     expect(captured.read).not_to include("fixture test command ran")
+  end
+
+  # Found by an independent review (round 19) of Task 022.2. #run's
+  # `ensure` was a bare two-step straight line -- `output_file&.close!`
+  # then `log_file&.close!` -- and `Tempfile#close!` is not total: its
+  # `unlink` rescues only Errno::ENOENT/EACCES, so Errno::EROFS (a TMPDIR
+  # remounted read-only after the disk filled), EPERM (an immutable or
+  # append-only TMPDIR), EIO and EBUSY all escape it. That is the same
+  # "cleanup that only runs when the step before it didn't raise" shape
+  # rounds 15 and 16 fixed in AgentProcessManager, one level in: the
+  # `ensure` existed, its body did not honour the same contract.
+  #
+  # Both halves are asserted, because they are separate failures:
+  # the *second* temp file is stranded on disk with nothing left that
+  # would ever unlink it, and the Errno escapes #run entirely -- whose
+  # documented contract is "Never raises", the contract round 6 opened to
+  # make structural and round 13 had to re-open for a second method.
+  describe "temp-file discard (round 19)" do
+    # Real Tempfiles, so the assertion is about a real on-disk file being
+    # unlinked rather than about a double receiving a message. Only the
+    # *first* one's #close! is broken; everything else behaves normally.
+    def stub_tempfiles_with_a_broken_first_discard
+      first = Tempfile.new(["ovallsp-observation-spec", ".marshal"])
+      second = Tempfile.new(["ovallsp-observation-spec", ".log"])
+      # The broken discard is the whole point, so nothing under test will
+      # ever unlink `first` -- this spec must not itself leave litter in
+      # TMPDIR (see the sibling `Dir.mktmpdir` fix in this same round).
+      @leftover_paths = [first.path, second.path]
+      allow(first).to receive(:close!).and_raise(Errno::EROFS)
+      allow(Tempfile).to receive(:new).and_return(first, second)
+      [first, second]
+    end
+
+    after do
+      Array(@leftover_paths).each do |path|
+        File.unlink(path)
+      rescue SystemCallError
+        nil
+      end
+    end
+
+    it "still discards the second temp file when discarding the first one raises" do
+      _first, second = stub_tempfiles_with_a_broken_first_discard
+      second_path = second.path
+
+      # Swallowed deliberately, so this example measures the *stranded
+      # file* specifically rather than collapsing into the sibling
+      # example's "it raised at all" -- pre-fix both are true, and they
+      # are two different costs.
+      begin
+        runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)
+      rescue SystemCallError
+        nil
+      end
+
+      expect(File.exist?(second_path)).to be(false)
+    end
+
+    it "does not let a failing discard raise out of #run, whose contract is that it never does" do
+      stub_tempfiles_with_a_broken_first_discard
+
+      expect do
+        runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)
+      end.not_to raise_error
+    end
+
+    # The sharpest edge of the same defect: an `ensure` that raises
+    # *replaces* whatever was already propagating, and #run deliberately
+    # lets Interrupt through (round 9 -- a Ctrl-C must really kill the
+    # editor's server). Pre-fix this reported Errno::EROFS instead.
+    it "lets an in-flight Interrupt survive a failing discard rather than replacing it" do
+      stub_tempfiles_with_a_broken_first_discard
+      allow(Process).to receive(:waitpid2).and_raise(Interrupt)
+
+      expect do
+        runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)
+      end.to raise_error(Interrupt)
+    end
   end
 end

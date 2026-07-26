@@ -17,7 +17,7 @@ RSpec.describe "Ovallsp::Observation::Harness" do
   # OvalLSP_OBSERVATION_* variables plus its `-r<harness>` RUBYOPT
   # injection -- the only channel Harness#install reads at all.
   def run_under_harness(script)
-    output_path = File.join(Dir.mktmpdir("ovallsp-harness-spec"), "results.marshal")
+    output_path = File.join(example_tmpdir("ovallsp-harness-spec"), "results.marshal")
     env = {
       "OvalLSP_OBSERVATION_WORKSPACE_ROOT" => fixtures_root,
       "OvalLSP_OBSERVATION_OUTPUT_PATH" => output_path,

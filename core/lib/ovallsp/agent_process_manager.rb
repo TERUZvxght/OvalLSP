@@ -665,9 +665,13 @@ module Ovallsp
     # A stale non-nil @pid is not merely cosmetic bookkeeping: it is a pid
     # the kernel is now free to hand to somebody else, and this class goes
     # on using it as a signal target. #alive? answers `ChildProcess.signal(pid, 0)`
-    # about a stranger, and `at_exit { stop }` re-enters this method at
-    # process exit and delivers SIGTERM -- then SIGKILL, via #force_kill --
-    # to whatever unrelated process inherited that number. Losing an fd is
+    # about a stranger, and the process-wide exit hook (.stop_registered_at_exit,
+    # which was one `at_exit { stop }` per manager when this was written and
+    # became a single hook over a weak registry in round 17) re-enters this
+    # method at process exit and delivers SIGTERM -- then SIGKILL, via
+    # #force_kill -- to whatever unrelated process inherited that number,
+    # since a manager whose teardown never completed is exactly one the
+    # registry still holds. Losing an fd is
     # the small half of this finding; signalling a stranger is the large one.
     #
     # The `if @pid` guard makes the `ensure` a no-op for the guarded early
@@ -687,7 +691,9 @@ module Ovallsp
       # teardown below: the Agent's three pipes stayed open, the reader
       # thread stayed alive, `@pid` stayed set, and the exception replaced
       # whatever was already propagating through #stop's `ensure` -- or
-      # escaped `at_exit { stop }` entirely.
+      # escaped the process-wide exit hook entirely (one `at_exit { stop }`
+      # per manager when round 12 wrote this; .stop_registered_at_exit
+      # since round 17, which rescues around each manager for this reason).
       ChildProcess.signal(@pid, "TERM")
       wait_for_exit(2) || force_kill
     ensure
