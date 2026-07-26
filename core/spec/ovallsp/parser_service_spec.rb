@@ -293,6 +293,70 @@ RSpec.describe Ovallsp::ParserService do
     expect(params.map(&:kind)).to eq(%i[required rest required keyword_optional block])
   end
 
+  # Found by an independent review (round 29), and the same collateral round
+  # 28 found one method below in #extract_parameters, reached through the same
+  # "assume the Prism node answers" habit: #visit_namespace read
+  # `node.constant_path.full_name` bare, and that method *raises*
+  # `Prism::ConstantPathNode::DynamicPartsInConstantPathError` for a path with
+  # a non-constant segment. The raise propagated out of #summarize, so the
+  # failure was never one namespace's name -- it was the whole file: no
+  # FileSummary at all, every declaration gone from the index.
+  #
+  # Two halves, both load-bearing. `Gamma` fails on the *collateral* loss
+  # rather than only on `Beta`. And the skipped namespace is deliberately
+  # *nested*, with a sibling declared after it: that is what rejects the
+  # obvious wrong fix, a bare `return unless` above #visit_namespace's old
+  # `ensure`, which pops four stacks that were never pushed. At the top level
+  # that happens to rebalance (popping an empty @owner_stack is a no-op, and
+  # the next namespace re-pushes @visibility_stack), so a top-level-only
+  # example passes for the wrong implementation; nested, it unwinds `Outer`
+  # early and `later_sibling` lands on the wrong owner -- silently, with the
+  # file still indexing.
+  it "indexes the rest of a file containing a namespace whose constant path is not statically resolvable" do
+    source = <<~RUBY
+      module Outer
+        class self::Beta
+          def b; end
+        end
+
+        def later_sibling; end
+      end
+
+      class Gamma
+        def c; end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+
+    expect(summary.declarations.map { |d| [d.symbol_id.kind, d.symbol_id.owner, d.symbol_id.name] }).to eq(
+      [[:module, nil, "::Outer"], [:instance_method, "::Outer", "later_sibling"],
+       [:class, nil, "::Gamma"], [:instance_method, "::Gamma", "c"]]
+    )
+  end
+
+  # The same loss, one keystroke from anybody, and via the *other* half of
+  # the guard. Prism is deliberately error-tolerant here -- this class's
+  # whole premise is that "even when the source has a syntax error,
+  # declarations before the error remain visible" (Task 002 acceptance
+  # criterion) -- and the document is reparsed on every didChange. Half-way
+  # through typing `class Foo::Bar`, at `class Foo::`, `node.constant_path`
+  # is not a ConstantPathNode at all but a `Prism::CallNode`, which has no
+  # `#full_name` to raise from: it raises `NoMethodError` instead. So this is
+  # #extract_parameters' round-28 defect exactly -- a missing `respond_to?`
+  # -- and it wiped the file's whole index mid-edit, which is when hover and
+  # completion are most wanted. The diagnostics are asserted alongside
+  # because reporting the error *while still indexing what parsed* is the
+  # entire point of this path.
+  it "keeps indexing, and still reports the error, mid-edit on an incomplete namespace path" do
+    source = "class Alpha\n  def a; end\nend\n\nclass Foo::\n  def b; end\nend\n"
+
+    summary = service.summarize(document(source))
+
+    expect(summary.declarations.map { |d| d.symbol_id.name }).to include("::Alpha", "a")
+    expect(summary.diagnostics).not_to be_empty
+  end
+
   describe "Rails DSL generated methods (Task 017)" do
     def generated(summary) = summary.generated_method_facts
 

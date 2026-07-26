@@ -275,8 +275,49 @@ module Ovallsp
 
       private
 
+      # A namespace whose constant path is not statically resolvable is
+      # skipped -- the node itself and its whole subtree -- rather than
+      # guessed at or allowed to raise (round 29).
+      #
+      # `Prism::ConstantPathNode#full_name` does not merely return something
+      # unhelpful for a path with a non-constant segment: it *raises*
+      # `DynamicPartsInConstantPathError`. Read bare, that propagated out of
+      # #summarize, and the failure was never one namespace's name -- it was
+      # the loss of the *whole file*: no FileSummary at all, every
+      # declaration in it gone from the index, hover/definition/completion/
+      # diagnostics dark for it. Exactly the collateral round 28 found one
+      # method below, in #extract_parameters, reached through the same
+      # "assume the Prism node answers" habit.
+      #
+      # Two reachable shapes, measured end to end through ParserService:
+      # `class self::Beta` -- legal, ordinary Ruby -- and any *mistyped*
+      # path (`class foo::Beta`), which matters because Prism is
+      # deliberately error-tolerant here: this class's whole premise is that
+      # "even when the source has a syntax error, declarations before the
+      # error remain visible" (Task 002 acceptance criterion), and a file
+      # being typed in the editor is reparsed on every keystroke. So a
+      # transient lowercase segment took the file's entire index down
+      # mid-edit.
+      #
+      # #raw_constant_name is the guard this file already uses for exactly
+      # this question everywhere else (#record_superclass,
+      # #record_ancestor_call, #record_method_call_candidate,
+      # #constant_full_name) -- "動的な名前は推測せず対象外", never guess at
+      # dynamic input. This path was the one caller that asked Prism
+      # directly instead.
+      #
+      # The four stack pushes moved into #within_namespace so the `ensure`
+      # that pops them can only ever run when they actually ran. Guarding
+      # with a bare early `return` above an `ensure` in this same method
+      # would have popped four stacks that were never pushed -- emptying
+      # @visibility_stack and unbalancing @owner_stack, so every *later*
+      # declaration in the file gets the wrong owner. Pairing them
+      # structurally makes that class of bug unwritable here rather than
+      # merely absent today.
       def visit_namespace(node, kind:)
-        local_path = node.constant_path.full_name
+        local_path = raw_constant_name(node.constant_path)
+        return unless local_path
+
         absolute_name = qualify(local_path)
 
         @declarations << Index::Declaration.new(
@@ -290,11 +331,15 @@ module Ovallsp
 
         record_superclass(node, absolute_name) if node.is_a?(Prism::ClassNode)
 
+        within_namespace(absolute_name) { node.each_child_node { |child| child.accept(self) } }
+      end
+
+      def within_namespace(absolute_name)
         @owner_stack.push(absolute_name)
         @singleton_context_stack.push(false)
         @visibility_stack.push(:public)
         @scope_stack.push(next_scope_id)
-        node.each_child_node { |child| child.accept(self) }
+        yield
       ensure
         @owner_stack.pop
         @singleton_context_stack.pop
