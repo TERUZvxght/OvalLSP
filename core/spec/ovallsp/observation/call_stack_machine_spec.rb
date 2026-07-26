@@ -52,7 +52,7 @@ RSpec.describe Ovallsp::Observation::CallStackMachine do
     end
   end
 
-  describe "#pop_matching -- matches the nearest frame, not merely the top (I3, table rows 3-4)" do
+  describe "#pop_matching -- closes the top frame, and only when it matches (I3, table rows 3-4)" do
     it "closes the innermost live invocation of a recursive key, not an outer one" do
       machine.push(KEY_A, :outer)
       machine.push(KEY_A, :inner)
@@ -62,30 +62,42 @@ RSpec.describe Ovallsp::Observation::CallStackMachine do
       expect(machine.depth).to be_zero
     end
 
-    it "discards everything stacked above the match (table row 7: an unwound raise)" do
-      machine.push(KEY_A, :a)
-      machine.push(KEY_B, :b) # abandoned by a raise; never gets its own pop
-      machine.push(KEY_C, :c) # also abandoned
-
-      frame = machine.pop_matching(KEY_A)
-
-      expect(frame.payload).to eq(:a)
-      expect(machine.depth).to be_zero
-    end
-
-    it "does not disturb frames below a match that is not at the top" do
+    it "unwinds a multi-frame raise one frame at a time, each on its own pop (table row 7)" do
       machine.push(KEY_A, :a)
       machine.push(KEY_B, :b)
       machine.push(KEY_C, :c)
 
-      machine.pop_matching(KEY_B) # discards B and C, per the row-7 semantics above
-
-      expect(machine.depth).to eq(1)
+      # CRuby fires one `:return` per abandoned frame, innermost first --
+      # nothing is ever left above a frame when its own return arrives, so
+      # no pop ever has to discard anything but the top.
+      expect(machine.pop_matching(KEY_C).payload).to eq(:c)
+      expect(machine.pop_matching(KEY_B).payload).to eq(:b)
       expect(machine.pop_matching(KEY_A).payload).to eq(:a)
+      expect(machine.depth).to be_zero
+    end
+
+    # Round 30. The machine used to scan downward for the nearest matching
+    # key and discard everything above it. This is the sequence that makes
+    # that wrong rather than merely unexercised: KEY_A is live *twice* --
+    # an outer invocation with KEY_B stacked above it -- and a stray
+    # `:return` for KEY_A arrives for a third invocation the machine was
+    # never told about (CRuby skips `:call` when an argument default
+    # raises, but still fires `:return`). Scanning answered it with the
+    # outer, still-running A and took B down with it.
+    it "leaves a live frame alone when a stray pop's key matches only further down the stack" do
+      machine.push(KEY_A, :outer_a)
+      machine.push(KEY_B, :live_b)
+
+      expect(machine.pop_matching(KEY_A)).to be_nil
+      expect(machine.depth).to eq(2)
+
+      # Both frames survive intact, and their own returns still close them.
+      expect(machine.pop_matching(KEY_B).payload).to eq(:live_b)
+      expect(machine.pop_matching(KEY_A).payload).to eq(:outer_a)
     end
   end
 
-  describe "#pop_matching -- no match anywhere (I4, table rows 11 and 13)" do
+  describe "#pop_matching -- no match at the top (I4, table rows 11 and 13)" do
     it "returns nil and leaves a non-empty stack completely untouched" do
       machine.push(KEY_A, :a)
 
@@ -178,7 +190,9 @@ RSpec.describe Ovallsp::Observation::CallStackMachine do
         machine.push(KEY_B, :b)
         machine.note_raise
         machine.pop_matching(KEY_C) # no match
-        machine.pop_matching(KEY_A) # matches, discarding B above it
+        machine.pop_matching(KEY_A) # A is live, but B is on top -- no-op
+        machine.pop_matching(KEY_B) # matches the top
+        machine.pop_matching(KEY_A) # now on top -- matches
         machine.pop_matching(KEY_A) # already gone -- no match, no error
       end.not_to raise_error
     end
@@ -211,12 +225,11 @@ RSpec.describe Ovallsp::Observation::CallStackMachine do
 
     # A single random sequence of push/pop/raise operations, applied to
     # both the machine under test and a plain-Ruby reference model that
-    # implements the same "push always; pop scans from top for nearest
-    # match, discarding everything above" contract independently (so a
-    # bug shared by both would still be caught by the explicit unit
-    # examples above, but this catches the machine disagreeing with its
-    # own documented contract under sequences no one thought to write by
-    # hand).
+    # implements the same "push always; pop closes the top frame and only
+    # when its key matches" contract independently (so a bug shared by
+    # both would still be caught by the explicit unit examples above, but
+    # this catches the machine disagreeing with its own documented
+    # contract under sequences no one thought to write by hand).
     def run_sequence(seed)
       rng = Random.new(seed)
       reference = [] # parallel Array-of-[key, payload, epoch] model
@@ -252,18 +265,21 @@ RSpec.describe Ovallsp::Observation::CallStackMachine do
     end
 
     # Mirrors CallStackMachine#pop_matching's own documented contract
-    # (nearest match, discard above) against the parallel reference
-    # array, so a generated sequence's expectation is computed the same
-    # way the machine itself is documented to behave -- this test is
-    # checking internal consistency of that contract under many
-    # sequences, not deriving a new specification independently.
+    # (close the top frame, and only when its key matches) against the
+    # parallel reference array, so a generated sequence's expectation is
+    # computed the same way the machine itself is documented to behave --
+    # this test is checking internal consistency of that contract under
+    # many sequences, not deriving a new specification independently.
+    #
+    # The small key alphabet is what makes this section a real check on
+    # round 30's rule rather than a formality: with three keys and
+    # bounded-depth pushes, "the popped key is live but not on top" is a
+    # common draw, so a machine that scanned past the top would disagree
+    # with this model within a handful of operations.
     def reference_pop(reference, key)
-      index = reference.rindex { |entry_key, _, _| entry_key == key }
-      return nil unless index
+      return nil if reference.empty? || reference.last[0] != key
 
-      frame = reference[index]
-      reference.slice!(index, reference.size - index)
-      frame
+      reference.pop
     end
 
     # Compares the raise_epoch stamp as well as the payload. The reference

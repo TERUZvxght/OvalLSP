@@ -119,6 +119,42 @@ module ObservationFixture
       n * factorial(n - 1)
     end
 
+    # A `:return` CRuby delivers for a frame it never announced a `:call`
+    # for (round 30). `:call` fires only *after* the argument prologue has
+    # run, so when an optional-argument default expression raises, the
+    # method gets no `:call` at all -- and still gets its own `:return`,
+    # `return_value = nil`, as the exception unwinds past it.
+    #
+    # Arranged so that stray `:return` arrives while the *same* key is
+    # already live further down the stack, with a third workspace frame
+    # stacked in between: `unannounced_outer(1)` -> `unannounced_middle` ->
+    # `unannounced_outer(0)`, whose default calls #boom_for_default. A
+    # `#pop_matching` that scans past the top for the nearest matching key
+    # answers that stray `:return` with the *outer, still-running* frame
+    # and discards `unannounced_middle` along with it, so
+    # `unannounced_middle` disappears from the run entirely.
+    #
+    # Every return value here is deliberately a distinct class, so a frame
+    # closed against the wrong event shows up as a wrong (or missing)
+    # recorded type rather than coincidentally matching.
+    def boom_for_default
+      raise "raised while evaluating a default argument"
+    end
+
+    def unannounced_outer(n, _guard = (n.zero? ? boom_for_default : nil))
+      unannounced_middle(n)
+    end
+
+    # Rescues the raise itself, so both live frames go on to return real,
+    # non-nil values of their own: whatever they are recorded as is then a
+    # statement about which event closed which frame, not about the
+    # fabricated-nil rule (I6) that would apply to an abandoned one.
+    def unannounced_middle(n)
+      unannounced_outer(n - 1)
+    rescue RuntimeError
+      "middle-string"
+    end
+
     # Mutual recursion (table row 4): two different keys interleaved on
     # the same fiber's stack, neither ever popping the other's frame.
     def mutual_a(n)

@@ -812,6 +812,47 @@ RSpec.describe Ovallsp::Observation::Collector do
       expect(signature.samples).to eq(1)
     end
 
+    # Round 30. The *other* way a `:return` arrives with no matching push,
+    # and this one is CRuby's own doing rather than Collector bailing out:
+    # `:call` fires only after the argument prologue has run, so a method
+    # whose optional-argument default expression raises gets no `:call` at
+    # all -- and still gets its `:return`, `return_value = nil`, as the
+    # exception unwinds past it. `def m(a, b = might_raise)` is ordinary
+    # Ruby. Verified directly on 3.4.7: the event stream for
+    # `unannounced_outer(1)` is
+    # `call outer, call middle, call boom, raise boom, return boom,`
+    # **`return outer`**`, return middle, return outer`.
+    #
+    # That stray `return outer` arrives while `outer` is live *and* has
+    # `middle` stacked above it, which is precisely the sequence the old
+    # "scan down for the nearest matching key, discard everything above
+    # it" rule got wrong. Measured with that rule: `unannounced_middle`
+    # is absent from the results entirely -- its frame was sliced off with
+    # the outer one, so its own later `:return` matched nothing -- and
+    # `unannounced_outer` reports `Unknown` instead of the String it
+    # returns. Silent, from ordinary code, and the number of methods lost
+    # grows with the depth of the call chain between the two invocations.
+    #
+    # Both methods are asserted, because losing `middle` outright is the
+    # more serious half and the one an assertion on `outer` alone would
+    # miss.
+    it "keeps live frames when CRuby delivers a :return for a call it never announced" do
+      collector.start
+      ObservationFixture::Widget.new.unannounced_outer(1)
+      collector.stop
+
+      middle = signature_for(collector, "unannounced_middle")
+      outer = signature_for(collector, "unannounced_outer")
+
+      expect(middle).not_to be_nil
+      expect(middle.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
+      expect(middle.samples).to eq(1)
+
+      expect(outer).not_to be_nil
+      expect(outer.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
+      expect(outer.samples).to eq(1)
+    end
+
     it "records direct recursion correctly, one sample per invocation" do
       collector.start
       ObservationFixture::Widget.new.factorial(4)

@@ -72,41 +72,72 @@ module Ovallsp
         nil
       end
 
-      # Finds the frame matching `key`, scanning from the top of the stack
-      # downward (the *nearest* match, not necessarily the top itself),
-      # and discards it along with anything stacked above it.
+      # Closes the frame on *top* of the stack, and only if its key
+      # matches. Any other `:return` -- one whose key matches nothing, or
+      # matches only some frame deeper down -- is a no-op: `nil` is
+      # returned and the stack is left completely untouched (I4).
       #
-      # For an ordinary, single-fiber event stream this scan degenerates
-      # to "match is always the top" and nothing above it ever exists to
-      # discard: CRuby delivers exactly one `:return` per `#push`, in
-      # strict inner-to-outer order, even for a frame an exception unwound
-      # past (see #note_raise's docs and
-      # docs/design/tasks/022.2-collector-tracepoint-state-machine.md's
-      # transition table row 7) -- so a plain LIFO pop already gets rows
-      # 1-10 right on its own, and matching-by-identity is not what makes
-      # multi-frame unwinding or recursion correct (a bare `pop` handles
-      # both, verified while building this class).
+      # The rule is a consequence of one property of CRuby's delivery,
+      # not a heuristic: a `:return` can only ever be about the
+      # *innermost* live frame. Returns arrive in strict inner-to-outer
+      # order, one per frame, abandoned frames included -- a raise
+      # unwinding N frames fires N returns, innermost first (see
+      # #note_raise's docs and the transition table's row 7). So if the
+      # innermost frame this machine holds is not the one returning, no
+      # frame this machine holds has ended, and closing one would be a
+      # guess. This module prefers under-collection to fabrication
+      # everywhere else; the stack is no different.
       #
-      # What matching-by-identity is actually for is a `:return` with *no*
-      # corresponding `#push` at all, which a bare `pop` would answer by
-      # discarding whatever legitimate frame happens to be on top,
-      # corrupting every match after it for the rest of the run. Returns
-      # `nil`, leaving the stack completely untouched, in exactly that
-      # case (I4) rather than ever guessing.
+      # Matching at all (rather than a bare `@stack.pop`) is what keeps a
+      # `:return` with *no* corresponding `#push` from discarding whatever
+      # legitimate frame happens to be on top, corrupting every match
+      # after it for the rest of the run. That shape is reachable two
+      # ways, and NOT only as table row 11's "call already in flight when
+      # tracking started" (whose stray `:return`s, being strictly
+      # outermost, arrive when the stack is already empty and so are
+      # harmless even to a bare pop):
       #
-      # That case is reachable from real code, and NOT only as table row
-      # 11's "call already in flight when tracking started" (whose stray
-      # `:return`s, being strictly outermost, arrive when the stack is
-      # already empty and so are harmless even to a bare pop). The shape
-      # that actually bites is a push Collector *skipped*: `#handle_call`
-      # can raise -- `symbol_id_for` reads `defined_class.name`, which
-      # real code does override -- and be swallowed by `#handle`'s blanket
-      # rescue before ever reaching `#push`, while `#handle_return` pops
-      # unconditionally. The unmatched `:return` then arrives in the
-      # *middle* of a live stack. Measured with a bare pop, the caller's
-      # recorded return type becomes its callee's: round 20's bug exactly.
-      # Pinned by collector_spec.rb's "keeps a live frame when a :return
-      # arrives for a call that was never pushed".
+      # 1. A push Collector *skipped*. `#handle_call` can raise --
+      #    `symbol_id_for` reads `defined_class.name`, which real code does
+      #    override -- and be swallowed by `#handle`'s blanket rescue
+      #    before ever reaching `#push`, while `#handle_return` pops
+      #    unconditionally. Measured with a bare pop, the caller's
+      #    recorded return type becomes its callee's: round 20's bug
+      #    exactly. Pinned by collector_spec.rb's "keeps a live frame when
+      #    a :return arrives for a call that was never pushed".
+      # 2. A push *CRuby itself* never announced (round 30). `:call` fires
+      #    only after the argument prologue has run, so a method whose own
+      #    optional-argument or keyword-argument default expression raises
+      #    gets **no `:call` at all** -- and still gets its `:return`,
+      #    with `return_value = nil`, as the exception unwinds past it.
+      #    `def m(a, b = might_raise)` is ordinary Ruby, and this stray
+      #    `:return` arrives in the *middle* of a live stack.
+      #
+      # Shape 2 is why the match is restricted to the top. This method
+      # used to scan downward for the *nearest* frame with a matching key
+      # and discard everything above it, on the grounds that real
+      # delivery never exercises the scan (true for rows 1-12) and that
+      # generality could only be defensive (I7). It was not defensive: a
+      # stray `:return` for a key that is *also* live further down -- the
+      # everyday `a -> b -> a` shape, where the inner `a`'s default
+      # argument raises -- matched that outer, still-running `a` and
+      # sliced off every live frame stacked above it. Measured through a
+      # real Collector on `outer -> middle -> outer(raising default)`:
+      # `middle` vanished from the run entirely (its own later `:return`
+      # then matched nothing), and `outer`'s return type was replaced by
+      # the abandoned frame's untrusted `nil`. Silent, and it scales with
+      # the depth of the call chain between the two invocations.
+      #
+      # What the top-only rule costs is bounded and strictly
+      # under-collection: when the stray `:return`'s key matches the top
+      # *because the same method is directly recursive* (`recur` whose own
+      # default raises at the base case), the live outer frame is closed
+      # one event early. Its parameter types are its own and still
+      # correct, and its return value is discarded rather than fabricated
+      # -- the raise epoch has already advanced, so #return_type_for
+      # refuses the `nil` (I6). There is no event that distinguishes that
+      # case, so it is recorded as a residue rather than guessed at; see
+      # the design doc's "what is not fixed".
       #
       # Note this makes matching, not `#push`-for-every-call (I2), the
       # mechanism round 20's shape actually depends on today: reverting
@@ -114,28 +145,14 @@ module Ovallsp
       # covers the other. I2 is retained as deliberate defense in depth
       # (I7's spirit), not as the load-bearing half.
       #
-      # The "discard everything above the match" behavior this scan
-      # implies is defensive generality (I7: never raise, never corrupt
-      # state, for *any* input this class is given) rather than a property
-      # today's real TracePoint delivery is known to require -- see
-      # call_stack_machine_spec.rb's generative section, which constructs
-      # event sequences with no attempt to mirror what real Ruby code
-      # would produce, specifically to hold this class to a contract
-      # stronger than "correct for the cases observed so far".
-      #
       # Never raises, for any input, including an empty stack or a key
-      # that matches nothing anywhere in it.
+      # that matches nothing.
       def pop_matching(key)
-        index = @stack.size - 1
-        while index >= 0
-          frame = @stack[index]
-          if frame.key == key
-            @stack.slice!(index, @stack.size - index)
-            return frame
-          end
-          index -= 1
-        end
-        nil
+        frame = @stack.last
+        return nil unless frame && frame.key == key
+
+        @stack.pop
+        frame
       end
 
       # The epoch a frame must match to have its own `nil` return trusted
