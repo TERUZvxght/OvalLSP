@@ -335,13 +335,23 @@ RSpec.describe Ovallsp::Observation::Collector do
     # either shape a per-thread registry could take (a Hash keyed by
     # thread, or a plain list of stacks). Its legitimate state --
     # @aggregates and @method_cache -- maps to Hashes and to nil, never to
-    # the bare Arrays a call stack is, so this is zero for any
-    # implementation that doesn't keep a registry of its own.
+    # a call stack, so this is zero for any implementation that doesn't
+    # keep a registry of its own.
+    #
+    # A call stack must be recognized in *both* the shapes this code has
+    # actually had: the bare Array it was before Task 022.2's redesign,
+    # and the CallStackMachine it is after. Checking only for Array made
+    # this example vacuous the moment the machine was extracted -- verified
+    # by reintroducing the exact `@stacks[Thread.current.object_id] ||=`
+    # registry round 20 removed and watching this file stay green.
+    stack_like = lambda do |entry|
+      entry.is_a?(Array) || entry.is_a?(Ovallsp::Observation::CallStackMachine)
+    end
     retained_stacks = collector.instance_variables.sum do |name|
       case (value = collector.instance_variable_get(name))
-      when Hash then value.count { |_, entry| entry.is_a?(Array) }
-      when Array then value.count { |entry| entry.is_a?(Array) }
-      else 0
+      when Hash then value.count { |_, entry| stack_like.call(entry) }
+      when Array then value.count { |entry| stack_like.call(entry) }
+      else stack_like.call(value) ? 1 : 0
       end
     end
 
@@ -377,6 +387,36 @@ RSpec.describe Ovallsp::Observation::Collector do
       collector.results(run_id: "r1").find do |r|
         r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::Widget", name: name)
       end
+    end
+
+    # The one real-code shape where CallStackMachine#pop_matching's
+    # matching-by-identity is load-bearing rather than redundant with
+    # "push a frame for every :call". Everything else rounds 20-22 fixed
+    # is caught by *either* mechanism alone (verified by reverting each
+    # separately: with the other still in place, this whole file stays
+    # green), so without this example a future simplification of
+    # #pop_matching to a bare LIFO `pop` -- which the machine's own docs
+    # explicitly invite by noting a bare pop gets table rows 1-10 right --
+    # would reintroduce round 20's wrong-attribution bug with no test
+    # failing anywhere.
+    #
+    # Collector's `:call` handling can raise (a class whose `name` raises,
+    # here) and is then swallowed by #handle's blanket rescue *before*
+    # CallStackMachine#push runs, while #handle_return pops unconditionally.
+    # So a `:return` arrives with no matching push, in the middle of the
+    # stack rather than at its outermost edge. Measured with a bare pop:
+    # `calls_unnameable` reports Integer -- its callee's return value --
+    # instead of the String it plainly returns.
+    it "keeps a live frame when a :return arrives for a call that was never pushed" do
+      collector.start
+      ObservationFixture::Widget.new.calls_unnameable
+      collector.stop
+
+      signature = signature_for(collector, "calls_unnameable")
+
+      expect(signature).not_to be_nil
+      expect(signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
+      expect(signature.samples).to eq(1)
     end
 
     it "records direct recursion correctly, one sample per invocation" do

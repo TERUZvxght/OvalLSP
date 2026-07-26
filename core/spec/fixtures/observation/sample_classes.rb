@@ -127,6 +127,43 @@ module ObservationFixture
       mutual_a(n - 1)
     end
 
+    # Calls a workspace method whose `:call` event Collector cannot even
+    # finish translating (see UnnameableOwner below), so no frame is ever
+    # pushed for it -- while this method's own frame is live underneath and
+    # a third workspace frame gets pushed above it. The skipped frame's
+    # `:return` still fires, in the *middle* of the stack rather than at
+    # its outermost edge, which is the one real shape where matching a
+    # `:return` by identity (rather than popping whatever is on top) is
+    # what keeps this method's own return type from being replaced by its
+    # callee's. Returns a String; the callee returns an Integer, so a
+    # mismatch is visible in the recorded type rather than coincidental.
+    def calls_unnameable
+      UnnameableOwner.new.mid(self)
+      "outer-string"
+    end
+  end
+
+  # `Collector#symbol_id_for` reads `defined_class.name`; a class that
+  # overrides `name` to raise (real code does override `name` -- ORMs and
+  # proxy/delegator gems both do) makes Collector's whole `:call` handler
+  # raise before it reaches `CallStackMachine#push`, so this class's
+  # methods get a `:return` with no corresponding push. That asymmetry --
+  # `#handle_call` can bail out before pushing, while `#handle_return`
+  # always pops -- is why `#pop_matching` must answer an unmatched key
+  # with a no-op instead of taking the top of the stack.
+  class UnnameableOwner
+    def self.name = raise("this class refuses to be named")
+
+    # Keeps RSpec's own failure output safe despite the `name` override.
+    def inspect = "#<ObservationFixture::UnnameableOwner>"
+
+    def mid(widget)
+      widget.combine("x", "y")
+      99 # Integer -- deliberately not what Widget#calls_unnameable returns
+    end
+  end
+
+  class Widget
     # A Fiber suspending mid-call and later resuming (table row 15): the
     # fiber's own call stack must stay isolated from whatever else runs on
     # the same Thread while it's suspended.

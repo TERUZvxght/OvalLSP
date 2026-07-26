@@ -244,9 +244,10 @@ RSpec.describe Ovallsp::Observation::CallStackMachine do
       # Final invariant: whatever's left agrees on depth and on every
       # remaining key/payload, regardless of how the sequence unfolded.
       expect(machine.depth).to eq(reference.size), "depth mismatch at seed #{seed}"
-      reference.reverse_each do |key, payload, _epoch|
+      reference.reverse_each do |key, payload, entry_epoch|
         frame = machine.pop_matching(key)
         expect(frame&.payload).to eq(payload), "final drain mismatch at seed #{seed} for key #{key.inspect}"
+        expect(frame&.raise_epoch).to eq(entry_epoch), "final drain epoch mismatch at seed #{seed} for key #{key.inspect}"
       end
     end
 
@@ -265,11 +266,17 @@ RSpec.describe Ovallsp::Observation::CallStackMachine do
       frame
     end
 
+    # Compares the raise_epoch stamp as well as the payload. The reference
+    # model already tracked the epoch alongside every pushed entry, but
+    # nothing asserted on it, so I6 -- the invariant round 21's fabricated
+    # `nil` bug lived in, and the one whose failure mode is a *confidently
+    # wrong* type rather than lost evidence -- was the only invariant the
+    # generative section carried the data for and never checked.
     def frames_equivalent?(actual, expected)
       return actual.nil? if expected.nil?
       return false if actual.nil?
 
-      actual.payload == expected[1]
+      actual.payload == expected[1] && actual.raise_epoch == expected[2]
     end
 
     # A fixed, small set of seeds rather than truly random ones, so a

@@ -88,21 +88,40 @@ module Ovallsp
       # both, verified while building this class).
       #
       # What matching-by-identity is actually for is a `:return` with *no*
-      # corresponding `#push` at all -- a call already in flight when
-      # tracking started (table row 11) -- which a bare `pop` would answer
-      # by discarding whatever legitimate frame happens to be on top,
+      # corresponding `#push` at all, which a bare `pop` would answer by
+      # discarding whatever legitimate frame happens to be on top,
       # corrupting every match after it for the rest of the run. Returns
       # `nil`, leaving the stack completely untouched, in exactly that
       # case (I4) rather than ever guessing.
       #
+      # That case is reachable from real code, and NOT only as table row
+      # 11's "call already in flight when tracking started" (whose stray
+      # `:return`s, being strictly outermost, arrive when the stack is
+      # already empty and so are harmless even to a bare pop). The shape
+      # that actually bites is a push Collector *skipped*: `#handle_call`
+      # can raise -- `symbol_id_for` reads `defined_class.name`, which
+      # real code does override -- and be swallowed by `#handle`'s blanket
+      # rescue before ever reaching `#push`, while `#handle_return` pops
+      # unconditionally. The unmatched `:return` then arrives in the
+      # *middle* of a live stack. Measured with a bare pop, the caller's
+      # recorded return type becomes its callee's: round 20's bug exactly.
+      # Pinned by collector_spec.rb's "keeps a live frame when a :return
+      # arrives for a call that was never pushed".
+      #
+      # Note this makes matching, not `#push`-for-every-call (I2), the
+      # mechanism round 20's shape actually depends on today: reverting
+      # either one alone leaves collector_spec.rb green, because each
+      # covers the other. I2 is retained as deliberate defense in depth
+      # (I7's spirit), not as the load-bearing half.
+      #
       # The "discard everything above the match" behavior this scan
-      # implies is therefore defensive generality (I7: never raise, never
-      # corrupt state, for *any* input this class is given) rather than a
-      # property today's real TracePoint delivery is known to require --
-      # see call_stack_machine_spec.rb's generative section, which
-      # constructs event sequences with no attempt to mirror what real
-      # Ruby code would produce, specifically to hold this class to a
-      # contract stronger than "correct for the cases observed so far".
+      # implies is defensive generality (I7: never raise, never corrupt
+      # state, for *any* input this class is given) rather than a property
+      # today's real TracePoint delivery is known to require -- see
+      # call_stack_machine_spec.rb's generative section, which constructs
+      # event sequences with no attempt to mirror what real Ruby code
+      # would produce, specifically to hold this class to a contract
+      # stronger than "correct for the cases observed so far".
       #
       # Never raises, for any input, including an empty stack or a key
       # that matches nothing anywhere in it.
