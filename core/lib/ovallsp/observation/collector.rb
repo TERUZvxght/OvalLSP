@@ -235,15 +235,52 @@ module Ovallsp
         current_stack.note_raise
       end
 
+      # The aggregate's slot count is a function of *every* observation, not
+      # of whichever one happened to arrive first (round 27).
+      #
+      # A symbol_id is `[kind, owner-name, method-name]`, so two different
+      # `[defined_class, method_id]` keys -- two distinct Class objects that
+      # answer `#name` with the same string -- legitimately file evidence
+      # under one aggregate. That is not exotic: it is what a Rails/Zeitwerk
+      # constant reload, an `Object.send(:remove_const, ...)` + redefine, and
+      # rspec-mocks' `stub_const` all produce inside a single run, and the
+      # two definitions need not have the same arity.
+      #
+      # Sizing the array once from the first call's slot count
+      # (`Array.new(payload[:param_types].size) { Set.new }`) made a later,
+      # wider call index past its end, so `agg[:param_type_sets][index]` was
+      # `nil` and `nil << type` raised NoMethodError -- straight into
+      # #handle's blanket rescue, which exists for "a plugin's own bug must
+      # never take down the user's test run", not to absorb this class's own
+      # index errors. The write is not atomic either, so the aggregate was
+      # left half-applied: every slot before the overflow had already taken
+      # the new type while `samples` and the return type never did.
+      #
+      # Measured on a class reloaded mid-run from `m(a)` to `m(a, b, c)`,
+      # called once narrow and twice wide: `parameter_types` came back as a
+      # single slot reading `Integer | String | Symbol` -- a three-call union
+      # -- next to `samples: 1`, with both wider calls' return types dropped
+      # and two whole parameter slots reported as not existing. `samples` is
+      # the confidence signal the user actually acts on (Server renders it
+      # verbatim as `samples:` and sums it into `sampleCount` for
+      # `ovallsp/showTypeEvidence`), so this is the same family as rounds
+      # 20-22 and 24-26: not lost evidence but confidently wrong evidence.
+      #
+      # Growing per slot also makes holes impossible by construction rather
+      # than by a guard: the indices are visited in ascending order from 0,
+      # so slot `n` cannot be reached before slot `n - 1` exists, and
+      # #results never sees a `nil` where it expects a Set.
       def record(payload, return_type:)
         @mutex.synchronize do
           agg = @aggregates[payload[:symbol_id]] ||= {
-            param_type_sets: Array.new(payload[:param_types].size) { Set.new },
+            param_type_sets: [],
             return_type_set: Set.new,
             samples: 0,
             fingerprint: payload[:fingerprint]
           }
-          payload[:param_types].each_with_index { |type, index| agg[:param_type_sets][index] << type }
+          payload[:param_types].each_with_index do |type, index|
+            (agg[:param_type_sets][index] ||= Set.new) << type
+          end
           agg[:return_type_set] << return_type if return_type
           agg[:samples] += 1
         end

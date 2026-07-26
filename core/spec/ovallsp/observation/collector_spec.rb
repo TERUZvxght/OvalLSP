@@ -575,6 +575,94 @@ RSpec.describe Ovallsp::Observation::Collector do
     )
   end
 
+  # Found by an independent review (round 27). Unlike rounds 20-26, which all
+  # lived in how a single call's evidence is *derived*, this one is in how
+  # calls are *aggregated*: `#record` sized an aggregate's per-slot Array
+  # once, from whichever observation happened to arrive first, and every
+  # later call was assumed to have exactly that many slots forever.
+  #
+  # A symbol_id is `[kind, owner-name, method-name]`, so two distinct Class
+  # objects answering `#name` with the same string share one aggregate --
+  # which is what a Rails/Zeitwerk constant reload, a `remove_const` +
+  # redefine, and rspec-mocks' `stub_const` each produce inside one run. When
+  # the later definition is wider, `agg[:param_type_sets][index]` was `nil`
+  # and `nil << type` raised NoMethodError into #handle's blanket rescue --
+  # a rescue that exists so a plugin's bug can't take down the user's own
+  # test run, not to absorb this class's own index errors. And `#record` is
+  # not atomic, so the aggregate was left half-applied.
+  #
+  # Measured pre-fix on exactly the calls below: one slot reading
+  # `Integer | String | Symbol` -- a union of all three calls' slot-0
+  # arguments -- reported next to `samples: 1`, with both wider calls' return
+  # types dropped and two whole parameter slots missing. `samples` is the
+  # confidence signal `ovallsp/showTypeEvidence` renders verbatim (see
+  # Server#type_evidence_response), so this is rounds 20-22/24-26's family
+  # again: not lost evidence but confidently wrong evidence.
+  describe "a symbol observed at two different arities in one run (round 27)" do
+    after { ObservationFixture::Reloading.reset }
+
+    def reloaded_signature(collector)
+      collector.results(run_id: "r1").find do |r|
+        r.symbol_id == sym(kind: :instance_method, owner: "::ObservationFixture::Reloaded", name: "m")
+      end
+    end
+
+    it "counts every call and keeps every slot when a later definition is wider than the first" do
+      ObservationFixture::Reloading.define_narrow
+      collector.start
+      ObservationFixture.const_get(:Reloaded).new.m(1)
+      ObservationFixture::Reloading.define_wide
+      ObservationFixture.const_get(:Reloaded).new.m("s", :b, :c)
+      ObservationFixture.const_get(:Reloaded).new.m(:sym, :b, :c)
+      collector.stop
+
+      signature = reloaded_signature(collector)
+
+      expect(signature).not_to be_nil
+      # All three calls, not just the ones that fit the first-seen shape.
+      expect(signature.samples).to eq(3)
+      # The widest shape observed, not the first-observed one.
+      expect(signature.parameter_types.size).to eq(3)
+      expect(signature.parameter_types.first).to eq(
+        Ovallsp::Types.normalize_union(
+          [Ovallsp::Types::Nominal.new(name: "Integer"), Ovallsp::Types::Nominal.new(name: "String"),
+           Ovallsp::Types::Nominal.new(name: "Symbol")]
+        )
+      )
+      # The wider calls' own return type survives too -- pre-fix it was
+      # discarded with the sample, since #record raised before reaching it.
+      expect(signature.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
+    end
+
+    # The other order, which never raised and so was never the visible half
+    # of this bug: it pins that growing the array did not turn "a slot no
+    # later call has" into a hole `#results` would choke on, and that a
+    # narrower call still contributes its own slots rather than being
+    # dropped for not filling the wider shape.
+    it "keeps the wider shape's slots when a later definition is narrower than the first" do
+      ObservationFixture::Reloading.define_wide
+      collector.start
+      ObservationFixture.const_get(:Reloaded).new.m(1, "s", :sym)
+      ObservationFixture::Reloading.define_narrow
+      ObservationFixture.const_get(:Reloaded).new.m(:only)
+      collector.stop
+
+      signature = reloaded_signature(collector)
+
+      expect(signature).not_to be_nil
+      expect(signature.samples).to eq(2)
+      expect(signature.parameter_types).to eq(
+        [
+          Ovallsp::Types.normalize_union(
+            [Ovallsp::Types::Nominal.new(name: "Integer"), Ovallsp::Types::Nominal.new(name: "Symbol")]
+          ),
+          Ovallsp::Types::Nominal.new(name: "String"),
+          Ovallsp::Types::Nominal.new(name: "Symbol")
+        ]
+      )
+    end
+  end
+
   # Same round: the per-thread call stacks lived in a plain `Hash` keyed by
   # `Thread.current.object_id` that nothing ever pruned, in code that runs
   # inside the *user's own test-suite process* for the whole length of

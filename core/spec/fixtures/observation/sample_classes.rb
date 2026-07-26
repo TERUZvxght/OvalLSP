@@ -252,6 +252,42 @@ module ObservationFixture
     end
   end
 
+  # Two *distinct* Class objects that both answer `#name` with
+  # "ObservationFixture::Reloaded", so both file their evidence under one
+  # symbol_id -- `[kind, owner-name, method-name]` has no notion of which
+  # class object produced it. That is the shape a Rails/Zeitwerk constant
+  # reload, a bare `remove_const` + redefine, and rspec-mocks' `stub_const`
+  # all produce inside a single observation run, and the two definitions
+  # need not share an arity (round 27). Deliberately *different* arities
+  # and different slot-0 argument classes below, so an aggregate that
+  # silently truncates to the first-observed slot count is visible in the
+  # recorded signature rather than coincidental.
+  module Reloading
+    module_function
+
+    def define_narrow
+      reset
+      ObservationFixture.const_set(:Reloaded, Class.new do
+        def m(_a)
+          "narrow"
+        end
+      end)
+    end
+
+    def define_wide
+      reset
+      ObservationFixture.const_set(:Reloaded, Class.new do
+        def m(_a, _b, _c)
+          "wide"
+        end
+      end)
+    end
+
+    def reset
+      ObservationFixture.send(:remove_const, :Reloaded) if ObservationFixture.const_defined?(:Reloaded, false)
+    end
+  end
+
   class Widget
     # A Fiber suspending mid-call and later resuming (table row 15): the
     # fiber's own call stack must stay isolated from whatever else runs on
