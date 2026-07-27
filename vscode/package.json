@@ -2,7 +2,7 @@
   "name": "ovallsp",
   "displayName": "OvalLSP",
   "description": "Semantic Ruby/Rails language features backed by a standalone Core Language Server.",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "publisher": "ovallsp",
   "private": true,
   "license": "MIT",
@@ -11,6 +11,35 @@
   },
   "categories": [
     "Programming Languages"
+  ],
+  "keywords": [
+    "ruby",
+    "rails",
+    "lsp",
+    "language-server",
+    "semantic",
+    "hover",
+    "definition",
+    "completion",
+    "rename",
+    "rbs",
+    "prism",
+    "refactoring"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TERUZvxght/OvalLSP.git"
+  },
+  "homepage": "https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/README.md",
+  "bugs": {
+    "url": "https://github.com/TERUZvxght/OvalLSP/issues"
+  },
+  "galleryBanner": {
+    "color": "#2B2A33",
+    "theme": "dark"
+  },
+  "extensionKind": [
+    "workspace"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -100,6 +129,10 @@
         "title": "OvalLSP: Show Environment Diagnostics"
       },
       {
+        "command": "ovallsp.showVersionInformation",
+        "title": "OvalLSP: Show Version Information"
+      },
+      {
         "command": "ovallsp.reindexWorkspace",
         "title": "OvalLSP: Re-index Workspace"
       }
@@ -115,7 +148,7 @@
     "test": "npm run test:unit",
     "copy-core": "node scripts/copy-core.js",
     "copy-core:allow-missing-vendor": "node scripts/copy-core.js --allow-missing-vendor",
-    "package": "npm run copy-core && npm run compile && vsce package --allow-missing-repository"
+    "package": "npm run copy-core && npm run compile && vsce package --target darwin-arm64 --allow-missing-repository"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"

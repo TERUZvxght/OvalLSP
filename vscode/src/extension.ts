@@ -5,18 +5,35 @@ import {
   LanguageClientOptions,
   ServerOptions
 } from 'vscode-languageclient/node';
-import { resolveServerConfig } from './serverConfig';
+import { resolveServerConfig, classifyServerSelection } from './serverConfig';
 import { resolveRuby, RubyResolution } from './rubyResolver';
 import { checkBundledCoreCompatibility } from './platformCompatibility';
 import { WATCHED_FILES_GLOB } from './watchedFiles';
+import {
+  CLIENT_PROTOCOL_VERSION,
+  OvallspServerInfo,
+  VersionDiagnostic,
+  compareVersionInfo,
+  gatherClientVersionInfo
+} from './versionInfo';
+import { ClientLifecycleManager } from './clientLifecycle';
 
 const clients = new Map<string, LanguageClient>();
 const watchers = new Map<string, vscode.FileSystemWatcher>();
+// Task 023.3: the single owner of "is it still valid to call
+// client.start() for this folder right now" -- see clientLifecycle.ts's
+// own docs for the exact race this closes.
+const lifecycle = new ClientLifecycleManager();
 // The Ruby resolution actually used to launch each folder's client — kept
 // around purely so `OvalLSP: Show Environment Diagnostics` can show *why*
 // that Ruby was picked without re-running the search (020's "Ruby
 // executable選択理由を診断画面で確認できる").
 const rubyResolutions = new Map<string, RubyResolution>();
+// Task 023.2: the version-compatibility diagnostic computed for each
+// folder's client, once it has actually started and reported
+// `ovallspInfo` -- kept purely so `OvalLSP: Show Version Information`
+// can display it without re-running the comparison.
+const versionDiagnostics = new Map<string, VersionDiagnostic>();
 
 // Task 020's priority order: an explicit path setting always wins outright
 // (never even runs the version-manager search); everything below that is
@@ -53,11 +70,13 @@ function startClientForFolder(
     rubyResolutions.delete(folder.uri.toString());
   }
 
-  const { command, args } = resolveServerConfig({
+  const serverConfigInput = {
     rubyCommand: resolvedRubyCommand,
     serverPath: config.get<string | null>('server.path'),
     extensionRoot: context.extensionPath
-  });
+  };
+  const { command, args } = resolveServerConfig(serverConfigInput);
+  const classification = classifyServerSelection(serverConfigInput);
 
   const serverOptions: ServerOptions = {
     run: { command, args, options: { cwd: folder.uri.fsPath } },
@@ -103,11 +122,25 @@ function startClientForFolder(
     // There's no standard LSP field for workspace trust, so it's passed
     // through here — the Core Server must not launch the Runtime Agent
     // (Rails/Bundler code execution) in an untrusted workspace
-    // (docs/design/docs/02-architecture.md section 11).
-    initializationOptions: { workspaceTrusted: vscode.workspace.isTrusted }
+    // (docs/design/docs/02-architecture.md section 11). `ovallspClient`
+    // is Task 023.2's own addition -- Core doesn't consume it yet (the
+    // handshake today is entirely client-side, comparing what Core
+    // reports in `ovallspInfo` against what this Extension expects), but
+    // sending it now means a future Core-side check has real data to read
+    // instead of needing every already-shipped Extension to add it later.
+    initializationOptions: {
+      workspaceTrusted: vscode.workspace.isTrusted,
+      ovallspClient: {
+        extensionVersion: context.extension.packageJSON.version,
+        protocolVersion: CLIENT_PROTOCOL_VERSION
+      }
+    }
   };
 
   const client = new LanguageClient('ovallsp', `OvalLSP (${folder.name})`, serverOptions, clientOptions);
+
+  const key = folder.uri.toString();
+  const generation = lifecycle.beginStart(key);
 
   // ADR-0005: checked *before* Core is actually spawned, not after --
   // `core/bin/ovallsp` itself already refuses to load an incompatible
@@ -129,10 +162,89 @@ function startClientForFolder(
           'native dependencies. See the OvalLSP output channel for details.'
       );
     }
-    client.start().then(undefined, (err) => outputChannel.appendLine(`failed to start Core Server: ${err}`));
+
+    // Task 023.3: this probe may resolve long after a stop was already
+    // requested for this exact generation (deactivate, workspace-folder
+    // removal, a restart that began a newer generation). `markStarting`
+    // is the single gate that decides whether calling `client.start()`
+    // below is still valid at all -- refusing here is what stops an
+    // orphaned Core child process from ever being spawned in the first
+    // place, rather than trying to clean one up after the fact.
+    if (!lifecycle.markStarting(key, generation)) {
+      outputChannel.appendLine(
+        `OvalLSP: skipping Core Server start for ${folder.name} -- superseded by a stop or a newer restart.`
+      );
+      return;
+    }
+
+    client.start().then(() => {
+      // A stop can also race in *during* `client.start()` itself (it's
+      // not instantaneous -- it spawns a process and waits for
+      // `initialize` to complete). `markRunning` returning false means
+      // exactly that happened; this client is now running but nothing
+      // else will ever call `.stop()` on it (stopClient already ran
+      // against a generation that, at the time, had nothing to actually
+      // stop), so this is the one place responsible for tearing it down.
+      if (!lifecycle.markRunning(key, generation)) {
+        outputChannel.appendLine(
+          `OvalLSP: Core Server for ${folder.name} finished starting after a stop was requested -- stopping it immediately.`
+        );
+        void client.stop().then(() => lifecycle.markStopped(key, generation));
+        return;
+      }
+      runVersionHandshake(folder, client, context, classification, outputChannel);
+    }, (err) => outputChannel.appendLine(`failed to start Core Server: ${err}`));
   });
 
   return client;
+}
+
+// Task 023.2: once Core has actually started and answered `initialize`,
+// compare what it reported (`ovallspInfo`) against what this Extension
+// expects. Deliberately *after* `client.start()` resolves rather than
+// woven into the pre-start compatibility probe above — that probe only
+// ever checks the Ruby interpreter (ADR-0005) and must not block Core
+// from starting at all (a Ruby with its own separately-installed prism/rbs
+// is a legitimate combination it can't rule out in advance); this
+// handshake instead reads Core's own self-report of what actually
+// launched, which only exists once `initialize` has actually completed.
+function runVersionHandshake(
+  folder: vscode.WorkspaceFolder,
+  client: LanguageClient,
+  context: vscode.ExtensionContext,
+  classification: ReturnType<typeof classifyServerSelection>,
+  outputChannel: vscode.OutputChannel
+): void {
+  const key = folder.uri.toString();
+  const serverConfigInput = {
+    serverPath: vscode.workspace.getConfiguration('ovallsp', folder).get<string | null>('server.path'),
+    extensionRoot: context.extensionPath
+  };
+  const clientInfo = gatherClientVersionInfo({
+    extensionRoot: context.extensionPath,
+    extensionVersion: context.extension.packageJSON.version,
+    classification,
+    selectedCorePath: resolveServerConfig(serverConfigInput).args[0],
+    currentTarget: `${process.platform}-${process.arch}`
+  });
+
+  const ovallspInfo = client.initializeResult?.ovallspInfo as OvallspServerInfo | undefined;
+  const diagnostic = compareVersionInfo(clientInfo, ovallspInfo);
+  versionDiagnostics.set(key, diagnostic);
+
+  if (!diagnostic.compatible) {
+    outputChannel.appendLine(`--- OvalLSP version compatibility (${folder.name}) ---`);
+    for (const reason of diagnostic.reasons) {
+      outputChannel.appendLine(`  ✗ ${reason}`);
+    }
+    if (diagnostic.action) {
+      outputChannel.appendLine(`  Action: ${diagnostic.action}`);
+    }
+    void vscode.window.showErrorMessage(
+      `OvalLSP: the Core Server for ${folder.name} is not version-compatible with this Extension. ` +
+        'See the OvalLSP output channel for details.'
+    );
+  }
 }
 
 // Task 019: opt-in runtime type observation. Every command here resolves
@@ -326,18 +438,88 @@ function registerEnvironmentCommands(
       outputChannel.show();
     })
   );
+
+  // Task 023 Section 2: deliberately never shows an absolute path in the
+  // information popup itself (only the OutputChannel, which the user must
+  // explicitly open) -- `selectedCorePath` in particular can reveal local
+  // usernames/directory layout, which has no business appearing in a
+  // notification toast the user didn't ask to expand.
+  context.subscriptions.push(
+    vscode.commands.registerCommand('ovallsp.showVersionInformation', () => {
+      const uri = vscode.window.activeTextEditor?.document.uri;
+      const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : vscode.workspace.workspaceFolders?.[0];
+      if (!folder) {
+        void vscode.window.showWarningMessage('OvalLSP: no workspace folder is open.');
+        return;
+      }
+
+      const diagnostic = versionDiagnostics.get(folder.uri.toString());
+      outputChannel.appendLine(`--- OvalLSP version information: ${folder.name} ---`);
+      if (!diagnostic) {
+        outputChannel.appendLine('No version information yet -- the Core Server for this folder has not finished starting.');
+        outputChannel.show();
+        return;
+      }
+
+      const d = diagnostic.details;
+      outputChannel.appendLine(`Compatible: ${diagnostic.compatible ? 'yes' : 'NO'}`);
+      outputChannel.appendLine(`Extension version: ${d.extensionVersion}`);
+      outputChannel.appendLine(`Core version: ${d.coreVersion ?? '(unknown)'}`);
+      outputChannel.appendLine(`Client protocol version: ${d.clientProtocolVersion}`);
+      outputChannel.appendLine(`Server protocol version: ${d.serverProtocolCurrent ?? '(unknown)'}`);
+      outputChannel.appendLine(`Ruby running: ${d.rubyRunning ?? '(unknown)'}`);
+      outputChannel.appendLine(`Ruby expected: ${d.rubyExpected ?? '(no bundled manifest -- monorepo/custom Core)'}`);
+      outputChannel.appendLine(`Core selection: ${d.classification}`);
+      outputChannel.appendLine(`Selected Core path: ${d.selectedCorePath}`);
+      for (const reason of diagnostic.reasons) {
+        outputChannel.appendLine(`  ✗ ${reason}`);
+      }
+      if (diagnostic.action) {
+        outputChannel.appendLine(`Action: ${diagnostic.action}`);
+      }
+      outputChannel.show();
+
+      void vscode.window.showInformationMessage(
+        diagnostic.compatible
+          ? `OvalLSP: Extension ${d.extensionVersion} / Core ${d.coreVersion ?? '(unknown)'} -- compatible. See the OvalLSP output channel for details.`
+          : `OvalLSP: version incompatibility detected for ${folder.name}. See the OvalLSP output channel for details.`
+      );
+    })
+  );
 }
 
 function stopClient(key: string): Thenable<void> {
+  // Marked *before* anything else, in particular before the `await
+  // client.stop()` below -- so a compatibility probe or an in-flight
+  // `client.start()` for this exact generation (still running
+  // concurrently in `startClientForFolder`'s own promise chain) observes
+  // the stop on its very next check, no matter how long this function's
+  // own async work still takes (Task 023.3).
+  const generation = lifecycle.getGeneration(key);
+  lifecycle.requestStop(key);
+
   watchers.get(key)?.dispose();
   watchers.delete(key);
+  versionDiagnostics.delete(key);
 
   const client = clients.get(key);
   if (!client) {
     return Promise.resolve();
   }
   clients.delete(key);
-  return client.stop();
+
+  // `stopIfRunning` is what actually protects against
+  // vscode-languageclient's `client.stop()` throwing synchronously
+  // whenever its internal state isn't exactly `Running` (in particular
+  // while `client.start()` is still in flight) -- see its own docs in
+  // clientLifecycle.ts, and Task 023.3's follow-up notes for the bug this
+  // closes (found by independent review: `restartServer`'s own `await
+  // stopClient(key)` was silently broken by this).
+  return lifecycle.stopIfRunning(key, () => client.stop()).then((didStop) => {
+    if (didStop && generation !== undefined) {
+      lifecycle.markStopped(key, generation);
+    }
+  });
 }
 
 export function activate(context: vscode.ExtensionContext): void {
