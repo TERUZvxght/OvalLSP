@@ -14,6 +14,10 @@ vscode/.vscode-test/
 vscode/core/
 vscode/*.vsix
 
+# Marketplace publish PAT, read by vscode/scripts/release.sh -- never
+# committed, never logged. See docs/PUBLISHING.md's Credentials section.
+vscode/.vsce-pat.local
+
 # Editor / OS
 .DS_Store
 

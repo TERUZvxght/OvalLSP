@@ -2,6 +2,20 @@
 
 All notable changes to the OvalLSP VS Code extension are documented here.
 
+## 0.1.2 — Documentation update
+
+No code or runtime behavior changes. Updates the README (both language
+versions) with two previously-undocumented, now-verified facts:
+
+- Installing the extension alone is sufficient to run it, provided a
+  compatible Ruby (3.4.x) is already reachable on the system — no
+  separate download or `bundle install` beyond that.
+- A real, verified conflict: running alongside another active Ruby
+  language server extension (tested against Shopify's Ruby LSP) produces
+  overlapping completion/definition results, since VS Code merges
+  results from every active provider rather than picking one. See
+  "Known conflicts with other extensions" in the README.
+
 ## 0.1.1 — Fix: published VSIX was missing the bundled Core Server
 
 0.1.0 was published by running `vsce publish` directly, which does not
@@ -40,6 +54,6 @@ Highlights:
 - The Core Server ships inside the extension itself — no separate
   install step, and it updates atomically with the Extension.
 
-This is a Preview release. Feedback on the above, and on this Preview's
-Apple-Silicon-only scope, is welcome via
-[SUPPORT.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.md).
+This is a Preview release. See
+[SUPPORT.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.md)
+for the current state of external feedback/issue intake.

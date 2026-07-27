@@ -57,11 +57,24 @@ Before treating this as a release candidate:
 
 ## Publishing
 
+`vscode/scripts/release.sh` automates the full pipeline: builds the
+package, verifies `core/` was actually vendored (the exact thing that
+broke in v0.1.0), runs `vsce ls --tree` and the packaged semantic smoke
+test, computes the SHA-256, and only then prompts for a typed `yes`
+before running `vsce publish --target darwin-arm64 --pre-release`. It
+reads the PAT from `vscode/.vsce-pat.local` (gitignored — see
+Credentials below) rather than requiring it typed in each time.
+
 ```bash
-npx @vscode/vsce publish --target darwin-arm64 --pre-release
+vscode/scripts/release.sh
 ```
 
-**This command must not be run until all of the following are true:**
+The prompt at the end is deliberate and not skippable by a flag: every
+publish, not just the first, needs a human saying "yes, publish this" at
+the moment it happens — a script that removed that step would undo the
+whole point of gating it. Whether run via this script or the bare `vsce
+publish` command directly, **this must not happen until all of the
+following are true:**
 
 - The Marketplace publisher ID has been confirmed by the project owner
   (not guessed or assumed by whoever is preparing the release — a
@@ -82,9 +95,19 @@ substitute for asking.
 
 - Never commit a Personal Access Token (PAT) or any other credential to
   this repository, in any form (files, commit messages, CI logs).
-- If using a PAT, provide it only via an ephemeral environment variable
-  (`VSCE_PAT`) for a single publish invocation, or as a GitHub Actions
-  secret consumed by a release workflow — never written to disk.
+- If using a PAT directly with `vsce publish`, provide it only via an
+  ephemeral environment variable (`VSCE_PAT`) for a single publish
+  invocation, or as a GitHub Actions secret consumed by a release
+  workflow — never written to a tracked file.
+- `vscode/scripts/release.sh` reads the PAT from `vscode/.vsce-pat.local`
+  — a single line containing only the token, gitignored (see
+  `.gitignore`'s own comment on that entry) so it's never committed. This
+  is a local convenience for repeated publishing, not a relaxation of the
+  rule above: the file never leaves your machine, the script never
+  prints or logs its contents, and it's still your responsibility to
+  protect it the same way as any other local credential (correct file
+  permissions, not syncing it to a shared or backed-up location you don't
+  control).
 - `vsce login` stores a credential in your local machine's credential
   store; understand that scope before using it on a shared machine.
 - Marketplace publisher registration itself (creating the publisher

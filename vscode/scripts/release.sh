@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# Packages and publishes OvalLSP to the VS Code Marketplace.
+#
+# Reads the publish PAT from vscode/.vsce-pat.local (one line, the token
+# itself, nothing else) -- gitignored, never committed, never echoed or
+# logged by this script. Create it yourself:
+#
+#   printf '%s' 'your-pat-here' > vscode/.vsce-pat.local
+#   chmod 600 vscode/.vsce-pat.local
+#
+# See docs/PUBLISHING.md's Credentials section for how to obtain a PAT.
+#
+# This script builds the release candidate, runs the packaged semantic
+# smoke test, and shows the package contents -- but it does NOT publish
+# without an explicit "yes" typed at the confirmation prompt below. That
+# prompt is the one part of this script intentionally not automated away:
+# initial publish and every later publish are supposed to need a human
+# saying "yes, publish this" at the moment it actually happens, not a
+# standing approval baked into a script that runs unattended.
+#
+# Usage: vscode/scripts/release.sh
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VSCODE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$VSCODE_DIR/.." && pwd)"
+PAT_FILE="$VSCODE_DIR/.vsce-pat.local"
+
+if [ ! -f "$PAT_FILE" ]; then
+  echo "release.sh: $PAT_FILE does not exist." >&2
+  echo "Create it with your Marketplace PAT (see docs/PUBLISHING.md's Credentials section):" >&2
+  echo "  printf '%s' 'your-pat-here' > $PAT_FILE && chmod 600 $PAT_FILE" >&2
+  exit 1
+fi
+
+# Read into a variable, never into a shell option or anything that could
+# land in a trace/log -- and this script never sets -x, deliberately.
+VSCE_PAT="$(cat "$PAT_FILE")"
+if [ -z "$VSCE_PAT" ]; then
+  echo "release.sh: $PAT_FILE is empty." >&2
+  exit 1
+fi
+
+VERSION="$(node -p "require('$VSCODE_DIR/package.json').version")"
+PUBLISHER="$(node -p "require('$VSCODE_DIR/package.json').publisher")"
+NAME="$(node -p "require('$VSCODE_DIR/package.json').name")"
+
+echo "== release.sh: building $PUBLISHER.$NAME v$VERSION (darwin-arm64) =="
+
+cd "$VSCODE_DIR"
+
+echo "-- npm ci --"
+npm ci
+
+echo "-- npm run package (copy-core -> tsc -> vsce package --target darwin-arm64) --"
+npm run package
+
+VSIX_PATH="$VSCODE_DIR/ovallsp-darwin-arm64-$VERSION.vsix"
+if [ ! -f "$VSIX_PATH" ]; then
+  echo "release.sh: expected $VSIX_PATH to exist after 'npm run package' but it doesn't." >&2
+  exit 1
+fi
+
+echo "-- vsce ls --tree (full package contents) --"
+npx @vscode/vsce ls --tree
+
+echo "-- unpacking for semantic smoke and a core/ sanity check --"
+UNPACK_DIR="$(mktemp -d)"
+trap 'rm -rf "$UNPACK_DIR"' EXIT
+unzip -q "$VSIX_PATH" -d "$UNPACK_DIR"
+
+if [ ! -d "$UNPACK_DIR/extension/core/vendor/bundle" ]; then
+  echo "release.sh: packaged VSIX has no extension/core/vendor/bundle -- Core Server was not vendored." >&2
+  echo "This is the exact failure that broke v0.1.0; refusing to publish." >&2
+  exit 1
+fi
+
+echo "-- ruby scripts/vsix_semantic_smoke.rb --"
+ruby "$REPO_ROOT/scripts/vsix_semantic_smoke.rb" "$UNPACK_DIR/extension"
+
+echo "-- SHA-256 --"
+SHA256="$(shasum -a 256 "$VSIX_PATH" | awk '{print $1}')"
+echo "$SHA256  $(basename "$VSIX_PATH")"
+
+echo
+echo "About to publish $PUBLISHER.$NAME v$VERSION (darwin-arm64) to the Marketplace Pre-Release channel."
+echo "VSIX: $VSIX_PATH"
+echo "SHA-256: $SHA256"
+read -r -p "Publish now? Type 'yes' to proceed, anything else to abort: " CONFIRM
+if [ "$CONFIRM" != "yes" ]; then
+  echo "release.sh: aborted -- not published."
+  exit 1
+fi
+
+echo "-- vsce publish --target darwin-arm64 --pre-release --"
+VSCE_PAT="$VSCE_PAT" npx @vscode/vsce publish --target darwin-arm64 --pre-release
+
+echo "== release.sh: published $PUBLISHER.$NAME v$VERSION =="

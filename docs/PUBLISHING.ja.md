@@ -57,11 +57,24 @@ packaging前に`tsc`自身のcompileステップをローカルで明示的に�
 
 ## Publish
 
+`vscode/scripts/release.sh`が一連の手順を自動化します: packageをビルド
+し、`core/`が実際にvendoringされていること(v0.1.0で実際に壊れた点その
+もの)を検証し、`vsce ls --tree`とpackage済みsemantic smokeを実行し、
+SHA-256を計算した上で、最後に`yes`の入力を求めてから初めて`vsce publish
+--target darwin-arm64 --pre-release`を実行します。PATは毎回入力する
+代わりに`vscode/.vsce-pat.local`(gitignore対象、下記Credentials参照)
+から読み込みます。
+
 ```bash
-npx @vscode/vsce publish --target darwin-arm64 --pre-release
+vscode/scripts/release.sh
 ```
 
-**このコマンドは、以下の全てが真になるまで実行してはいけません:**
+最後の確認プロンプトは意図的なもので、フラグでスキップすることは
+できません: 初回に限らず、publishのたびに「今この瞬間にpublishして
+よい」という人間の意思表示が必要であり、それを省略するscriptはこの
+ゲート自体の意味を無くしてしまいます。このscript経由であれ、`vsce
+publish`を直接実行するのであれ、**以下の全てが真になるまで実行しては
+いけません:**
 
 - Marketplace publisher IDがプロジェクトオーナーによって確認済みで
   あること(リリース準備者が推測・仮定したものではない — publisher ID
@@ -83,9 +96,16 @@ targetの追加等)は、同じ承認手順に従います — checklistがgreen
 
 - Personal Access Token(PAT)やその他のcredentialは、いかなる形でも
   (ファイル・commit message・CIログ)このリポジトリへcommitしません。
-- PATを使う場合、単発のpublish実行のための一時的な環境変数
-  (`VSCE_PAT`)経由、またはrelease workflowが消費するGitHub Actions
-  secretとしてのみ提供し、ディスクに書き込むことはありません。
+- `vsce publish`を直接使う場合、単発のpublish実行のための一時的な環境
+  変数(`VSCE_PAT`)経由、またはrelease workflowが消費するGitHub Actions
+  secretとしてのみ提供し、tracked fileへ書き込むことはありません。
+- `vscode/scripts/release.sh`はPATを`vscode/.vsce-pat.local`(token本体
+  のみを1行、`.gitignore`自身のコメント参照)から読み込みます。これは
+  繰り返しpublishする際のローカルな利便性のためのものであり、上記の
+  ルールを緩めるものではありません: このファイルはあなたのマシンから
+  一切外に出ず、scriptはその内容を出力・ログに残しません。適切な
+  ファイル権限を設定し、管理下にない共有・バックアップ先へ同期しない
+  など、他のローカルcredentialと同様の保護はあなた自身の責任です。
 - `vsce login`はローカルマシンのcredential storeにcredentialを保存する
   ため、共有マシンで使う前にそのスコープを理解しておく必要があります。
 - Marketplace publisherの登録自体(publisherアカウントの作成・検証)は
