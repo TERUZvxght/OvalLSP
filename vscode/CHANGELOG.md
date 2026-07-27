@@ -2,6 +2,17 @@
 
 All notable changes to the OvalLSP VS Code extension are documented here.
 
+## 0.1.1 — Fix: published VSIX was missing the bundled Core Server
+
+0.1.0 was published by running `vsce publish` directly, which does not
+automatically vendor the Core Server (`vscode/scripts/copy-core.js`)
+unless invoked through this project's own `npm run package` wrapper --
+the published 0.1.0 VSIX shipped without a `core/` directory at all, and
+could not start the Core Server. Fixed structurally by adding a
+`vscode:prepublish` npm script, which `vsce package`/`vsce publish` both
+run automatically before packaging regardless of how they're invoked --
+this failure mode can no longer happen from any invocation path.
+
 ## 0.1.0 — Apple Silicon Marketplace Preview
 
 First Marketplace Pre-Release, scoped to macOS on Apple Silicon

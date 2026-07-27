@@ -2,7 +2,7 @@
   "name": "ovallsp",
   "displayName": "OvalLSP",
   "description": "Semantic Ruby/Rails language features backed by a standalone Core Language Server.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "teruz",
   "private": true,
   "license": "MIT",
@@ -149,7 +149,8 @@
     "test": "npm run test:unit",
     "copy-core": "node scripts/copy-core.js",
     "copy-core:allow-missing-vendor": "node scripts/copy-core.js --allow-missing-vendor",
-    "package": "npm run copy-core && npm run compile && vsce package --target darwin-arm64 --allow-missing-repository"
+    "package": "npm run copy-core && npm run compile && vsce package --target darwin-arm64 --allow-missing-repository",
+    "vscode:prepublish": "npm run copy-core && npm run compile"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
