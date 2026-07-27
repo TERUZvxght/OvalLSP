@@ -62,6 +62,78 @@ export function queryRubyIdentity(rubyCommand: string): Promise<RubyIdentity> {
   });
 }
 
+export interface RubyConfigPaths {
+  /** `RbConfig::CONFIG["bindir"]` -- the directory containing the *real* ruby binary. */
+  bindir: string;
+  /** `RbConfig::CONFIG["libdir"]` -- the directory containing the real `libruby`. */
+  libdir: string;
+}
+
+/**
+ * Fixes a real, reproduced bug (Task 023.8, found by independent
+ * review): a vendored native extension (prism.bundle/rbs_extension.bundle,
+ * ADR-0004) records an absolute, non-relocatable `libruby` dependency
+ * path baked in at packaging time (standard rbenv/ruby-build
+ * `--enable-shared` behavior on macOS, confirmed via `otool -L`/`-l`: no
+ * `LC_RPATH` fallback), which fails to load under any *other* Ruby
+ * installation -- even one just as compatible by ADR-0005's own
+ * engine/version/platform check. Reproduced directly: a `prism.bundle`
+ * vendored under one Ruby 3.4.x raises `LoadError: linked to
+ * incompatible .../libruby.3.4.dylib` under a different Ruby 3.4.x
+ * install at a different absolute path.
+ *
+ * This went through two failed designs before landing here, both found
+ * by directly reproducing the fix rather than trusting it in the
+ * abstract:
+ *
+ * 1. Deriving `<prefix>/lib` from `rubyCommand`'s own path shape
+ *    (`<prefix>/bin/ruby`) -- wrong for mise/asdf/rbenv, whose
+ *    `rubyResolver.ts` strategies all resolve to a *shim* script (e.g.
+ *    `~/.rbenv/shims/ruby`), not a real per-version binary, so the
+ *    derived directory never actually contained `libruby` for exactly
+ *    the highest-priority, most common resolution paths.
+ * 2. Querying `RbConfig::CONFIG["libdir"]` from the resolved command
+ *    (correctly shim-agnostic) and setting `DYLD_LIBRARY_PATH` on the
+ *    spawned child's environment -- but still spawning the *shim*
+ *    itself as the command. Reproduced directly that this silently does
+ *    nothing: macOS strips `DYLD_*` environment variables for any
+ *    process launched through `/bin/bash` (confirmed directly -- even a
+ *    trivial `#!/bin/bash` script loses `DYLD_LIBRARY_PATH` before its
+ *    own body runs, let alone whatever it execs afterward), and rbenv's/
+ *    asdf's/mise's shims are themselves bash scripts that ultimately
+ *    `exec` the real interpreter through one or more further bash hops
+ *    (rbenv's shim execs `rbenv exec`, itself a bash script).
+ *    `DYLD_LIBRARY_PATH` set on the *shim's* spawn environment never
+ *    survives to reach the real `ruby` process at all.
+ *
+ * The fix that actually works, verified the same way: query
+ * `RbConfig::CONFIG["bindir"]` *alongside* `libdir` from the resolved
+ * (possibly-shim) command, then spawn `<bindir>/ruby` -- the real
+ * binary -- directly for the long-running Core Server process, bypassing
+ * the shim (and its bash hops) entirely, with `DYLD_LIBRARY_PATH` set to
+ * `libdir`. Since the real binary is what dyld loads directly (no
+ * intervening bash process to strip the environment), the env var is
+ * honored. The one-time shim invocation to ask this question is the
+ * only place the shim script itself still runs.
+ */
+export function queryRubyConfigPaths(rubyCommand: string): Promise<RubyConfigPaths> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      rubyCommand,
+      ['-e', 'print [RbConfig::CONFIG["bindir"], RbConfig::CONFIG["libdir"]].join("|")'],
+      { timeout: 5000 },
+      (err, stdout) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        const [bindir, libdir] = stdout.trim().split('|');
+        resolve({ bindir, libdir });
+      }
+    );
+  });
+}
+
 /**
  * Checks whether `rubyCommand` is compatible with the extension's own
  * bundled `core/vendor/bundle`, if any. Compatible whenever:

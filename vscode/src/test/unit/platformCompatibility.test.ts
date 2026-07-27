@@ -2,7 +2,7 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { checkBundledCoreCompatibility, RubyIdentity } from '../../platformCompatibility';
+import { checkBundledCoreCompatibility, queryRubyConfigPaths, RubyIdentity } from '../../platformCompatibility';
 
 describe('checkBundledCoreCompatibility', () => {
   let extensionRoot: string;
@@ -114,5 +114,35 @@ describe('checkBundledCoreCompatibility', () => {
     const result = await checkBundledCoreCompatibility(extensionRoot, 'ruby');
 
     assert.strictEqual(result.compatible, true);
+  });
+});
+
+describe('queryRubyConfigPaths', () => {
+  // Task 023.8: this went through two failed designs (see the function's
+  // own docs) before landing on querying both bindir and libdir so Core
+  // can be spawned via the *real* ruby binary directly, bypassing any
+  // version-manager shim -- proven here against this machine's own real
+  // `ruby` resolution, not just synthetic paths.
+  it('actually spawns the real Ruby interpreter and returns its own RbConfig bindir/libdir', async function () {
+    this.timeout(10000);
+    const { execFileSync } = await import('child_process');
+    const [expectedBindir, expectedLibdir] = execFileSync(
+      'ruby',
+      ['-e', 'print [RbConfig::CONFIG["bindir"], RbConfig::CONFIG["libdir"]].join("|")'],
+      { encoding: 'utf8' }
+    )
+      .trim()
+      .split('|');
+
+    const result = await queryRubyConfigPaths('ruby');
+
+    assert.strictEqual(result.bindir, expectedBindir);
+    assert.strictEqual(result.libdir, expectedLibdir);
+    assert.ok(fs.existsSync(result.bindir), `expected ${result.bindir} to actually exist on disk`);
+    assert.ok(fs.existsSync(result.libdir), `expected ${result.libdir} to actually exist on disk`);
+  });
+
+  it('rejects when the given command cannot be spawned at all', async () => {
+    await assert.rejects(queryRubyConfigPaths('nonexistent-ruby-command'));
   });
 });

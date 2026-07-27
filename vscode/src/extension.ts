@@ -1,13 +1,14 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import {
   LanguageClient,
   LanguageClientOptions,
   ServerOptions
 } from 'vscode-languageclient/node';
-import { resolveServerConfig, classifyServerSelection, deriveNativeExtensionLibraryPath } from './serverConfig';
+import { resolveServerConfig, classifyServerSelection } from './serverConfig';
 import { resolveRuby, RubyResolution } from './rubyResolver';
-import { checkBundledCoreCompatibility } from './platformCompatibility';
+import { checkBundledCoreCompatibility, queryRubyConfigPaths, RubyConfigPaths } from './platformCompatibility';
 import { WATCHED_FILES_GLOB } from './watchedFiles';
 import {
   CLIENT_PROTOCOL_VERSION,
@@ -80,25 +81,32 @@ function startClientForFolder(
 
   // Task 023.8: the vendored native extensions' own absolute libruby
   // reference is specific to the machine that packaged this VSIX, not
-  // to whichever Ruby actually resolved for this workspace -- see
-  // deriveNativeExtensionLibraryPath's own docs for how this was found
-  // and verified. `undefined` (platform isn't darwin, or the resolved
-  // command isn't an absolute path) leaves the spawn environment
-  // untouched, same as before this fix existed.
-  const nativeExtensionLibraryPath = deriveNativeExtensionLibraryPath(resolvedRubyCommand, process.platform);
-  const spawnEnv = nativeExtensionLibraryPath
-    ? {
-        ...process.env,
-        DYLD_LIBRARY_PATH: [nativeExtensionLibraryPath, process.env.DYLD_LIBRARY_PATH].filter(Boolean).join(':'),
-        DYLD_FALLBACK_LIBRARY_PATH: [nativeExtensionLibraryPath, process.env.DYLD_FALLBACK_LIBRARY_PATH]
-          .filter(Boolean)
-          .join(':')
-      }
-    : undefined;
+  // to whichever Ruby actually resolves for this workspace. Fixed below
+  // by spawning the *real* ruby binary directly (bypassing a version-
+  // manager shim entirely, when the resolved command is one) with
+  // DYLD_LIBRARY_PATH set to that real binary's own libdir -- see
+  // `queryRubyConfigPaths`'s own docs for why both parts are necessary
+  // (setting the env var alone does nothing when the spawned command is
+  // still a shim script, since macOS strips DYLD_* env vars for any
+  // process launched through /bin/bash).
+  //
+  // `execTarget` is a single mutable object shared by both `run`/`debug`
+  // below (vscode-languageclient reads `this._serverOptions` -- and the
+  // `command`/`options` reached through it -- fresh at actual spawn
+  // time, not a frozen snapshot from `new LanguageClient(...)`, so
+  // mutating `command`/`options.env` here later, right before
+  // `client.start()`, is picked up correctly); starts as the originally
+  // resolved command/args, replaced only if the async query below
+  // succeeds.
+  const execTarget: { command: string; args: string[]; options: { cwd: string; env?: NodeJS.ProcessEnv } } = {
+    command,
+    args,
+    options: { cwd: folder.uri.fsPath }
+  };
 
   const serverOptions: ServerOptions = {
-    run: { command, args, options: { cwd: folder.uri.fsPath, ...(spawnEnv ? { env: spawnEnv } : {}) } },
-    debug: { command, args, options: { cwd: folder.uri.fsPath, ...(spawnEnv ? { env: spawnEnv } : {}) } }
+    run: execTarget,
+    debug: execTarget
   };
 
   // Forwarded to the server as workspace/didChangeWatchedFiles so files
@@ -172,47 +180,80 @@ function startClientForFolder(
   // vendor payload gets used, and a Ruby with its own separately-installed
   // prism/rbs is a legitimate, fully-working combination this check has
   // no way to rule out in advance.
-  void checkBundledCoreCompatibility(context.extensionPath, resolvedRubyCommand).then((compatibility) => {
-    if (!compatibility.compatible) {
-      outputChannel.appendLine(`OvalLSP: ${compatibility.reason}`);
-      void vscode.window.showErrorMessage(
-        `OvalLSP: the Ruby interpreter selected for ${folder.name} is incompatible with this VSIX's bundled ` +
-          'native dependencies. See the OvalLSP output channel for details.'
-      );
-    }
+  // Task 023.8: queried in parallel with the compatibility probe below,
+  // and only on darwin (this Preview's only target; Linux/Windows use
+  // their own different dynamic-linker environment variables and shim
+  // implementations, out of scope for this fix). A query failure (Ruby
+  // too old to know RbConfig, spawn error, ...) is not fatal here -- it
+  // just means `execTarget` stays at the originally resolved command,
+  // same as before this fix existed, rather than blocking Core from
+  // starting at all over a diagnostic-only lookup.
+  const configPathsPromise: Promise<RubyConfigPaths | undefined> =
+    process.platform === 'darwin'
+      ? queryRubyConfigPaths(resolvedRubyCommand).catch(() => undefined)
+      : Promise.resolve(undefined);
 
-    // Task 023.3: this probe may resolve long after a stop was already
-    // requested for this exact generation (deactivate, workspace-folder
-    // removal, a restart that began a newer generation). `markStarting`
-    // is the single gate that decides whether calling `client.start()`
-    // below is still valid at all -- refusing here is what stops an
-    // orphaned Core child process from ever being spawned in the first
-    // place, rather than trying to clean one up after the fact.
-    if (!lifecycle.markStarting(key, generation)) {
-      outputChannel.appendLine(
-        `OvalLSP: skipping Core Server start for ${folder.name} -- superseded by a stop or a newer restart.`
-      );
-      return;
-    }
-
-    client.start().then(() => {
-      // A stop can also race in *during* `client.start()` itself (it's
-      // not instantaneous -- it spawns a process and waits for
-      // `initialize` to complete). `markRunning` returning false means
-      // exactly that happened; this client is now running but nothing
-      // else will ever call `.stop()` on it (stopClient already ran
-      // against a generation that, at the time, had nothing to actually
-      // stop), so this is the one place responsible for tearing it down.
-      if (!lifecycle.markRunning(key, generation)) {
-        outputChannel.appendLine(
-          `OvalLSP: Core Server for ${folder.name} finished starting after a stop was requested -- stopping it immediately.`
+  void Promise.all([
+    checkBundledCoreCompatibility(context.extensionPath, resolvedRubyCommand),
+    configPathsPromise
+  ]).then(([compatibility, configPaths]) => {
+      if (!compatibility.compatible) {
+        outputChannel.appendLine(`OvalLSP: ${compatibility.reason}`);
+        void vscode.window.showErrorMessage(
+          `OvalLSP: the Ruby interpreter selected for ${folder.name} is incompatible with this VSIX's bundled ` +
+            'native dependencies. See the OvalLSP output channel for details.'
         );
-        void client.stop().then(() => lifecycle.markStopped(key, generation));
+      }
+
+      if (configPaths) {
+        // Spawn the real binary directly -- bypassing `resolvedRubyCommand`
+        // entirely when it was a version-manager shim -- since setting
+        // DYLD_LIBRARY_PATH on a shim's own spawn environment never
+        // reaches the real ruby process it eventually execs (see
+        // queryRubyConfigPaths's own docs for why).
+        execTarget.command = path.join(configPaths.bindir, 'ruby');
+        execTarget.options.env = {
+          ...process.env,
+          DYLD_LIBRARY_PATH: [configPaths.libdir, process.env.DYLD_LIBRARY_PATH].filter(Boolean).join(':'),
+          DYLD_FALLBACK_LIBRARY_PATH: [configPaths.libdir, process.env.DYLD_FALLBACK_LIBRARY_PATH]
+            .filter(Boolean)
+            .join(':')
+        };
+      }
+
+      // Task 023.3: this probe may resolve long after a stop was already
+      // requested for this exact generation (deactivate, workspace-folder
+      // removal, a restart that began a newer generation). `markStarting`
+      // is the single gate that decides whether calling `client.start()`
+      // below is still valid at all -- refusing here is what stops an
+      // orphaned Core child process from ever being spawned in the first
+      // place, rather than trying to clean one up after the fact.
+      if (!lifecycle.markStarting(key, generation)) {
+        outputChannel.appendLine(
+          `OvalLSP: skipping Core Server start for ${folder.name} -- superseded by a stop or a newer restart.`
+        );
         return;
       }
-      runVersionHandshake(folder, client, context, classification, outputChannel);
-    }, (err) => outputChannel.appendLine(`failed to start Core Server: ${err}`));
-  });
+
+      client.start().then(() => {
+        // A stop can also race in *during* `client.start()` itself (it's
+        // not instantaneous -- it spawns a process and waits for
+        // `initialize` to complete). `markRunning` returning false means
+        // exactly that happened; this client is now running but nothing
+        // else will ever call `.stop()` on it (stopClient already ran
+        // against a generation that, at the time, had nothing to actually
+        // stop), so this is the one place responsible for tearing it down.
+        if (!lifecycle.markRunning(key, generation)) {
+          outputChannel.appendLine(
+            `OvalLSP: Core Server for ${folder.name} finished starting after a stop was requested -- stopping it immediately.`
+          );
+          void client.stop().then(() => lifecycle.markStopped(key, generation));
+          return;
+        }
+        runVersionHandshake(folder, client, context, classification, outputChannel);
+      }, (err) => outputChannel.appendLine(`failed to start Core Server: ${err}`));
+    }
+  );
 
   return client;
 }

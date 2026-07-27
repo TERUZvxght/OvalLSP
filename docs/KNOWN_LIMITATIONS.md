@@ -32,19 +32,26 @@ evidence-based supported/unsupported table this summarizes.
   would otherwise affect essentially every real end user, since a
   different username alone is enough to trigger it, and this is not
   something ADR-0005's own engine/version/platform compatibility check
-  catches. **Fixed**: the Extension sets `DYLD_LIBRARY_PATH`/
-  `DYLD_FALLBACK_LIBRARY_PATH` to the actually-resolved Ruby's own `lib`
-  directory when spawning Core Server (`serverConfig.ts`'s
-  `deriveNativeExtensionLibraryPath`) -- macOS' dynamic linker checks
-  that variable, by leaf filename, before ever consulting a dependent
-  library's own recorded absolute path. Verified by reproducing the
-  exact failure and confirming the fix resolves it, using two different
-  Ruby 3.4.x installations already present on the same development
-  machine (see `docs/design/tasks/023.8-*.md`). This mitigation only
-  applies when the resolved Ruby command is an absolute path (any
-  version-manager-resolved Ruby is); a bare `ruby` resolved via `PATH`
-  search has no sibling directory to derive and is unaffected by this
-  fix either way.
+  catches. **Fixed**: before spawning Core Server, the Extension queries
+  the resolved Ruby's own `RbConfig::CONFIG["bindir"]`/`["libdir"]`
+  (`platformCompatibility.ts`'s `queryRubyConfigPaths`) and spawns the
+  *real* `<bindir>/ruby` binary directly -- bypassing a version-manager
+  shim entirely when the resolved command was one (mise/asdf/rbenv all
+  resolve to a shim script) -- with `DYLD_LIBRARY_PATH`/
+  `DYLD_FALLBACK_LIBRARY_PATH` set to that real binary's own `libdir`.
+  Both parts are necessary: setting the env var alone does nothing if
+  the spawned command is still a shim script, since macOS strips
+  `DYLD_*` environment variables for any process launched through
+  `/bin/bash` (confirmed directly -- this is not specific to rbenv's
+  shim, it's a general macOS behavior for anything that hops through the
+  system shell). Verified by reproducing the exact failure through an
+  actual rbenv shim forced to a different Ruby version than the one that
+  built the vendored payload, and confirming the fix resolves it end to
+  end, using two Ruby 3.4.x installations already present on the same
+  development machine (see `docs/design/tasks/023.8-*.md`). This
+  mitigation only applies on darwin; a query failure (an unusually old
+  Ruby, a spawn error) leaves Core Server started with the originally
+  resolved command, same as before this fix existed.
 - **Linux and Windows are not supported in this Preview.** The Ruby
   resolver includes Windows RubyInstaller detection logic and the Core
   Server itself is platform-agnostic Ruby, but this Preview's packaging,
