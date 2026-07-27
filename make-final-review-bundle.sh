@@ -154,19 +154,22 @@ assert_rspec_json_clean() {
   local json_path="$1"
   local suite_name="$2"
 
+  # File.read without an explicit encoding follows the shell locale
+  # (LANG/LC_ALL) for its external encoding. Under a locale-less shell
+  # (LANG unset, reproduced on this machine) that defaults to US-ASCII,
+  # and reading RSpecs own JSON output -- which commonly contains this
+  # codebases em dashes and other non-ASCII punctuation, both in test
+  # descriptions and in source lines RSpec echoes back in failure
+  # messages -- then raises Encoding::InvalidByteSequenceError before
+  # JSON.parse ever runs. Found by actually running this release-gate
+  # script end to end (Task 023.8); fixed below by reading as UTF-8
+  # explicitly instead of depending on the invoking shells locale.
+  # (Apostrophes are avoided in this comment block on purpose: it sits
+  # directly above a single-quoted `ruby -e` string, and a literal
+  # single quote inside that string would terminate it early, exactly
+  # the bug this note itself would otherwise risk reintroducing.)
   ruby -rjson -e '
     path, suite = ARGV
-    # `File.read` without an explicit encoding uses the process' own
-    # external encoding, which follows the shell locale (LANG/LC_ALL) --
-    # under a locale-less shell (LANG unset, as on this machine), that
-    # defaults to US-ASCII, and reading RSpec's own JSON output (which
-    # commonly contains this codebase's em dashes and other non-ASCII
-    # punctuation, both in test descriptions and in the source lines
-    # RSpec echoes back in failure messages) then raises
-    # Encoding::InvalidByteSequenceError before JSON.parse ever runs.
-    # Found by actually running this release-gate script end to end
-    # (Task 023.8) -- fixed by reading as UTF-8 explicitly rather than
-    # depending on the invoking shell's ambient locale.
     data = JSON.parse(File.read(path, encoding: "UTF-8"))
     summary = data.fetch("summary")
 
