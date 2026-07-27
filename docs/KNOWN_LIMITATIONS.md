@@ -1,5 +1,7 @@
 # Apple Silicon Marketplace Preview — Known Limitations
 
+[日本語版](KNOWN_LIMITATIONS.ja.md)
+
 This document lists what's intentionally out of scope for the first
 Marketplace Pre-Release, as distinct from bugs. See
 [docs/SUPPORT_MATRIX.md](SUPPORT_MATRIX.md) for the exact,
@@ -10,7 +12,8 @@ evidence-based supported/unsupported table this summarizes.
 - **Only macOS on Apple Silicon (`darwin-arm64`) is targeted.** The VSIX
   is built with `vsce package --target darwin-arm64` and bundles native
   extensions (Prism, RBS) compiled specifically for that platform (see
-  [ADR-0005](design/adrs/0005-platform-scoped-vsix-with-runtime-compatibility-check.md)).
+  [ADR-0005](design/adrs/0005-platform-scoped-vsix-with-runtime-compatibility-check.md),
+  Japanese).
   On any other OS/CPU, the bundled native dependencies simply aren't
   loaded, and OvalLSP shows a diagnostic explaining why rather than
   attempting to run in a degraded or guessed configuration.
@@ -39,19 +42,26 @@ evidence-based supported/unsupported table this summarizes.
   shim entirely when the resolved command was one (mise/asdf/rbenv all
   resolve to a shim script) -- with `DYLD_LIBRARY_PATH`/
   `DYLD_FALLBACK_LIBRARY_PATH` set to that real binary's own `libdir`.
-  Both parts are necessary: setting the env var alone does nothing if
-  the spawned command is still a shim script, since macOS strips
-  `DYLD_*` environment variables for any process launched through
-  `/bin/bash` (confirmed directly -- this is not specific to rbenv's
-  shim, it's a general macOS behavior for anything that hops through the
-  system shell). Verified by reproducing the exact failure through an
-  actual rbenv shim forced to a different Ruby version than the one that
-  built the vendored payload, and confirming the fix resolves it end to
-  end, using two Ruby 3.4.x installations already present on the same
-  development machine (see `docs/design/tasks/023.8-*.md`). This
-  mitigation only applies on darwin; a query failure (an unusually old
-  Ruby, a spawn error) leaves Core Server started with the originally
-  resolved command, same as before this fix existed.
+  The query itself is run with the *workspace folder's own* working
+  directory, not omitted -- a version-manager shim resolves which Ruby
+  version to actually run based on the current working directory's own
+  `.ruby-version`/`.tool-versions`, so an omitted `cwd` would silently
+  query (and then launch) whichever Ruby the *extension host's own*
+  ambient working directory happens to resolve to, not the workspace's
+  pinned version. Both the real-binary-spawn and the `cwd`-scoped query
+  are necessary: setting the env var alone does nothing if the spawned
+  command is still a shim script, since macOS strips `DYLD_*`
+  environment variables for any process launched through `/bin/bash`
+  (confirmed directly -- this is not specific to rbenv's shim, it's a
+  general macOS behavior for anything that hops through the system
+  shell). Verified by reproducing the exact failure through an actual
+  rbenv shim forced to a different Ruby version than the one that built
+  the vendored payload, and confirming the fix resolves it end to end,
+  using two Ruby 3.4.x installations already present on the same
+  development machine (see `docs/design/tasks/023.8-*.md`, Japanese).
+  This mitigation only applies on darwin; a query failure (an unusually
+  old Ruby, a spawn error) leaves Core Server started with the
+  originally resolved command, same as before this fix existed.
 - **Linux and Windows are not supported in this Preview.** The Ruby
   resolver includes Windows RubyInstaller detection logic and the Core
   Server itself is platform-agnostic Ruby, but this Preview's packaging,
@@ -73,7 +83,8 @@ suite.
 
 - The Core Server ships **inside** the extension and updates atomically
   with it via the Marketplace's own extension update mechanism — see
-  [ADR-0006](design/adrs/0006-marketplace-bundled-core-update-atomicity.md).
+  [ADR-0006](design/adrs/0006-marketplace-bundled-core-update-atomicity.md)
+  (Japanese).
   There is no separate Core Server download, and no independent
   background self-updater. If that model changes in the future (for
   example, to support Core updates independent of Extension releases),
@@ -103,7 +114,10 @@ Ruby type checker. By design, it does not track:
 Expanding beyond this Preview's scope (additional OS/CPU targets, a
 Ruby/Rails version matrix, a self-hosted Apple Silicon release runner,
 Entra ID-based Marketplace publishing, Extension JS bundling, and a
-stable-release readiness bar) is tracked as separate GitHub issues, not
-blocking this Preview — see
+stable-release readiness bar) is recorded as non-blocking follow-up work
+for this Preview — see
 [docs/design/tasks/023.1-marketplace-preview-investigation-and-distribution-model.md](design/tasks/023.1-marketplace-preview-investigation-and-distribution-model.md)
-and onward for the full task breakdown.
+(Japanese) and onward for the full task breakdown. This repository is
+not currently accepting external issues (see
+[CONTRIBUTING.md](../CONTRIBUTING.md)), so this work is tracked
+internally rather than via a public issue tracker for now.

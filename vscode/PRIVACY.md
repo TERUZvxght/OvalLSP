@@ -1,5 +1,7 @@
 # Privacy
 
+[日本語版](PRIVACY.ja.md)
+
 ## Summary
 
 OvalLSP does not collect telemetry, does not phone home, and does not

@@ -1,9 +1,11 @@
 # Third-Party Notices
 
+[日本語版](THIRD_PARTY_NOTICES.ja.md)
+
 This extension bundles the following third-party packages, generated
 from [docs/SBOM.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SBOM.md)
-(`scripts/generate_sbom.rb`, verified against the actual packaged VSIX
-contents by `scripts/verify_sbom_against_vsix.rb`). Each package's own
+(Japanese; `scripts/generate_sbom.rb`, verified against the actual
+packaged VSIX contents by `scripts/verify_sbom_against_vsix.rb`). Each package's own
 license file ships alongside it inside `core/vendor/bundle/` (RubyGems)
 or `node_modules/` (npm) in this VSIX — this document is a summary index,
 not a substitute for those.

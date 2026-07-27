@@ -28,7 +28,7 @@ OvalLSPはRuby実装の言語サーバー(`ovallsp`)をVS Codeと並行して起
   調査できない場合は静的解析のみで継続します。
 - Opt-inのruntime型観測(`OvalLSP: Run Tests with Type Observation`) —
   実際のテストで実行されたメソッド呼び出しの形状のみを記録します
-  (引数・戻り値の**値**は一切記録しません、[PRIVACY.md](PRIVACY.md)参照)。
+  (引数・戻り値の**値**は一切記録しません、[PRIVACY.ja.md](PRIVACY.ja.md)参照)。
 - 型エンジンを拡張するPlugin API(static/runtime) — OSプロセスレベルで
   隔離された環境で実行されます。
 
@@ -48,8 +48,8 @@ OvalLSPはRuby実装の言語サーバー(`ovallsp`)をVS Codeと並行して起
 | Rails 7.x以下 | 未検証 |
 | WSL / Dev Container / Remote SSH | このPreviewでは非対応 |
 
-詳細は[docs/SUPPORT_MATRIX.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SUPPORT_MATRIX.md)
-と[既知の制限事項](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.md)
+詳細は[docs/SUPPORT_MATRIX.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SUPPORT_MATRIX.ja.md)
+と[既知の制限事項](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md)
 を参照してください。
 
 対応外のプラットフォーム/Rubyの組合せでは、OvalLSPは黙って劣化動作したり
@@ -89,7 +89,7 @@ OvalLSPはRuby実装の言語サーバー(`ovallsp`)をVS Codeと並行して起
 | `OvalLSP: Show Logs` | OvalLSPのoutput channelを開く |
 | `OvalLSP: Show Environment Diagnostics` | どのRubyが、なぜ選ばれたか(mise/asdf/rbenv/Homebrew/PATH) |
 | `OvalLSP: Re-index Workspace` | 強制的な全体再インデックス |
-| `OvalLSP: Run Tests with Type Observation` | Opt-inのruntime型観測([PRIVACY.md](PRIVACY.md)参照) |
+| `OvalLSP: Run Tests with Type Observation` | Opt-inのruntime型観測([PRIVACY.ja.md](PRIVACY.ja.md)参照) |
 | `OvalLSP: Clear Observed Types` / `Show Type Evidence` | 観測データの管理 |
 
 ## 設定
@@ -163,28 +163,28 @@ protocol互換性のチェックは行われますが、「標準の同梱Core�
 ## プライバシー・テレメトリ
 
 OvalLSPはテレメトリを収集せず、実行時にネットワーク経由で何も送信しません。
-詳細は[PRIVACY.md](PRIVACY.md)を参照(opt-inのruntime型観測が何を
+詳細は[PRIVACY.ja.md](PRIVACY.ja.md)を参照(opt-inのruntime型観測が何を
 記録し、何を記録しないかを含む)。
 
 ## セキュリティ
 
 脆弱性の報告方法とRails Agentのセキュリティモデルについては
-[SECURITY.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.md)
+[SECURITY.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.ja.md)
 を参照してください。
 
 ## サポート
 
-[SUPPORT.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.md)を参照。
+[SUPPORT.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md)を参照。
 
 ## ライセンス
 
 MIT — [LICENSE](LICENSE)参照。サードパーティ依存のライセンスは
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)を参照。
+[THIRD_PARTY_NOTICES.ja.md](THIRD_PARTY_NOTICES.ja.md)を参照。
 
 ## 既知の制限事項
 
 このPreviewの対応範囲については
-[docs/KNOWN_LIMITATIONS.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.md)
+[docs/KNOWN_LIMITATIONS.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md)
 を、静的解析自体の原理的な限界(既知のRails DSL以外の
 `method_missing`/`define_method`、文字列引数による`class_eval`/
 `instance_eval`、実行時にしか決まらないconstant解決は設計上scope外)に

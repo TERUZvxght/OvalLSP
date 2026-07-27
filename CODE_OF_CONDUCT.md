@@ -1,5 +1,7 @@
 # Code of Conduct
 
+[日本語版](CODE_OF_CONDUCT.ja.md)
+
 ## Our pledge
 
 We as contributors and maintainers pledge to make participation in this

@@ -1,9 +1,14 @@
 # Publishing OvalLSP to the VS Code Marketplace
 
+[日本語版](PUBLISHING.ja.md)
+
 This document describes how OvalLSP is packaged and published. It is a
 process document, not an authorization to publish — see
-[docs/RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) for the gate that must
-pass first, and note the explicit approvals required below.
+[docs/RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) (Japanese) for the
+gate that must pass first, and note the explicit approvals required
+below. (The first Preview, v0.1.1, has already been published following
+this process; this document remains the reference for any future
+release.)
 
 ## Scope of the first Preview
 
@@ -30,6 +35,16 @@ This runs, in order: `copy-core.js` (vendors Core Server's runtime gems,
 writes `PLATFORM_MANIFEST.json`), `tsc` (compiles the extension), then
 `vsce package --target darwin-arm64 --allow-missing-repository`. The
 result is `ovallsp-darwin-arm64-<version>.vsix`.
+
+`vscode/package.json`'s `vscode:prepublish` script also runs `copy-core`
+and `tsc` automatically before *any* `vsce package`/`vsce publish`
+invocation, even a bare one that skips `npm run package` entirely — this
+exists because v0.1.0 was accidentally published without Core Server
+vendored at all (`vsce publish` was run directly, bypassing `npm run
+package`), producing a VSIX that couldn't start. `npm run package`
+remains the recommended way to build a release candidate regardless,
+since it also runs `tsc`'s own compile step explicitly for local
+inspection before packaging.
 
 Before treating this as a release candidate:
 
@@ -90,12 +105,14 @@ non-blocking work.
 
 ## What this document does not cover
 
-- Making this repository public — that's a separate, explicitly-gated
-  decision (see `docs/design/tasks/023.7-*.md` for GitHub public-
-  readiness prep, which does not itself change repository visibility).
+- Making this repository public — a separate, explicitly-gated decision
+  (see `docs/design/tasks/023.7-*.md`, Japanese, for the GitHub public-
+  readiness prep that preceded it). This repository is now public, but
+  this remains a decision to make deliberately for any repository, not
+  something a publish should do implicitly.
 - CI/CD automation of the steps above — see
-  `docs/design/tasks/023.7-*.md` for what exists and what's manual-only
-  for now.
+  `docs/design/tasks/023.7-*.md` (Japanese) for what exists and what's
+  manual-only for now.
 - Publishing additional platform targets (Linux, Windows, Intel Mac) —
   out of scope for this Preview; see ADR-0005's rejected alternatives
   and the post-Preview issue list.

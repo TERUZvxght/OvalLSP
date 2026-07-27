@@ -1,15 +1,22 @@
 # Support
 
+[日本語版](SUPPORT.ja.md)
+
+**This repository is currently not accepting bug reports, feature
+requests, or issues of any kind — GitHub Issues are disabled.** See
+[CONTRIBUTING.md](CONTRIBUTING.md) for why. This document will be
+updated once that changes.
+
 OvalLSP is currently in **Preview** (Pre-Release), scoped to macOS on
 Apple Silicon with Ruby 3.4.x. See
 [docs/SUPPORT_MATRIX.md](docs/SUPPORT_MATRIX.md) for exactly what's
 verified, and [docs/KNOWN_LIMITATIONS.md](docs/KNOWN_LIMITATIONS.md) for
 what's intentionally out of scope right now.
 
-## Before reporting an issue
+## Troubleshooting on your own
 
 1. Run `OvalLSP: Show Version Information` and `OvalLSP: Show
-   Environment Diagnostics` — most reports need this output.
+   Environment Diagnostics`.
 2. Check [docs/SUPPORT_MATRIX.md](docs/SUPPORT_MATRIX.md) to confirm
    your platform/Ruby/Rails combination is one this Preview actually
    targets.
@@ -17,28 +24,15 @@ what's intentionally out of scope right now.
    section for common cases (Ruby not found, Rails features not
    working, cache issues).
 
-## Reporting a bug
-
-Open a GitHub issue with:
-
-- What you expected vs. what happened.
-- The `OvalLSP: Show Version Information` and `OvalLSP: Show Environment
-  Diagnostics` output.
-- A minimal reproduction if possible (a small Ruby/Rails project
-  fixture).
-- Whether it reproduces with `ovallsp.server.path` unset (the bundled
-  Core Server) — reports against a custom Core Server build are still
-  welcome, but please say so.
-
 ## Security issues
 
-Do not open a public issue for a security vulnerability — see
-[SECURITY.md](SECURITY.md) for private reporting.
+Even while Issues are disabled, security vulnerabilities can still be
+reported privately — see [SECURITY.md](SECURITY.md).
 
-## Feature requests / feedback on the Preview scope
+## Preview scope
 
-This Preview intentionally targets a single platform first. If you'd
-like to see another OS/CPU/Ruby/Rails combination supported, feel free
-to open an issue — the roadmap for expanding beyond Apple Silicon is
-tracked separately (see [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
-and this repository's issue tracker for post-Preview work).
+This Preview intentionally targets a single platform first. The roadmap
+for expanding beyond Apple Silicon (Linux/Windows/Intel Mac, a Ruby/Rails
+version matrix, etc.) is tracked separately in
+`docs/RELEASE_CHECKLIST.md` (Japanese) as post-Preview, non-blocking
+work.

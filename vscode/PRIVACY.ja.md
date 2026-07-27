@@ -1,0 +1,89 @@
+# Privacy
+
+[English version](PRIVACY.md)
+
+## 要約
+
+OvalLSPはテレメトリを収集せず、外部と通信せず、あなたのソースコードや
+workspace情報をどこにも送信しません。全ての動作はあなた自身のマシン上で
+ローカルに完結します。
+
+## テレメトリ
+
+一切ありません。OvalLSPはいかなる種類のテレメトリ統合も持ちません
+(クラッシュレポートサービス、analytics SDK、利用状況トラッキングの
+いずれもなし)。これは単なる宣言ではなく、実際のコードベースに対して
+検証済みです: Core Server(`core/`)、拡張機能(`vscode/src/`)のいずれにも、
+ネットワーククライアントのコード・telemetry/analyticsライブラリ・
+outboundなHTTP/HTTPS呼び出しは一切含まれていません。
+
+## ネットワークアクセス
+
+OvalLSP自体は実行時にネットワークリクエストを一切行いません。この
+プロジェクト内で唯一存在するネットワークアクセスは:
+
+- **packaging時のみ**(VSIXをビルドする時のみで、利用者にインストール
+  された拡張機能自体が行うものではない): Core Serverのruntime gem依存
+  (Prism、RBS)をRubyGems.orgから取得し、VSIXへ同梱するため。これは
+  リリースをビルドするマシン上でのみ発生し、利用者のマシン上では発生
+  しません。
+- **VS Code自身のMarketplace更新機構** — これはVS Code自体の挙動であり
+  OvalLSPのものではありません。詳細はお使いのVS Code自身のprivacy文書を
+  参照してください。
+
+VS Code自身のMarketplace拡張機能更新以外に、自動ダウンロードや
+self-update機構は存在しません(理由はメインの
+[README](README.ja.md#サーバー起動更新モデル)参照 — Core Serverは
+拡張機能の内部に同梱され、独立したダウンローダーではなく、拡張機能と
+アトミックに更新されます)。
+
+## ローカルに記録される内容
+
+`OvalLSP: Show Logs`のoutput channelとCore Server自身のstderr出力には、
+OvalLSP自身の動作(起動、インデックス進行状況、エラー、version
+互換性handshake)に関する診断メッセージが含まれます。これらのログは
+あなたのマシン上(VS Code自身のOutputパネル)に留まり、どこにも送信
+されません。output channelを閉じて再度開くことでクリアできます。
+OvalLSP自身がディスクに書き込むのは、`~/.cache/ovallsp/`配下の
+[永続parseキャッシュ](README.ja.md#performance-tuning)のみです(workspace
+とtoolchainのversionをキーにした、parse済みの宣言/型 — あなたの
+ソースコードの内容そのものではなく、どこにも送信されません)。
+
+## Runtime型観測(opt-in)
+
+`OvalLSP: Run Tests with Type Observation`は完全にopt-inです(明示的に
+コマンドを実行するまで無効)。実際にあなた自身のテスト実行で行使された
+メソッドについて、以下を記録します:
+
+- class/module名、method識別子、パラメータ位置、呼び出し回数、呼び出し
+  が例外を送出したかどうか。
+
+引数の値・戻り値・文字列内容・SQL・環境変数・ファイル内容は一切記録
+しません — このevidenceを構築するnormalizerは、観測対象に対して
+`#inspect`/`#to_s`を一切呼び出しません。このデータはローカル(メモリ内・
+上記と同じローカルキャッシュ)に留まり、どこにも送信されません。
+
+## Runtime Agent
+
+Runtime Agent(Rails route/modelの調査)は、VS Code上で明示的に
+**信頼済み**とマークしたworkspaceでのみ起動し、あなた自身のプロジェクト
+の一部として既に存在するコード(あなたのプロジェクト自身のBundler
+context経由)のみを実行します — あなた自身がアプリケーションを実行した
+時に既に発生するもの以外の、新たなネットワークアクセスや外部への
+データフローを一切導入しません。
+
+## カスタムCore Serverパス
+
+`ovallsp.server.path`を設定し、この拡張機能が同梱するもの以外のCore
+Serverビルドを指定した場合、上記は引き続きOvalLSP自身のコードに対して
+成り立ちますが、そのカスタムビルド自体が何を行うかについてはあなた
+自身の責任になります — このプロジェクトが配布・レビューしている正確な
+コードではなくなるためです。
+
+## ご質問・懸念事項
+
+連絡方法は
+[SUPPORT.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md)
+を、セキュリティ固有の懸念については
+[SECURITY.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.ja.md)
+を参照してください。

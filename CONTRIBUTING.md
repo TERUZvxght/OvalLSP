@@ -1,5 +1,7 @@
 # Contributing
 
+[日本語版](CONTRIBUTING.ja.md)
+
 **This project is currently not accepting external issues or pull
 requests.** The developer is actively investigating and fixing things
 in this codebase right now, and reviewing external PRs would be

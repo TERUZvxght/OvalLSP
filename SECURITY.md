@@ -1,5 +1,7 @@
 # Security Policy
 
+[日本語版](SECURITY.ja.md)
+
 ## Reporting a vulnerability
 
 If you find a security vulnerability in OvalLSP, please report it
@@ -35,7 +37,7 @@ reaching the process over the network" — it's:
 3. **Secret leakage via logs/error messages** must be minimized, since
    Core often logs a target Rails app's own exception text verbatim.
 
-See [docs/SECURITY_CHECKLIST.md](docs/SECURITY_CHECKLIST.md) for the
+See [docs/SECURITY_CHECKLIST.md](docs/SECURITY_CHECKLIST.md) (Japanese) for the
 full, itemized threat model and mitigations — summarized:
 
 - The Rails Runtime Agent (which can execute a target application's own
