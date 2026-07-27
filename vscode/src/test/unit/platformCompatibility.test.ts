@@ -65,6 +65,29 @@ describe('checkBundledCoreCompatibility', () => {
     assert.ok(result.reason?.includes('ovallsp.rubyExecutablePath'));
   });
 
+  it('is incompatible when an Apple Silicon-built VSIX is run under a Rosetta-translated (x86_64) Ruby (Task 023.4)', async () => {
+    // Apple Silicon's Homebrew installs under /opt/homebrew, Intel's under
+    // /usr/local -- both remain valid, separately-installed Ruby builds on
+    // the same Apple Silicon Mac (Rosetta 2 can still run the x86_64 one).
+    // `rubyResolver.ts`'s own Homebrew strategy only ever *tries*
+    // `/opt/homebrew/opt/ruby/bin/ruby` (Task 023.1's ADR-0006 note on why
+    // that prefix specifically), but nothing stops a user from setting
+    // `ovallsp.rubyExecutablePath` to an Intel Homebrew Ruby by hand -- this
+    // check is the actual backstop that must reject that combination
+    // outright, since RUBY_PLATFORM differs (`arm64-darwin25` vs.
+    // `x86_64-darwin25`) even though RUBY_ENGINE/RUBY_VERSION could
+    // otherwise coincidentally match.
+    writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
+
+    const result = await checkBundledCoreCompatibility(extensionRoot, '/usr/local/opt/ruby/bin/ruby', stubIdentity({
+      engine: 'ruby', version: '3.4.7', platform: 'x86_64-darwin25'
+    }));
+
+    assert.strictEqual(result.compatible, false);
+    assert.ok(result.reason?.includes('arm64-darwin25'));
+    assert.ok(result.reason?.includes('x86_64-darwin25'));
+  });
+
   it('is incompatible when the Ruby query itself fails (not on PATH, or does not understand -e)', async () => {
     writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
 

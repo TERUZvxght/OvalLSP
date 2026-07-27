@@ -33,11 +33,13 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CORE_SOURCE = path.join(REPO_ROOT, 'core');
 const CORE_DEST = path.join(__dirname, '..', 'core');
+const EXTENSION_PACKAGE_JSON = path.join(__dirname, '..', 'package.json');
 // Built in a staging directory and only ever `renameSync`d into place as
 // `CORE_DEST` once the entire build (copy + vendor) succeeds -- found
 // missing by an independent review of Task 020: the previous version
@@ -112,28 +114,153 @@ function copyCoreSourceIntoStaging() {
 // mean when this Node script runs" (the two are the same process'
 // resolution in practice, but asking Ruby itself rather than assuming it
 // keeps this correct if that ever changes).
-function currentRubyIdentity() {
-  const raw = execFileSync('ruby', ['-e', 'print [RUBY_ENGINE, RUBY_VERSION, RUBY_PLATFORM].join("|")'], {
-    encoding: 'utf8'
-  });
+const IDENTITY_PROBE = 'print [RUBY_ENGINE, RUBY_VERSION, RUBY_PLATFORM].join("|")';
+
+function parseIdentity(raw) {
   const [engine, version, platform] = raw.split('|');
   const [major, minor] = version.split('.');
   return { engine, versionMajorMinor: `${major}.${minor}`, fullVersion: version, platform };
 }
 
-function writePlatformManifest() {
-  const identity = currentRubyIdentity();
+function currentRubyIdentity() {
+  return parseIdentity(execFileSync('ruby', ['-e', IDENTITY_PROBE], { encoding: 'utf8' }));
+}
+
+// What `bundle exec ruby` itself resolves to, run from *inside* the
+// staging directory bundle install just populated -- not necessarily the
+// same interpreter `ruby` resolves to bare. Task 023.4's own requirement:
+// Ruby identity "must be queried against the actual Ruby executable that
+// will run, not assumed" -- `bundle install` above already ran under
+// whatever `bundle` itself picked, and if that differs from the bare
+// `ruby` this script otherwise queries (a stale `BUNDLE_GEMFILE`, a
+// version-manager shim mismatch between the two commands, ...), the
+// native extensions it just vendored were built for a *different*
+// interpreter than the one `core/bin/ovallsp`'s own `$LOAD_PATH`
+// manipulation will later run under.
+function bundleRubyIdentity() {
+  return parseIdentity(
+    execFileSync('bundle', ['exec', 'ruby', '-e', IDENTITY_PROBE], { cwd: CORE_STAGING, encoding: 'utf8' })
+  );
+}
+
+// Hard-fails packaging (never merely warns) if `ruby` and `bundle exec
+// ruby` disagree on engine/version/platform -- Section 4's own
+// requirement. Returns the agreed-upon identity so callers don't need a
+// third `ruby -e` round-trip.
+function verifyRubyAndBundleAgree() {
+  const rubyIdentity = currentRubyIdentity();
+  const bundleIdentity = bundleRubyIdentity();
+
+  if (
+    rubyIdentity.engine !== bundleIdentity.engine ||
+    rubyIdentity.versionMajorMinor !== bundleIdentity.versionMajorMinor ||
+    rubyIdentity.platform !== bundleIdentity.platform
+  ) {
+    throw new Error(
+      `'ruby' resolves to ${rubyIdentity.engine} ${rubyIdentity.fullVersion} (${rubyIdentity.platform}), but ` +
+        `'bundle exec ruby' resolves to ${bundleIdentity.engine} ${bundleIdentity.fullVersion} ` +
+        `(${bundleIdentity.platform}) -- these must be the same interpreter, or the native extensions 'bundle ` +
+        "install' just vendored won't match what 'ruby' itself will actually load them into at runtime. Check for " +
+        'a stale BUNDLE_GEMFILE, or a version-manager shim mismatch between the two commands.'
+    );
+  }
+
+  return rubyIdentity;
+}
+
+// The commit this VSIX was built from -- Task 023.2's build manifest
+// needs *a* build identity distinguishable across otherwise-same-SemVer
+// builds, and the git SHA is the one this monorepo already has without
+// inventing a separate build-counter. `"unknown"` (never a thrown error)
+// when there's no `.git` to ask (a tarball checkout, say) -- this is a
+// diagnostic field, not something correctness depends on.
+function currentGitCommit() {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: REPO_ROOT, encoding: 'utf8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+// Matches `vsce package --target <target>`'s own naming
+// (`darwin-arm64`, `linux-x64`, ...) so the manifest's recorded target
+// and the actual packaging command's target can be compared directly by
+// Task 023.5's packaging script.
+function currentBuildTarget() {
+  return `${process.platform}-${process.arch}`;
+}
+
+function extensionVersion() {
+  return JSON.parse(fs.readFileSync(EXTENSION_PACKAGE_JSON, 'utf8')).version;
+}
+
+// core/lib/ovallsp/version.rb is a one-line `VERSION = "x.y.z"` constant
+// -- read as text rather than shelling out to Ruby a second time (this
+// script already has one `ruby -e` round-trip in `currentRubyIdentity`);
+// simpler and avoids a dependency on Ruby understanding
+// `require_relative` from an arbitrary cwd during packaging.
+function coreVersionFromStaging() {
+  const source = fs.readFileSync(path.join(CORE_STAGING, 'lib', 'ovallsp', 'version.rb'), 'utf8');
+  const match = source.match(/VERSION\s*=\s*"([^"]+)"/);
+  if (!match) {
+    throw new Error(`copy-core: could not find VERSION constant in ${path.join(CORE_STAGING, 'lib', 'ovallsp', 'version.rb')}`);
+  }
+  return match[1];
+}
+
+// A single sha256 over every file's relative path and contents under
+// `dir`, walked in a stable (sorted) order -- so the same payload always
+// hashes the same way regardless of directory-listing order, and any
+// change to file contents *or* the file set itself changes the hash.
+// This is what Task 023.5's payload-corruption regression test (and the
+// Extension's own runtime re-check, Task 023.2) compares against to
+// detect a tampered or partially-written vendor payload.
+function computeDirectorySha256(dir) {
+  const hash = crypto.createHash('sha256');
+
+  function walk(current, relativePrefix) {
+    for (const entry of fs.readdirSync(current).sort()) {
+      const fullPath = path.join(current, entry);
+      const relativePath = path.join(relativePrefix, entry);
+      const stat = fs.statSync(fullPath);
+      if (stat.isDirectory()) {
+        walk(fullPath, relativePath);
+      } else if (stat.isFile()) {
+        hash.update(relativePath.split(path.sep).join('/'));
+        hash.update('\0');
+        hash.update(fs.readFileSync(fullPath));
+      }
+    }
+  }
+
+  walk(dir, '');
+  return hash.digest('hex');
+}
+
+function writePlatformManifest(identity) {
   const manifest = {
     rubyEngine: identity.engine,
     rubyVersionMajorMinor: identity.versionMajorMinor,
     rubyFullVersion: identity.fullVersion,
     rubyPlatform: identity.platform,
-    generatedAt: new Date().toISOString()
+    generatedAt: new Date().toISOString(),
+    // Task 023.2's build manifest -- additive fields alongside the
+    // ADR-0005 ruby* fields above, which `Ovallsp::VendorCompatibility`
+    // and `platformCompatibility.ts` keep reading unchanged.
+    extensionVersion: extensionVersion(),
+    coreVersion: coreVersionFromStaging(),
+    buildCommit: currentGitCommit(),
+    buildTarget: currentBuildTarget(),
+    // Computed over the staged tree *before* this manifest file itself
+    // exists within it (see call site in the packaging pipeline below) --
+    // a manifest cannot include a hash of itself.
+    payloadSha256: computeDirectorySha256(CORE_STAGING)
   };
   fs.writeFileSync(path.join(CORE_STAGING, 'PLATFORM_MANIFEST.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(
     `copy-core: recorded platform manifest (${manifest.rubyEngine} ${manifest.rubyFullVersion}, ` +
-      `${manifest.rubyPlatform}) -- see ADR-0005`
+      `${manifest.rubyPlatform}, extension ${manifest.extensionVersion}, core ${manifest.coreVersion}, ` +
+      `target ${manifest.buildTarget}) -- see ADR-0005, ADR-0006, Task 023.2`
   );
   return manifest;
 }
@@ -156,6 +283,38 @@ function vendorGemDependenciesIntoStaging() {
   });
   execFileSync('bundle', ['install'], { cwd: CORE_STAGING, stdio: 'inherit' });
   console.log('copy-core: vendored runtime gem dependencies into staging');
+}
+
+// Native-extension gems' own build process (`extconf.rb`/`make`) leaves
+// build-log byproducts behind under `ext/` and `extensions/` --
+// `mkmf.log`, `gem_make.out`, and `Makefile` -- none of which are ever
+// loaded at runtime (only the compiled `.bundle`/`.so` itself is). Found
+// reviewing package contents for Marketplace readiness (Task 023.6): all
+// three files embed the absolute path of whatever machine ran `bundle
+// install` (this machine's own username/home directory, verbatim, inside
+// `mkmf.log` and `Makefile` in particular) -- exactly the "no local
+// absolute paths/usernames in the package" requirement a packaged VSIX
+// must satisfy before Marketplace publication. Removed unconditionally
+// (never gated behind ALLOW_MISSING_VENDOR), since a release build must
+// never ship these regardless of how vendoring itself was invoked.
+const NATIVE_BUILD_ARTIFACT_NAMES = ['mkmf.log', 'gem_make.out', 'Makefile'];
+
+function removeNativeBuildArtifacts(vendorRoot) {
+  if (!fs.existsSync(vendorRoot)) {
+    return;
+  }
+  let removed = 0;
+  for (const entry of fs.readdirSync(vendorRoot, { recursive: true })) {
+    if (!NATIVE_BUILD_ARTIFACT_NAMES.includes(path.basename(entry.toString()))) {
+      continue;
+    }
+    const fullPath = path.join(vendorRoot, entry.toString());
+    if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+      fs.rmSync(fullPath);
+      removed += 1;
+    }
+  }
+  console.log(`copy-core: removed ${removed} native-extension build-log artifact(s) (mkmf.log/gem_make.out/Makefile) -- these embed this build machine's own absolute paths and must never ship in the VSIX`);
 }
 
 // Confirms the staged vendor install actually contains what bin/ovallsp
@@ -203,7 +362,61 @@ function verifyVendoredGems() {
     }
   }
 
+  verifyVendoredGemVersionsSatisfyGemspec(specDirs);
+
   console.log(`copy-core: verified ${REQUIRED_VENDORED_GEMS.join(', ')} are vendored with their native extensions`);
+}
+
+// Bundler's own dependency resolution already enforces
+// `ovallsp.gemspec`'s `add_dependency` constraints when `bundle install`
+// runs -- this check exists as an explicit, independently-verifiable
+// invariant on top of that implicit guarantee (Section 4: "verify runtime
+// dependency version/API requirements before requiring Core"), not
+// because a successful `bundle install` could actually violate it in
+// practice. A lockfile edited by hand, or a `bundle install` run against
+// a stale `Gemfile.lock` with `--local`, are the realistic ways this
+// could still drift; this makes packaging fail loudly instead of only
+// discovering the drift as a runtime API mismatch inside an end user's
+// Core Server process.
+function parseGemspecDependencyConstraints() {
+  const source = fs.readFileSync(path.join(CORE_STAGING, 'ovallsp.gemspec'), 'utf8');
+  const constraints = {};
+  for (const match of source.matchAll(/add_dependency\s+["']([^"']+)["'],\s*["']>=\s*([0-9.]+)["']/g)) {
+    constraints[match[1]] = match[2];
+  }
+  return constraints;
+}
+
+function compareVersionStrings(a, b) {
+  const partsA = a.split('.').map(Number);
+  const partsB = b.split('.').map(Number);
+  for (let i = 0; i < Math.max(partsA.length, partsB.length); i += 1) {
+    const diff = (partsA[i] ?? 0) - (partsB[i] ?? 0);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  return 0;
+}
+
+function verifyVendoredGemVersionsSatisfyGemspec(specDirs) {
+  const constraints = parseGemspecDependencyConstraints();
+  const gemBasenames = specDirs.map((entry) => path.basename(entry));
+
+  for (const [gemName, minimumVersion] of Object.entries(constraints)) {
+    const match = gemBasenames.find((base) => base.startsWith(`${gemName}-`));
+    if (!match) {
+      continue; // already a hard failure above (REQUIRED_VENDORED_GEMS), nothing new to report here.
+    }
+    const actualVersion = match.slice(gemName.length + 1);
+    if (compareVersionStrings(actualVersion, minimumVersion) < 0) {
+      throw new Error(
+        `copy-core: vendored '${gemName}' is version ${actualVersion}, but ovallsp.gemspec declares ` +
+          `'>= ${minimumVersion}' as a runtime dependency requirement -- the vendored payload does not satisfy ` +
+          "Core's own declared API requirement."
+      );
+    }
+  }
 }
 
 function commitStaging() {
@@ -216,8 +429,10 @@ try {
   copyCoreSourceIntoStaging();
   try {
     vendorGemDependenciesIntoStaging();
-    writePlatformManifest();
+    removeNativeBuildArtifacts(path.join(CORE_STAGING, 'vendor', 'bundle'));
+    const identity = verifyRubyAndBundleAgree();
     verifyVendoredGems();
+    writePlatformManifest(identity);
   } catch (err) {
     if (!ALLOW_MISSING_VENDOR) {
       throw new Error(

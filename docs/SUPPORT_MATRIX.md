@@ -30,7 +30,9 @@ alternatives"に記載の拡張方針(選択肢1: 複数ビルド、2: Ruby runt
 
 | バージョン | 区分 | 根拠 |
 |---|---|---|
-| 3.3, 3.4 | supported | `core/ovallsp.gemspec`の`required_ruby_version >= 3.3`。このセッションでは3.4.7(主要)および3.4.5(このマシンのrbenv経由)で`core/`のテストスイート実行を確認 |
+| 3.4(3.4.5、3.4.7で実行確認) | supported | 実際に`core/`のテストスイート(895 examples)をこのマシンで3.4.7(主要)および3.4.5(rbenv経由)で実行しgreenを確認 |
+| 3.3 | unsupported(未検証) | `core/ovallsp.gemspec`の`required_ruby_version >= 3.3`はRuby 3.3を**拒否しない**という宣言に過ぎず、実際に3.3で動作確認した実績ではない(Task 023.1の指摘どおり、`>= 3.3`単体をsupportedの根拠にしない)。Apple Silicon Marketplace Previewの対象はdarwin-arm64 + Ruby 3.4.xに限定するため、3.3は当面この区分のまま |
+| 3.5 | unsupported(未検証) | 同上。リリース時点でstableな3.5系での実行実績がない |
 | 3.2以下 | unsupported | `required_ruby_version`で明示的に拒否 |
 
 ## Rails (Runtime Agent)
