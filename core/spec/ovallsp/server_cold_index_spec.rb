@@ -94,4 +94,35 @@ RSpec.describe "Ovallsp::Server cold index (Task 008.5)" do
       expect(elapsed).to be < 1.0
     end
   end
+
+  it "cold-indexes references and Rails generated-method facts, not only declarations" do
+    Dir.mktmpdir do |root|
+      write(root, "app/models/widget.rb", <<~RUBY)
+        class Widget
+          scope :active, -> { where(active: true) }
+          def build
+          end
+        end
+      RUBY
+      write(root, "app/services/widget_user.rb", "Widget.new.build\n")
+
+      server = Ovallsp::Server.new(
+        input: StringIO.new(""), output: output, logger: logger, workspace_root: root
+      )
+      server.send(:start_cold_index)
+
+      build_symbol = Ovallsp::Index::SymbolId.new(
+        kind: :instance_method, owner: "::Widget", name: "build", discriminator: nil
+      )
+      scope_symbol = Ovallsp::Index::SymbolId.new(
+        kind: :singleton_method, owner: "::Widget", name: "active", discriminator: nil
+      )
+      reference_index = server.instance_variable_get(:@reference_index)
+      generated_index = server.instance_variable_get(:@generated_method_index)
+
+      expect(wait_until { generated_index.fact_for(scope_symbol) }).to be(true)
+      server.send(:ensure_reference_index_current)
+      expect(reference_index.references(build_symbol)).not_to be_empty
+    end
+  end
 end

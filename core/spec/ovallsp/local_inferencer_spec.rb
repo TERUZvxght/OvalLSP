@@ -213,6 +213,132 @@ RSpec.describe Ovallsp::LocalInferencer do
     expect(infer("x = foo\n", line: 0, character: 1)).to eq(Ovallsp::Types::UNKNOWN)
   end
 
+  it "continues inference through a loaded stdlib RBS signature" do
+    signatures = Ovallsp::Signatures::Environment.new
+    signatures.load(workspace_root: nil)
+    signature_inferencer = described_class.new(signatures: signatures)
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", text: "value = \"hello\".upcase\nvalue\n", version: 1, language_id: "ruby"
+    )
+
+    type = signature_inferencer.infer_at(document, { line: 1, character: 2 })
+
+    expect(type.to_s).to eq("String")
+  end
+
+  it "substitutes a generic receiver's element type into an RBS return type" do
+    signatures = Ovallsp::Signatures::Environment.new
+    signatures.load(workspace_root: nil)
+    signature_inferencer = described_class.new(signatures: signatures)
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", text: "value = [\"hello\"].sample\nvalue\n", version: 1, language_id: "ruby"
+    )
+
+    type = signature_inferencer.infer_at(document, { line: 1, character: 2 })
+
+    expect(type.to_s).to eq("String")
+  end
+
+  it "prefers an explicit project signature over a conflicting source-body inference" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sig"))
+      File.write(File.join(root, "sig", "widget.rbs"), "class Widget\n  def value: () -> String\nend\n")
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      workspace_index = Ovallsp::WorkspaceIndex.new
+      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      source = "class Widget\n  def value = 1\nend\nWidget.new.value\n"
+      document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+      summary = Ovallsp::ParserService.new.summarize(document)
+      workspace_index.replace_file(summary)
+      hierarchy_index.replace_file(summary)
+      resolver = Ovallsp::Semantic::MethodResolver.new(
+        workspace_index: workspace_index, hierarchy_index: hierarchy_index
+      )
+      analyzer = Ovallsp::Semantic::MethodAnalyzer.new(
+        workspace_index: workspace_index, method_resolver: resolver,
+        summary_store: Ovallsp::Semantic::MethodSummaryStore.new
+      )
+      signature_inferencer = described_class.new(
+        method_resolver: resolver, method_analyzer: analyzer, signatures: signatures
+      )
+
+      expect(signature_inferencer.infer_at(document, { line: 3, character: 12 }).to_s).to eq("String")
+    end
+  end
+
+  it "uses opt-in observed return evidence only when static source and RBS remain Unknown" do
+    workspace_index = Ovallsp::WorkspaceIndex.new
+    hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+    source = "class Widget\n  def value\n    unknown_runtime_value\n  end\nend\n\nWidget.new.value\n"
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+    summary = Ovallsp::ParserService.new.summarize(document)
+    workspace_index.replace_file(summary)
+    hierarchy_index.replace_file(summary)
+    method_resolver = Ovallsp::Semantic::MethodResolver.new(
+      workspace_index: workspace_index, hierarchy_index: hierarchy_index
+    )
+    method_analyzer = Ovallsp::Semantic::MethodAnalyzer.new(
+      workspace_index: workspace_index, method_resolver: method_resolver,
+      summary_store: Ovallsp::Semantic::MethodSummaryStore.new
+    )
+    store = Ovallsp::Observation::Store.new
+    symbol_id = Ovallsp::Index::SymbolId.new(
+      kind: :instance_method, owner: "::Widget", name: "value", discriminator: nil
+    )
+    store.replace_run([
+      Ovallsp::Observation::ObservedSignature.new(
+        symbol_id: symbol_id, parameter_types: [], return_type: Ovallsp::Types::Nominal.new(name: "String"),
+        samples: 2, run_id: "run", code_fingerprint: "fingerprint", created_at: Time.now
+      )
+    ])
+    observed_inferencer = described_class.new(
+      method_resolver: method_resolver, method_analyzer: method_analyzer, observation_store: store
+    )
+
+    type = observed_inferencer.infer_at(document, { line: 6, character: 12 })
+
+    expect(type.to_s).to eq("String")
+  end
+
+  it "finds observed evidence on the inherited method that Ruby lookup resolves" do
+    workspace_index = Ovallsp::WorkspaceIndex.new
+    hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+    source = <<~RUBY
+      class Base
+        def value = unknown_runtime_value
+      end
+      class Child < Base; end
+      Child.new.value
+    RUBY
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+    summary = Ovallsp::ParserService.new.summarize(document)
+    workspace_index.replace_file(summary)
+    hierarchy_index.replace_file(summary)
+    resolver = Ovallsp::Semantic::MethodResolver.new(
+      workspace_index: workspace_index, hierarchy_index: hierarchy_index
+    )
+    analyzer = Ovallsp::Semantic::MethodAnalyzer.new(
+      workspace_index: workspace_index, method_resolver: resolver,
+      summary_store: Ovallsp::Semantic::MethodSummaryStore.new
+    )
+    store = Ovallsp::Observation::Store.new
+    store.replace_run([
+      Ovallsp::Observation::ObservedSignature.new(
+        symbol_id: Ovallsp::Index::SymbolId.new(
+          kind: :instance_method, owner: "::Base", name: "value", discriminator: nil
+        ),
+        parameter_types: [], return_type: Ovallsp::Types::Nominal.new(name: "String"),
+        samples: 1, run_id: "run", code_fingerprint: "fingerprint", created_at: Time.now
+      )
+    ])
+    observed_inferencer = described_class.new(
+      method_resolver: resolver, method_analyzer: analyzer, observation_store: store
+    )
+
+    expect(observed_inferencer.infer_at(document, { line: 4, character: 12 }).to_s).to eq("String")
+  end
+
   it "returns Unknown, not an exception, once the step budget is exceeded" do
     tiny_budget = described_class.new(max_steps: 5)
     source = (1..50).map { |i| "v#{i} = #{i}" }.join("\n") + "\n"
@@ -466,6 +592,142 @@ RSpec.describe Ovallsp::LocalInferencer do
       ivars = inferencer.infer_ivars_for_method(document("def broken(\n"), owner_name: "::X", method_name: "y")
 
       expect(ivars).to eq({})
+    end
+
+    it "seeds a method with ivars inferred by an earlier callback" do
+      source = <<~RUBY
+        class UsersController
+          def show
+            @copy = @user
+          end
+        end
+      RUBY
+      user_type = Ovallsp::Types::Nominal.new(name: "User")
+
+      ivars = inferencer.infer_ivars_for_method(
+        document(source), owner_name: "::UsersController", method_name: "show", initial_env: { :@user => user_type }
+      )
+
+      expect(ivars).to include(:@user => user_type, :@copy => user_type)
+    end
+  end
+
+  describe "#infer_ivars_for_action" do
+    def document(source)
+      Ovallsp::TextDocument.new(uri: "file:///controller.rb", text: source, version: 1, language_id: "ruby")
+    end
+
+    it "runs applicable before_action methods before the action and carries their ivars forward" do
+      source = <<~RUBY
+        class UsersController
+          before_action :load_user
+
+          def load_user
+            @user = User.new
+          end
+
+          def show
+            @copy = @user
+          end
+        end
+      RUBY
+
+      ivars = inferencer.infer_ivars_for_action(
+        document(source), owner_name: "::UsersController", action_name: "show"
+      )
+
+      expect(ivars[:@user].to_s).to eq("User")
+      expect(ivars[:@copy].to_s).to eq("User")
+    end
+
+    it "honors literal only:/except: selectors and multiple callback names" do
+      source = <<~RUBY
+        class UsersController
+          before_action :load_user, :load_team, only: [:show, :edit]
+          before_action :authenticate, except: :show
+
+          def load_user = @user = User.new
+          def load_team = @team = Team.new
+          def authenticate = @auth = true
+          def show; end
+          def index; end
+        end
+      RUBY
+
+      show = inferencer.infer_ivars_for_action(
+        document(source), owner_name: "::UsersController", action_name: "show"
+      )
+      index = inferencer.infer_ivars_for_action(
+        document(source), owner_name: "::UsersController", action_name: "index"
+      )
+
+      expect(show.keys).to contain_exactly(:@user, :@team)
+      expect(index.keys).to contain_exactly(:@auth)
+    end
+
+    it "lets the action override a callback's earlier assignment" do
+      source = <<~RUBY
+        class UsersController
+          before_action :set_value
+          def set_value = @value = 1
+          def show = @value = "final"
+        end
+      RUBY
+
+      ivars = inferencer.infer_ivars_for_action(
+        document(source), owner_name: "::UsersController", action_name: "show"
+      )
+
+      expect(ivars[:@value].to_s).to eq("String")
+    end
+
+    it "ignores callbacks with unresolved runtime conditions" do
+      source = <<~RUBY
+        class UsersController
+          before_action :load_user, if: :signed_in?
+          def load_user = @user = User.new
+          def show; end
+        end
+      RUBY
+
+      ivars = inferencer.infer_ivars_for_action(
+        document(source), owner_name: "::UsersController", action_name: "show"
+      )
+
+      expect(ivars).to be_empty
+    end
+
+    it "applies a same-class skip_before_action selector" do
+      source = <<~RUBY
+        class UsersController
+          before_action :load_user
+          skip_before_action :load_user, only: :show
+          def load_user = @user = User.new
+          def show; end
+        end
+      RUBY
+
+      ivars = inferencer.infer_ivars_for_action(
+        document(source), owner_name: "::UsersController", action_name: "show"
+      )
+
+      expect(ivars).to be_empty
+    end
+
+    it "preserves earlier ivars when a later callback method is missing" do
+      source = <<~RUBY
+        class UsersController
+          before_action :load_user, :missing_callback
+          def load_user = @user = User.new
+          def show; end
+        end
+      RUBY
+
+      ivars = inferencer.infer_ivars_for_action(
+        document(source), owner_name: "::UsersController", action_name: "show"
+      )
+
+      expect(ivars[:@user].to_s).to eq("User")
     end
   end
 

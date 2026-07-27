@@ -2,6 +2,23 @@
 
 All notable changes to the OvalLSP VS Code extension are documented here.
 
+## 0.1.5 — Lifecycle reliability and deeper semantic coverage
+
+- Stops and reaps the Core process and, on macOS/Linux, its discovered
+  descendant process groups during restart, deactivation, overlapping
+  restart commands, and initialize hangs.
+- Infers controller view instance variables assigned by conventional
+  `before_action` callbacks, including inheritance, `skip_before_action`,
+  literal `only:` / `except:` selectors, and callback-to-action type flow.
+- Cold-indexes references and Rails generated methods, and re-resolves
+  references when declarations arrive or disappear.
+- Uses RBS/RBI overload return types in local inference, live-reloads
+  project signature changes, and uses opt-in runtime observations only as
+  a low-authority fallback for otherwise-Unknown returns.
+- Fixes Union completion conditional flags, generated-method reopening
+  fallback, stale model-dependent method summaries, duplicate Cold Index
+  runs, and delayed automatic Agent retries after a manual restart.
+
 ## 0.1.4 — Actually fixes the false "Payload hash mismatch" warning
 
 v0.1.3 attempted this fix and did not succeed: the warning still

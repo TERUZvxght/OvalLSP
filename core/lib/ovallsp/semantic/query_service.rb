@@ -67,6 +67,7 @@ module Ovallsp
         add_source_members(candidates, receiver_type, prefix, context)
         add_model_members(candidates, receiver_type, prefix)
         add_signature_members(candidates, receiver_type, prefix, context)
+        normalize_union_conditionals(candidates, receiver_type, context)
 
         candidates.values.sort_by { |m| [m.conditional ? 1 : 0, ORIGIN_AUTHORITY.fetch(m.origin, 9), m.name] }
       end
@@ -114,6 +115,38 @@ module Ovallsp
 
       private
 
+      # A name can be supplied by different origins on different Union
+      # members (for example, a model column on one member and RBS on
+      # another). Per-origin occurrence counts incorrectly label that
+      # common name conditional, so recompute availability by receiver.
+      def normalize_union_conditionals(candidates, receiver_type, context)
+        return unless receiver_type.is_a?(Types::Union)
+
+        variants = receiver_type.members.reject { |member| member == Types::NIL }
+        candidates.transform_values! do |member|
+          conditional = variants.any? { |variant| !member_available_on?(variant, member.name, context) }
+          member.with(conditional: conditional)
+        end
+      end
+
+      def member_available_on?(receiver_type, name, context)
+        source = @method_resolver&.resolve(receiver_type: receiver_type, name: name, context: context)
+        return true unless source.nil? || source.empty?
+
+        nominal = case receiver_type
+                  when Types::Nominal then receiver_type
+                  when Types::Generic then Types::Nominal.new(name: receiver_type.name)
+                  end
+        return false unless nominal
+
+        if @model_registry&.known_model?(nominal.name)
+          return true if @model_registry.column(nominal.name, name) || @model_registry.association(nominal.name, name)
+        end
+
+        singleton = context[:singleton] == true
+        @signatures&.member_names(qualify(nominal.name), prefix: name, singleton: singleton)&.include?(name) || false
+      end
+
       def add_source_members(candidates, receiver_type, prefix, context)
         return unless @method_resolver
 
@@ -126,28 +159,34 @@ module Ovallsp
       def add_model_members(candidates, receiver_type, prefix)
         return unless @model_registry
 
-        each_nominal(receiver_type) do |nominal|
+        nominals = each_nominal(receiver_type).to_a
+        occurrences = Hash.new(0)
+        details = {}
+        nominals.each do |nominal|
           next unless @model_registry.known_model?(nominal.name)
 
-          add_model_columns_and_associations(candidates, nominal.name, prefix)
+          model = @model_registry.model(nominal.name)
+          next unless model
+
+          model.columns.each do |column|
+            next unless column.name.start_with?(prefix)
+
+            occurrences[[:model_column, column.name]] += 1
+            details[[:model_column, column.name]] = column.ruby_type
+          end
+          model.associations.each do |association|
+            next unless association.name.start_with?(prefix)
+
+            occurrences[[:model_association, association.name]] += 1
+            details[[:model_association, association.name]] = association.class_name
+          end
         end
-      end
 
-      def add_model_columns_and_associations(candidates, model_name, prefix)
-        model = @model_registry.model(model_name)
-        return unless model
-
-        model.columns.each do |column|
-          next unless column.name.start_with?(prefix)
-
-          candidates[column.name] ||= Member.new(name: column.name, origin: :model_column, conditional: false,
-                                                   visibility: :public, detail: column.ruby_type)
-        end
-        model.associations.each do |assoc|
-          next unless assoc.name.start_with?(prefix)
-
-          candidates[assoc.name] ||= Member.new(name: assoc.name, origin: :model_association, conditional: false,
-                                                 visibility: :public, detail: assoc.class_name)
+        occurrences.each do |(origin, name), count|
+          candidates[name] ||= Member.new(
+            name: name, origin: origin, conditional: count < nominals.length, visibility: :public,
+            detail: details[[origin, name]]
+          )
         end
       end
 
@@ -155,10 +194,17 @@ module Ovallsp
         return unless @signatures
 
         singleton = context[:singleton] == true
-        each_nominal(receiver_type) do |nominal|
+        nominals = each_nominal(receiver_type).to_a
+        occurrences = Hash.new(0)
+        nominals.each do |nominal|
           @signatures.member_names(qualify(nominal.name), prefix: prefix, singleton: singleton).each do |name|
-            candidates[name] ||= Member.new(name: name, origin: :signature, conditional: false, visibility: nil, detail: nil)
+            occurrences[name] += 1
           end
+        end
+        occurrences.each do |name, count|
+          candidates[name] ||= Member.new(
+            name: name, origin: :signature, conditional: count < nominals.length, visibility: nil, detail: nil
+          )
         end
       end
 
@@ -233,7 +279,7 @@ module Ovallsp
         case type
         when Types::Nominal then yield type
         when Types::Generic then yield Types::Nominal.new(name: type.name)
-        when Types::Union then type.members.each { |m| yield m if m.is_a?(Types::Nominal) }
+        when Types::Union then type.members.each { |member| each_nominal(member) { |nominal| yield nominal } }
         end
       end
 

@@ -6,6 +6,7 @@ require_relative "../index/symbol_id"
 require_relative "../index/source_location"
 require_relative "signature_method"
 require_relative "type_converter"
+require_relative "rbi_parser"
 
 module Ovallsp
   module Signatures
@@ -35,6 +36,7 @@ module Ovallsp
         @member_name_cache = {}
         @rbs_environment = nil
         @definition_builder = nil
+        @rbi_methods = {}
       end
 
       def generation
@@ -57,6 +59,7 @@ module Ovallsp
 
           @rbs_environment = env
           @definition_builder = RBS::DefinitionBuilder.new(env: env)
+          @rbi_methods = load_rbi_methods(workspace_root, diagnostics)
           @diagnostics = diagnostics
           @method_cache = {}
           @ancestor_cache = {}
@@ -98,7 +101,7 @@ module Ovallsp
       # `overload` into its own Overload) or nil if the owning type isn't
       # known to the loaded environment, or it has no such method.
       def method_signatures(symbol_id)
-        @mutex.synchronize { @method_cache[symbol_id] ||= build_signature_method(symbol_id) }
+        @mutex.synchronize { @rbi_methods[symbol_id] || (@method_cache[symbol_id] ||= build_signature_method(symbol_id)) }
       end
 
       # Ordered ancestor names (most specific first) for a fully-qualified
@@ -127,6 +130,25 @@ module Ovallsp
         add_project_sig(loader, workspace_root, diagnostics)
         add_gem_signatures(loader, bundle_context, diagnostics)
         loader
+      end
+
+      def load_rbi_methods(workspace_root, diagnostics)
+        return {} unless workspace_root
+
+        patterns = [
+          File.join(workspace_root, "sorbet", "rbi", "**", "*.rbi"),
+          File.join(workspace_root, "sig", "**", "*.rbi")
+        ]
+        patterns.flat_map { |pattern| Dir.glob(pattern) }.uniq.sort.each_with_object({}) do |path, methods|
+          uri = "file://#{path}"
+          result = RbiParser.parse(File.read(path, encoding: Encoding::UTF_8), uri: uri)
+          diagnostics.concat(result.diagnostics)
+          result.signature_methods.each do |signature|
+            methods[signature.symbol_id] = signature.with(generation: @generation + 1)
+          end
+        rescue StandardError => e
+          diagnostics << { severity: :warning, message: "failed to load RBI at #{path}: #{e.message}", location: nil }
+        end
       end
 
       def add_project_sig(loader, workspace_root, diagnostics)
@@ -228,11 +250,19 @@ module Ovallsp
         return [] unless type_name
 
         definition = build_definition(type_name, singleton: singleton)
-        return [] unless definition
+        return rbi_member_names(type_name_string, singleton) unless definition
 
-        definition.methods.keys.map(&:to_s).sort
+        rbs_names = definition.methods.keys.map(&:to_s)
+        rbi_names = rbi_member_names(type_name_string, singleton)
+        (rbs_names + rbi_names).uniq.sort
       rescue StandardError
-        []
+        rbi_member_names(type_name_string, singleton)
+      end
+
+      def rbi_member_names(type_name_string, singleton)
+        owner = type_name_string.start_with?("::") ? type_name_string : "::#{type_name_string}"
+        kind = singleton ? :singleton_method : :instance_method
+        @rbi_methods.keys.filter_map { |symbol_id| symbol_id.name if symbol_id.owner == owner && symbol_id.kind == kind }
       end
 
       def compute_ancestors(type_name_string)

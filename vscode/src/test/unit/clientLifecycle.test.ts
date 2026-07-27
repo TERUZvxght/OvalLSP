@@ -1,5 +1,5 @@
 import * as assert from 'assert';
-import { ClientLifecycleManager } from '../../clientLifecycle';
+import { ClientLifecycleManager, KeyedTransitionQueue } from '../../clientLifecycle';
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolve!: (value: T) => void;
@@ -140,7 +140,7 @@ describe('ClientLifecycleManager', () => {
     assert.strictEqual(lifecycle.markRunning('folder-a', generation), false);
   });
 
-  describe('stopIfRunning', () => {
+  describe('requestStopAndStopIfRunning', () => {
     // A stub reproducing vscode-languageclient's own `LanguageClient.stop()`
     // (`shutdown()` internally) contract precisely enough to catch a
     // regression: it throws synchronously (inside the returned rejected
@@ -170,10 +170,11 @@ describe('ClientLifecycleManager', () => {
         return fakeLanguageClientStop(() => false)(); // the real library would reject here
       };
 
-      const didStop = await lifecycle.stopIfRunning('folder-a', stopFn);
+      const didStop = await lifecycle.requestStopAndStopIfRunning('folder-a', stopFn);
 
       assert.strictEqual(stopFnCalled, false, 'stopFn must never be called while this generation has not reached running');
       assert.strictEqual(didStop, false);
+      assert.strictEqual(lifecycle.getState('folder-a'), 'stopping');
     });
 
     it('calls stopFn when the generation has actually reached running', async () => {
@@ -188,17 +189,18 @@ describe('ClientLifecycleManager', () => {
         return fakeLanguageClientStop(() => true)();
       };
 
-      const didStop = await lifecycle.stopIfRunning('folder-a', stopFn);
+      const didStop = await lifecycle.requestStopAndStopIfRunning('folder-a', stopFn);
 
       assert.strictEqual(stopFnCalled, true);
       assert.strictEqual(didStop, true);
+      assert.strictEqual(lifecycle.getState('folder-a'), 'stopping');
     });
 
     it('does not call stopFn for a key that never started at all', async () => {
       const lifecycle = new ClientLifecycleManager();
       let stopFnCalled = false;
 
-      const didStop = await lifecycle.stopIfRunning('never-started', () => {
+      const didStop = await lifecycle.requestStopAndStopIfRunning('never-started', () => {
         stopFnCalled = true;
         return Promise.resolve();
       });
@@ -229,9 +231,24 @@ describe('ClientLifecycleManager', () => {
       const stopFn = () => Promise.reject(new Error('Client is not running and can\'t be stopped.'));
 
       await assert.doesNotReject(
-        lifecycle.stopIfRunning('folder-a', stopFn),
+        lifecycle.requestStopAndStopIfRunning('folder-a', stopFn),
         'stopClient must never propagate the real library\'s reject/throw in this window'
       );
+    });
+
+    it('regression: the production ordering stops a running client instead of losing its pre-stop state', async () => {
+      const lifecycle = new ClientLifecycleManager();
+      const generation = lifecycle.beginStart('folder-a');
+      lifecycle.markStarting('folder-a', generation);
+      lifecycle.markRunning('folder-a', generation);
+
+      let stopFnCalled = false;
+      const didStop = await lifecycle.requestStopAndStopIfRunning('folder-a', async () => {
+        stopFnCalled = true;
+      });
+
+      assert.strictEqual(stopFnCalled, true, 'a normally running Core process must be stopped during restart');
+      assert.strictEqual(didStop, true);
     });
   });
 
@@ -244,5 +261,83 @@ describe('ClientLifecycleManager', () => {
 
     assert.strictEqual(lifecycle.markStarting('folder-a', genA), false);
     assert.strictEqual(lifecycle.markStarting('folder-b', genB), true);
+  });
+
+  it('terminates a process registered after its generation was already stopped', async () => {
+    const lifecycle = new ClientLifecycleManager();
+    const generation = lifecycle.beginStart('folder-a');
+    lifecycle.markStarting('folder-a', generation);
+    lifecycle.requestStop('folder-a');
+
+    let terminated = false;
+    const registered = lifecycle.registerProcess('folder-a', generation, {
+      terminate: async () => {
+        terminated = true;
+      }
+    });
+    await Promise.resolve();
+
+    assert.strictEqual(registered, false);
+    assert.strictEqual(terminated, true);
+  });
+
+  it('terminates the exact process owned by the current generation', async () => {
+    const lifecycle = new ClientLifecycleManager();
+    const generation = lifecycle.beginStart('folder-a');
+    lifecycle.markStarting('folder-a', generation);
+    let terminationCount = 0;
+    lifecycle.registerProcess('folder-a', generation, {
+      terminate: async () => {
+        terminationCount += 1;
+      }
+    });
+
+    await lifecycle.terminateProcess('folder-a', generation);
+    await lifecycle.terminateProcess('folder-a', generation);
+
+    assert.strictEqual(terminationCount, 1);
+  });
+});
+
+describe('KeyedTransitionQueue', () => {
+  it('serializes overlapping restarts for the same folder', async () => {
+    const queue = new KeyedTransitionQueue();
+    const firstStop = deferred<void>();
+    const firstEntered = deferred<void>();
+    const order: string[] = [];
+
+    const first = queue.enqueue('folder-a', async () => {
+      order.push('first-stop-started');
+      firstEntered.resolve();
+      await firstStop.promise;
+      order.push('first-start');
+    });
+    const second = queue.enqueue('folder-a', async () => {
+      order.push('second-stop');
+      order.push('second-start');
+    });
+
+    await firstEntered.promise;
+    assert.deepStrictEqual(order, ['first-stop-started']);
+    firstStop.resolve();
+    await Promise.all([first, second]);
+
+    assert.deepStrictEqual(order, ['first-stop-started', 'first-start', 'second-stop', 'second-start']);
+  });
+
+  it('continues with the next transition after an earlier one rejects', async () => {
+    const queue = new KeyedTransitionQueue();
+    const first = queue.enqueue('folder-a', async () => {
+      throw new Error('failed');
+    });
+    let secondRan = false;
+    const second = queue.enqueue('folder-a', async () => {
+      secondRan = true;
+    });
+
+    await assert.rejects(first);
+    await second;
+
+    assert.strictEqual(secondRan, true);
   });
 });

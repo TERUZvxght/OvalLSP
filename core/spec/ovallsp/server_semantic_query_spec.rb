@@ -180,4 +180,56 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
       sleep 0.02
     end
   end
+
+  it "reloads project RBS signatures after a watched .rbs change" do
+    Dir.mktmpdir do |root|
+      sig_dir = File.join(root, "sig")
+      FileUtils.mkdir_p(sig_dir)
+      signature_path = File.join(sig_dir, "widget.rbs")
+      File.write(signature_path, "class Widget\n  def value: () -> String\nend\n")
+      server = Ovallsp::Server.new(
+        input: StringIO.new(""), output: output, logger: logger, workspace_root: root
+      )
+      signatures = server.instance_variable_get(:@signatures)
+      symbol_id = Ovallsp::Index::SymbolId.new(
+        kind: :instance_method, owner: "::Widget", name: "value", discriminator: nil
+      )
+      expect(signatures.method_signatures(symbol_id).overloads.first.return_type.to_s).to eq("String")
+      generation = signatures.generation
+
+      File.write(signature_path, "class Widget\n  def value: () -> Integer\nend\n")
+      server.send(
+        :handle_did_change_watched_files,
+        { changes: [{ uri: Ovallsp::UriUtil.from_path(signature_path), type: 2 }] }
+      )
+
+      expect(signatures.generation).to be > generation
+      expect(signatures.method_signatures(symbol_id).overloads.first.return_type.to_s).to eq("Integer")
+    end
+  end
+
+  it "reloads project RBI signatures after a watched .rbi change" do
+    Dir.mktmpdir do |root|
+      rbi_dir = File.join(root, "sorbet", "rbi")
+      FileUtils.mkdir_p(rbi_dir)
+      signature_path = File.join(rbi_dir, "widget.rbi")
+      File.write(signature_path, "class Widget\n  sig { returns(String) }\n  def value; end\nend\n")
+      server = Ovallsp::Server.new(
+        input: StringIO.new(""), output: output, logger: logger, workspace_root: root
+      )
+      signatures = server.instance_variable_get(:@signatures)
+      symbol_id = Ovallsp::Index::SymbolId.new(
+        kind: :instance_method, owner: "::Widget", name: "value", discriminator: nil
+      )
+      expect(signatures.method_signatures(symbol_id).overloads.first.return_type.to_s).to eq("String")
+
+      File.write(signature_path, "class Widget\n  sig { returns(Integer) }\n  def value; end\nend\n")
+      server.send(
+        :handle_did_change_watched_files,
+        { changes: [{ uri: Ovallsp::UriUtil.from_path(signature_path), type: 2 }] }
+      )
+
+      expect(signatures.method_signatures(symbol_id).overloads.first.return_type.to_s).to eq("Integer")
+    end
+  end
 end

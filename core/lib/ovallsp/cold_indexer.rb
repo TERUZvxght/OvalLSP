@@ -35,7 +35,7 @@ module Ovallsp
 
     def initialize(root:, parser_service:, workspace_index:, document_store:, logger:, hierarchy_index: nil,
                    cache_store: nil, excluded_dirs: DEFAULT_EXCLUDED_DIRS, excluded_paths: DEFAULT_EXCLUDED_PATHS,
-                   included_extensions: DEFAULT_INCLUDED_EXTENSIONS)
+                   included_extensions: DEFAULT_INCLUDED_EXTENSIONS, on_indexed: nil, on_complete: nil)
       @root = File.expand_path(root)
       @root_real = safe_realpath(@root) || @root
       @parser_service = parser_service
@@ -47,6 +47,8 @@ module Ovallsp
       @excluded_dirs = excluded_dirs
       @excluded_paths = excluded_paths
       @included_extensions = included_extensions
+      @on_indexed = on_indexed
+      @on_complete = on_complete
     end
 
     def run
@@ -55,6 +57,8 @@ module Ovallsp
       each_candidate_file(@root, visited_dirs) { |path| index_file(path, visited_files) }
     rescue StandardError => e
       @logger.error("cold index failed: #{e.class}: #{e.message}")
+    ensure
+      @on_complete&.call
     end
 
     private
@@ -138,10 +142,15 @@ module Ovallsp
 
       raw_source = source_for(path)
       parsed = cached_or_parsed_summary(uri, path, raw_source)
+      document = TextDocument.new(uri: uri, text: raw_source, version: nil, language_id: "ruby")
 
       read_sequence = @workspace_index.next_read_sequence
       summary = parsed.with(source: :disk, read_sequence: read_sequence)
-      @hierarchy_index&.replace_file(summary) if @workspace_index.replace_file(summary)
+      previous_declarations = @workspace_index.declarations_for_uri(uri)
+      if @workspace_index.replace_file(summary)
+        @hierarchy_index&.replace_file(summary)
+        @on_indexed&.call(uri, document, summary, previous_declarations)
+      end
     rescue StandardError => e
       @logger.error("cold index: failed to index #{path}: #{e.class}: #{e.message}")
     end

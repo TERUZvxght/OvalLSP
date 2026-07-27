@@ -81,6 +81,21 @@ RSpec.describe "Ovallsp::Server textDocument/references (Task 014)" do
     expect(result.map { |loc| loc[:uri] }).to contain_exactly("file:///user.rb")
   end
 
+  it "re-resolves an earlier callsite when its declaration is indexed later" do
+    input =
+      did_open("file:///user.rb", "Widget.new.build\n") +
+      did_open("file:///widget.rb", "class Widget\n  def build\n  end\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/references",
+        params: { textDocument: { uri: "file:///widget.rb" }, position: { line: 1, character: 6 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.first[:result].map { |loc| loc[:uri] }).to contain_exactly("file:///user.rb")
+  end
+
   it "removes a file's references once it's closed and reverted, or deleted" do
     input =
       did_open("file:///widget.rb", "class Widget\n  def build\n  end\nend\n") +

@@ -6,4 +6,4 @@
 // exported constant so it can be exercised directly by a real
 // `vscode.workspace.createFileSystemWatcher` in an integration test, not
 // just asserted on as a string.
-export const WATCHED_FILES_GLOB = '**/{*.rb,*.erb,Gemfile.lock,db/structure.sql}';
+export const WATCHED_FILES_GLOB = '**/{*.rb,*.rbs,*.rbi,*.erb,Gemfile.lock,db/structure.sql}';

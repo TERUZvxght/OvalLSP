@@ -4,6 +4,7 @@ require "prism"
 require_relative "types"
 require_relative "models/model_registry"
 require_relative "semantic/generic_rule_registry"
+require_relative "signatures/overload_resolver"
 
 module Ovallsp
   # Minimal local type inference over a single document's top-level
@@ -48,7 +49,7 @@ module Ovallsp
     MAX_ARRAY_ELEMENT_UNION = 8
 
     def initialize(max_steps: 5000, model_registry: Models::ModelRegistry.new, generic_rules: nil,
-                   method_resolver: nil, method_analyzer: nil)
+                   method_resolver: nil, method_analyzer: nil, signatures: nil, observation_store: nil)
       @max_steps = max_steps
       @model_registry = model_registry
       @generic_rules = generic_rules || self.class.default_generic_rules
@@ -59,6 +60,8 @@ module Ovallsp
       # call simply stays Types::UNKNOWN, as it always has.
       @method_resolver = method_resolver
       @method_analyzer = method_analyzer
+      @signatures = signatures
+      @observation_store = observation_store
       @step_budget = max_steps
     end
 
@@ -102,21 +105,58 @@ module Ovallsp
     # view rendered after this action runs would see
     # (docs/design/tasks/008-controller-view-propagation.md). Returns {} if
     # the method can't be found or parsing fails; never raises.
-    def infer_ivars_for_method(document, owner_name:, method_name:)
+    def infer_ivars_for_method(document, owner_name:, method_name:, initial_env: {})
       method_node = find_method_node(document, owner_name, method_name)
-      return {} unless method_node&.body
+      return ivars_from(initial_env) unless method_node
+      return ivars_from(initial_env) unless method_node.body
 
       @steps = 0
       @step_budget = @max_steps
       @self_type_stack = [Types::Nominal.new(name: owner_name.to_s.split("::").last)]
-      env = {}
+      env = initial_env.dup
       eval_type(method_node.body, env)
       # Symbol-keyed (":@user", not "@user") to match how Prism names
       # InstanceVariableReadNode/WriteNode, so this can be passed straight
       # back in as another call's `initial_env` without re-keying.
-      env.select { |key, _| key.to_s.start_with?("@") }
+      ivars_from(env)
     rescue BudgetExceeded, StandardError
       {}
+    end
+
+    # Evaluates the statically-declared before_action callbacks that apply
+    # to `action_name`, in declaration/argument order, then evaluates the
+    # action itself with their ivar environment. Literal callback names
+    # and literal only:/except: selectors cover the conventional Rails
+    # form; dynamic conditions and callback blocks are deliberately left
+    # unresolved instead of guessed.
+    def infer_ivars_for_action(document, owner_name:, action_name:)
+      callbacks = before_action_operations(document, owner_name: owner_name, action_name: action_name).each_with_object([]) do |operation, names|
+        verb, name = operation
+        verb == :add ? names << name : names.delete(name)
+      end
+
+      env = callbacks.reduce({}) do |callback_env, callback_name|
+        infer_ivars_for_method(
+          document, owner_name: owner_name, method_name: callback_name, initial_env: callback_env
+        )
+      end
+      infer_ivars_for_method(document, owner_name: owner_name, method_name: action_name, initial_env: env)
+    rescue StandardError
+      {}
+    end
+
+    def before_action_operations(document, owner_name:, action_name:)
+      finder = BeforeActionFinder.new(owner_name, action_name.to_s)
+      Prism.parse(document.text).value.accept(finder)
+      finder.operations
+    rescue StandardError
+      []
+    end
+
+    def method_declared?(document, owner_name:, method_name:)
+      !find_method_node(document, owner_name, method_name).nil?
+    rescue StandardError
+      false
     end
 
     # Finds a literal `render :name` / `render "name"` / `render "dir/name"`
@@ -137,6 +177,10 @@ module Ovallsp
     end
 
     private
+
+    def ivars_from(env)
+      env.select { |key, _| key.to_s.start_with?("@") }
+    end
 
     def find_method_node(document, owner_name, method_name)
       result = Prism.parse(document.text)
@@ -386,6 +430,11 @@ module Ovallsp
       end
 
       if constant_receiver?(node.receiver)
+        signature_method = resolve_signature_call(
+          Types::Nominal.new(name: node.receiver.full_name), node, singleton: true
+        )
+        return signature_method if signature_method
+
         class_level = resolve_class_level_finder(node.receiver.full_name, node.name)
         return class_level if class_level
 
@@ -398,13 +447,20 @@ module Ovallsp
         singleton_method = resolve_source_method_member(Types::Nominal.new(name: node.receiver.full_name), node.name,
                                                           singleton: true)
         return singleton_method if singleton_method
+
       end
+
+      signature = receiver_type && resolve_signature_call(receiver_type, node)
+      return signature if signature
 
       generic = receiver_type && resolve_generic_call(node, receiver_type, env)
       return generic if generic
 
       instance_level = receiver_type && resolve_instance_level(receiver_type, node.name)
       return instance_level if instance_level
+
+      observed = receiver_type && resolve_observed_call(receiver_type, node)
+      return observed if observed
 
       Types::UNKNOWN
     end
@@ -511,6 +567,93 @@ module Ovallsp
       return nil unless candidate
 
       @method_analyzer.summarize(symbol_id: candidate.symbol_id).return_type
+        .then { |type| type == Types::UNKNOWN ? nil : type }
+    end
+
+    def resolve_signature_call(receiver_type, node, singleton: false)
+      return nil unless @signatures
+
+      if receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
+        return resolve_signature_call(receiver_type.type_arg, node, singleton: true)
+      end
+      if receiver_type.is_a?(Types::Union)
+        resolved = receiver_type.members.filter_map do |member|
+          next if member == Types::NIL
+
+          resolve_signature_call(member, node, singleton: singleton)
+        end
+        return Types.normalize_union(resolved) unless resolved.empty?
+        return nil
+      end
+      generic_type_arg = receiver_type.type_arg if receiver_type.is_a?(Types::Generic)
+      receiver_type = Types::Nominal.new(name: receiver_type.name) if receiver_type.is_a?(Types::Generic)
+      return nil unless receiver_type.is_a?(Types::Nominal)
+
+      owner = receiver_type.name.start_with?("::") ? receiver_type.name : "::#{receiver_type.name}"
+      symbol_id = Index::SymbolId.new(
+        kind: singleton ? :singleton_method : :instance_method, owner: owner, name: node.name.to_s, discriminator: nil
+      )
+      signature = @signatures.method_signatures(symbol_id)
+      return nil unless signature
+
+      arguments = node.arguments&.arguments || []
+      keyword_hash = arguments.last if arguments.last.is_a?(Prism::KeywordHashNode)
+      positional_count = keyword_hash ? arguments.length - 1 : arguments.length
+      keyword_names = keyword_hash ? keyword_hash.elements.filter_map { |element| element.key.value if element.key.is_a?(Prism::SymbolNode) } : []
+      resolved = Signatures::OverloadResolver.resolve(
+        signature.overloads, positional_count: positional_count, keyword_names: keyword_names,
+        block_given: !node.block.nil?
+      )
+      return resolved unless generic_type_arg && resolved
+
+      parameter_names = type_parameter_names(resolved)
+      Types.substitute(resolved, parameter_names.to_h { |name| [name, generic_type_arg] })
+    rescue StandardError
+      nil
+    end
+
+    def resolve_observed_call(receiver_type, node, singleton: false)
+      return nil unless @observation_store
+
+      if receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
+        return resolve_observed_call(receiver_type.type_arg, node, singleton: true)
+      end
+      if receiver_type.is_a?(Types::Union)
+        resolved = receiver_type.members.filter_map do |member|
+          next if member == Types::NIL
+
+          resolve_observed_call(member, node, singleton: singleton)
+        end
+        return Types.normalize_union(resolved) unless resolved.empty?
+        return nil
+      end
+      return nil unless receiver_type.is_a?(Types::Nominal)
+
+      owner = receiver_type.name.start_with?("::") ? receiver_type.name : "::#{receiver_type.name}"
+      symbol_ids = [Index::SymbolId.new(
+        kind: singleton ? :singleton_method : :instance_method, owner: owner, name: node.name.to_s, discriminator: nil
+      )]
+      if @method_resolver
+        symbol_ids.concat(
+          @method_resolver.resolve(receiver_type: receiver_type, name: node.name, context: { singleton: singleton })
+                          .sort_by(&:lookup_rank).map(&:symbol_id)
+        )
+      end
+      evidence = symbol_ids.uniq.filter_map { |symbol_id| @observation_store.evidence_for(symbol_id) }.first
+      return nil if evidence.nil? || evidence.return_type == Types::UNKNOWN
+
+      evidence.return_type
+    end
+
+    def type_parameter_names(type)
+      case type
+      when Types::TypeParameter then [type.name]
+      when Types::Generic then type_parameter_names(type.type_arg)
+      when Types::Union then type.members.flat_map { |member| type_parameter_names(member) }
+      when Types::ProcType
+        type.parameters.flat_map { |parameter| type_parameter_names(parameter) } + type_parameter_names(type.return_type)
+      else []
+      end.uniq
     end
 
     # `user.company.orders` where `company` is `Company | nil`: resolves
@@ -755,5 +898,103 @@ module Ovallsp
       end
     end
     private_constant :RenderTargetFinder
+
+    # Extracts receiver-less before_action declarations directly from the
+    # requested class body. This intentionally does not descend into
+    # method bodies or nested namespaces, where a same-named call is not a
+    # Rails controller callback declaration.
+    class BeforeActionFinder < Prism::Visitor
+      attr_reader :operations
+
+      def initialize(owner_name, action_name)
+        super()
+        @owner_name = owner_name
+        @action_name = action_name
+        @owner_stack = []
+        @operations = []
+      end
+
+      def visit_module_node(node) = visit_namespace(node)
+      def visit_class_node(node) = visit_namespace(node)
+
+      private
+
+      def visit_namespace(node)
+        @owner_stack.push(qualify(node.constant_path.full_name))
+        if @owner_stack.last == @owner_name
+          node.body&.body&.each { |statement| record(statement) }
+        else
+          node.each_child_node { |child| child.accept(self) }
+        end
+      ensure
+        @owner_stack.pop
+      end
+
+      def qualify(local_path)
+        return local_path if local_path.start_with?("::")
+
+        @owner_stack.last ? "#{@owner_stack.last}::#{local_path}" : "::#{local_path}"
+      end
+
+      def record(node)
+        return unless node.is_a?(Prism::CallNode) && node.receiver.nil?
+        return unless %i[before_action skip_before_action].include?(node.name)
+
+        arguments = node.arguments&.arguments || []
+        options = arguments.last.is_a?(Prism::KeywordHashNode) ? arguments.pop : nil
+        return unless selector_applies?(options)
+
+        names = arguments.filter_map { |argument| literal_name(argument) }
+        # A dynamic callback name makes the declaration only partially
+        # understood. Ignore the declaration rather than silently applying
+        # just the literal subset with misleading certainty.
+        return unless names.length == arguments.length
+
+        if node.name == :skip_before_action
+          names.each { |name| @operations << [:skip, name] }
+        else
+          names.each { |name| @operations << [:add, name] }
+        end
+      end
+
+      def selector_applies?(options)
+        return true unless options
+
+        selectors = {}
+        options.elements.each do |element|
+          return false unless element.is_a?(Prism::AssocNode)
+
+          key = literal_name(element.key)
+          # Conditions cannot be evaluated statically. Treat the whole
+          # declaration as unresolved instead of applying a callback that
+          # may be disabled at runtime.
+          return false unless %w[only except].include?(key)
+
+          values = literal_names(element.value)
+          return false unless values
+
+          selectors[key] = values
+        end
+
+        return false if selectors["only"] && !selectors["only"].include?(@action_name)
+        return false if selectors["except"]&.include?(@action_name)
+
+        true
+      end
+
+      def literal_names(node)
+        elements = node.is_a?(Prism::ArrayNode) ? node.elements : [node]
+        names = elements.filter_map { |element| literal_name(element) }
+        names.length == elements.length ? names : nil
+      end
+
+      def literal_name(node)
+        case node
+        when Prism::SymbolNode then node.value.to_s
+        when Prism::StringNode then node.unescaped
+        end
+      end
+    end
+    private_constant :BeforeActionFinder
   end
 end

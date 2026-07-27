@@ -301,6 +301,20 @@ RSpec.describe Ovallsp::Semantic::MethodAnalyzer do
       expect(summary.return_type.to_s).to eq("Relation[Widget]")
     end
 
+    it "restores an earlier generated fact when a reopening file is removed" do
+      first = index_generated_source(
+        "class Widget\n  scope :active, -> { where(active: true) }\nend\n", uri: "file:///first.rb"
+      )
+      first_fact = first.generated_method_facts.first
+      index_generated_source(
+        "class Widget\n  scope :active, -> { where(visible: true) }\nend\n", uri: "file:///second.rb"
+      )
+
+      generated_method_index.remove_file("file:///second.rb")
+
+      expect(generated_method_index.fact_for(method_symbol("::Widget", "active", singleton: true))).to eq(first_fact)
+    end
+
     it "resolves a delegate's return type by chasing its target association's column" do
       model_registry.register_from_agent_response(
         "Widget",

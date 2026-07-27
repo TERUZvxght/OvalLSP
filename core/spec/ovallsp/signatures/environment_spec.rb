@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "tmpdir"
+require "fileutils"
+
 RSpec.describe Ovallsp::Signatures::Environment do
   subject(:environment) { described_class.new }
 
@@ -91,6 +94,26 @@ RSpec.describe Ovallsp::Signatures::Environment do
       environment.load(workspace_root: File.join(fixtures_root, "project_workspace"))
 
       expect(environment.method_signatures(sym("::String", "upcase"))).not_to be_nil
+    end
+  end
+
+  describe "project RBI" do
+    it "loads a minimal Sorbet RBI and exposes it through the shared environment" do
+      Dir.mktmpdir do |root|
+        rbi_dir = File.join(root, "sorbet", "rbi")
+        FileUtils.mkdir_p(rbi_dir)
+        File.write(
+          File.join(rbi_dir, "widget.rbi"),
+          "class Widget\n  sig { returns(String) }\n  def label; end\nend\n"
+        )
+
+        environment.load(workspace_root: root)
+        sm = environment.method_signatures(sym("::Widget", "label"))
+
+        expect(sm.source_kind).to eq(:rbi)
+        expect(sm.overloads.first.return_type.to_s).to eq("String")
+        expect(environment.member_names("::Widget", prefix: "lab")).to include("label")
+      end
     end
   end
 

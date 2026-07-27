@@ -83,6 +83,24 @@ RSpec.describe "Ovallsp::Server environment status (Task 020)" do
     expect(sent_messages.find { |m| m[:id] == 2 }[:result]).to eq(acknowledged: true)
   end
 
+  it "cancels a scheduled automatic retry when a manual restart is requested" do
+    server = build_server("")
+    server.instance_variable_set(
+      :@agent_supervisor,
+      Ovallsp::AgentSupervisor.new(max_attempts: 2, base_delay_seconds: 0.05, max_delay_seconds: 0.05)
+    )
+    restart_count = 0
+    server.define_singleton_method(:restart_agent) { restart_count += 1 }
+
+    server.send(:handle_agent_unavailable, "test crash")
+    server.send(:restart_agent_result, nil)
+    sleep 0.1
+
+    expect(restart_count).to eq(1)
+  ensure
+    server&.instance_variable_get(:@background_tasks)&.shutdown
+  end
+
   it "acknowledges ovallsp/reindexWorkspace" do
     input =
       frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +

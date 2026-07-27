@@ -58,6 +58,7 @@ module Ovallsp
       @reader = Ovallsp::IO::FramedReader.new(input)
       @writer = Ovallsp::IO::FramedWriter.new(output)
       @logger = logger
+      @workspace_root = workspace_root
       @document_store = DocumentStore.new
       @parser_service = ParserService.new
       @workspace_index = WorkspaceIndex.new
@@ -65,6 +66,8 @@ module Ovallsp
       @method_resolver = Semantic::MethodResolver.new(workspace_index: @workspace_index, hierarchy_index: @hierarchy_index)
       @method_summary_store = Semantic::MethodSummaryStore.new
       @generated_method_index = Semantic::GeneratedMethodIndex.new
+      @signatures = load_signatures_environment
+      @observation_store = Observation::Store.new
       @method_analyzer = Semantic::MethodAnalyzer.new(
         workspace_index: @workspace_index, method_resolver: @method_resolver, summary_store: @method_summary_store,
         model_registry: model_registry, generated_method_index: @generated_method_index
@@ -76,22 +79,25 @@ module Ovallsp
       # in as part of Task 013 after an independent review found Task 010
       # had shipped as a fully isolated, never-called engine).
       @local_inferencer = LocalInferencer.new(
-        model_registry: model_registry, method_resolver: @method_resolver, method_analyzer: @method_analyzer
+        model_registry: model_registry, method_resolver: @method_resolver, method_analyzer: @method_analyzer,
+        signatures: @signatures, observation_store: @observation_store
       )
       @route_registry = route_registry
       @model_registry = model_registry
-      @workspace_root = workspace_root
       @agent_bootstrap = agent_bootstrap
       @agent_manager = nil
       @agent_restart_mutex = Mutex.new
       @file_summaries = {}
       @shutdown_received = false
-      @signatures = load_signatures_environment
       @query_service = Semantic::QueryService.new(
         local_inferencer: @local_inferencer, method_resolver: @method_resolver, model_registry: @model_registry,
         signatures: @signatures, workspace_index: @workspace_index
       )
       @reference_index = Semantic::ReferenceIndex.new
+      @reference_state_mutex = Mutex.new
+      @reference_rebuild_mutex = Mutex.new
+      @reference_dirty_token = 0
+      @reference_built_token = -1
       @reference_resolver = Semantic::ReferenceResolver.new(
         workspace_index: @workspace_index, method_resolver: @method_resolver, local_inferencer: @local_inferencer,
         model_registry: @model_registry, route_registry: @route_registry
@@ -100,11 +106,12 @@ module Ovallsp
       @diagnostics_mode = :safe
       @rename_planner = Rename::Planner.new(workspace_index: @workspace_index, reference_index: @reference_index)
       @plugin_loader = Plugins::Loader.new(logger: @logger)
-      @observation_store = Observation::Store.new
       @observation_runner = Observation::Runner.new(logger: @logger)
       @observation_test_command = nil
       @cold_indexing = false
       @agent_supervisor = AgentSupervisor.new
+      @agent_retry_mutex = Mutex.new
+      @agent_retry_generation = 0
       @background_tasks = BackgroundTasks.new(shutdown_timeout: background_task_shutdown_timeout)
     end
 
@@ -317,6 +324,7 @@ module Ovallsp
       @reference_index.remove_file(uri)
       @generated_method_index.remove_file(uri)
       invalidate_method_summaries(previous_declarations)
+      mark_reference_index_dirty
       clear_diagnostics(uri)
 
       path = UriUtil.to_path(uri)
@@ -330,8 +338,8 @@ module Ovallsp
       if @workspace_index.replace_file(summary)
         @hierarchy_index.replace_file(summary)
         invalidate_method_summaries(previous_declarations)
-        index_references(document.uri, document, summary)
         @generated_method_index.replace_file(uri: document.uri, facts: summary.generated_method_facts)
+        mark_reference_index_dirty
         invalidate_stale_observations
         publish_diagnostics(document)
       end
@@ -416,6 +424,7 @@ module Ovallsp
       # "manual restart" is its own capability (Task 022), not gated by
       # the automatic backoff's own crash-loop cap.
       @agent_supervisor.reset
+      cancel_scheduled_agent_retries
       restart_agent
       { acknowledged: true }
     end
@@ -651,6 +660,46 @@ module Ovallsp
       @logger.error("failed to resolve references for #{uri}: #{e.class}: #{e.message}")
     end
 
+    def mark_reference_index_dirty
+      @reference_state_mutex.synchronize { @reference_dirty_token += 1 }
+    end
+
+    # Reference resolution is workspace-wide, but rebuilding on every
+    # keystroke makes ordinary editing O(workspace). Defer it until Find
+    # References/Rename needs it. Resolution happens outside the short
+    # state lock; a token compare prevents a concurrent Cold Index or
+    # didChange from installing an older snapshot after a newer one.
+    def ensure_reference_index_current
+      @reference_rebuild_mutex.synchronize do
+        loop do
+          token, current = @reference_state_mutex.synchronize do
+            [@reference_dirty_token, @reference_built_token == @reference_dirty_token]
+          end
+          break if current
+
+          resolved_by_uri = @file_summaries.dup.each_with_object({}) do |(uri, summary), resolved|
+            document = @document_store.fetch(uri: uri) || load_document_from_disk(uri)
+            next unless document
+
+            resolved[uri] = @reference_resolver.resolve(
+              document, summary.reference_candidates, uri: uri, generation: @reference_index.generation
+            )
+          rescue StandardError => e
+            @logger.error("failed to resolve references for #{uri}: #{e.class}: #{e.message}")
+          end
+
+          installed = @reference_state_mutex.synchronize do
+            next false unless @reference_dirty_token == token
+
+            resolved_by_uri.each { |uri, references| @reference_index.replace_file(uri: uri, references: references) }
+            @reference_built_token = token
+            true
+          end
+          break if installed
+        end
+      end
+    end
+
     # MethodSummaryStore's cache (Task 010, wired into resolution by Task
     # 013) is keyed by SymbolId, not by file, so it needs its own
     # invalidation trigger independent of WorkspaceIndex/HierarchyIndex —
@@ -692,6 +741,8 @@ module Ovallsp
     # source executes none of it, unlike booting the workspace's own Rails
     # app does.
     def start_cold_index
+      return if @cold_indexing
+
       root = @workspace_root
       parser_service = @parser_service
       workspace_index = @workspace_index
@@ -704,12 +755,20 @@ module Ovallsp
       @background_tasks.track_thread(Thread.new do
         ColdIndexer.new(root: root, parser_service: parser_service, workspace_index: workspace_index,
                         hierarchy_index: hierarchy_index, document_store: document_store, logger: logger,
-                        cache_store: cache_store).run
+                        cache_store: cache_store, on_indexed: method(:apply_cold_summary),
+                        on_complete: method(:mark_reference_index_dirty)).run
       rescue StandardError => e
         logger.error("cold index failed: #{e.class}: #{e.message}")
       ensure
         @cold_indexing = false
       end)
+    end
+
+    def apply_cold_summary(uri, _document, summary, previous_declarations)
+      @file_summaries[uri] = summary
+      invalidate_method_summaries(previous_declarations)
+      @generated_method_index.replace_file(uri: uri, facts: summary.generated_method_facts)
+      mark_reference_index_dirty
     end
 
     # Task 021: one persistent, on-disk FileSummary cache per distinct
@@ -745,13 +804,14 @@ module Ovallsp
     # itself (its own #generation is a load-order counter, not stable
     # across process restarts, so it can't be used as a cache-key
     # component) -- approximated from the mtime+size of every file that
-    # could actually change what gets loaded (`sig/**/*.rbs`,
-    # `rbs_collection.lock.yaml`), cheap enough to compute on every
+    # could actually change what gets loaded (`sig/**/*.rbs` and project
+    # RBI files), cheap enough to compute on every
     # startup without itself becoming a performance problem.
     def rbs_digest
-      candidates = Dir.glob(File.join(@workspace_root, "sig", "**", "*.rbs")).sort
-      lockfile = File.join(@workspace_root, "rbs_collection.lock.yaml")
-      candidates << lockfile if File.file?(lockfile)
+      candidates = [
+        File.join(@workspace_root, "sig", "**", "*.{rbs,rbi}"),
+        File.join(@workspace_root, "sorbet", "rbi", "**", "*.rbi")
+      ].flat_map { |pattern| Dir.glob(pattern) }.uniq.sort
       return nil if candidates.empty?
 
       fingerprint = candidates.map { |f| "#{f}:#{File.mtime(f).to_i}:#{File.size(f)}" }.join("|")
@@ -845,7 +905,10 @@ module Ovallsp
           # #shutdown_background_tasks (found by an independent review).
           @agent_manager = background_tasks.track_manager(coerce_agent_manager(manager))
         end
-        @agent_supervisor.record_success if agent_manager_ready?(@agent_manager)
+        if agent_manager_ready?(@agent_manager)
+          @agent_supervisor.record_success
+          cancel_scheduled_agent_retries
+        end
       rescue StandardError => e
         logger.error("Runtime Agent bootstrap failed: #{e.class}: #{e.message}")
       end
@@ -871,14 +934,27 @@ module Ovallsp
       end
 
       @logger.warn("runtime agent became unavailable (#{reason}); retrying in #{delay}s")
+      retry_generation = @agent_retry_mutex.synchronize do
+        @agent_retry_generation += 1
+      end
       # Tracked so shutdown can reclaim it -- it owns no subprocess of its
       # own (unlike the bootstrap/restart threads), so BackgroundTasks#shutdown
       # killing it outright once its bounded join expires is safe: no
       # scheduled restart ever fires after Server#run has already exited.
       @background_tasks.track_thread(Thread.new do
         sleep delay
-        restart_agent
+        next unless scheduled_agent_retry_current?(retry_generation)
+
+        restart_agent(retry_generation: retry_generation)
       end)
+    end
+
+    def cancel_scheduled_agent_retries
+      @agent_retry_mutex.synchronize { @agent_retry_generation += 1 }
+    end
+
+    def scheduled_agent_retry_current?(generation)
+      @agent_retry_mutex.synchronize { @agent_retry_generation == generation }
     end
 
     def workspace_trusted?(params)
@@ -966,8 +1042,70 @@ module Ovallsp
       return {} unless controller_document
 
       contributing_actions(controller_document, context[:owner], context[:action]).reduce({}) do |env, action_name|
-        env.merge(@local_inferencer.infer_ivars_for_method(controller_document, owner_name: context[:owner],
-                                                                                 method_name: action_name))
+        merge_ivar_environments(
+          env,
+          infer_controller_action_ivars(context[:owner], action_name)
+        )
+      end
+    end
+
+    # Rails inherits callback declarations. Build the effective callback
+    # chain from the oldest controller superclass to the concrete
+    # controller, applying skip_before_action in declaration order. Each
+    # callback method itself follows normal Ruby lookup from child to
+    # parent, so an override is evaluated exactly once.
+    def infer_controller_action_ivars(owner_name, action_name)
+      documents = controller_ancestor_documents(owner_name)
+      operations = documents.reverse.flat_map do |ancestor_name, document|
+        @local_inferencer.before_action_operations(
+          document, owner_name: ancestor_name, action_name: action_name
+        )
+      end
+      callbacks = operations.each_with_object([]) do |(verb, name), names|
+        verb == :add ? names << name : names.delete(name)
+      end
+
+      env = callbacks.reduce({}) do |callback_env, callback_name|
+        declaration = documents.find do |ancestor_name, document|
+          @local_inferencer.method_declared?(
+            document, owner_name: ancestor_name, method_name: callback_name
+          )
+        end
+        next callback_env unless declaration
+
+        ancestor_name, document = declaration
+        @local_inferencer.infer_ivars_for_method(
+          document, owner_name: ancestor_name, method_name: callback_name, initial_env: callback_env
+        )
+      end
+
+      concrete_document = documents.find { |ancestor_name, _document| ancestor_name == owner_name }&.last
+      return env unless concrete_document
+
+      @local_inferencer.infer_ivars_for_method(
+        concrete_document, owner_name: owner_name, method_name: action_name, initial_env: env
+      )
+    end
+
+    def controller_ancestor_documents(owner_name)
+      ancestors = @hierarchy_index.ancestors(owner_name).select do |entry|
+        entry.kind == :class && %i[self superclass].include?(entry.origin)
+      end
+      names = ([owner_name] + ancestors.map(&:name)).uniq
+      names.filter_map do |name|
+        uri = find_controller_uri(name)
+        document = uri && (@document_store.fetch(uri: uri) || load_document_from_disk(uri))
+        [name, document] if document
+      end
+    end
+
+    # Multiple controller actions can render the same view. They are
+    # alternative runtime paths, so conflicting ivar types must be
+    # unioned rather than whichever declaration happened to be visited
+    # last overwriting the others.
+    def merge_ivar_environments(left, right)
+      left.merge(right) do |_name, left_type, right_type|
+        Types.normalize_union([left_type, right_type])
       end
     end
 
@@ -1100,6 +1238,7 @@ module Ovallsp
       symbol_id = reference_symbol_id_at(document, summary, uri, position) || declaration_symbol_id_at(summary, position)
       return [] unless symbol_id
 
+      ensure_reference_index_current
       @reference_index.references(symbol_id, minimum_confidence: :high).map { |r| { uri: r.uri, range: r.location } }
     end
 
@@ -1163,6 +1302,7 @@ module Ovallsp
       symbol_id, = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
       return nil unless symbol_id
 
+      ensure_reference_index_current
       plan = @rename_planner.plan(symbol_id, new_name: params.fetch(:newName), generation: @workspace_index.generation)
       if plan.confirmed_edits.empty?
         @logger.warn("rename refused for #{symbol_id.inspect}: #{plan.warnings.join('; ')}") unless plan.warnings.empty?
@@ -1379,10 +1519,13 @@ module Ovallsp
       needs_routes_refresh = false
       needs_restart = false
       needs_full_models_refresh = false
+      needs_signature_reload = false
 
       params.fetch(:changes, []).each do |change|
         uri = change.fetch(:uri)
-        if change.fetch(:type) == FILE_CHANGE_DELETED
+        if signature_file?(uri)
+          needs_signature_reload = true
+        elsif change.fetch(:type) == FILE_CHANGE_DELETED
           previous_declarations = @workspace_index.declarations_for_uri(uri)
           @workspace_index.remove_file(uri)
           @hierarchy_index.remove_file(uri)
@@ -1390,6 +1533,7 @@ module Ovallsp
           @generated_method_index.remove_file(uri)
           invalidate_method_summaries(previous_declarations)
           @file_summaries.delete(uri)
+          mark_reference_index_dirty
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
           # reindex from disk for files nobody currently has open.
@@ -1404,6 +1548,11 @@ module Ovallsp
           model_name = model_name_for(uri)
           changed_models << model_name if model_name
         end
+      end
+
+      if needs_signature_reload
+        @signatures.load(workspace_root: @workspace_root)
+        @method_summary_store.clear
       end
 
       # Deduplicated across the whole batch — a git checkout or branch
@@ -1428,6 +1577,11 @@ module Ovallsp
     end
 
     SCHEMA_FILE_PATTERNS = [%r{db/schema\.rb\z}, %r{db/structure\.sql\z}, %r{db/migrate/}].freeze
+
+    def signature_file?(uri)
+      path = UriUtil.to_path(uri) || uri
+      path.end_with?(".rbs", ".rbi")
+    end
 
     def classify_rails_change(uri)
       path = UriUtil.to_path(uri) || uri
@@ -1464,8 +1618,8 @@ module Ovallsp
         @hierarchy_index.replace_file(summary)
         @file_summaries[uri] = summary
         invalidate_method_summaries(previous_declarations)
-        index_references(uri, document, summary)
         @generated_method_index.replace_file(uri: uri, facts: summary.generated_method_facts)
+        mark_reference_index_dirty
       end
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
@@ -1570,11 +1724,13 @@ module Ovallsp
     def refresh_models(names)
       agent_manager = @agent_manager
       model_registry = @model_registry
+      method_summary_store = @method_summary_store
       logger = @logger
       mutex = @agent_restart_mutex
 
       @background_tasks.track_thread(Thread.new do
         agent_manager.reload(sections: ["models"])
+        updated = false
 
         names.each do |name|
           response = agent_manager.fetch_model(name: name)
@@ -1588,8 +1744,10 @@ module Ovallsp
             else
               model_registry.register_from_agent_response(name, response)
             end
+            updated = true
           end
         end
+        method_summary_store.clear if updated
       rescue StandardError => e
         logger.error("failed to refresh models #{names.to_a.join(', ')}: #{e.class}: #{e.message}")
       end)
@@ -1609,6 +1767,7 @@ module Ovallsp
     def refresh_all_models
       agent_manager = @agent_manager
       model_registry = @model_registry
+      method_summary_store = @method_summary_store
       logger = @logger
       mutex = @agent_restart_mutex
 
@@ -1626,6 +1785,7 @@ module Ovallsp
 
           responses_by_name = models.filter_map { |entry| entry[:name] && [entry[:name], entry] }.to_h
           model_registry.replace(responses_by_name)
+          method_summary_store.clear
         end
       rescue StandardError => e
         logger.error("failed to refresh models after a schema change: #{e.class}: #{e.message}")
@@ -1650,7 +1810,7 @@ module Ovallsp
     # (not capturing it beforehand) means a second, serialized restart
     # correctly stops the process the first restart just started, instead
     # of a stale reference to the one from before either ran.
-    def restart_agent
+    def restart_agent(retry_generation: nil)
       bootstrap = @agent_bootstrap
       root = @workspace_root
       route_registry = @route_registry
@@ -1661,6 +1821,8 @@ module Ovallsp
 
       thread = Thread.new do
         mutex.synchronize do
+          next if retry_generation && !scheduled_agent_retry_current?(retry_generation)
+
           @agent_manager&.stop
           manager = bootstrap.start(
             root: root, logger: logger, route_registry: route_registry, model_registry: model_registry,
@@ -1675,7 +1837,10 @@ module Ovallsp
           )
           @agent_manager = background_tasks.track_manager(coerce_agent_manager(manager))
         end
-        @agent_supervisor.record_success if agent_manager_ready?(@agent_manager)
+        if agent_manager_ready?(@agent_manager)
+          @agent_supervisor.record_success
+          cancel_scheduled_agent_retries
+        end
       rescue StandardError => e
         logger.error("failed to restart runtime agent: #{e.class}: #{e.message}")
       end

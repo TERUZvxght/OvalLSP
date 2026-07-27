@@ -80,6 +80,33 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       expect(name.conditional).to be(false)
       expect(members.index(name)).to be < members.index(superpowers)
     end
+
+    it "marks Active Record and RBS members conditional when only one Union member has them" do
+      model_registry.register_from_agent_response(
+        "User",
+        { tableName: "users", partial: false, columns: [{ name: "email", type: "string", nullable: false }],
+          associations: [] }
+      )
+
+      union = Ovallsp::Types.normalize_union([nominal("User"), nominal("String")])
+      members = service.members_of(union, prefix: "")
+
+      expect(members.find { |member| member.name == "email" }.conditional).to be(true)
+      expect(members.find { |member| member.name == "upcase" }.conditional).to be(true)
+    end
+
+    it "treats a same-named member from different origins as available across the Union" do
+      model_registry.register_from_agent_response(
+        "User",
+        { tableName: "users", partial: false, columns: [{ name: "hash", type: "integer", nullable: false }],
+          associations: [] }
+      )
+
+      union = Ovallsp::Types.normalize_union([nominal("User"), nominal("String")])
+      member = service.members_of(union, prefix: "hash").find { |candidate| candidate.name == "hash" }
+
+      expect(member.conditional).to be(false)
+    end
   end
 
   describe "#definitions_of" do

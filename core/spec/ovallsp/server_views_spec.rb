@@ -77,6 +77,107 @@ RSpec.describe "Ovallsp::Server controller-to-view instance variable propagation
     expect(sent_messages.first[:result]).to eq(type: "Integer")
   end
 
+  it "propagates ivars assigned by a before_action into the corresponding view" do
+    input =
+      open("file:///app/controllers/users_controller.rb", <<~RUBY) +
+        class UsersController
+          before_action :load_user, only: :show
+
+          def load_user
+            @user = User.find(params[:id])
+          end
+
+          def show
+          end
+        end
+      RUBY
+      open("file:///app/views/users/show.html.erb", "<%= @user %>\n", language_id: "erb") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "ovallsp/explainType",
+        params: { textDocument: { uri: "file:///app/views/users/show.html.erb" }, position: { line: 0, character: 4 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.first[:result]).to eq(type: "User")
+  end
+
+  it "propagates inherited before_actions and honors a child skip_before_action" do
+    inherited_input =
+      open("file:///app/controllers/application_controller.rb", <<~RUBY) +
+        class ApplicationController
+          before_action :load_user
+          def load_user = @user = User.new
+        end
+      RUBY
+      open("file:///app/controllers/users_controller.rb", <<~RUBY) +
+        class UsersController < ApplicationController
+          def show; end
+        end
+      RUBY
+      open("file:///app/views/users/show.html.erb", "<%= @user %>\n", language_id: "erb") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "ovallsp/explainType",
+        params: { textDocument: { uri: "file:///app/views/users/show.html.erb" }, position: { line: 0, character: 4 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(inherited_input).run
+    expect(sent_messages.first[:result]).to eq(type: "User")
+
+    output.truncate(0)
+    output.rewind
+    skipped_input =
+      open("file:///app/controllers/application_controller.rb", <<~RUBY) +
+        class ApplicationController
+          before_action :load_user
+          def load_user = @user = User.new
+        end
+      RUBY
+      open("file:///app/controllers/users_controller.rb", <<~RUBY) +
+        class UsersController < ApplicationController
+          skip_before_action :load_user, only: :show
+          def show; end
+        end
+      RUBY
+      open("file:///app/views/users/show.html.erb", "<%= @user %>\n", language_id: "erb") +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "ovallsp/explainType",
+        params: { textDocument: { uri: "file:///app/views/users/show.html.erb" }, position: { line: 0, character: 4 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(skipped_input).run
+    expect(sent_messages.first[:result]).to eq(type: "Unknown")
+  end
+
+  it "unions conflicting ivar types from alternative actions that render the same view" do
+    input =
+      open("file:///app/controllers/posts_controller.rb", <<~RUBY) +
+        class PostsController
+          def edit
+            @record = User.new
+          end
+
+          def update
+            @record = Admin.new
+            render :edit
+          end
+        end
+      RUBY
+      open("file:///app/views/posts/edit.html.erb", "<%= @record %>\n", language_id: "erb") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "ovallsp/explainType",
+        params: { textDocument: { uri: "file:///app/views/posts/edit.html.erb" }, position: { line: 0, character: 4 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.first[:result][:type].split(" | ")).to contain_exactly("User", "Admin")
+  end
+
   it "reflects an edited controller action immediately (no stale view context)" do
     controller_uri = "file:///app/controllers/users_controller.rb"
     view_uri = "file:///app/views/users/show.html.erb"

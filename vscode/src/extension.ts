@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import {
   LanguageClient,
@@ -17,7 +18,8 @@ import {
   compareVersionInfo,
   gatherClientVersionInfo
 } from './versionInfo';
-import { ClientLifecycleManager } from './clientLifecycle';
+import { ClientLifecycleManager, KeyedTransitionQueue } from './clientLifecycle';
+import { SpawnedCoreProcess } from './coreProcess';
 
 const clients = new Map<string, LanguageClient>();
 const watchers = new Map<string, vscode.FileSystemWatcher>();
@@ -35,6 +37,11 @@ const rubyResolutions = new Map<string, RubyResolution>();
 // `ovallspInfo` -- kept purely so `OvalLSP: Show Version Information`
 // can display it without re-running the comparison.
 const versionDiagnostics = new Map<string, VersionDiagnostic>();
+// Every folder's stop->start replacement is serialized through this
+// chain. Without it, two Restart Server commands can interleave so the
+// first command overwrites the second command's already-running client,
+// leaving that process unreachable from `clients`.
+const clientTransitions = new KeyedTransitionQueue();
 
 // Task 020's priority order: an explicit path setting always wins outright
 // (never even runs the version-manager search); everything below that is
@@ -104,11 +111,6 @@ function startClientForFolder(
     options: { cwd: folder.uri.fsPath }
   };
 
-  const serverOptions: ServerOptions = {
-    run: execTarget,
-    debug: execTarget
-  };
-
   // Forwarded to the server as workspace/didChangeWatchedFiles so files
   // edited or removed outside the open buffers (git checkout, another
   // editor, rm) still update the workspace index — and, for Gemfile.lock
@@ -163,10 +165,19 @@ function startClientForFolder(
     }
   };
 
-  const client = new LanguageClient('ovallsp', `OvalLSP (${folder.name})`, serverOptions, clientOptions);
-
   const key = folder.uri.toString();
   const generation = lifecycle.beginStart(key);
+  const serverOptions: ServerOptions = () => {
+    const child = spawn(execTarget.command, execTarget.args, {
+      ...execTarget.options,
+      detached: process.platform !== 'win32',
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    lifecycle.registerProcess(key, generation, new SpawnedCoreProcess(child));
+    return Promise.resolve({ process: child, detached: process.platform !== 'win32' });
+  };
+
+  const client = new LanguageClient('ovallsp', `OvalLSP (${folder.name})`, serverOptions, clientOptions);
 
   // ADR-0005: checked *before* Core is actually spawned, not after --
   // `core/bin/ovallsp` itself already refuses to load an incompatible
@@ -256,11 +267,25 @@ function startClientForFolder(
           outputChannel.appendLine(
             `OvalLSP: Core Server for ${folder.name} finished starting after a stop was requested -- stopping it immediately.`
           );
-          void client.stop().then(() => lifecycle.markStopped(key, generation));
+          void client.stop()
+            .catch(() => undefined)
+            .then(() => lifecycle.terminateProcess(key, generation))
+            .then(() => lifecycle.markStopped(key, generation));
           return;
         }
         runVersionHandshake(folder, client, context, classification, outputChannel);
-      }, (err) => outputChannel.appendLine(`failed to start Core Server: ${err}`));
+      }, (err) => {
+        void lifecycle.terminateProcess(key, generation).then(() => {
+          lifecycle.markStopped(key, generation);
+          if (lifecycle.isCurrentGeneration(key, generation) && clients.get(key) === client) {
+            clients.delete(key);
+            watchers.get(key)?.dispose();
+            watchers.delete(key);
+            versionDiagnostics.delete(key);
+          }
+        });
+        outputChannel.appendLine(`failed to start Core Server: ${err}`);
+      });
     }
   );
 
@@ -449,9 +474,7 @@ function registerEnvironmentCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand('ovallsp.restartServer', async () => {
       for (const folder of vscode.workspace.workspaceFolders ?? []) {
-        const key = folder.uri.toString();
-        await stopClient(key);
-        clients.set(key, startClientForFolder(folder, outputChannel, context));
+        await restartClientForFolder(folder, outputChannel, context);
       }
       void vscode.window.showInformationMessage('OvalLSP: Core Server restarted.');
     })
@@ -557,14 +580,7 @@ function registerEnvironmentCommands(
 }
 
 function stopClient(key: string): Thenable<void> {
-  // Marked *before* anything else, in particular before the `await
-  // client.stop()` below -- so a compatibility probe or an in-flight
-  // `client.start()` for this exact generation (still running
-  // concurrently in `startClientForFolder`'s own promise chain) observes
-  // the stop on its very next check, no matter how long this function's
-  // own async work still takes (Task 023.3).
   const generation = lifecycle.getGeneration(key);
-  lifecycle.requestStop(key);
 
   watchers.get(key)?.dispose();
   watchers.delete(key);
@@ -572,21 +588,38 @@ function stopClient(key: string): Thenable<void> {
 
   const client = clients.get(key);
   if (!client) {
+    lifecycle.requestStop(key);
     return Promise.resolve();
   }
   clients.delete(key);
 
-  // `stopIfRunning` is what actually protects against
-  // vscode-languageclient's `client.stop()` throwing synchronously
-  // whenever its internal state isn't exactly `Running` (in particular
-  // while `client.start()` is still in flight) -- see its own docs in
-  // clientLifecycle.ts, and Task 023.3's follow-up notes for the bug this
-  // closes (found by independent review: `restartServer`'s own `await
-  // stopClient(key)` was silently broken by this).
-  return lifecycle.stopIfRunning(key, () => client.stop()).then((didStop) => {
-    if (didStop && generation !== undefined) {
-      lifecycle.markStopped(key, generation);
-    }
+  // Recording the stop intent and deciding whether `client.stop()` is
+  // currently safe are one atomic lifecycle operation. Splitting them
+  // previously changed `running` to `stopping` before testing for
+  // `running`, so a normal restart never stopped its old Core process.
+  return lifecycle.requestStopAndStopIfRunning(key, () => client.stop())
+    .catch(() => false)
+    .then(async () => {
+      if (generation !== undefined) {
+        await lifecycle.terminateProcess(key, generation);
+        lifecycle.markStopped(key, generation);
+      }
+    });
+}
+
+function queueClientTransition(key: string, transition: () => Promise<void>): Promise<void> {
+  return clientTransitions.enqueue(key, transition);
+}
+
+function restartClientForFolder(
+  folder: vscode.WorkspaceFolder,
+  outputChannel: vscode.OutputChannel,
+  context: vscode.ExtensionContext
+): Promise<void> {
+  const key = folder.uri.toString();
+  return queueClientTransition(key, async () => {
+    await stopClient(key);
+    clients.set(key, startClientForFolder(folder, outputChannel, context));
   });
 }
 
@@ -622,10 +655,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
       for (const folder of vscode.workspace.workspaceFolders ?? []) {
-        const key = folder.uri.toString();
-        void stopClient(key).then(() => {
-          clients.set(key, startClientForFolder(folder, outputChannel, context));
-        });
+        void restartClientForFolder(folder, outputChannel, context);
       }
     })
   );
@@ -639,7 +669,8 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       }
       for (const folder of event.removed) {
-        void stopClient(folder.uri.toString());
+        const key = folder.uri.toString();
+        void queueClientTransition(key, () => Promise.resolve(stopClient(key)));
       }
     })
   );
@@ -654,5 +685,10 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export async function deactivate(): Promise<void> {
-  await Promise.all(Array.from(clients.keys()).map((key) => stopClient(key)));
+  const keys = new Set([...clients.keys(), ...clientTransitions.keys()]);
+  await Promise.all(
+    Array.from(keys).map((key) =>
+      queueClientTransition(key, () => Promise.resolve(stopClient(key)))
+    )
+  );
 }
