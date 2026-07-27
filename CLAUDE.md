@@ -19,3 +19,9 @@ This was established after Task 008.5 shipped without this gate and failed a lat
 - When a review finding implies "the architecture allows this class of bug," fix the architecture, not just the reported instance.
 - Every fix needs a regression test that fails without the fix (verify via git-stash-revert) — this project's established discipline throughout Tasks 001–008.6.
 - When you discover a bug, flaky test, or other fixable issue while working on something else in this repo, fix it in place, in the same session, immediately — do not spawn it off as a separate/background/recommended task. Established after a flaky mtime race in `core/spec/ovallsp/cache/store_spec.rb` was found mid-session during Task 022.2's verification loop and initially deferred via a spawned task instead of being fixed directly; the user explicitly redirected that this must not happen going forward. This applies regardless of whether the issue is related to the task currently in progress.
+
+## Public repository privacy and secret handling
+
+- This repository is public. Never commit or push secrets, credentials, tokens, private keys, private URLs, personal information, or personal email addresses.
+- Treat Git author/committer metadata, generated artifacts, logs, fixtures, snapshots, and copied command output as possible disclosure paths, not only source files.
+- Use an established public noreply address for commit metadata. Before every push, inspect the complete outgoing diff and commit range and run the repository's secret scan; stop rather than push if any sensitive or personal data may be present.
