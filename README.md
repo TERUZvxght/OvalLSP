@@ -1,5 +1,11 @@
 # OvalLSP — Ruby Semantic LSP
 
+> **開発途中のプロジェクトです。** 現在、開発者自身が調査・修正作業を
+> 継続的に行っている段階のため、**外部からのissue提案・Pull Requestは
+> 現在受け付けていません**。PRチェックが後回しになり、開発者側で
+> 進行中の修正と内容が重複してしまう可能性があるためです。詳細は
+> [CONTRIBUTING.md](CONTRIBUTING.md)を参照してください。
+
 Ruby/Rails向けセマンティック言語サーバーのmonorepo。設計の背景と全体方針は
 [`docs/design/README.md`](docs/design/README.md) と
 [`docs/design/START_HERE.md`](docs/design/START_HERE.md) を参照。

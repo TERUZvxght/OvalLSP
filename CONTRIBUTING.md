@@ -1,5 +1,17 @@
 # Contributing
 
+**This project is currently not accepting external issues or pull
+requests.** The developer is actively investigating and fixing things
+in this codebase right now, and reviewing external PRs would be
+deprioritized against that ongoing work — meaning a submitted PR could
+easily end up overlapping or conflicting with changes already in
+progress on the developer's own side, with no timely review to catch
+that. Issues are disabled on this repository for the same reason.
+
+This is expected to change once the codebase reaches a more stable
+point; this document will be updated when it does. In the meantime,
+feel free to fork and experiment locally.
+
 Thanks for your interest in OvalLSP. This project is in active Preview
 development; the notes below reflect how the repository actually works
 today.
