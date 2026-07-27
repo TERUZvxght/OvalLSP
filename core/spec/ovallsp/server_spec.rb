@@ -49,6 +49,31 @@ RSpec.describe Ovallsp::Server do
     expect(messages[2]).to include(id: 3, result: nil)
   end
 
+  it "reports ovallspInfo (Task 023.2's Extension/Core version handshake) alongside serverInfo on initialize" do
+    input =
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      frame(jsonrpc: "2.0", id: 2, method: "shutdown", params: nil) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    info = sent_messages[0][:result][:ovallspInfo]
+    expect(info[:coreVersion]).to eq(Ovallsp::VERSION)
+    expect(info[:protocol]).to eq(
+      current: Ovallsp::ProtocolVersion::CURRENT,
+      minimumClient: Ovallsp::ProtocolVersion::MINIMUM_CLIENT,
+      maximumClient: Ovallsp::ProtocolVersion::MAXIMUM_CLIENT,
+      minimumServer: Ovallsp::ProtocolVersion::MINIMUM_SERVER,
+      maximumServer: Ovallsp::ProtocolVersion::MAXIMUM_SERVER
+    )
+    expect(info[:ruby]).to eq(engine: RUBY_ENGINE, version: RUBY_VERSION, platform: RUBY_PLATFORM)
+    # No PLATFORM_MANIFEST.json in a dev checkout (this spec's own working
+    # directory is never a packaged VSIX) -- `build` must be nil, not a
+    # hash of missing/nil sub-fields, so a client can tell "no manifest at
+    # all" apart from "manifest present but incomplete".
+    expect(info[:build]).to be_nil
+  end
+
   it "answers textDocument/hover with the inferred type, plus origin/definition for a receiver-qualified call (Task 013)" do
     input =
       frame(

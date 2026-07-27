@@ -1701,6 +1701,40 @@ module Ovallsp
         serverInfo: {
           name: "ovallsp",
           version: Ovallsp::VERSION
+        },
+        ovallspInfo: ovallsp_info
+      }
+    end
+
+    # Task 023.2: everything the Extension's own version-compatibility
+    # handshake needs to judge whether this Core is safe to keep talking
+    # to, beyond the bare `serverInfo` LSP already has a slot for. Always
+    # reports protocol/coreVersion/ruby identity (true regardless of
+    # whether this is a packaged VSIX or a monorepo dev checkout); `build`
+    # is only ever non-nil for a packaged VSIX, since a dev checkout has no
+    # `PLATFORM_MANIFEST.json` to read it from (Ovallsp::BuildManifest
+    # returns nil the same way VendorCompatibility already treats that
+    # case -- "no information", not an error).
+    def ovallsp_info
+      manifest = Ovallsp::BuildManifest.load
+      {
+        coreVersion: Ovallsp::VERSION,
+        protocol: {
+          current: Ovallsp::ProtocolVersion::CURRENT,
+          minimumClient: Ovallsp::ProtocolVersion::MINIMUM_CLIENT,
+          maximumClient: Ovallsp::ProtocolVersion::MAXIMUM_CLIENT,
+          minimumServer: Ovallsp::ProtocolVersion::MINIMUM_SERVER,
+          maximumServer: Ovallsp::ProtocolVersion::MAXIMUM_SERVER
+        },
+        ruby: {
+          engine: RUBY_ENGINE,
+          version: RUBY_VERSION,
+          platform: RUBY_PLATFORM
+        },
+        build: manifest && {
+          commit: manifest["buildCommit"],
+          target: manifest["buildTarget"],
+          payloadSha256: manifest["payloadSha256"]
         }
       }
     end

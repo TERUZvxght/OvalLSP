@@ -80,7 +80,11 @@ def gem_rows
 end
 
 def npm_rows
-  lock = JSON.parse(File.read(File.join(ROOT, "vscode", "package-lock.json")))
+  # Explicit encoding, not the invoking shell's ambient locale -- see the
+  # same fix (and its rationale) in make-final-review-bundle.sh's
+  # assert_rspec_json_clean, found by actually running that script under
+  # a locale-less shell (Task 023.8).
+  lock = JSON.parse(File.read(File.join(ROOT, "vscode", "package-lock.json"), encoding: "UTF-8"))
 
   # `package.json`'s own top-level `dependencies` names only the *direct*
   # production dependency (vscode-languageclient) -- but that package's own

@@ -41,15 +41,28 @@ export interface RubyIdentity {
   platform: string;
 }
 
-export type RubyIdentityQuery = (rubyCommand: string) => Promise<RubyIdentity>;
+export type RubyIdentityQuery = (rubyCommand: string, cwd?: string) => Promise<RubyIdentity>;
 
-/** The real implementation; injectable so unit tests never spawn a process. */
-export function queryRubyIdentity(rubyCommand: string): Promise<RubyIdentity> {
+/**
+ * The real implementation; injectable so unit tests never spawn a
+ * process. `cwd` matters, not just as a nicety: rbenv/asdf/mise version-
+ * manager shims pick *which* installed Ruby version to actually run
+ * based on the current working directory's own `.ruby-version`/
+ * `.tool-versions` (absent an env var override) -- found by independent
+ * review (Task 023.8, a second re-review round) that omitting it here
+ * silently queries whatever Ruby the *extension host's own* ambient cwd
+ * happens to resolve to, not the workspace folder's pinned version.
+ * Reproduced directly: the same `~/.rbenv/shims/ruby` reports a
+ * genuinely different `RbConfig::CONFIG["bindir"]` depending solely on
+ * which directory it's invoked from, when different workspace folders
+ * pin different Ruby versions via their own `.ruby-version`.
+ */
+export function queryRubyIdentity(rubyCommand: string, cwd?: string): Promise<RubyIdentity> {
   return new Promise((resolve, reject) => {
     execFile(
       rubyCommand,
       ['-e', 'print [RUBY_ENGINE, RUBY_VERSION, RUBY_PLATFORM].join("|")'],
-      { timeout: 5000 },
+      { timeout: 5000, cwd },
       (err, stdout) => {
         if (err) {
           reject(err);
@@ -57,6 +70,89 @@ export function queryRubyIdentity(rubyCommand: string): Promise<RubyIdentity> {
         }
         const [engine, version, platform] = stdout.trim().split('|');
         resolve({ engine, version, platform });
+      }
+    );
+  });
+}
+
+export interface RubyConfigPaths {
+  /** `RbConfig::CONFIG["bindir"]` -- the directory containing the *real* ruby binary. */
+  bindir: string;
+  /** `RbConfig::CONFIG["libdir"]` -- the directory containing the real `libruby`. */
+  libdir: string;
+}
+
+/**
+ * Fixes a real, reproduced bug (Task 023.8, found by independent
+ * review): a vendored native extension (prism.bundle/rbs_extension.bundle,
+ * ADR-0004) records an absolute, non-relocatable `libruby` dependency
+ * path baked in at packaging time (standard rbenv/ruby-build
+ * `--enable-shared` behavior on macOS, confirmed via `otool -L`/`-l`: no
+ * `LC_RPATH` fallback), which fails to load under any *other* Ruby
+ * installation -- even one just as compatible by ADR-0005's own
+ * engine/version/platform check. Reproduced directly: a `prism.bundle`
+ * vendored under one Ruby 3.4.x raises `LoadError: linked to
+ * incompatible .../libruby.3.4.dylib` under a different Ruby 3.4.x
+ * install at a different absolute path.
+ *
+ * This went through two failed designs before landing here, both found
+ * by directly reproducing the fix rather than trusting it in the
+ * abstract:
+ *
+ * 1. Deriving `<prefix>/lib` from `rubyCommand`'s own path shape
+ *    (`<prefix>/bin/ruby`) -- wrong for mise/asdf/rbenv, whose
+ *    `rubyResolver.ts` strategies all resolve to a *shim* script (e.g.
+ *    `~/.rbenv/shims/ruby`), not a real per-version binary, so the
+ *    derived directory never actually contained `libruby` for exactly
+ *    the highest-priority, most common resolution paths.
+ * 2. Querying `RbConfig::CONFIG["libdir"]` from the resolved command
+ *    (correctly shim-agnostic) and setting `DYLD_LIBRARY_PATH` on the
+ *    spawned child's environment -- but still spawning the *shim*
+ *    itself as the command. Reproduced directly that this silently does
+ *    nothing: macOS strips `DYLD_*` environment variables for any
+ *    process launched through `/bin/bash` (confirmed directly -- even a
+ *    trivial `#!/bin/bash` script loses `DYLD_LIBRARY_PATH` before its
+ *    own body runs, let alone whatever it execs afterward), and rbenv's/
+ *    asdf's/mise's shims are themselves bash scripts that ultimately
+ *    `exec` the real interpreter through one or more further bash hops
+ *    (rbenv's shim execs `rbenv exec`, itself a bash script).
+ *    `DYLD_LIBRARY_PATH` set on the *shim's* spawn environment never
+ *    survives to reach the real `ruby` process at all.
+ *
+ * The fix that actually works, verified the same way: query
+ * `RbConfig::CONFIG["bindir"]` *alongside* `libdir` from the resolved
+ * (possibly-shim) command, then spawn `<bindir>/ruby` -- the real
+ * binary -- directly for the long-running Core Server process, bypassing
+ * the shim (and its bash hops) entirely, with `DYLD_LIBRARY_PATH` set to
+ * `libdir`. Since the real binary is what dyld loads directly (no
+ * intervening bash process to strip the environment), the env var is
+ * honored. The one-time shim invocation to ask this question is the
+ * only place the shim script itself still runs.
+ */
+// `cwd` must be the *workspace folder's* own directory, not omitted --
+// found by independent review (a second re-review round on this same
+// fix): rbenv/asdf/mise shims resolve which installed Ruby version to
+// actually run based on the current working directory's own
+// `.ruby-version`/`.tool-versions`, so querying without `cwd` silently
+// asks whatever Ruby the *extension host's own* ambient working
+// directory resolves to -- a different, wrong interpreter entirely (not
+// merely a DYLD/native-extension problem) whenever a workspace folder
+// pins a different Ruby version than that ambient default. Reproduced
+// directly: the same shim path returns a different `bindir`/`libdir`
+// pair depending solely on which directory it's invoked from.
+export function queryRubyConfigPaths(rubyCommand: string, cwd?: string): Promise<RubyConfigPaths> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      rubyCommand,
+      ['-e', 'print [RbConfig::CONFIG["bindir"], RbConfig::CONFIG["libdir"]].join("|")'],
+      { timeout: 5000, cwd },
+      (err, stdout) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        const [bindir, libdir] = stdout.trim().split('|');
+        resolve({ bindir, libdir });
       }
     );
   });
@@ -82,7 +178,8 @@ export function queryRubyIdentity(rubyCommand: string): Promise<RubyIdentity> {
 export async function checkBundledCoreCompatibility(
   extensionRoot: string,
   rubyCommand: string,
-  queryIdentity: RubyIdentityQuery = queryRubyIdentity
+  queryIdentity: RubyIdentityQuery = queryRubyIdentity,
+  cwd?: string
 ): Promise<CompatibilityResult> {
   const manifest = readManifest(extensionRoot);
   if (!manifest) {
@@ -91,7 +188,7 @@ export async function checkBundledCoreCompatibility(
 
   let identity: RubyIdentity;
   try {
-    identity = await queryIdentity(rubyCommand);
+    identity = await queryIdentity(rubyCommand, cwd);
   } catch (err) {
     return {
       compatible: false,

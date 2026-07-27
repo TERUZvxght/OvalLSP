@@ -1,0 +1,14 @@
+# gitleaks configuration for OvalLSP (Task 023.7 -- full-history secret
+# scan gate, see docs/design/tasks/023.7-github-ci-secret-scan-and-release-workflow.md).
+#
+# Extends gitleaks' own default ruleset rather than replacing it.
+title = "OvalLSP gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known test fixtures for Ovallsp::Redactor's own tests -- synthetic, secret-shaped strings that exist specifically to verify redaction logic, not real credentials. One is explicitly named with \"ExampleKeyValue\" in the fixture itself. Confirmed by manual review; see the task doc above for the exact findings this allowlist covers. Matches both the file's current path and its pre-rename path (this project was originally named \"rslsp\") -- gitleaks scans historical blobs under whatever path they had at each commit, not just the current one."
+paths = [
+  '''core/spec/(ovallsp|rslsp)/redactor_spec\.rb'''
+]

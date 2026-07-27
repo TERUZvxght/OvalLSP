@@ -54,3 +54,4 @@ describe('resolveServerConfig', () => {
     assert.ok(!result.args[0].includes('\\'), 'no manual shell-escaping was applied');
   });
 });
+

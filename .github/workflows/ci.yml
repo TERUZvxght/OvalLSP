@@ -56,7 +56,7 @@ jobs:
         working-directory: core
         run: |
           ruby -rjson -e '
-            result = JSON.parse(File.read("tmp/rspec.json"))
+            result = JSON.parse(File.read("tmp/rspec.json", encoding: "UTF-8"))
             real_rails_examples = result.fetch("examples").select { |ex| ex.fetch("file_path").include?("spec/integration/real_rails_spec.rb") }
             if real_rails_examples.empty?
               warn "real_rails_spec.rb contributed zero examples -- was it even loaded?"
@@ -94,3 +94,95 @@ jobs:
       - name: Unit tests
         working-directory: vscode
         run: npm run test:unit
+
+  # Task 023.7: full git history secret scan, on every PR/push -- not
+  # merely a one-time pre-release check. `fetch-depth: 0` is required so
+  # gitleaks actually walks the repo's full history rather than the
+  # single shallow commit `actions/checkout` fetches by default.
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    # gitleaks-action's own PR mode calls the GitHub API to list the PR's
+    # commits (to scan just the diff) -- found by actually running this
+    # workflow for the first time (this session's own first push): without
+    # `pull-requests: read` explicitly granted here, the default
+    # `GITHUB_TOKEN` this repository issues doesn't include it, and the
+    # action fails outright with a 403 ("Resource not accessible by
+    # integration") before it ever gets to scan anything. Not a secret
+    # finding -- a permissions gap in the workflow itself.
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Task 023.7: verifies a freshly-packaged VSIX never contains this
+  # build machine's own absolute paths -- a regression guard for the
+  # native-extension-build-log leak found and fixed in Task 023.6
+  # (mkmf.log/gem_make.out/Makefile embedding the packaging machine's
+  # username/home directory verbatim). Runs on ubuntu-latest (not
+  # darwin-arm64) deliberately: this check is about package *contents*
+  # hygiene, not about producing a release-quality Apple Silicon binary --
+  # see the separate apple-silicon-release workflow for the real,
+  # native-arm64 build.
+  package-contents-inspection:
+    name: Package contents inspection
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: core
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+
+      - name: Install npm dependencies
+        working-directory: vscode
+        run: npm ci
+
+      - name: Package the extension
+        working-directory: vscode
+        run: npm run package
+
+      - name: List package contents
+        working-directory: vscode
+        run: npx @vscode/vsce ls --tree > /tmp/vsix-contents.txt
+
+      - name: Fail on any absolute path from this build machine, or any other unexpected leak
+        working-directory: vscode
+        run: |
+          VSIX=$(ls ovallsp-*.vsix)
+          mkdir -p /tmp/vsix-unpacked
+          unzip -q "$VSIX" -d /tmp/vsix-unpacked
+
+          # Deliberately checks for *this runner's own* $HOME value only
+          # -- not a broad `/Users/[a-zA-Z0-9_-]+`/`/home/[a-zA-Z0-9_-]+`
+          # pattern. A broad pattern false-positives on legitimate
+          # third-party content this project doesn't control: the `rbs`
+          # gem's own bundled stdlib documentation contains an *example*
+          # path (`/Users/rhc`) in a code-sample comment, unrelated to any
+          # real build-machine leak. Matching this run's actual `$HOME`
+          # verbatim is what actually distinguishes "this build's own
+          # absolute path leaked" from "an unrelated string happens to
+          # look like a home directory". `grep -r` against the real,
+          # unpacked VSIX contents -- not just the file list -- so this
+          # catches leaks inside file *content*, not only in filenames.
+          if grep -rlF "$HOME" /tmp/vsix-unpacked/ ; then
+            echo "FAILED: packaged VSIX contains this build machine's own absolute path -- see files listed above"
+            exit 1
+          fi
+          echo "OK: no local absolute paths found in packaged VSIX contents"

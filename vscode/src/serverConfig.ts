@@ -47,6 +47,23 @@ export function resolveServerConfig(input: ResolveServerConfigInput): ServerLaun
   };
 }
 
+export type CoreClassification = 'bundled' | 'monorepo' | 'custom';
+
+/**
+ * Which of the three Core-selection cases this config resolved to --
+ * shared by `versionInfo.ts`'s compatibility diagnostic (Task 023.2) and
+ * `OvalLSP: Show Version Information`, so both agree with what
+ * `resolveServerConfig` itself actually picked instead of re-deriving the
+ * same bundled-vs-monorepo check a second, potentially-diverging way.
+ */
+export function classifyServerSelection(input: ResolveServerConfigInput): CoreClassification {
+  if (input.serverPath && input.serverPath.trim().length > 0) {
+    return 'custom';
+  }
+  const existsSync = input.existsSync ?? fs.existsSync;
+  return existsSync(path.join(input.extensionRoot, 'core', 'bin', 'ovallsp')) ? 'bundled' : 'monorepo';
+}
+
 // A packaged VSIX has `core/` copied inside its own install directory
 // (ADR-0004, "VSIXはCoreのsource/gem payloadを同梱する") -- checked
 // first so a real end user, who never checked out this monorepo at all,
