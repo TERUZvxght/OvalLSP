@@ -19,8 +19,14 @@ describe('OvalLSP extension (Extension Development Host)', () => {
     // initialize handshake); waiting on the extension's own activation
     // Promise -- rather than a fixed delay -- is what makes the polling
     // below bounded rather than a guess at how long that takes.
-    const extension = vscode.extensions.getExtension('ovallsp.ovallsp');
-    assert.ok(extension, 'expected the ovallsp.ovallsp extension to be installed in the test host');
+    // Extension id is `${publisher}.${name}` -- must track package.json's
+    // own `publisher` field (changed ovallsp -> teruz), not a hardcoded
+    // string; this broke silently once before for exactly that reason,
+    // since `npm run test:integration` isn't part of CI (no display
+    // server) and nobody re-ran it by hand after the publisher rename.
+    const extensionId = `${require('../../../package.json').publisher}.${require('../../../package.json').name}`;
+    const extension = vscode.extensions.getExtension(extensionId);
+    assert.ok(extension, `expected the ${extensionId} extension to be installed in the test host`);
     await extension!.activate();
 
     workspaceFolder = vscode.workspace.workspaceFolders?.[0]!;
