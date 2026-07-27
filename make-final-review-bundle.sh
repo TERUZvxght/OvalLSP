@@ -441,19 +441,27 @@ echo "== Package contents inspection =="
 # ~/.rbenv/versions/<x>/lib/libruby.<x>.dylib (`otool -L` confirms it),
 # which is not a removable build-log byproduct like mkmf.log -- it's the
 # actual dynamic-linker dependency the compiled binary needs to load
-# libruby at all. Whether this also limits the packaged VSIX's native
-# extensions to machines whose Ruby happens to live at this exact
-# absolute path (as opposed to just matching engine/version/platform,
-# which is all ADR-0005's own compatibility check verifies) has not been
-# empirically verified against a second machine/path in this session --
-# see docs/design/tasks/023.8-*.md's own notes on this gap. Reported here
-# as a non-fatal warning, not silently dropped.
+# libruby at all. Independent review (Review B) flagged this as likely
+# to break loading on essentially any other machine (a different
+# username alone is enough) despite ADR-0005's own compatibility check
+# saying "compatible" -- reproduced directly (a LoadError, using two
+# different Ruby 3.4.x installs already present on this machine) and
+# fixed at the Extension's spawn layer, not by altering this embedded
+# path: `vscode/src/serverConfig.ts#deriveNativeExtensionLibraryPath`
+# sets DYLD_LIBRARY_PATH/DYLD_FALLBACK_LIBRARY_PATH to the
+# actually-resolved Ruby's own lib/ directory when spawning Core Server,
+# which macOS' dynamic linker checks (by leaf filename) before ever
+# consulting this recorded absolute path. See
+# docs/design/tasks/023.8-*.md for the full reproduction and fix.
+# Reported here as a non-fatal warning (the embedded path itself is
+# still present, even though its functional impact is now mitigated),
+# not silently dropped.
 if grep -rlF --exclude='*.bundle' --exclude='*.so' --exclude='*.dylib' "$HOME" "$VSIX_UNPACKED" >"$LOG_DIR/package-contents-inspection.log" 2>&1; then
   fail "パッケージ済みVSIXにこのビルドマシン自身の絶対パスが含まれています(native extension以外)。詳細: $LOG_DIR/package-contents-inspection.log"
 fi
 
 if grep -rlF "$HOME" "$VSIX_UNPACKED" --include='*.bundle' --include='*.so' --include='*.dylib' >"$LOG_DIR/package-contents-inspection-native-extensions.log" 2>&1; then
-  echo "WARNING: compiled native extension(s) embed this build machine's absolute Ruby install path -- see $LOG_DIR/package-contents-inspection-native-extensions.log and docs/design/tasks/023.8-*.md" >&2
+  echo "WARNING: compiled native extension(s) embed this build machine's absolute Ruby install path -- mitigated at spawn time via DYLD_LIBRARY_PATH (see $LOG_DIR/package-contents-inspection-native-extensions.log and docs/design/tasks/023.8-*.md)" >&2
 fi
 
 echo "PASS: package-contents-inspection"

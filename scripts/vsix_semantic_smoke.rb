@@ -163,7 +163,7 @@ begin
   initialized_notification = frame(jsonrpc: "2.0", method: "initialized", params: {})
   did_open = frame(
     jsonrpc: "2.0", method: "textDocument/didOpen",
-    params: { textDocument: { uri: "file://#{fixture_path}", languageId: "ruby", version: 1, text: File.read(fixture_path) } }
+    params: { textDocument: { uri: "file://#{fixture_path}", languageId: "ruby", version: 1, text: File.read(fixture_path, encoding: "UTF-8") } }
   )
   hover_request = frame(
     jsonrpc: "2.0", id: 2, method: "textDocument/hover",

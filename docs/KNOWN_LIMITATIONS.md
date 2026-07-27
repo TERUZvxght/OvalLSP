@@ -18,21 +18,33 @@ evidence-based supported/unsupported table this summarizes.
   supported in this Preview.** An x86_64 Ruby (even one installed
   natively on an Apple Silicon Mac via Intel Homebrew) is rejected by the
   same platform-compatibility check for the same reason.
-- **Unverified: whether the bundled native extensions load correctly on
-  a machine other than the one that built them, even with an identical
-  Ruby engine/version/platform.** `otool -L` on the packaged
-  `prism.bundle`/`rbs_extension.bundle` shows an absolute
-  `LC_LOAD_DYLIB` reference to the *packaging machine's own* rbenv
-  `libruby` path (e.g. `/Users/<packager>/.rbenv/versions/3.4.7/lib/libruby.3.4.dylib`),
-  not a relocatable `@rpath` reference. Whether this actually prevents
-  loading on a different machine whose Ruby happens to live at a
-  different absolute path (a different username, a different version
-  manager) has not been empirically verified in this Preview's own
-  testing -- only one Apple Silicon Mac was available. If you install
-  this Preview and the Core Server fails to load `prism`/`rbs` despite
-  `OvalLSP: Show Version Information` reporting a compatible Ruby
-  engine/version/platform, this is the most likely cause -- please
-  report it (see [SUPPORT.md](../SUPPORT.md)).
+- **The bundled native extensions embed the packaging machine's own
+  absolute Ruby install path, mitigated by the Extension at launch
+  time.** `otool -L` on the packaged `prism.bundle`/`rbs_extension.bundle`
+  shows an absolute `LC_LOAD_DYLIB` reference to the *packaging
+  machine's own* rbenv `libruby` path (e.g.
+  `/Users/<packager>/.rbenv/versions/3.4.7/lib/libruby.3.4.dylib`), not a
+  relocatable `@rpath` reference -- standard `rbenv`/`ruby-build`
+  `--enable-shared` behavior on macOS. Reproduced directly: a
+  `prism.bundle` built under one Ruby 3.4.x install raised `LoadError:
+  linked to incompatible .../libruby.3.4.dylib` when required under a
+  *different* Ruby 3.4.x install at a different absolute path -- which
+  would otherwise affect essentially every real end user, since a
+  different username alone is enough to trigger it, and this is not
+  something ADR-0005's own engine/version/platform compatibility check
+  catches. **Fixed**: the Extension sets `DYLD_LIBRARY_PATH`/
+  `DYLD_FALLBACK_LIBRARY_PATH` to the actually-resolved Ruby's own `lib`
+  directory when spawning Core Server (`serverConfig.ts`'s
+  `deriveNativeExtensionLibraryPath`) -- macOS' dynamic linker checks
+  that variable, by leaf filename, before ever consulting a dependent
+  library's own recorded absolute path. Verified by reproducing the
+  exact failure and confirming the fix resolves it, using two different
+  Ruby 3.4.x installations already present on the same development
+  machine (see `docs/design/tasks/023.8-*.md`). This mitigation only
+  applies when the resolved Ruby command is an absolute path (any
+  version-manager-resolved Ruby is); a bare `ruby` resolved via `PATH`
+  search has no sibling directory to derive and is unaffected by this
+  fix either way.
 - **Linux and Windows are not supported in this Preview.** The Ruby
   resolver includes Windows RubyInstaller detection logic and the Core
   Server itself is platform-agnostic Ruby, but this Preview's packaging,

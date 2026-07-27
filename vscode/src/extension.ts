@@ -5,7 +5,7 @@ import {
   LanguageClientOptions,
   ServerOptions
 } from 'vscode-languageclient/node';
-import { resolveServerConfig, classifyServerSelection } from './serverConfig';
+import { resolveServerConfig, classifyServerSelection, deriveNativeExtensionLibraryPath } from './serverConfig';
 import { resolveRuby, RubyResolution } from './rubyResolver';
 import { checkBundledCoreCompatibility } from './platformCompatibility';
 import { WATCHED_FILES_GLOB } from './watchedFiles';
@@ -78,9 +78,27 @@ function startClientForFolder(
   const { command, args } = resolveServerConfig(serverConfigInput);
   const classification = classifyServerSelection(serverConfigInput);
 
+  // Task 023.8: the vendored native extensions' own absolute libruby
+  // reference is specific to the machine that packaged this VSIX, not
+  // to whichever Ruby actually resolved for this workspace -- see
+  // deriveNativeExtensionLibraryPath's own docs for how this was found
+  // and verified. `undefined` (platform isn't darwin, or the resolved
+  // command isn't an absolute path) leaves the spawn environment
+  // untouched, same as before this fix existed.
+  const nativeExtensionLibraryPath = deriveNativeExtensionLibraryPath(resolvedRubyCommand, process.platform);
+  const spawnEnv = nativeExtensionLibraryPath
+    ? {
+        ...process.env,
+        DYLD_LIBRARY_PATH: [nativeExtensionLibraryPath, process.env.DYLD_LIBRARY_PATH].filter(Boolean).join(':'),
+        DYLD_FALLBACK_LIBRARY_PATH: [nativeExtensionLibraryPath, process.env.DYLD_FALLBACK_LIBRARY_PATH]
+          .filter(Boolean)
+          .join(':')
+      }
+    : undefined;
+
   const serverOptions: ServerOptions = {
-    run: { command, args, options: { cwd: folder.uri.fsPath } },
-    debug: { command, args, options: { cwd: folder.uri.fsPath } }
+    run: { command, args, options: { cwd: folder.uri.fsPath, ...(spawnEnv ? { env: spawnEnv } : {}) } },
+    debug: { command, args, options: { cwd: folder.uri.fsPath, ...(spawnEnv ? { env: spawnEnv } : {}) } }
   };
 
   // Forwarded to the server as workspace/didChangeWatchedFiles so files
