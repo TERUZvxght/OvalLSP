@@ -106,7 +106,23 @@ if [ "$CONFIRM" != "yes" ]; then
   exit 1
 fi
 
-echo "-- vsce publish --target darwin-arm64 --pre-release --"
-VSCE_PAT="$VSCE_PAT" npx @vscode/vsce publish --target darwin-arm64 --pre-release
+# Publishes the EXACT file just built, smoke-tested, and hashed above --
+# never `vsce publish --target ... --pre-release` on its own. Found by
+# directly reproducing a real, live bug: `vsce publish` runs its own
+# `vscode:prepublish` (copy-core -> tsc) independently, on top of the one
+# `npm run package` already ran, silently rebuilding Core's vendored
+# native extensions from scratch a second time. Since native-extension
+# compilation isn't byte-reproducible run to run, this produced a
+# genuinely different binary than the one this script had just verified
+# -- and the manifest embedded in that second, unverified build didn't
+# match its own payload hash by the time it reached the Marketplace
+# (confirmed by downloading the actual published v0.1.2 VSIX and finding
+# its own PLATFORM_MANIFEST.json didn't match a live rehash of its own
+# core/ directory -- exactly the false "Payload hash mismatch... may be
+# corrupted" warning reported from a real install). `--packagePath`
+# uploads this exact file as-is, so nothing rebuilds between "verified"
+# and "published" ever again.
+echo "-- vsce publish --packagePath \"$VSIX_PATH\" --pre-release --"
+VSCE_PAT="$VSCE_PAT" npx @vscode/vsce publish --packagePath "$VSIX_PATH" --pre-release
 
 echo "== release.sh: published $PUBLISHER.$NAME v$VERSION =="

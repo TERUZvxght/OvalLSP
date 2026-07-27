@@ -2,6 +2,36 @@
 
 All notable changes to the OvalLSP VS Code extension are documented here.
 
+## 0.1.3 — Fix: v0.1.2 always showed a false "Payload hash mismatch" warning
+
+Every activation of v0.1.2 showed a false-positive diagnostic:
+"Payload hash mismatch: the bundled Core on disk does not match this
+Extension's recorded payload hash -- it may be corrupted or was
+partially/incorrectly installed", suggesting a reinstall. The Core
+Server itself worked fine despite the warning.
+
+Root cause: `vscode/scripts/release.sh` (and, before it existed, a bare
+`vsce publish` after a separate build) called `vsce publish
+--target darwin-arm64 --pre-release` directly. `vsce publish` runs its
+own `vscode:prepublish` hook independently of any earlier `npm run
+package` -- silently rebuilding Core's vendored native extensions
+(Prism, RBS) from scratch a second time. Native-extension compilation
+isn't byte-reproducible run to run, so the actually-uploaded build
+differed from whatever had just been verified, and the manifest
+embedded in that unverified rebuild didn't match its own payload hash
+by the time it reached the Marketplace. Confirmed by downloading the
+actual published v0.1.2 VSIX from the Marketplace CDN and finding its
+own `PLATFORM_MANIFEST.json` didn't match a live rehash of its own
+`core/` directory.
+
+Fixed by publishing the exact already-built, already-smoke-tested VSIX
+file via `vsce publish --packagePath <file> --pre-release` instead of
+letting `vsce publish` rebuild on its own. Verified end to end: after
+this change, a build's on-disk payload hash is provably unchanged by
+the publish step (rebuilt once, hashed, attempted publish, rehashed --
+identical both times), where before the same sequence produced two
+different hashes.
+
 ## 0.1.2 — Documentation update
 
 No code or runtime behavior changes. Updates the README (both language
