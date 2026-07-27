@@ -54,6 +54,10 @@ mkdir -p \
   "$ARTIFACT_DIR"
 
 cleanup() {
+  if [[ -n "${KEEP_WORK_ROOT:-}" ]]; then
+    echo "KEEP_WORK_ROOT set -- leaving $WORK_ROOT in place for inspection" >&2
+    return
+  fi
   rm -rf "$WORK_ROOT"
 }
 trap cleanup EXIT
