@@ -102,6 +102,17 @@ jobs:
   secret-scan:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
+    # gitleaks-action's own PR mode calls the GitHub API to list the PR's
+    # commits (to scan just the diff) -- found by actually running this
+    # workflow for the first time (this session's own first push): without
+    # `pull-requests: read` explicitly granted here, the default
+    # `GITHUB_TOKEN` this repository issues doesn't include it, and the
+    # action fails outright with a 403 ("Resource not accessible by
+    # integration") before it ever gets to scan anything. Not a secret
+    # finding -- a permissions gap in the workflow itself.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
