@@ -1,0 +1,81 @@
+name: Apple Silicon Release Build
+
+# Task 023.7 / ADR-0005 / ADR-0006: builds and smoke-tests a real
+# darwin-arm64 VSIX on a genuine Apple Silicon runner -- never emulated
+# or cross-compiled from an x86_64 machine (a native gem extension built
+# elsewhere would be the wrong ABI for the target this VSIX claims).
+# GitHub-hosted `macos-14` (and later) runners are Apple Silicon (M1)
+# natively, so no self-hosted runner is required for this step.
+#
+# Deliberately `workflow_dispatch`-only, never triggered by a tag push --
+# this project's release process requires the project owner's explicit
+# approval before anything is published (see docs/PUBLISHING.md), and a
+# workflow that runs automatically on every tag would defeat that gate
+# regardless of what it does or doesn't upload. This workflow only
+# *builds* an artifact for manual download/review; it never runs
+# `vsce publish`.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    name: Build and smoke-test darwin-arm64 VSIX
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Confirm this runner is actually Apple Silicon
+        run: |
+          arch=$(uname -m)
+          echo "Runner architecture: $arch"
+          if [ "$arch" != "arm64" ]; then
+            echo "FAILED: this workflow must only run on a genuine arm64 runner, got '$arch'"
+            exit 1
+          fi
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: core
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+
+      - name: Install npm dependencies
+        working-directory: vscode
+        run: npm ci
+
+      - name: Package the extension (darwin-arm64 target)
+        working-directory: vscode
+        run: npm run package
+
+      - name: Compute SHA-256
+        working-directory: vscode
+        run: |
+          VSIX=$(ls ovallsp-darwin-arm64-*.vsix)
+          shasum -a 256 "$VSIX" | tee "$VSIX.sha256"
+
+      - name: Semantic smoke test against the packaged VSIX
+        run: |
+          VSIX=$(ls vscode/ovallsp-darwin-arm64-*.vsix)
+          mkdir -p /tmp/vsix-unpacked
+          unzip -q "$VSIX" -d /tmp/vsix-unpacked
+          ruby scripts/vsix_semantic_smoke.rb /tmp/vsix-unpacked/extension
+
+      - name: Upload VSIX and checksum as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ovallsp-darwin-arm64-vsix
+          path: |
+            vscode/ovallsp-darwin-arm64-*.vsix
+            vscode/ovallsp-darwin-arm64-*.vsix.sha256
+          retention-days: 14
+
+      # Intentionally no `vsce publish` step here -- see docs/PUBLISHING.md.
+      # Publishing is a separate, explicitly human-approved action, never
+      # something this workflow does on the project owner's behalf.
