@@ -104,6 +104,16 @@ OvalLSPはRuby型チェッカーではなく、LSP機能のための確信度付
 - opt-inのruntime型観測に関して、テスト実行で一度も実行されなかった
   コードパス(実際に実行された経路にのみevidenceが存在します)。
 
+## 他の拡張機能との競合
+
+検証済みの内容は
+[vscode/README.ja.md](../vscode/README.ja.md#他の拡張機能との既知の競合)
+を参照: OvalLSPをShopify製Ruby LSPと同時に有効化すると、LSP結果が
+(クラッシュではなく)重複します — completion/definitionの結果を、VS
+Codeのprovider modelがいずれか一つを選ぶのではなく両方まとめて表示する
+ためです。これは特定の拡張機能固有の問題ではなく、有効化されている他の
+Ruby言語サーバー拡張機能全般に当てはまると考えられます。
+
 ## Preview公開後の別作業として追跡している事項
 
 このPreviewのscopeを超える拡張(追加のOS/CPUターゲット、Ruby/Railsの

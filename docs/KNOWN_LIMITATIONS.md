@@ -109,6 +109,15 @@ Ruby type checker. By design, it does not track:
 - Code paths never exercised by a test run, for opt-in runtime type
   observation specifically (evidence only exists for what actually ran).
 
+## Conflicts with other extensions
+
+See [vscode/README.md](../vscode/README.md#known-conflicts-with-other-extensions)
+for a verified finding: OvalLSP installed alongside Shopify's Ruby LSP
+produces overlapping (not crashing) LSP results — both extensions'
+completion/definition results are shown together by VS Code's provider
+model, which merges rather than picks one. This is expected to apply to
+any other active Ruby language server extension, not just that one.
+
 ## What's tracked as separate, post-Preview work
 
 Expanding beyond this Preview's scope (additional OS/CPU targets, a

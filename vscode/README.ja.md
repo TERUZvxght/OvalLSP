@@ -69,6 +69,22 @@ OvalLSPはRuby実装の言語サーバー(`ovallsp`)をVS Codeと並行して起
 不要です — Core Serverのruntime依存(Prism、RBS)は拡張機能自体に同梱
 されています。
 
+### 追加のセットアップなしでインストール直後から動作しますか?
+
+**はい、ただし互換性のあるRubyが既にシステム上で見つかることが前提です。**
+OvalLSPはRuby自体をインストールすることはできません — mise/asdf/rbenv/
+Homebrew経由、または明示的な`ovallsp.rubyExecutablePath`で、Ruby 3.4.x
+が既に何らかの形で存在している必要があります。その前提さえ満たせば、
+実行に必要なそれ以外の全て(Core Server自体とそのruntime依存である
+Prism・RBS)はVSIX自体に同梱されており、追加のダウンロード・
+`bundle install`・リポジトリのチェックアウトは一切発生しません。
+
+互換性のあるRubyが見つからない場合、または見つかったRubyがこのビルドの
+native依存がコンパイルされた対象と一致しない場合、OvalLSPは黙って
+劣化動作したり中途半端に起動したりせず、何が問題で何をすべきかを説明する
+明確な診断を表示します([Ruby解決](#ruby解決)と
+[バージョン・互換性エラー](#バージョン互換性エラー)を参照)。
+
 ## クイックスタート
 
 1. 拡張機能をインストールする(Pre-Releaseチャンネル)。
@@ -146,6 +162,29 @@ Rubyをインストールしてください。`OvalLSP: Show Environment Diagnos
 protocol互換性のチェックは行われますが、「標準の同梱Core」としては
 扱われず(version/build/payloadの比較対象にならない)、自動更新も
 されません。
+
+## 他の拡張機能との既知の競合
+
+OvalLSPは、他の全てのRuby関連拡張機能との組合せを検証しているわけでは
+ありませんが、広く使われているものの一つ —
+[Shopify製Ruby LSP](https://marketplace.visualstudio.com/items?itemName=Shopify.ruby-lsp)
+— を同一ウィンドウ内で同時に有効化した状態で実際に検証済みです。結果:
+**クラッシュやインストール時の競合はありませんでした**が、結果の重複
+という実際に確認された事象があります。両拡張機能は同じ`.rb`ドキュメント
+に対してLSP provider(hover、completion、definition)を登録しており、
+VS Codeはいずれか一つを選ぶのではなく、有効な全providerの結果を統合
+します。具体的にこのテストでは: completionとgo-to-definitionのいずれも、
+同じ位置で両方の拡張機能からの結果を合わせて返しました(go-to-definition
+はOvalLSP単独では候補1件だったのに対し、両方有効化すると4件に増加) —
+つまり、いずれの拡張機能も実際に誤動作しているわけではないものの、
+重複または食い違うsuggestionや、複数の候補位置が同時に表示され、
+混乱を招く可能性があります。
+
+これはVS Codeのprovider modelのアーキテクチャ上の性質であり、Ruby LSP
+固有の問題ではありません — インストールして有効化している他のRuby言語
+サーバー拡張機能(Solargraph、Sorbet等)であれば同様に当てはまります。
+Rubyプロジェクトに対してOvalLSP自身の結果のみを表示したい場合は、その
+workspaceで他のRuby言語サーバー拡張機能を無効化してください。
 
 ## トラブルシューティング
 

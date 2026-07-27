@@ -73,6 +73,22 @@ No `bundle install`, no repository checkout, and no manual gem
 installation is required — the extension bundles Core Server's own
 runtime dependencies (Prism, RBS).
 
+### Does it work right after installing, with no extra setup?
+
+**Yes, provided a compatible Ruby is already reachable on your system.**
+OvalLSP does not install Ruby itself, and can't — it needs *some* Ruby
+3.4.x already present (via mise/asdf/rbenv/Homebrew, or an explicit
+`ovallsp.rubyExecutablePath`). Given that one prerequisite, everything
+else needed to run — the Core Server itself and its own runtime
+dependencies (Prism, RBS) — ships inside the VSIX; there is no second
+download, no `bundle install`, and no repository checkout involved.
+
+If no compatible Ruby can be found, or the one found doesn't match what
+this build's native dependencies were compiled for, OvalLSP does not
+silently degrade or half-start — it shows a clear diagnostic explaining
+what's wrong and what to do (see [Ruby resolution](#ruby-resolution) and
+[Version and compatibility errors](#version-and-compatibility-errors)).
+
 ## Quick start
 
 1. Install the extension (Pre-Release channel).
@@ -152,6 +168,30 @@ bundled one (for development against this repository, for example). A
 custom path is checked for protocol compatibility the same way the
 bundled Core is, but is never treated as "the standard bundled Core" for
 version/build/payload comparisons, and is never auto-updated.
+
+## Known conflicts with other extensions
+
+OvalLSP hasn't been tested against every other Ruby-related extension,
+but it *has* been verified side by side with a widely-used one —
+[Shopify's Ruby LSP](https://marketplace.visualstudio.com/items?itemName=Shopify.ruby-lsp)
+— installed and active in the same window. Result: **no crash or
+install-time conflict**, but a real, confirmed overlap in results. Both
+extensions register LSP providers (hover, completion, definition) for
+the same `.rb` documents, and VS Code combines results from every active
+provider rather than picking one. Concretely, in this test: completion
+and go-to-definition both returned results from *both* extensions
+together at the same position (go-to-definition went from 1 candidate
+with OvalLSP alone to 4 with both active) — meaning duplicate or
+differing suggestions, and multiple candidate locations shown at once,
+which can be confusing even though neither extension actually
+malfunctions.
+
+This is an architectural property of VS Code's provider model, not
+something specific to Ruby LSP — it would apply to any other Ruby
+language server extension you have installed and active (Solargraph,
+Sorbet, etc.), not just that one. If you want OvalLSP's own results to
+be the only ones shown for a Ruby project, disable other Ruby language
+server extensions for that workspace.
 
 ## Troubleshooting
 
