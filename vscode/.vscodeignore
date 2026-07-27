@@ -7,7 +7,18 @@ out/test/**
 **/tsconfig.json
 core/spec/**
 core/tmp/**
-core/vendor/bundle/ruby/*/cache/**
+
+# NOTE: do not add further `core/**` exclusions here. `core/` is staged by
+# scripts/copy-core.js, which records a sha256 of that staged tree into
+# core/PLATFORM_MANIFEST.json; the extension rehashes the *installed*
+# tree at activation and reports a mismatch. Excluding a staged file here
+# makes those two disagree permanently, which is precisely what shipped a
+# false "Payload hash mismatch ... may be corrupted" warning to every
+# v0.1.2/v0.1.3 user (a `core/vendor/bundle/ruby/*/cache/**` rule that
+# stripped 4 already-hashed .gem archives). Anything that must not ship
+# gets deleted in copy-core.js instead, so the staged tree is exactly the
+# shipped tree. The `core/spec` and `core/tmp` rules above are safe only
+# because copy-core.js never stages those directories in the first place.
 .gitignore
 **/.eslintrc*
 

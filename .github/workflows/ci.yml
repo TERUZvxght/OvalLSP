@@ -162,6 +162,22 @@ jobs:
         working-directory: vscode
         run: npx @vscode/vsce ls --tree > /tmp/vsix-contents.txt
 
+      # Catches "what copy-core.js hashed" drifting from "what actually
+      # ships" -- the defect that made every v0.1.2/v0.1.3 install report
+      # a false "Payload hash mismatch ... may be corrupted" at
+      # activation. Runs here, on every PR, because that divergence is
+      # entirely platform-independent (it is just file hashing) even
+      # though the VSIX built on this Linux runner is not a releasable
+      # Apple Silicon artifact.
+      - name: Verify the packaged VSIX matches its own recorded payload hash
+        working-directory: vscode
+        run: |
+          VSIX=$(ls ovallsp-*.vsix)
+          rm -rf /tmp/vsix-payload-check
+          mkdir -p /tmp/vsix-payload-check
+          unzip -q "$VSIX" -d /tmp/vsix-payload-check
+          node scripts/verify-packaged-payload-hash.js /tmp/vsix-payload-check/extension
+
       - name: Fail on any absolute path from this build machine, or any other unexpected leak
         working-directory: vscode
         run: |

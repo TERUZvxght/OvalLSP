@@ -89,6 +89,17 @@ if [ -f "$UNPACK_DIR/extension/.vsce-pat.local" ]; then
   exit 1
 fi
 
+# Runs the *runtime* payload-hash check against the packaged artifact,
+# here, rather than letting every user discover it at activation. v0.1.2
+# and v0.1.3 both shipped with a manifest that could never match the
+# installed tree (`.vscodeignore` stripped four already-hashed
+# `vendor/bundle/**/cache/*.gem` archives), so every install showed a
+# false "may be corrupted" warning -- and nothing in this script noticed,
+# because everything before this point only ever inspected the staged
+# tree or the file list, never the shipped payload's own hash.
+echo "-- node scripts/verify-packaged-payload-hash.js --"
+node "$VSCODE_DIR/scripts/verify-packaged-payload-hash.js" "$UNPACK_DIR/extension"
+
 echo "-- ruby scripts/vsix_semantic_smoke.rb --"
 ruby "$REPO_ROOT/scripts/vsix_semantic_smoke.rb" "$UNPACK_DIR/extension"
 

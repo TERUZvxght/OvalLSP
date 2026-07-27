@@ -317,6 +317,50 @@ function removeNativeBuildArtifacts(vendorRoot) {
   console.log(`copy-core: removed ${removed} native-extension build-log artifact(s) (mkmf.log/gem_make.out/Makefile) -- these embed this build machine's own absolute paths and must never ship in the VSIX`);
 }
 
+// Bundler keeps the original downloaded `.gem` archives under
+// `vendor/bundle/ruby/<abi>/cache/` after extracting them into `gems/`.
+// Nothing ever loads them: `bin/ovallsp` only ever adds
+// `**/gems/*/lib` to `$LOAD_PATH`, never `cache/`.
+//
+// They must be deleted *here*, from the staged tree, rather than merely
+// excluded from the VSIX by `.vscodeignore` -- which is exactly what the
+// previous version did, and exactly why every single v0.1.2/v0.1.3
+// install showed a false "Payload hash mismatch ... may be corrupted"
+// diagnostic on activation. `writePlatformManifest` hashes *this staged
+// directory*, while `.vscodeignore` decided what actually shipped: two
+// independent notions of "the payload" that silently disagreed by these
+// four files, so the runtime rehash (over the installed, 811-file tree)
+// could never match the manifest (recorded over the staged, 815-file
+// tree) on any machine, ever. Found by directly rehashing a real
+// installed extension and diffing the staged tree against the packaged
+// one.
+//
+// The invariant this restores, and which `assertPackagedPayloadMatchesManifest`
+// (see release.sh and the CI package-contents job) now verifies for real:
+// **the staged `core/` tree is byte-for-byte what ships**, so hashing it
+// is meaningful. Anything that must not ship gets deleted here, never
+// filtered downstream.
+function removeBundlerGemCache(vendorRoot) {
+  if (!fs.existsSync(vendorRoot)) {
+    return;
+  }
+  const cacheDirs = fs
+    .readdirSync(vendorRoot, { recursive: true })
+    .map((entry) => entry.toString())
+    .filter((entry) => path.basename(entry) === 'cache')
+    .map((entry) => path.join(vendorRoot, entry))
+    .filter((full) => fs.existsSync(full) && fs.statSync(full).isDirectory());
+
+  let removed = 0;
+  for (const dir of cacheDirs) {
+    removed += fs.readdirSync(dir).length;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+  console.log(
+    `copy-core: removed ${removed} Bundler gem-cache archive(s) (vendor/bundle/**/cache/*.gem) -- never loaded at runtime, and keeping them staged would desync the payload hash from what actually ships`
+  );
+}
+
 // Confirms the staged vendor install actually contains what bin/ovallsp
 // needs to run, and that the gems with native extensions actually built
 // one -- catching a `bundle install` that "succeeded" (exit 0) but left
@@ -430,6 +474,7 @@ try {
   try {
     vendorGemDependenciesIntoStaging();
     removeNativeBuildArtifacts(path.join(CORE_STAGING, 'vendor', 'bundle'));
+    removeBundlerGemCache(path.join(CORE_STAGING, 'vendor', 'bundle'));
     const identity = verifyRubyAndBundleAgree();
     verifyVendoredGems();
     writePlatformManifest(identity);
