@@ -18,6 +18,21 @@ evidence-based supported/unsupported table this summarizes.
   supported in this Preview.** An x86_64 Ruby (even one installed
   natively on an Apple Silicon Mac via Intel Homebrew) is rejected by the
   same platform-compatibility check for the same reason.
+- **Unverified: whether the bundled native extensions load correctly on
+  a machine other than the one that built them, even with an identical
+  Ruby engine/version/platform.** `otool -L` on the packaged
+  `prism.bundle`/`rbs_extension.bundle` shows an absolute
+  `LC_LOAD_DYLIB` reference to the *packaging machine's own* rbenv
+  `libruby` path (e.g. `/Users/<packager>/.rbenv/versions/3.4.7/lib/libruby.3.4.dylib`),
+  not a relocatable `@rpath` reference. Whether this actually prevents
+  loading on a different machine whose Ruby happens to live at a
+  different absolute path (a different username, a different version
+  manager) has not been empirically verified in this Preview's own
+  testing -- only one Apple Silicon Mac was available. If you install
+  this Preview and the Core Server fails to load `prism`/`rbs` despite
+  `OvalLSP: Show Version Information` reporting a compatible Ruby
+  engine/version/platform, this is the most likely cause -- please
+  report it (see [SUPPORT.md](../SUPPORT.md)).
 - **Linux and Windows are not supported in this Preview.** The Ruby
   resolver includes Windows RubyInstaller detection logic and the Core
   Server itself is platform-agnostic Ruby, but this Preview's packaging,
