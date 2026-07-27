@@ -24,6 +24,26 @@ describe('checkBundledCoreCompatibility', () => {
     return async (_rubyCommand: string) => identity;
   }
 
+  it('forwards cwd through to the identity query -- rbenv/asdf/mise shims pick the active Ruby version based on cwd, not just the command string', async () => {
+    // Task 023.8 (second re-review round): omitting `cwd` here silently
+    // queries whatever Ruby the *extension host's own* ambient working
+    // directory resolves to via a version-manager shim, not the
+    // workspace folder actually being checked -- reproduced directly
+    // against a real rbenv shim, where the same shim path returns a
+    // different Ruby version depending solely on which directory it's
+    // invoked from.
+    writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
+    let receivedCwd: string | undefined;
+    const queryIdentity = async (_rubyCommand: string, cwd?: string) => {
+      receivedCwd = cwd;
+      return { engine: 'ruby', version: '3.4.7', platform: 'arm64-darwin25' };
+    };
+
+    await checkBundledCoreCompatibility(extensionRoot, 'ruby', queryIdentity, '/workspace/project-a');
+
+    assert.strictEqual(receivedCwd, '/workspace/project-a');
+  });
+
   it('is compatible when there is no bundled manifest at all (a dev checkout)', async () => {
     const result = await checkBundledCoreCompatibility(extensionRoot, 'ruby', stubIdentity({
       engine: 'ruby', version: '3.4.7', platform: 'arm64-darwin25'
@@ -144,5 +164,35 @@ describe('queryRubyConfigPaths', () => {
 
   it('rejects when the given command cannot be spawned at all', async () => {
     await assert.rejects(queryRubyConfigPaths('nonexistent-ruby-command'));
+  });
+
+  it('actually runs the query in the given cwd, not the caller\'s own ambient working directory', async () => {
+    // Task 023.8 (second re-review round): this is the regression the
+    // previous version of this test suite couldn't have caught -- it
+    // only asserted on stdout parsing, never on *which directory* the
+    // query itself ran in. A real rbenv/asdf/mise shim resolves its
+    // active Ruby version from cwd; querying from the wrong directory
+    // silently returns a different (wrong) interpreter's bindir/libdir
+    // entirely. Proven here with a fake "ruby" that only ever reports
+    // its own actual working directory -- no real Ruby version manager
+    // needed for this assertion to be meaningful or portable to CI.
+    const fakeRubyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ovallsp-fake-ruby-'));
+    const fakeRubyPath = path.join(fakeRubyDir, 'fake-ruby.sh');
+    fs.writeFileSync(fakeRubyPath, '#!/bin/sh\necho "$(pwd)|$(pwd)"\n');
+    fs.chmodSync(fakeRubyPath, 0o755);
+
+    const targetCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'ovallsp-target-cwd-'));
+    try {
+      const result = await queryRubyConfigPaths(fakeRubyPath, targetCwd);
+
+      // Resolve both sides through realpath -- macOS' /tmp is itself a
+      // symlink to /private/tmp, and `pwd` inside the fake script
+      // reports the resolved path, not necessarily byte-identical to
+      // the un-resolved mkdtempSync result.
+      assert.strictEqual(fs.realpathSync(result.bindir), fs.realpathSync(targetCwd));
+    } finally {
+      fs.rmSync(fakeRubyDir, { recursive: true, force: true });
+      fs.rmSync(targetCwd, { recursive: true, force: true });
+    }
   });
 });

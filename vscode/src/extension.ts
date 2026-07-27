@@ -188,13 +188,22 @@ function startClientForFolder(
   // just means `execTarget` stays at the originally resolved command,
   // same as before this fix existed, rather than blocking Core from
   // starting at all over a diagnostic-only lookup.
+  // `folder.uri.fsPath` as `cwd` matters here, not just for `execFile`
+  // hygiene -- found by independent review (a second re-review round):
+  // rbenv/asdf/mise shims resolve *which installed Ruby version* to run
+  // based on the current working directory's own `.ruby-version`/
+  // `.tool-versions`. Querying from the extension host's own ambient cwd
+  // (i.e. omitting this) would silently resolve a different project's
+  // pinned version than this workspace folder's own, in a multi-root or
+  // per-project-Ruby-version setup -- reproduced directly against this
+  // machine's real rbenv shim.
   const configPathsPromise: Promise<RubyConfigPaths | undefined> =
     process.platform === 'darwin'
-      ? queryRubyConfigPaths(resolvedRubyCommand).catch(() => undefined)
+      ? queryRubyConfigPaths(resolvedRubyCommand, folder.uri.fsPath).catch(() => undefined)
       : Promise.resolve(undefined);
 
   void Promise.all([
-    checkBundledCoreCompatibility(context.extensionPath, resolvedRubyCommand),
+    checkBundledCoreCompatibility(context.extensionPath, resolvedRubyCommand, undefined, folder.uri.fsPath),
     configPathsPromise
   ]).then(([compatibility, configPaths]) => {
       if (!compatibility.compatible) {

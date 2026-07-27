@@ -41,15 +41,28 @@ export interface RubyIdentity {
   platform: string;
 }
 
-export type RubyIdentityQuery = (rubyCommand: string) => Promise<RubyIdentity>;
+export type RubyIdentityQuery = (rubyCommand: string, cwd?: string) => Promise<RubyIdentity>;
 
-/** The real implementation; injectable so unit tests never spawn a process. */
-export function queryRubyIdentity(rubyCommand: string): Promise<RubyIdentity> {
+/**
+ * The real implementation; injectable so unit tests never spawn a
+ * process. `cwd` matters, not just as a nicety: rbenv/asdf/mise version-
+ * manager shims pick *which* installed Ruby version to actually run
+ * based on the current working directory's own `.ruby-version`/
+ * `.tool-versions` (absent an env var override) -- found by independent
+ * review (Task 023.8, a second re-review round) that omitting it here
+ * silently queries whatever Ruby the *extension host's own* ambient cwd
+ * happens to resolve to, not the workspace folder's pinned version.
+ * Reproduced directly: the same `~/.rbenv/shims/ruby` reports a
+ * genuinely different `RbConfig::CONFIG["bindir"]` depending solely on
+ * which directory it's invoked from, when different workspace folders
+ * pin different Ruby versions via their own `.ruby-version`.
+ */
+export function queryRubyIdentity(rubyCommand: string, cwd?: string): Promise<RubyIdentity> {
   return new Promise((resolve, reject) => {
     execFile(
       rubyCommand,
       ['-e', 'print [RUBY_ENGINE, RUBY_VERSION, RUBY_PLATFORM].join("|")'],
-      { timeout: 5000 },
+      { timeout: 5000, cwd },
       (err, stdout) => {
         if (err) {
           reject(err);
@@ -116,12 +129,23 @@ export interface RubyConfigPaths {
  * honored. The one-time shim invocation to ask this question is the
  * only place the shim script itself still runs.
  */
-export function queryRubyConfigPaths(rubyCommand: string): Promise<RubyConfigPaths> {
+// `cwd` must be the *workspace folder's* own directory, not omitted --
+// found by independent review (a second re-review round on this same
+// fix): rbenv/asdf/mise shims resolve which installed Ruby version to
+// actually run based on the current working directory's own
+// `.ruby-version`/`.tool-versions`, so querying without `cwd` silently
+// asks whatever Ruby the *extension host's own* ambient working
+// directory resolves to -- a different, wrong interpreter entirely (not
+// merely a DYLD/native-extension problem) whenever a workspace folder
+// pins a different Ruby version than that ambient default. Reproduced
+// directly: the same shim path returns a different `bindir`/`libdir`
+// pair depending solely on which directory it's invoked from.
+export function queryRubyConfigPaths(rubyCommand: string, cwd?: string): Promise<RubyConfigPaths> {
   return new Promise((resolve, reject) => {
     execFile(
       rubyCommand,
       ['-e', 'print [RbConfig::CONFIG["bindir"], RbConfig::CONFIG["libdir"]].join("|")'],
-      { timeout: 5000 },
+      { timeout: 5000, cwd },
       (err, stdout) => {
         if (err) {
           reject(err);
@@ -154,7 +178,8 @@ export function queryRubyConfigPaths(rubyCommand: string): Promise<RubyConfigPat
 export async function checkBundledCoreCompatibility(
   extensionRoot: string,
   rubyCommand: string,
-  queryIdentity: RubyIdentityQuery = queryRubyIdentity
+  queryIdentity: RubyIdentityQuery = queryRubyIdentity,
+  cwd?: string
 ): Promise<CompatibilityResult> {
   const manifest = readManifest(extensionRoot);
   if (!manifest) {
@@ -163,7 +188,7 @@ export async function checkBundledCoreCompatibility(
 
   let identity: RubyIdentity;
   try {
-    identity = await queryIdentity(rubyCommand);
+    identity = await queryIdentity(rubyCommand, cwd);
   } catch (err) {
     return {
       compatible: false,
