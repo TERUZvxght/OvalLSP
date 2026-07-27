@@ -40,6 +40,19 @@ jobs:
           bundler-cache: true
           working-directory: core
 
+      - name: Record and hard-assert the Ruby identity is genuinely arm64
+        run: |
+          identity=$(ruby -e 'print [RUBY_ENGINE, RUBY_VERSION, RUBY_PLATFORM].join("|")')
+          echo "Ruby identity: $identity"
+          platform=$(echo "$identity" | cut -d'|' -f3)
+          case "$platform" in
+            arm64-*) ;;
+            *)
+              echo "FAILED: expected an arm64 Ruby platform, got '$platform' -- refusing to build a darwin-arm64 VSIX with a non-arm64 interpreter"
+              exit 1
+              ;;
+          esac
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
