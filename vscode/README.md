@@ -1,0 +1,198 @@
+# OvalLSP (Preview)
+
+[日本語版 README](README.ja.md)
+
+Semantic Ruby/Rails language features backed by a standalone Core Language
+Server, packaged as a VS Code extension.
+
+> **Preview status**: this is an early Pre-Release build. It currently
+> targets **macOS on Apple Silicon only** (`darwin-arm64`). See
+> [Supported environments](#supported-environments) below before
+> installing.
+
+## What OvalLSP does
+
+OvalLSP runs a Ruby-native language server (`ovallsp`) alongside VS Code
+and provides:
+
+- Hover, `textDocument/definition`, `documentSymbol`, `workspace/symbol`,
+  find references, and guarded rename, backed by real declaration
+  extraction (via [Prism](https://github.com/ruby/prism)) and a
+  workspace-wide index — not lexical/regex guessing.
+- Local type inference (`ovallsp/explainType`) with RBS/RBI signature
+  integration.
+- Rails-aware completion, signature help, and definition for
+  `*_path`/`*_url` route helpers, Active Record column/association
+  types, and common Rails DSLs (`enum`, `scope`, `delegate`).
+- Controller → view instance-variable propagation for `.erb` templates.
+- A Runtime Agent that introspects your Rails app's own routes and
+  models in the background (only in a **trusted** workspace — see
+  [Security model](#security-model)) to make the above more accurate,
+  falling back to static analysis alone if the app can't be introspected.
+- Opt-in runtime type observation (`OvalLSP: Run Tests with Type
+  Observation`) that records method call shapes actually exercised by
+  your own test suite — never argument/return *values*, see
+  [PRIVACY.md](PRIVACY.md).
+- A Plugin API (static and runtime plugins) for extending the type
+  engine, running in an OS-process-isolated sandbox.
+
+This is a Preview: the feature set above reflects what's actually
+implemented and tested today, not a roadmap.
+
+## Supported environments
+
+| | Status |
+|---|---|
+| macOS, Apple Silicon (`darwin-arm64`) | **Supported** |
+| macOS, Intel / Rosetta | Not supported in this Preview |
+| Linux, Windows | Not supported in this Preview |
+| Ruby 3.4.x | **Supported** (tested: 3.4.5, 3.4.7) |
+| Ruby 3.3.x, 3.5.x | Not verified — treated as unsupported |
+| Rails 8.1 | **Supported** (tested against the real integration suite) |
+| Rails ≤ 7.x | Not verified |
+| WSL / Dev Containers / Remote SSH | Not supported in this Preview |
+
+Full detail and rationale: [docs/SUPPORT_MATRIX.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SUPPORT_MATRIX.md)
+and [Known Limitations](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.md).
+
+On an unsupported platform/Ruby combination, OvalLSP does not silently
+degrade or guess — it refuses to load its bundled native dependencies and
+shows a clear diagnostic instead (see
+[Version and compatibility errors](#version-and-compatibility-errors)).
+
+## Requirements
+
+- macOS on Apple Silicon.
+- Ruby 3.4.x, discoverable via one of: an explicit
+  `ovallsp.rubyExecutablePath` setting, [mise](https://mise.jdx.dev/),
+  [asdf](https://asdf-vm.com/), [rbenv](https://github.com/rbenv/rbenv),
+  or [Homebrew](https://brew.sh/) (`/opt/homebrew`). See
+  [Ruby resolution](#ruby-resolution) if OvalLSP can't find your Ruby.
+
+No `bundle install`, no repository checkout, and no manual gem
+installation is required — the extension bundles Core Server's own
+runtime dependencies (Prism, RBS).
+
+## Quick start
+
+1. Install the extension (Pre-Release channel).
+2. Open a Ruby or Rails project.
+3. Open any `.rb` file — the Core Server starts automatically.
+4. Trust the workspace if prompted, to enable Rails-aware features (the
+   Runtime Agent never runs in an untrusted workspace).
+5. Run `OvalLSP: Show Version Information` to confirm the Extension and
+   Core Server are running compatible versions.
+
+## Commands
+
+| Command | Purpose |
+|---|---|
+| `OvalLSP: Show Version Information` | Extension/Core version, protocol compatibility, and Ruby environment actually in use |
+| `OvalLSP: Restart Server` | Restart the Core Server for every open workspace folder |
+| `OvalLSP: Restart Rails Agent` | Restart just the Runtime Agent (routes/model introspection) |
+| `OvalLSP: Show Logs` | Open the OvalLSP output channel |
+| `OvalLSP: Show Environment Diagnostics` | Which Ruby was selected, and why (mise/asdf/rbenv/Homebrew/PATH) |
+| `OvalLSP: Re-index Workspace` | Force a full re-index |
+| `OvalLSP: Run Tests with Type Observation` | Opt-in runtime type observation (see [PRIVACY.md](PRIVACY.md)) |
+| `OvalLSP: Clear Observed Types` / `Show Type Evidence` | Manage observation data |
+
+## Settings
+
+| Setting | Purpose |
+|---|---|
+| `ovallsp.enabled` | Enable/disable the extension entirely |
+| `ovallsp.rubyExecutablePath` | Explicit Ruby interpreter, skipping auto-detection |
+| `ovallsp.server.path` | Explicit Core Server entrypoint (advanced; see [Custom Core Server paths](#custom-core-server-paths)) |
+| `ovallsp.observation.testCommand` | Command used by runtime type observation (default: `bundle exec rspec`) |
+
+## Rails projects
+
+When a workspace root contains `bin/rails`, OvalLSP starts a Runtime
+Agent in the background (once the workspace is trusted) that introspects
+your app's own routes and models to improve completion, definition, and
+type inference for Rails-specific code. If the app can't be introspected
+(no Rails, Agent crash, etc.), OvalLSP continues with static analysis
+only — it never blocks on the Agent.
+
+## Server startup and update model
+
+The Core Server ships **inside** this extension — there is no separate
+download or install step, and no independent background updater. When
+VS Code updates this extension via the Marketplace, the bundled Core
+Server updates atomically along with it: the next time a workspace
+activates OvalLSP, it always runs the Core Server that shipped with the
+Extension version you now have. A custom `ovallsp.server.path` is never
+auto-updated and is only checked for compatibility, never modified.
+
+## Version and compatibility errors
+
+At startup, the Extension and Core Server exchange version, protocol,
+build, and Ruby/platform information. If they don't match (a stale
+process from a previous Extension version, a payload that didn't install
+correctly, an incompatible custom `ovallsp.server.path`, ...), OvalLSP
+stops before sending any feature requests and shows a diagnostic instead
+of a broken/degraded session. Run `OvalLSP: Show Version Information` to
+see exactly what was detected and what to do about it.
+
+## Ruby resolution
+
+OvalLSP looks for a Ruby interpreter in this order: an explicit
+`ovallsp.rubyExecutablePath` setting, then mise, asdf, rbenv, Homebrew
+(Apple Silicon), then your shell `PATH`. If VS Code was launched from the
+Dock/Spotlight rather than a terminal, its `PATH` may not include your
+usual shell's additions — in that case, set `ovallsp.rubyExecutablePath`
+explicitly, or install Ruby via one of mise/asdf/rbenv/Homebrew (all
+detected without relying on `PATH`). Run `OvalLSP: Show Environment
+Diagnostics` to see exactly what was tried and why.
+
+## Custom Core Server paths
+
+Setting `ovallsp.server.path` points OvalLSP at a Core Server outside the
+bundled one (for development against this repository, for example). A
+custom path is checked for protocol compatibility the same way the
+bundled Core is, but is never treated as "the standard bundled Core" for
+version/build/payload comparisons, and is never auto-updated.
+
+## Troubleshooting
+
+1. `OvalLSP: Show Logs` for the raw output channel.
+2. `OvalLSP: Show Environment Diagnostics` for Ruby resolution.
+3. `OvalLSP: Show Version Information` for Extension/Core compatibility.
+4. If Rails-specific features aren't working, try `OvalLSP: Restart Rails
+   Agent`, then confirm the workspace is trusted.
+5. The status bar shows the current state: Indexing / Ready (static) /
+   Ready (Rails) / Agent unavailable.
+6. If a persistent cache seems corrupted, it lives under
+   `~/.cache/ovallsp/`, keyed per workspace/Ruby/Prism/Gemfile.lock/RBS
+   combination — deleting the relevant directory forces a fresh index.
+
+## Privacy and telemetry
+
+OvalLSP collects no telemetry and sends nothing over the network at
+runtime. See [PRIVACY.md](PRIVACY.md) for the full statement, including
+what opt-in runtime type observation does and does not record.
+
+## Security
+
+See [SECURITY.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.md)
+for how to report a vulnerability, and the Rails Agent's own security
+model above.
+
+## Support
+
+See [SUPPORT.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE). Third-party dependency licenses:
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Known limitations
+
+See [docs/KNOWN_LIMITATIONS.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.md)
+for this Preview's platform scope, and the design docs for the static
+analysis' own principled limits (dynamic `method_missing`/`define_method`
+outside known Rails DSLs, `class_eval`/`instance_eval` with string
+arguments, and runtime-only constant resolution are all out of scope by
+design — OvalLSP is a confidence-aware heuristic engine for LSP features,
+not a Ruby type checker).
