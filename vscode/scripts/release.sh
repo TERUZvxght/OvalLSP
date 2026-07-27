@@ -76,6 +76,19 @@ if [ ! -d "$UNPACK_DIR/extension/core/vendor/bundle" ]; then
   exit 1
 fi
 
+# Found by actually inspecting a real run's `vsce ls --tree` output:
+# .vscodeignore not excluding .vsce-pat.local let vsce package bundle the
+# PAT file itself straight into the VSIX. .vscodeignore now excludes it
+# too, but this check exists so a future .vscodeignore regression (or any
+# other stray credential-shaped file landing at the package root) fails
+# loudly here, before ever reaching the publish prompt, rather than
+# silently shipping inside a public VSIX.
+if [ -f "$UNPACK_DIR/extension/.vsce-pat.local" ]; then
+  echo "release.sh: the packaged VSIX contains .vsce-pat.local -- the Marketplace PAT itself would ship inside it." >&2
+  echo "Check vscode/.vscodeignore excludes it, then rebuild. Refusing to publish." >&2
+  exit 1
+fi
+
 echo "-- ruby scripts/vsix_semantic_smoke.rb --"
 ruby "$REPO_ROOT/scripts/vsix_semantic_smoke.rb" "$UNPACK_DIR/extension"
 

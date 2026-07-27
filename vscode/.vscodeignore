@@ -10,3 +10,10 @@ core/tmp/**
 core/vendor/bundle/ruby/*/cache/**
 .gitignore
 **/.eslintrc*
+
+# Never package the local Marketplace PAT file (vscode/scripts/release.sh
+# reads it from disk; vsce package has no reason to ever see it, and
+# .vscodeignore -- unlike .gitignore -- is what actually decides VSIX
+# contents). Found by actually inspecting a real `vsce ls --tree` run:
+# without this line, .vsce-pat.local was bundled straight into the VSIX.
+.vsce-pat.local
