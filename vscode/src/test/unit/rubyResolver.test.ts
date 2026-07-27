@@ -52,6 +52,30 @@ describe('resolveRuby', () => {
     assert.strictEqual(result.executable, pathRuby);
   });
 
+  it('picks a Homebrew Ruby on macOS when no version manager shim is present, before ever checking PATH', () => {
+    const homebrewRuby = path.join('/opt/homebrew/opt/ruby/bin', 'ruby');
+    const pathRuby = path.join('/usr/local/bin', 'ruby');
+    const env = baseEnv({ existsSync: (p) => p === homebrewRuby || p === pathRuby });
+
+    const result = resolveRuby(env);
+
+    assert.strictEqual(result.executable, homebrewRuby);
+    const homebrewStep = result.steps.find((s) => s.strategy === 'Homebrew');
+    assert.strictEqual(homebrewStep?.matched, true);
+  });
+
+  it('skips the Homebrew strategy entirely on non-macOS platforms', () => {
+    const homebrewRuby = path.join('/opt/homebrew/opt/ruby/bin', 'ruby');
+    const env = baseEnv({ platform: 'linux', existsSync: (p) => p === homebrewRuby });
+
+    const result = resolveRuby(env);
+
+    assert.notStrictEqual(result.executable, homebrewRuby);
+    const homebrewStep = result.steps.find((s) => s.strategy === 'Homebrew');
+    assert.strictEqual(homebrewStep?.matched, false);
+    assert.strictEqual(homebrewStep?.reason, 'not running on macOS');
+  });
+
   it('checks PATH entries in order, picking the first that exists', () => {
     const first = path.join('/usr/bin', 'ruby');
     const second = path.join('/usr/local/bin', 'ruby');
@@ -123,6 +147,7 @@ describe('resolveRuby', () => {
     assert.ok(result.steps.some((s) => s.strategy === 'asdf'));
     assert.ok(result.steps.some((s) => s.strategy === 'rbenv'));
     assert.ok(result.steps.some((s) => s.strategy === 'chruby'));
+    assert.ok(result.steps.some((s) => s.strategy === 'Homebrew'));
     assert.ok(result.steps.some((s) => s.strategy === 'PATH'));
     assert.ok(result.steps.some((s) => s.strategy === 'RubyInstaller'));
     assert.ok(result.steps.every((s) => typeof s.reason === 'string' && s.reason.length > 0));

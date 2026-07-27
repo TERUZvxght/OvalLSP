@@ -50,8 +50,9 @@ function pathEntries(env: RubyResolverEnv): string[] {
  *   3. asdf
  *   4. rbenv
  *   5. chruby
- *   6. PATH
- *   7. Windows RubyInstaller locations
+ *   6. Homebrew (`/opt/homebrew`, macOS only -- Task 023, see its own docs)
+ *   7. PATH
+ *   8. Windows RubyInstaller locations
  *
  * "VS Code terminal/environment integration" (the design doc's own #2) is
  * deliberately not a separate strategy here: VS Code's extension host
@@ -93,6 +94,7 @@ function pickExecutable(
     asdfRuby(env, record) ??
     rbenvRuby(env, record) ??
     chrubyRuby(env, record) ??
+    homebrewRuby(env, record) ??
     pathRuby(env, record) ??
     windowsInstallerRuby(env, record) ??
     'ruby'
@@ -162,6 +164,40 @@ function chrubyRuby(
   // mapping. Recorded as a *matched marker file* only, for diagnostics —
   // never picked as the actual executable.
   return record('chruby', null, `${versionFile} exists, but chruby's own ruby-<version> directory naming can't be resolved without shelling out to chruby itself`);
+}
+
+/**
+ * Homebrew's own prefix, checked directly rather than relying on PATH
+ * containing it -- found reviewing Apple Silicon readiness (Task 023).
+ * A GUI-launched VS Code (Dock/Finder/Spotlight, not a terminal) gets
+ * macOS' own minimal launchd-inherited PATH, which does not include
+ * `/opt/homebrew/bin` unless something else already put it there; a
+ * Homebrew-installed Ruby is otherwise invisible to `pathRuby` below in
+ * exactly that (common) launch shape.
+ *
+ * Checked before the generic PATH scan, deliberately: a Homebrew Ruby is
+ * a real, user-installed interpreter, while `pathRuby` below can easily
+ * land on macOS' own restricted system `/usr/bin/ruby` first if PATH
+ * happens to be minimal -- worse for this project's needs.
+ *
+ * Apple Silicon's prefix (`/opt/homebrew`) is checked, not Intel's
+ * (`/usr/local`, still valid under Rosetta on an Apple Silicon Mac): this
+ * Preview supports darwin-arm64 only, and picking an x86_64 Homebrew
+ * Ruby here would silently hand `platformCompatibility.ts`'s own
+ * architecture check a Rosetta-translated interpreter to reject *after*
+ * spawning it, rather than simply not offering it as a candidate. That
+ * check still exists as the authoritative backstop (this function only
+ * decides what gets *tried*, not what's ultimately compatible).
+ */
+function homebrewRuby(
+  env: RubyResolverEnv,
+  record: (strategy: string, candidate: string | null, reason: string) => string | null
+): string | null {
+  if (env.platform !== 'darwin') {
+    return record('Homebrew', null, 'not running on macOS');
+  }
+  const candidate = path.join('/opt/homebrew/opt/ruby/bin', exeName('ruby', env));
+  return record('Homebrew', candidate, `Homebrew (Apple Silicon prefix) Ruby at ${candidate}`);
 }
 
 function pathRuby(
