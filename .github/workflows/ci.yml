@@ -56,7 +56,7 @@ jobs:
         working-directory: core
         run: |
           ruby -rjson -e '
-            result = JSON.parse(File.read("tmp/rspec.json"))
+            result = JSON.parse(File.read("tmp/rspec.json", encoding: "UTF-8"))
             real_rails_examples = result.fetch("examples").select { |ex| ex.fetch("file_path").include?("spec/integration/real_rails_spec.rb") }
             if real_rails_examples.empty?
               warn "real_rails_spec.rb contributed zero examples -- was it even loaded?"

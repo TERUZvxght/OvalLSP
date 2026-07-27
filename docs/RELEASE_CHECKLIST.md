@@ -27,6 +27,37 @@ Task 022の受け入れ基準(「1.0 release checklistが全項目判定可能�
 - ⚠️ 要確認/部分検証: 一部は実装済みだが、完全な検証には至っていない
 - ❌ 未着手: このセッションでは着手していない
 
+## Apple Silicon Marketplace Preview Release Gate (Task 023)
+
+上記の1.0リリースチェックリストとは別に、Task 023(Apple Silicon向け
+Marketplace Preview公開)固有の22項目のゲートを設ける。`make-final-review-bundle.sh`
+へ組み込み済みの項目には✅を付す — 手動確認のみの項目は状態欄にその旨を記す。
+
+| # | 項目 | 状態 | 根拠 |
+|---|---|---|---|
+| 1 | git tracked tree clean | ✅ `make-final-review-bundle.sh`が`git diff --quiet`/`git diff --cached --quiet`で強制 |
+| 2 | Core full RSpec failure/pending 0 | ✅ `make-final-review-bundle.sh`の"Core full RSpec"ステップ。895 examples / 0 failures(Task 023.2のBuildManifest/ProtocolVersion specを含む) |
+| 3 | Real Rails integration failure/pending 0 | ✅ 同スクリプトの"Mandatory real Rails integration"ステップ |
+| 4 | VS Code unit/integration failure 0 | ✅ `test:unit`(65 examples、Task 023.2-023.5のversionInfo/clientLifecycle/platformCompatibility分含む)・`test:integration` |
+| 5 | packaged integration failure 0 | ✅ `test:integration:packaged`(既存)+本タスクで追加した`vsix_semantic_smoke.rb`のdocumentSymbol/definition検証 |
+| 6 | Apple Silicon semantic smoke PASS | ✅ `scripts/vsix_semantic_smoke.rb`(hover/documentSymbol/definition/stderr allowlist、Task 023.4で拡張) |
+| 7 | Extension/Core version handshake PASS | ✅ `vscode/src/versionInfo.ts#compareVersionInfo`のテスト(Task 023.2、8種の不一致モード全て) |
+| 8 | update E1/C1→E2/C2 PASS | ✅ `versionInfo.test.ts`の"never mixes E1/C1 and E2/C2"(Task 023.5) |
+| 9 | delayed-start race test PASS | ✅ `clientLifecycle.test.ts`(Task 023.3、独立レビューでの追加P0修正込み) |
+| 10 | payload hash verification PASS | ✅ `computeBundledPayloadSha256`のテスト+`versionInfo.test.ts`の"detects a payload hash mismatch" |
+| 11 | SBOM name/version match PASS | ✅ `scripts/verify_sbom_against_vsix.rb`(既存、Task 022由来、本タスクでは変更なし) |
+| 12 | LICENSE/Third Party Notice match PASS | ✅ `vscode/LICENSE`(既存)+本タスクで追加した`vscode/THIRD_PARTY_NOTICES.md`が`docs/SBOM.md`と一致することを目視確認済み |
+| 13 | Privacy doc matches actual code | ✅ `vscode/PRIVACY.md`の記述を`grep`でtelemetry/network呼び出しの不在を確認してから作成(Task 023.6) |
+| 14 | secret scan PASS | ✅ `gitleaks`を`make-final-review-bundle.sh`へ組み込み(全履歴、`.gitleaks.toml`でテストフィクスチャのみ許可リスト化) |
+| 15 | `vsce ls --tree`内容検査PASS | ✅ `make-final-review-bundle.sh`の"Package contents inspection"ステップ(このビルドマシン自身の絶対パス漏洩チェック、Task 023.6で発見したmkmf.log等のリークを修正済み) |
+| 16 | darwin-arm64 target確認 | ✅ `make-final-review-bundle.sh`の"Apple Silicon target confirmation"ステップ(VSIXファイル名検証)+`vscode/package.json`の`package`スクリプト自体が`--target darwin-arm64`固定 |
+| 17 | clean install/update/uninstall PASS | ✅ 既存の"VS Code isolated install"ステップ(Task 022由来) |
+| 18 | no process leftover | ✅ `scripts/vsix_semantic_smoke.rb`のprocess group kill(0)確認+`clientLifecycle.test.ts`のlifecycle race修正 |
+| 19 | README/Support Matrix/CHANGELOG整合性 | ✅ 目視確認(Task 023.6、Ruby 3.3の扱いをSUPPORT_MATRIX.md/RELEASE_CHECKLIST.md/README.md/KNOWN_LIMITATIONS.mdで統一) |
+| 20 | Marketplace preflight PASS | ⚠️ 手動確認のみ — 実際のMarketplace publisher登録・アップロードUIでのpreflightはpublish実行時まで発生しない(Task 023.8で確認事項として提示) |
+| 21 | repository remains private | ✅ 本タスク全体を通じて`gh repo view`で`PRIVATE`のまま変更していないことを都度確認 |
+| 22 | awaiting user approval before actual publish | ⚠️ 本タスクのどのコマンドも`vsce publish`を実行しない設計(`docs/PUBLISHING.md`) — ユーザーの明示承認を待つ状態 |
+
 ## Public distributionの状態
 
 このリポジトリは`private: true`(`vscode/package.json`)のまま、git remote
