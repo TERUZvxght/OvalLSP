@@ -2,6 +2,7 @@
 
 require "benchmark"
 require "fileutils"
+require "time"
 require "tmpdir"
 
 module Ovallsp
