@@ -17,6 +17,11 @@ triaged as such by the reviewer that raised it.
 Status legend: **open** — not started. **fixed** — resolved; entry kept
 until the next release, then deleted.
 
+Entries numbered `024.R*` are roadmap items rather than defects: work
+that is understood, deliberately not scheduled for the current release,
+and too large to fold into one. They live here rather than in a separate
+roadmap file for the same reason everything else does — one place.
+
 ---
 
 ## 024.1 Duplicate, unused implementation of the controller callback chain
@@ -201,3 +206,50 @@ a bug report quoting "Core 0.0.1" is hard to map to a release.
 **Direction:** decide whether the gem version tracks the extension
 version or is deliberately independent, and either bump it in step or say
 so in the version panel's own wording.
+
+---
+
+## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 0.2.x)
+
+**Status:** open — roadmap
+**Area:** `core/lib/ovallsp/server.rb`, `core/lib/ovallsp/parser_service.rb`,
+`core/lib/ovallsp/local_inferencer.rb`
+
+Rails detection gates exactly one thing: whether `RailsBootstrap.start`
+spawns the Runtime Agent (`bin/rails` + `config/environment.rb` must both
+exist). Everything downstream is not branched on "is this Rails" at all —
+the same code runs either way, and in a plain Ruby project the
+Rails-derived registries are simply empty, so those features contribute
+nothing.
+
+That part is a good property: a wrong Rails guess degrades to static
+analysis instead of breaking, and it is the same path an untrusted
+workspace takes when the Agent deliberately does not start.
+
+The gap is that several Rails *conventions* are applied on filename and
+method-name shape alone, with no Rails gate anywhere:
+
+- controller-to-view ivar propagation matches
+  `app/views/<dir>/<action>.*.erb`
+- file-change classification matches `app/models/*.rb`, `db/schema.rb`,
+  `db/structure.sql`, `db/migrate/`
+- `before_action` is recognised by method name
+- `enum`/`scope`/`delegate` generated-method facts are recorded by method
+  name
+
+So a plain Ruby project that happens to use those names or that directory
+layout gets Rails semantics applied to it. No incorrect behaviour has
+been observed — the registries those paths feed are empty without an
+Agent — but the boundary is implicit, and nothing tests what a non-Rails
+project experiences.
+
+**Direction:** give the Rails conventions one explicit boundary (a
+capability/profile decided once at initialize, from the same detection
+that gates the Agent) rather than re-deriving "this looks like Rails"
+from a path pattern at each site. Add a plain-Ruby workspace to the E2E
+capability suite so the non-Rails experience is specified and verified
+rather than assumed.
+
+Deferred out of 0.1.6 deliberately: it is an architectural change across
+three files, and 0.1.6's goal is that the capabilities already claimed to
+work actually do.
