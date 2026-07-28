@@ -36,6 +36,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
+const { assertBundledVersionsAgree } = require('./version-pairing');
+
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CORE_SOURCE = path.join(REPO_ROOT, 'core');
 const CORE_DEST = path.join(__dirname, '..', 'core');
@@ -238,6 +240,14 @@ function computeDirectorySha256(dir) {
 }
 
 function writePlatformManifest(identity) {
+  // Checked before anything is written: a bundled Core carries the
+  // extension's version, and the release that forgets is the one that
+  // bumped only package.json. See ./version-pairing.js.
+  const bundledVersions = {
+    extensionVersion: extensionVersion(),
+    coreVersion: coreVersionFromStaging()
+  };
+  assertBundledVersionsAgree(bundledVersions);
   const manifest = {
     rubyEngine: identity.engine,
     rubyVersionMajorMinor: identity.versionMajorMinor,
@@ -247,8 +257,8 @@ function writePlatformManifest(identity) {
     // Task 023.2's build manifest -- additive fields alongside the
     // ADR-0005 ruby* fields above, which `Ovallsp::VendorCompatibility`
     // and `platformCompatibility.ts` keep reading unchanged.
-    extensionVersion: extensionVersion(),
-    coreVersion: coreVersionFromStaging(),
+    extensionVersion: bundledVersions.extensionVersion,
+    coreVersion: bundledVersions.coreVersion,
     buildCommit: currentGitCommit(),
     buildTarget: currentBuildTarget(),
     // Computed over the staged tree *before* this manifest file itself

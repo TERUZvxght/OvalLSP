@@ -186,7 +186,9 @@ module, or add an integration test host.
 
 ## 024.11 Core reports version 0.0.1 while the extension reports 0.1.5
 
-**Status:** open
+**Status:** fixed — `Ovallsp::VERSION` now tracks the extension version,
+and `copy-core.js` refuses to build a bundled payload where the two
+disagree. The rule and its exemptions are in `docs/PUBLISHING.md`.
 **Area:** `core/lib/ovallsp/version.rb`, surfaced by `OvalLSP: Show Version Information`
 
 `Ovallsp::VERSION` has been `0.0.1` since the rebrand, so `initialize`

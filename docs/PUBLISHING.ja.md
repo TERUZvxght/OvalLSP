@@ -18,6 +18,36 @@ Marketplaceの**Pre-Release**チャンネルへ公開します。汎用でtarget
 `docs/design/tasks/023.5-darwin-arm64-packaging-and-update-regression.md`
 を参照。
 
+## バージョン: 同梱するCoreは拡張機能のバージョンを名乗る
+
+`core/lib/ovallsp/version.rb`のgemバージョンと`vscode/package.json`の
+拡張機能バージョンは、同梱ビルドにおいては1つの番号です。同梱Coreは
+この拡張機能自身のパッケージング手順で生成されVSIXに入り、
+`OvalLSP: Show Version Information`が利用者に「Core x.y.z」として
+表示します。どのリリースにも存在しないCoreバージョンが表示されると、
+バグ報告をビルドに対応付けられなくなります。
+
+**Rubyコードを一切変更していないリリースであっても、`package.json`と
+同時に`Ovallsp::VERSION`を上げてください。** 忘れるのはまさにその
+ケースなので、手順の記憶に頼らせません。両者が食い違う場合、
+`copy-core.js`はplatform manifestの書き出しを拒否し、
+`npm run package`が両方のバージョンを示して失敗します。覚えておくべき
+ことはありません — 食い違ったビルドは生成できません。
+
+拡張機能がビルドしていないCoreは、意図的に対象外です。
+
+| Core | バージョン規則 | 判定基準 |
+|---|---|---|
+| 同梱(VSIX内) | 拡張機能のバージョンと一致必須 | プロトコル範囲 + manifest検査(build commit、payload hash、target、Rubyのengine/version) |
+| monorepoチェックアウト(開発時) | 相違可 | プロトコル範囲のみ |
+| 利用者指定の`ovallsp.rubyExecutablePath`/カスタムCoreパス | 相違可 | プロトコル範囲のみ |
+
+下2行はADR-0006の保証#9です。利用者が選んだCoreは「この拡張機能と実際に
+通信できるか」だけで判定し、そのCoreを説明するために書かれたわけでもない
+manifestと違うというだけで不正扱いにはしません。互換性判定は常に
+プロトコル範囲で行い、バージョン文字列の比較では行いません — 同じ
+プロトコルを話す古いCoreは動作し続けます。
+
 ## リリース成果物のビルド
 
 必ず実機のApple Silicon Mac上で実行してください — x86_64マシンや

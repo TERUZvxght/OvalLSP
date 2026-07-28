@@ -19,6 +19,37 @@ ADR-0006 for why a single-target build is the right choice for this
 stage, and `docs/design/tasks/023.5-darwin-arm64-packaging-and-update-regression.md`
 for how the packaging script enforces this.
 
+## Versioning: the bundled Core carries the extension's version
+
+The gem version in `core/lib/ovallsp/version.rb` and the extension
+version in `vscode/package.json` are one number for a bundled build. A
+bundled Core is produced by this extension's own packaging step, ships
+inside the VSIX, and is reported to users as "Core x.y.z" by
+`OvalLSP: Show Version Information` — so a Core version that no release
+ever had makes a bug report impossible to map back to a build.
+
+**Bump `Ovallsp::VERSION` together with `package.json`, even for a
+release that changed no Ruby code.** That is the case that forgets, so it
+is not left to procedure: `copy-core.js` refuses to write a platform
+manifest when the two disagree, and `npm run package` fails with both
+versions named. There is nothing to remember — a mismatched build cannot
+be produced.
+
+A Core the extension did *not* build is deliberately exempt:
+
+| Core | Version rule | Judged on |
+|---|---|---|
+| Bundled (shipped in the VSIX) | must equal the extension version | protocol range, plus the manifest checks — build commit, payload hash, target, Ruby engine/version |
+| Monorepo checkout (development) | may differ | protocol range only |
+| User-supplied `ovallsp.rubyExecutablePath` / custom Core path | may differ | protocol range only |
+
+The two lower rows are ADR-0006's guarantee #9: a Core the user chose is
+judged only on whether it can actually talk to this extension, never
+flagged as wrong merely for differing from a manifest that was never
+meant to describe it. Compatibility itself is always decided on the
+protocol range, never by comparing version strings — so an older Core
+that still speaks the same protocol keeps working.
+
 ## Building the release artifact
 
 Must be run on a real Apple Silicon Mac — never emulated/cross-compiled
