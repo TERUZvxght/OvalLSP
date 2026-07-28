@@ -34,6 +34,7 @@ module Ovallsp
         @method_cache = {}
         @ancestor_cache = {}
         @member_name_cache = {}
+        @type_parameter_cache = {}
         @rbs_environment = nil
         @definition_builder = nil
         @rbi_methods = {}
@@ -64,6 +65,7 @@ module Ovallsp
           @method_cache = {}
           @ancestor_cache = {}
           @member_name_cache = {}
+          @type_parameter_cache = {}
           @generation += 1
         end
       end
@@ -121,6 +123,18 @@ module Ovallsp
           names = (@member_name_cache[key] ||= compute_member_names(type_name, singleton))
           names.select { |name| name.start_with?(prefix) }
         end
+      end
+
+      def type_parameters(type_name)
+        @mutex.synchronize do
+          @type_parameter_cache[type_name] ||= begin
+            type = rbs_type_name(type_name)
+            definition = type && build_definition(type, singleton: false)
+            definition ? definition.type_params.map(&:to_s) : []
+          end
+        end
+      rescue StandardError
+        []
       end
 
       private
@@ -200,7 +214,8 @@ module Ovallsp
           overloads: overloads,
           location: signature_location(method),
           source_kind: :rbs,
-          generation: @generation
+          generation: @generation,
+          direct: method.defined_in == type_name
         )
       rescue StandardError => e
         @diagnostics << { severity: :warning, message: "failed to build signature for #{symbol_id.owner}##{symbol_id.name}: #{e.message}",
@@ -229,7 +244,8 @@ module Ovallsp
           rest_keyword: fn.rest_keywords && TypeConverter.convert(fn.rest_keywords.type),
           block_required: !method_type.block.nil? && method_type.block.required,
           block_type: method_type.block && TypeConverter.convert_function(method_type.block.type),
-          return_type: TypeConverter.convert(fn.return_type)
+          return_type: TypeConverter.convert(fn.return_type),
+          type_parameters: method_type.type_params.map(&:to_s)
         )
       end
 

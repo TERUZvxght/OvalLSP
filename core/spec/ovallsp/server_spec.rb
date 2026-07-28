@@ -270,7 +270,7 @@ RSpec.describe Ovallsp::Server do
     expect(result).to contain_exactly(a_hash_including(name: "User", kind: 5))
   end
 
-  it "removes a file's workspace index contribution on a Deleted watched-file notification" do
+  it "keeps an open buffer's workspace index contribution on a Deleted watched-file notification" do
     input =
       frame(
         jsonrpc: "2.0", method: "textDocument/didOpen",
@@ -288,7 +288,7 @@ RSpec.describe Ovallsp::Server do
 
     build_server(input).run
 
-    expect(sent_messages.first[:result]).to eq([])
+    expect(sent_messages.first[:result]).to contain_exactly(a_hash_including(name: "User", kind: 5))
   end
 
   it "answers the custom ovallsp/explainType request with the inferred type" do
@@ -313,6 +313,48 @@ RSpec.describe Ovallsp::Server do
   # -- a follow-up review of Tasks 009-013 flagged it as orphaned. These
   # exercise the fix directly: Server now builds one per hover/explainType
   # request and checks it for staleness afterward.
+  # Every read request answers from several indexes at once (workspace,
+  # hierarchy, references, generated methods, model registry, signature
+  # environment). Off this lock, a Cold Index callback or a model refresh
+  # can commit between two of those reads inside a single request, so
+  # hover and completion at the same position can be answered from
+  # different index states. The pairing is exactly what the LSP client
+  # then shows as an inconsistent type.
+  describe "read requests answer from one index snapshot" do
+    {
+      "textDocument/hover" => :hover_result,
+      "textDocument/documentSymbol" => :document_symbol_result,
+      "textDocument/definition" => :definition_result,
+      "workspace/symbol" => :workspace_symbol_result,
+      "ovallsp/explainType" => :explain_type_result,
+      "textDocument/completion" => :completion_result,
+      "textDocument/signatureHelp" => :signature_help_result,
+      "textDocument/references" => :references_result,
+      "textDocument/prepareRename" => :prepare_rename_result,
+      "textDocument/rename" => :rename_result,
+      "ovallsp/showTypeEvidence" => :show_type_evidence_result
+    }.each do |lsp_method, result_method|
+      it "holds the index lock for the whole of #{lsp_method}" do
+        input =
+          frame(
+            jsonrpc: "2.0", id: 1, method: lsp_method,
+            params: { textDocument: { uri: "file:///a.rb" }, position: { line: 0, character: 0 }, query: "" }
+          ) +
+          frame(jsonrpc: "2.0", method: "exit", params: nil)
+        server = build_server(input)
+        held = nil
+        allow(server).to receive(result_method) do |*|
+          held = server.instance_variable_get(:@index_mutation_mutex).owned?
+          nil
+        end
+
+        server.run
+
+        expect(held).to be(true)
+      end
+    end
+  end
+
   describe "QueryContext wiring (Task 013 review fix)" do
     let(:server) { build_server("") }
 

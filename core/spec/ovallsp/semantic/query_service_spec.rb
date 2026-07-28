@@ -95,6 +95,15 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       expect(members.find { |member| member.name == "upcase" }.conditional).to be(true)
     end
 
+    it "keeps members conditional on a nilable receiver" do
+      index_source("class User\n  def name\n  end\nend\n")
+      receiver = Ovallsp::Types.normalize_union([nominal("User"), Ovallsp::Types::NIL])
+
+      name = service.members_of(receiver, prefix: "name").find { |member| member.name == "name" }
+
+      expect(name.conditional).to be(true)
+    end
+
     it "treats a same-named member from different origins as available across the Union" do
       model_registry.register_from_agent_response(
         "User",
@@ -155,6 +164,73 @@ RSpec.describe Ovallsp::Semantic::QueryService do
 
       expect(signatures_result).not_to be_empty
       expect(signatures_result.first[:label]).to start_with("upcase(")
+    end
+
+    it "prefers an explicit RBS signature over a conflicting source declaration" do
+      Dir.mktmpdir do |root|
+        FileUtils.mkdir_p(File.join(root, "sig"))
+        File.write(File.join(root, "sig", "widget.rbs"), "class Widget\n  def build: () -> String\nend\n")
+        signatures.load(workspace_root: root)
+        index_source("class Widget\n  def build(count)\n  end\nend\n")
+
+        result = service.signatures_of(nominal("Widget"), "build")
+
+        expect(result.first[:label]).to include("-> String")
+      end
+    end
+
+    # Rewritten: the previous version wrote an RBS declaring no `to_s` at
+    # all, so there was never a signature to outrank -- it passed
+    # identically against the old unconditional `source || rbs` order and
+    # constrained nothing about the direct/inherited split it claimed to
+    # document.
+    #
+    # Only this direction is actually assertable. The ladder is
+    # `rbs(direct) || source || rbs(inherited)`, whose rungs 1 and 3
+    # together reproduce the old `source || rbs` for everything except a
+    # *directly declared* RBS signature -- so "source beats inherited" is
+    # not a state the design can fail, and a spec for it would pass
+    # against any implementation.
+    it "prefers a directly-declared RBS signature over a source declaration of the same method" do
+      Dir.mktmpdir do |root|
+        FileUtils.mkdir_p(File.join(root, "sig"))
+        File.write(File.join(root, "sig", "widget.rbs"), "class Widget\n  def render: (Integer size) -> String\nend\n")
+        signatures.load(workspace_root: root)
+        index_source("class Widget\n  def render(from_source)\n  end\nend\n")
+
+        result = service.signatures_of(nominal("Widget"), "render")
+
+        expect(result.first[:label]).to include("-> String")
+      end
+    end
+
+    it "keeps authoritative signatures from every Union receiver member" do
+      Dir.mktmpdir do |root|
+        FileUtils.mkdir_p(File.join(root, "sig"))
+        File.write(
+          File.join(root, "sig", "values.rbs"),
+          "class Widget\n  def value: () -> String\nend\nclass Gadget\nend\n"
+        )
+        signatures.load(workspace_root: root)
+        index_source(<<~RUBY)
+          class Widget
+            def value(source_argument)
+            end
+          end
+          class Gadget
+            def value(count)
+            end
+          end
+        RUBY
+
+        result = service.signatures_of(
+          Ovallsp::Types.normalize_union([nominal("Widget"), nominal("Gadget")]), "value"
+        )
+
+        expect(result.map { |signature| signature[:label] }).to include(
+          a_string_including("-> String"), "value(count)"
+        )
+      end
     end
   end
 

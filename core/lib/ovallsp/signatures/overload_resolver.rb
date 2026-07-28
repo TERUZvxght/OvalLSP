@@ -15,14 +15,24 @@ module Ovallsp
     module OverloadResolver
       module_function
 
-      def resolve(overloads, positional_count:, keyword_names: [], block_given: false)
+      def resolve(overloads, positional_count:, keyword_names: [], block_given: false, receiver_bindings: {})
         matches = overloads.select { |o| matches?(o, positional_count, keyword_names, block_given) }
-        matches = overloads if matches.empty? # no exact shape match -- fall back to every overload's return type
+        exact_match = !matches.empty?
+        matches = overloads unless exact_match # no exact shape match -- fall back to every overload's return type
+        if exact_match && block_given
+          block_matches = matches.select(&:block_type)
+          matches = block_matches unless block_matches.empty?
+        end
 
-        Types.normalize_union(matches.map(&:return_type))
+        Types.normalize_union(matches.map do |overload|
+          bindings = receiver_bindings.reject { |name, _type| overload.type_parameters.include?(name) }
+          Types.substitute(overload.return_type, bindings)
+        end)
       end
 
       def matches?(overload, positional_count, keyword_names, block_given)
+        return false if positional_count.nil? || keyword_names.nil?
+
         positional_arity_matches?(overload, positional_count) &&
           keyword_arity_matches?(overload, keyword_names) &&
           block_arity_matches?(overload, block_given)
@@ -38,7 +48,7 @@ module Ovallsp
 
       def keyword_arity_matches?(overload, keyword_names)
         return true if overload.rest_keyword
-        return true if overload.required_keywords.empty? && overload.optional_keywords.empty?
+        return keyword_names.empty? if overload.required_keywords.empty? && overload.optional_keywords.empty?
 
         known = overload.required_keywords.keys + overload.optional_keywords.keys
         required_present = overload.required_keywords.keys.all? { |k| keyword_names.include?(k) }

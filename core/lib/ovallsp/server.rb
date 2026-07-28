@@ -87,7 +87,26 @@ module Ovallsp
       @agent_bootstrap = agent_bootstrap
       @agent_manager = nil
       @agent_restart_mutex = Mutex.new
+      @agent_refresh_mutex = Mutex.new
+      # Serializing agent refreshes fixed out-of-order writes but made
+      # every refresh queue behind the previous one, so a wedged Agent
+      # (each round trip burning its full timeout) accumulated blocked
+      # threads without bound -- a rebase or a long migration can fire
+      # didChangeWatchedFiles repeatedly, and every one of those queued
+      # refreshes is already stale by the time it runs.
+      #
+      # Whole-section refreshes are superseded by generation: only the
+      # newest queued routes/all-models refresh does the work. Targeted
+      # model refreshes cannot be dropped that way -- a later refresh of
+      # ["Team"] says nothing about an earlier ["User"] -- so their names
+      # are coalesced into one pending set instead, and whichever thread
+      # wins the mutex drains and refreshes the whole set at once.
+      @refresh_state_mutex = Mutex.new
+      @refresh_generations = Hash.new(0)
+      @pending_model_names = []
+      @model_refresh_waiter = nil
       @file_summaries = {}
+      @index_mutation_mutex = Mutex.new
       @shutdown_received = false
       @query_service = Semantic::QueryService.new(
         local_inferencer: @local_inferencer, method_resolver: @method_resolver, model_registry: @model_registry,
@@ -98,6 +117,7 @@ module Ovallsp
       @reference_rebuild_mutex = Mutex.new
       @reference_dirty_token = 0
       @reference_built_token = -1
+      @reference_built_semantic_generation = nil
       @reference_resolver = Semantic::ReferenceResolver.new(
         workspace_index: @workspace_index, method_resolver: @method_resolver, local_inferencer: @local_inferencer,
         model_registry: @model_registry, route_registry: @route_registry
@@ -221,33 +241,33 @@ module Ovallsp
       when "textDocument/didClose"
         handle_did_close(message[:params])
       when "textDocument/hover"
-        respond(id, hover_result(message[:params]))
+        respond(id, with_index_snapshot { hover_result(message[:params]) })
       when "textDocument/documentSymbol"
-        respond(id, document_symbol_result(message[:params]))
+        respond(id, with_index_snapshot { document_symbol_result(message[:params]) })
       when "textDocument/definition"
-        respond(id, definition_result(message[:params]))
+        respond(id, with_index_snapshot { definition_result(message[:params]) })
       when "workspace/symbol"
-        respond(id, workspace_symbol_result(message[:params]))
+        respond(id, with_index_snapshot { workspace_symbol_result(message[:params]) })
       when "workspace/didChangeWatchedFiles"
         handle_did_change_watched_files(message[:params])
       when "ovallsp/explainType"
-        respond(id, explain_type_result(message[:params]))
+        respond(id, with_index_snapshot { explain_type_result(message[:params]) })
       when "textDocument/completion"
-        respond(id, completion_result(message[:params]))
+        respond(id, with_index_snapshot { completion_result(message[:params]) })
       when "textDocument/signatureHelp"
-        respond(id, signature_help_result(message[:params]))
+        respond(id, with_index_snapshot { signature_help_result(message[:params]) })
       when "textDocument/references"
-        respond(id, references_result(message[:params]))
+        respond(id, with_index_snapshot { references_result(message[:params]) })
       when "textDocument/prepareRename"
-        respond(id, prepare_rename_result(message[:params]))
+        respond(id, with_index_snapshot { prepare_rename_result(message[:params]) })
       when "textDocument/rename"
-        respond(id, rename_result(message[:params]))
+        respond(id, with_index_snapshot { rename_result(message[:params]) })
       when "ovallsp/runObservedTests"
         respond(id, run_observed_tests_result(message[:params]))
       when "ovallsp/clearObservedTypes"
         respond(id, clear_observed_types_result(message[:params]))
       when "ovallsp/showTypeEvidence"
-        respond(id, show_type_evidence_result(message[:params]))
+        respond(id, with_index_snapshot { show_type_evidence_result(message[:params]) })
       when "ovallsp/status"
         respond(id, status_result(message[:params]))
       when "ovallsp/restartAgent"
@@ -262,6 +282,10 @@ module Ovallsp
     rescue StandardError => e
       handle_dispatch_error(method, id, e)
       nil
+    end
+
+    def with_index_snapshot(&block)
+      @index_mutation_mutex.synchronize(&block)
     end
 
     def handle_unknown_method(method, id)
@@ -308,7 +332,10 @@ module Ovallsp
     def handle_did_close(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       @document_store.close(uri: uri)
-      @file_summaries.delete(uri)
+      # `@file_summaries.delete(uri)` used to run here too, outside the
+      # index lock -- redundant, since #remove_index_contribution deletes
+      # the same key one line below *inside* it, and a lock-discipline
+      # exception the rest of this file no longer makes.
 
       # Unconditional and first: WorkspaceIndex#replace_file now refuses to
       # let any disk-sourced summary overwrite a buffer-sourced one for the
@@ -318,13 +345,7 @@ module Ovallsp
       # #reindex_from_disk's own replace_file call, or that call would see
       # a still-buffer-sourced existing entry and be silently rejected as
       # stale (docs/design/tasks/008.6-agent-and-index-hardening.md).
-      previous_declarations = @workspace_index.declarations_for_uri(uri)
-      @workspace_index.remove_file(uri)
-      @hierarchy_index.remove_file(uri)
-      @reference_index.remove_file(uri)
-      @generated_method_index.remove_file(uri)
-      invalidate_method_summaries(previous_declarations)
-      mark_reference_index_dirty
+      @index_mutation_mutex.synchronize { remove_index_contribution(uri) }
       clear_diagnostics(uri)
 
       path = UriUtil.to_path(uri)
@@ -333,13 +354,7 @@ module Ovallsp
 
     def reindex(document)
       summary = @parser_service.summarize(document)
-      @file_summaries[document.uri] = summary
-      previous_declarations = @workspace_index.declarations_for_uri(document.uri)
-      if @workspace_index.replace_file(summary)
-        @hierarchy_index.replace_file(summary)
-        invalidate_method_summaries(previous_declarations)
-        @generated_method_index.replace_file(uri: document.uri, facts: summary.generated_method_facts)
-        mark_reference_index_dirty
+      if apply_file_summary(summary)
         invalidate_stale_observations
         publish_diagnostics(document)
       end
@@ -359,8 +374,10 @@ module Ovallsp
     # there's no LSP client-side buffer to attach the notification to
     # meaningfully.
     def publish_diagnostics(document)
-      context = diagnostics_semantic_context
-      findings = @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
+      findings = with_index_snapshot do
+        context = diagnostics_semantic_context
+        @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
+      end
       @writer.write_message(
         jsonrpc: JSONRPC_VERSION, method: "textDocument/publishDiagnostics",
         params: { uri: document.uri, version: document.version, diagnostics: findings.map { |f| to_lsp_diagnostic(f) } }
@@ -672,12 +689,18 @@ module Ovallsp
     def ensure_reference_index_current
       @reference_rebuild_mutex.synchronize do
         loop do
+          semantic_generation = reference_semantic_generation
           token, current = @reference_state_mutex.synchronize do
-            [@reference_dirty_token, @reference_built_token == @reference_dirty_token]
+            [
+              @reference_dirty_token,
+              @reference_built_token == @reference_dirty_token &&
+                @reference_built_semantic_generation == semantic_generation
+            ]
           end
           break if current
 
           resolved_by_uri = @file_summaries.dup.each_with_object({}) do |(uri, summary), resolved|
+            resolved[uri] = []
             document = @document_store.fetch(uri: uri) || load_document_from_disk(uri)
             next unless document
 
@@ -688,16 +711,30 @@ module Ovallsp
             @logger.error("failed to resolve references for #{uri}: #{e.class}: #{e.message}")
           end
 
+          latest_semantic_generation = reference_semantic_generation
           installed = @reference_state_mutex.synchronize do
-            next false unless @reference_dirty_token == token
+            next false unless @reference_dirty_token == token &&
+                              latest_semantic_generation == semantic_generation
 
             resolved_by_uri.each { |uri, references| @reference_index.replace_file(uri: uri, references: references) }
             @reference_built_token = token
+            @reference_built_semantic_generation = semantic_generation
             true
           end
           break if installed
         end
       end
+    end
+
+    def reference_semantic_generation
+      [
+        @workspace_index.generation,
+        @signatures.generation,
+        @model_registry.generation,
+        @route_registry.generation,
+        @observation_store.generation,
+        @generated_method_index.generation
+      ]
     end
 
     # MethodSummaryStore's cache (Task 010, wired into resolution by Task
@@ -750,13 +787,25 @@ module Ovallsp
       document_store = @document_store
       logger = @logger
       cache_store = build_cache_store
+      existing_disk_uris = workspace_index.uris_by_source(:disk)
 
       @cold_indexing = true
       @background_tasks.track_thread(Thread.new do
         ColdIndexer.new(root: root, parser_service: parser_service, workspace_index: workspace_index,
                         hierarchy_index: hierarchy_index, document_store: document_store, logger: logger,
-                        cache_store: cache_store, on_indexed: method(:apply_cold_summary),
-                        on_complete: method(:mark_reference_index_dirty)).run
+                        cache_store: cache_store, on_summary: method(:apply_cold_summary),
+                        on_complete: lambda { |result|
+                          sweep_deleted_cold_files(existing_disk_uris, result.seen_uris) if result.complete
+                          # Bumped under the same lock every other
+                          # mutation site uses. Outside it, a dispatch
+                          # thread already holding the lock could finish a
+                          # full-workspace reference resolution, observe
+                          # the token move at install time, and throw the
+                          # whole pass away -- a doubled O(workspace)
+                          # rebuild on exactly the "just cold-indexed a
+                          # large repo" path.
+                          @index_mutation_mutex.synchronize { mark_reference_index_dirty }
+                        }).run
       rescue StandardError => e
         logger.error("cold index failed: #{e.class}: #{e.message}")
       ensure
@@ -764,10 +813,113 @@ module Ovallsp
       end)
     end
 
-    def apply_cold_summary(uri, _document, summary, previous_declarations)
-      @file_summaries[uri] = summary
+    def apply_cold_summary(_uri, _document, summary)
+      apply_file_summary(summary)
+    end
+
+    def apply_file_summary(summary)
+      @index_mutation_mutex.synchronize do
+        previous_declarations = @workspace_index.declarations_for_uri(summary.uri)
+        return false unless @workspace_index.replace_file(summary)
+
+        @hierarchy_index.replace_file(summary)
+        @file_summaries[summary.uri] = summary
+        invalidate_method_summaries(previous_declarations)
+        @generated_method_index.replace_file(uri: summary.uri, facts: summary.generated_method_facts)
+        mark_reference_index_dirty
+        true
+      end
+    end
+
+    # "ColdIndexer did not visit it" is not the same fact as "it was
+    # deleted", and treating them as one silently dropped live files out
+    # of the index. ColdIndexer only walks its own include/exclude
+    # filters (DEFAULT_EXCLUDED_DIRS covers vendor/tmp/log/storage/...),
+    # while `reindex_from_disk` indexes whatever the client's watcher
+    # reports -- and that glob has no such exclusions. Anything indexed
+    # through the wider path but skipped by the narrower one was
+    # therefore purged on the next re-index, reappeared when touched, and
+    # was purged again: permanently flapping. The symlink-dedup
+    # early-return in ColdIndexer never records a `seen` URI either, so
+    # it hit the same hole.
+    #
+    # Absence is now *verified* rather than inferred, which is correct no
+    # matter how the two path sets diverge in future. Also one critical
+    # section instead of one per URI, so a concurrent request can never
+    # observe a half-swept index.
+    # Claims the newest generation for a whole-section refresh. The
+    # caller compares it again after acquiring @agent_refresh_mutex and
+    # bows out if a newer request has since arrived.
+    def claim_refresh_generation(kind)
+      @refresh_state_mutex.synchronize { @refresh_generations[kind] += 1 }
+    end
+
+    def refresh_generation_current?(kind, generation)
+      @refresh_state_mutex.synchronize { @refresh_generations[kind] == generation }
+    end
+
+    def enqueue_model_names(names)
+      @refresh_state_mutex.synchronize { @pending_model_names |= names.to_a }
+    end
+
+    def drain_model_names
+      @refresh_state_mutex.synchronize { @pending_model_names.tap { @pending_model_names = [] } }
+    end
+
+    # At most one thread may *wait* for the model-refresh mutex. Every
+    # queued thread would refresh exactly the same thing -- whoever gets
+    # the mutex drains the whole pending set -- so the ones behind the
+    # first waiter are pure accumulation.
+    #
+    # The slot is released the moment its holder acquires the mutex and
+    # before it drains, which is what makes bowing out safe: a thread that
+    # finds the slot taken knows the waiter has not drained yet, so the
+    # names it just enqueued are still ahead of that waiter's drain. A
+    # dead waiter (killed during shutdown) never wedges the queue, since
+    # liveness is rechecked on every claim.
+    def claim_model_refresh_slot
+      @refresh_state_mutex.synchronize do
+        next false if @model_refresh_waiter&.alive?
+
+        @model_refresh_waiter = Thread.current
+        true
+      end
+    end
+
+    def release_model_refresh_slot
+      @refresh_state_mutex.synchronize do
+        @model_refresh_waiter = nil if @model_refresh_waiter == Thread.current
+      end
+    end
+
+    def sweep_deleted_cold_files(existing_disk_uris, seen_uris)
+      deleted = (existing_disk_uris - seen_uris.to_a).reject do |uri|
+        path = UriUtil.to_path(uri)
+        # A URI whose path cannot be derived is *unverifiable*, not
+        # verified-absent -- keeping it is the direction that matches
+        # this method's whole point. Treating nil as "gone" would have
+        # reintroduced exactly the inference this check replaced.
+        path.nil? || File.file?(path)
+      end
+      return if deleted.empty?
+
+      @index_mutation_mutex.synchronize do
+        deleted.each do |uri|
+          next unless @workspace_index.summary_for_uri(uri)&.source == :disk
+
+          remove_index_contribution(uri)
+        end
+      end
+    end
+
+    def remove_index_contribution(uri)
+      previous_declarations = @workspace_index.declarations_for_uri(uri)
+      @workspace_index.remove_file(uri)
+      @hierarchy_index.remove_file(uri)
+      @reference_index.remove_file(uri)
+      @generated_method_index.remove_file(uri)
+      @file_summaries.delete(uri)
       invalidate_method_summaries(previous_declarations)
-      @generated_method_index.replace_file(uri: uri, facts: summary.generated_method_facts)
       mark_reference_index_dirty
     end
 
@@ -870,7 +1022,8 @@ module Ovallsp
         # both writes to @agent_manager could interleave the same way
         # described in #restart_agent's comment.
         mutex.synchronize do
-          manager = bootstrap.start(
+          manager = start_agent_bootstrap(
+            bootstrap,
             root: root, logger: logger, route_registry: route_registry, model_registry: model_registry,
             on_unavailable: method(:handle_agent_unavailable),
             # Registers the manager with BackgroundTasks the moment it
@@ -1041,12 +1194,14 @@ module Ovallsp
                              load_document_from_disk(context[:controller_uri])
       return {} unless controller_document
 
-      contributing_actions(controller_document, context[:owner], context[:action]).reduce({}) do |env, action_name|
-        merge_ivar_environments(
-          env,
-          infer_controller_action_ivars(context[:owner], action_name)
+      documents = controller_ancestor_documents(context[:owner])
+      method_maps = controller_method_maps(documents)
+      environments = contributing_actions(documents, method_maps, context[:action], context[:view_key]).map do |action_name|
+        infer_controller_action_ivars(
+          context[:owner], action_name, documents: documents, method_maps: method_maps
         )
       end
+      merge_alternative_ivar_environments(environments)
     end
 
     # Rails inherits callback declarations. Build the effective callback
@@ -1054,8 +1209,8 @@ module Ovallsp
     # controller, applying skip_before_action in declaration order. Each
     # callback method itself follows normal Ruby lookup from child to
     # parent, so an override is evaluated exactly once.
-    def infer_controller_action_ivars(owner_name, action_name)
-      documents = controller_ancestor_documents(owner_name)
+    def infer_controller_action_ivars(owner_name, action_name, documents: controller_ancestor_documents(owner_name),
+                                      method_maps: controller_method_maps(documents))
       operations = documents.reverse.flat_map do |ancestor_name, document|
         @local_inferencer.before_action_operations(
           document, owner_name: ancestor_name, action_name: action_name
@@ -1065,25 +1220,24 @@ module Ovallsp
         verb == :add ? names << name : names.delete(name)
       end
 
+      @local_inferencer.begin_ivar_inference
       env = callbacks.reduce({}) do |callback_env, callback_name|
-        declaration = documents.find do |ancestor_name, document|
-          @local_inferencer.method_declared?(
-            document, owner_name: ancestor_name, method_name: callback_name
-          )
-        end
+        declaration = documents.find { |ancestor_name, _document| method_maps[ancestor_name].key?(callback_name) }
         next callback_env unless declaration
 
-        ancestor_name, document = declaration
-        @local_inferencer.infer_ivars_for_method(
-          document, owner_name: ancestor_name, method_name: callback_name, initial_env: callback_env
+        ancestor_name, = declaration
+        @local_inferencer.infer_ivars_for_method_node(
+          method_maps[ancestor_name][callback_name], initial_env: callback_env,
+          self_type_name: owner_name, reset_budget: false
         )
       end
 
-      concrete_document = documents.find { |ancestor_name, _document| ancestor_name == owner_name }&.last
-      return env unless concrete_document
+      action_declaration = documents.find { |ancestor_name, _document| method_maps[ancestor_name].key?(action_name) }
+      return env unless action_declaration
 
-      @local_inferencer.infer_ivars_for_method(
-        concrete_document, owner_name: owner_name, method_name: action_name, initial_env: env
+      ancestor_name, = action_declaration
+      @local_inferencer.infer_ivars_for_method_node(
+        method_maps[ancestor_name][action_name], initial_env: env, self_type_name: owner_name, reset_budget: false
       )
     end
 
@@ -1099,13 +1253,19 @@ module Ovallsp
       end
     end
 
-    # Multiple controller actions can render the same view. They are
-    # alternative runtime paths, so conflicting ivar types must be
-    # unioned rather than whichever declaration happened to be visited
-    # last overwriting the others.
-    def merge_ivar_environments(left, right)
-      left.merge(right) do |_name, left_type, right_type|
-        Types.normalize_union([left_type, right_type])
+    def controller_method_maps(documents)
+      documents.to_h do |ancestor_name, document|
+        [ancestor_name, @local_inferencer.method_nodes(document, owner_name: ancestor_name)]
+      end
+    end
+
+    def merge_alternative_ivar_environments(environments)
+      return {} if environments.empty?
+
+      environments.reduce do |left, right|
+        (left.keys | right.keys).to_h do |name|
+          [name, Types.normalize_union([left.fetch(name, Types::NIL), right.fetch(name, Types::NIL)])]
+        end
       end
     end
 
@@ -1122,12 +1282,22 @@ module Ovallsp
       controller_uri = find_controller_uri(owner)
       return nil unless controller_uri
 
-      { owner: owner, action: match[:action], controller_uri: controller_uri }
+      { owner: owner, action: match[:action], view_key: "#{match[:dir]}/#{match[:action]}", controller_uri: controller_uri }
     end
 
+    # Looked up by qualified *name*, never by a reconstructed SymbolId.
+    # `owner` is recorded lexically, so one class has as many SymbolIds as
+    # there are ways to spell it -- `module Api; module V1; class
+    # UsersController`, `class Api::V1::UsersController`, and the partly
+    # compact `module Api; class V1::UsersController` are three different
+    # keys. Any owner-derived lookup matches some and misses the rest, and
+    # a miss silently stops a whole controller's ivars from reaching its
+    # views; enumerating candidate owners only moves which spelling
+    # breaks. The name is already fully qualified and unique, so asking by
+    # it answers every shape at once.
     def find_controller_uri(owner_name)
-      symbol_id = Index::SymbolId.new(kind: :class, owner: nil, name: owner_name, discriminator: nil)
-      @workspace_index.declarations_with_uri(symbol_id).first&.first
+      canonical = owner_name.start_with?("::") ? owner_name : "::#{owner_name}"
+      @workspace_index.class_declaration_uris(canonical).first
     end
 
     # An action contributes its ivars to this view if it either *is* the
@@ -1135,16 +1305,36 @@ module Ovallsp
     # failed #update's ivars into "edit.html.erb"
     # (docs/design/tasks/008-controller-view-propagation.md "render :edit
     # 先へ伝播").
-    def contributing_actions(controller_document, owner_name, view_action)
-      summary = @parser_service.summarize(controller_document)
-      action_names = summary.declarations
-                            .select { |d| d.symbol_id.kind == :instance_method && d.symbol_id.owner == owner_name }
-                            .map { |d| d.symbol_id.name }
+    def contributing_actions(documents, method_maps, view_action, view_key)
+      effective_visibilities = {}
+      documents.each do |ancestor_name, document|
+        summary = @file_summaries[document.uri] || @parser_service.summarize(document)
+        canonical_owner = ancestor_name.start_with?("::") ? ancestor_name : "::#{ancestor_name}"
+        owner_visibilities = {}
+        summary.declarations.each do |declaration|
+          symbol = declaration.symbol_id
+          next unless symbol.kind == :instance_method
+          next unless symbol.owner == canonical_owner || symbol.owner == ancestor_name
+          next unless method_maps.fetch(ancestor_name).key?(symbol.name)
+
+          owner_visibilities[symbol.name] = declaration.visibility
+        end
+        # Documents are child-first. The first declaration reached for a
+        # name is therefore Ruby's effective override; a private child
+        # method must hide a public action inherited from its parent.
+        owner_visibilities.each { |name, visibility| effective_visibilities[name] ||= visibility }
+      end
+      action_names = effective_visibilities.filter_map { |name, visibility| name if visibility == :public }
 
       action_names.select do |action_name|
-        action_name == view_action ||
-          @local_inferencer.find_static_render_target(controller_document, owner_name: owner_name,
-                                                                             method_name: action_name) == view_action
+        next true if action_name == view_action
+
+        declaration = documents.find { |ancestor_name, _document| method_maps[ancestor_name].key?(action_name) }
+        next false unless declaration
+
+        ancestor_name, = declaration
+        target = @local_inferencer.static_render_target_for_node(method_maps[ancestor_name][action_name])
+        target && (target.include?("/") ? target.delete_prefix("/") == view_key : target == view_action)
       end
     end
 
@@ -1525,15 +1715,8 @@ module Ovallsp
         uri = change.fetch(:uri)
         if signature_file?(uri)
           needs_signature_reload = true
-        elsif change.fetch(:type) == FILE_CHANGE_DELETED
-          previous_declarations = @workspace_index.declarations_for_uri(uri)
-          @workspace_index.remove_file(uri)
-          @hierarchy_index.remove_file(uri)
-          @reference_index.remove_file(uri)
-          @generated_method_index.remove_file(uri)
-          invalidate_method_summaries(previous_declarations)
-          @file_summaries.delete(uri)
-          mark_reference_index_dirty
+        elsif change.fetch(:type) == FILE_CHANGE_DELETED && @document_store.fetch(uri: uri).nil?
+          @index_mutation_mutex.synchronize { remove_index_contribution(uri) }
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
           # reindex from disk for files nobody currently has open.
@@ -1550,9 +1733,17 @@ module Ovallsp
         end
       end
 
+      # Under @index_mutation_mutex like every other mutation of shared
+      # index state: this swaps the whole signature environment out from
+      # under readers and empties the summary cache derived from it. Off
+      # the lock, a request thread could read a method summary computed
+      # from the pre-reload environment and store it *after* the clear,
+      # leaving a stale entry that nothing else invalidates.
       if needs_signature_reload
-        @signatures.load(workspace_root: @workspace_root)
-        @method_summary_store.clear
+        @index_mutation_mutex.synchronize do
+          @signatures.load(workspace_root: @workspace_root)
+          @method_summary_store.clear
+        end
       end
 
       # Deduplicated across the whole batch — a git checkout or branch
@@ -1613,14 +1804,7 @@ module Ovallsp
       document = TextDocument.new(uri: uri, text: File.read(path, encoding: Encoding::UTF_8), version: nil,
                                    language_id: "ruby")
       summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
-      previous_declarations = @workspace_index.declarations_for_uri(uri)
-      if @workspace_index.replace_file(summary)
-        @hierarchy_index.replace_file(summary)
-        @file_summaries[uri] = summary
-        invalidate_method_summaries(previous_declarations)
-        @generated_method_index.replace_file(uri: uri, facts: summary.generated_method_facts)
-        mark_reference_index_dirty
-      end
+      apply_file_summary(summary)
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
     end
@@ -1669,8 +1853,9 @@ module Ovallsp
     # が消える"). Runs on its own thread: both requests block on Agent I/O,
     # and nothing here may delay LSP responses.
     #
-    # The final write is guarded by @agent_restart_mutex and an identity
-    # check against the *current* @agent_manager: this thread captured a
+    # The whole refresh is serialized with every other refresh from this
+    # Server. Its final write is guarded by @agent_restart_mutex and an
+    # identity check against the *current* @agent_manager: this thread captured a
     # specific manager instance at call time, and if a restart (Gemfile.lock,
     # an initializer change) swaps in a fresh one — and fully repopulates
     # both registries — while this thread's own round trip was still in
@@ -1686,20 +1871,35 @@ module Ovallsp
       route_registry = @route_registry
       logger = @logger
       mutex = @agent_restart_mutex
+      refresh_mutex = @agent_refresh_mutex
+
+      generation = claim_refresh_generation(:routes)
 
       @background_tasks.track_thread(Thread.new do
-        next unless agent_manager.reload(sections: ["routes"])
+        # Checked *before* blocking on the mutex, not only after
+        # acquiring it: a superseded refresh that waits its turn behind a
+        # wedged Agent still occupies a thread for the whole timeout, so
+        # checking only on the inside skipped the redundant work while
+        # leaving the thread pile-up it was supposed to bound.
+        next unless refresh_generation_current?(:routes, generation)
 
-        snapshot = agent_manager.fetch_snapshot(sections: ["routes"])
-        unless snapshot
-          logger.warn("failed to fetch routes snapshot after routes.rb change; keeping last-known-good routes")
-          next
-        end
+        refresh_mutex.synchronize do
+          # Re-checked inside: a newer request may have arrived while
+          # this thread was waiting for the lock.
+          next unless refresh_generation_current?(:routes, generation)
+          next unless agent_manager.reload(sections: ["routes"])
 
-        mutex.synchronize do
-          next unless agent_manager.equal?(@agent_manager)
+          snapshot = agent_manager.fetch_snapshot(sections: ["routes"])
+          unless snapshot
+            logger.warn("failed to fetch routes snapshot after routes.rb change; keeping last-known-good routes")
+            next
+          end
 
-          route_registry.replace(snapshot[:routes] || [])
+          mutex.synchronize do
+            next unless agent_manager.equal?(@agent_manager)
+
+            @index_mutation_mutex.synchronize { route_registry.replace(snapshot[:routes] || []) }
+          end
         end
       rescue StandardError => e
         logger.error("failed to refresh routes after routes.rb change: #{e.class}: #{e.message}")
@@ -1716,38 +1916,124 @@ module Ovallsp
     # last-known columns/associations behind. One reload per batch (not
     # per model) -- a Rails reload is whole-app regardless of which
     # specific file triggered it.
-    # Same stale-generation guard as #refresh_routes: each per-model write
-    # is checked against the *current* @agent_manager (not just once
-    # before the loop), since a restart can land partway through a batch
-    # of models just as easily as between #refresh_models calls
-    # (docs/design/tasks/008.6-agent-and-index-hardening.md).
+    # Same stale-generation guard as #refresh_routes. All responses are
+    # fetched before any are installed, then the whole changed-model batch
+    # and its MethodSummaryStore invalidation become visible under one
+    # semantic-index lock.
     def refresh_models(names)
       agent_manager = @agent_manager
       model_registry = @model_registry
       method_summary_store = @method_summary_store
       logger = @logger
       mutex = @agent_restart_mutex
+      refresh_mutex = @agent_refresh_mutex
+
+      enqueue_model_names(names)
 
       @background_tasks.track_thread(Thread.new do
-        agent_manager.reload(sections: ["models"])
-        updated = false
+        # Bow out *before* blocking on the mutex, the way #refresh_routes
+        # and #refresh_all_models check their generation first. Without
+        # this, the whole-section refreshes were bounded against a wedged
+        # Agent but targeted model refreshes were not: every save under
+        # app/models/ parked another thread on the mutex for the Agent's
+        # full timeout (measured 10 blocked threads to routes' 1), each
+        # holding a @background_tasks entry, all of them queued to redo
+        # the identical drain. One waiter is enough; see
+        # #claim_model_refresh_slot for why bowing out drops no names.
+        next unless claim_model_refresh_slot
 
-        names.each do |name|
-          response = agent_manager.fetch_model(name: name)
-          next unless response
+        refresh_mutex.synchronize do
+          release_model_refresh_slot
+          # Whichever thread gets here first refreshes every name queued
+          # so far; the ones behind it find an empty set and exit.
+          #
+          # `outstanding` is the contract that makes "names are never
+          # dropped, only batched" actually true: draining removes them
+          # from @pending_model_names, so from here until each name has
+          # been *successfully* committed this block owns them, and the
+          # ensure below puts back whatever it still owns. Re-enqueuing
+          # only on individually enumerated failure paths was not enough
+          # -- `prepare_replace` raises on a malformed payload (which the
+          # all-or-nothing commit is designed around) and a dying Agent
+          # can raise mid-round-trip, and either unwound straight past
+          # them to the rescue with the whole batch already gone. One bad
+          # model then permanently suppressed every unrelated model that
+          # happened to be batched with it.
+          names = drain_model_names
+          next if names.empty?
 
-          mutex.synchronize do
-            next unless agent_manager.equal?(@agent_manager)
-
-            if response[:error]
-              model_registry.remove(name)
-            else
-              model_registry.register_from_agent_response(name, response)
+          outstanding = names.dup
+          begin
+            unless agent_manager.reload(sections: ["models"])
+              # Routes already logged its equivalent failure; a dropped
+              # model refresh left no trace at all, so stale model data
+              # after a schema change looked like an inference bug.
+              logger.warn("failed to reload models after a model change; keeping last-known-good models")
+              next
             end
-            updated = true
+
+            # A nil response is a failed round trip, not "this model is
+            # gone", so those names stay outstanding and get retried.
+            responses = []
+            unfetched = []
+            names.each do |name|
+              response = agent_manager.fetch_model(name: name)
+              response ? responses << [name, response] : unfetched << name
+            end
+            unless unfetched.empty?
+              logger.warn("failed to fetch #{unfetched.join(", ")} after a model change; will retry on the next change")
+            end
+            next if responses.empty?
+
+            removals, upserts = responses.partition { |_name, response| response[:error] }
+            prepared =
+              begin
+                model_registry.prepare_replace(upserts.to_h)
+              rescue StandardError => e
+                # A payload that cannot even be *built* is malformed data,
+                # not a transient failure, so retrying it forever cannot
+                # help -- and the ensure below would do exactly that,
+                # re-enqueuing the whole batch including the bad name.
+                # Every later drain then re-included it, raised again, and
+                # re-enqueued again: one permanently malformed model
+                # wedged every unrelated model for the life of the
+                # process (verified: a well-formed `Post` queued after a
+                # bad `Team` never landed, and never would).
+                #
+                # The name is isolated by preparing each payload alone --
+                # a pure build with no side effects -- and dropped. The
+                # batch still publishes nothing this pass, preserving the
+                # all-or-nothing contract; what changes is that the next
+                # pass is no longer poisoned. A model dropped this way
+                # keeps its last-known-good entry and returns on its next
+                # change, by which time the payload may be valid again.
+                poisoned = upserts.filter_map do |name, response|
+                  model_registry.prepare_replace({ name => response })
+                  nil
+                rescue StandardError
+                  name
+                end
+                outstanding -= poisoned
+                logger.error("dropping malformed model payload for #{poisoned.join(', ')}: #{e.class}: #{e.message}")
+                raise
+              end
+
+            mutex.synchronize do
+              # A restart replaced the Agent mid-flight; this batch is
+              # stale, but the names still need refreshing.
+              next unless agent_manager.equal?(@agent_manager)
+
+              @index_mutation_mutex.synchronize do
+                model_registry.commit_updates(prepared, removals: removals.map(&:first))
+                method_summary_store.clear
+              end
+              # Committed: these names no longer need to go back.
+              outstanding -= responses.map(&:first)
+            end
+          ensure
+            enqueue_model_names(outstanding) unless outstanding.empty?
           end
         end
-        method_summary_store.clear if updated
       rescue StandardError => e
         logger.error("failed to refresh models #{names.to_a.join(', ')}: #{e.class}: #{e.message}")
       end)
@@ -1770,22 +2056,38 @@ module Ovallsp
       method_summary_store = @method_summary_store
       logger = @logger
       mutex = @agent_restart_mutex
+      refresh_mutex = @agent_refresh_mutex
+
+      generation = claim_refresh_generation(:all_models)
 
       @background_tasks.track_thread(Thread.new do
-        agent_manager.reload(sections: ["models"])
+        # See #refresh_routes: checked before blocking so a superseded
+        # refresh does not sit on a thread for a whole Agent timeout.
+        next unless refresh_generation_current?(:all_models, generation)
 
-        models = agent_manager.fetch_all_models
-        unless models
-          logger.warn("failed to fetch models after a schema change; keeping last-known-good models")
-          next
-        end
+        refresh_mutex.synchronize do
+          next unless refresh_generation_current?(:all_models, generation)
 
-        mutex.synchronize do
-          next unless agent_manager.equal?(@agent_manager)
+          unless agent_manager.reload(sections: ["models"])
+            logger.warn("failed to reload models for a full refresh; keeping last-known-good models")
+            next
+          end
 
-          responses_by_name = models.filter_map { |entry| entry[:name] && [entry[:name], entry] }.to_h
-          model_registry.replace(responses_by_name)
-          method_summary_store.clear
+          models = agent_manager.fetch_all_models
+          unless models
+            logger.warn("failed to fetch models after a schema change; keeping last-known-good models")
+            next
+          end
+
+          mutex.synchronize do
+            next unless agent_manager.equal?(@agent_manager)
+
+            responses_by_name = models.filter_map { |entry| entry[:name] && [entry[:name], entry] }.to_h
+            @index_mutation_mutex.synchronize do
+              model_registry.replace(responses_by_name)
+              method_summary_store.clear
+            end
+          end
         end
       rescue StandardError => e
         logger.error("failed to refresh models after a schema change: #{e.class}: #{e.message}")
@@ -1824,7 +2126,8 @@ module Ovallsp
           next if retry_generation && !scheduled_agent_retry_current?(retry_generation)
 
           @agent_manager&.stop
-          manager = bootstrap.start(
+          manager = start_agent_bootstrap(
+            bootstrap,
             root: root, logger: logger, route_registry: route_registry, model_registry: model_registry,
             on_unavailable: method(:handle_agent_unavailable),
             # See #maybe_start_agent's identical hook for why this
@@ -1845,6 +2148,32 @@ module Ovallsp
         logger.error("failed to restart runtime agent: #{e.class}: #{e.message}")
       end
       background_tasks.track_thread(thread)
+    end
+
+    # Always passes install_snapshot rather than sniffing whether the
+    # bootstrap declares it. The reflection this replaces made a
+    # load-bearing atomicity guarantee depend on a signature guess: any
+    # bootstrap it guessed wrong about (a wrapper, a decorator, a
+    # method_missing-backed object, a future signature change) silently
+    # took RailsBootstrap's fallback branch, which commits routes and
+    # models as two separate un-locked writes and never clears the method
+    # summary store -- precisely the mixed state installing them together
+    # exists to prevent. A capability this important is a contract, not
+    # something to infer at runtime.
+    def start_agent_bootstrap(bootstrap, **kwargs)
+      bootstrap.start(install_snapshot: method(:install_agent_snapshot), **kwargs)
+    end
+
+    def install_agent_snapshot(routes:, models:)
+      prepared_routes = @route_registry.prepare_replace(routes) if routes
+      prepared_models = @model_registry.prepare_replace(models) if models
+      @index_mutation_mutex.synchronize do
+        @route_registry.commit_replace(prepared_routes) if prepared_routes
+        if prepared_models
+          @model_registry.commit_replace(prepared_models)
+          @method_summary_store.clear
+        end
+      end
     end
 
     def initialize_result

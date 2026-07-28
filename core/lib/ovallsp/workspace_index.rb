@@ -137,6 +137,16 @@ module Ovallsp
       @mutex.synchronize { @summaries[uri]&.declarations&.dup || [] }
     end
 
+    def summary_for_uri(uri)
+      @mutex.synchronize { @summaries[uri] }
+    end
+
+    def uris_by_source(source)
+      @mutex.synchronize do
+        @summaries.filter_map { |uri, summary| uri if summary.source == source }
+      end
+    end
+
     # Lexical (name-only) lookup across class/module/constant declarations,
     # independent of any particular SymbolId#owner. This is the "名前ヒュー
     # リスティック" fallback from docs/03-semantic-engine.md section 6 — the
@@ -155,6 +165,31 @@ module Ovallsp
           @by_symbol.fetch(symbol_id, []).each { |(uri, decl)| results << { uri: uri, range: decl.location } }
         end
         results
+      end
+    end
+
+    # Every uri declaring the class/module whose *fully-qualified* name is
+    # `qualified_name`, regardless of how it was written.
+    #
+    # SymbolId#owner is recorded lexically, so one class has as many
+    # distinct SymbolIds as there are ways to spell it: `module Api;
+    # module V1; class UsersController` (owner "::Api::V1"), `class
+    # Api::V1::UsersController` (owner nil) and `module Api; class
+    # V1::UsersController` (owner "::Api") are three different keys for
+    # the same class. Any lookup that reconstructs an owner can only ever
+    # match some of them, which is why callers that know the qualified
+    # name should ask by name. `name` is always absolute-qualified, so
+    # this cannot collide with a same-named class in another namespace.
+    def class_declaration_uris(qualified_name)
+      @mutex.synchronize do
+        uris = []
+        @by_simple_name.fetch(simple_name_of(qualified_name).downcase, []).each do |symbol_id|
+          next unless %i[class module].include?(symbol_id.kind)
+          next unless symbol_id.name == qualified_name
+
+          @by_symbol.fetch(symbol_id, []).each { |(uri, _decl)| uris << uri }
+        end
+        uris
       end
     end
 
@@ -262,7 +297,11 @@ module Ovallsp
     end
 
     def simple_name(symbol_id)
-      symbol_id.name.to_s.split("::").last.to_s
+      simple_name_of(symbol_id.name)
+    end
+
+    def simple_name_of(name)
+      name.to_s.split("::").last.to_s
     end
 
     def resolve_type_symbol_locked(name)

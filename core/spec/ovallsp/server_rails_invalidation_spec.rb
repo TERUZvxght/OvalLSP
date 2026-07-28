@@ -66,6 +66,41 @@ RSpec.describe "Ovallsp::Server Rails file-change invalidation" do
     expect(wait_until { route_registry.completion_names("new_").include?("new_route_path") }).to be(true)
   end
 
+  it "serializes refreshes from the same Agent so an older response cannot overwrite a newer one" do
+    first_fetch_entered = Queue.new
+    release_first_fetch = Queue.new
+    fetch_count = 0
+    fetch_count_mutex = Mutex.new
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| true }
+      define_singleton_method(:fetch_snapshot) do |**|
+        number = fetch_count_mutex.synchronize { fetch_count += 1 }
+        if number == 1
+          first_fetch_entered << true
+          release_first_fetch.pop
+        end
+        name = number == 1 ? "old" : "new"
+        {
+          routes: [{
+            name: name, verb: "GET", pathTemplate: "/#{name}", requiredParts: [], optionalParts: [],
+            defaults: { controller: name, action: "index" }, sourceLocation: nil, routeSet: "main_app"
+          }]
+        }
+      end
+    end
+    server = build_server("", agent_manager: fake_manager)
+
+    server.send(:refresh_routes)
+    expect(first_fetch_entered.pop(timeout: 2)).to be(true)
+    server.send(:refresh_routes)
+    release_first_fetch << true
+
+    expect(wait_until { route_registry.completion_names("new").include?("new_path") }).to be(true)
+    expect(route_registry.completion_names("old")).to be_empty
+    server.send(:shutdown_background_tasks)
+  end
+
   it "re-fetches only the changed model when a file under app/models/ changes" do
     calls = Queue.new
     fake_manager = Class.new do
@@ -83,6 +118,272 @@ RSpec.describe "Ovallsp::Server Rails file-change invalidation" do
     expect(calls.pop(timeout: 2)).to eq(:reload)
     expect(calls.pop(timeout: 2)).to eq([:fetch_model, "User"])
     expect(wait_until { model_registry.known_model?("User") }).to be(true)
+  end
+
+  # Regression: this was the one mutation site left outside
+  # @index_mutation_mutex. Swapping the signature environment and
+  # emptying the summaries derived from it off the lock lets a request
+  # thread compute a summary from the pre-reload environment and store it
+  # after the clear, stranding a stale entry no later reload invalidates.
+  it "reloads signatures and clears method summaries under the index lock" do
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { false }
+    end
+    server = build_server("", agent_manager: fake_manager)
+    index_mutex = server.instance_variable_get(:@index_mutation_mutex)
+    signatures = server.instance_variable_get(:@signatures)
+    summary_store = server.instance_variable_get(:@method_summary_store)
+    observations = []
+    allow(signatures).to receive(:load) { observations << [:load, index_mutex.owned?] }
+    allow(summary_store).to receive(:clear).and_wrap_original do |original|
+      observations << [:clear, index_mutex.owned?]
+      original.call
+    end
+
+    server.send(:handle_did_change_watched_files, { changes: [{ uri: "file:///workspace/sig/user.rbs", type: 2 }] })
+
+    expect(observations).to eq([[:load, true], [:clear, true]])
+  end
+
+  it "publishes a changed-model batch and clears method summaries under one index lock" do
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| true }
+      define_singleton_method(:fetch_model) do |name:|
+        { name: name, tableName: "#{name.downcase}s", columns: [], associations: [], partial: false }
+      end
+    end
+    server = build_server("", agent_manager: fake_manager)
+    index_mutex = server.instance_variable_get(:@index_mutation_mutex)
+    summary_store = server.instance_variable_get(:@method_summary_store)
+    clear_observations = Queue.new
+    allow(summary_store).to receive(:clear).and_wrap_original do |original|
+      acquired = index_mutex.try_lock
+      index_mutex.unlock if acquired
+      clear_observations << {
+        lock_held: !acquired,
+        user_present: model_registry.known_model?("User"),
+        team_present: model_registry.known_model?("Team")
+      }
+      original.call
+    end
+
+    server.send(:refresh_models, Set["User", "Team"])
+
+    expect(clear_observations.pop(timeout: 2)).to eq(
+      lock_held: true, user_present: true, team_present: true
+    )
+    server.send(:shutdown_background_tasks)
+  end
+
+  # Regression: serializing refreshes on @agent_refresh_mutex made each
+  # one queue behind the previous, so a slow/wedged Agent accumulated
+  # blocked threads without bound while every queued refresh was already
+  # stale. Targeted model refreshes are coalesced instead -- but they
+  # must be coalesced, not dropped: a later refresh of ["Team"] says
+  # nothing about an earlier ["User"], so superseding by generation (as
+  # the whole-section refreshes do) would silently lose names.
+  #
+  # The name check alone did not test coalescing at all -- three
+  # independent serialized refreshes fetch the same three names. The
+  # claim is *one Agent round trip per batch*, so the reload count is
+  # what has to be asserted, and it is only deterministic if the second
+  # and third refreshes are queued while the first is provably already
+  # inside `reload` (hence `entered`): the two behind it then find both
+  # names pending, one drains them together and the other finds nothing.
+  it "coalesces overlapping model refreshes into one batch without losing any name" do
+    gate = Queue.new
+    entered = Queue.new
+    reloads = Queue.new
+    fetched = Queue.new
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) do |**|
+        reloads << :reload
+        entered << :entered
+        gate.pop # hold the refresh inside the mutex
+        true
+      end
+      define_singleton_method(:fetch_model) do |name:|
+        fetched << name
+        { name: name, tableName: "#{name.downcase}s", columns: [], associations: [], partial: false }
+      end
+    end
+    server = build_server("", agent_manager: fake_manager)
+
+    server.send(:refresh_models, Set["User"])
+    entered.pop(timeout: 2) # the first refresh has drained ["User"] and holds the mutex
+    # Queued while the first refresh is blocked inside `reload`.
+    server.send(:refresh_models, Set["Team"])
+    server.send(:refresh_models, Set["Invoice"])
+    gate << :go
+    gate << :go
+
+    collected = []
+    collected << fetched.pop(timeout: 2) while collected.size < 3
+    expect(collected).to contain_exactly("User", "Team", "Invoice")
+
+    server.send(:shutdown_background_tasks)
+    # Two round trips, not three: Team and Invoice were batched together.
+    expect(reloads.size).to eq(2)
+  end
+
+  # Regression: the retention contract above was one step short of a
+  # permanent wedge. `prepare_replace` raises on a malformed payload and
+  # the ensure re-enqueued the *whole* drained batch -- bad name
+  # included -- so every later drain re-included it, raised again, and
+  # re-enqueued again. One model with a permanently malformed payload
+  # therefore suppressed every unrelated model for the life of the
+  # process: a well-formed `Post` queued afterwards never landed.
+  it "drops a permanently malformed model instead of poisoning every later batch" do
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| true }
+      define_singleton_method(:fetch_model) do |name:|
+        if name == "Team"
+          {
+            name: name, tableName: "teams", columns: [],
+            associations: [{ name: "owner", macro: nil, className: "User" }], partial: false
+          }
+        else
+          { name: name, tableName: "#{name.downcase}s", columns: [], associations: [], partial: false }
+        end
+      end
+    end
+    server = build_server("", agent_manager: fake_manager)
+
+    server.send(:refresh_models, Set["User", "Team"])
+    expect(wait_until { server.instance_variable_get(:@pending_model_names) == ["User"] }).to be(true)
+
+    # An unrelated, well-formed model changes afterwards.
+    server.send(:refresh_models, Set["Post"])
+
+    expect(wait_until { model_registry.known_model?("Post") && model_registry.known_model?("User") }).to be(true)
+    expect(model_registry.known_model?("Team")).to be(false)
+    server.send(:shutdown_background_tasks)
+  end
+
+  # Regression: bounding thread accumulation against a wedged Agent is
+  # the stated reason refreshes stopped being serialized at all, and
+  # routes/all-models honour it by checking their generation before
+  # blocking. Targeted model refreshes did not check anything: every
+  # batch parked another thread on the mutex for the Agent's full
+  # timeout, so an Agent wedged on a bad migration plus a few minutes of
+  # saves under app/models/ accumulated one blocked thread (and one
+  # @background_tasks entry) per save, without bound -- all of them
+  # queued to perform the identical drain.
+  it "parks at most one waiting thread per wedged model refresh, without losing names" do
+    gate = Queue.new
+    entered = Queue.new
+    fetched = Queue.new
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) do |**|
+        entered << :entered
+        gate.pop
+        true
+      end
+      define_singleton_method(:fetch_model) do |name:|
+        fetched << name
+        { name: name, tableName: "#{name.downcase}s", columns: [], associations: [], partial: false }
+      end
+    end
+    server = build_server("", agent_manager: fake_manager)
+    threads = server.instance_variable_get(:@background_tasks).instance_variable_get(:@threads)
+
+    server.send(:refresh_models, Set["User"])
+    entered.pop(timeout: 2) # wedged inside reload, holding the mutex
+    8.times { |i| server.send(:refresh_models, Set["Model#{i}"]) }
+    expect(wait_until { threads.count(&:alive?) <= 2 }).to be(true),
+                                                          "expected one holder and at most one waiter, saw #{threads.count(&:alive?)} live threads"
+
+    # Bowing out must not drop the bowed-out names: every one of them is
+    # still ahead of the single waiter's drain.
+    gate << :go
+    gate << :go
+    collected = []
+    collected << fetched.pop(timeout: 2) while collected.size < 9
+    expect(collected).to contain_exactly("User", *8.times.map { |i| "Model#{i}" })
+    server.send(:shutdown_background_tasks)
+  end
+
+  # Regression: draining empties @pending_model_names, and every
+  # re-enqueue lived on a hand-enumerated failure branch -- so anything
+  # that *raised* (a broken pipe to a dying Agent, mid-round-trip)
+  # unwound straight to the rescue with the whole batch already gone,
+  # silently losing every name in it with only an error log.
+  #
+  # This is the *transient* case, where retrying is the right answer. A
+  # malformed payload is the opposite and is covered separately above:
+  # retrying that one forever is what poisoned every later batch.
+  it "keeps every drained name pending when the batch raises" do
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| true }
+      define_singleton_method(:fetch_model) do |name:|
+        raise IOError, "broken pipe" if name == "Team"
+
+        { name: name, tableName: "#{name.downcase}s", columns: [], associations: [], partial: false }
+      end
+    end
+    server = build_server("", agent_manager: fake_manager)
+
+    server.send(:refresh_models, Set["User", "Team"])
+    server.send(:shutdown_background_tasks)
+
+    expect(server.instance_variable_get(:@pending_model_names)).to contain_exactly("User", "Team")
+  end
+
+  it "rolls back a changed-model batch when any payload is malformed" do
+    model_registry.register_from_agent_response(
+      "User", { name: "User", tableName: "old_users", columns: [], associations: [], partial: false }
+    )
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| true }
+      define_singleton_method(:fetch_model) do |name:|
+        if name == "User"
+          { name: name, tableName: "new_users", columns: [], associations: [], partial: false }
+        else
+          {
+            name: name, tableName: "teams", columns: [],
+            associations: [{ name: "owner", macro: nil, className: "User" }], partial: false
+          }
+        end
+      end
+    end
+    server = build_server("", agent_manager: fake_manager)
+    summary_store = server.instance_variable_get(:@method_summary_store)
+    allow(summary_store).to receive(:clear).and_call_original
+
+    server.send(:refresh_models, Set["User", "Team"])
+    server.send(:shutdown_background_tasks)
+
+    expect(model_registry.model("User").table_name).to eq("old_users")
+    expect(model_registry.known_model?("Team")).to be(false)
+    expect(summary_store).not_to have_received(:clear)
+    expect(logger).to have_received(:error).with(/failed to refresh models/)
+  end
+
+  it "computes diagnostics while holding a consistent semantic index snapshot" do
+    server = build_server("", agent_manager: nil)
+    index_mutex = server.instance_variable_get(:@index_mutation_mutex)
+    lock_held = false
+    engine = instance_double(Ovallsp::Diagnostics::Engine)
+    allow(engine).to receive(:analyze) do
+      acquired = index_mutex.try_lock
+      index_mutex.unlock if acquired
+      lock_held = !acquired
+      []
+    end
+    server.instance_variable_set(:@diagnostics_engine, engine)
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///workspace/a.rb", text: "value = 1\n", version: 1, language_id: "ruby"
+    )
+
+    server.send(:publish_diagnostics, document)
+
+    expect(lock_held).to be(true)
   end
 
   it "removes a model from the registry when the Agent reports it no longer exists after reload" do
@@ -110,7 +411,7 @@ RSpec.describe "Ovallsp::Server Rails file-change invalidation" do
     calls = Queue.new
     fake_manager = Class.new do
       define_singleton_method(:ready?) { true }
-      define_singleton_method(:reload) { |**| nil }
+      define_singleton_method(:reload) { |**| true }
       define_singleton_method(:fetch_model) do |name:|
         calls << name
         { name: name, tableName: "projects", columns: [], associations: [], partial: false }
@@ -129,7 +430,7 @@ RSpec.describe "Ovallsp::Server Rails file-change invalidation" do
     def fake_manager_for(models_by_name)
       Class.new do
         define_singleton_method(:ready?) { true }
-        define_singleton_method(:reload) { |**| nil }
+        define_singleton_method(:reload) { |**| true }
         define_singleton_method(:fetch_all_models) { models_by_name.values }
       end
     end
@@ -204,6 +505,38 @@ RSpec.describe "Ovallsp::Server Rails file-change invalidation" do
 
       expect(model_registry.known_model?("User")).to be(true)
     end
+
+    it "does not fetch or install a model snapshot when the prerequisite reload fails" do
+      fetches = Queue.new
+      fake_manager = Class.new do
+        define_singleton_method(:ready?) { true }
+        define_singleton_method(:reload) { |**| nil }
+        define_singleton_method(:fetch_all_models) { fetches << :called; [] }
+      end
+
+      build_server(
+        changes_input([{ uri: "file:///app/db/schema.rb", type: 2 }]), agent_manager: fake_manager
+      ).run
+      sleep 0.05
+
+      expect(fetches.pop(timeout: 0.1)).to be_nil
+    end
+  end
+
+  it "does not fetch a changed model when the prerequisite reload fails" do
+    fetches = Queue.new
+    fake_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:reload) { |**| nil }
+      define_singleton_method(:fetch_model) { |name:| fetches << name }
+    end
+
+    build_server(
+      changes_input([{ uri: "file:///app/app/models/user.rb", type: 2 }]), agent_manager: fake_manager
+    ).run
+    sleep 0.05
+
+    expect(fetches.pop(timeout: 0.1)).to be_nil
   end
 
   it "restarts the whole Agent when Gemfile.lock changes" do
@@ -227,6 +560,85 @@ RSpec.describe "Ovallsp::Server Rails file-change invalidation" do
 
     expect(calls.pop(timeout: 2)).to eq(:stopped)
     expect(calls.pop(timeout: 2)).to eq([:restarted, "/workspace"])
+  end
+
+  it "atomically installs a restart snapshot and invalidates model-dependent method summaries" do
+    old_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:stop) {}
+    end
+    new_manager = Class.new do
+      define_singleton_method(:ready?) { true }
+      define_singleton_method(:stop) {}
+    end
+    installed = Queue.new
+    fake_bootstrap = Class.new do
+      define_singleton_method(:start) do |install_snapshot:, **|
+        install_snapshot.call(
+          routes: [{
+            name: "fresh", verb: "GET", pathTemplate: "/fresh", requiredParts: [], optionalParts: [],
+            defaults: { controller: "fresh", action: "index" }, sourceLocation: nil, routeSet: "main_app"
+          }],
+          models: {
+            "Post" => { name: "Post", tableName: "posts", columns: [], associations: [], partial: false }
+          }
+        )
+        installed << true
+        new_manager
+      end
+    end
+    server = build_server(
+      changes_input([{ uri: "file:///workspace/Gemfile.lock", type: 2 }]),
+      agent_manager: old_manager, agent_bootstrap: fake_bootstrap, workspace_root: "/workspace"
+    )
+    summary_store = server.instance_variable_get(:@method_summary_store)
+    allow(summary_store).to receive(:clear).and_call_original
+
+    server.run
+
+    expect(installed.pop(timeout: 2)).to be(true)
+    expect(route_registry.completion_names("fresh")).to include("fresh_path")
+    expect(model_registry.known_model?("Post")).to be(true)
+    expect(summary_store).to have_received(:clear)
+  end
+
+  it "publishes neither routes nor models when a restart snapshot contains a malformed model" do
+    route_registry.replace(
+      [{ name: "old", verb: "GET", pathTemplate: "/old", requiredParts: [], optionalParts: [],
+         defaults: { controller: "old", action: "index" }, sourceLocation: nil, routeSet: "main_app" }]
+    )
+    model_registry.register_from_agent_response(
+      "User", { name: "User", tableName: "old_users", columns: [], associations: [], partial: false }
+    )
+    server = build_server("", agent_manager: nil)
+
+    # Without this, the test passes vacuously against any build where
+    # `install_agent_snapshot` does not exist: `send` itself raises
+    # NoMethodError, satisfying the `raise_error(NoMethodError)` below,
+    # and every assertion after it then holds trivially because nothing
+    # ran. It would have stayed green if the method were deleted outright.
+    expect(server.respond_to?(:install_agent_snapshot, true)).to be(true)
+
+    expect do
+      server.send(
+        :install_agent_snapshot,
+        routes: [{
+          name: "fresh", verb: "GET", pathTemplate: "/fresh", requiredParts: [], optionalParts: [],
+          defaults: { controller: "fresh", action: "index" }, sourceLocation: nil, routeSet: "main_app"
+        }],
+        models: {
+          "Team" => {
+            name: "Team", tableName: "teams", columns: [],
+            associations: [{ name: "owner", macro: nil, className: "User" }], partial: false
+          }
+        }
+      )
+    end.to raise_error(NoMethodError, /to_sym/) # the malformed `macro: nil`, not a missing method
+
+    expect(route_registry.completion_names("old")).to include("old_path")
+    expect(route_registry.completion_names("fresh")).to be_empty
+    expect(model_registry.model("User").table_name).to eq("old_users")
+    expect(model_registry.known_model?("Team")).to be(false)
   end
 
   it "restarts the Agent on a Gemfile.lock change even when it's currently static-only — restart IS the recovery path" do
@@ -338,7 +750,7 @@ RSpec.describe "Ovallsp::Server Rails file-change invalidation" do
     calls = Queue.new
     fake_manager = Class.new do
       define_singleton_method(:ready?) { true }
-      define_singleton_method(:reload) { |**| nil }
+      define_singleton_method(:reload) { |**| true }
       define_singleton_method(:fetch_model) do |name:|
         calls << name
         { name: name, tableName: "users", columns: [], associations: [], partial: false }

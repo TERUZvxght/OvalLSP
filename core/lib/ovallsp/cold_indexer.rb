@@ -29,13 +29,15 @@ module Ovallsp
   # would produce URIs that never match what didOpen sends for the same
   # file, silently defeating the "open document wins" rule above.
   class ColdIndexer
+    Result = Data.define(:seen_uris, :complete)
     DEFAULT_INCLUDED_EXTENSIONS = %w[.rb .rake .erb].freeze
     DEFAULT_EXCLUDED_DIRS = %w[.git node_modules vendor tmp log coverage storage].freeze
     DEFAULT_EXCLUDED_PATHS = ["vendor/bundle", "public/assets"].freeze
 
     def initialize(root:, parser_service:, workspace_index:, document_store:, logger:, hierarchy_index: nil,
                    cache_store: nil, excluded_dirs: DEFAULT_EXCLUDED_DIRS, excluded_paths: DEFAULT_EXCLUDED_PATHS,
-                   included_extensions: DEFAULT_INCLUDED_EXTENSIONS, on_indexed: nil, on_complete: nil)
+                   included_extensions: DEFAULT_INCLUDED_EXTENSIONS, on_indexed: nil, on_complete: nil,
+                   on_summary: nil)
       @root = File.expand_path(root)
       @root_real = safe_realpath(@root) || @root
       @parser_service = parser_service
@@ -49,6 +51,9 @@ module Ovallsp
       @included_extensions = included_extensions
       @on_indexed = on_indexed
       @on_complete = on_complete
+      @on_summary = on_summary
+      @seen_uris = Set.new
+      @scan_complete = true
     end
 
     def run
@@ -56,16 +61,23 @@ module Ovallsp
       visited_files = Set.new
       each_candidate_file(@root, visited_dirs) { |path| index_file(path, visited_files) }
     rescue StandardError => e
+      @scan_complete = false
       @logger.error("cold index failed: #{e.class}: #{e.message}")
     ensure
-      @on_complete&.call
+      if @on_complete
+        result = Result.new(seen_uris: @seen_uris.dup, complete: @scan_complete)
+        @on_complete.arity.zero? ? @on_complete.call : @on_complete.call(result)
+      end
     end
 
     private
 
     def each_candidate_file(dir, visited_dirs)
       real_dir = safe_realpath(dir)
-      return if real_dir.nil? # gone, or a broken symlink
+      unless real_dir
+        @scan_complete = false
+        return
+      end
       return if visited_dirs.include?(real_dir) # already walked (symlink cycle or alias)
 
       visited_dirs << real_dir
@@ -83,6 +95,7 @@ module Ovallsp
         end
       end
     rescue Errno::ENOENT, Errno::EACCES, Errno::ELOOP => e
+      @scan_complete = false
       @logger.error("cold index: skipping #{dir}: #{e.class}: #{e.message}")
     end
 
@@ -129,6 +142,7 @@ module Ovallsp
       return unless real_path_stays_inside_root?(real_path)
 
       uri = UriUtil.from_path(path)
+      @seen_uris << uri
       # This check alone is NOT what prevents an open buffer from being
       # overwritten — there's a window between it and the #replace_file
       # call below where a didOpen for this exact uri can land, and this
@@ -146,12 +160,18 @@ module Ovallsp
 
       read_sequence = @workspace_index.next_read_sequence
       summary = parsed.with(source: :disk, read_sequence: read_sequence)
+      if @on_summary
+        @on_summary.call(uri, document, summary)
+        return
+      end
+
       previous_declarations = @workspace_index.declarations_for_uri(uri)
       if @workspace_index.replace_file(summary)
         @hierarchy_index&.replace_file(summary)
         @on_indexed&.call(uri, document, summary, previous_declarations)
       end
     rescue StandardError => e
+      @scan_complete = false
       @logger.error("cold index: failed to index #{path}: #{e.class}: #{e.message}")
     end
 

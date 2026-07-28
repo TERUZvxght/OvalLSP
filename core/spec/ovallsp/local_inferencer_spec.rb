@@ -239,6 +239,29 @@ RSpec.describe Ovallsp::LocalInferencer do
     expect(type.to_s).to eq("String")
   end
 
+  it "keeps block-aware generic inference ahead of a less-specific RBS overload" do
+    signatures = Ovallsp::Signatures::Environment.new
+    signatures.load(workspace_root: nil)
+    signature_inferencer = described_class.new(signatures: signatures)
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", text: "value = [1].map { |item| item.to_s }\nvalue\n", version: 1, language_id: "ruby"
+    )
+
+    expect(signature_inferencer.infer_at(document, { line: 1, character: 2 }).to_s).to eq("Array[String]")
+  end
+
+  it "never leaks an unbound RBS TypeParameter into a final type" do
+    signatures = Ovallsp::Signatures::Environment.new
+    signatures.load(workspace_root: nil)
+    signature_inferencer = described_class.new(signatures: signatures)
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", text: "value = { a: 1 }.keys\nvalue\n", version: 1, language_id: "ruby"
+    )
+
+    type = signature_inferencer.infer_at(document, { line: 1, character: 2 })
+    expect(type.to_s).not_to match(/\b[KEUV]\b/)
+  end
+
   it "prefers an explicit project signature over a conflicting source-body inference" do
     Dir.mktmpdir do |root|
       FileUtils.mkdir_p(File.join(root, "sig"))
@@ -265,6 +288,346 @@ RSpec.describe Ovallsp::LocalInferencer do
 
       expect(signature_inferencer.infer_at(document, { line: 3, character: 12 }).to_s).to eq("String")
     end
+  end
+
+  it "applies source/RBS authority independently to every Union receiver member" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sig"))
+      File.write(
+        File.join(root, "sig", "values.rbs"),
+        "class Widget\n  def value: () -> String\nend\nclass Gadget\nend\n"
+      )
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      workspace_index = Ovallsp::WorkspaceIndex.new
+      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      source = <<~RUBY
+        class Widget
+          def value = :source_is_shadowed
+        end
+        class Gadget
+          def value = 1
+        end
+        receiver = condition ? Widget.new : Gadget.new
+        receiver.value
+      RUBY
+      document = Ovallsp::TextDocument.new(uri: "file:///union.rb", text: source, version: 1, language_id: "ruby")
+      summary = Ovallsp::ParserService.new.summarize(document)
+      workspace_index.replace_file(summary)
+      hierarchy_index.replace_file(summary)
+      resolver = Ovallsp::Semantic::MethodResolver.new(
+        workspace_index: workspace_index, hierarchy_index: hierarchy_index
+      )
+      analyzer = Ovallsp::Semantic::MethodAnalyzer.new(
+        workspace_index: workspace_index, method_resolver: resolver,
+        summary_store: Ovallsp::Semantic::MethodSummaryStore.new
+      )
+      union_inferencer = described_class.new(
+        method_resolver: resolver, method_analyzer: analyzer, signatures: signatures
+      )
+
+      type = union_inferencer.infer_at(document, { line: 7, character: 10 })
+
+      expect(type.to_s.split(" | ")).to contain_exactly("String", "Integer")
+    end
+  end
+
+  it "falls back to every RBS overload when a positional splat makes arity unknown" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sig"))
+      File.write(
+        File.join(root, "sig", "picker.rbs"),
+        "class Picker\n  def take: () -> String\n          | (Integer) -> Integer\nend\n"
+      )
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      splat_inferencer = described_class.new(signatures: signatures)
+      document = Ovallsp::TextDocument.new(
+        uri: "file:///splat.rb",
+        text: "args = []\nvalue = Picker.new.take(*args)\nvalue\n",
+        version: 1,
+        language_id: "ruby"
+      )
+
+      type = splat_inferencer.infer_at(document, { line: 2, character: 2 })
+
+      expect(type.to_s.split(" | ")).to contain_exactly("String", "Integer")
+    end
+  end
+
+  it "honors an explicit singleton .new signature before the nominal constructor fallback" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sig"))
+      File.write(File.join(root, "sig", "widget.rbs"), "class Widget\n  def self.new: () -> String\nend\n")
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      document = Ovallsp::TextDocument.new(
+        uri: "file:///a.rb", text: "value = Widget.new\nvalue\n", version: 1, language_id: "ruby"
+      )
+
+      type = described_class.new(signatures: signatures).infer_at(document, { line: 1, character: 2 })
+
+      expect(type.to_s).to eq("String")
+    end
+  end
+
+  # Regression: consulting RBS before the nominal-constructor fallback is
+  # right, but an `untyped` RBS `.new` converts to an Unknown -- which is
+  # truthy, so it won the race and `Struct.new(:x)`/`Data.new` degraded
+  # from `Struct`/`Data` to `Unknown`. Unknown is "no answer", not an
+  # answer. (Compared by type rather than against the constant:
+  # Types::Unknown defines no value equality, so any Unknown that is not
+  # the frozen constant would compare unequal to it. Every producer
+  # returns the constant today, so that is a guard, not a live fix.)
+  it "falls back to the nominal constructor when RBS types .new as untyped" do
+    Dir.mktmpdir do |root|
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      inferencer = described_class.new(signatures: signatures)
+
+      %w[Struct Data].each do |constant|
+        document = Ovallsp::TextDocument.new(
+          uri: "file:///a.rb", text: "value = #{constant}.new(:x)\nvalue\n", version: 1, language_id: "ruby"
+        )
+
+        expect(inferencer.infer_at(document, { line: 1, character: 2 }).to_s).to eq(constant)
+      end
+    end
+  end
+
+  # Regression: overload selection was only ever tested by calling
+  # OverloadResolver directly with hand-written Symbol keyword names.
+  # Driven through the inferencer instead -- i.e. with the keyword names
+  # Prism actually produces, which are Strings -- no keyword-bearing
+  # overload could ever match, so every keyword call silently degraded to
+  # the union of all overloads.
+  it "selects the overload matching the call's keyword, through real Prism-parsed source" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sig"))
+      File.write(
+        File.join(root, "sig", "picker.rbs"),
+        "class Picker\n  def take: (?id: Integer) -> String\n         | (?name: String) -> Integer\nend\n"
+      )
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      document = Ovallsp::TextDocument.new(
+        uri: "file:///a.rb", text: "value = Picker.new.take(id: 1)\nvalue\n", version: 1, language_id: "ruby"
+      )
+
+      type = described_class.new(signatures: signatures).infer_at(document, { line: 1, character: 2 })
+
+      expect(type.to_s).to eq("String")
+    end
+  end
+
+  # Regression: `...` forwards positionals, keywords and a block, so arity
+  # is not statically countable. Prism models it as a single
+  # ForwardingArgumentsNode element, which was counted as one positional
+  # argument -- narrowing to whichever overload takes exactly one, rather
+  # than falling back to the union the way `*args` already did.
+  it "does not narrow to a single overload when arguments are forwarded with `...`" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sig"))
+      File.write(
+        File.join(root, "sig", "picker.rbs"),
+        "class Picker\n  def take: () -> String\n         | (Integer) -> Integer\nend\n"
+      )
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      document = Ovallsp::TextDocument.new(
+        uri: "file:///a.rb",
+        text: "def g(...)\n  value = Picker.new.take(...)\n  value\nend\n",
+        version: 1, language_id: "ruby"
+      )
+
+      type = described_class.new(signatures: signatures).infer_at(document, { line: 2, character: 3 })
+
+      expect(type.to_s).to eq("Integer | String")
+    end
+  end
+
+  it "prefers a source override over an RBS method inherited by the receiver" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sig"))
+      File.write(File.join(root, "sig", "widget.rbs"), "class Widget\nend\nclass Gadget\nend\n")
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      workspace_index = Ovallsp::WorkspaceIndex.new
+      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      source = <<~RUBY
+        class Widget
+          def to_s = 1
+        end
+        class Gadget
+          def self.new = "custom"
+        end
+        Widget.new.to_s
+        Gadget.new
+      RUBY
+      document = Ovallsp::TextDocument.new(
+        uri: "file:///a.rb", text: source, version: 1, language_id: "ruby"
+      )
+      summary = Ovallsp::ParserService.new.summarize(document)
+      workspace_index.replace_file(summary)
+      hierarchy_index.replace_file(summary)
+      resolver = Ovallsp::Semantic::MethodResolver.new(
+        workspace_index: workspace_index, hierarchy_index: hierarchy_index
+      )
+      analyzer = Ovallsp::Semantic::MethodAnalyzer.new(
+        workspace_index: workspace_index, method_resolver: resolver,
+        summary_store: Ovallsp::Semantic::MethodSummaryStore.new
+      )
+      source_first = described_class.new(
+        signatures: signatures, method_resolver: resolver, method_analyzer: analyzer
+      )
+
+      expect(source_first.infer_at(document, { line: 6, character: 11 }).to_s).to eq("Integer")
+      expect(source_first.infer_at(document, { line: 7, character: 8 }).to_s).to eq("String")
+    end
+  end
+
+  it "does not bind a method type parameter from a same-named receiver parameter" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sig"))
+      File.write(
+        File.join(root, "sig", "box.rbs"),
+        "class Box[A]\n  def receiver_value: () -> A\n  def method_value: [A] () -> A\nend\n"
+      )
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      signature_inferencer = described_class.new(signatures: signatures)
+      receiver = Ovallsp::Types::Generic.new(
+        name: "Box", type_arg: Ovallsp::Types::Nominal.new(name: "String")
+      )
+      receiver_call = Prism.parse("box.receiver_value").value.statements.body.first
+      method_call = Prism.parse("box.method_value").value.statements.body.first
+
+      expect(signature_inferencer.send(:resolve_signature_call, receiver, receiver_call).to_s).to eq("String")
+      expect(signature_inferencer.send(:resolve_signature_call, receiver, method_call)).to eq(Ovallsp::Types::UNKNOWN)
+    end
+  end
+
+  # Regression: a Generic carries exactly one type argument, and
+  # TypeConverter#convert_class_type fills it from the *last* RBS
+  # argument -- `Hash[K, V]` keeps `V`. Binding it to the receiver's
+  # first declared parameter therefore bound `V`'s type to `K`, which is
+  # worse than answering nothing: `.keys` reported a concrete, confidently
+  # wrong element type while `.values`/`.fetch` lost the answer the model
+  # actually had.
+  it "binds a receiver type argument to the parameter the converter kept it from" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb",
+      text: "tallied = [\"a\"].tally\nvalues = tallied.values\nkeys = tallied.keys\nfetched = tallied.fetch(\"a\")\n",
+      version: 1, language_id: "ruby"
+    )
+    inferencer = described_class.new(
+      signatures: Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace_root: nil) }
+    )
+
+    expect(inferencer.infer_at(document, { line: 0, character: 2 }).to_s).to eq("Hash[Integer]")
+    expect(inferencer.infer_at(document, { line: 1, character: 2 }).to_s).to eq("Array[Integer]")
+    expect(inferencer.infer_at(document, { line: 3, character: 2 }).to_s).to eq("Integer")
+    # No `K` binding exists, so the honest answer is Unknown -- never
+    # `Array[Integer]`, which is what binding the wrong parameter produced.
+    expect(inferencer.infer_at(document, { line: 2, character: 2 }).to_s).to eq("Array[Unknown]")
+  end
+
+  # The sibling of the Struct/Data guard: an `untyped` RBS `.new` on a
+  # *superclass* also converts to an Unknown, which is truthy, so without
+  # the filter it wins over the nominal-constructor fallback and every
+  # subclass of that base degrades to Unknown. `def self.new: (*untyped)
+  # -> untyped` on a base class is ordinary in gem RBS/RBI, so this takes
+  # out whole hierarchies at once.
+  it "falls back to the nominal constructor when only an inherited RBS .new is untyped" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sig"))
+      File.write(
+        File.join(root, "sig", "base.rbs"),
+        "class Base\n  def self.new: () -> untyped\nend\n\nclass Child < Base\nend\n"
+      )
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      inferencer = described_class.new(signatures: signatures)
+      document = Ovallsp::TextDocument.new(
+        uri: "file:///a.rb", text: "value = Child.new\nvalue\n", version: 1, language_id: "ruby"
+      )
+
+      expect(inferencer.infer_at(document, { line: 1, character: 0 }).to_s).to eq("Child")
+    end
+  end
+
+  # MethodLocator's `class << self` guard had nothing enforcing it: the
+  # matching guard in MethodMapLocator is pinned through the views spec,
+  # but this locator is reached only from #infer_ivars_for_method, so its
+  # removal was invisible. A `class << self` body's `def`s are
+  # receiverless exactly like instance methods, so without the guard a
+  # same-named singleton method is indistinguishable from the real action
+  # and can be picked as its body -- handing the view the wrong ivars.
+  it "does not mistake a `class << self` method for the same-named instance method's body" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///c.rb",
+      text: <<~RUBY,
+        class UsersController
+          class << self
+            def show
+              @actor = Admin.new
+            end
+          end
+
+          def show
+            @actor = User.new
+          end
+        end
+      RUBY
+      version: 1, language_id: "ruby"
+    )
+
+    ivars = inferencer.infer_ivars_for_method(document, owner_name: "::UsersController", method_name: "show")
+
+    expect(ivars[:@actor].to_s).to eq("User")
+  end
+
+  # The step budget is what bounds a single action's inference, and an
+  # action is callbacks + body. Resetting it per method made the real
+  # bound `max_steps * (callbacks + 1)`, so a controller with a long
+  # before_action chain could do several times the work the budget names
+  # -- on the request path, holding the index lock. Sharing one budget
+  # across the chain is what makes the number mean anything, and the
+  # visible consequence is that the tail of a chain degrades instead of
+  # everything being inferred at any cost.
+  it "spends one step budget across a whole before_action chain, not one per callback" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///c.rb",
+      text: <<~RUBY,
+        class PostsController
+          before_action :first_callback
+          before_action :second_callback
+
+          def first_callback
+            @a = User.new
+          end
+
+          def second_callback
+            @b = User.new
+          end
+
+          def show
+            @c = User.new
+          end
+        end
+      RUBY
+      version: 1, language_id: "ruby"
+    )
+    tight = described_class.new(max_steps: 6)
+
+    ivars = tight.infer_ivars_for_action(document, owner_name: "::PostsController", action_name: "show")
+
+    # A budget of 6 covers the first callback only. Per-method resets
+    # would have inferred all three for the same number.
+    expect(ivars.keys).to eq([:@a])
+    expect(described_class.new(max_steps: 100).infer_ivars_for_action(
+      document, owner_name: "::PostsController", action_name: "show"
+    ).keys).to eq(%i[@a @b @c])
   end
 
   it "uses opt-in observed return evidence only when static source and RBS remain Unknown" do
@@ -338,7 +701,6 @@ RSpec.describe Ovallsp::LocalInferencer do
 
     expect(observed_inferencer.infer_at(document, { line: 4, character: 12 }).to_s).to eq("String")
   end
-
   it "returns Unknown, not an exception, once the step budget is exceeded" do
     tiny_budget = described_class.new(max_steps: 5)
     source = (1..50).map { |i| "v#{i} = #{i}" }.join("\n") + "\n"
@@ -462,6 +824,76 @@ RSpec.describe Ovallsp::LocalInferencer do
 
       expect(block_param_type.to_s).to eq("User")
       expect(result_type.to_s).to eq("Array[User]")
+    end
+
+    # Regression: these three bind their result from a seed argument or
+    # from the block's returned collection, not from the receiver's
+    # element type. With no rule of their own they fell through to RBS --
+    # whose method-level type parameters this engine does not bind -- and
+    # collapsed to a bare `Unknown` once overload narrowing began picking
+    # the block-taking overload. `reduce` especially is common enough
+    # that an `Unknown` hover is a visible regression.
+    it "binds reduce/inject to the seed argument's type, not the block's element type" do
+      expect(infer("xs = [1, 2]\nxs.reduce(0) { |acc, x| acc }\n", line: 1, character: 3).to_s).to eq("Integer")
+      expect(infer("xs = [1, 2]\nxs.inject(\"\") { |acc, x| acc }\n", line: 1, character: 3).to_s).to eq("String")
+    end
+
+    # Regression: both specs above return the accumulator unchanged from
+    # their blocks, so neither could tell "seed wins" from "block wins" --
+    # and the implementation had chosen seed-wins, which is backwards.
+    # Ruby returns the *block's* last value; the seed survives only for an
+    # empty receiver. `line_items.reduce(0) { |sum, i| sum + i.amount }`
+    # therefore answered `Integer` for a BigDecimal sum: confidently
+    # wrong, and worse than the Unknown the rule replaced. Both outcomes
+    # are reachable at runtime, so the honest answer is their union.
+    it "unions the block's return type into reduce's result, rather than letting the seed win" do
+      source = "xs = [1, 2]\nxs.reduce(0) { |acc, x| User.new }\n"
+
+      expect(infer(source, line: 1, character: 3).to_s.split(" | ")).to contain_exactly("Integer", "User")
+    end
+
+    # Every other spec for these rules hovers the *call*, which goes
+    # through #resolve. The block parameters are answered by a separate
+    # path (#block_parameter_types), and it binding arguments differently
+    # is exactly the inconsistency this exists to prevent: hovering
+    # `reduce(0)` said Integer while hovering its own `acc` said Unknown,
+    # and the body was walked with the accumulator unbound.
+    it "binds an argument-seeded block's parameters the same way the call itself resolves" do
+      accumulator = infer("xs = [1, 2]\nxs.reduce(0) { |acc, x| acc }\n", line: 1, character: 18)
+      memo = infer("xs = [1, 2]\nxs.each_with_object(User.new) { |x, memo| memo }\n", line: 1, character: 38)
+
+      expect(accumulator.to_s).to eq("Integer")
+      expect(memo.to_s).to eq("User")
+    end
+
+    # Unioning the block's result with the seed must drop an Unknown the
+    # way every other union site in this engine does. `X | Unknown` is
+    # strictly less informative than either member -- it shows the user
+    # two alternatives when the truth is "unconstrained" -- and it is the
+    # commonest shape there is, since `acc << x` on an untyped
+    # accumulator, or any call the engine cannot resolve, lands here. It
+    # also degrades completion: QueryService marks a member conditional
+    # unless it is available on *every* union member, and nothing is ever
+    # available on Unknown, so the whole list greys out.
+    it "does not fold an unresolved block result into the seed's type" do
+      source = "xs = [1, 2]\nxs.reduce(0) { |acc, x| acc.no_such_method }\n"
+
+      expect(infer(source, line: 1, character: 3).to_s).to eq("Integer")
+    end
+
+    it "binds each_with_object to the object passed in" do
+      source = "xs = [1, 2]\nxs.each_with_object(User.new) { |x, memo| memo }\n"
+
+      expect(infer(source, line: 1, character: 3).to_s).to eq("User")
+    end
+
+    # The other direction, and the reason this is not simply "the block
+    # always wins": Ruby discards an each_with_object block's value, so a
+    # block returning something else must not change the answer.
+    it "ignores an each_with_object block's return type, which Ruby discards" do
+      source = "xs = [1, 2]\nxs.each_with_object(User.new) { |x, memo| Admin.new }\n"
+
+      expect(infer(source, line: 1, character: 3).to_s).to eq("User")
     end
 
     it "does not crash and returns Unknown for a call with a block syntax error, degrading partially" do
@@ -714,6 +1146,23 @@ RSpec.describe Ovallsp::LocalInferencer do
       expect(ivars).to be_empty
     end
 
+    it "does not claim callback ivars when a conditional skip may execute" do
+      source = <<~RUBY
+        class UsersController
+          before_action :load_user
+          skip_before_action :load_user, if: :guest?
+          def load_user = @user = User.new
+          def show; end
+        end
+      RUBY
+
+      ivars = inferencer.infer_ivars_for_action(
+        document(source), owner_name: "::UsersController", action_name: "show"
+      )
+
+      expect(ivars).to be_empty
+    end
+
     it "preserves earlier ivars when a later callback method is missing" do
       source = <<~RUBY
         class UsersController
@@ -724,6 +1173,27 @@ RSpec.describe Ovallsp::LocalInferencer do
       RUBY
 
       ivars = inferencer.infer_ivars_for_action(
+        document(source), owner_name: "::UsersController", action_name: "show"
+      )
+
+      expect(ivars[:@user].to_s).to eq("User")
+    end
+
+    it "preserves earlier ivars when a later callback exceeds the inference budget" do
+      assignments = (1..100).map { |index| "    value_#{index} = #{index}" }.join("\n")
+      source = <<~RUBY
+        class UsersController
+          before_action :load_user, :too_complex
+          def load_user = @user = User.new
+          def too_complex
+      #{assignments}
+          end
+          def show; end
+        end
+      RUBY
+      tiny = described_class.new(max_steps: 20)
+
+      ivars = tiny.infer_ivars_for_action(
         document(source), owner_name: "::UsersController", action_name: "show"
       )
 

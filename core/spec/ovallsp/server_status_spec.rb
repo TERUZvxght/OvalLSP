@@ -111,4 +111,25 @@ RSpec.describe "Ovallsp::Server environment status (Task 020)" do
 
     expect(sent_messages.find { |m| m[:id] == 2 }[:result]).to eq(acknowledged: true)
   end
+
+  it "removes disk-indexed files that disappeared before a manual reindex" do
+    Dir.mktmpdir do |root|
+      path = File.join(root, "widget.rb")
+      File.write(path, "class Widget\nend\n")
+      server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: root)
+      symbol = Ovallsp::Index::SymbolId.new(kind: :class, owner: nil, name: "::Widget", discriminator: nil)
+
+      server.send(:start_cold_index)
+      expect(wait_until { !server.instance_variable_get(:@workspace_index).declarations(symbol).empty? }).to be(true)
+      expect(wait_until { !server.instance_variable_get(:@cold_indexing) }).to be(true)
+
+      File.delete(path)
+      server.send(:start_cold_index)
+      expect(wait_until { !server.instance_variable_get(:@cold_indexing) }).to be(true)
+
+      expect(server.instance_variable_get(:@workspace_index).declarations(symbol)).to be_empty
+    ensure
+      server&.instance_variable_get(:@background_tasks)&.shutdown
+    end
+  end
 end

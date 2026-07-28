@@ -20,11 +20,8 @@ module Ovallsp
     # and definition — there's no merge/accumulation across snapshots.
     #
     # #replace may run on a background thread (RailsBootstrap) concurrently
-    # with reads from the main thread. No mutex: `@helpers` is only ever
-    # reassigned wholesale, after the new Hash is fully built, so a reader
-    # sees either the complete old table or the complete new one — never a
-    # partial one. This relies on CRuby's GVL making that single Hash
-    # reference reassignment atomic.
+    # with reads from the main thread. A mutex publishes the complete table
+    # and its generation atomically.
     class RouteRegistry
       def self.from_route_facts(route_facts)
         new.tap { |registry| registry.replace(route_facts) }
@@ -32,20 +29,38 @@ module Ovallsp
 
       def initialize
         @helpers = {}
+        @generation = 0
+        @mutex = Mutex.new
       end
 
+      def generation = @mutex.synchronize { @generation }
+
       def replace(route_facts)
+        commit_replace(prepare_replace(route_facts))
+      end
+
+      # See ModelRegistry#prepare_replace: building and publication are
+      # separate so Server can validate a routes+models snapshot before
+      # making either half visible.
+      def prepare_replace(route_facts)
         grouped = Hash.new { |h, k| h[k] = [] }
         route_facts.each do |fact|
           name = fact[:name]
           grouped[name] << fact if name && !name.to_s.empty?
         end
 
-        @helpers = grouped.transform_values { |facts| build_helper(facts) }
+        grouped.transform_values { |facts| build_helper(facts) }
+      end
+
+      def commit_replace(replacement)
+        @mutex.synchronize do
+          @helpers = replacement.dup
+          @generation += 1
+        end
       end
 
       def helper(name)
-        @helpers[name.to_s]
+        @mutex.synchronize { @helpers[name.to_s] }
       end
 
       # Resolves a Ruby method call name like "post_path" or "posts_url"
@@ -59,13 +74,15 @@ module Ovallsp
       end
 
       def completion_names(prefix = "")
-        @helpers.each_key.flat_map { |name| ["#{name}_path", "#{name}_url"] }
-                .select { |candidate| candidate.start_with?(prefix) }
-                .sort
+        @mutex.synchronize do
+          @helpers.each_key.flat_map { |name| ["#{name}_path", "#{name}_url"] }
+                  .select { |candidate| candidate.start_with?(prefix) }
+                  .sort
+        end
       end
 
       def empty?
-        @helpers.empty?
+        @mutex.synchronize { @helpers.empty? }
       end
 
       private

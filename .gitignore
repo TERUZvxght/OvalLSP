@@ -38,5 +38,11 @@ core/spec/fixtures/rails_real/tmp/
 # not repo content -- never auto-commit them.
 /*.zip
 
+# Per-release working notes (session handoff: what round of review we are
+# on, what to re-read next session). Working material like the zips above,
+# not repo content -- root .md files are the contributor-facing EN/JA set,
+# and durable decisions belong in CLAUDE.md / AGENTS.md / docs/design.
+/V*_PROGRESS.md
+
 # CI's rspec JSON output (used to detect skipped real-Rails examples)
 core/tmp/

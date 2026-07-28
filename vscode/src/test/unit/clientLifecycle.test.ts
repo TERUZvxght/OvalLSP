@@ -1,5 +1,14 @@
 import * as assert from 'assert';
-import { ClientLifecycleManager, KeyedTransitionQueue } from '../../clientLifecycle';
+import * as fs from 'fs';
+import * as path from 'path';
+import {
+  canSpawnCoreProcess,
+  ClientLifecycleManager,
+  CoreStartRejectedError,
+  isCoreStartRejected,
+  KeyedTransitionQueue,
+  ShutdownBarrier
+} from '../../clientLifecycle';
 
 function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
   let resolve!: (value: T) => void;
@@ -296,6 +305,268 @@ describe('ClientLifecycleManager', () => {
     await lifecycle.terminateProcess('folder-a', generation);
 
     assert.strictEqual(terminationCount, 1);
+  });
+
+  it('accepts vscode-languageclient automatic process replacement while running', async () => {
+    const lifecycle = new ClientLifecycleManager();
+    const generation = lifecycle.beginStart('folder-a');
+    lifecycle.markStarting('folder-a', generation);
+    let oldTerminations = 0;
+    let newTerminations = 0;
+    lifecycle.registerProcess('folder-a', generation, {
+      terminate: async () => {
+        oldTerminations += 1;
+      }
+    });
+    lifecycle.markRunning('folder-a', generation);
+
+    const registered = lifecycle.registerProcess('folder-a', generation, {
+      terminate: async () => {
+        newTerminations += 1;
+      }
+    });
+    await Promise.resolve();
+
+    assert.strictEqual(registered, true);
+    assert.strictEqual(oldTerminations, 1);
+    assert.strictEqual(newTerminations, 0);
+    await lifecycle.terminateProcess('folder-a', generation);
+    assert.strictEqual(newTerminations, 1);
+  });
+
+  it('awaits retirement of a replaced process during final termination', async () => {
+    const lifecycle = new ClientLifecycleManager();
+    const generation = lifecycle.beginStart('folder-a');
+    lifecycle.markStarting('folder-a', generation);
+    const oldTermination = deferred<void>();
+    lifecycle.registerProcess('folder-a', generation, { terminate: () => oldTermination.promise });
+    lifecycle.markRunning('folder-a', generation);
+    lifecycle.registerProcess('folder-a', generation, { terminate: async () => undefined });
+
+    let drained = false;
+    const termination = lifecycle.terminateProcess('folder-a', generation).then(() => {
+      drained = true;
+    });
+    await Promise.resolve();
+    assert.strictEqual(drained, false);
+
+    oldTermination.resolve();
+    await termination;
+    assert.strictEqual(drained, true);
+  });
+
+  it('awaits a stale registration retirement through the global drain', async () => {
+    const lifecycle = new ClientLifecycleManager();
+    const retirement = deferred<void>();
+    lifecycle.registerProcess('missing', 1, { terminate: () => retirement.promise });
+
+    let drained = false;
+    const draining = lifecycle.drainRetirements().then(() => {
+      drained = true;
+    });
+    await Promise.resolve();
+    assert.strictEqual(drained, false);
+
+    retirement.resolve();
+    await draining;
+    assert.strictEqual(drained, true);
+  });
+
+  // Regression guard: every production path stops the client first, and
+  // that nulls `folder.process` -- so this is the last line of defence
+  // for a handle that outlived its generation (a stop that threw, a
+  // crash-recovery spawn landing after a restart began). Nothing else in
+  // the suite would notice if it were dropped, and the process it owns
+  // is a live Core plus whatever it spawned.
+  it('retires a process still held by the previous generation when a new start begins', async () => {
+    const lifecycle = new ClientLifecycleManager();
+    const generation = lifecycle.beginStart('folder-a');
+    lifecycle.markStarting('folder-a', generation);
+    let terminated = false;
+    lifecycle.registerProcess('folder-a', generation, {
+      terminate: async () => {
+        terminated = true;
+      }
+    });
+
+    lifecycle.beginStart('folder-a');
+    await lifecycle.drainRetirements();
+
+    assert.strictEqual(terminated, true, 'expected the superseded generation\'s Core to be terminated');
+  });
+
+  // `terminateProcess` must not resolve until the Core it just handed to
+  // `trackTermination` — and anything already retiring for this folder —
+  // has actually finished terminating. `stopClient` awaits it, and
+  // `deactivate` awaits `stopClient`, so resolving early lets VS Code
+  // exit while a Core (and whatever Runtime Agent it spawned) is still
+  // mid-teardown. Awaiting only the handle would also miss a retirement
+  // from a previous crash-recovery replacement.
+  it('does not resolve terminateProcess until every retirement for that folder has settled', async () => {
+    const lifecycle = new ClientLifecycleManager();
+    const generation = lifecycle.beginStart('folder-a');
+    lifecycle.markStarting('folder-a', generation);
+    // The Core replaced by vscode-languageclient's crash recovery: still
+    // retiring, and reachable only through `folder.retirements`.
+    const crashed = deferred<void>();
+    lifecycle.registerProcess('folder-a', generation, { terminate: () => crashed.promise });
+    lifecycle.registerProcess('folder-a', generation, { terminate: async () => undefined });
+
+    let finished = false;
+    const termination = lifecycle.terminateProcess('folder-a', generation).then(() => {
+      finished = true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(finished, false, 'expected the terminate to still be waiting on the replaced Core');
+
+    crashed.resolve();
+    await termination;
+
+    assert.strictEqual(finished, true);
+  });
+
+  it('includes a retirement registered while a drain is already waiting', async () => {
+    const lifecycle = new ClientLifecycleManager();
+    const first = deferred<void>();
+    const late = deferred<void>();
+    lifecycle.registerProcess('missing', 1, { terminate: () => first.promise });
+
+    let drained = false;
+    const draining = lifecycle.drainRetirements().then(() => {
+      drained = true;
+    });
+    lifecycle.registerProcess('also-missing', 1, { terminate: () => late.promise });
+    first.resolve();
+    // Two microtask ticks were not enough to make this assertion mean
+    // anything: the retirement chain (`then -> catch -> finally`) had not
+    // settled by then even in a single-pass drain, so `drained` was still
+    // false for reasons unrelated to the re-check loop and the test
+    // passed against the very implementation it exists to reject. A
+    // macrotask boundary flushes the whole microtask queue, so reaching
+    // here with `drained` still false is now evidence that the drain
+    // genuinely looked again and saw the late retirement.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(drained, false);
+
+    late.resolve();
+    await draining;
+    assert.strictEqual(drained, true);
+  });
+});
+
+describe('CoreStartRejectedError', () => {
+  // vscode-languageclient reports every ServerOptions rejection through
+  // `error(..., 'force')`, which forces a red popup -- so declining to
+  // spawn during a normal deactivate/restart told users "Restarting
+  // server failed" about the barrier working as designed. The rejection
+  // is branded so exactly that case can be downgraded to a log line,
+  // while genuine failures keep the library's louder handling.
+  it('is recognizable after crossing a promise boundary that erases the class', async () => {
+    const rejection = Promise.reject(new CoreStartRejectedError('rejected during shutdown'));
+
+    const caught = await rejection.catch((error: unknown) => error);
+
+    assert.strictEqual(isCoreStartRejected(caught), true);
+  });
+
+  it('does not claim unrelated failures, which must keep their visible error', () => {
+    assert.strictEqual(isCoreStartRejected(new Error('ruby not found')), false);
+    assert.strictEqual(isCoreStartRejected(undefined), false);
+    assert.strictEqual(isCoreStartRejected(null), false);
+    assert.strictEqual(isCoreStartRejected('rejected during shutdown'), false);
+  });
+
+  // Duck-typed rather than `instanceof`: the value crosses
+  // vscode-languageclient's own plumbing, and a duplicated module
+  // instance would break identity while the brand survives.
+  it('recognizes the brand without depending on the class identity', () => {
+    const structurallyIdentical = { ovallspReason: new CoreStartRejectedError('x').ovallspReason };
+
+    assert.strictEqual(isCoreStartRejected(structurallyIdentical), true);
+  });
+});
+
+describe('ShutdownBarrier', () => {
+  it('rejects new starts for the rest of the shutdown once deactivation begins', () => {
+    const barrier = new ShutdownBarrier();
+
+    assert.strictEqual(barrier.permitsStart(), true);
+    barrier.beginShutdown();
+    assert.strictEqual(barrier.permitsStart(), false);
+    barrier.beginShutdown();
+    assert.strictEqual(barrier.permitsStart(), false);
+  });
+
+  // Regression: the barrier is module state and outlives deactivate() in
+  // a surviving extension host, so disable-then-enable (no window
+  // reload) re-entered activate() with the barrier still closed. Every
+  // client start and every added workspace folder was then refused, and
+  // the refusal is branded precisely so it does *not* raise a popup --
+  // the extension was silently, permanently dead with no error shown.
+  it('reopens for a fresh activation after a completed shutdown', () => {
+    const barrier = new ShutdownBarrier();
+    barrier.beginShutdown();
+
+    barrier.reset();
+
+    assert.strictEqual(barrier.permitsStart(), true);
+  });
+
+  // The test above covers the class; the *bug* was that `activate()`
+  // never called it. `extension.ts` imports `vscode` and so cannot be
+  // loaded here, which is exactly why deleting the call left the whole
+  // suite green -- so this reads the source instead. A structural guard,
+  // deliberately: it costs nothing and pins the one line whose absence
+  // silently kills the extension after a disable/enable.
+  it('is reopened by activate() before anything can ask to spawn Core', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../../src/extension.ts'), 'utf8');
+    const activateBody = source.slice(source.indexOf('export function activate('));
+
+    assert.ok(
+      activateBody.indexOf('shutdownBarrier.reset()') >= 0 &&
+        activateBody.indexOf('shutdownBarrier.reset()') < activateBody.indexOf('startClientForFolder('),
+      'expected activate() to reset the shutdown barrier before starting any client'
+    );
+  });
+
+  // The state half of the predicate, which the generation/barrier test
+  // below cannot see. `stopClient` moves the folder to `stopping`
+  // synchronously and only then awaits `client.stop()`; inside that
+  // window vscode-languageclient still considers itself Running, so a
+  // Core connection closing there takes its error handler's Restart
+  // branch straight back into ServerOptions. The shutdown barrier is
+  // open (this is a Restart Server or a removed folder, not a
+  // deactivate), so nothing else refuses: without the state check a real
+  // Core is spawned during its own shutdown, and only `registerProcess`
+  // tears it back down afterwards.
+  it('refuses to spawn for a generation that is already stopping', () => {
+    const barrier = new ShutdownBarrier();
+    const lifecycle = new ClientLifecycleManager();
+    const generation = lifecycle.beginStart('folder-a');
+    lifecycle.markStarting('folder-a', generation);
+    lifecycle.markRunning('folder-a', generation);
+    assert.strictEqual(canSpawnCoreProcess(barrier, lifecycle, 'folder-a', generation), true);
+
+    lifecycle.requestStop('folder-a');
+
+    assert.strictEqual(canSpawnCoreProcess(barrier, lifecycle, 'folder-a', generation), false);
+  });
+
+  it('rejects an old client auto-restart before spawn after shutdown or generation replacement', () => {
+    const barrier = new ShutdownBarrier();
+    const lifecycle = new ClientLifecycleManager();
+    const oldGeneration = lifecycle.beginStart('folder-a');
+    lifecycle.markStarting('folder-a', oldGeneration);
+    lifecycle.markRunning('folder-a', oldGeneration);
+    assert.strictEqual(canSpawnCoreProcess(barrier, lifecycle, 'folder-a', oldGeneration), true);
+
+    const newGeneration = lifecycle.beginStart('folder-a');
+    lifecycle.markStarting('folder-a', newGeneration);
+    assert.strictEqual(canSpawnCoreProcess(barrier, lifecycle, 'folder-a', oldGeneration), false);
+    assert.strictEqual(canSpawnCoreProcess(barrier, lifecycle, 'folder-a', newGeneration), true);
+
+    barrier.beginShutdown();
+    assert.strictEqual(canSpawnCoreProcess(barrier, lifecycle, 'folder-a', newGeneration), false);
   });
 });
 

@@ -158,5 +158,24 @@ RSpec.describe Ovallsp::Signatures::Environment do
       sm = environment.method_signatures(sym("::String", "upcase"))
       expect(sm.generation).to eq(environment.generation)
     end
+
+    # The type-parameter cache is memoized per type name and has to be
+    # dropped with the others: it feeds the receiver binding in generic
+    # calls, so a stale entry survives a `.rbs` edit and keeps binding a
+    # container's element type from the *previous* declaration.
+    it "drops the cached type parameters of a class whose RBS declaration changed" do
+      Dir.mktmpdir do |root|
+        FileUtils.mkdir_p(File.join(root, "sig"))
+        signature = File.join(root, "sig", "box.rbs")
+        File.write(signature, "class Box[A]\nend\n")
+        environment.load(workspace_root: root)
+        expect(environment.type_parameters("Box")).to eq(["A"])
+
+        File.write(signature, "class Box[K, V]\nend\n")
+        environment.load(workspace_root: root)
+
+        expect(environment.type_parameters("Box")).to eq(%w[K V])
+      end
+    end
   end
 end

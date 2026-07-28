@@ -110,6 +110,7 @@ module Ovallsp
         @owner_stack = []
         @singleton_context_stack = [false]
         @visibility_stack = [:public]
+        @in_method_body = false
         # Task 014: a fresh local-variable scope id per class/module body,
         # `def`, `class << self`, and block — matching real Ruby's own
         # local-scoping boundaries (verified live: `class << self` does
@@ -131,10 +132,21 @@ module Ovallsp
 
       def visit_singleton_class_node(node)
         @singleton_context_stack.push(true)
+        # A `class << self` body has its own visibility section, exactly
+        # as a class/module body does (see #visit_namespace, which has
+        # always pushed both). Without this, a bare `private` inside the
+        # singleton block set the *enclosing class's* visibility frame and
+        # never restored it, so every instance method declared after the
+        # block was recorded private. That was latent until Rails action
+        # detection began filtering on `visibility == :public`, at which
+        # point those methods stopped being actions and their ivars
+        # silently vanished from the corresponding views.
+        @visibility_stack.push(:public)
         @scope_stack.push(next_scope_id)
         super
       ensure
         @singleton_context_stack.pop
+        @visibility_stack.pop
         @scope_stack.pop
       end
 
@@ -155,10 +167,15 @@ module Ovallsp
           discriminator: nil
         )
 
+        # A pending entry means this def is the argument of a
+        # `private def …`/`protected def …`, which names it explicitly and
+        # so outranks whatever section is currently open.
+        inline_visibility = @pending_visibility_names&.delete([owner, node.name.to_s])
+
         @declarations << Index::Declaration.new(
           symbol_id: symbol_id,
           location: Index::SourceLocation.to_range(node.location, @lines),
-          visibility: singleton ? nil : @visibility_stack.last,
+          visibility: singleton ? nil : (inline_visibility || @visibility_stack.last),
           parameters: extract_parameters(node.parameters),
           origin: :source,
           body_source: node.body&.slice,
@@ -166,14 +183,33 @@ module Ovallsp
         )
 
         @scope_stack.push(next_scope_id)
+        # Tracks "we are inside a method body", so a `private :target`
+        # written there -- which never runs at class level in Ruby -- does
+        # not retroactively rewrite a declaration. Restored rather than
+        # cleared, since `private def foo; ...; end` nests a def inside a
+        # call inside a def in the argument-form case.
+        previous_in_method_body = @in_method_body
+        @in_method_body = true
+        # Same frame discipline as blocks and `class << self`: a bare
+        # `private` written inside a method body must not rewrite the
+        # class's open section. `@in_method_body` already stopped the
+        # `private :x` argument form from doing this; the argumentless
+        # form went straight to `update_visibility` and was unguarded, so
+        # `def wrapper; private; end` privatised every method declared
+        # after it. Guarding one call site was the symptom fix -- the
+        # frame is the cause.
+        @visibility_stack.push(@visibility_stack.last)
         super
       ensure
+        @visibility_stack.pop
+        @in_method_body = previous_in_method_body
         @scope_stack.pop
       end
 
       def visit_call_node(node)
         if node.receiver.nil?
           update_visibility(node) if node.arguments.nil?
+          apply_visibility_arguments(node) unless node.arguments.nil?
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
           record_generated_methods(node) if current_owner && GENERATED_METHOD_DSLS.include?(node.name)
@@ -184,8 +220,25 @@ module Ovallsp
 
       def visit_block_node(node)
         @scope_stack.push(next_scope_id)
+        # A visibility section opened inside a block belongs to that
+        # block. `concerning :Auth do private; def authenticate; end end`
+        # and `included do ... end` and `class_eval do ... end` all run
+        # their `private` against a different module than the enclosing
+        # class, so it cannot reach the class body -- yet without a frame
+        # here it set the enclosing frame and never restored it, and every
+        # method written after the block was recorded private. With
+        # actions now filtered on `visibility == :public`, that silently
+        # dropped real controller actions and their ivars vanished from
+        # the corresponding views.
+        #
+        # The frame *inherits* rather than resetting to :public: a plain
+        # iterator block does not open a new cref, so a `def` inside it
+        # really does take the enclosing section's visibility. Inheriting
+        # keeps that case right while still containing the leak.
+        @visibility_stack.push(@visibility_stack.last)
         super
       ensure
+        @visibility_stack.pop
         @scope_stack.pop
       end
 
@@ -628,6 +681,101 @@ module Ovallsp
         when :public then @visibility_stack[-1] = :public
         when :private then @visibility_stack[-1] = :private
         when :protected then @visibility_stack[-1] = :protected
+        end
+      end
+
+      VISIBILITY_MODIFIERS = { public: :public, private: :private, protected: :protected }.freeze
+
+      # `private`/`protected`/`public` *with* arguments do not open a
+      # section -- they change the visibility of exactly the methods named.
+      # Only the bare, argumentless section form was handled, so both
+      # `private def prepare; end` (idiomatic in Rails controllers) and
+      # `private :prepare` recorded the method as public.
+      #
+      # That is a visibility-model gap, not a view-propagation gap, so it
+      # is fixed here rather than in any one consumer: `contributing_actions`
+      # (Rails action detection), completion filtering and method
+      # resolution all read `Declaration#visibility` and all inherited the
+      # same wrong answer.
+      #
+      # `private def …` is retroactive in the same pass because Prism
+      # visits the CallNode before its DefNode argument only in source
+      # order -- the DefNode is an *argument*, so `super` below visits it
+      # after this runs. Matching on the recorded declaration afterwards
+      # would need the def's location, which is exactly what the argument
+      # node already carries; both forms therefore resolve through the
+      # same by-name rewrite, applied to declarations already recorded and
+      # to the pending inline def once `super` records it.
+      def apply_visibility_arguments(node)
+        visibility = VISIBILITY_MODIFIERS[node.name]
+        return unless visibility
+        # Inside `class << self`, `private :show` names the *singleton*
+        # method. Declarations for singleton methods carry no visibility
+        # (visit_def_node records nil for them), so there is nothing to
+        # rewrite -- and rewriting by owner alone would hit the
+        # same-named instance method instead, privatizing a real Rails
+        # action and dropping it from view propagation.
+        return if @singleton_context_stack.last
+        # `private :target` written inside a method body never runs at
+        # class level in Ruby, so it must not retroactively change a
+        # declaration either.
+        return if @in_method_body
+
+        # Only a `def` argument needs a pending entry: it is the one form
+        # whose declaration has not been recorded yet, and `visit_def_node`
+        # consumes the entry moments later. A symbol/string argument names
+        # a method that already exists, so `rewrite_recorded_visibility`
+        # below fully handles it -- recording a pending entry for it too
+        # left an unconsumed trap that the *next* `def` of that name
+        # claimed instead. `def target; private :target; def target` (a
+        # same-file reopen) then recorded the second, public definition as
+        # private, dropping the action from view propagation.
+        pending_names = []
+        names = node.arguments.arguments.filter_map do |argument|
+          case argument
+          when Prism::SymbolNode then argument.unescaped
+          when Prism::StringNode then argument.unescaped
+          when Prism::DefNode
+            # `private def self.x` / `private def Helper.x` declare a
+            # singleton method, which carries no recorded visibility --
+            # so there is nothing to rewrite, and rewriting by name and
+            # owner alone reached the *instance* method `x` instead. That
+            # privatized a real Rails action and dropped it from view
+            # propagation, the same cross-kind hit the `class << self`
+            # guard above exists to prevent. The pending entry leaked the
+            # same way: it is stored under `current_owner` but consumed
+            # under the def's own owner, so `private def Helper.foo`
+            # inside `class A` sat there until `A#foo` claimed it.
+            next if argument.receiver
+
+            pending_names << argument.name.to_s
+            argument.name.to_s
+          end
+        end
+        return if names.empty?
+
+        unless pending_names.empty?
+          @pending_visibility_names ||= {}
+          pending_names.each { |name| @pending_visibility_names[[current_owner, name]] = visibility }
+        end
+        rewrite_recorded_visibility(names, visibility)
+      end
+
+      def rewrite_recorded_visibility(names, visibility)
+        @declarations.map! do |declaration|
+          next declaration unless declaration.symbol_id.kind == :instance_method
+          next declaration unless declaration.symbol_id.owner == current_owner
+          next declaration unless names.include?(declaration.symbol_id.name)
+
+          Index::Declaration.new(
+            symbol_id: declaration.symbol_id,
+            location: declaration.location,
+            visibility: visibility,
+            parameters: declaration.parameters,
+            origin: declaration.origin,
+            body_source: declaration.body_source,
+            name_location: declaration.name_location
+          )
         end
       end
 

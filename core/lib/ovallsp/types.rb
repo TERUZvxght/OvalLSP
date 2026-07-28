@@ -82,6 +82,15 @@ module Ovallsp
     # order branches were visited in.
     def normalize_union(types)
       flattened = types.flat_map { |t| t.is_a?(Union) ? t.members : [t] }
+      # `Hash[Unknown]` constrains nothing that `Hash` does not, so a
+      # union holding both presents a single type as two alternatives.
+      # Reachable from any union of a bare container literal with a call
+      # returning the same container generically, e.g.
+      # `reduce({}) { |acc, x| acc.merge(x => x) }`.
+      plain_names = flattened.filter_map { |t| t.name if t.is_a?(Nominal) }
+      flattened = flattened.reject do |t|
+        t.is_a?(Generic) && t.type_arg.is_a?(Unknown) && plain_names.include?(t.name)
+      end
       unique = flattened.uniq.sort_by { |t| t.to_s }
 
       case unique.size

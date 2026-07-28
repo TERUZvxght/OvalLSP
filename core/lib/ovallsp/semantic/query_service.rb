@@ -98,7 +98,15 @@ module Ovallsp
       # helper signatures itself, since routes have no Types receiver at
       # all.
       def signatures_of(receiver_type, method_name, context: {})
-        source_signatures(receiver_type, method_name, context) || rbs_signatures(receiver_type, method_name, context) || []
+        if receiver_type.is_a?(Types::Union)
+          return receiver_type.members.flat_map do |member|
+            member == Types::NIL ? [] : signatures_of(member, method_name, context: context)
+          end.uniq
+        end
+
+        rbs_signatures(receiver_type, method_name, context, direct: true) ||
+          source_signatures(receiver_type, method_name, context) ||
+          rbs_signatures(receiver_type, method_name, context, direct: false) || []
       end
 
       # A minimal evidence trail for `type_at`'s result: what the type
@@ -108,6 +116,14 @@ module Ovallsp
       # source is deferred (docs/design/tasks/012-rbs-rbi-and-external-signatures.md's
       # own "矛盾時は...evidenceへ残す" is explicitly left to a future
       # richer evidence model; this is the MVP "型の根拠を確認できる" slice).
+      # Left exactly as it was: no production code calls #explain
+      # (`explain_type_result` uses #type_at, `show_type_evidence_result`
+      # reads the observation store directly). Routing it through a new
+      # two-pass evidence API added a second full inference per query and
+      # an `origin:` field for a caller that does not exist -- AGENTS.md
+      # is explicit that functionality is not implemented in advance. If
+      # #explain is to be wired up, that is the change to make; until
+      # then there is nothing here to enrich.
       def explain(document, position, initial_env: {})
         type = type_at(document, position, initial_env: initial_env)
         { type: type, confidence: type == Types::UNKNOWN ? :low : :high }
@@ -122,7 +138,7 @@ module Ovallsp
       def normalize_union_conditionals(candidates, receiver_type, context)
         return unless receiver_type.is_a?(Types::Union)
 
-        variants = receiver_type.members.reject { |member| member == Types::NIL }
+        variants = receiver_type.members
         candidates.transform_values! do |member|
           conditional = variants.any? { |variant| !member_available_on?(variant, member.name, context) }
           member.with(conditional: conditional)
@@ -248,7 +264,7 @@ module Ovallsp
         end.compact
       end
 
-      def rbs_signatures(receiver_type, method_name, context)
+      def rbs_signatures(receiver_type, method_name, context, direct: nil)
         return nil unless @signatures
 
         singleton = context[:singleton] == true
@@ -259,6 +275,7 @@ module Ovallsp
           )
           sm = @signatures.method_signatures(symbol_id)
           next unless sm
+          next unless direct.nil? || sm.direct == direct
 
           sm.overloads.map { |overload| { label: rbs_signature_label(method_name, overload), parameters: [] } }
         end.flatten.tap { |result| return nil if result.empty? }

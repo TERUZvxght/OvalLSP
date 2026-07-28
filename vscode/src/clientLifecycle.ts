@@ -25,14 +25,88 @@ import { CoreProcessHandle } from './coreProcess';
 
 export type LifecycleState = 'pending' | 'starting' | 'running' | 'stopping' | 'stopped';
 
+export class ShutdownBarrier {
+  private shuttingDown = false;
+
+  beginShutdown(): void {
+    this.shuttingDown = true;
+  }
+
+  /**
+   * Reopens the barrier for a fresh activation.
+   *
+   * The barrier is module state, so it outlives `deactivate()` inside a
+   * surviving extension host -- disable-then-enable, or an extension
+   * reload without a window reload, runs `activate()` again in the same
+   * process. Without this, the barrier stayed closed forever: every
+   * client start was refused, every added workspace folder was ignored,
+   * and because the refusal is deliberately branded to suppress its
+   * popup, the extension was silently and permanently dead with nothing
+   * shown to the user.
+   */
+  reset(): void {
+    this.shuttingDown = false;
+  }
+
+  permitsStart(): boolean {
+    return !this.shuttingDown;
+  }
+}
+
+export function canSpawnCoreProcess(
+  shutdown: ShutdownBarrier,
+  lifecycle: ClientLifecycleManager,
+  key: string,
+  generation: number
+): boolean {
+  return shutdown.permitsStart() && lifecycle.permitsProcessSpawn(key, generation);
+}
+
+/**
+ * Marks the rejection `ServerOptions` returns when the shutdown barrier
+ * (or a superseded generation) deliberately declines to spawn Core.
+ *
+ * It exists to be *recognised* rather than merely thrown:
+ * vscode-languageclient reports any `ServerOptions` rejection through
+ * `error(..., 'force')`, which forces a red popup -- so refusing to start
+ * during a perfectly normal deactivate/restart showed users a
+ * "Restarting server failed" alarm about the extension working exactly as
+ * designed. The barrier itself is correct; only the presentation was
+ * wrong, so the rejection carries a marker instead of being softened.
+ *
+ * A branded property rather than `instanceof`: the value crosses
+ * vscode-languageclient's own promise plumbing, and duck-typing survives
+ * a duplicated module instance where `instanceof` would silently fail.
+ */
+export const CORE_START_REJECTED = 'ovallsp.coreStartRejected';
+
+export class CoreStartRejectedError extends Error {
+  readonly ovallspReason = CORE_START_REJECTED;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'CoreStartRejectedError';
+  }
+}
+
+export function isCoreStartRejected(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { ovallspReason?: unknown }).ovallspReason === CORE_START_REJECTED
+  );
+}
+
 interface FolderState {
   generation: number;
   state: LifecycleState;
   process?: CoreProcessHandle;
+  retirements: Set<Promise<void>>;
 }
 
 export class ClientLifecycleManager {
   private readonly folders = new Map<string, FolderState>();
+  private readonly orphanRetirements = new Set<Promise<void>>();
 
   /**
    * Begins a new generation for `key`, superseding any prior one
@@ -41,8 +115,13 @@ export class ClientLifecycleManager {
    * `markRunning` all refuse to act on its now-stale generation number.
    */
   beginStart(key: string): number {
-    const generation = (this.folders.get(key)?.generation ?? 0) + 1;
-    this.folders.set(key, { generation, state: 'pending' });
+    const previous = this.folders.get(key);
+    const generation = (previous?.generation ?? 0) + 1;
+    const retirements = previous?.retirements ?? new Set<Promise<void>>();
+    if (previous?.process) {
+      this.trackTermination(previous.process, retirements);
+    }
+    this.folders.set(key, { generation, state: 'pending', retirements });
     return generation;
   }
 
@@ -85,6 +164,14 @@ export class ClientLifecycleManager {
     return true;
   }
 
+  permitsProcessSpawn(key: string, generation: number): boolean {
+    const folder = this.folders.get(key);
+    return (
+      folder?.generation === generation &&
+      (folder.state === 'starting' || folder.state === 'running')
+    );
+  }
+
   /**
    * Registers the OS process as soon as it is spawned. A stop can land
    * between `client.start()` and the server-options callback; if this
@@ -92,11 +179,22 @@ export class ClientLifecycleManager {
    */
   registerProcess(key: string, generation: number, process: CoreProcessHandle): boolean {
     const folder = this.folders.get(key);
-    if (!folder || folder.generation !== generation || folder.state !== 'starting') {
-      void process.terminate();
+    if (
+      !folder ||
+      folder.generation !== generation ||
+      (folder.state !== 'starting' && folder.state !== 'running')
+    ) {
+      this.trackTermination(process, this.orphanRetirements);
       return false;
     }
+    const previous = folder.process;
     folder.process = process;
+    if (previous && previous !== process) {
+      // vscode-languageclient invokes ServerOptions again when its
+      // default crash recovery restarts the server. Replace ownership
+      // atomically and reclaim descendants of the crashed process.
+      this.trackTermination(previous, folder.retirements);
+    }
     return true;
   }
 
@@ -107,7 +205,10 @@ export class ClientLifecycleManager {
     }
     const process = folder.process;
     folder.process = undefined;
-    await process?.terminate();
+    if (process) {
+      this.trackTermination(process, folder.retirements);
+    }
+    await Promise.all([...folder.retirements, ...this.orphanRetirements]);
   }
 
   /**
@@ -141,6 +242,32 @@ export class ClientLifecycleManager {
   /** Test/diagnostic helper -- not used by production wiring. */
   getGeneration(key: string): number | undefined {
     return this.folders.get(key)?.generation;
+  }
+
+  keys(): IterableIterator<string> {
+    return this.folders.keys();
+  }
+
+  async drainRetirements(): Promise<void> {
+    while (true) {
+      const pending = [
+        ...this.orphanRetirements,
+        ...[...this.folders.values()].flatMap((folder) => [...folder.retirements])
+      ];
+      if (pending.length === 0) {
+        return;
+      }
+      await Promise.all(pending);
+    }
+  }
+
+  private trackTermination(process: CoreProcessHandle, target: Set<Promise<void>>): void {
+    let retirement!: Promise<void>;
+    retirement = Promise.resolve()
+      .then(() => process.terminate())
+      .catch(() => undefined)
+      .finally(() => target.delete(retirement));
+    target.add(retirement);
   }
 
   /**

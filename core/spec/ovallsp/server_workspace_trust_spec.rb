@@ -12,8 +12,12 @@ RSpec.describe "Ovallsp::Server workspace trust gating" do
   let(:fake_bootstrap) do
     queue = calls
     Class.new do
+      # `**` mirrors the real RailsBootstrap.start, which takes
+      # install_snapshot: too. Server passes that unconditionally now, so
+      # a double with a narrower signature would only be testing a
+      # bootstrap that cannot exist in production.
       define_singleton_method(:start) do |root:, logger:, route_registry:, model_registry:, on_unavailable: nil,
-                                            on_manager_created: nil|
+                                            on_manager_created: nil, **|
         queue << { root: root, route_registry: route_registry, model_registry: model_registry }
       end
     end
