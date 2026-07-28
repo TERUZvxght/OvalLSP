@@ -183,3 +183,19 @@ a workspace folder is added, and the restart notification wording.
 
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
+
+## 024.11 Core reports version 0.0.1 while the extension reports 0.1.5
+
+**Status:** open
+**Area:** `core/lib/ovallsp/version.rb`, surfaced by `OvalLSP: Show Version Information`
+
+`Ovallsp::VERSION` has been `0.0.1` since the rebrand, so `initialize`
+answers `serverInfo.version` / `ovallspInfo.coreVersion` as `0.0.1` while
+the extension reports its own `0.1.5`. Compatibility is judged on the
+protocol range, not on these strings, so nothing misbehaves — but the
+version panel shows a pairing that looks wrong to anyone reading it, and
+a bug report quoting "Core 0.0.1" is hard to map to a release.
+
+**Direction:** decide whether the gem version tracks the extension
+version or is deliberately independent, and either bump it in step or say
+so in the version panel's own wording.

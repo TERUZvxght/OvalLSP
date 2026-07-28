@@ -33,7 +33,9 @@ Verify this mechanically rather than by inspection: take the diff hunk by hunk, 
 
 Established after rounds 9–12 of independent review on the v0.1.5 change set: of the last six findings, four were not wrong behaviour but behaviour that could be reverted with the entire suite still green — including a one-line qualified-name guard whose removal would have made a view show a different controller's inferred types. Each was found only because a reviewer thought to mutate that specific line by hand.
 
-Two rules follow from that experience:
+The sweep has a blind spot worth knowing before trusting its number: reverse-applying a hunk that *adds a whole method* only tests that the method exists at all. It says nothing about the individual decisions inside it, because reverting the hunk removes the call site too. A `reset_budget: false` argument living inside such a hunk survived the sweep untested and was caught only by a later reviewer. Treat "N of M hunks pinned" as a floor, and for any hunk that introduces new code wholesale, pin its internal decisions separately.
+
+Two further rules follow from that experience:
 
 - Never run this hunk-by-hunk sweep while another agent is mutating the same working tree. Concurrent mutation invalidates both results. Sequence them.
 - A spec whose fixture cannot distinguish the two candidate behaviours is unpinned even though it passes. Prefer fixtures where each branch of the decision yields a *different* observable answer (e.g. a block whose return type differs from the seed type, or two same-named classes in different namespaces), and assert the distinguishing value.
