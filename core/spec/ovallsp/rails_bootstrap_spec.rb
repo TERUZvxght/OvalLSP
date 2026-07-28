@@ -87,14 +87,15 @@ RSpec.describe Ovallsp::RailsBootstrap do
       expect(model_registry.known_model?("User")).to be(false)
     end
 
-    it "keeps the last-known-good models instead of wiping the registry when fetch_all_models fails (Task 008.6)" do
+    it "keeps the last-known-good models instead of wiping the registry when the model fetch fails (Task 008.6)" do
       model_registry.register_from_agent_response(
         "User", { name: "User", tableName: "users", columns: [], associations: [], partial: false }
       )
       fake_manager = instance_double(
         Ovallsp::AgentProcessManager,
         fetch_snapshot: { routes: [] },
-        fetch_all_models: nil # simulates a timeout/communication failure, not a genuinely empty app
+        # A timeout/communication failure, not a genuinely empty app.
+        fetch_models_snapshot: nil
       )
 
       Ovallsp::RailsBootstrap.populate_registries(
@@ -110,7 +111,7 @@ RSpec.describe Ovallsp::RailsBootstrap do
         [{ name: "existing", verb: "GET", pathTemplate: "/existing", requiredParts: [], optionalParts: [],
            defaults: { controller: "existing", action: "index" }, sourceLocation: nil, routeSet: "main_app" }]
       )
-      fake_manager = instance_double(Ovallsp::AgentProcessManager, fetch_snapshot: nil, fetch_all_models: [])
+      fake_manager = instance_double(Ovallsp::AgentProcessManager, fetch_snapshot: nil, fetch_models_snapshot: { models: [] })
 
       Ovallsp::RailsBootstrap.populate_registries(
         fake_manager, route_registry: route_registry, model_registry: model_registry, logger: logger
@@ -124,7 +125,9 @@ RSpec.describe Ovallsp::RailsBootstrap do
       fake_manager = instance_double(
         Ovallsp::AgentProcessManager,
         fetch_snapshot: { routes: [{ name: "posts" }] },
-        fetch_all_models: [{ name: "Post", tableName: "posts", columns: [], associations: [], partial: false }]
+        fetch_models_snapshot: {
+          models: [{ name: "Post", tableName: "posts", columns: [], associations: [], partial: false }]
+        }
       )
       installed = []
 

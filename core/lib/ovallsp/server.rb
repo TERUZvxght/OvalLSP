@@ -1542,7 +1542,7 @@ module Ovallsp
 
     # LSP CompletionItemKind values used below: Function=3, Method=2,
     # Field=5, Property=10.
-    COMPLETION_KIND = { source: 2, model_column: 5, model_association: 10, signature: 2 }.freeze
+    COMPLETION_KIND = { source: 2, model_column: 5, model_association: 10, signature: 2, model_api: 2 }.freeze
 
     # Route helper completion (Task 006) is unconditional-on-nonempty-
     # prefix, unioned with QueryService member completion (Task 013) when

@@ -41,11 +41,35 @@ module Ovallsp
     class ModelRegistry
       def initialize
         @models = {}
+        @active_record_api = { instance: [], singleton: [] }
         @generation = 0
         @mutex = Mutex.new
       end
 
       def generation = @mutex.synchronize { @generation }
+
+      # Active Record's own API, as reported by the Runtime Agent from the
+      # really-loaded classes. Shared by every model, so it is stored once
+      # rather than copied into each ModelInfo.
+      #
+      # Installed only when the Agent actually reports it: a failed or
+      # absent report must leave the last known API in place rather than
+      # blanking it, exactly as a failed model fetch leaves the last
+      # known-good models alone.
+      def install_active_record_api(api)
+        return if api.nil?
+
+        instance = Array(api[:instance] || api["instance"]).map(&:to_s)
+        singleton = Array(api[:singleton] || api["singleton"]).map(&:to_s)
+        return if instance.empty? && singleton.empty?
+
+        @mutex.synchronize do
+          @active_record_api = { instance: instance, singleton: singleton }
+          @generation += 1
+        end
+      end
+
+      def active_record_api = @mutex.synchronize { @active_record_api }
 
       # Builds a ModelInfo from an agent/model response's `:result` hash
       # and registers (or overwrites) it in place. `name` is passed

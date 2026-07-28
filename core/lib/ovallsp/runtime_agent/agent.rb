@@ -198,7 +198,45 @@ module Ovallsp
           model_payload(klass)
         end
 
-        { models: models }
+        { models: models, activeRecordApi: active_record_api }
+      end
+
+      # The Active Record API itself, reported once rather than per model.
+      #
+      # A model's ancestors above ApplicationRecord are outside the
+      # workspace and have no signatures, so Core could see a model's
+      # columns and associations but not `save`, `destroy`, `find` or
+      # `where` -- the methods a Rails developer reaches for constantly.
+      # Completion on a model offered columns only, and the unknown-method
+      # check stayed silent because the receiver was never a closed class.
+      #
+      # Taken from the loaded classes rather than guessed or hardcoded:
+      # this Agent has the real Rails booted, which is the entire reason
+      # it exists (ADR-0002). What ships is therefore what that version of
+      # Rails actually defines, not what some vendored signature claims.
+      #
+      # ActiveRecord::Base's own API is the same for every model, so it is
+      # sent once (~1000 names, ~17KB) instead of once per model, which
+      # for an app with hundreds of models would have been megabytes of
+      # identical strings. Per-model additions (concerns, scopes) already
+      # arrive through each model's own payload.
+      def active_record_api
+        return nil unless active_record_available?
+
+        {
+          instance: callable_names(::ActiveRecord::Base.instance_methods - Object.instance_methods),
+          singleton: callable_names(::ActiveRecord::Base.methods - Object.methods)
+        }
+      rescue StandardError => e
+        @logger.call("active record api unavailable: #{e.class}: #{e.message}")
+        nil
+      end
+
+      # Operators (`==`, `<=>`, `[]`) are real methods but never useful as
+      # completion items after a dot, so they are dropped here rather than
+      # shipped and filtered by every consumer.
+      def callable_names(names)
+        names.map(&:to_s).select { |name| name.match?(/\A[a-z_][A-Za-z0-9_]*[?!=]?\z/) }.sort
       end
 
       def model_payload(klass)

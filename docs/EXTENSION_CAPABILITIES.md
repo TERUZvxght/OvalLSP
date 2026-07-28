@@ -50,18 +50,18 @@ rather than merely absent.
 | C1 | Types `s.` where `s` is a String | stdlib methods (`upcase`, `split`, …) | PASS |
 | C2 | Types `w.` where `w` is a workspace class instance | that class's own instance methods | PASS |
 | C3 | Types `article.` where `article` is an Active Record instance | the model's columns and associations | PASS |
-| C4 | Types `article.` where `article` is an Active Record instance | **Active Record's own instance API** (`save`, `update`, `destroy`, `valid?`, …) | NOT YET |
-| C5 | Types `Article.` (a constant) | **Active Record's class API** (`all`, `find`, `where`, `create`, `new`, …) | NOT YET |
+| C4 | Types `article.` where `article` is an Active Record instance | Active Record's own instance API (`save`, `update`, `destroy`, `valid?`, …) | PASS |
+| C5 | Types `Article.` (a constant) | Active Record's class API (`all`, `find`, `where`, `create`, `new`, …) | PASS |
 | C6 | Types `Widget.` where Widget is a workspace class | that class's own singleton methods (`def self.build`) | PASS |
 | C7 | Types `article_p` in a view | route helpers (`article_path`, `article_url`) | PASS |
 
-C6 was the same defect as C5 and is now fixed: a bare constant inferred
-as `Unknown`, so nothing downstream ever saw a class receiver. C5 needs
-one more thing on top of that -- Active Record's class API is not in the
-workspace and not in any signature, so there is nothing for a correctly
-typed class receiver to offer yet. C4 is that same gap on the instance
-side: a model's ancestors above `ApplicationRecord` are outside the
-workspace and have no signatures, so the inherited API is invisible.
+C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
+a bare constant inferred as `Unknown`, so nothing downstream ever saw a
+class receiver. C4/C5 shared another: a model's ancestors above
+`ApplicationRecord` are outside the workspace and have no signatures, so
+Active Record's own API was invisible. The Runtime Agent now reports that
+API from the really-loaded classes — once for all models, not per model —
+which is what it is for.
 
 ## Go to definition
 

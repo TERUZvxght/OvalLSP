@@ -26,7 +26,9 @@ module Ovallsp
     #   of a Union receiver.
     Member = Data.define(:name, :origin, :conditional, :visibility, :detail)
 
-    ORIGIN_AUTHORITY = { source: 0, model_column: 1, model_association: 1, signature: 2 }.freeze
+    ORIGIN_AUTHORITY = {
+      source: 0, model_column: 1, model_association: 1, signature: 2, model_api: 3
+    }.freeze
     private_constant :ORIGIN_AUTHORITY
 
     # The shared semantic layer behind Completion/Hover/Definition/
@@ -66,6 +68,7 @@ module Ovallsp
         candidates = {}
         add_source_members(candidates, receiver_type, prefix, context)
         add_model_members(candidates, receiver_type, prefix)
+        add_active_record_api_members(candidates, receiver_type, prefix)
         add_signature_members(candidates, receiver_type, prefix, context)
         normalize_union_conditionals(candidates, receiver_type, context)
 
@@ -169,6 +172,34 @@ module Ovallsp
         @method_resolver.complete(receiver_type: receiver_type, prefix: prefix, context: context).each do |result|
           candidates[result[:name]] ||= Member.new(name: result[:name], origin: :source, conditional: result[:conditional],
                                                      visibility: nil, detail: nil)
+        end
+      end
+
+      # Active Record's own API, as the Runtime Agent read it off the
+      # really-loaded classes. A model's ancestors above ApplicationRecord
+      # are outside the workspace and have no signatures, so without this
+      # completion on a model offered its columns and nothing else -- no
+      # `save`, no `destroy`, and on the class no `find`, `where` or
+      # `all`. Ranked below columns, associations and source declarations,
+      # all of which say something more specific about *this* model.
+      #
+      # `ClassOf[Model]` takes the class API, a plain `Model` the instance
+      # API. That distinction is the whole reason a constant now infers as
+      # a class object rather than Unknown.
+      def add_active_record_api_members(candidates, receiver_type, prefix)
+        return unless @model_registry
+
+        singleton = receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
+        subject = singleton ? receiver_type.type_arg : receiver_type
+        return unless each_nominal(subject).any? { |nominal| @model_registry.known_model?(nominal.name) }
+
+        api = @model_registry.active_record_api
+        names = singleton ? api[:singleton] : api[:instance]
+        names.each do |name|
+          next unless name.start_with?(prefix)
+
+          candidates[name] ||= Member.new(name: name, origin: :model_api, conditional: false,
+                                            visibility: nil, detail: nil)
         end
       end
 

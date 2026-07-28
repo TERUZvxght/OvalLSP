@@ -263,8 +263,17 @@ module Ovallsp
     # time (docs/design/tasks/008.5-runtime-and-index-corrections.md).
     # Returns nil if the Agent isn't ready or doesn't respond in time.
     def fetch_all_models(timeout: 30)
+      fetch_models_snapshot(timeout: timeout)&.fetch(:models, nil)
+    end
+
+    # The whole agent/models result: every model, plus Active Record's own
+    # API, which the Agent reports once for all of them rather than
+    # repeating per model. One round trip returns both, so a caller that
+    # needs the API never has to ask again and cannot pair an API with a
+    # different fetch's models.
+    def fetch_models_snapshot(timeout: 30)
       response = request_while_ready("agent/models", {}, timeout: timeout, on_failure: "agent/models timed out")
-      response && response[:result] && response[:result][:models]
+      response && response[:result]
     end
 
     # Asks the Agent to re-draw routes (and anything else a real reload

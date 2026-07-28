@@ -137,7 +137,11 @@ module Ovallsp
       # a full swap (a model discoverable in an earlier boot but absent
       # from this fetch doesn't linger) — the same generation-replace
       # semantics route_registry.replace already gives routes above.
-      models = manager.fetch_all_models
+      snapshot = manager.fetch_models_snapshot
+      models = snapshot && snapshot[:models]
+      # Installed before the models themselves: it is shared by every
+      # model and a model is useless for completion without it.
+      model_registry.install_active_record_api(snapshot && snapshot[:activeRecordApi])
       responses_by_name = nil
       if models
         responses_by_name = models.filter_map { |entry| entry[:name] && [entry[:name], entry] }.to_h
