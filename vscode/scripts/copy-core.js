@@ -240,14 +240,6 @@ function computeDirectorySha256(dir) {
 }
 
 function writePlatformManifest(identity) {
-  // Checked before anything is written: a bundled Core carries the
-  // extension's version, and the release that forgets is the one that
-  // bumped only package.json. See ./version-pairing.js.
-  const bundledVersions = {
-    extensionVersion: extensionVersion(),
-    coreVersion: coreVersionFromStaging()
-  };
-  assertBundledVersionsAgree(bundledVersions);
   const manifest = {
     rubyEngine: identity.engine,
     rubyVersionMajorMinor: identity.versionMajorMinor,
@@ -257,8 +249,8 @@ function writePlatformManifest(identity) {
     // Task 023.2's build manifest -- additive fields alongside the
     // ADR-0005 ruby* fields above, which `Ovallsp::VendorCompatibility`
     // and `platformCompatibility.ts` keep reading unchanged.
-    extensionVersion: bundledVersions.extensionVersion,
-    coreVersion: bundledVersions.coreVersion,
+    extensionVersion: extensionVersion(),
+    coreVersion: coreVersionFromStaging(),
     buildCommit: currentGitCommit(),
     buildTarget: currentBuildTarget(),
     // Computed over the staged tree *before* this manifest file itself
@@ -481,6 +473,15 @@ function commitStaging() {
 
 try {
   copyCoreSourceIntoStaging();
+  // A precondition of the whole build, not a detail of manifest
+  // writing, and deliberately outside the try below: inside it a
+  // mismatch is reported as "vendoring runtime gem dependencies
+  // failed" -- the wrong cause -- and --allow-missing-vendor
+  // downgrades it to a warning and builds anyway. See ./version-pairing.js.
+  assertBundledVersionsAgree({
+    extensionVersion: extensionVersion(),
+    coreVersion: coreVersionFromStaging()
+  });
   try {
     vendorGemDependenciesIntoStaging();
     removeNativeBuildArtifacts(path.join(CORE_STAGING, 'vendor', 'bundle'));
