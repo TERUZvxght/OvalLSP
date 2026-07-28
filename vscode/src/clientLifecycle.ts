@@ -21,15 +21,92 @@
 // exercised with deferred Promises instead of a real LanguageClient or
 // fixed `setTimeout`s.
 
+import { CoreProcessHandle } from './coreProcess';
+
 export type LifecycleState = 'pending' | 'starting' | 'running' | 'stopping' | 'stopped';
+
+export class ShutdownBarrier {
+  private shuttingDown = false;
+
+  beginShutdown(): void {
+    this.shuttingDown = true;
+  }
+
+  /**
+   * Reopens the barrier for a fresh activation.
+   *
+   * The barrier is module state, so it outlives `deactivate()` inside a
+   * surviving extension host -- disable-then-enable, or an extension
+   * reload without a window reload, runs `activate()` again in the same
+   * process. Without this, the barrier stayed closed forever: every
+   * client start was refused, every added workspace folder was ignored,
+   * and because the refusal is deliberately branded to suppress its
+   * popup, the extension was silently and permanently dead with nothing
+   * shown to the user.
+   */
+  reset(): void {
+    this.shuttingDown = false;
+  }
+
+  permitsStart(): boolean {
+    return !this.shuttingDown;
+  }
+}
+
+export function canSpawnCoreProcess(
+  shutdown: ShutdownBarrier,
+  lifecycle: ClientLifecycleManager,
+  key: string,
+  generation: number
+): boolean {
+  return shutdown.permitsStart() && lifecycle.permitsProcessSpawn(key, generation);
+}
+
+/**
+ * Marks the rejection `ServerOptions` returns when the shutdown barrier
+ * (or a superseded generation) deliberately declines to spawn Core.
+ *
+ * It exists to be *recognised* rather than merely thrown:
+ * vscode-languageclient reports any `ServerOptions` rejection through
+ * `error(..., 'force')`, which forces a red popup -- so refusing to start
+ * during a perfectly normal deactivate/restart showed users a
+ * "Restarting server failed" alarm about the extension working exactly as
+ * designed. The barrier itself is correct; only the presentation was
+ * wrong, so the rejection carries a marker instead of being softened.
+ *
+ * A branded property rather than `instanceof`: the value crosses
+ * vscode-languageclient's own promise plumbing, and duck-typing survives
+ * a duplicated module instance where `instanceof` would silently fail.
+ */
+export const CORE_START_REJECTED = 'ovallsp.coreStartRejected';
+
+export class CoreStartRejectedError extends Error {
+  readonly ovallspReason = CORE_START_REJECTED;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'CoreStartRejectedError';
+  }
+}
+
+export function isCoreStartRejected(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    (value as { ovallspReason?: unknown }).ovallspReason === CORE_START_REJECTED
+  );
+}
 
 interface FolderState {
   generation: number;
   state: LifecycleState;
+  process?: CoreProcessHandle;
+  retirements: Set<Promise<void>>;
 }
 
 export class ClientLifecycleManager {
   private readonly folders = new Map<string, FolderState>();
+  private readonly orphanRetirements = new Set<Promise<void>>();
 
   /**
    * Begins a new generation for `key`, superseding any prior one
@@ -38,8 +115,13 @@ export class ClientLifecycleManager {
    * `markRunning` all refuse to act on its now-stale generation number.
    */
   beginStart(key: string): number {
-    const generation = (this.folders.get(key)?.generation ?? 0) + 1;
-    this.folders.set(key, { generation, state: 'pending' });
+    const previous = this.folders.get(key);
+    const generation = (previous?.generation ?? 0) + 1;
+    const retirements = previous?.retirements ?? new Set<Promise<void>>();
+    if (previous?.process) {
+      this.trackTermination(previous.process, retirements);
+    }
+    this.folders.set(key, { generation, state: 'pending', retirements });
     return generation;
   }
 
@@ -82,6 +164,53 @@ export class ClientLifecycleManager {
     return true;
   }
 
+  permitsProcessSpawn(key: string, generation: number): boolean {
+    const folder = this.folders.get(key);
+    return (
+      folder?.generation === generation &&
+      (folder.state === 'starting' || folder.state === 'running')
+    );
+  }
+
+  /**
+   * Registers the OS process as soon as it is spawned. A stop can land
+   * between `client.start()` and the server-options callback; if this
+   * generation is already stale/stopping, terminate it immediately.
+   */
+  registerProcess(key: string, generation: number, process: CoreProcessHandle): boolean {
+    const folder = this.folders.get(key);
+    if (
+      !folder ||
+      folder.generation !== generation ||
+      (folder.state !== 'starting' && folder.state !== 'running')
+    ) {
+      this.trackTermination(process, this.orphanRetirements);
+      return false;
+    }
+    const previous = folder.process;
+    folder.process = process;
+    if (previous && previous !== process) {
+      // vscode-languageclient invokes ServerOptions again when its
+      // default crash recovery restarts the server. Replace ownership
+      // atomically and reclaim descendants of the crashed process.
+      this.trackTermination(previous, folder.retirements);
+    }
+    return true;
+  }
+
+  async terminateProcess(key: string, generation: number): Promise<void> {
+    const folder = this.folders.get(key);
+    if (!folder || folder.generation !== generation) {
+      return;
+    }
+    const process = folder.process;
+    folder.process = undefined;
+    if (process) {
+      this.trackTermination(process, folder.retirements);
+    }
+    await Promise.all([...folder.retirements, ...this.orphanRetirements]);
+  }
+
   /**
    * Called synchronously by `stopClient`, before it does anything else
    * (in particular, before awaiting `client.stop()`) -- so a probe or
@@ -115,36 +244,82 @@ export class ClientLifecycleManager {
     return this.folders.get(key)?.generation;
   }
 
+  keys(): IterableIterator<string> {
+    return this.folders.keys();
+  }
+
+  async drainRetirements(): Promise<void> {
+    while (true) {
+      const pending = [
+        ...this.orphanRetirements,
+        ...[...this.folders.values()].flatMap((folder) => [...folder.retirements])
+      ];
+      if (pending.length === 0) {
+        return;
+      }
+      await Promise.all(pending);
+    }
+  }
+
+  private trackTermination(process: CoreProcessHandle, target: Set<Promise<void>>): void {
+    let retirement!: Promise<void>;
+    retirement = Promise.resolve()
+      .then(() => process.terminate())
+      .catch(() => undefined)
+      .finally(() => target.delete(retirement));
+    target.add(retirement);
+  }
+
   /**
-   * Calls `stopFn` only when `key`'s current generation has actually
-   * reached `running` -- found necessary by independent review (Task
-   * 023.3's own follow-up): `vscode-languageclient`'s real
-   * `LanguageClient.shutdown()` throws synchronously (not merely rejects)
-   * unless its own internal state is exactly `Running`, including while a
-   * `client.start()` is still in flight (`Starting`). Calling a client's
-   * `.stop()` unconditionally the moment a stop is requested -- as
-   * `extension.ts`'s `stopClient` used to -- threw in exactly that
-   * window, breaking `OvalLSP: Restart Server`'s own `await
-   * stopClient(key)` silently.
+   * Atomically records the stop request and captures whether the client
+   * had already reached `running`. These two operations must not be
+   * separate: `requestStop` changes `running` to `stopping`, so checking
+   * for `running` afterward would always skip `stopFn` and leave every
+   * normally-running Core process behind on restart/deactivation.
    *
-   * When this generation is `pending`/`starting`, there is nothing to
-   * stop yet from here: either `client.start()` was never called at all
-   * (a stop landed before `markStarting`), or it's still in flight and
-   * its own continuation's `markRunning`-false branch is what stops it,
-   * once `client.start()` resolves and the library's internal state has
-   * genuinely become `Running` (safe to call `.stop()` at that point).
-   * Calling `stopFn` a second time from here in that case would be
-   * redundant at best, and would reproduce the exact throw at worst if
-   * called before that continuation has run.
-   *
-   * Returns whether `stopFn` was actually called, so the caller knows
-   * whether to record this generation as stopped.
+   * A pending/starting client is not stopped here because
+   * vscode-languageclient rejects `stop()` until startup completes. Its
+   * own `markRunning`-false continuation remains responsible for stopping
+   * it immediately after startup.
    */
-  async stopIfRunning(key: string, stopFn: () => Promise<void>): Promise<boolean> {
-    if (this.getState(key) !== 'running') {
+  async requestStopAndStopIfRunning(key: string, stopFn: () => Promise<void>): Promise<boolean> {
+    const folder = this.folders.get(key);
+    if (!folder) {
       return false;
     }
+
+    const shouldStop = folder.state === 'running';
+    folder.state = folder.state === 'stopped' ? 'stopped' : 'stopping';
+    if (!shouldStop) {
+      return false;
+    }
+
     await stopFn();
     return true;
+  }
+}
+
+/**
+ * Serializes asynchronous lifecycle replacements independently per key.
+ * A rejected transition does not poison later work for that folder.
+ */
+export class KeyedTransitionQueue {
+  private readonly chains = new Map<string, Promise<void>>();
+
+  enqueue(key: string, transition: () => Promise<void>): Promise<void> {
+    const previous = this.chains.get(key) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(transition);
+    this.chains.set(key, next);
+    const cleanup = () => {
+      if (this.chains.get(key) === next) {
+        this.chains.delete(key);
+      }
+    };
+    void next.then(cleanup, cleanup);
+    return next;
+  }
+
+  keys(): IterableIterator<string> {
+    return this.chains.keys();
   }
 }

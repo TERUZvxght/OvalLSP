@@ -131,6 +131,255 @@ RSpec.describe Ovallsp::ParserService do
     expect(by_name["open"].symbol_id.kind).to eq(:singleton_method)
   end
 
+  # Regression: only the bare, argumentless section form was recognized,
+  # so `private def …` -- idiomatic in Rails controllers -- and
+  # `private :sym` both recorded the method as public. Everything reading
+  # Declaration#visibility inherited that: Rails action detection (a
+  # private helper was treated as an action, leaking its ivars into a
+  # view), completion filtering, and method resolution.
+  it "honors the argument forms of private/protected, not only the bare section form" do
+    source = <<~RUBY
+      class PostsController
+        def edit
+        end
+
+        private def prepare_inline
+        end
+
+        def prepare_symbol
+        end
+        private :prepare_symbol
+
+        protected def collaborate
+        end
+
+        def still_public
+        end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+    by_name = summary.declarations.each_with_object({}) { |d, h| h[d.symbol_id.name] = d }
+
+    expect(by_name["prepare_inline"].visibility).to eq(:private)
+    # (see also the `class << self` and method-body cases below)
+    expect(by_name["prepare_symbol"].visibility).to eq(:private)
+    expect(by_name["collaborate"].visibility).to eq(:protected)
+    # The argument forms name specific methods; they must not open a
+    # section that swallows everything declared after them.
+    expect(by_name["edit"].visibility).to eq(:public)
+    expect(by_name["still_public"].visibility).to eq(:public)
+  end
+
+  # Regression: visibility handling must be scoped to the body it appears
+  # in. Both of these silently privatized a real Rails action, which the
+  # action detector then dropped -- so a controller's ivars stopped
+  # reaching its view with no error anywhere.
+  it "keeps `class << self` visibility out of the enclosing class's instance methods" do
+    source = <<~RUBY
+      class UsersController
+        class << self
+          private
+
+          def internal_helper
+          end
+        end
+
+        def show
+        end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+    by_name = summary.declarations.each_with_object({}) { |d, h| h[d.symbol_id.name] = d }
+
+    expect(by_name["show"].visibility).to eq(:public)
+  end
+
+  it "does not let `private :name` inside `class << self` privatize the same-named instance method" do
+    source = <<~RUBY
+      class UsersController
+        def show
+        end
+
+        class << self
+          def show
+          end
+          private :show
+        end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+    instance_show = summary.declarations.find do |d|
+      d.symbol_id.kind == :instance_method && d.symbol_id.name == "show"
+    end
+
+    expect(instance_show.visibility).to eq(:public)
+  end
+
+  it "ignores `private :name` written inside a method body, which never runs at class level" do
+    source = <<~RUBY
+      class Foo
+        def wrapper
+          private :target
+        end
+
+        def target
+        end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+    by_name = summary.declarations.each_with_object({}) { |d, h| h[d.symbol_id.name] = d }
+
+    expect(by_name["target"].visibility).to eq(:public)
+  end
+
+  # Regression: the same leak as `class << self`, through the door Rails
+  # code actually walks through. `concerning`/`included do`/`class_eval
+  # do` run their body against a different module, so a `private` inside
+  # cannot reach the class body -- but with no frame for the block it set
+  # the enclosing class's section and never restored it, and every method
+  # written after the block was recorded private. The `class << self` fix
+  # pushed a frame at exactly one of the three sites that need one.
+  it "keeps a visibility section opened inside a block out of the enclosing class body" do
+    source = <<~RUBY
+      class UsersController
+        concerning :Authentication do
+          private
+
+          def authenticate
+          end
+        end
+
+        def show
+        end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+    by_name = summary.declarations.each_with_object({}) { |d, h| h[d.symbol_id.name] = d }
+
+    expect(by_name["authenticate"].visibility).to eq(:private)
+    expect(by_name["show"].visibility).to eq(:public)
+  end
+
+  # A plain iterator block opens no new cref, so a `def` inside it really
+  # does take the enclosing section's visibility. The block frame has to
+  # inherit for that reason -- resetting it to :public would trade this
+  # leak for the opposite error.
+  it "still applies the enclosing section to a method declared inside a plain block" do
+    source = <<~RUBY
+      class Foo
+        private
+
+        [1].each do |_i|
+          def generated
+          end
+        end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+    generated = summary.declarations.find { |d| d.symbol_id.name == "generated" }
+
+    expect(generated.visibility).to eq(:private)
+  end
+
+  it "ignores a bare `private` written inside a method body, which never runs at class level" do
+    source = <<~RUBY
+      class Foo
+        def wrapper
+          private
+        end
+
+        def target
+        end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+    by_name = summary.declarations.each_with_object({}) { |d, h| h[d.symbol_id.name] = d }
+
+    expect(by_name["target"].visibility).to eq(:public)
+  end
+
+  # Regression: the same cross-kind hit the `class << self` guard exists
+  # to prevent, reached through the other two receiver-bearing `def`
+  # forms. A singleton method records no visibility, so the rewrite found
+  # nothing under its own kind and landed on the same-named *instance*
+  # method -- privatizing a real Rails action and dropping it from view
+  # propagation.
+  it "does not let `private def self.name` privatize the same-named instance method" do
+    source = <<~RUBY
+      class PostsController
+        def index
+        end
+
+        private def self.index
+        end
+
+        def show
+        end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+    instance_index = summary.declarations.find do |d|
+      d.symbol_id.kind == :instance_method && d.symbol_id.name == "index"
+    end
+
+    expect(instance_index.visibility).to eq(:public)
+  end
+
+  # The pending entry leaked the same way: it is recorded under
+  # `current_owner` but consumed under the def's own owner, so it sat
+  # there until an unrelated instance method of the enclosing class
+  # claimed it.
+  it "does not let `private def Const.name` privatize a later same-named instance method" do
+    source = <<~RUBY
+      class A
+        private def Helper.foo
+        end
+
+        def foo
+        end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+    own_foo = summary.declarations.find do |d|
+      d.symbol_id.kind == :instance_method && d.symbol_id.owner == "::A" && d.symbol_id.name == "foo"
+    end
+
+    expect(own_foo.visibility).to eq(:public)
+  end
+
+  # Regression: a pending entry was recorded for *every* argument form,
+  # but only a `def` argument needs one -- a symbol argument names a
+  # method that already exists and is handled by the retroactive rewrite.
+  # The extra entry was never consumed and never cleared, so the next
+  # `def` of that name claimed it: a same-file reopen recorded its
+  # second, public definition as private and lost the action.
+  it "does not let `private :name` privatize a later redefinition of that name" do
+    source = <<~RUBY
+      class Foo
+        def target
+        end
+        private :target
+
+        def target
+        end
+      end
+    RUBY
+
+    summary = service.summarize(document(source))
+    redefinition = summary.declarations.select { |d| d.symbol_id.name == "target" }.last
+
+    expect(redefinition.visibility).to eq(:public)
+  end
+
   it "still extracts declarations that appear before a syntax error" do
     source = <<~RUBY
       class Broken

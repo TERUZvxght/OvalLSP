@@ -25,7 +25,7 @@ module Ovallsp
         @mutex.synchronize do
           remove_file_locked(uri)
           @by_uri[uri] = facts
-          facts.each { |fact| @by_symbol[symbol_id_for(fact)] = [uri, fact] }
+          facts.each { |fact| (@by_symbol[symbol_id_for(fact)] ||= []) << [uri, fact] }
           @generation += 1
         end
       end
@@ -39,7 +39,7 @@ module Ovallsp
       end
 
       def fact_for(symbol_id)
-        @mutex.synchronize { @by_symbol[symbol_id]&.last }
+        @mutex.synchronize { @by_symbol.fetch(symbol_id, nil)&.last&.last }
       end
 
       private
@@ -54,8 +54,11 @@ module Ovallsp
 
         previous.each do |fact|
           symbol_id = symbol_id_for(fact)
-          entry = @by_symbol[symbol_id]
-          @by_symbol.delete(symbol_id) if entry && entry.first == uri
+          entries = @by_symbol[symbol_id]
+          next unless entries
+
+          entries.reject! { |entry_uri, _entry_fact| entry_uri == uri }
+          @by_symbol.delete(symbol_id) if entries.empty?
         end
         true
       end

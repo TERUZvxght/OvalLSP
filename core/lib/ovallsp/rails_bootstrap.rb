@@ -65,7 +65,7 @@ module Ovallsp
     # exercising this real method end-to-end without ever mutating global
     # ENV (see BundleEnvironment's own docs for why that matters).
     def start(root:, logger:, route_registry:, model_registry:, hello_timeout: 60, command: nil, args: nil,
-              on_unavailable: nil, on_manager_created: nil, env_source: ENV)
+              on_unavailable: nil, on_manager_created: nil, install_snapshot: nil, env_source: ENV)
       env = {}
       if command.nil?
         return nil unless rails_app?(root)
@@ -94,7 +94,10 @@ module Ovallsp
       status = manager.start
 
       if status == :ready
-        populate_registries(manager, route_registry: route_registry, model_registry: model_registry, logger: logger)
+        populate_registries(
+          manager, route_registry: route_registry, model_registry: model_registry, logger: logger,
+          install_snapshot: install_snapshot
+        )
       else
         logger.warn("Runtime Agent unavailable (#{status}); continuing in static-only mode")
       end
@@ -111,11 +114,10 @@ module Ovallsp
     # Runs on the caller's (background) thread, not the LSP transport
     # thread, and a failure here is logged and swallowed rather than
     # propagated, since static features must keep working either way.
-    def populate_registries(manager, route_registry:, model_registry:, logger:)
+    def populate_registries(manager, route_registry:, model_registry:, logger:, install_snapshot: nil)
       snapshot = manager.fetch_snapshot(sections: %w[routes])
-      if snapshot
-        route_registry.replace(snapshot[:routes] || [])
-      else
+      routes = snapshot && (snapshot[:routes] || [])
+      unless snapshot
         logger.warn("failed to fetch routes snapshot from Runtime Agent; leaving route_registry as-is")
       end
 
@@ -136,11 +138,20 @@ module Ovallsp
       # from this fetch doesn't linger) — the same generation-replace
       # semantics route_registry.replace already gives routes above.
       models = manager.fetch_all_models
+      responses_by_name = nil
       if models
         responses_by_name = models.filter_map { |entry| entry[:name] && [entry[:name], entry] }.to_h
-        model_registry.replace(responses_by_name)
       else
         logger.warn("failed to fetch models from Runtime Agent; leaving model_registry as-is")
+      end
+
+      if install_snapshot
+        install_snapshot.call(routes: routes, models: responses_by_name)
+      else
+        prepared_routes = route_registry.prepare_replace(routes) if routes
+        prepared_models = model_registry.prepare_replace(responses_by_name) if responses_by_name
+        route_registry.commit_replace(prepared_routes) if prepared_routes
+        model_registry.commit_replace(prepared_models) if prepared_models
       end
     rescue StandardError => e
       logger.error("failed to populate Rails registries from Runtime Agent snapshot: #{e.class}: #{e.message}")

@@ -63,6 +63,30 @@ RSpec.describe Ovallsp::RailsBootstrap do
       expect(model_registry.association("User", "company").class_name).to eq("Company")
     end
 
+    # `.start` has to hand its `install_snapshot` down to
+    # #populate_registries. The installer contract itself is pinned below,
+    # but nothing pinned the wiring -- and dropping it does not raise,
+    # because the keyword defaults to nil: `.start` would just silently
+    # fall back to writing each registry directly, which is exactly the
+    # non-atomic hybrid the installer exists to prevent (routes and models
+    # committed separately, outside the caller's index lock).
+    it "hands its atomic installer down to the registry population step" do
+      installed = []
+
+      @manager = described_class.start(
+        root: fixture_root, logger: logger, route_registry: route_registry, model_registry: model_registry,
+        command: RbConfig.ruby, args: ["-I", File.join(core_root, "lib"), boot_script, "start", environment_file],
+        install_snapshot: ->(**snapshot) { installed << snapshot }
+      )
+
+      expect(@manager.status).to eq(:ready)
+      expect(installed.size).to eq(1)
+      expect(installed.first[:models]).to have_key("User")
+      # Nothing may reach the registries directly when an installer is given.
+      expect(route_registry.completion_names("")).to be_empty
+      expect(model_registry.known_model?("User")).to be(false)
+    end
+
     it "keeps the last-known-good models instead of wiping the registry when fetch_all_models fails (Task 008.6)" do
       model_registry.register_from_agent_response(
         "User", { name: "User", tableName: "users", columns: [], associations: [], partial: false }
@@ -94,6 +118,29 @@ RSpec.describe Ovallsp::RailsBootstrap do
 
       expect(route_registry.completion_names("existing")).to include("existing_path")
       expect(logger).to have_received(:warn).with(/leaving route_registry as-is/)
+    end
+
+    it "hands routes and models to a single atomic installer when one is provided" do
+      fake_manager = instance_double(
+        Ovallsp::AgentProcessManager,
+        fetch_snapshot: { routes: [{ name: "posts" }] },
+        fetch_all_models: [{ name: "Post", tableName: "posts", columns: [], associations: [], partial: false }]
+      )
+      installed = []
+
+      Ovallsp::RailsBootstrap.populate_registries(
+        fake_manager, route_registry: route_registry, model_registry: model_registry, logger: logger,
+        install_snapshot: ->(**snapshot) { installed << snapshot }
+      )
+
+      expect(installed).to eq([
+        routes: [{ name: "posts" }],
+        models: {
+          "Post" => { name: "Post", tableName: "posts", columns: [], associations: [], partial: false }
+        }
+      ])
+      expect(route_registry.completion_names("")).to be_empty
+      expect(model_registry.known_model?("Post")).to be(false)
     end
 
     it "logs a warning and leaves the registries empty when the Agent never becomes ready" do

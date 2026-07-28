@@ -216,6 +216,71 @@ RSpec.describe Ovallsp::ColdIndexer do
     end
   end
 
+  it "reports an incomplete scan when a directory cannot be traversed" do
+    Dir.mktmpdir do |dir|
+      blocked = File.join(dir, "blocked")
+      FileUtils.mkdir_p(blocked)
+      result = nil
+      allow(Dir).to receive(:each_child).and_wrap_original do |original, path, &block|
+        raise Errno::EACCES, path if path == blocked
+
+        original.call(path, &block)
+      end
+
+      described_class.new(
+        root: dir, parser_service: parser_service, workspace_index: workspace_index,
+        document_store: document_store, logger: logger, on_complete: ->(value) { result = value }
+      ).run
+
+      expect(result.complete).to be(false)
+    end
+  end
+
+  # `seen_uris` is what the Server's deletion sweep subtracts from what it
+  # has indexed, so a file missing from this set reads as "deleted from
+  # disk" and gets evicted even though it is right there. That is the
+  # watcher-vs-cold-index flapping this Result was introduced to end, so
+  # the set has to include every file actually visited -- including one
+  # whose summary went out through `on_summary` and one already open in a
+  # buffer, both of which return early.
+  it "reports every visited file in seen_uris, including ones handled by on_summary" do
+    Dir.mktmpdir do |dir|
+      scanned = write(dir, "scanned.rb", "class Scanned\nend\n")
+      handed_off = write(dir, "handed_off.rb", "class HandedOff\nend\n")
+      result = nil
+
+      described_class.new(
+        root: dir, parser_service: parser_service, workspace_index: workspace_index,
+        document_store: document_store, logger: logger,
+        on_summary: ->(_uri, _document, _summary) { nil },
+        on_complete: ->(value) { result = value }
+      ).run
+
+      expect(result.seen_uris).to include(
+        Ovallsp::UriUtil.from_path(scanned), Ovallsp::UriUtil.from_path(handed_off)
+      )
+    end
+  end
+
+  it "reports an incomplete scan when a candidate file cannot be inspected" do
+    Dir.mktmpdir do |dir|
+      path = write(dir, "blocked.rb", "class Blocked\nend\n")
+      result = nil
+      allow(File).to receive(:realpath).and_wrap_original do |original, candidate|
+        raise Errno::EACCES, candidate if candidate == path
+
+        original.call(candidate)
+      end
+
+      described_class.new(
+        root: dir, parser_service: parser_service, workspace_index: workspace_index,
+        document_store: document_store, logger: logger, on_complete: ->(value) { result = value }
+      ).run
+
+      expect(result.complete).to be(false)
+    end
+  end
+
   describe "persistent cache (Task 021)" do
     def run_indexer_with_cache(root, cache_store)
       described_class.new(

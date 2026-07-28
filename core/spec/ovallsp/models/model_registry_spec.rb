@@ -81,6 +81,42 @@ RSpec.describe Ovallsp::Models::ModelRegistry do
       expect(registry.known_model?("User")).to be(false)
       expect(registry.known_model?("Company")).to be(true)
     end
+
+    # Rewritten: the previous version asserted only that a malformed
+    # payload leaves the registry untouched, which `replace`'s `to_h`
+    # already guaranteed before this change -- so it passed with or
+    # without it, and would have kept passing if the whole
+    # prepare/commit split were deleted. What is actually new, and what
+    # callers depend on to keep models and routes in step, is that
+    # preparing a snapshot *publishes nothing*.
+    it "prepares a replacement without publishing it, so a caller can validate a whole snapshot first" do
+      registry.register_from_agent_response("User", agent_response(table_name: "old_users"))
+
+      prepared = registry.prepare_replace("User" => agent_response(table_name: "new_users"))
+
+      expect(registry.model("User").table_name).to eq("old_users")
+
+      registry.commit_replace(prepared)
+
+      expect(registry.model("User").table_name).to eq("new_users")
+    end
+
+    it "raises while preparing a malformed payload, before anything is published" do
+      registry.register_from_agent_response("User", agent_response(table_name: "old_users"))
+
+      expect do
+        registry.prepare_replace(
+          "User" => agent_response(table_name: "new_users"),
+          "Team" => agent_response(associations: [{ name: "owner", macro: nil, className: "User" }])
+        )
+        # Matched on the message, not just the class: a build without
+        # #prepare_replace raises NoMethodError too, and would otherwise
+        # satisfy this expectation vacuously.
+      end.to raise_error(NoMethodError, /to_sym/)
+
+      expect(registry.model("User").table_name).to eq("old_users")
+      expect(registry.known_model?("Team")).to be(false)
+    end
   end
 
   describe "#remove (Task 008.5)" do

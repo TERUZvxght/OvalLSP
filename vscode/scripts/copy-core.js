@@ -36,6 +36,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 
+const { assertBundledVersionsAgree } = require('./version-pairing');
+
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const CORE_SOURCE = path.join(REPO_ROOT, 'core');
 const CORE_DEST = path.join(__dirname, '..', 'core');
@@ -471,6 +473,15 @@ function commitStaging() {
 
 try {
   copyCoreSourceIntoStaging();
+  // A precondition of the whole build, not a detail of manifest
+  // writing, and deliberately outside the try below: inside it a
+  // mismatch is reported as "vendoring runtime gem dependencies
+  // failed" -- the wrong cause -- and --allow-missing-vendor
+  // downgrades it to a warning and builds anyway. See ./version-pairing.js.
+  assertBundledVersionsAgree({
+    extensionVersion: extensionVersion(),
+    coreVersion: coreVersionFromStaging()
+  });
   try {
     vendorGemDependenciesIntoStaging();
     removeNativeBuildArtifacts(path.join(CORE_STAGING, 'vendor', 'bundle'));

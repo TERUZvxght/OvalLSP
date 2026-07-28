@@ -6,7 +6,7 @@ import { WATCHED_FILES_GLOB } from '../../watchedFiles';
 
 // Regression coverage for a real gap found reviewing packaging/release
 // readiness: the extension's own FileSystemWatcher pattern
-// (`**/{*.rb,*.erb,Gemfile.lock,db/structure.sql}`) previously had no
+// (`WATCHED_FILES_GLOB`) previously had no
 // `db/structure.sql` entry at all, so a Rails app configured for the SQL
 // schema-dump format (`config.active_record.schema_format = :sql`) never
 // had an external change to that file reach Core's own
@@ -17,11 +17,10 @@ import { WATCHED_FILES_GLOB } from '../../watchedFiles';
 // Creates a *real* `vscode.workspace.createFileSystemWatcher` with the
 // same exported glob the extension itself uses, and proves — through the
 // real VS Code glob-matching implementation, not a hand-rolled one — that
-// each of the four kinds of file this pattern exists for actually fires a
-// change event: an ordinary `.rb` file, a migration-style `.rb` file, a
-// Zeitwerk/Bundler `Gemfile.lock`, and `db/structure.sql` itself.
+// each relevant kind of file actually fires a change event, including
+// project RBS signatures that Core must live-reload.
 describe('OvalLSP extension watcher pattern reaches Core-relevant schema files', () => {
-  it('fires for .rb, Gemfile.lock, and db/structure.sql changes, not only *.rb/*.erb', async function () {
+  it('fires for .rb, .rbs, .rbi, Gemfile.lock, and db/structure.sql changes', async function () {
     this.timeout(20000);
 
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -41,15 +40,21 @@ describe('OvalLSP extension watcher pattern reaches Core-relevant schema files',
       const candidates = {
         migration: path.join(dbDir, 'migrate', '20260101000000_create_widgets.rb'),
         structureSql: path.join(dbDir, 'structure.sql'),
-        gemfileLock: path.join(workspaceFolder!.uri.fsPath, 'watcher_test_Gemfile.lock')
+        gemfileLock: path.join(workspaceFolder!.uri.fsPath, 'watcher_test_Gemfile.lock'),
+        signature: path.join(workspaceFolder!.uri.fsPath, 'sig', 'watcher_test.rbs'),
+        rbi: path.join(workspaceFolder!.uri.fsPath, 'sorbet', 'rbi', 'watcher_test.rbi')
       };
       fs.mkdirSync(path.dirname(candidates.migration), { recursive: true });
+      fs.mkdirSync(path.dirname(candidates.signature), { recursive: true });
+      fs.mkdirSync(path.dirname(candidates.rbi), { recursive: true });
       fs.writeFileSync(candidates.migration, '# frozen_string_literal: true\n');
       fs.writeFileSync(candidates.structureSql, '-- schema\n');
       fs.writeFileSync(candidates.gemfileLock, 'GEM\n');
+      fs.writeFileSync(candidates.signature, 'class WatcherTest\nend\n');
+      fs.writeFileSync(candidates.rbi, 'class WatcherRbiTest\nend\n');
 
       const deadline = Date.now() + 10000;
-      const expectedBasenames = ['20260101000000_create_widgets.rb', 'structure.sql'];
+      const expectedBasenames = ['20260101000000_create_widgets.rb', 'structure.sql', 'watcher_test.rbs', 'watcher_test.rbi'];
       while (Date.now() < deadline && !expectedBasenames.every((name) => [...seen].some((p) => p.endsWith(name)))) {
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
@@ -62,9 +67,19 @@ describe('OvalLSP extension watcher pattern reaches Core-relevant schema files',
         [...seen].some((p) => p.endsWith('20260101000000_create_widgets.rb')),
         `expected a create event for the migration file (matched by *.rb, not the new entry); saw: ${[...seen].join(', ')}`
       );
+      assert.ok(
+        [...seen].some((p) => p.endsWith('watcher_test.rbs')),
+        `expected a create event for a project RBS file; saw: ${[...seen].join(', ')}`
+      );
+      assert.ok(
+        [...seen].some((p) => p.endsWith('watcher_test.rbi')),
+        `expected a create event for a project RBI file; saw: ${[...seen].join(', ')}`
+      );
 
       fs.rmSync(dbDir, { recursive: true, force: true });
       fs.rmSync(candidates.gemfileLock, { force: true });
+      fs.rmSync(path.dirname(candidates.signature), { recursive: true, force: true });
+      fs.rmSync(path.join(workspaceFolder!.uri.fsPath, 'sorbet'), { recursive: true, force: true });
     } finally {
       disposable.dispose();
       watcher.dispose();

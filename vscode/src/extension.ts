@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import {
   LanguageClient,
@@ -17,7 +18,32 @@ import {
   compareVersionInfo,
   gatherClientVersionInfo
 } from './versionInfo';
-import { ClientLifecycleManager } from './clientLifecycle';
+import {
+  canSpawnCoreProcess,
+  ClientLifecycleManager,
+  CoreStartRejectedError,
+  isCoreStartRejected,
+  KeyedTransitionQueue,
+  ShutdownBarrier
+} from './clientLifecycle';
+import { SpawnedCoreProcess } from './coreProcess';
+
+/**
+ * Exists solely to keep a deliberate shutdown refusal out of the user's
+ * face. vscode-languageclient funnels every `ServerOptions` rejection
+ * through `error(..., 'force')` -- both when it first fails to create a
+ * connection and again from its own auto-restart -- and `'force'` means a
+ * red popup. So declining to spawn Core during deactivate/restart, which
+ * is the shutdown barrier working exactly as intended, greeted users with
+ * "Restarting server failed". Only our own branded rejection is
+ * downgraded to an output-channel line; every other error keeps the
+ * library's default, louder handling.
+ */
+class OvalLspLanguageClient extends LanguageClient {
+  error(message: string, data?: unknown, showNotification?: boolean | 'force'): void {
+    super.error(message, data, isCoreStartRejected(data) ? false : showNotification);
+  }
+}
 
 const clients = new Map<string, LanguageClient>();
 const watchers = new Map<string, vscode.FileSystemWatcher>();
@@ -25,6 +51,7 @@ const watchers = new Map<string, vscode.FileSystemWatcher>();
 // client.start() for this folder right now" -- see clientLifecycle.ts's
 // own docs for the exact race this closes.
 const lifecycle = new ClientLifecycleManager();
+const startAttempts = new Set<Promise<void>>();
 // The Ruby resolution actually used to launch each folder's client — kept
 // around purely so `OvalLSP: Show Environment Diagnostics` can show *why*
 // that Ruby was picked without re-running the search (020's "Ruby
@@ -35,6 +62,12 @@ const rubyResolutions = new Map<string, RubyResolution>();
 // `ovallspInfo` -- kept purely so `OvalLSP: Show Version Information`
 // can display it without re-running the comparison.
 const versionDiagnostics = new Map<string, VersionDiagnostic>();
+// Every folder's stop->start replacement is serialized through this
+// chain. Without it, two Restart Server commands can interleave so the
+// first command overwrites the second command's already-running client,
+// leaving that process unreachable from `clients`.
+const clientTransitions = new KeyedTransitionQueue();
+const shutdownBarrier = new ShutdownBarrier();
 
 // Task 020's priority order: an explicit path setting always wins outright
 // (never even runs the version-manager search); everything below that is
@@ -104,11 +137,6 @@ function startClientForFolder(
     options: { cwd: folder.uri.fsPath }
   };
 
-  const serverOptions: ServerOptions = {
-    run: execTarget,
-    debug: execTarget
-  };
-
   // Forwarded to the server as workspace/didChangeWatchedFiles so files
   // edited or removed outside the open buffers (git checkout, another
   // editor, rm) still update the workspace index — and, for Gemfile.lock
@@ -163,10 +191,60 @@ function startClientForFolder(
     }
   };
 
-  const client = new LanguageClient('ovallsp', `OvalLSP (${folder.name})`, serverOptions, clientOptions);
-
   const key = folder.uri.toString();
   const generation = lifecycle.beginStart(key);
+  const serverOptions: ServerOptions = () => {
+    // vscode-languageclient can invoke ServerOptions again for its own
+    // crash recovery. Reject stale clients before spawning anything:
+    // registerProcess is intentionally a second line of defense, not the
+    // first point at which shutdown/stale-generation state is noticed.
+    if (!canSpawnCoreProcess(shutdownBarrier, lifecycle, key, generation)) {
+      return Promise.reject(
+        new CoreStartRejectedError('OvalLSP Core start rejected during shutdown or after generation replacement')
+      );
+    }
+    const windowsJobWrapper = path.join(context.extensionPath, 'resources', 'core-job.ps1');
+    const posixSessionWrapper = path.join(context.extensionPath, 'resources', 'core-session.rb');
+    const command = process.platform === 'win32' ? 'powershell.exe' : execTarget.command;
+    const args =
+      process.platform === 'win32'
+        ? [
+            '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+            '-File', windowsJobWrapper, '-ChildCommand', execTarget.command,
+            '-ChildArguments', quoteWindowsCommandLine(execTarget.args)
+          ]
+        : [posixSessionWrapper, ...execTarget.args];
+    const child = spawn(command, args, {
+      ...execTarget.options,
+      detached: false,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    lifecycle.registerProcess(
+      key,
+      generation,
+      process.platform === 'win32' ? new SpawnedCoreProcess(child) : SpawnedCoreProcess.forDedicatedSession(child)
+    );
+    // `detached` on the *descriptor* is unrelated to the `spawn` option
+    // above (which must stay false, so `core-session.rb` is what creates
+    // the session). It is vscode-languageclient's own switch for its
+    // fallback killer: `stop()` otherwise schedules a `process.kill(pid,
+    // 0)` 2s later and, if that pid is alive, runs `terminateProcess.sh`
+    // to `kill -9` its whole tree by pid -- a blind pid-keyed kill on a
+    // number we may no longer own, racing the identity-validated teardown
+    // SpawnedCoreProcess performs. Declaring detached says the owner
+    // registered above is responsible for this process.
+    //
+    // Documentation of intent more than a live fix: that killer is
+    // already unreachable for a ServerOptions function returning
+    // ChildProcessInfo, because that branch never assigns the
+    // `_serverProcess` field `stop()` gates on (vscode-languageclient
+    // 9.x, lib/node/main.js -- assignments exist only on the
+    // Executable/NodeModule branches). Stated here so a future library
+    // upgrade that closes that gap cannot silently re-arm it.
+    return Promise.resolve({ process: child, detached: true });
+  };
+
+  const client = new OvalLspLanguageClient('ovallsp', `OvalLSP (${folder.name})`, serverOptions, clientOptions);
 
   // ADR-0005: checked *before* Core is actually spawned, not after --
   // `core/bin/ovallsp` itself already refuses to load an incompatible
@@ -202,7 +280,7 @@ function startClientForFolder(
       ? queryRubyConfigPaths(resolvedRubyCommand, folder.uri.fsPath).catch(() => undefined)
       : Promise.resolve(undefined);
 
-  void Promise.all([
+  const startAttempt = Promise.all([
     checkBundledCoreCompatibility(context.extensionPath, resolvedRubyCommand, undefined, folder.uri.fsPath),
     configPathsPromise
   ]).then(([compatibility, configPaths]) => {
@@ -244,7 +322,7 @@ function startClientForFolder(
         return;
       }
 
-      client.start().then(() => {
+      return client.start().then(async () => {
         // A stop can also race in *during* `client.start()` itself (it's
         // not instantaneous -- it spawns a process and waits for
         // `initialize` to complete). `markRunning` returning false means
@@ -256,15 +334,45 @@ function startClientForFolder(
           outputChannel.appendLine(
             `OvalLSP: Core Server for ${folder.name} finished starting after a stop was requested -- stopping it immediately.`
           );
-          void client.stop().then(() => lifecycle.markStopped(key, generation));
+          await client.stop()
+            .catch(() => undefined)
+            .then(() => lifecycle.terminateProcess(key, generation))
+            .then(() => lifecycle.markStopped(key, generation));
           return;
         }
         runVersionHandshake(folder, client, context, classification, outputChannel);
-      }, (err) => outputChannel.appendLine(`failed to start Core Server: ${err}`));
+      }, async (err) => {
+        await lifecycle.terminateProcess(key, generation).then(() => {
+          lifecycle.markStopped(key, generation);
+          if (lifecycle.isCurrentGeneration(key, generation) && clients.get(key) === client) {
+            clients.delete(key);
+            watchers.get(key)?.dispose();
+            watchers.delete(key);
+            versionDiagnostics.delete(key);
+          }
+        });
+        outputChannel.appendLine(`failed to start Core Server: ${err}`);
+      });
     }
+  ).catch((error) => {
+    outputChannel.appendLine(`failed during Core Server startup: ${error}`);
+  });
+  startAttempts.add(startAttempt);
+  void startAttempt.then(
+    () => startAttempts.delete(startAttempt),
+    () => startAttempts.delete(startAttempt)
   );
 
   return client;
+}
+
+function quoteWindowsCommandLine(argumentsList: string[]): string {
+  return argumentsList.map((argument) => {
+    if (argument.length > 0 && !/[\s"]/u.test(argument)) {
+      return argument;
+    }
+    return `"${argument.replace(/(\\*)"/gu, '$1$1\\"').replace(/(\\+)$/u, '$1$1')}"`;
+  }).join(' ');
 }
 
 // Task 023.2: once Core has actually started and answered `initialize`,
@@ -449,11 +557,9 @@ function registerEnvironmentCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand('ovallsp.restartServer', async () => {
       for (const folder of vscode.workspace.workspaceFolders ?? []) {
-        const key = folder.uri.toString();
-        await stopClient(key);
-        clients.set(key, startClientForFolder(folder, outputChannel, context));
+        await restartClientForFolder(folder, outputChannel, context);
       }
-      void vscode.window.showInformationMessage('OvalLSP: Core Server restarted.');
+      void vscode.window.showInformationMessage('OvalLSP: Core Server restart requested.');
     })
   );
 
@@ -557,14 +663,7 @@ function registerEnvironmentCommands(
 }
 
 function stopClient(key: string): Thenable<void> {
-  // Marked *before* anything else, in particular before the `await
-  // client.stop()` below -- so a compatibility probe or an in-flight
-  // `client.start()` for this exact generation (still running
-  // concurrently in `startClientForFolder`'s own promise chain) observes
-  // the stop on its very next check, no matter how long this function's
-  // own async work still takes (Task 023.3).
   const generation = lifecycle.getGeneration(key);
-  lifecycle.requestStop(key);
 
   watchers.get(key)?.dispose();
   watchers.delete(key);
@@ -572,25 +671,53 @@ function stopClient(key: string): Thenable<void> {
 
   const client = clients.get(key);
   if (!client) {
-    return Promise.resolve();
+    lifecycle.requestStop(key);
+    return generation === undefined
+      ? lifecycle.drainRetirements()
+      : lifecycle.terminateProcess(key, generation).then(() => lifecycle.markStopped(key, generation));
   }
   clients.delete(key);
 
-  // `stopIfRunning` is what actually protects against
-  // vscode-languageclient's `client.stop()` throwing synchronously
-  // whenever its internal state isn't exactly `Running` (in particular
-  // while `client.start()` is still in flight) -- see its own docs in
-  // clientLifecycle.ts, and Task 023.3's follow-up notes for the bug this
-  // closes (found by independent review: `restartServer`'s own `await
-  // stopClient(key)` was silently broken by this).
-  return lifecycle.stopIfRunning(key, () => client.stop()).then((didStop) => {
-    if (didStop && generation !== undefined) {
-      lifecycle.markStopped(key, generation);
+  // Recording the stop intent and deciding whether `client.stop()` is
+  // currently safe are one atomic lifecycle operation. Splitting them
+  // previously changed `running` to `stopping` before testing for
+  // `running`, so a normal restart never stopped its old Core process.
+  return lifecycle.requestStopAndStopIfRunning(key, () => client.stop())
+    .catch(() => false)
+    .then(async () => {
+      if (generation !== undefined) {
+        await lifecycle.terminateProcess(key, generation);
+        lifecycle.markStopped(key, generation);
+      }
+    });
+}
+
+function queueClientTransition(key: string, transition: () => Promise<void>): Promise<void> {
+  return clientTransitions.enqueue(key, transition);
+}
+
+function restartClientForFolder(
+  folder: vscode.WorkspaceFolder,
+  outputChannel: vscode.OutputChannel,
+  context: vscode.ExtensionContext
+): Promise<void> {
+  if (!shutdownBarrier.permitsStart()) {
+    return Promise.resolve();
+  }
+  const key = folder.uri.toString();
+  return queueClientTransition(key, async () => {
+    await stopClient(key);
+    if (shutdownBarrier.permitsStart()) {
+      clients.set(key, startClientForFolder(folder, outputChannel, context));
     }
   });
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  // Module state survives deactivate() inside a live extension host, and
+  // a closed barrier refuses every start. Reopen it before anything can
+  // ask to spawn Core.
+  shutdownBarrier.reset();
   const outputChannel = vscode.window.createOutputChannel('OvalLSP');
   context.subscriptions.push(outputChannel);
 
@@ -622,10 +749,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
       for (const folder of vscode.workspace.workspaceFolders ?? []) {
-        const key = folder.uri.toString();
-        void stopClient(key).then(() => {
-          clients.set(key, startClientForFolder(folder, outputChannel, context));
-        });
+        void restartClientForFolder(folder, outputChannel, context);
       }
     })
   );
@@ -634,12 +758,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeWorkspaceFolders((event) => {
       for (const folder of event.added) {
         const key = folder.uri.toString();
-        if (!clients.has(key)) {
+        if (shutdownBarrier.permitsStart() && !clients.has(key)) {
           clients.set(key, startClientForFolder(folder, outputChannel, context));
         }
       }
       for (const folder of event.removed) {
-        void stopClient(folder.uri.toString());
+        const key = folder.uri.toString();
+        void queueClientTransition(key, () => Promise.resolve(stopClient(key)));
       }
     })
   );
@@ -654,5 +779,15 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export async function deactivate(): Promise<void> {
-  await Promise.all(Array.from(clients.keys()).map((key) => stopClient(key)));
+  shutdownBarrier.beginShutdown();
+  const keys = new Set([...clients.keys(), ...clientTransitions.keys(), ...lifecycle.keys()]);
+  await Promise.all(
+    Array.from(keys).map((key) =>
+      queueClientTransition(key, () => Promise.resolve(stopClient(key)))
+    )
+  );
+  while (startAttempts.size > 0) {
+    await Promise.all([...startAttempts]);
+  }
+  await lifecycle.drainRetirements();
 }

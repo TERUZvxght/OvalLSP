@@ -35,16 +35,17 @@ module Ovallsp
     # can resolve `user.company`, `company.orders`, DB-column accessors,
     # and so on (docs/design/tasks/007-active-record-snapshot.md).
     # Populated from a background thread (RailsBootstrap) while the main
-    # thread may already be reading it (LocalInferencer). No mutex: each
-    # #register_from_agent_response call is a single Hash#[]= on `@models`,
-    # which is atomic under CRuby's GVL — a concurrent reader sees either
-    # the old or the new value, never a torn write. This relies on CRuby's
-    # GVL specifically; a JRuby/TruffleRuby port would need real locking
-    # here (unlike WorkspaceIndex, which already uses a Mutex throughout).
+    # thread may already be reading it (LocalInferencer). A mutex publishes
+    # each payload together with its generation, so reference rebuilds can
+    # never observe new model data under an old generation.
     class ModelRegistry
       def initialize
         @models = {}
+        @generation = 0
+        @mutex = Mutex.new
       end
+
+      def generation = @mutex.synchronize { @generation }
 
       # Builds a ModelInfo from an agent/model response's `:result` hash
       # and registers (or overwrites) it in place. `name` is passed
@@ -52,7 +53,11 @@ module Ovallsp
       # off reliably. Used for a single live model refresh (Server#refresh_models);
       # #replace is the full-generation counterpart used at bootstrap.
       def register_from_agent_response(name, response)
-        @models[name] = build_model_info(name, response)
+        info = prepare_replace(name => response).fetch(name)
+        @mutex.synchronize do
+          @models[name] = info
+          @generation += 1
+        end
       end
 
       # Full swap from a generation's worth of agent/model responses,
@@ -64,7 +69,35 @@ module Ovallsp
       # generation must never survive just because this generation didn't
       # happen to re-mention it.
       def replace(responses_by_name)
-        @models = responses_by_name.to_h { |name, response| [name, build_model_info(name, response)] }
+        commit_replace(prepare_replace(responses_by_name))
+      end
+
+      # Conversion is deliberately separated from publication. Callers
+      # coordinating models with routes/cache state can validate every
+      # Agent payload first, then commit only after the whole snapshot is
+      # known to be usable.
+      def prepare_replace(responses_by_name)
+        responses_by_name.to_h { |name, response| [name, build_model_info(name, response)] }
+      end
+
+      def commit_replace(replacement)
+        @mutex.synchronize do
+          @models = replacement.dup
+          @generation += 1
+        end
+      end
+
+      # Atomically applies a partial refresh. `prepared` must come from
+      # #prepare_replace, so malformed payloads fail before this method
+      # can publish any member of the batch.
+      def commit_updates(prepared, removals: [])
+        @mutex.synchronize do
+          replacement = @models.dup
+          removals.each { |name| replacement.delete(name) }
+          prepared.each { |name, info| replacement[name] = info }
+          @models = replacement
+          @generation += 1
+        end
       end
 
       # Drops one model entirely -- used when the Agent reports NOT_FOUND
@@ -72,23 +105,27 @@ module Ovallsp
       # being resolvable for completion/definition/type inference instead
       # of lingering with its last-known columns/associations.
       def remove(name)
-        @models.delete(name)
+        @mutex.synchronize do
+          removed = @models.delete(name)
+          @generation += 1 if removed
+          removed
+        end
       end
 
       def known_model?(name)
-        @models.key?(name)
+        @mutex.synchronize { @models.key?(name) }
       end
 
       def model(name)
-        @models[name]
+        @mutex.synchronize { @models[name] }
       end
 
       def association(model_name, association_name)
-        @models[model_name]&.associations&.find { |a| a.name == association_name.to_s }
+        @mutex.synchronize { @models[model_name]&.associations&.find { |a| a.name == association_name.to_s } }
       end
 
       def column(model_name, column_name)
-        @models[model_name]&.columns&.find { |c| c.name == column_name.to_s }
+        @mutex.synchronize { @models[model_name]&.columns&.find { |c| c.name == column_name.to_s } }
       end
 
       private

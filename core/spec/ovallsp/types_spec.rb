@@ -17,6 +17,28 @@ RSpec.describe Ovallsp::Types do
       expect(result.members).to contain_exactly(user, described_class::NIL)
     end
 
+    # `Hash` and `Hash[Unknown]` say exactly the same thing -- a Generic
+    # whose argument is Unknown constrains nothing beyond its name -- so
+    # keeping both presents one type as two alternatives. Reachable from
+    # any union of a bare container literal with a call that returns the
+    # same container generically, e.g. `reduce({}) { |acc, x| acc.merge(x => x) }`.
+    it "collapses a Generic whose argument is Unknown into the same-named plain type" do
+      hash = described_class::Nominal.new(name: "Hash")
+      generic = described_class::Generic.new(name: "Hash", type_arg: described_class::UNKNOWN)
+
+      expect(described_class.normalize_union([hash, generic])).to eq(hash)
+    end
+
+    it "keeps a Generic that carries a real argument alongside the plain type" do
+      hash = described_class::Nominal.new(name: "Hash")
+      generic = described_class::Generic.new(name: "Hash", type_arg: described_class::Nominal.new(name: "User"))
+
+      result = described_class.normalize_union([hash, generic])
+
+      expect(result).to be_a(described_class::Union)
+      expect(result.members).to contain_exactly(hash, generic)
+    end
+
     it "produces a stable member order regardless of input order" do
       user = described_class::Nominal.new(name: "User")
       company = described_class::Nominal.new(name: "Company")

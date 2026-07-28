@@ -101,6 +101,20 @@ module Ovallsp
         end
       end
 
+      # Model/schema refreshes can change the meaning of generated
+      # delegate methods without changing any source declaration. Clear
+      # the cache as one generation change so those summaries are lazily
+      # recomputed against the new ModelRegistry.
+      def clear
+        @mutex.synchronize do
+          return if @summaries.empty?
+
+          @summaries.clear
+          @dependents.clear
+          @generation += 1
+        end
+      end
+
       private
 
       def remove_edges_locked(symbol_id)

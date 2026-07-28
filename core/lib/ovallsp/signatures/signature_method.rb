@@ -13,15 +13,17 @@ module Ovallsp
     Overload = Data.define(
       :required_positionals, :optional_positionals, :rest_positional,
       :required_keywords, :optional_keywords, :rest_keyword,
-      :block_required, :block_type, :return_type
+      :block_required, :block_type, :return_type, :type_parameters
     ) do
       def initialize(required_positionals: [], optional_positionals: [], rest_positional: nil,
                       required_keywords: {}, optional_keywords: {}, rest_keyword: nil,
-                      block_required: false, block_type: nil, return_type: Types::UNKNOWN)
+                      block_required: false, block_type: nil, return_type: Types::UNKNOWN,
+                      type_parameters: [])
         super(required_positionals: required_positionals, optional_positionals: optional_positionals,
               rest_positional: rest_positional, required_keywords: required_keywords,
               optional_keywords: optional_keywords, rest_keyword: rest_keyword,
-              block_required: block_required, block_type: block_type, return_type: return_type)
+              block_required: block_required, block_type: block_type, return_type: return_type,
+              type_parameters: type_parameters)
       end
     end
 
@@ -39,6 +41,13 @@ module Ovallsp
     #   bundled stdlib RBS still has one — it's the .rbs file).
     # - source_kind: :rbs or :rbi — which of the two loaders produced this.
     # - generation: the owning Environment#generation this was built under.
-    SignatureMethod = Data.define(:symbol_id, :type_parameters, :overloads, :location, :source_kind, :generation)
+    SignatureMethod = Data.define(
+      :symbol_id, :type_parameters, :overloads, :location, :source_kind, :generation, :direct
+    ) do
+      def initialize(symbol_id:, type_parameters:, overloads:, location:, source_kind:, generation:, direct: true)
+        super(symbol_id: symbol_id, type_parameters: type_parameters, overloads: overloads, location: location,
+              source_kind: source_kind, generation: generation, direct: direct)
+      end
+    end
   end
 end

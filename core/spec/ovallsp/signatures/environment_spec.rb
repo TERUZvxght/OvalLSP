@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "tmpdir"
+require "fileutils"
+
 RSpec.describe Ovallsp::Signatures::Environment do
   subject(:environment) { described_class.new }
 
@@ -94,6 +97,26 @@ RSpec.describe Ovallsp::Signatures::Environment do
     end
   end
 
+  describe "project RBI" do
+    it "loads a minimal Sorbet RBI and exposes it through the shared environment" do
+      Dir.mktmpdir do |root|
+        rbi_dir = File.join(root, "sorbet", "rbi")
+        FileUtils.mkdir_p(rbi_dir)
+        File.write(
+          File.join(rbi_dir, "widget.rbi"),
+          "class Widget\n  sig { returns(String) }\n  def label; end\nend\n"
+        )
+
+        environment.load(workspace_root: root)
+        sm = environment.method_signatures(sym("::Widget", "label"))
+
+        expect(sm.source_kind).to eq(:rbi)
+        expect(sm.overloads.first.return_type.to_s).to eq("String")
+        expect(environment.member_names("::Widget", prefix: "lab")).to include("label")
+      end
+    end
+  end
+
   describe "Gem signature fixture" do
     it "loads a Gem's own sig/ directory supplied via bundle_context" do
       environment.load(workspace_root: nil, bundle_context: [File.join(fixtures_root, "gem_sig")])
@@ -134,6 +157,25 @@ RSpec.describe Ovallsp::Signatures::Environment do
       expect(environment.generation).to eq(first_generation + 1)
       sm = environment.method_signatures(sym("::String", "upcase"))
       expect(sm.generation).to eq(environment.generation)
+    end
+
+    # The type-parameter cache is memoized per type name and has to be
+    # dropped with the others: it feeds the receiver binding in generic
+    # calls, so a stale entry survives a `.rbs` edit and keeps binding a
+    # container's element type from the *previous* declaration.
+    it "drops the cached type parameters of a class whose RBS declaration changed" do
+      Dir.mktmpdir do |root|
+        FileUtils.mkdir_p(File.join(root, "sig"))
+        signature = File.join(root, "sig", "box.rbs")
+        File.write(signature, "class Box[A]\nend\n")
+        environment.load(workspace_root: root)
+        expect(environment.type_parameters("Box")).to eq(["A"])
+
+        File.write(signature, "class Box[K, V]\nend\n")
+        environment.load(workspace_root: root)
+
+        expect(environment.type_parameters("Box")).to eq(%w[K V])
+      end
     end
   end
 end
