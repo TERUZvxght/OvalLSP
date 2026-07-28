@@ -15,7 +15,13 @@ module E2E
   class LspClient
     class Timeout < StandardError; end
 
-    CORE_BIN = File.expand_path("../../bin/ovallsp", __dir__)
+    # Which Core the capability suite drives. The development tree by
+    # default; set OVALLSP_E2E_CORE_BIN to the bundled copy inside a built
+    # VSIX to verify the artifact users actually install rather than the
+    # sources it was built from. Those are not the same thing: the bundled
+    # copy carries its own vendored gems and a PLATFORM_MANIFEST, and a
+    # release has already shipped without its `core/` at all.
+    CORE_BIN = ENV.fetch("OVALLSP_E2E_CORE_BIN", File.expand_path("../../bin/ovallsp", __dir__))
 
     attr_reader :diagnostics_by_uri
 

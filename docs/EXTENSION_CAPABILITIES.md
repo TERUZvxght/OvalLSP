@@ -39,6 +39,27 @@ Untrusted workspaces stay as described at the end of this document: the
 Runtime Agent does not start, and every Rails-derived capability degrades
 to its static-only answer by design.
 
+## How these are verified
+
+Two layers, because they are two different claims:
+
+1. `core/spec/e2e/capabilities_spec.rb` drives a real Core over stdio
+   against a real Rails app and checks every row below. Set
+   `OVALLSP_E2E_CORE_BIN` to the Core *inside a built VSIX* to verify the
+   artifact users install rather than the sources it was built from.
+2. `vscode/scripts/verify-installed-extension.sh <vsix> <workspace>`
+   installs that VSIX into a throwaway VS Code, opens a Rails folder, and
+   confirms VS Code lists it, activates it, spawns Core and the Runtime
+   Agent, and leaves nothing behind on exit.
+
+The second layer exists because the first cannot see the failure that
+looks most like "the extension does nothing": an extension present on
+disk but not registered with VS Code, which never loads and never logs.
+This project has been in that state.
+
+`core/spec/e2e/capability_coverage_spec.rb` keeps this document and the
+suite in step: every row must have an example, every example a row.
+
 ## Status legend
 
 - **PASS** — verified by an E2E row that fails if the behaviour breaks.
