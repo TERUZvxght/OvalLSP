@@ -426,8 +426,33 @@ module Ovallsp
       when Prism::ParenthesesNode then eval_type(node.body, env)
       when Prism::CallNode then eval_call(node, env)
       when Prism::IfNode, Prism::UnlessNode then eval_conditional(node, env)
+      when Prism::ConstantReadNode, Prism::ConstantPathNode then eval_constant(node)
       else Types::UNKNOWN
       end
+    end
+
+    # A bare constant is the *class object*, not an instance of it, which
+    # is what `ClassOf[X]` means everywhere else in this engine (it is
+    # already what `self` is inside `class << self` and what a singleton
+    # method's receiver resolves to).
+    #
+    # There was no case for this at all, so every constant evaluated to
+    # Unknown -- and since completion asks for the type of whatever
+    # precedes the dot, `User.`, `Article.`, `JSON.` produced an empty
+    # list. That is the single most common completion trigger in Ruby, and
+    # it answered nothing in every released version.
+    #
+    # `Foo.new`/`Foo.find` do not come through here: #eval_call resolves a
+    # constant receiver from the AST directly, which is why those worked
+    # while the receiver's own type did not.
+    def eval_constant(node)
+      name = node.full_name
+      return Types::UNKNOWN if name.nil? || name.empty?
+
+      Types::Generic.new(name: "ClassOf", type_arg: Types::Nominal.new(name: name.delete_prefix("::")))
+    rescue StandardError
+      # `full_name` raises on a dynamic constant path (`Foo::(bar)`).
+      Types::UNKNOWN
     end
 
     # Elements beyond #MAX_ARRAY_ELEMENT_UNION contribute to a widened
