@@ -463,6 +463,50 @@ RSpec.describe "Ovallsp::Server controller-to-view instance variable propagation
     expect(sent_messages.first[:result]).to eq(type: "AdminUser")
   end
 
+  # The step budget bounds one action's inference, and an action is its
+  # before_action chain plus its body. This is the *production* path:
+  # LocalInferencer has a second, unused implementation of the same rule,
+  # and a spec against that one pins nothing here (found in round 14 --
+  # deleting `reset_budget: false` from both call sites below left the
+  # whole suite green). Resetting per method makes the real bound
+  # `max_steps * (callbacks + 1)`, spent on the request thread while
+  # holding the index lock that now serialises every read request.
+  it "spends one step budget across a controller's whole before_action chain" do
+    server = build_server("")
+    document = server.instance_variable_get(:@document_store).open(
+      uri: "file:///app/controllers/posts_controller.rb",
+      text: <<~RUBY,
+        class PostsController
+          before_action :first_callback
+          before_action :second_callback
+
+          def first_callback
+            @a = User.new
+          end
+
+          def second_callback
+            @b = User.new
+          end
+
+          def show
+            @c = User.new
+          end
+        end
+      RUBY
+      version: 1, language_id: "ruby"
+    )
+    server.send(:reindex, document)
+    # Tight enough that one shared budget covers the first callback only.
+    server.instance_variable_set(
+      :@local_inferencer,
+      Ovallsp::LocalInferencer.new(max_steps: 6)
+    )
+
+    ivars = server.send(:infer_controller_action_ivars, "::PostsController", "show")
+
+    expect(ivars.keys).to eq([:@a])
+  end
+
   it "infers an inherited action body using the concrete controller as self" do
     input =
       open("file:///app/controllers/application_controller.rb", <<~RUBY) +

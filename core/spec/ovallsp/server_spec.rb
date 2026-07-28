@@ -355,6 +355,43 @@ RSpec.describe Ovallsp::Server do
     end
   end
 
+  # `rbs_collection.lock.yaml` decides *which* gem RBS get loaded, so it
+  # belongs in the fingerprint that decides whether the on-disk summary
+  # cache is still valid. Dropping it means `rbs collection update` can
+  # change every gem signature while nothing under sig/ or sorbet/rbi/
+  # moves, leaving the cache from the previous signature set in use.
+  describe "#rbs_digest" do
+    def digest_for(root)
+      described_class.new(
+        input: StringIO.new(""), output: output, logger: logger, workspace_root: root
+      ).send(:rbs_digest)
+    end
+
+    it "fingerprints the RBS collection lockfile even when the workspace has no sig/ directory" do
+      Dir.mktmpdir do |root|
+        lockfile = File.join(root, "rbs_collection.lock.yaml")
+        File.write(lockfile, "gems: []\n")
+
+        expect(digest_for(root)).not_to be_nil
+      end
+    end
+
+    it "changes when the RBS collection lockfile changes" do
+      Dir.mktmpdir do |root|
+        FileUtils.mkdir_p(File.join(root, "sig"))
+        File.write(File.join(root, "sig", "a.rbs"), "class A\nend\n")
+        lockfile = File.join(root, "rbs_collection.lock.yaml")
+        File.write(lockfile, "gems: []\n")
+        before = digest_for(root)
+
+        File.write(lockfile, "gems:\n  - name: activesupport\n")
+        FileUtils.touch(lockfile, mtime: Time.now + 2)
+
+        expect(digest_for(root)).not_to eq(before)
+      end
+    end
+  end
+
   describe "QueryContext wiring (Task 013 review fix)" do
     let(:server) { build_server("") }
 

@@ -963,7 +963,17 @@ module Ovallsp
       candidates = [
         File.join(@workspace_root, "sig", "**", "*.{rbs,rbi}"),
         File.join(@workspace_root, "sorbet", "rbi", "**", "*.rbi")
-      ].flat_map { |pattern| Dir.glob(pattern) }.uniq.sort
+      ].flat_map { |pattern| Dir.glob(pattern) }
+      # The collection lockfile decides *which* gem RBS get loaded, so a
+      # `rbs collection update` changes every gem signature while nothing
+      # under sig/ or sorbet/rbi/ moves. Without it in the fingerprint the
+      # cache key is unchanged and the summaries built against the
+      # previous signature set stay in use. It also has to count on its
+      # own: a project can have a lockfile and no sig/ directory at all,
+      # which otherwise fingerprints as "no signatures".
+      lockfile = File.join(@workspace_root, "rbs_collection.lock.yaml")
+      candidates << lockfile if File.file?(lockfile)
+      candidates = candidates.uniq.sort
       return nil if candidates.empty?
 
       fingerprint = candidates.map { |f| "#{f}:#{File.mtime(f).to_i}:#{File.size(f)}" }.join("|")
