@@ -110,6 +110,10 @@ module E2E
       []
     end
 
+    # The pid of the Core process this client owns, so B3 can assert what
+    # actually matters after a shutdown: that nothing survives it.
+    def core_pid = @wait.pid
+
     def stop
       request("shutdown", nil, timeout: 10)
       notify("exit", nil)

@@ -97,20 +97,25 @@ which is what it is for.
 | G1 | Writes a syntax error | a parse diagnostic at that position | PASS |
 | G2 | Calls a method that does not exist on a **workspace class** | "has no method named" | PASS |
 | G3 | References a route helper that does not exist | "no route named" | PASS |
-| G4 | Calls a method that does not exist on an **Active Record model** | a diagnostic | NOT YET |
-| G5 | Calls a method with the wrong **number of arguments** | a diagnostic | NOT YET |
-| G6 | Passes an argument of the wrong **type** | a diagnostic | NOT YET |
+| G4 | Calls a method that does not exist on an **Active Record model** | "has no method named" | PASS |
+| G5 | Calls a method with the wrong **number of arguments** | "takes N arguments, but M given" | PASS |
 
-G4 follows from the same missing-ancestor problem as C4: the engine only
-reports unknown methods on a *closed* receiver — one whose ancestors are
-all known and which declares no `method_missing`. An Active Record model
-is never closed today, so the check is silently inert for exactly the
-classes a Rails developer writes most.
+G4 used to follow from the same missing-ancestor problem as C4 and is now
+closed: the Runtime Agent reports what each model actually responds to,
+so a model counts as a closed receiver — unless it defines
+`method_missing`, or its columns could not be read, in which cases the
+check stays silent rather than guessing.
 
-G5 and G6 are not implemented at all. They are named here so their
-absence is a stated gap rather than an assumed feature: the diagnostics
-engine has four checks (syntax, unknown method, unresolved constant,
-unknown route helper) and none of them inspects arguments.
+G5 is deliberately narrow. It reports only when the receiver resolves to
+exactly one source declaration, the call passes no splat or `...`, and
+the declaration takes no `*rest`. Everything else says nothing: a false
+"wrong number of arguments" on code that runs would be worse than no
+arity checking.
+
+Argument *type* checking is not a row here at all, deliberately. This
+document's own rule is that a capability with no E2E row is not a
+capability, so a promise with nothing verifying it does not belong in the
+table — it belongs in the non-goals below.
 
 ## Signature help
 
@@ -132,8 +137,8 @@ unknown route helper) and none of them inspects arguments.
 
 - Type checking in the sense a static type checker means it. There is no
   flow-sensitive analysis, no generics beyond the built-in container
-  shapes, and no exhaustiveness. G5/G6 above are the nearest thing and
-  they are not built.
+  shapes, and no exhaustiveness. Nothing inspects the *type* of an
+  argument; G5 counts arguments and says nothing about what they are.
 - Anything about a Ruby file outside a workspace folder.
 - Anything while the workspace is untrusted: the Runtime Agent does not
   start, so every Rails-derived capability (C3, C4, C5, D2, G3, G4)

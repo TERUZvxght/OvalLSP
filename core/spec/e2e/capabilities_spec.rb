@@ -73,6 +73,30 @@ RSpec.describe "Extension capabilities", :e2e do
     self.class.remove_workspace
   end
 
+  def descendant_pids(root_pid)
+    rows = `ps -axo pid=,ppid=`.lines.filter_map do |line|
+      pid, ppid = line.split.map(&:to_i)
+      [pid, ppid] if pid && ppid
+    end
+    children = rows.select { |_pid, ppid| ppid == root_pid }.map(&:first)
+    children + children.flat_map { |child| rows.select { |_pid, ppid| ppid == child }.map(&:first) }
+  end
+
+  def process_alive?(pid)
+    Process.kill(0, pid)
+    true
+  rescue Errno::ESRCH
+    false
+  rescue Errno::EPERM
+    true
+  end
+
+  def wait_until_gone(pid, timeout: 10)
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+    sleep 0.1 while process_alive?(pid) && Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+    !process_alive?(pid)
+  end
+
   # Writes `source` into the workspace as `relative_path`, opens it, and
   # yields its uri. The file stays for the rest of the run; names are
   # unique per example.
@@ -86,6 +110,24 @@ RSpec.describe "Extension capabilities", :e2e do
   describe "baseline" do
     it "B1/B2: reaches a ready state against a real Rails app" do
       expect(@state).to eq("ready-rails")
+    end
+  end
+
+  # Runs its own Core rather than the shared one: this is about what
+  # happens to a process on shutdown, and the shared client has to stay
+  # alive for every other example.
+  it "B3: leaves no Core or Runtime Agent process behind after shutdown" do
+    client = E2E::LspClient.new(self.class.workspace)
+    client.initialize!
+    client.wait_until_ready
+    pid = client.core_pid
+    agent_pids = descendant_pids(pid)
+
+    client.stop
+
+    expect(wait_until_gone(pid)).to be(true), "Core #{pid} survived shutdown"
+    agent_pids.each do |agent_pid|
+      expect(wait_until_gone(agent_pid)).to be(true), "a Runtime Agent/runner (#{agent_pid}) survived shutdown"
     end
   end
 
@@ -113,6 +155,20 @@ RSpec.describe "Extension capabilities", :e2e do
         end
       RUBY
         expect(@client.hover_text(uri, 3, 6)).to eq("Post")
+      end
+    end
+
+    it "H3: reports an ivar's type in a view from the action that assigned it" do
+      with_file("app/controllers/hover_view_controller.rb", <<~RUBY) do |_uri|
+        class HoverViewController < ApplicationController
+          def show
+            @record = Post.find(1)
+          end
+        end
+      RUBY
+        with_file("app/views/hover_view/show.html.erb", "<%= @record %>\n") do |view_uri|
+          expect(@client.hover_text(view_uri, 0, 5)).to eq("Post")
+        end
       end
     end
 
@@ -243,6 +299,36 @@ RSpec.describe "Extension capabilities", :e2e do
     end
   end
 
+  describe "definition (continued)" do
+    it "D2: jumps to the owning model for an Active Record column" do
+      with_file("app/models/column_definition_probe.rb", <<~RUBY) do |uri|
+        class ColumnDefinitionProbe
+          def run
+            user = User.find(1)
+            user.email
+          end
+        end
+      RUBY
+        targets = @client.definitions(uri, 3, 12).map { |location| location[:uri] }
+        expect(targets).to include(a_string_ending_with("app/models/user.rb"))
+      end
+    end
+
+    it "D3: jumps into the RBS declaration for a stdlib method" do
+      with_file("app/models/stdlib_definition_probe.rb", <<~RUBY) do |uri|
+        class StdlibDefinitionProbe
+          def run
+            text = "s"
+            text.upcase
+          end
+        end
+      RUBY
+        targets = @client.definitions(uri, 3, 12).map { |location| location[:uri] }
+        expect(targets).to include(a_string_matching(/string\.rbs\z/))
+      end
+    end
+  end
+
   describe "diagnostics" do
     it "G1: reports a syntax error" do
       with_file("app/models/syntax_probe.rb", "class SyntaxProbe\n  def broken(\n") do |uri|
@@ -321,6 +407,33 @@ RSpec.describe "Extension capabilities", :e2e do
     end
   end
 
+  describe "signature help (continued)" do
+    it "S2: reports an RBS overload label for a stdlib method" do
+      with_file("app/models/stdlib_signature_probe.rb", <<~RUBY) do |uri|
+        class StdlibSignatureProbe
+          def run
+            text = "s"
+            text.split(
+          end
+        end
+      RUBY
+        expect(@client.signature_labels(uri, 3, 15).join(" ")).to include("split")
+      end
+    end
+
+    it "S3: reports a route helper's parts" do
+      with_file("app/controllers/route_signature_controller.rb", <<~RUBY) do |uri|
+        class RouteSignatureController < ApplicationController
+          def index
+            post_path(
+          end
+        end
+      RUBY
+        expect(@client.signature_labels(uri, 2, 14).join(" ")).to include("post_path")
+      end
+    end
+  end
+
   describe "workspace-wide" do
     it "W1: finds every reference to a workspace method" do
       with_file("app/models/reference_probe.rb", <<~RUBY) do |uri|
@@ -334,6 +447,22 @@ RSpec.describe "Extension capabilities", :e2e do
         end
       RUBY
         expect(@client.references(uri, 1, 8)).not_to be_empty
+      end
+    end
+
+    it "W2: rewrites every call site when a workspace method is renamed" do
+      with_file("app/models/rename_probe.rb", <<~RUBY) do |uri|
+        class RenameProbe
+          def old_name; end
+
+          def run
+            value = RenameProbe.new
+            value.old_name
+          end
+        end
+      RUBY
+        edits = @client.rename_edits(uri, 1, 8, "new_name")
+        expect(edits.values.flatten.size).to be >= 2
       end
     end
 
