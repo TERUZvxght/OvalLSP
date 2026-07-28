@@ -664,8 +664,30 @@ module Ovallsp
         @reference_candidates << Index::ReferenceCandidate.new(
           kind: :method_call, name: node.name.to_s, location: Index::SourceLocation.to_range(node.message_loc, @lines),
           scope_id: nil, owner: current_owner, singleton: singleton, receiver: receiver,
-          lexical_nesting: current_lexical_nesting
+          lexical_nesting: current_lexical_nesting, arguments: call_argument_shape(node)
         )
+      end
+
+      # What a call site passes, in the terms an arity check needs. A
+      # splat makes the positional count a lower bound rather than a
+      # count, and `...` forwarding says nothing at all about arity, so
+      # both are recorded as such instead of being counted -- a diagnostic
+      # that fires on `f(*args)` would be worse than no diagnostic.
+      def call_argument_shape(node)
+        arguments = node.arguments&.arguments || []
+        splat = arguments.any? do |argument|
+          argument.is_a?(Prism::SplatNode) || argument.is_a?(Prism::ForwardingArgumentsNode)
+        end
+        keywords = arguments.count { |argument| argument.is_a?(Prism::KeywordHashNode) }
+        {
+          positional: arguments.count do |argument|
+            !argument.is_a?(Prism::KeywordHashNode) && !argument.is_a?(Prism::SplatNode) &&
+              !argument.is_a?(Prism::ForwardingArgumentsNode) && !argument.is_a?(Prism::BlockArgumentNode)
+          end,
+          splat: splat,
+          keywords: keywords.positive?,
+          block: !node.block.nil?
+        }
       end
 
       def constant_full_name(node)

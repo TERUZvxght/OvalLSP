@@ -195,7 +195,15 @@ module Ovallsp
 
         api = @model_registry.active_record_api
         names = singleton ? api[:singleton] : api[:instance]
-        names.each do |name|
+        # Plus whatever each model adds on top: attribute and dirty
+        # methods, association accessors, enum predicates, scopes.
+        each_nominal(subject).each do |nominal|
+          model = @model_registry.model(nominal.name)
+          next unless model
+
+          names += singleton ? model.singleton_methods : model.instance_methods
+        end
+        names.uniq.each do |name|
           next unless name.start_with?(prefix)
 
           candidates[name] ||= Member.new(name: name, origin: :model_api, conditional: false,

@@ -10,7 +10,13 @@ module Ovallsp
     # reason to drop the information here.
     Column = Data.define(:name, :ruby_type, :nullable)
     Association = Data.define(:name, :macro, :class_name, :optional)
-    ModelInfo = Data.define(:name, :table_name, :columns, :associations, :partial)
+    # `instance_methods`/`singleton_methods` are what this model adds on
+    # top of ActiveRecord::Base, as reported by the Runtime Agent from the
+    # loaded class -- attribute and dirty-tracking methods, association
+    # accessors, enum predicates, scopes, concerns, own defs. Reported
+    # rather than reconstructed from Rails' conventions, which drift.
+    ModelInfo = Data.define(:name, :table_name, :columns, :associations, :partial,
+                             :instance_methods, :singleton_methods)
 
     # Standard DB-type -> Ruby-type mapping (docs/03-semantic-engine.md
     # section 7.3). Adapters/plugins can override this later; unmapped
@@ -170,7 +176,9 @@ module Ovallsp
 
         ModelInfo.new(
           name: name, table_name: response[:tableName], columns: columns, associations: associations,
-          partial: response[:partial] == true
+          partial: response[:partial] == true,
+          instance_methods: Array(response[:instanceMethods]).map(&:to_s),
+          singleton_methods: Array(response[:singletonMethods]).map(&:to_s)
         )
       end
     end

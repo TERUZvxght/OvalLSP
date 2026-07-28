@@ -20,6 +20,25 @@ row is skipped is not shipped.** If a row cannot pass yet, it stays in
 this document marked `NOT YET` with the reason, so the gap is visible
 rather than merely absent.
 
+## The environment this guarantee covers
+
+Every row below is a promise about one environment, and only that one:
+
+- a **Rails application** (`bin/rails` and `config/environment.rb`
+  present), opened as a **trusted** workspace, on **darwin-arm64**, with
+  the extension's own bundled Core.
+
+That is what the E2E suite runs against, so it is what is verified. A
+plain Ruby project is explicitly *not* covered by these rows yet: much of
+the engine works there, but nothing here has been specified or verified
+for it, and half-supporting it would make both stories worse. Giving the
+Rails conventions an explicit boundary and specifying the plain-Ruby
+experience is roadmap item 024.R1, for 0.2.x.
+
+Untrusted workspaces stay as described at the end of this document: the
+Runtime Agent does not start, and every Rails-derived capability degrades
+to its static-only answer by design.
+
 ## Status legend
 
 - **PASS** — verified by an E2E row that fails if the behaviour breaks.

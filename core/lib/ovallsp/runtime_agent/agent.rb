@@ -235,20 +235,61 @@ module Ovallsp
       # Operators (`==`, `<=>`, `[]`) are real methods but never useful as
       # completion items after a dot, so they are dropped here rather than
       # shipped and filtered by every consumer.
+      #
+      # So are leading-underscore names. Rails' callback and internal
+      # machinery contributes hundreds of them (`__callbacks`,
+      # `_create_callbacks`, `_reflections`, ...) -- measured: they were
+      # most of a 442-item completion list on a three-column model, which
+      # buries the handful of methods anyone is looking for. Ruby's own
+      # convention already reads a leading underscore as "not for you".
       def callable_names(names)
-        names.map(&:to_s).select { |name| name.match?(/\A[a-z_][A-Za-z0-9_]*[?!=]?\z/) }.sort
+        names.map(&:to_s).select { |name| name.match?(/\A[a-z][A-Za-z0-9_]*[?!=]?\z/) }.sort
       end
 
       def model_payload(klass)
         columns, partial = extract_columns(klass)
+        instance_extras, singleton_extras = model_method_extras(klass)
 
         {
           name: klass.name,
           tableName: safely { klass.table_name },
           columns: columns,
           associations: extract_associations(klass),
-          partial: partial
+          partial: partial,
+          instanceMethods: instance_extras,
+          singletonMethods: singleton_extras
         }
+      end
+
+      # What this model adds on top of ActiveRecord::Base: attribute
+      # readers/writers and their dirty-tracking variants
+      # (`title_changed?`, `saved_change_to_title?`, ...), association
+      # accessors, enum predicates, scopes, concerns, and its own `def`s.
+      #
+      # Reported rather than reconstructed. Rails generates these by
+      # convention, and a convention re-implemented here is a convention
+      # that drifts: every Rails version that adds a variant would produce
+      # a false "no method named" on code that runs fine. Asking the
+      # loaded class removes the guesswork -- including whether the model
+      # defines `method_missing`, which is what decides whether the
+      # unknown-method check may run against it at all.
+      #
+      # `define_attribute_methods` first, because Rails defines attribute
+      # methods lazily: before something touches them, `instance_methods`
+      # genuinely does not list `title` for a model with a title column
+      # (measured: 0 extras before, 119 after). It is the same call Rails
+      # itself makes on first access, so this only does earlier what the
+      # app would do anyway.
+      def model_method_extras(klass)
+        safely { klass.define_attribute_methods }
+        base = ::ActiveRecord::Base
+        [
+          callable_names(klass.instance_methods - base.instance_methods),
+          callable_names(klass.methods - base.methods)
+        ]
+      rescue StandardError => e
+        @logger.call("method list unavailable for #{klass.name}: #{e.class}: #{e.message}")
+        [[], []]
       end
 
       # "constantize前にconstant名を検証する" (docs/03-semantic-engine.md 7.1's
