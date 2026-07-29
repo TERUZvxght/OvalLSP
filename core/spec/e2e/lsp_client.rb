@@ -69,9 +69,16 @@ module E2E
     end
 
     def completion_labels(uri, line, character)
+      completion_items(uri, line, character).map { |item| item[:label] }
+    end
+
+    def completion_items(uri, line, character)
       result = request("textDocument/completion", { textDocument: { uri: uri }, position: { line: line, character: character } })
-      items = result.is_a?(Array) ? result : (result[:items] || [])
-      items.map { |item| item[:label] }
+      result.is_a?(Array) ? result : (result[:items] || [])
+    end
+
+    def completion_item(uri, line, character, label)
+      completion_items(uri, line, character).find { |item| item[:label] == label }
     end
 
     def hover_text(uri, line, character)

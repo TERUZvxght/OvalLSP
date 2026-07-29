@@ -1566,8 +1566,37 @@ module Ovallsp
       return [] unless receiver_type
 
       @query_service.members_of(receiver_type, prefix: prefix).map do |member|
-        { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s }
+        item = { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s }
+        snippet = completion_snippet(member)
+        item.merge(snippet ? { insertText: snippet, insertTextFormat: SNIPPET_INSERT_FORMAT } : {})
       end
+    end
+
+    # LSP InsertTextFormat.Snippet: `$1`/`${1:name}` become tab stops
+    # rather than literal text.
+    SNIPPET_INSERT_FORMAT = 2
+
+    # Accepting a completion should leave the cursor where the next thing
+    # gets typed, not at the end of a bare name the user then has to add
+    # parentheses to. Three cases, because we know three different amounts
+    # about a method:
+    #
+    # - parameter names known (workspace source): each becomes a tab stop,
+    #   so `takes_two` completes to `takes_two(first, second)` and Tab
+    #   moves between them;
+    # - takes arguments but names unknown: Rails' own methods are nearly
+    #   all `(*, **, &)`, so there is nothing to name -- open the
+    #   parentheses and put the cursor inside, `where($1)`;
+    # - takes nothing: insert the bare name. `save()` is not how Ruby is
+    #   written, and an editor that produces it is worse than one that
+    #   inserts plain text.
+    def completion_snippet(member)
+      parameters = member.parameters
+      return "#{member.name}($1)" if parameters == :unknown_arity
+      return nil if parameters.nil? || parameters.empty?
+
+      stops = parameters.each_with_index.map { |name, index| "${#{index + 1}:#{name}}" }
+      "#{member.name}(#{stops.join(', ')})"
     end
 
     # Finds the call whose argument list the cursor is inside by scanning
@@ -2286,6 +2315,12 @@ module Ovallsp
       # #explain_type_in_view already used just above for `type` itself.
       receiver_type = word && !erb_view?(document.uri) && receiver_type_before_dot(document, position)
       if receiver_type
+        # The call's own shape, first: hovering `value.documented(1)` is
+        # most often a question about what to pass, and the answer was
+        # only reachable by retyping `(` to trigger signature help.
+        signature = @query_service.signatures_of(receiver_type, word).first
+        lines.unshift(signature[:label]) if signature && signature[:label]
+
         origin = hover_origin(receiver_type, word)
         lines << "Origin: #{origin}" if origin
 

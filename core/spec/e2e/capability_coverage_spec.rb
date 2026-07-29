@@ -14,6 +14,7 @@
 # has to skip.
 RSpec.describe "capability document coverage" do
   CAPABILITY_DOC = File.expand_path("../../../docs/EXTENSION_CAPABILITIES.md", __dir__)
+  CAPABILITY_DOC_JA = File.expand_path("../../../docs/EXTENSION_CAPABILITIES.ja.md", __dir__)
   CAPABILITY_SPEC = File.expand_path("capabilities_spec.rb", __dir__)
 
   # Table rows look like `| C5 | ... |`; example names carry the id they
@@ -43,5 +44,15 @@ RSpec.describe "capability document coverage" do
     statuses = read_utf8(CAPABILITY_DOC).scan(/^\| [BHCDGSW]\d \|[^|]*\|[^|]*\| ([^|]+) \|/).flatten.map(&:strip)
 
     expect(statuses.uniq).to all(match(/\A(PASS|NOT YET)\z/))
+  end
+
+  # The Japanese pair is a translation, not a second source of truth: it
+  # must list exactly the same capabilities. A row added to one and not
+  # the other is how a translated document quietly starts describing a
+  # different product.
+  it "lists the same capabilities in the Japanese pair" do
+    japanese = read_utf8(CAPABILITY_DOC_JA).scan(/^\| ([BHCDGSW]\d) \|/).flatten
+
+    expect(japanese).to eq(documented)
   end
 end

@@ -223,9 +223,20 @@ module Ovallsp
       def active_record_api
         return nil unless active_record_available?
 
+        base = ::ActiveRecord::Base
+        instance = callable_names(base.instance_methods - Object.instance_methods)
+        singleton = callable_names(base.methods - Object.methods)
         {
-          instance: callable_names(::ActiveRecord::Base.instance_methods - Object.instance_methods),
-          singleton: callable_names(::ActiveRecord::Base.methods - Object.methods)
+          instance: instance,
+          singleton: singleton,
+          # Which of those accept an argument at all. Rails' own methods
+          # are nearly all `(*, **, &)`, so their parameter *names* are
+          # worthless for completion -- but "takes something" versus
+          # "takes nothing" is exactly what decides whether an editor
+          # should offer `where()` with the cursor inside, or a bare
+          # `save`. That distinction is derivable here and nowhere else.
+          instanceWithArguments: names_taking_arguments(instance) { |name| base.instance_method(name) },
+          singletonWithArguments: names_taking_arguments(singleton) { |name| base.method(name) }
         }
       rescue StandardError => e
         @logger.call("active record api unavailable: #{e.class}: #{e.message}")
@@ -242,6 +253,19 @@ module Ovallsp
       # most of a 442-item completion list on a three-column model, which
       # buries the handful of methods anyone is looking for. Ruby's own
       # convention already reads a leading underscore as "not for you".
+      # A method "takes arguments" when its parameter list contains
+      # anything a caller could pass: required, optional, keyword, or the
+      # variadic forms. A lone block parameter does not count -- `each`
+      # is written `each` in Ruby, not `each()`.
+      def names_taking_arguments(names)
+        names.select do |name|
+          parameters = yield(name).parameters
+          parameters.any? { |kind, _| %i[req opt rest key keyreq keyrest].include?(kind) }
+        rescue StandardError
+          false
+        end
+      end
+
       def callable_names(names)
         names.map(&:to_s).select { |name| name.match?(/\A[a-z][A-Za-z0-9_]*[?!=]?\z/) }.sort
       end

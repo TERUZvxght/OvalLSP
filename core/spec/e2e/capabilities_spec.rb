@@ -172,6 +172,22 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    it "H5: shows a method's parameters when hovering it" do
+      with_file("app/models/hover_params_probe.rb", <<~RUBY) do |uri|
+        class HoverParamsProbe
+          def documented(first, second = 1)
+          end
+
+          def run
+            value = HoverParamsProbe.new
+            value.documented(1)
+          end
+        end
+      RUBY
+        expect(@client.hover_text(uri, 6, 10)).to include("documented(first, second)")
+      end
+    end
+
     it "H4: reports literal types" do
       with_file("app/models/literal_probe.rb", <<~RUBY) do |uri|
         class LiteralProbe
@@ -265,6 +281,65 @@ RSpec.describe "Extension capabilities", :e2e do
         end
       RUBY
         expect(@client.completion_labels(uri, 4, 19)).to include("build_one")
+      end
+    end
+
+    it "C8: inserts a call template with the cursor between the parentheses" do
+      with_file("app/models/snippet_probe.rb", <<~RUBY) do |uri|
+        class SnippetProbe
+          def takes_two(first, second); end
+
+          def run
+            value = SnippetProbe.new
+            value.
+          end
+        end
+      RUBY
+        item = @client.completion_item(uri, 5, 10, "takes_two")
+
+        # 2 is InsertTextFormat.Snippet: `$1`/`${1:name}` are tab stops
+        # rather than literal text.
+        expect(item[:insertTextFormat]).to eq(2)
+        expect(item[:insertText]).to eq("takes_two(${1:first}, ${2:second})")
+      end
+    end
+
+    it "C9: inserts a no-argument method without parentheses" do
+      with_file("app/models/no_arg_probe.rb", <<~RUBY) do |uri|
+        class NoArgProbe
+          def plain_call; end
+
+          def run
+            value = NoArgProbe.new
+            value.
+          end
+        end
+      RUBY
+        item = @client.completion_item(uri, 5, 10, "plain_call")
+
+        # No insertText and no snippet format: the label is inserted
+        # verbatim. `plain_call()` is not how Ruby is written, and an
+        # editor that produces it is worse than one that inserts the name.
+        expect(item[:insertText]).to be_nil
+        expect(item[:insertTextFormat]).to be_nil
+      end
+    end
+
+    it "C10: puts the cursor inside the parentheses when a method takes arguments of unknown shape" do
+      with_file("app/models/ar_snippet_probe.rb", <<~RUBY) do |uri|
+        class ArSnippetProbe
+          def run
+            User.
+          end
+        end
+      RUBY
+        # Active Record defines `where(*, **, &)`, so there are no
+        # parameter names to offer -- but "takes arguments" is known, and
+        # that is enough to open the parentheses and put the cursor there.
+        item = @client.completion_item(uri, 2, 9, "where")
+
+        expect(item[:insertTextFormat]).to eq(2)
+        expect(item[:insertText]).to eq("where($1)")
       end
     end
 

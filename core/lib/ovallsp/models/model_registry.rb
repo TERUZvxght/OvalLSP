@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+
+require "set"
 module Ovallsp
   module Models
     # `nullable` mirrors the Agent's raw `null` column flag as-is (Task
@@ -47,7 +49,9 @@ module Ovallsp
     class ModelRegistry
       def initialize
         @models = {}
-        @active_record_api = { instance: [], singleton: [] }
+        @active_record_api = {
+        instance: [], singleton: [], instance_with_arguments: Set.new, singleton_with_arguments: Set.new
+      }
         @generation = 0
         @mutex = Mutex.new
       end
@@ -65,12 +69,17 @@ module Ovallsp
       def install_active_record_api(api)
         return if api.nil?
 
-        instance = Array(api[:instance] || api["instance"]).map(&:to_s)
-        singleton = Array(api[:singleton] || api["singleton"]).map(&:to_s)
+        fetch = ->(key) { Array(api[key.to_sym] || api[key.to_s]).map(&:to_s) }
+        instance = fetch.call("instance")
+        singleton = fetch.call("singleton")
         return if instance.empty? && singleton.empty?
 
         @mutex.synchronize do
-          @active_record_api = { instance: instance, singleton: singleton }
+          @active_record_api = {
+            instance: instance, singleton: singleton,
+            instance_with_arguments: fetch.call("instanceWithArguments").to_set,
+            singleton_with_arguments: fetch.call("singletonWithArguments").to_set
+          }
           @generation += 1
         end
       end
