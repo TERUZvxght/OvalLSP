@@ -863,13 +863,9 @@ module Ovallsp
 
     PLUGIN_LOCATION = { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }.freeze
 
-    # Task 014: resolves this file's raw reference candidates (Prism-level
-    # constant/local/ivar/cvar/method-call sites -- ParserService already
-    # collected them into `summary.reference_candidates`) against the
-    # *current* whole-workspace state, and replaces this uri's
-    # contribution to ReferenceIndex. Errors degrade the same way
-    # #reindex itself does: Find References for this file just stays
-    # stale/empty rather than taking the server down.
+    # Marks the workspace-wide reference index as needing a rebuild. The
+    # rebuild itself is #ensure_reference_index_current's job, deferred to
+    # the next query that actually needs it rather than run per edit.
     def mark_reference_index_dirty
       @reference_state_mutex.synchronize { @reference_dirty_token += 1 }
     end

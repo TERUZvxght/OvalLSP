@@ -410,7 +410,7 @@ export class SpawnedCoreProcess implements CoreProcessHandle {
         // invariant over a process's life, so re-capturing could not
         // change any later answer. A post-setsid pgid change is tolerated
         // because pgid is not compared at all -- which is the real
-        // guarantee, and is pinned by its own test below (024.7).
+        // guarantee, and is pinned in coreProcess.test.ts (024.7).
         root = rootRow;
       } else {
         // Positive evidence that our pid now belongs to someone else.

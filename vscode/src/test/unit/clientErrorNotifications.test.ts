@@ -1,4 +1,6 @@
 import * as assert from 'assert';
+import * as fs from 'fs';
+import * as path from 'path';
 import { notificationLevelFor } from '../../clientErrorNotifications';
 import { CoreStartRejectedError } from '../../clientLifecycle';
 
@@ -63,6 +65,34 @@ describe('notificationLevelFor', () => {
     assert.strictEqual(
       notificationLevelFor({ data: new Error('server exited'), showNotification: 'force', stopWasRequested: false }),
       'force'
+    );
+  });
+
+  // Everything above covers the decision; the connection to a real client
+  // is one line in `extension.ts`, which imports `vscode` and so cannot be
+  // loaded here. Passing `() => false` there undoes 024.9 completely and
+  // leaves every test in this file green -- verified. So this reads the
+  // source instead, the same structural guard `clientLifecycle.test.ts`
+  // already uses for `shutdownBarrier.reset()`, and for the same reason.
+  it('is wired to the real lifecycle, not to a constant', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../../src/extension.ts'), 'utf8');
+    const construction = source.slice(source.indexOf('new OvalLspLanguageClient('));
+    const argumentList = construction.slice(0, construction.indexOf(');'));
+
+    assert.ok(
+      /lifecycle\.stopWasRequested\(\s*key\s*,\s*generation\s*\)/.test(argumentList),
+      'expected the client to ask the lifecycle about its own generation, not a fixed value'
+    );
+  });
+
+  it('asks about the generation captured at construction, not whichever is current', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../../../src/extension.ts'), 'utf8');
+    const startBody = source.slice(source.indexOf('function startClientForFolder('));
+
+    assert.ok(
+      startBody.indexOf('const generation = lifecycle.beginStart(key)') <
+        startBody.indexOf('new OvalLspLanguageClient('),
+      'expected the generation to be captured before the client that reports against it'
     );
   });
 });

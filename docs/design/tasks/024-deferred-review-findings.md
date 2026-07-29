@@ -62,6 +62,21 @@ plain `Hash` threw away the ability to resolve anything called on the
 result. Both sides are now pinned — the union direction in
 `types_spec.rb`, the constructor rendering in `local_inferencer_spec.rb`,
 with a comment in each pointing at the other.
+
+Independent review of that change found it had traded a rendering
+inconsistency for a lost capability: `MethodResolver#nominal_members`
+understood only `Nominal` (and `ClassOf[X]`), so moving the collapsed
+value to the generic branch left definition and completion returning
+nothing on it — reproduced against a workspace reopening `Hash`. The
+justification given was also one-sided: `GenericRuleRegistry` only has
+rules for `Array`/`Relation`/`CollectionProxy`, so for the `Hash` and
+`Set` this entry is named after there was no dispatch to gain. The
+resolver was the thing that was wrong, and now reads any `Generic` as the
+class it is generic over; `ClassOf[X]` keeps its own earlier unwrapping.
+
+Still open, and deliberately not folded in here: `{}` infers
+`Nominal("Hash")` while `Hash.new` infers `Generic("Hash", Unknown)`, so
+the two still render differently. Recorded as 024.12.
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`resolve_call`'s `.new` ladder)
 
 Consulting RBS before the nominal-constructor fallback means `Hash.new`
@@ -721,3 +736,31 @@ path solves and has no existing answer here:
 None of that is settled, and settling it needs measurement against a real
 workspace rather than reasoning — which is why this is scoped as its own
 roadmap entry rather than folded into another release's work.
+
+---
+
+## 024.12 A hash literal and `Hash.new` still render differently (0.2.0)
+
+**Status:** open
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`Prism::HashNode`)
+
+024.2 settled the canonical rendering of "container with unknown element
+type" on the generic form and aligned `Types.normalize_union` with it.
+One path was missed: a hash literal infers `Nominal("Hash")`, so
+
+```
+{}        => Hash
+[]        => Array[Unknown]
+Hash.new  => Hash[Unknown]
+```
+
+Hovering `{}` and hovering `Hash.new` still disagree about the same kind
+of value, which is the symptom 024.2 was opened about. Found by
+independent review of 0.1.8, which also observed that nothing pins what
+`{}` renders as, so it is free to drift either way.
+
+**Direction:** infer `Generic("Hash", Unknown)` for an empty hash literal,
+matching the array literal, and pin all three renderings together. Held
+back from 0.1.8 only because it changes an inference result rather than
+correcting an inconsistency between two of them, and 0.1.8 was already
+carrying a resolver change made under review.

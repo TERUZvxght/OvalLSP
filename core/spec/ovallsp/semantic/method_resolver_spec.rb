@@ -26,6 +26,47 @@ RSpec.describe Ovallsp::Semantic::MethodResolver do
     expect(candidates.first.origin).to eq(:superclass)
   end
 
+  # A container's own methods live on its class, whatever its element type
+  # is. Before this, only `ClassOf[X]` was unwrapped and every other
+  # Generic fell through to `[]` -- so a workspace that reopens `Hash` got
+  # definition and completion on `{}` (a Nominal) and neither on
+  # `Hash.new` or on anything the container rules returned (a Generic).
+  #
+  # Found by independent review of 0.1.8: settling 024.2 on the generic
+  # form moved values from the branch the resolver handles to the branch
+  # it did not, which turned a rendering inconsistency into a lost
+  # capability. The resolver is the thing that was wrong.
+  it "resolves a method on a generic receiver against the class it is generic over" do
+    index_source("class Hash\n  def deep_symbolize!\n  end\nend\n")
+    generic = Ovallsp::Types::Generic.new(name: "Hash", type_arg: Ovallsp::Types::UNKNOWN)
+
+    candidates = resolver.resolve(receiver_type: generic, name: "deep_symbolize!")
+
+    expect(candidates.map(&:owner)).to eq(["::Hash"])
+  end
+
+  it "completes a generic receiver's members the same way it completes the plain type" do
+    index_source("class Hash\n  def deep_symbolize!\n  end\nend\n")
+    generic = Ovallsp::Types::Generic.new(name: "Hash", type_arg: Ovallsp::Types::UNKNOWN)
+
+    generic_names = resolver.complete(receiver_type: generic, prefix: "deep").map { |r| r[:name] }
+
+    expect(generic_names).to eq(resolver.complete(receiver_type: nominal("Hash"), prefix: "deep").map { |r| r[:name] })
+    expect(generic_names).to include("deep_symbolize!")
+  end
+
+  # The one Generic that must NOT be read as its own name: `ClassOf[X]` is
+  # the class object of X, so its members are X's singleton methods, and
+  # reading it as a class literally called "ClassOf" would find nothing.
+  it "still treats ClassOf as the class object rather than as a class named ClassOf" do
+    index_source("class Widget\n  def self.build\n  end\nend\n")
+    class_of = Ovallsp::Types::Generic.new(name: "ClassOf", type_arg: nominal("Widget"))
+
+    candidates = resolver.resolve(receiver_type: class_of, name: "build")
+
+    expect(candidates.map(&:owner)).to eq(["::Widget"])
+  end
+
   # "prepend methodがclass methodより先に解決される"
   it "resolves a prepended module's method before the class' own method, ranked first" do
     index_source(<<~RUBY)

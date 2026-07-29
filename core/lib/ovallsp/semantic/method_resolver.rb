@@ -99,11 +99,27 @@ module Ovallsp
         [receiver_type.type_arg, context.merge(singleton: true)]
       end
 
+      # A `Generic` receiver is read as the class it is generic over:
+      # `Hash[Unknown]`'s own methods live on `Hash`, exactly as `{}`'s do.
+      # Without this, every value the container rules produce -- and every
+      # container constructor resolved through RBS -- reached here, matched
+      # nothing, and offered no definition and no completion at all, while
+      # the same class reached as a plain Nominal worked.
+      #
+      # `ClassOf[X]` is already unwrapped before this by
+      # #normalize_class_receiver, so it never arrives here as a class
+      # literally named "ClassOf".
       def nominal_members(type)
         case type
-        when Types::Union then type.members.select { |m| m.is_a?(Types::Nominal) }
-        when Types::Nominal then [type]
-        else []
+        when Types::Union then type.members.filter_map { |m| base_nominal(m) }
+        else Array(base_nominal(type))
+        end
+      end
+
+      def base_nominal(type)
+        case type
+        when Types::Nominal then type
+        when Types::Generic then Types::Nominal.new(name: type.name)
         end
       end
 
