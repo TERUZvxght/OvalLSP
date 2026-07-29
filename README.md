@@ -107,6 +107,14 @@ instead, deliberately: reporting there would mean guessing. Indexing what
 the gems actually define is what lifts that, and is why the row above
 carries 0.3.x.
 
+The inverse case is a known false positive in this release. A workspace
+file that *reopens* a gem class looks identical to one that defines it —
+`test/test_helper.rb`'s `class ActiveSupport::TestCase`, which every
+Rails application has — so the ancestry reads as complete and calls into
+the gem's own API (`parallelize`, `fixtures`) are reported as unknown.
+Two per project, in one file. Fixed in 0.1.7
+([024.R5](docs/design/tasks/024-deferred-review-findings.md)).
+
 An undefined *variable* is not a separate row. In Ruby a bare identifier
 that is not a local variable parses as a call on self, so a typo'd
 variable is reported by the same check, under the same limitation. An

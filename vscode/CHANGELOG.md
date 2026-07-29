@@ -50,6 +50,13 @@ Also in this release:
   release it shipped in.
 - Rails' internal callback methods no longer flood completion.
 
+Known limitation: a workspace file that *reopens* a gem class is
+indistinguishable from one that defines it, so the unknown-method check
+reads its ancestry as complete. `test/test_helper.rb`'s
+`class ActiveSupport::TestCase` has exactly this shape in every Rails
+application, and its `parallelize` and `fixtures` calls are reported as
+unknown. Two per project, in one file; fixed in 0.1.7.
+
 ## 0.1.5 — Lifecycle reliability and deeper semantic coverage
 
 - Stops and reaps the Core process and, on macOS/Linux, its discovered
