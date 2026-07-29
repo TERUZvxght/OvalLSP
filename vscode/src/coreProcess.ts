@@ -405,9 +405,12 @@ export class SpawnedCoreProcess implements CoreProcessHandle {
         this.rootIdentity = rootRow;
         root = rootRow;
       } else if (sameRootProcess(rootRow, this.rootIdentity)) {
-        // Still our process. Refresh the captured copy so a post-setsid
-        // pgid change is picked up rather than treated as an impostor.
-        this.rootIdentity = rootRow;
+        // Still our process. The captured copy is deliberately *not*
+        // refreshed: `sameRootProcess` compares pid and startedAt, both
+        // invariant over a process's life, so re-capturing could not
+        // change any later answer. A post-setsid pgid change is tolerated
+        // because pgid is not compared at all -- which is the real
+        // guarantee, and is pinned by its own test below (024.7).
         root = rootRow;
       } else {
         // Positive evidence that our pid now belongs to someone else.

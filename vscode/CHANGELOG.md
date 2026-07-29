@@ -6,6 +6,46 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.1.8 — Deferred corrections
+
+- Fixed: repeatedly restarting the server no longer produces "The OvalLSP
+  server crashed 5 times in the last 3 minutes". Those closures were the
+  extension's own deliberate stops, reported back to you as crashes.
+- Fixed: a container whose element type is unknown now renders the same
+  way everywhere. `Hash.new` and a union arriving at the same value
+  disagreed — one said `Hash[Unknown]`, the other `Hash`.
+- Removed: dead reference-indexing code, and a line in process ownership
+  that could not affect any decision.
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: no
+capability is added. It clears four entries from
+`docs/design/tasks/024-deferred-review-findings.md` (024.9, 024.2, 024.5,
+024.7).
+
+### Details
+
+The crash notice is vscode-languageclient's, and it counts every
+connection closure it did not initiate. Some of those are ours: stopping
+a client that is still `starting` terminates Core directly, because
+calling `client.stop()` in that state is unsafe. The library cannot tell
+that from a crash, so the suppression now keys on lifecycle state as well
+as on the branded rejection it already recognised — if we asked *that
+generation* to stop, the closure is ours. A superseded generation counts
+as stopped, since it was torn down to make way for its replacement and
+its client can still report the closure afterwards. A client nobody asked
+to stop is still reported however it failed.
+
+That decision now lives in a module that imports no `vscode`, so it is
+unit-tested rather than manually verified — the first piece of 024.10 to
+come out of `extension.ts`.
+
+The container rendering was settled in favour of the generic form, and
+the union rule corrected to agree with it. The engine already produced
+`Array[Unknown]` for `[]`, so the union rule was the one out of step.
+Keeping the generic form also keeps a type argument for the container
+rules to dispatch on: collapsing to a plain `Hash` threw away the ability
+to resolve anything called on the result.
+
 ## 0.1.7 — The reopened gem class
 
 - Fixed: a class the workspace *reopens* rather than defines is no longer

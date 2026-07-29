@@ -239,6 +239,27 @@ export class ClientLifecycleManager {
     return this.folders.get(key)?.state;
   }
 
+  /**
+   * Whether the extension asked this generation to stop -- so a
+   * connection closure the language client is complaining about was ours,
+   * not a crash (024.9).
+   *
+   * A *superseded* generation counts as stopped whatever the current
+   * state says: it was necessarily torn down to make way for the one that
+   * replaced it, and its client can still report the closure afterwards,
+   * which is precisely when this gets asked.
+   */
+  stopWasRequested(key: string, generation: number): boolean {
+    const folder = this.folders.get(key);
+    if (!folder) {
+      return false;
+    }
+    if (folder.generation !== generation) {
+      return true;
+    }
+    return folder.state === 'stopping' || folder.state === 'stopped';
+  }
+
   /** Test/diagnostic helper -- not used by production wiring. */
   getGeneration(key: string): number | undefined {
     return this.folders.get(key)?.generation;

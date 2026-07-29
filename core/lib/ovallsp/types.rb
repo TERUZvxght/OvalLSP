@@ -82,14 +82,25 @@ module Ovallsp
     # order branches were visited in.
     def normalize_union(types)
       flattened = types.flat_map { |t| t.is_a?(Union) ? t.members : [t] }
-      # `Hash[Unknown]` constrains nothing that `Hash` does not, so a
-      # union holding both presents a single type as two alternatives.
-      # Reachable from any union of a bare container literal with a call
-      # returning the same container generically, e.g.
+      # `Hash` and `Hash[Unknown]` say the same thing, so a union holding
+      # both presents a single type as two alternatives. Reachable from any
+      # union of a bare container literal with a call returning the same
+      # container generically, e.g.
       # `reduce({}) { |acc, x| acc.merge(x => x) }`.
-      plain_names = flattened.filter_map { |t| t.name if t.is_a?(Nominal) }
+      #
+      # The *generic* form survives, for two reasons. It is what the rest
+      # of the engine already produces for a container whose element type
+      # is unknown -- `[]` infers `Array[Unknown]` -- so keeping the plain
+      # one made the same value render two different ways depending on the
+      # path it arrived by (024.2). And only the generic form carries a
+      # type argument for GenericRuleRegistry to dispatch on, so collapsing
+      # to the plain one threw away the ability to resolve anything called
+      # on the result.
+      generic_unknown_names = flattened.filter_map do |t|
+        t.name if t.is_a?(Generic) && t.type_arg.is_a?(Unknown)
+      end
       flattened = flattened.reject do |t|
-        t.is_a?(Generic) && t.type_arg.is_a?(Unknown) && plain_names.include?(t.name)
+        t.is_a?(Nominal) && generic_unknown_names.include?(t.name)
       end
       unique = flattened.uniq.sort_by { |t| t.to_s }
 

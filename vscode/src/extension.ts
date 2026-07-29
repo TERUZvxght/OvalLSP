@@ -22,26 +22,40 @@ import {
   canSpawnCoreProcess,
   ClientLifecycleManager,
   CoreStartRejectedError,
-  isCoreStartRejected,
   KeyedTransitionQueue,
   ShutdownBarrier
 } from './clientLifecycle';
+import { notificationLevelFor } from './clientErrorNotifications';
 import { SpawnedCoreProcess } from './coreProcess';
 
 /**
- * Exists solely to keep a deliberate shutdown refusal out of the user's
- * face. vscode-languageclient funnels every `ServerOptions` rejection
- * through `error(..., 'force')` -- both when it first fails to create a
- * connection and again from its own auto-restart -- and `'force'` means a
- * red popup. So declining to spawn Core during deactivate/restart, which
- * is the shutdown barrier working exactly as intended, greeted users with
- * "Restarting server failed". Only our own branded rejection is
- * downgraded to an output-channel line; every other error keeps the
- * library's default, louder handling.
+ * Exists solely to keep our own deliberate teardowns out of the user's
+ * face. vscode-languageclient reports every connection closure it did not
+ * initiate as an error, and `'force'` means a red popup -- so both
+ * declining to spawn Core during deactivate/restart and stopping a client
+ * that is still `starting` were reported to the user as failures, when
+ * both are the extension working as intended.
+ *
+ * The decision itself lives in `clientErrorNotifications`, which does not
+ * import `vscode` and so can actually be tested (024.9, 024.10).
  */
 class OvalLspLanguageClient extends LanguageClient {
+  constructor(
+    id: string,
+    name: string,
+    serverOptions: ServerOptions,
+    clientOptions: LanguageClientOptions,
+    private readonly stopWasRequested: () => boolean
+  ) {
+    super(id, name, serverOptions, clientOptions);
+  }
+
   error(message: string, data?: unknown, showNotification?: boolean | 'force'): void {
-    super.error(message, data, isCoreStartRejected(data) ? false : showNotification);
+    super.error(
+      message,
+      data,
+      notificationLevelFor({ data, showNotification, stopWasRequested: this.stopWasRequested() })
+    );
   }
 }
 
@@ -244,7 +258,17 @@ function startClientForFolder(
     return Promise.resolve({ process: child, detached: true });
   };
 
-  const client = new OvalLspLanguageClient('ovallsp', `OvalLSP (${folder.name})`, serverOptions, clientOptions);
+  // The generation is captured, not looked up: by the time the library
+  // reports a closure this client's generation may already have been
+  // superseded, and it is precisely that client's own fate we are asking
+  // about.
+  const client = new OvalLspLanguageClient(
+    'ovallsp',
+    `OvalLSP (${folder.name})`,
+    serverOptions,
+    clientOptions,
+    () => lifecycle.stopWasRequested(key, generation)
+  );
 
   // ADR-0005: checked *before* Core is actually spawned, not after --
   // `core/bin/ovallsp` itself already refuses to load an incompatible

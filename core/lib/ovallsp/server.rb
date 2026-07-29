@@ -870,14 +870,6 @@ module Ovallsp
     # contribution to ReferenceIndex. Errors degrade the same way
     # #reindex itself does: Find References for this file just stays
     # stale/empty rather than taking the server down.
-    def index_references(uri, document, summary)
-      references = @reference_resolver.resolve(document, summary.reference_candidates, uri: uri,
-                                                          generation: @reference_index.generation)
-      @reference_index.replace_file(uri: uri, references: references)
-    rescue StandardError => e
-      @logger.error("failed to resolve references for #{uri}: #{e.class}: #{e.message}")
-    end
-
     def mark_reference_index_dirty
       @reference_state_mutex.synchronize { @reference_dirty_token += 1 }
     end
@@ -1666,8 +1658,8 @@ module Ovallsp
     end
 
     # Task 014: finds the reference candidate ParserService already
-    # recorded at `position` (the same candidate list #index_references
-    # resolved into ReferenceIndex), resolves *that one* candidate again
+    # recorded at `position` (the same candidate list #ensure_reference_index_current
+    # resolves into ReferenceIndex), resolves *that one* candidate again
     # to learn its SymbolId, then returns every location ReferenceIndex
     # has for that SymbolId. Resolving just the one clicked-on candidate
     # rather than looking up a pre-built "SymbolId at position" table

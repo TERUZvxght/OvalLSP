@@ -53,7 +53,15 @@ one-line change.
 
 ## 024.2 `Hash.new` / `Set.new` hover as `Hash[Unknown]` / `Set[Unknown]`
 
-**Status:** open
+**Status:** fixed in 0.1.8 — settled in favour of the **generic** form,
+and `Types.normalize_union` corrected to agree with it. The engine already
+produced `Array[Unknown]` for an empty array literal, so the union rule
+was the one out of step, not hover. Keeping the generic form also keeps a
+type argument for `GenericRuleRegistry` to dispatch on: collapsing to the
+plain `Hash` threw away the ability to resolve anything called on the
+result. Both sides are now pinned — the union direction in
+`types_spec.rb`, the constructor rendering in `local_inferencer_spec.rb`,
+with a comment in each pointing at the other.
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`resolve_call`'s `.new` ladder)
 
 Consulting RBS before the nominal-constructor fallback means `Hash.new`
@@ -104,7 +112,9 @@ it becomes a live bug as soon as anything caches or re-walks that tree.
 
 ## 024.5 `Server#index_references` is dead
 
-**Status:** open
+**Status:** fixed in 0.1.8 — deleted. The one comment that named it now
+names `#ensure_reference_index_current`, which is what actually resolves
+that candidate list into ReferenceIndex.
 **Area:** `core/lib/ovallsp/server.rb`
 
 Both former callers now go through `apply_file_summary` plus
@@ -129,7 +139,16 @@ actually asserts.
 
 ## 024.7 `rootIdentity`'s refresh assignment cannot affect any decision
 
-**Status:** open
+**Status:** fixed in 0.1.8 — the line is deleted and the comment now says
+what is actually true. An attempt to pin it first confirmed the entry's
+own claim that it cannot be: `terminate()` takes two snapshots, and in a
+fixture where the root's pgid changes between them, ownership is never
+established on the first pass either way, so the two candidate
+implementations produce identical output. Deleting was the honest
+resolution rather than adding a test that cannot distinguish them. The
+guarantee the comment credited it with — a post-setsid pgid change is
+tolerated — is real and lives in `sameRootProcess` comparing pid and
+startedAt only, which the corrected comment now says.
 **Area:** `vscode/src/coreProcess.ts`
 
 `this.rootIdentity = rootRow` in the "still our process" branch is
@@ -158,7 +177,13 @@ invariant is genuinely carried elsewhere.
 
 ## 024.9 A forced crash popup can still appear for deliberate stops
 
-**Status:** open
+**Status:** fixed in 0.1.8 — the suppression now keys on lifecycle state
+as well as on `data`, and the decision lives in
+`vscode/src/clientErrorNotifications.ts`, which imports no `vscode` and is
+unit-tested. `ClientLifecycleManager#stopWasRequested` answers whether we
+asked *that generation* to stop; a superseded generation counts as
+stopped, since it was torn down to make way for its replacement and its
+client can still report the closure afterwards.
 **Area:** `vscode/src/extension.ts` (`OvalLspLanguageClient.error`)
 
 The suppression keys off the branded rejection arriving as `data`. That
