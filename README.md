@@ -101,7 +101,8 @@ ambiguous between a local variable and a method call — the engine already
 knows which, the editor does not). Rationale for each, and for the
 Pylance features deliberately *not* planned, is in
 [`docs/design/tasks/024-deferred-review-findings.md`](docs/design/tasks/024-deferred-review-findings.md)
-(024.R3).
+(024.R3). [`docs/ROADMAP.md`](docs/ROADMAP.md) states the same plan
+release by release, in terms of what each one lets you do.
 
 The two unknown-method rows above fire only on a receiver whose whole
 ancestry is known — a workspace class, or an Active Record model, whose

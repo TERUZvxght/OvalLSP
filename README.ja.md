@@ -90,7 +90,8 @@ minorでしか増えない——それがここでのminorの定義——ため�
 エンジンは判別できているのにエディタが知りません)。各項目の根拠と、Pylanceの機能の
 うち意図的に**予定しない**ものは
 [`docs/design/tasks/024-deferred-review-findings.md`](docs/design/tasks/024-deferred-review-findings.md)
-(英語、024.R3)に記載しています。
+(英語、024.R3)に記載しています。同じ計画をリリース単位で、「何ができるように
+なるか」の形にまとめたものが [`docs/ROADMAP.ja.md`](docs/ROADMAP.ja.md) です。
 
 未定義メソッドの2行は、祖先がすべて既知のレシーバでのみ発火します。ワークスペースの
 クラスか、Runtime Agentがメソッドを報告するActive Recordモデルです。gemを継承した
