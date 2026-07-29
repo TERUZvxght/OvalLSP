@@ -42,9 +42,16 @@ meaning of both.
 
 | Position | Changes when | Examples |
 |---|---|---|
-| patch (`0.1.**5**`) | Nothing a user sees behaves differently | Bug fixes, performance, refactoring, documentation. No row is added to README's capability matrix and no existing ✅ changes |
+| patch (`0.1.**7**`) | The set of capabilities is unchanged — the extension does what it already claimed, and no more | Bug fixes, performance, refactoring, documentation. No row is added to README's capability matrix and no existing ✅ changes |
 | minor (`0.**1**.5`) | A capability is added | A new row in the capability matrix, a `NOT YET` becoming ✅, a new setting or command |
 | major (`**0**.1.5`) | Something a user already relies on stops working | A setting or command removed or renamed, a supported environment tier dropped, an older protocol version no longer accepted, a ✅ row removed |
+
+Note what the patch row does **not** say: that nothing a user sees
+changes. A bug fix changes what a user sees — that is the whole point of
+it — and a rule reading otherwise would have no patch releases in it at
+all. 0.1.7 is the worked example: two false diagnostics stop appearing in
+every Rails project, which every user sees, and it is still a patch
+because the extension gained no capability it did not already claim.
 
 "Capability" means a row of
 [`docs/EXTENSION_CAPABILITIES.md`](EXTENSION_CAPABILITIES.md), which is
