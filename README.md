@@ -69,6 +69,8 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown method on a model | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: unknown route helper | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: wrong number of arguments | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
+| Diagnostics: reading an `@ivar` that is never assigned | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
 | Find references, rename, workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: wrong argument *type* | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
@@ -96,6 +98,20 @@ knows which, the editor does not). Rationale for each, and for the
 Pylance features deliberately *not* planned, is in
 [`docs/design/tasks/024-deferred-review-findings.md`](docs/design/tasks/024-deferred-review-findings.md)
 (024.R3).
+
+The two unknown-method rows above fire only on a receiver whose whole
+ancestry is known — a workspace class, or an Active Record model, whose
+methods the Runtime Agent reports. A class inheriting from a gem
+(`ApplicationController`, and so most controllers and jobs) is silent
+instead, deliberately: reporting there would mean guessing. Indexing what
+the gems actually define is what lifts that, and is why the row above
+carries 0.3.x.
+
+An undefined *variable* is not a separate row. In Ruby a bare identifier
+that is not a local variable parses as a call on self, so a typo'd
+variable is reported by the same check, under the same limitation. An
+unassigned `@ivar` is genuinely different — Ruby returns `nil` rather
+than raising — and has its own row.
 
 A dash means the capability is defined by Rails data that only the
 Runtime Agent can supply. In an untrusted workspace the Agent

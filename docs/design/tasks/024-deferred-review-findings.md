@@ -423,3 +423,83 @@ false-positive flood the unknown-method check just came out of.
 Until then the check is silent for gem-derived classes reached by
 superclass, and wrong for gem classes reached by reopening.
 
+---
+
+## 024.R6 Reading an instance variable that is never assigned (roadmap, 0.2.x)
+
+**Status:** open — roadmap
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+
+Nothing reports `@usr` where the code meant `@user`. Ruby returns `nil`
+for an unassigned instance variable rather than raising, so this is a
+mistake the language itself never surfaces: the view renders empty and
+nobody is told why.
+
+The information is already here. Controller-to-view propagation infers
+the set of instance variables an action assigns, including through the
+`before_action` chain (capability H3). A read of an `@ivar` that no
+assignment in the effective chain produces is reportable with high
+confidence.
+
+**Direction:** report an `@ivar` read when the enclosing method, its
+callback chain, and its ancestors contain no assignment to it. Stay
+silent where assignments could come from somewhere unmodelled --
+`instance_variable_set`, a concern the workspace cannot see -- on the
+same standard as every other check here.
+
+## 024.R7 Index what the gems actually define, and keep it fresh (roadmap, 0.3.x)
+
+**Status:** open — roadmap
+**Area:** `core/lib/ovallsp/runtime_agent/agent.rb`,
+`core/lib/ovallsp/cache/`, `core/lib/ovallsp/diagnostics/engine.rb`
+
+Today the unknown-method check only fires on a *closed* receiver, and a
+class is closed only when the workspace can see its whole ancestry. In a
+Rails application that is a minority of classes: a controller inherits
+from `ApplicationController`, whose parent is in a gem, so the check
+stays silent there — correctly, but silently. The result is that the
+check works where it is least needed and says nothing where most code is
+written.
+
+The running application knows all of it. Measured against a small Rails 8
+app: 3027 named modules loaded, 2204 of them attributable to one of 63
+gems, contributing 15868 methods defined directly on them. Names only,
+that is roughly 365KB — small enough to persist, far too much to send on
+every query.
+
+**Direction:**
+
+- the Agent walks loaded modules once, attributing each to a gem through
+  `Object.const_source_location` and the `…/gems/<name>-<version>/` path,
+  and reports, per class: its own methods, its ancestors, and whether it
+  defines `method_missing`;
+- Core persists that per gem-version, in the cache store that already
+  exists for file summaries. `Gemfile.lock` already contributes to the
+  cache key, so the invalidation shape is in place — but it should become
+  per gem rather than whole-index, so a single bumped gem re-indexes one
+  gem and not sixty-three;
+- with that, "closed" stops meaning "declared in this workspace" and
+  starts meaning "we know its full method set", which is the honest
+  question. Most receivers in a Rails app become closed, and the check
+  becomes useful where the code actually is.
+
+It also subsumes several entries above: 024.R5's reopened-gem-class case
+(the index knows `ActiveSupport::TestCase` is a gem class), and the
+latent `unresolved-constant` flood (the index knows `Rails` exists).
+024.R5 stays as the narrow, cheap version for 0.1.7 — one question per
+constant, no persistence — and is a stepping stone to this rather than a
+competing design.
+
+**Risks to settle when building it, not after:**
+
+- what is loaded depends on the environment and on eager loading, so the
+  index describes *a* boot, not the gem in the abstract. It must be
+  recorded as such and never treated as proof a method is absent unless
+  the class was actually seen;
+- classes that define methods at runtime (`define_method` in an included
+  hook, `method_missing`) are already handled by the existing
+  `method_missing` rule, which must apply to gem classes too;
+- the walk costs real time on a large app and must not block the first
+  query — the same background/degrade-to-static shape the Agent already
+  uses.
+
