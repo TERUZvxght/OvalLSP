@@ -124,6 +124,11 @@ which is what it is for.
 | G3 | References a route helper that does not exist | "no route named" | PASS |
 | G4 | Calls a method that does not exist on an **Active Record model** | "has no method named" | PASS |
 | G5 | Calls a method with the wrong **number of arguments** | "takes N arguments, but M given" | PASS |
+| G6 | Calls a Rails DSL in a class whose superclass is a gem constant (`< Rails::Application`) | nothing — the class's real method set is unknown here | PASS |
+| G7 | Calls a DSL in a class whose superclass is an expression (`< ActiveRecord::Migration[8.1]`) | nothing | PASS |
+| G9 | Writes an ERB template that calls a method on a local | nothing about HTML — the Ruby regions are analysed, not the template text | PASS |
+| G10 | Writes `<%= yield %>` in a layout | nothing — legal in a template, even though the extracted Ruby is top level | PASS |
+| G11 | Calls a method on an argument (`User.find(params[:id])`) | nothing — the inner call belongs to its own receiver | PASS |
 
 G4 used to follow from the same missing-ancestor problem as C4 and is now
 closed: the Runtime Agent reports what each model actually responds to,

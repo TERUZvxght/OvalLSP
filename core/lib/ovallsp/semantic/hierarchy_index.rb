@@ -168,7 +168,15 @@ module Ovallsp
         @includes_by_owner.fetch(canonical, []).reverse_each { |fact| entries.concat(ancestor_entries_for(fact, visited)) }
 
         superclass_fact = @superclass_by_owner[canonical]
-        if superclass_fact && ROOT_SUPERCLASS_NAMES.include?(superclass_fact.target)
+        if superclass_fact && superclass_fact.target.nil?
+          # `class Foo < <expression>`: the class has a parent whose name
+          # we cannot resolve, so its method set is unbounded. Recorded as
+          # a nameless, kindless ancestor rather than omitted, because
+          # omitting it makes the class look parentless and therefore
+          # fully known -- which is what made every Rails migration report
+          # its own DSL calls as undefined methods.
+          entries << AncestorEntry.new(name: nil, kind: nil, origin: :superclass, location: nil)
+        elsif superclass_fact && ROOT_SUPERCLASS_NAMES.include?(superclass_fact.target)
           entries.concat(DEFAULT_OBJECT_CHAIN)
         elsif superclass_fact
           entries.concat(
@@ -187,7 +195,9 @@ module Ovallsp
         @extends_by_owner.fetch(canonical, []).reverse_each { |fact| entries.concat(ancestor_entries_for(fact, visited)) }
 
         superclass_fact = @superclass_by_owner[canonical]
-        if superclass_fact && !ROOT_SUPERCLASS_NAMES.include?(superclass_fact.target)
+        if superclass_fact && superclass_fact.target.nil?
+          entries << AncestorEntry.new(name: nil, kind: nil, origin: :superclass, location: nil)
+        elsif superclass_fact && !ROOT_SUPERCLASS_NAMES.include?(superclass_fact.target)
           entries.concat(
             compute_ancestors_locked(superclass_fact.target, singleton: true, visited: visited, origin_for_self: :superclass)
           )

@@ -243,6 +243,15 @@ module Ovallsp
           locate(node.receiver, offset, env)
         elsif node.block.is_a?(Prism::BlockNode) && contains?(node.block.location, offset)
           locate_in_block(node, offset, env)
+        elsif (argument = argument_containing(node, offset))
+          # An argument is its own expression and has its own type.
+          # Without this, every position inside an argument list answered
+          # with the *enclosing* call's type: hovering `params` in
+          # `User.find(params[:id])` said User, and -- because the
+          # diagnostics engine resolves a receiver by asking for the type
+          # at the receiver's position -- `params[:id]` was reported as
+          # "User has no method named `[]`".
+          locate(argument, offset, env)
         else
           eval_type(node, env)
         end
@@ -279,6 +288,10 @@ module Ovallsp
     # most common shape of call in real Ruby) never resolved, the same
     # class of gap as the ClassNode/ModuleNode fix above, just one level
     # deeper.
+    def argument_containing(node, offset)
+      (node.arguments&.arguments || []).find { |argument| contains?(argument.location, offset) }
+    end
+
     def locate_in_namespace(node, offset)
       return Types::UNKNOWN unless contains?(node.location, offset)
 

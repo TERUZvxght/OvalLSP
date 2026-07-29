@@ -121,6 +121,11 @@ Active Record自身のAPIが不可視でした。現在はRuntime Agentが、実
 | G3 | 存在しないルートヘルパーを参照する | 「no route named」 | PASS |
 | G4 | **Active Recordモデル**に存在しないメソッドを呼ぶ | 「has no method named」 | PASS |
 | G5 | **引数の個数**が合わない呼び出しを書く | 「takes N arguments, but M given」 | PASS |
+| G6 | 親クラスがgemの定数であるクラス(`< Rails::Application`)でRails DSLを呼ぶ | 何も出さない。そのクラスの本当のメソッド集合をここでは知らないため | PASS |
+| G7 | 親クラスが式であるクラス(`< ActiveRecord::Migration[8.1]`)でDSLを呼ぶ | 何も出さない | PASS |
+| G9 | ERBテンプレートでローカル変数のメソッドを呼ぶ | HTMLについて何も出さない。テンプレート文字列ではなくRuby領域を解析する | PASS |
+| G10 | レイアウトに `<%= yield %>` を書く | 何も出さない。展開後のRubyはトップレベルだがテンプレートでは正当 | PASS |
+| G11 | 引数に対してメソッドを呼ぶ(`User.find(params[:id])`) | 何も出さない。内側の呼び出しは自身のレシーバに属する | PASS |
 
 G4はかつてC4と同じ「祖先が不明」問題に起因していましたが、現在は解消済みです。
 Runtime Agentが各モデルの実際の応答可能メソッドを報告するため、モデルを閉じた

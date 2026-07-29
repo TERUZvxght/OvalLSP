@@ -367,3 +367,48 @@ several unknowns.
 The other of the two things 1.0.0 requires (`docs/PUBLISHING.md`, "0.x,
 and what 1.0.0 requires").
 
+---
+
+## 024.R5 A reopened gem class still looks closed (roadmap, 0.1.7)
+
+**Status:** open — roadmap
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
+`core/lib/ovallsp/runtime_agent/agent.rb`
+
+0.1.6 stopped the unknown-method check firing on classes whose ancestry
+the workspace cannot see: a chain that does not reach BasicObject is
+treated as open, which covers a gem superclass named by constant and a
+superclass that is an expression (`ActiveRecord::Migration[8.1]`).
+
+One case is left, and it is not a gap in the rule but a limit of static
+analysis. Reopening a class the workspace does not define looks identical
+to defining it:
+
+```ruby
+module ActiveSupport
+  class TestCase          # a reopen: the real class lives in a gem
+    parallelize(workers: :number_of_processors)
+  end
+end
+```
+
+Ruby keeps the original superclass when a class is reopened, but nothing
+in this file says so, so the declaration reads as a plain class with no
+parent — Object, Kernel, BasicObject, complete. `parallelize` and
+`fixtures` are then reported as undefined. Every Rails application's
+`test/test_helper.rb` has exactly this shape, so this is the common case,
+not an exotic one.
+
+Distinguishing the two needs to know where the constant was really
+defined, which only the running application knows.
+
+**Direction:** ask the Runtime Agent, the same way model methods and the
+Active Record API are already answered from runtime truth
+(`Object.const_source_location`): a constant defined outside the
+workspace root means the class's real method set is unknown here, so the
+check stays silent for it. Cache per constant; it cannot change without
+a restart.
+
+Until then the check is silent for gem-derived classes reached by
+superclass, and wrong for gem classes reached by reopening.
+

@@ -35,6 +35,14 @@ module Ovallsp
         raise ArgumentError, "unknown mode: #{mode.inspect}" unless MODES.include?(mode)
 
         summary = ParserService.new.summarize(document)
+        # Everything below asks the type engine about positions in
+        # `summary`'s coordinates, and for an .erb file those are the
+        # *extracted* Ruby regions -- ParserService extracts before
+        # parsing. Passing the raw template on meant every receiver in a
+        # template was resolved against HTML, so a partial's local read as
+        # a String and its own methods were reported missing. Extraction
+        # preserves line and column layout, so no range needs remapping.
+        document = analysis_document(document)
         resolver = build_resolver(semantic_context)
         resolved = resolver.resolve(document, summary.reference_candidates, uri: document.uri,
                                                                              generation: semantic_context.generation)
@@ -53,6 +61,15 @@ module Ovallsp
       end
 
       private
+
+      def analysis_document(document)
+        return document unless document.uri.to_s.end_with?(".erb")
+
+        TextDocument.new(
+          uri: document.uri, text: Erb::RubyRegionExtractor.extract_ruby_source(document.text),
+          version: document.version, language_id: "ruby"
+        )
+      end
 
       def build_resolver(context)
         Semantic::ReferenceResolver.new(
@@ -286,9 +303,35 @@ module Ovallsp
       def closed_nominal?(nominal, singleton, context)
         entries = context.hierarchy_index.ancestors(nominal.name, singleton: singleton)
         return false if entries.empty?
+        # Always asked of the *instance* chain, even for a singleton
+        # lookup: a singleton chain ends at the class itself and never
+        # reaches BasicObject, so asking it directly would call every
+        # `Foo.bar` open and silence the check entirely.
+        return false unless chain_reaches_root?(context.hierarchy_index.ancestors(nominal.name, singleton: false))
 
         entries.all? { |entry| ancestor_known?(entry, context) } &&
           entries.none? { |entry| declares_method_missing?(entry.name, context) }
+      end
+
+      # Every Ruby class inherits from BasicObject, so a chain that does
+      # not reach it did not end -- it stopped. Two ways that happens, and
+      # both produced false "has no method named" against a real Rails
+      # application:
+      #
+      # - the superclass name resolved to the class itself. `class
+      #   Application < Rails::Application` inside `module Ovaldev` finds
+      #   the workspace's own `Ovaldev::Application` by unqualified name,
+      #   the walk detects the cycle and stops, and the class is left
+      #   looking like its own complete ancestry.
+      # - the superclass named something the workspace does not declare,
+      #   so the walk had nowhere to continue.
+      #
+      # Requiring BasicObject makes both of those open rather than closed,
+      # without needing to tell them apart. A class the workspace really
+      # does define completely always reaches it, through the default
+      # Object chain if it declares no parent at all.
+      def chain_reaches_root?(entries)
+        entries.any? { |entry| entry.name == "BasicObject" }
       end
 
       # A builtin ancestor (Object/Kernel/BasicObject, or any RBS-known
@@ -310,6 +353,9 @@ module Ovallsp
       end
 
       def ancestor_known?(entry, context)
+        # A nameless ancestor is `class Foo < <expression>` -- there is
+        # nothing to look up and nothing to know.
+        return false if entry.name.nil?
         return true if entry.kind
 
         context.signatures && !context.signatures.ancestors("::#{entry.name}").empty?

@@ -449,6 +449,75 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # Regression: every one of these produced a false "has no method
+    # named" against a real Rails application. The unknown-method check
+    # only fires on a *closed* receiver, and a Rails class is never
+    # closed in reality -- its real definition lives in a gem. Three
+    # different ways the chain silently looked complete anyway.
+    it "G6: says nothing about a class whose superclass is a gem constant" do
+      with_file("config/gem_parent_probe.rb", <<~RUBY) do |uri|
+        module GemParentProbe
+          class Application < Rails::Application
+            config.load_defaults 8.1
+          end
+        end
+      RUBY
+        expect(@client.diagnostic_messages(uri, timeout: 6).join(" ")).not_to match(/no method named/i)
+      end
+    end
+
+    it "G7: says nothing about a class whose superclass is an expression" do
+      with_file("db/migrate_probe.rb", <<~RUBY) do |uri|
+        class MigrateProbe < ActiveRecord::Migration[8.1]
+          def change
+            create_table :probes
+          end
+        end
+      RUBY
+        expect(@client.diagnostic_messages(uri, timeout: 6).join(" ")).not_to match(/no method named/i)
+      end
+    end
+
+    # Regression: diagnostics ran the *raw* template through type
+    # inference while ParserService extracted the Ruby regions first, so
+    # every receiver in an .erb file was resolved against HTML. A partial
+    # using its local read as a String, and its `article.errors` was
+    # reported as a missing String method.
+    it "G9: does not report methods against HTML in an ERB template" do
+      with_file("app/views/articles/_diag_probe.html.erb",
+                "<div>\n  <% if article.errors.any? %>\n    <p>x</p>\n  <% end %>\n</div>\n") do |uri|
+        expect(@client.diagnostic_messages(uri, timeout: 6).join(" ")).not_to match(/String has no method/i)
+      end
+    end
+
+    # Regression: `<%= yield %>` is legal in a layout -- the compiled
+    # template is a method body -- but the extracted Ruby is top level,
+    # where Prism rejects it. Every Rails layout reported a syntax error.
+    it "G10: does not report `yield` in a layout as a syntax error" do
+      with_file("app/views/layouts/probe.html.erb", "<html>\n  <%= yield %>\n</html>\n") do |uri|
+        expect(@client.diagnostic_messages(uri, timeout: 6).join(" ")).not_to match(/yield/i)
+      end
+    end
+
+    # Regression: the receiver position for an inner call was recorded
+    # one character past the receiver, which lands on `[` in
+    # `params[:id]` -- a position the *enclosing* expression also covers.
+    # With a model registry loaded, `Article.find(params[:id])` therefore
+    # resolved `[]`'s receiver to Article and reported "Article has no
+    # method named `[]`". Invisible without model data, which is why no
+    # unit test saw it.
+    it "G11: attributes an inner call to its own receiver, not the enclosing expression" do
+      with_file("app/models/inner_call_probe.rb", <<~RUBY) do |uri|
+        class InnerCallProbe
+          def run(params)
+            User.find(params[:id])
+          end
+        end
+      RUBY
+        expect(@client.diagnostic_messages(uri, timeout: 6).join(" ")).not_to match(/no method named/i)
+      end
+    end
+
     it "G5: reports a call with the wrong number of arguments" do
       with_file("app/models/arity_probe.rb", <<~RUBY) do |uri|
         class ArityProbe
