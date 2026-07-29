@@ -13,11 +13,12 @@ module Ovallsp
     # every check that doesn't depend on it.
     SemanticContext = Data.define(
       :workspace_index, :hierarchy_index, :method_resolver, :local_inferencer, :model_registry, :route_registry,
-      :signatures, :generation
+      :signatures, :generation, :ancestry_registry
     ) do
-      def initialize(model_registry: nil, route_registry: nil, signatures: nil, generation: nil, **rest)
+      def initialize(model_registry: nil, route_registry: nil, signatures: nil, generation: nil,
+                     ancestry_registry: nil, **rest)
         super(model_registry: model_registry, route_registry: route_registry, signatures: signatures,
-              generation: generation, **rest)
+              generation: generation, ancestry_registry: ancestry_registry, **rest)
       end
     end
   end

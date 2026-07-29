@@ -63,6 +63,8 @@ module Ovallsp
           respond(id, model_result(message[:params]))
         when "agent/models"
           respond(id, models_result)
+        when "agent/ancestors"
+          respond(id, ancestors_result(message[:params]))
         when "agent/reload"
           respond(id, reload_result(message[:params]))
         when "agent/shutdown"
@@ -264,6 +266,106 @@ module Ovallsp
         rescue StandardError
           false
         end
+      end
+
+      # Answers, for each requested name, the ancestors the application
+      # really gives that class -- and `Object.ancestors` alongside them,
+      # because that is the baseline Core subtracts. Core's unknown-method
+      # check believes a class's ancestry is complete when the workspace
+      # declares every link in it; a class the workspace merely *reopens*
+      # looks exactly the same, and only this process can tell the
+      # difference (docs/design/tasks/024-deferred-review-findings.md, 024.R5).
+      #
+      # `null` for a name is a real answer -- "the application does not
+      # have this" -- and Core relies on it to leave the static reading
+      # alone rather than waiting for something that will never come.
+      def ancestors_result(params)
+        names = Array(params && (params[:names] || params["names"])).map(&:to_s)
+
+        {
+          objectAncestors: ::Object.ancestors.filter_map { |mod| module_name(mod) },
+          classes: names.to_h { |name| [name, class_answer(name)] }
+        }
+      end
+
+      # One of three answers, and the difference between them is the whole
+      # point:
+      #
+      # - `{ancestors: [...]}` -- the class is loaded, so its real ancestry
+      #   can be compared against Object's;
+      # - `{definedOutsideWorkspace: true}` -- not loaded, but registered
+      #   for autoload from a file that is not the workspace's, which
+      #   settles the question without loading anything;
+      # - `null` -- the application does not know this name, or knows it
+      #   only from a workspace file it has not loaded yet. Both leave
+      #   Core's static reading standing, which is the right answer for a
+      #   class the workspace really does own.
+      def class_answer(name)
+        owner, segment = resolve_owner(name)
+        return nil unless owner
+        return nil unless safely { owner.const_defined?(segment, false) }
+
+        # `false`, matching #const_defined? above: `autoload?` inherits by
+        # default, so a class that really does define the constant itself
+        # would otherwise be handed its *superclass's* autoload path and
+        # judged to live outside the workspace on that evidence.
+        registered = safely { owner.autoload?(segment, false) }
+        return autoload_answer(registered) if registered
+
+        value = safely { owner.const_get(segment, false) }
+        return nil unless value.is_a?(::Module)
+
+        { ancestors: safely { value.ancestors.filter_map { |ancestor| module_name(ancestor) } } }
+      end
+
+      # Zeitwerk registers the application's own classes by absolute path
+      # (".../app/models/article.rb"), while a gem's `autoload` registers
+      # the bare require path it was written with ("active_support/test_case").
+      # So a registration that is not a real file under this workspace is
+      # someone else's class -- which is exactly the provenance question,
+      # answered without loading anything.
+      def autoload_answer(path)
+        return nil if workspace_path?(path)
+
+        { definedOutsideWorkspace: true }
+      end
+
+      # A root that is not itself absolute cannot decide whose file a path
+      # is, and treating it as a prefix would be worse than useless: an
+      # empty root would make `"/anything"` look like the workspace's own
+      # and silence the check everywhere.
+      def workspace_path?(path)
+        root = rails_root.to_s
+        return false unless root.start_with?("/")
+
+        path.to_s.start_with?(root.chomp("/") + "/")
+      end
+
+      # Walks every namespace segment but the last, and returns nil rather
+      # than resolving through anything that would have to be loaded first.
+      # `const_get` on an autoload-registered constant *runs the autoload*:
+      # in a real application that raised Gem::LoadError from a gem outside
+      # the bundle, and an Agent that loads arbitrary application code to
+      # answer a diagnostic question is not one worth having (024.R5).
+      def resolve_owner(name)
+        segments = name.split("::")
+        last = segments.pop
+        owner = segments.reduce(::Object) do |current, segment|
+          return nil unless current.is_a?(::Module)
+          return nil unless safely { current.const_defined?(segment, false) }
+          return nil if safely { current.autoload?(segment, false) }
+
+          safely { current.const_get(segment, false) }
+        end
+        owner.is_a?(::Module) ? [owner, last] : nil
+      rescue StandardError
+        nil
+      end
+
+      # An anonymous class or one still being defined has no name to send.
+      def module_name(mod)
+        name = safely { mod.name }
+        name && !name.empty? ? name : nil
       end
 
       def callable_names(names)

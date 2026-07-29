@@ -582,6 +582,33 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # The shape `rails new` generates, and the last false positive 0.1.6
+    # shipped with: `ActiveSupport::TestCase` lives in a gem, so reopening
+    # it here is indistinguishable from defining it and the static chain
+    # reads as complete. It is also never loaded in the environment the
+    # Agent boots, so its ancestors cannot be compared -- only its autoload
+    # registration settles it (024.R5).
+    it "G13: reports nothing for a gem class the workspace reopens" do
+      uri = @client.open(File.join(self.class.workspace, "test/test_helper.rb"))
+
+      messages = @client.diagnostic_messages(uri, timeout: 10)
+      # The control first: this file *is* being diagnosed, so the absence
+      # below is the check staying silent rather than nothing running.
+      expect(messages.join(" ")).to match(/definitely_not_a_method_on_this_class/)
+      expect(messages.join(" ")).not_to match(/parallelize|fixtures/)
+    end
+
+    # The reopen makes `ActiveSupport::TestCase` a workspace-declared name,
+    # so every test file inheriting from it has a static chain that reaches
+    # BasicObject through it. Asking about the receiver alone left all of
+    # them reporting the gem's whole API as unknown -- the same false
+    # positive, one level down (024.R5).
+    it "G14: reports nothing in a test that inherits from a reopened gem class" do
+      uri = @client.open(File.join(self.class.workspace, "test/models/probe_subclass_test.rb"))
+
+      expect(@client.diagnostic_messages(uri, timeout: 10).join(" ")).not_to match(/has no method named/i)
+    end
+
     it "G5: reports a call with the wrong number of arguments" do
       with_file("app/models/arity_probe.rb", <<~RUBY) do |uri|
         class ArityProbe

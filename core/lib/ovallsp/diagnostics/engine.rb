@@ -308,9 +308,94 @@ module Ovallsp
         # reaches BasicObject, so asking it directly would call every
         # `Foo.bar` open and silence the check entirely.
         return false unless chain_reaches_root?(context.hierarchy_index.ancestors(nominal.name, singleton: false))
+        return false unless entries.all? { |entry| ancestor_known?(entry, context) }
+        return false if entries.any? { |entry| declares_method_missing?(entry.name, context) }
 
-        entries.all? { |entry| ancestor_known?(entry, context) } &&
-          entries.none? { |entry| declares_method_missing?(entry.name, context) }
+        # Asked of every link in the chain, not just the receiver. Once
+        # `test/test_helper.rb` has reopened `ActiveSupport::TestCase`,
+        # that name is workspace-declared, so every test file inheriting
+        # from it has a chain that reaches BasicObject *through* it --
+        # and the subclass itself is a genuine workspace class the Agent
+        # rightly cannot place. Asking only about the receiver left every
+        # `class FooTest < ActiveSupport::TestCase` reporting the whole
+        # gem's API as unknown, which is the same false positive this
+        # check came out of, one level down.
+        #
+        # Asked last, and only of a receiver every cheaper test has already
+        # called closed: this is the one test that costs a round trip to
+        # another process, and asking it first meant every Active Record
+        # model and every module -- receivers the static tests were about
+        # to rule out anyway -- queued a question whose answer could not
+        # change the outcome.
+        # Skipping `origin: :default` -- the Object/Kernel/BasicObject tail
+        # HierarchyIndex appends to every class. Those are not links the
+        # workspace wrote, so they cannot be ones it reopened, and asking
+        # would spend a round trip to be told what RBS already says.
+        entries.none? do |entry|
+          entry.origin != :default && reopened_elsewhere?(entry.name, context)
+        end
+      end
+
+      # Reopening a class that lives in a gem is syntactically identical
+      # to defining it, so #chain_reaches_root? succeeds and the class
+      # looks complete when it is not -- `module ActiveSupport; class
+      # TestCase` in every Rails application's test/test_helper.rb indexes
+      # as [itself, Object, Kernel, BasicObject] (024.R5). Static analysis
+      # cannot tell the two apart; only the running application can.
+      #
+      # So it is asked, for the ancestors it really has. An ancestor
+      # beyond the running Object's own, that the workspace does not
+      # declare and RBS does not know, is code this class carries from
+      # somewhere the static chain never walked -- which is exactly the
+      # claim #closed_nominal? is making, disproved.
+      #
+      # Before the answer arrives the check stays silent for that
+      # receiver, because reporting would be the guess already known to be
+      # wrong for this shape. That deferral applies only while an Agent is
+      # actually connected: with no Agent the answer can never come, so an
+      # inactive registry leaves the static reading alone rather than
+      # disabling the check for the whole session.
+      def reopened_elsewhere?(raw_name, context)
+        registry = context.ancestry_registry
+        return false unless registry&.active?
+        return false if raw_name.nil?
+
+        # HierarchyIndex names workspace ancestors from the root ("::Foo")
+        # while the registry and the Agent speak in plain names -- the
+        # Agent would split a leading "::" into an empty first namespace
+        # segment and answer "no such constant", which is a permanent
+        # answer. Normalised here, at the one boundary between them.
+        name = raw_name.delete_prefix("::")
+        entry = registry.entry(name)
+        if entry.nil?
+          registry.request(name)
+          return true
+        end
+
+        case entry.status
+        when :external then true
+        when :loaded then entry.foreign_ancestors.any? { |ancestor| !locally_accounted_for?(ancestor, context) }
+        else false
+        end
+      end
+
+      # The Agent reports ancestors as the application names them
+      # ("Shared"), while the index stores them fully qualified from root
+      # ("::Shared") -- #resolve_type_name is the existing resolver for
+      # exactly that mismatch, and is used here rather than an exact-name
+      # lookup so a workspace concern is recognised as the workspace's own.
+      # The resolved name has to *be* the ancestor, not merely share its
+      # last segment. `#resolve_type_name` matches by unqualified simple
+      # name, which is right for resolving what a user typed and wrong for
+      # this: here the question is "is this exact ancestor the workspace's
+      # own code", and a workspace `Assertions` answering for a gem's
+      # `ActiveSupport::Testing::Assertions` is how one same-named constant
+      # anywhere in the project silently defeated the evidence.
+      def locally_accounted_for?(name, context)
+        resolved = context.workspace_index.resolve_type_name(name)
+        return true if resolved && resolved.delete_prefix("::") == name.delete_prefix("::")
+
+        context.signatures && !context.signatures.ancestors("::#{name}").empty?
       end
 
       # Every Ruby class inherits from BasicObject, so a chain that does

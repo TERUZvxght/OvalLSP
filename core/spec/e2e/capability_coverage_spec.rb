@@ -19,15 +19,20 @@ RSpec.describe "capability document coverage" do
 
   # Table rows look like `| C5 | ... |`; example names carry the id they
   # verify, either alone ("C5: ...") or paired ("B1/B2: ...").
+  #
+  # `\d+`, not `\d`: with a single digit every id from G10 up matched as
+  # "G1", so both directions of the check silently passed for them --
+  # G10, G11 and G12 were documented and verified without this guard ever
+  # comparing them, which is the exact failure it exists to prevent.
   # Read with an explicit encoding, never the locale's: both files carry
   # non-ASCII (the Japanese link, `…`), and under a C/POSIX locale
   # `File.read` hands back US-ASCII and every scan raises. The same
   # locale-dependent read has already broken this project once.
   def read_utf8(path) = File.read(path, encoding: "UTF-8")
 
-  let(:documented) { read_utf8(CAPABILITY_DOC).scan(/^\| ([BHCDGSW]\d) \|/).flatten }
+  let(:documented) { read_utf8(CAPABILITY_DOC).scan(/^\| ([BHCDGSW]\d+) \|/).flatten }
   let(:verified) do
-    read_utf8(CAPABILITY_SPEC).scan(/it "([BHCDGSW]\d)(?:\/([BHCDGSW]\d))?:/).flatten.compact
+    read_utf8(CAPABILITY_SPEC).scan(/it "([BHCDGSW]\d+)(?:\/([BHCDGSW]\d+))?:/).flatten.compact
   end
 
   it "verifies every capability the document lists" do
@@ -41,7 +46,7 @@ RSpec.describe "capability document coverage" do
   end
 
   it "lists no capability whose status is neither PASS nor an explicit gap" do
-    statuses = read_utf8(CAPABILITY_DOC).scan(/^\| [BHCDGSW]\d \|[^|]*\|[^|]*\| ([^|]+) \|/).flatten.map(&:strip)
+    statuses = read_utf8(CAPABILITY_DOC).scan(/^\| [BHCDGSW]\d+ \|[^|]*\|[^|]*\| ([^|]+) \|/).flatten.map(&:strip)
 
     expect(statuses.uniq).to all(match(/\A(PASS|NOT YET)\z/))
   end
@@ -51,7 +56,7 @@ RSpec.describe "capability document coverage" do
   # the other is how a translated document quietly starts describing a
   # different product.
   it "lists the same capabilities in the Japanese pair" do
-    japanese = read_utf8(CAPABILITY_DOC_JA).scan(/^\| ([BHCDGSW]\d) \|/).flatten
+    japanese = read_utf8(CAPABILITY_DOC_JA).scan(/^\| ([BHCDGSW]\d+) \|/).flatten
 
     expect(japanese).to eq(documented)
   end

@@ -259,7 +259,7 @@ what 1.0.0 requires"): a plain Ruby project must be guaranteed, not only
 a Rails one. Until then README's capability matrix carries ⚠️ for that
 column and this entry is why.
 
-## 024.R2 Argument *type* checking (roadmap, 0.2.x)
+## 024.R2 Argument *type* checking (roadmap, 0.2.0)
 
 **Status:** open — roadmap
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -303,17 +303,17 @@ Everything else below is absent.
 
 | Pylance capability | OvalLSP today | Planned for | Notes |
 |---|---|---|---|
-| Diagnostics across the whole project | Open files only | **0.2.x** | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
-| Docstrings in hover and completion | Type, origin and definition location only | **0.2.x** | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
-| Semantic highlighting (semantic tokens) | None | **0.2.x** | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. Covers ERB templates' Ruby regions too, which the shared extraction path now makes free. Distinct from shipping a TextMate grammar, which is a non-goal: VS Code already associates `.erb`, and another grammar would only collide. |
-| Inlay hints (inferred types, parameter names) | None | **0.3.x** | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |
-| Code actions / quick fixes | None | **0.3.x** | Each existing diagnostic implies one: define the missing method, correct the route helper name, fix the argument count. A diagnostic that only complains is half a feature. |
-| Go to type definition | Go to definition only | **0.3.x** | Cheap given `explainType` already resolves the type: jump from an expression to the class it evaluates to, rather than to the method being called. |
-| Document highlight (occurrences in file) | None | **0.3.x** | Small and self-contained: the reference index already answers this workspace-wide, so scoping it to one file is nearly free. |
-| Call hierarchy | Find references only | **0.3.x** | An incremental step on the same index. Callers/callees of a method, navigable, rather than a flat list. |
-| Auto-import / add `require` | None | **0.4.x** | Much weaker payoff than in Python: Rails autoloads, and plain Ruby projects mostly `require` at the entry point. Worth revisiting only after the plain-Ruby story (024.R1) exists. |
-| Type checking strictness levels | One fixed set of checks | **0.4.x** (as per-check severity) | Pylance's basic/strict switch matters because its checks are numerous and opinionated. With four checks, a per-check severity setting would cover the same need more simply. |
-| Signature help with active parameter tracking | Signature label only | **0.4.x** | Already useful; highlighting which argument the cursor is in is a refinement, not a gap. |
+| Diagnostics across the whole project | Open files only | **0.2.0** | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
+| Docstrings in hover and completion | Type, origin and definition location only | **0.2.0** | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
+| Semantic highlighting (semantic tokens) | None | **0.2.0** | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. Covers ERB templates' Ruby regions too, which the shared extraction path now makes free. Distinct from shipping a TextMate grammar, which is a non-goal: VS Code already associates `.erb`, and another grammar would only collide. |
+| Inlay hints (inferred types, parameter names) | None | **0.3.0** | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |
+| Code actions / quick fixes | None | **0.3.0** | Each existing diagnostic implies one: define the missing method, correct the route helper name, fix the argument count. A diagnostic that only complains is half a feature. |
+| Go to type definition | Go to definition only | **0.3.0** | Cheap given `explainType` already resolves the type: jump from an expression to the class it evaluates to, rather than to the method being called. |
+| Document highlight (occurrences in file) | None | **0.3.0** | Small and self-contained: the reference index already answers this workspace-wide, so scoping it to one file is nearly free. |
+| Call hierarchy | Find references only | **0.3.0** | An incremental step on the same index. Callers/callees of a method, navigable, rather than a flat list. |
+| Auto-import / add `require` | None | **0.4.0** | Much weaker payoff than in Python: Rails autoloads, and plain Ruby projects mostly `require` at the entry point. Worth revisiting only after the plain-Ruby story (024.R1) exists. |
+| Type checking strictness levels | One fixed set of checks | **0.4.0** (as per-check severity) | Pylance's basic/strict switch matters because its checks are numerous and opinionated. With four checks, a per-check severity setting would cover the same need more simply. |
+| Signature help with active parameter tracking | Signature label only | **0.4.0** | Already useful; highlighting which argument the cursor is in is a refinement, not a gap. |
 | Generating type stubs from source | RBS/RBI are read, never written | not planned | Interesting for library authors, irrelevant to the Rails application developer this Preview targets. |
 
 Not planned, and listed only so their absence is a decision rather than
@@ -369,9 +369,10 @@ and what 1.0.0 requires").
 
 ---
 
-## 024.R5 A reopened gem class still looks closed (roadmap, 0.1.7)
+## 024.R5 A reopened gem class still looks closed (done, 0.1.7)
 
-**Status:** open — roadmap
+**Status:** done — shipped in 0.1.7. Measured against the same real
+application that reported it: 2 diagnostics before, 0 after.
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
 `core/lib/ovallsp/runtime_agent/agent.rb`
 
@@ -402,15 +403,92 @@ not an exotic one.
 Distinguishing the two needs to know where the constant was really
 defined, which only the running application knows.
 
-**Direction:** ask the Runtime Agent, the same way model methods and the
-Active Record API are already answered from runtime truth
-(`Object.const_source_location`): a constant defined outside the
-workspace root means the class's real method set is unknown here, so the
-check stays silent for it. Cache per constant; it cannot change without
-a restart.
+**Direction (superseded — kept because the disproof is the useful part):**
+ask the Runtime Agent for `Object.const_source_location`, and treat a
+constant defined outside the workspace root as one whose real method set
+is unknown here.
 
-The same request answers a second, currently latent instance of the same
-mistake. `unresolved-constant` reports any constant that is neither in
+**`const_source_location` cannot answer this.** Measured against the same
+application, in the environment the Agent actually boots:
+
+| Constant | `const_source_location` |
+|---|---|
+| `ActiveSupport::TestCase` | `activesupport-8.1.3/lib/active_support/dependencies/autoload.rb:41` |
+| `ActiveRecord::Base` | the same `autoload.rb:41` |
+| `ApplicationController` | `zeitwerk-2.8.2/lib/zeitwerk/cref.rb:47` |
+| `ApplicationRecord` | the same `cref.rb:47` |
+| `Ovaldev::Application` | `config/application.rb:10` |
+| `String` | `[]` |
+
+It reports where the constant was *registered*, not where the class was
+written. Every `ActiveSupport::Autoload` constant points at one line of
+`autoload.rb`, and every Zeitwerk-managed constant — which is every class
+in `app/` — points at one line of `cref.rb`. So the rule "defined outside
+the workspace root means not ours" would classify `ApplicationController`
+and `ApplicationRecord`, the application's own classes, as foreign. That
+is the same bug pointed the other way, and worse: it would silence the
+check across all of `app/` instead of misfiring twice in one file.
+
+Two further approaches were measured and rejected:
+
+- **Walk every constant and record its origin** (the cheap precursor to
+  024.R7). `Module#const_get` on an autoload-registered constant *runs
+  the autoload*: the walk raised `Gem::LoadError: listen is not part of
+  the bundle` in `active_support/evented_file_update_checker` before
+  finishing. Enumerating constants is not a read-only operation, and an
+  Agent that loads arbitrary code to answer a diagnostic question is not
+  one worth having.
+- **Report the runtime's method set for the class**, the way model
+  methods already are. It fixes `parallelize` and not `fixtures`: the
+  Agent boots `config/environment.rb`, not `rails/test_help`, so
+  `ActiveSupport::TestCase.respond_to?(:fixtures)` is genuinely `false`
+  in the process being asked. Runtime truth is the wrong instrument when
+  the truth differs per environment, and the file in question is the one
+  file that only ever loads in a different one.
+
+**Direction (measured, and what 0.1.7 implements):** ask the Agent for
+the class's **ancestors**, and compare them against `Object.ancestors`
+taken in the same process. The static claim being tested is precisely
+"this class's ancestry is complete", so test it against the ancestry:
+
+```
+PlainWorkspaceThing      8 ancestors,  0 beyond Object's
+ActiveSupport::TestCase 28 ancestors, 20 beyond Object's
+```
+
+Using the running process's own `Object.ancestors` as the baseline is
+what makes this robust: an application that mixes into `Object` (this one
+mixes in four modules, from Active Support and JSON) calibrates the
+baseline itself, so no list of "expected" ancestors has to be maintained
+or guessed. A class carrying ancestors beyond it that the workspace does
+not declare and RBS does not know is one the workspace did not write
+alone — so the chain the static index believes is complete is not, and
+the check stays silent for that receiver.
+
+The question is asked of **every workspace-declared link in the chain**,
+not just the receiver. Reopening `ActiveSupport::TestCase` makes that name
+workspace-declared, so every `class FooTest < ActiveSupport::TestCase`
+then has a static chain that reaches BasicObject *through* it — while the
+subclass itself is a genuine workspace class the Agent rightly cannot
+place. Asking only about the receiver left every test file in the project
+reporting the gem's whole API as unknown: the same false positive, one
+level down. The implicit `Object`/`Kernel`/`BasicObject` tail is skipped,
+since those are not links the workspace wrote.
+
+Cache per class; ancestors cannot change without a restart. Ask lazily,
+for the names the check is actually about to report on, rather than
+enumerating anything — that is a handful of names per session, and it
+avoids both the load-everything hazard above and any dependency on the
+index being built before the Agent answers.
+
+Modules need no special case: a module's static chain never reaches
+BasicObject, so `chain_reaches_root?` already treats every module as
+open. Confirmed against the same fixture — `module ActiveSupport` indexes
+as the single ancestor `::ActiveSupport`, and nothing is reported for it.
+
+A second, currently latent instance of the same mistake is answerable
+from the Agent too, though not by the same request.
+`unresolved-constant` reports any constant that is neither in
 the workspace nor in RBS, which in a Rails application means every gem
 constant: measured against `config/application.rb`, it reports `Rails`
 and `Bundler` as unresolvable. It does not reach users today because the
@@ -420,12 +498,71 @@ is unusable as written, and enabling it without this would repeat the
 false-positive flood the unknown-method check just came out of.
 `Object.const_defined?` from the Agent settles it exactly.
 
-Until then the check is silent for gem-derived classes reached by
-superclass, and wrong for gem classes reached by reopening.
+**What shipped**, and the one part the measurement above did not predict:
+the ancestor comparison alone does not fix the reported case.
+`ActiveSupport::TestCase` is not loaded in the environment the Agent
+boots — `config/environment.rb`, not `rails/test_help` — so there are no
+ancestors to compare, and the first working version of this still
+reported both calls. The autoload registration is what settles it:
+Zeitwerk registers the application's own classes by absolute path under
+the workspace root, while a gem's `autoload` registers the bare require
+path it was written with (`"active_support/test_case"`). So the Agent
+answers one of three things per name — the real ancestors, "registered
+from outside this workspace", or nothing — and the third leaves the
+static reading standing, which is the right answer for a class the
+workspace genuinely owns but has not loaded.
+
+**What it still misses**, found by independent review rather than by the
+change set's own tests, and worth stating precisely because the ancestor
+comparison is the part this entry leads with: a reopened gem class whose
+ancestry carries nothing foreign is invisible to it. `class String; def
+to_bool; end; end` in an initializer gives `[String, Comparable, Object,
+Kernel, BasicObject]` — `Comparable` is RBS-known, so no ancestor
+disqualifies it, and a call to an Active Support core extension defined
+directly on `String` is still reported. The same holds for any gem class
+reopened without mixins (`class Faraday::Connection`). The reported
+`ActiveSupport::TestCase` case is fixed by the autoload branch, not by
+the ancestor comparison — the comparison covers the loaded-and-mixed
+case, which is a different one.
+
+Four further cases the Agent cannot settle, all reported by independent
+review and all leaving the check firing where it should be silent:
+
+- **The Agent's process is not the test environment.** It boots
+  `config/environment.rb` with no `RAILS_ENV` set, so `development`. A gem
+  in `group :test`, or one with `require: false`, is neither loaded nor
+  autoload-registered there, so its classes answer `:absent` and the
+  static reading stands.
+- **A top-level name the workspace and a gem both use.** `resolve_owner`
+  starts every walk at `::Object` with no notion of the workspace, so a
+  workspace PORO called `Configuration` or `Response` resolves in the
+  Agent to whichever gem owns that constant, and *that* class's foreign
+  ancestors silence the check for the workspace's own.
+- **Engines and monorepos.** `workspace_path?` compares against
+  `Rails.root`, so a class autoloaded from `/repo/engines/billing` while
+  `Rails.root` is `/repo/backend` reads as defined outside the workspace.
+- **Singleton-only provenance.** The Agent reports `Module#ancestors`,
+  the instance chain, so a class whose gem origin shows only in its
+  singleton class is invisible to the ancestor comparison. Mostly moot in
+  practice: a statically visible `extend` already puts the module in the
+  singleton chain, where `ancestor_known?` opens the receiver anyway.
+
+A crash-looped Agent is not on this list, and deliberately: once
+`AgentSupervisor` gives up, `AncestryRegistry#deactivate!` puts the check
+back on the static reading, exactly as if no Agent had ever existed.
+Without that the check would defer forever to an answer that cannot come,
+which is not degrading gracefully — it is going silent.
+
+Closing all of these needs to know where each *method* came from, not
+where the class did, which is 024.R7's territory.
+
+The check remains silent for gem-derived classes reached by superclass
+(024.R7 is what lifts that), and behaves exactly as it did in 0.1.6
+wherever there is no Runtime Agent to ask.
 
 ---
 
-## 024.R6 Reading an instance variable that is never assigned (roadmap, 0.2.x)
+## 024.R6 Reading an instance variable that is never assigned (roadmap, 0.2.0)
 
 **Status:** open — roadmap
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -447,7 +584,7 @@ silent where assignments could come from somewhere unmodelled --
 `instance_variable_set`, a concern the workspace cannot see -- on the
 same standard as every other check here.
 
-## 024.R7 Index what the gems actually define, and keep it fresh (roadmap, 0.3.x)
+## 024.R7 Index what the gems actually define, and keep it fresh (roadmap, 0.3.0)
 
 **Status:** open — roadmap
 **Area:** `core/lib/ovallsp/runtime_agent/agent.rb`,

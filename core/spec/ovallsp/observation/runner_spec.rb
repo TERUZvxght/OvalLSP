@@ -281,23 +281,29 @@ RSpec.describe Ovallsp::Observation::Runner do
   # *second* `Tempfile.new` raises (a full or unwritable TMPDIR,
   # Errno::EMFILE), the first file's fd was stranded until GC happened to
   # finalize it. Same fix as everywhere else: close on every path.
+  # Asserts on the tempfiles themselves rather than on a count of
+  # /dev/fd: that count is process-wide, so unrelated descriptors opened
+  # or finalized by anything else in the process land in the difference,
+  # and a full-suite run observed it going *negative*. Every file this
+  # method opened being closed is the actual claim, and it distinguishes
+  # the same regression without depending on what the rest of the process
+  # is doing.
   it "closes the result tempfile it already opened when creating the log tempfile fails" do
-    open_fd_count = -> { Dir.children("/dev/fd").size }
-
     real_new = Tempfile.method(:new)
+    opened = []
     calls = 0
     allow(Tempfile).to receive(:new) do |*args|
       calls += 1
       raise Errno::ENOSPC if calls.even?
 
-      real_new.call(*args)
+      real_new.call(*args).tap { |file| opened << file }
     end
 
-    before = open_fd_count.call
     10.times { runner.run(command: "ruby", args: ["-e", "1"], workspace_root: fixtures_root) }
-    leaked = open_fd_count.call - before
 
-    expect(leaked).to eq(0), "#run stranded #{leaked} tempfile descriptor(s) across 10 failed starts"
+    expect(opened).not_to be_empty
+    stranded = opened.reject(&:closed?)
+    expect(stranded).to be_empty, "#run stranded #{stranded.size} open tempfile(s) across 10 failed starts"
   end
 
   # Task 022.2 (found by an independent review, round 5): the command

@@ -33,7 +33,7 @@ plain Ruby project is explicitly *not* covered by these rows yet: much of
 the engine works there, but nothing here has been specified or verified
 for it, and half-supporting it would make both stories worse. Giving the
 Rails conventions an explicit boundary and specifying the plain-Ruby
-experience is roadmap item 024.R1, for 0.2.x.
+experience is roadmap item 024.R1, for 0.2.0.
 
 Untrusted workspaces stay as described at the end of this document: the
 Runtime Agent does not start, and every Rails-derived capability degrades
@@ -132,6 +132,8 @@ which is what it is for.
 | G10 | Writes `<%= yield %>` in a layout | nothing — legal in a template, even though the extracted Ruby is top level | PASS |
 | G11 | Calls a method on an argument (`User.find(params[:id])`) | nothing — the inner call belongs to its own receiver | PASS |
 | G12 | Has a file open from before the Runtime Agent reported routes | the route diagnostic clears once routes arrive, without touching the file | PASS |
+| G13 | Reopens a class that lives in a gem (`test/test_helper.rb`'s `ActiveSupport::TestCase`) | nothing — the workspace does not own that class, whatever the static chain says | PASS |
+| G14 | Writes a test that inherits from a reopened gem class (`class FooTest < ActiveSupport::TestCase`) | nothing — the reopen is in the chain, not just at the receiver | PASS |
 
 G4 used to follow from the same missing-ancestor problem as C4 and is now
 closed: the Runtime Agent reports what each model actually responds to,
@@ -178,7 +180,7 @@ table — it belongs in the non-goals below.
   associates `.erb`, and other Ruby extensions ship grammars of their
   own. Registering another would collide with them for no gain.
   *Semantic* highlighting is a different thing and is planned (README's
-  matrix, 0.2.x): it layers meaning this engine actually has — whether
+  matrix, 0.2.0): it layers meaning this engine actually has — whether
   `foo` is a local variable or a call on self — over whatever grammar is
   in use, in `.rb` files and in an ERB template's Ruby regions alike.
 - Anything about a Ruby file outside a workspace folder.

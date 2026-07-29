@@ -54,6 +54,7 @@ module Ovallsp
 
     def initialize(input:, output:, logger:, route_registry: Routes::RouteRegistry.new,
                    model_registry: Models::ModelRegistry.new, workspace_root: Dir.pwd,
+                   ancestry_registry: Runtime::AncestryRegistry.new,
                    agent_bootstrap: RailsBootstrap, background_task_shutdown_timeout: BackgroundTasks::DEFAULT_SHUTDOWN_TIMEOUT)
       @reader = Ovallsp::IO::FramedReader.new(input)
       @writer = Ovallsp::IO::FramedWriter.new(output)
@@ -84,6 +85,7 @@ module Ovallsp
       )
       @route_registry = route_registry
       @model_registry = model_registry
+      @ancestry_registry = ancestry_registry
       @agent_bootstrap = agent_bootstrap
       @agent_manager = nil
       @agent_restart_mutex = Mutex.new
@@ -105,6 +107,7 @@ module Ovallsp
       @refresh_generations = Hash.new(0)
       @pending_model_names = []
       @model_refresh_waiter = nil
+      @ancestry_question_worker = nil
       @file_summaries = {}
       @index_mutation_mutex = Mutex.new
       @shutdown_received = false
@@ -374,6 +377,11 @@ module Ovallsp
     # there's no LSP client-side buffer to attach the notification to
     # meaningfully.
     def publish_diagnostics(document)
+      # Whether there is a running application to ask has to be known
+      # *before* the check runs, not after: a receiver it cannot judge
+      # statically is one it must defer on rather than guess about, and
+      # deferring is only right when an answer can actually arrive.
+      @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
       findings = with_index_snapshot do
         context = diagnostics_semantic_context
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
@@ -384,6 +392,199 @@ module Ovallsp
       )
     rescue StandardError => e
       @logger.error("failed to compute diagnostics for #{document.uri}: #{e.class}: #{e.message}")
+    ensure
+      # Outside the rescue above, which is about computing *this*
+      # document's diagnostics: a failure to dispatch the Agent question
+      # reported as "failed to compute diagnostics for <uri>" would send
+      # anyone reading the log to entirely the wrong place.
+      begin
+        answer_pending_ancestry_questions
+      rescue StandardError => e
+        @logger.error("failed to ask the Runtime Agent about pending ancestries: #{e.class}: #{e.message}")
+      end
+    end
+
+    # The unknown-method check cannot judge a receiver whose ancestry only
+    # the running application knows, so it records the question instead of
+    # guessing and the answer is fetched here, off the transport thread
+    # (024.R5). Everything open is answered again once it lands, for the
+    # same reason routes and models are: the document was diagnosed
+    # against an answer that has since arrived, and editing the file
+    # should not be what corrects it.
+    def answer_pending_ancestry_questions
+      return unless @ancestry_registry.pending?
+      # Giving up means giving up asking, not just giving up waiting. The
+      # failure path re-queues its names, so the queue stays non-empty
+      # forever after a give-up -- without this every later publish spawns
+      # another worker to block for the full timeout against an Agent
+      # already known not to answer, warning each time and holding the
+      # Agent's single request lock away from routes and models.
+      return unless @ancestry_registry.active?
+
+      manager = @agent_manager
+      return unless agent_manager_ready?(manager)
+
+      # Diagnostics are republished for every open document, and each one
+      # comes back through here -- without a single-flight guard a batch
+      # of questions would spawn one thread per open buffer, all racing
+      # for the same drain and all but one finding it empty.
+      return unless claim_ancestry_question_slot
+
+      begin
+        worker = Thread.new { run_ancestry_questions(manager) }
+      rescue StandardError
+        # The slot is held by :claiming, which no worker will ever release
+        # because no worker exists -- without this every deferred receiver
+        # would stay silent for the rest of the session.
+        discard_ancestry_question_claim
+        raise
+      end
+      adopt_ancestry_question_worker(worker)
+      @background_tasks.track_thread(worker)
+    end
+
+    # Drains until the queue is empty rather than once, because this is the
+    # only thing that ever asks. Every other caller bows out on the
+    # single-flight guard -- including the ones this method's own
+    # #republish_open_diagnostics triggers -- so a question raised while a
+    # fetch was in flight had nobody left to carry it, and the check stayed
+    # silent for that receiver until the user edited the buffer.
+    #
+    # Found by independent review, and not theoretical: opening two
+    # documents back to back (what VS Code does at startup, restoring every
+    # editor at once) left the second one's unknown-method check disabled
+    # for the session, and made the shipped G2 capability example fail
+    # whenever the suite's random order did not happen to leave a gap
+    # between the two.
+    #
+    # Terminates because #install writes an entry for every name it was
+    # asked about and #request skips answered names, so each pass answers
+    # at least one name that will never be asked again, out of the finite
+    # set of receivers in the open documents.
+    def run_ancestry_questions(manager)
+      epoch = @ancestry_registry.epoch
+      drained_everything = false
+      loop do
+        names = @ancestry_registry.drain_pending
+        if names.empty?
+          drained_everything = true
+          break
+        end
+
+        result = manager.fetch_ancestors(names)
+        # Put them back rather than dropping them: they have already left
+        # the queue, so without this one timeout silences those receivers
+        # for the rest of the session. Recording them as absent instead
+        # would be a wrong answer that never expires, which is worse.
+        # Logged for the same reason a failed routes or models fetch is --
+        # a degraded Agent must not look like a working one.
+        #
+        # `drained_everything` stays false, which is what stops the retry
+        # from becoming perpetual: see the ensure below.
+        unless result
+          @logger.warn("failed to fetch ancestors from Runtime Agent for #{names.join(', ')}; will ask again")
+          names.each { |name| @ancestry_registry.request(name) }
+          give_up_on_ancestry_questions if @ancestry_registry.note_failure(epoch: epoch)
+          break
+        end
+
+        # Discarded rather than installed if the Agent was restarted while
+        # this was in flight: the answers describe a process that no longer
+        # exists, and installing them would both mark the registry active
+        # and keep them for the session, since answered names are never
+        # re-asked. The epoch is tested inside the registry's own lock,
+        # because testing it out here leaves a window for #reset to land
+        # between the test and the write.
+        @ancestry_registry.install(
+          object_ancestors: result[:objectAncestors] || [],
+          classes: names.to_h { |name| [name, (result[:classes] || {})[name.to_sym]] },
+          epoch: epoch
+        )
+        republish_open_diagnostics
+      end
+    rescue StandardError => e
+      # Every other Agent-touching background path in this file reports its
+      # own failures, and this one has more reason to: the names it drained
+      # are already out of the queue, so dying quietly silences those
+      # receivers for the session with nothing said about why.
+      @logger.error("failed to ask the Runtime Agent for ancestors: #{e.class}: #{e.message}")
+    ensure
+      release_ancestry_question_slot
+      # Only after a pass that ended by emptying the queue. A question
+      # raised between that last drain and the release above found the slot
+      # still taken and bowed out, so nobody was left to carry it -- this
+      # picks it up rather than waiting for whatever the user does next.
+      #
+      # Deliberately NOT after a failed fetch, which re-queues its names:
+      # that pairing is a perpetual motion machine. It became one when the
+      # ancestry fetch stopped degrading the Agent on a timeout, which had
+      # been the only thing ending the cycle -- measured at ~19,000 worker
+      # threads a second against an Agent that answers nothing. A failure
+      # now waits for the next real diagnostics run, which is bounded by
+      # what the user actually does.
+      if drained_everything
+        begin
+          answer_pending_ancestry_questions
+        rescue StandardError => e
+          @logger.error("failed to re-ask the Runtime Agent for ancestors: #{e.class}: #{e.message}")
+        end
+      end
+    end
+
+    # Same intent as #claim_model_refresh_slot -- every queued thread would
+    # fetch exactly the same thing, since whoever runs drains the whole
+    # pending set -- but the claim happens on the transport thread and the
+    # work happens on another, so the slot cannot simply hold
+    # `Thread.current`. It holds :claiming for the moment between the two,
+    # then the worker itself, whose liveness is what lets a thread killed
+    # during shutdown release the slot rather than wedge it.
+    def claim_ancestry_question_slot
+      @refresh_state_mutex.synchronize do
+        worker = @ancestry_question_worker
+        next false if worker == :claiming || worker&.alive?
+
+        @ancestry_question_worker = :claiming
+        true
+      end
+    end
+
+    def adopt_ancestry_question_worker(worker)
+      @refresh_state_mutex.synchronize do
+        @ancestry_question_worker = worker if @ancestry_question_worker == :claiming
+      end
+    end
+
+    def release_ancestry_question_slot
+      @refresh_state_mutex.synchronize do
+        @ancestry_question_worker = nil if @ancestry_question_worker == Thread.current
+      end
+    end
+
+    # An Agent that is `ready?` but has stopped answering -- hung, stopped
+    # in a debugger, thrashing -- is the one state nothing else notices.
+    # The ancestry fetch deliberately does not degrade the manager on a
+    # timeout (one slow answer about one class is not worth tearing down
+    # routes, models and completion), and the retry is deliberately not
+    # automatic, so without this the check would simply defer forever and
+    # go silent with nobody concluding anything.
+    #
+    # The counting itself belongs to the registry, together with the epoch
+    # it is about: kept here it survived an Agent restart, so a fresh Agent
+    # inherited the previous one's failures. Only the report is Server's.
+    # The Agent is left alone either way -- only the ancestry question
+    # gives up, falling back to the static reading, which is exactly what
+    # "no Agent" already means for this check.
+    def give_up_on_ancestry_questions
+      @logger.warn(
+        "Runtime Agent has not answered #{Runtime::AncestryRegistry::FAILURE_LIMIT} ancestry requests; " \
+        "falling back to static analysis for unknown-method checks"
+      )
+    end
+
+    def discard_ancestry_question_claim
+      @refresh_state_mutex.synchronize do
+        @ancestry_question_worker = nil if @ancestry_question_worker == :claiming
+      end
     end
 
     def clear_diagnostics(uri)
@@ -460,7 +661,7 @@ module Ovallsp
       Diagnostics::SemanticContext.new(
         workspace_index: @workspace_index, hierarchy_index: @hierarchy_index, method_resolver: @method_resolver,
         local_inferencer: @local_inferencer, model_registry: @model_registry, route_registry: @route_registry,
-        signatures: @signatures, generation: @workspace_index.generation
+        signatures: @signatures, generation: @workspace_index.generation, ancestry_registry: @ancestry_registry
       )
     end
 
@@ -1071,6 +1272,17 @@ module Ovallsp
         if agent_manager_ready?(@agent_manager)
           @agent_supervisor.record_success
           cancel_scheduled_agent_retries
+          # Only now is there an Agent to ask. The snapshot's own republish
+          # already ran, from inside the bootstrap call above, while
+          # @agent_manager was still unassigned -- so the unknown-method
+          # check saw no Agent, did not defer, and reported the very false
+          # positives this release removes. Everything open is answered
+          # once more, with the Agent in place.
+          #
+          # This is the ordinary path, not a race: VS Code restores its
+          # editors at startup and opens them immediately, while a real
+          # Rails boot takes tens of seconds.
+          republish_open_diagnostics
         end
       rescue StandardError => e
         logger.error("Runtime Agent bootstrap failed: #{e.class}: #{e.message}")
@@ -1093,6 +1305,13 @@ module Ovallsp
           "runtime agent crash-looped (#{reason}); giving up automatic restarts -- use " \
           "'OvalLSP: Restart Rails Agent' to try again manually"
         )
+        # No answer is ever coming now, so the unknown-method check must
+        # stop waiting for one. It defers on a receiver only an Agent could
+        # judge, which is right while one exists and disables the check
+        # outright once none does -- and a crash-looped Agent looks exactly
+        # like no Agent to the user. Answers already given are kept: they
+        # were true about the application that was running.
+        @ancestry_registry.deactivate!
         return
       end
 
@@ -2196,6 +2415,16 @@ module Ovallsp
           next if retry_generation && !scheduled_agent_retry_current?(retry_generation)
 
           @agent_manager&.stop
+          # A class's ancestors cannot change without a restart, which is
+          # precisely why they cannot survive one: what comes back may be
+          # a different Gemfile, a different environment, and answering
+          # from the old process would be answering about an application
+          # that no longer exists. #reset also moves the registry's epoch,
+          # which is what stops a fetch already in flight against the dying
+          # process from landing afterwards and re-populating what was just
+          # cleared -- answered names are never re-asked, so a stale answer
+          # that got in would have been permanent.
+          @ancestry_registry.reset
           manager = start_agent_bootstrap(
             bootstrap,
             root: root, logger: logger, route_registry: route_registry, model_registry: model_registry,
@@ -2213,6 +2442,17 @@ module Ovallsp
         if agent_manager_ready?(@agent_manager)
           @agent_supervisor.record_success
           cancel_scheduled_agent_retries
+          # Only now is there an Agent to ask. The snapshot's own republish
+          # already ran, from inside the bootstrap call above, while
+          # @agent_manager was still unassigned -- so the unknown-method
+          # check saw no Agent, did not defer, and reported the very false
+          # positives this release removes. Everything open is answered
+          # once more, with the Agent in place.
+          #
+          # This is the ordinary path, not a race: VS Code restores its
+          # editors at startup and opens them immediately, while a real
+          # Rails boot takes tens of seconds.
+          republish_open_diagnostics
         end
       rescue StandardError => e
         logger.error("failed to restart runtime agent: #{e.class}: #{e.message}")

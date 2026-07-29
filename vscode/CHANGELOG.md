@@ -2,6 +2,45 @@
 
 All notable changes to the OvalLSP VS Code extension are documented here.
 
+## 0.1.7 — The reopened gem class
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: it
+removes a wrong report and adds nothing.
+
+- A class the workspace *reopens* rather than defines is no longer
+  reported as missing the gem's own methods. `test/test_helper.rb`'s
+  `class ActiveSupport::TestCase` has this shape in every Rails
+  application, and its `parallelize` and `fixtures` calls were the last
+  two false positives 0.1.6 shipped with. Measured against a real
+  application: 2 diagnostics before, 0 after.
+
+  Reopening a class is syntactically identical to defining it, so no
+  amount of reading the file can tell them apart — the Runtime Agent is
+  asked instead. It answers with the class's real ancestors, measured
+  against that same process's own `Object.ancestors` so an application
+  that mixes into `Object` calibrates the baseline itself; and where the
+  class is not loaded at all, with the autoload registration, which is
+  the workspace's own absolute path for an application class and a gem's
+  bare require path for a gem's.
+
+  The question is asked of every workspace-declared class in the chain,
+  not just the receiver, which is what makes it reach the common case:
+  reopening `ActiveSupport::TestCase` makes that name the workspace's own,
+  so every `class FooTest < ActiveSupport::TestCase` inherits a chain that
+  looks complete, and every test file in the project was reporting the
+  gem's whole API as unknown.
+
+  Nothing is loaded to answer this. Where there is no Runtime Agent — an
+  untrusted workspace, or a project that is not a Rails app — the check
+  behaves exactly as it did.
+
+- Two test defects found while building it, both in guards that were
+  passing without checking anything: the capability-coverage guard
+  matched capability ids with a single-digit pattern, so every id from
+  `G10` up collapsed onto `G1` and was never compared in either
+  direction; and a tempfile-leak test counted process-wide open file
+  descriptors, which a full-suite run drove negative.
+
 ## 0.1.6 — Completion and diagnostics that actually fire
 
 A minor release under the versioning rule in `docs/PUBLISHING.md`: five
