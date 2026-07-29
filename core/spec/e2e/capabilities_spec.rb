@@ -188,6 +188,29 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # Regression: `locate` descended into a listed handful of node types
+    # and answered with the enclosing node's own type everywhere else, so
+    # a keyword argument, an array element, a hash value, a `while`/
+    # `case`/`begin` body and a `return` value all reported the wrong
+    # thing. The same omission for call arguments reported
+    # `User.find(params[:id])` as a missing `[]` on the model.
+    it "H6: reports the type of an expression nested inside any structure" do
+      with_file("app/models/nesting_probe.rb", <<~RUBY) do |uri|
+        class NestingProbe
+          def run(flag)
+            values = [Post.new]
+            case flag
+            when 1
+              post = values.first
+              post
+            end
+          end
+        end
+      RUBY
+        expect(@client.hover_text(uri, 6, 8)).to eq("Post")
+      end
+    end
+
     it "H4: reports literal types" do
       with_file("app/models/literal_probe.rb", <<~RUBY) do |uri|
         class LiteralProbe
@@ -340,6 +363,17 @@ RSpec.describe "Extension capabilities", :e2e do
 
         expect(item[:insertTextFormat]).to eq(2)
         expect(item[:insertText]).to eq("where($1)")
+      end
+    end
+
+    # The same raw-versus-extracted mistake the diagnostics engine had:
+    # completion resolves the receiver by asking for the type at the
+    # position before the dot, and for an .erb file that position was
+    # read against the template text rather than its Ruby regions.
+    it "C11: completes a method on a local inside an ERB template" do
+      with_file("app/views/posts/completion_probe.html.erb",
+                %(<div class="wrapper">\n  <% post = Post.new %>\n  <%= post. %>\n</div>\n)) do |uri|
+        expect(@client.completion_labels(uri, 2, 11)).to include("title")
       end
     end
 

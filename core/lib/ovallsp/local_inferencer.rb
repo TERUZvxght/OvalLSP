@@ -274,7 +274,18 @@ module Ovallsp
       when Prism::SingletonClassNode
         locate_in_singleton_class(node, offset)
       else
-        eval_type(node, env)
+        # Anything not named above may still *contain* the position: a
+        # keyword argument's value, an array element, a hash value, a
+        # `while`/`case`/`begin` body, a `return`'s value. Descending into
+        # whichever child holds the offset is the right default, and
+        # listing node types was the wrong one -- every unlisted composite
+        # answered with its own type instead of the expression under the
+        # cursor, so hovering `"s".upcase` inside `f(a: ...)` said Unknown
+        # and inside `[1, ...]` said Array. Found after the same mistake
+        # in CallNode reported `User.find(params[:id])` as a missing `[]`
+        # on the model.
+        child = node.compact_child_nodes.find { |candidate| contains?(candidate.location, offset) }
+        child ? locate(child, offset, env) : eval_type(node, env)
       end
     end
 

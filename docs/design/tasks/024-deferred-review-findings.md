@@ -409,6 +409,17 @@ workspace root means the class's real method set is unknown here, so the
 check stays silent for it. Cache per constant; it cannot change without
 a restart.
 
+The same request answers a second, currently latent instance of the same
+mistake. `unresolved-constant` reports any constant that is neither in
+the workspace nor in RBS, which in a Rails application means every gem
+constant: measured against `config/application.rb`, it reports `Rails`
+and `Bundler` as unresolvable. It does not reach users today because the
+check only runs in `standard` mode and the extension never sends
+`diagnosticsMode`, so `safe` is the only mode reachable -- but the check
+is unusable as written, and enabling it without this would repeat the
+false-positive flood the unknown-method check just came out of.
+`Object.const_defined?` from the Agent settles it exactly.
+
 Until then the check is silent for gem-derived classes reached by
 superclass, and wrong for gem classes reached by reopening.
 

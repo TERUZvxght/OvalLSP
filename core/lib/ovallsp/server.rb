@@ -528,7 +528,7 @@ module Ovallsp
     # callers never opt into.
     def show_type_evidence_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       summary = @file_summaries[uri]
       return nil unless document && summary
 
@@ -1154,6 +1154,33 @@ module Ovallsp
       uri.end_with?(".erb")
     end
 
+    # The document every position-based query should look at.
+    #
+    # For an .erb file that is the *extracted* Ruby, not the template:
+    # asking the type engine about a position in raw HTML gets whatever
+    # Prism made of the markup, which is how a partial's local was read as
+    # a String and completion inside a template returned nothing at all.
+    # ParserService already extracts before parsing, so every other
+    # consumer has to agree with it or the two disagree about what the
+    # file contains.
+    #
+    # Extraction blanks non-Ruby regions in place, preserving every line
+    # and column, so a position needs no remapping and neither does a
+    # range in the answer.
+    #
+    # Applied once, where documents are fetched, rather than at each of
+    # the ten handlers that take a position -- which is what let hover and
+    # explainType be correct while completion, signature help, definition,
+    # references and rename were not.
+    def analyzable_document(document)
+      return document unless document && erb_view?(document.uri)
+
+      TextDocument.new(
+        uri: document.uri, text: Erb::RubyRegionExtractor.extract_ruby_source(document.text),
+        version: document.version, language_id: "ruby"
+      )
+    end
+
     def explain_type_in_view(document, position, query_context = nil)
       ruby_source = Erb::RubyRegionExtractor.extract_ruby_source(document.text)
       synthetic = TextDocument.new(uri: document.uri, text: ruby_source, version: document.version, language_id: "ruby")
@@ -1365,7 +1392,7 @@ module Ovallsp
     # the type engine.
     def definition_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       return [] unless document
 
       position = params.fetch(:position)
@@ -1430,7 +1457,7 @@ module Ovallsp
     # the exact same #resolve a background reindex would have run.
     def references_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       summary = @file_summaries[uri]
       return [] unless document && summary
 
@@ -1476,7 +1503,7 @@ module Ovallsp
     # renameable under the cursor.
     def prepare_rename_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       summary = @file_summaries[uri]
       return nil unless document && summary
 
@@ -1495,7 +1522,7 @@ module Ovallsp
     # the refusal reason still goes to the log for anyone debugging why.
     def rename_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       summary = @file_summaries[uri]
       return nil unless document && summary
 
@@ -1551,7 +1578,7 @@ module Ovallsp
     # receiver's members) and neither should suppress the other.
     def completion_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       return [] unless document
 
       position = params.fetch(:position)
@@ -1608,7 +1635,7 @@ module Ovallsp
     # QueryService#signatures_of.
     def signature_help_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       return { signatures: [] } unless document
 
       position = params.fetch(:position)

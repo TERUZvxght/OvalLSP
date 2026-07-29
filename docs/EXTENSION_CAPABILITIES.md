@@ -83,6 +83,7 @@ suite in step: every row must have an example, every example a row.
 | H3 | Hovers an `@ivar` in a view whose controller action assigned it | the action's inferred type | PASS |
 | H4 | Hovers a literal (`"s"`, `1`, `[1]`) | `String`, `Integer`, `Array[Integer]` | PASS |
 | H5 | Hovers a method call | its parameter list (`documented(first, second)`) | PASS |
+| H6 | Hovers an expression nested in a keyword argument, array, hash, `case`, `while` or `return` | that expression's own type, not the enclosing structure's | PASS |
 
 ## Completion: the single most-used feature
 
@@ -98,6 +99,7 @@ suite in step: every row must have an example, every example a row.
 | C8 | Accepts a completion for a method whose parameters are known | the call is written out with each parameter as a tab stop (`takes_two(first, second)`) | PASS |
 | C9 | Accepts a completion for a method that takes nothing | the bare name, no parentheses | PASS |
 | C10 | Accepts a completion for a method that takes arguments of unknown shape | `where($1)` — parentheses opened, cursor inside | PASS |
+| C11 | Types `post.` inside an ERB template | the model's members, resolved from the template's Ruby regions rather than its HTML | PASS |
 
 C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
 a bare constant inferred as `Unknown`, so nothing downstream ever saw a
