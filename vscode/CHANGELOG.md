@@ -2,6 +2,54 @@
 
 All notable changes to the OvalLSP VS Code extension are documented here.
 
+## 0.1.6 — Completion and diagnostics that actually fire
+
+A minor release under the versioning rule in `docs/PUBLISHING.md`: five
+capabilities moved from "not yet" to verified. Every one of them was
+something the extension appeared to offer and did not.
+
+- Completion after a constant (`User.`, `Article.`, `JSON.`) returns
+  items. A bare constant evaluated to an unknown type, so the most common
+  completion trigger in Ruby produced an empty list in every previous
+  release.
+- Completion on a class offers its own `def self.` methods.
+- Completion on an Active Record model offers Active Record's own API —
+  `save`, `update`, `destroy` on an instance, `all`, `find`, `where`,
+  `create` on the class — alongside the columns and associations it
+  already offered. The Runtime Agent reports these from the classes the
+  application actually loaded, so they match the Rails version in use.
+- Calling a method that does not exist on an Active Record model is now
+  reported. The check was silently inert for every model, because a
+  model's ancestors are outside the workspace. It stays silent for a
+  model that defines `method_missing` or whose columns could not be read.
+- Calling a method with the wrong number of arguments is now reported,
+  for calls that resolve to a single definition with no splat and no
+  `*rest`. Anything less certain reports nothing.
+
+- Accepting a completion now writes the call, not just the name.
+  A method whose parameters are known completes to
+  `takes_two(first, second)` with each parameter a tab stop; one that
+  takes arguments of a shape Rails does not expose (`where(*, **, &)`)
+  completes to `where()` with the cursor between the parentheses; one
+  that takes nothing stays a bare name, because `save()` is not how Ruby
+  is written.
+- Hovering a method call shows its parameter list, which previously
+  required retyping `(` to trigger signature help.
+
+Also in this release:
+
+- `docs/EXTENSION_CAPABILITIES.md` states what must work, and every row
+  is verified end to end against a real Rails application by
+  `core/spec/e2e/capabilities_spec.rb` — driving a real Core over stdio,
+  waiting for the Runtime Agent and the cold index, then asking.
+  `vscode/scripts/verify-installed-extension.sh` separately confirms that
+  a real VS Code installs, activates, and runs the packaged extension,
+  and that nothing survives closing the window.
+- The bundled Core now carries the extension's version, enforced at
+  packaging time. Core previously reported `0.0.1` regardless of the
+  release it shipped in.
+- Rails' internal callback methods no longer flood completion.
+
 ## 0.1.5 — Lifecycle reliability and deeper semantic coverage
 
 - Stops and reaps the Core process and, on macOS/Linux, its discovered

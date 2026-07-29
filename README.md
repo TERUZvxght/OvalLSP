@@ -31,6 +31,95 @@ design docs) and
   environments and the 1.0 release checklist (the latter is Japanese
   only).
 
+## Capability matrix
+
+Two axes: what the feature is, and which environment it runs in.
+
+| | Meaning |
+|---|---|
+| ✅ | Verified end to end in that environment, by a test that fails if it breaks |
+| ⚠️ | May well work — much of the engine is environment-independent — but nothing verifies it, so nothing is promised |
+| version | Not built yet; the release it is planned for. A version alongside ⚠️ means it is planned for that release but will still be unverified in that environment |
+
+Everything below assumes the published artifact, which is **darwin-arm64
+only**. No VSIX is published for Windows, Linux, or Intel macOS; doing so,
+verified per platform, is what 1.0.0 requires (024.R4).
+
+| Feature | Rails, trusted workspace | Rails, untrusted workspace | Plain Ruby (no Rails) |
+|---|---|---|---|
+| Core starts, reaches a ready state | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| No process survives closing the window | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Hover: literals, constructors, locals | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Hover: Active Record finders | ✅ | — (no Runtime Agent) | — |
+| Hover: `@ivar` in a view, from its action | ✅ | ⚠️ | — |
+| Completion: stdlib methods (RBS) | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Completion: workspace class instance methods | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Completion: workspace class singleton methods | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Completion: model columns and associations | ✅ | — (no Runtime Agent) | — |
+| Completion: Active Record instance API | ✅ | — (no Runtime Agent) | — |
+| Completion: Active Record class API | ✅ | — (no Runtime Agent) | — |
+| Completion: route helpers | ✅ | — (no Runtime Agent) | — |
+| Completion inserts a call template with tab stops | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Hover on a method shows its parameters | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Go to definition: workspace methods | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Go to definition: model columns/associations | ✅ | — (no Runtime Agent) | — |
+| Go to definition: stdlib (into RBS) | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics: syntax errors | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics: unknown method on a workspace class | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics: unknown method on a model | ✅ | — (no Runtime Agent) | — |
+| Diagnostics: unknown route helper | ✅ | — (no Runtime Agent) | — |
+| Diagnostics: wrong number of arguments | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
+| Find references, rename, workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics: wrong argument *type* | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
+| Diagnostics across the whole project, not just open files | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
+| Documentation (RDoc/YARD) in hover and completion | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
+| Semantic highlighting (local variable vs. method call) | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
+| Inlay hints (inferred types, parameter names) | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
+| Code actions / quick fixes for each diagnostic | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
+| Go to type definition | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
+| Document highlight (occurrences within a file) | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
+| Call hierarchy (callers and callees) | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
+| Per-check diagnostic severity settings | 0.4.x | ⚠️ 0.4.x | ⚠️ 1.0.0 |
+| Auto-`require` insertion | 0.4.x | ⚠️ 0.4.x | ⚠️ 1.0.0 |
+| Signature help: active parameter highlighting | 0.4.x | ⚠️ 0.4.x | ⚠️ 1.0.0 |
+
+Rows carrying a version are not built anywhere yet; the version is the
+release they are planned for, ordered by what a user notices soonest. The
+first three are measured against Pylance, the closest well-known
+reference point for a language server in a dynamically typed language:
+project-wide diagnostics (today a mistake in a file you are not looking
+at is invisible), documentation in hover (hover says what a thing is,
+never what it is for), and semantic highlighting (Ruby's `foo` is
+ambiguous between a local variable and a method call — the engine already
+knows which, the editor does not). Rationale for each, and for the
+Pylance features deliberately *not* planned, is in
+[`docs/design/tasks/024-deferred-review-findings.md`](docs/design/tasks/024-deferred-review-findings.md)
+(024.R3).
+
+A dash means the capability is defined by Rails data that only the
+Runtime Agent can supply. In an untrusted workspace the Agent
+deliberately does not start, and outside a Rails app there is nothing for
+it to report — so these are absent by design, not broken.
+
+The ⚠️ column for plain Ruby is not a guess that it fails. Most of it
+almost certainly works today. It carries 1.0.0 because guaranteeing it —
+giving the Rails conventions an explicit boundary and specifying what a
+non-Rails project should expect (`docs/design/tasks/024-deferred-review-findings.md`,
+024.R1) — is one of the two things 1.0.0 is reserved for. The other is
+publishing and verifying the remaining platforms. Until then, nothing in
+that column is promised.
+
+Versions in this table are read as: patch means nothing a user sees
+changed, minor means a capability was added, major means something a user
+relied on stopped working. The full statement is in
+[`docs/PUBLISHING.md`](docs/PUBLISHING.md).
+
+Each ✅ corresponds to a row of [`docs/EXTENSION_CAPABILITIES.md`](docs/EXTENSION_CAPABILITIES.md),
+which describes what the user does and what must happen, and is verified
+by `core/spec/e2e/capabilities_spec.rb` plus
+`vscode/scripts/verify-installed-extension.sh`.
+
 ## Status
 
 `docs/design/tasks/001-*.md` through `023.8-*.md` are implemented (an
