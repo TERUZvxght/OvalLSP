@@ -1,5 +1,7 @@
 # Changelog
 
+[日本語版](CHANGELOG.ja.md)
+
 All notable changes to the OvalLSP VS Code extension are documented here.
 
 ## 0.1.7 — The reopened gem class
