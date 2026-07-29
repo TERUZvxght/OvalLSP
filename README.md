@@ -59,6 +59,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Completion: Active Record instance API | ✅ | — (no Runtime Agent) | — |
 | Completion: Active Record class API | ✅ | — (no Runtime Agent) | — |
 | Completion: route helpers | ✅ | — (no Runtime Agent) | — |
+| Completion at the start of an identifier — workspace classes, locals in scope, methods callable here | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
 | Completion inserts a call template with tab stops | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Hover on a method shows its parameters | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Go to definition: workspace methods | ✅ | ⚠️ | ⚠️ 1.0.0 |
@@ -69,25 +70,29 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown method on a model | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: unknown route helper | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: wrong number of arguments | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
-| Diagnostics: reading an `@ivar` that is never assigned | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
+| Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Diagnostics: reading an `@ivar` that is never assigned | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
 | Find references, rename, workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Diagnostics: wrong argument *type* | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
-| Diagnostics across the whole project, not just open files | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
-| Documentation (RDoc/YARD) in hover and completion | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
-| Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
-| Inlay hints (inferred types, parameter names) | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
-| Code actions / quick fixes for each diagnostic | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
-| Go to type definition | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
-| Document highlight (occurrences within a file) | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
-| Call hierarchy (callers and callees) | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
-| Per-check diagnostic severity settings | 0.4.x | ⚠️ 0.4.x | ⚠️ 1.0.0 |
-| Auto-`require` insertion | 0.4.x | ⚠️ 0.4.x | ⚠️ 1.0.0 |
-| Signature help: active parameter highlighting | 0.4.x | ⚠️ 0.4.x | ⚠️ 1.0.0 |
+| Diagnostics: wrong argument *type* | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
+| Diagnostics across the whole project, not just open files | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
+| Documentation (RDoc/YARD) in hover and completion | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
+| Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
+| Inlay hints (inferred types, parameter names) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Code actions / quick fixes for each diagnostic | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Go to type definition | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Document highlight (occurrences within a file) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Call hierarchy (callers and callees) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+| Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+| Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 
 Rows carrying a version are not built anywhere yet; the version is the
-release they are planned for, ordered by what a user notices soonest. The
+release they are planned for, ordered by what a user notices soonest.
+Each names a **minor** release exactly, never a `0.2.x`-style range,
+because a capability can only ever arrive in a minor one — that is what
+minor means here. A patch never adds a row. Several rows sharing a
+version ship together in that release, the way 0.1.6 shipped five. The
 first three are measured against Pylance, the closest well-known
 reference point for a language server in a dynamically typed language:
 project-wide diagnostics (today a mistake in a file you are not looking
@@ -97,7 +102,8 @@ ambiguous between a local variable and a method call — the engine already
 knows which, the editor does not). Rationale for each, and for the
 Pylance features deliberately *not* planned, is in
 [`docs/design/tasks/024-deferred-review-findings.md`](docs/design/tasks/024-deferred-review-findings.md)
-(024.R3).
+(024.R3). [`docs/ROADMAP.md`](docs/ROADMAP.md) states the same plan
+release by release, in terms of what each one lets you do.
 
 The two unknown-method rows above fire only on a receiver whose whole
 ancestry is known — a workspace class, or an Active Record model, whose
@@ -105,15 +111,17 @@ methods the Runtime Agent reports. A class inheriting from a gem
 (`ApplicationController`, and so most controllers and jobs) is silent
 instead, deliberately: reporting there would mean guessing. Indexing what
 the gems actually define is what lifts that, and is why the row above
-carries 0.3.x.
+carries 0.3.0.
 
-The inverse case is a known false positive in this release. A workspace
-file that *reopens* a gem class looks identical to one that defines it —
-`test/test_helper.rb`'s `class ActiveSupport::TestCase`, which every
-Rails application has — so the ancestry reads as complete and calls into
-the gem's own API (`parallelize`, `fixtures`) are reported as unknown.
-Two per project, in one file. Fixed in 0.1.7
-([024.R5](docs/design/tasks/024-deferred-review-findings.md)).
+The inverse case — a workspace file that *reopens* a gem class, which
+looks identical to one that defines it — was a false positive through
+0.1.6, and is fixed as of 0.1.7. `test/test_helper.rb`'s
+`class ActiveSupport::TestCase` is the one every Rails application has.
+The Runtime Agent is asked where the class really comes from, so the
+static chain's claim to be complete is checked rather than trusted
+([024.R5](docs/design/tasks/024-deferred-review-findings.md)). Without a
+Runtime Agent — an untrusted workspace, or no Rails app — there is
+nothing to ask, and the old reading stands.
 
 An undefined *variable* is not a separate row. In Ruby a bare identifier
 that is not a local variable parses as a call on self, so a typo'd

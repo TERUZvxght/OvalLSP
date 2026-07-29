@@ -1,0 +1,251 @@
+# 変更履歴
+
+[English version](CHANGELOG.md)
+
+OvalLSP VS Code拡張機能の注目すべき変更をすべて記録しています。各リリース
+はまず「何が変わったか」を示し、その理由・実測値・棄却した方針は下の
+**詳細**にまとめてあります。
+
+## 0.1.7 — 再オープンされたgemクラス
+
+- 修正: ワークスペースが**再オープン**しているだけのクラスに対して、gem
+  自身のメソッドが存在しないと報告することがなくなりました
+  (`test/test_helper.rb`の`parallelize`・`fixtures`)。実際のアプリケー
+  ションでの実測: 修正前2件、修正後0件。
+- 修正: そのクラスを継承するテストファイル
+  (`class FooTest < ActiveSupport::TestCase`)が、gemのAPI全体を未定義と
+  報告していた問題を解消しました。
+- 修正: 通ってはいるが何も検査していなかったテスト2件。ケイパビリティIDの
+  `G10`以降が一度も突き合わされていなかった件と、一時ファイルのリーク検査
+  がプロセス全体のfd数を数えていた件です。
+
+`docs/PUBLISHING.ja.md`のバージョン規約におけるpatchリリースです。誤った
+報告を1つ取り除くだけで、何も追加しません。
+
+### 詳細
+
+クラスの再オープンは、そのクラスを定義するコードと構文上まったく同じ
+です。したがってファイルをいくら読んでも区別はできません — 代わりに
+Runtime Agentに問い合わせます。答えはそのクラスの実際の祖先で、同じ
+プロセス自身の`Object.ancestors`を基準に測るため、`Object`に何かを混ぜて
+いるアプリケーションが自分で基準を較正します。クラスがまだ読み込まれて
+いない場合は、autoloadの登録元で答えます。アプリケーション自身のクラス
+ならワークスペース配下の絶対パス、gemのクラスならgemが書いたままの素の
+requireパスです。
+
+この問い合わせは、レシーバだけでなく継承チェーン上のワークスペースが宣言
+したクラスすべてに対して行います。これが最も多いケースに届くための条件
+です。`ActiveSupport::TestCase`を再オープンすると、その名前はワーク
+スペース自身のものになるため、`class FooTest < ActiveSupport::TestCase`
+はいずれも「完全に見える」継承チェーンを引き継ぎます。
+
+この判定のために何かを読み込むことはありません。autoload登録済み定数への
+`const_get`は読み込みを実行してしまい、実際のアプリケーションではbundle外
+のgemから`Gem::LoadError`が発生しました。Runtime Agentが存在しない場合 —
+信頼されていないワークスペース、Railsアプリでないプロジェクト — の挙動は
+従来どおりです。
+
+`Object.const_source_location`を最初に試しましたが、この問いには答えられ
+ません。返すのは定数が**登録された場所**であり、Zeitwerk管理下の`app/`の
+クラスはすべてZeitwerk内部の1行を指します。この方針では
+`ApplicationController`をアプリ外のクラスと判定し、アプリケーション全体で
+検査を黙らせていたはずです。反証と、棄却した他の2案、そしてこの方針でも
+なお取りこぼすケースは
+`docs/design/tasks/024-deferred-review-findings.md`(024.R5)に記録して
+あります。
+
+## 0.1.6 — 実際に発火する補完と診断
+
+- 追加: 定数の後の補完(`User.`、`Article.`、`JSON.`)。これまでのすべての
+  リリースで空のリストを返していました。
+- 追加: クラス自身の`def self.`メソッドの補完。
+- 追加: Active Record自身のAPI(`save`・`update`・`destroy`・`all`・
+  `find`・`where`・`create`)の補完。Runtime Agentがアプリケーションの
+  実際に読み込んだクラスから報告します。
+- 追加: Active Recordモデルに存在しないメソッド呼び出しの診断。
+- 追加: 引数の個数が合わない呼び出しの診断。
+- 変更: 補完を確定すると、名前だけでなくタブストップ付きの呼び出しの形
+  (`takes_two(first, second)`)が書き込まれるようになりました。
+- 変更: メソッド呼び出しへのhoverが引数一覧を表示します。
+- 追加: `docs/EXTENSION_CAPABILITIES.ja.md`。各行を実在のRailsアプリケー
+  ションに対してend-to-endで検証しています。
+- 修正: 同梱するCoreが、どのリリースに入っていても`0.0.1`と報告していた
+  問題。
+- 修正: Rails内部のコールバックメソッドが補完を埋め尽くしていた問題。
+
+`docs/PUBLISHING.ja.md`のバージョン規約におけるminorリリースです。5つの
+ケイパビリティが「未実装」から検証済みへ移りました。いずれも、拡張機能が
+提供しているように見えて実際には提供していなかったものです。
+
+### 詳細
+
+追加した2つの診断は意図的に狭く作ってあります。未定義メソッドの検査は、
+`method_missing`を定義しているモデルや、カラムを読めなかったモデルに
+対しては黙ります。引数の個数の検査は、splatも`*rest`も持たない単一の定義
+に解決できる呼び出しに限って報告します。それより確実でないものは何も
+報告しません。
+
+Railsが形を公開していない引数を取るメソッド(`where(*, **, &)`)は
+`where()`となりカーソルが括弧の中に入ります。引数を取らないメソッドは
+名前のままです。`save()`はRubyの書き方ではないためです。
+
+検証は2層に分けています。別の主張だからです。
+`core/spec/e2e/capabilities_spec.rb`は実在のRailsアプリケーションに対して
+実際のCoreをstdioで駆動し、Runtime AgentとCold Indexの完了を待ってから
+問い合わせます。`vscode/scripts/verify-installed-extension.sh`は別途、
+実際のVS Codeがパッケージ済み拡張機能をインストールし、起動し、実行する
+こと、そしてウィンドウを閉じた後に何も残らないことを確認します。後者は
+前者では検知できない失敗であり、このプロジェクトが実際に陥っていた状態
+です。
+
+既知の制限(0.1.7で修正): gemのクラスを**再オープン**しているワーク
+スペースのファイルは、そのクラスを定義しているファイルと区別がつかない
+ため、未定義メソッドの検査は祖先が完全だと読んでしまいます。
+`test/test_helper.rb`の`class ActiveSupport::TestCase`がすべてのRails
+アプリケーションでまさにこの形をしており、その`parallelize`と`fixtures`の
+呼び出しが未定義として報告されます。1プロジェクトあたり1ファイルで2件です。
+
+## 0.1.5 — ライフサイクルの信頼性と、より深いセマンティック対応
+
+- 修正: 再起動時・非アクティブ化時・再起動コマンドの重複時・initialize
+  ハング時に、Coreプロセスと子孫プロセスグループを停止し刈り取るように
+  なりました(macOS/Linux)。
+- 追加: 慣習的な`before_action`コールバックが代入する、コントローラの
+  ビュー用インスタンス変数の推論。
+- 追加: 参照とRails生成メソッドのCold Index化。宣言が現れたり消えたりした
+  ときの再解決も行います。
+- 追加: ローカル推論でのRBS/RBIのoverload戻り値型の利用と、プロジェクトの
+  シグネチャ変更のライブリロード。
+- 修正: Union補完の条件フラグ、生成メソッドの再オープン時フォールバック、
+  モデル依存のメソッドサマリの陳腐化、Cold Indexの重複実行、手動再起動後の
+  自動Agent再試行の遅延。
+
+### 詳細
+
+`before_action`の推論は、継承、`skip_before_action`、リテラルの
+`only:`/`except:`セレクタ、コールバックからアクションへの型の流れを
+カバーします。opt-inのruntime観測は、他にUnknownとなる戻り値に対する低
+優先度のフォールバックとしてのみ使用します。
+
+## 0.1.4 — 「Payload hash mismatch」の誤警告を実際に修正
+
+- 修正: 起動のたびに出ていた「Payload hash mismatch」警告。0.1.3はこれを
+  試みて成功していませんでした。
+- 追加: `scripts/verify-packaged-payload-hash.js`。`release.sh`とCIに
+  組み込み、同じ乖離が二度と利用者に届かないようにしました。
+
+### 詳細
+
+下記の0.1.3の診断(`vsce publish`が自身のprepublishフックを再実行し、
+native extensionを再ビルドしていた)は実在の問題であり修正済みのままです
+が、この警告の原因では**ありませんでした**。
+
+実際の原因: `scripts/copy-core.js`はステージングした`core/`ツリー(815
+ファイル)に対してsha256を記録する一方、`.vscodeignore`が独立して
+`core/vendor/bundle/ruby/*/cache/**` — 4つのBundlerの`.gem`アーカイブ —
+をVSIXから除外していました。したがってインストール済みの拡張機能は常に
+811ファイルであり、起動時に再ハッシュしても記録されたハッシュを再現できる
+ことは、どのマシンでも決してありませんでした。「payloadとは何か」の定義が
+2つ独立に存在し、静かに食い違っていたのです。実際にインストールされた
+0.1.3を再ハッシュし、ステージングツリーとパッケージ済みツリーを比較して
+確認しました。
+
+ハッシュ側にパッチを当てるのではなく構造的に修正しました。これらの
+キャッシュアーカイブはステージング時に削除します(純粋なビルド副産物です。
+`bin/ovallsp`は`$LOAD_PATH`に`**/gems/*/lib`しか追加せず`cache/`は決して
+追加しません)。これによりステージングツリー**そのもの**が出荷ツリーと
+なり、ハッシュを取ることに意味が生まれます。`.vscodeignore`の該当ルールは
+削除し、`core/**`をこれ以上除外しないよう注記を残しました。
+
+新しい検査は**パッケージ済み**VSIXを再ハッシュし、そのVSIX自身のmanifest
+と比較します — 拡張機能が起動時に実行するのと同じ検査を、ビルド時に実行
+します。古い`.vscodeignore`のルールを一度戻して検査が失敗することを確認
+し、元に戻して通ることを確認済みです。
+
+## 0.1.3 — 修正: `vsce publish`が検証済みビルドを公開せず拡張機能を再ビルドしていた
+
+- 修正: Marketplaceに届いていたのが、直前にsmoke testしハッシュを取った
+  ビルドではなく、再ビルドされた未検証の成果物だった問題。
+- **訂正:** このリリースは「Payload hash mismatch」の誤警告も修正したと
+  考えて公開されました。実際には修正できていません — 実際の原因は0.1.4を
+  参照してください。
+
+### 詳細
+
+`vsce publish`は、先行する`npm run package`とは独立に自身の
+`vscode:prepublish`フックを実行します。つまりCoreのvendoring済みnative
+extension(Prism、RBS)を静かにもう一度ゼロから再ビルドします。native
+extensionのコンパイルは実行ごとにバイト単位で再現可能ではないため、実際に
+Marketplaceへ届いていたのは、直前にビルドしsmoke testしハッシュを取った
+成果物では決してありませんでした。
+
+すでにビルド済みのVSIXファイルを`vsce publish --packagePath <file>
+--pre-release`で公開することで修正しました。end-to-endで検証済みです。
+この変更後は、ビルドのディスク上のpayloadハッシュがpublish手順によって
+変化しないことを証明できます。変更前は同じ手順で2つの異なるハッシュが
+生成されていました。
+
+## 0.1.2 — ドキュメント更新
+
+- 変更: 互換性のあるRuby(3.4.x)がシステム上ですでに到達可能であれば、
+  拡張機能をインストールするだけで動作することをREADME(両言語版)に
+  記載しました。
+- 変更: 他のRuby language server拡張機能との、検証済みの競合をREADMEに
+  記載しました。
+
+コードおよび実行時の挙動に変更はありません。
+
+### 詳細
+
+VS Codeは有効なプロバイダすべての結果をマージし、どれか1つを選ぶわけでは
+ありません。そのため他のRuby language server(Shopify製Ruby LSPで検証)と
+同時に有効化すると、補完・定義の結果が重複します。READMEの「他の拡張機能
+との既知の競合」を参照してください。
+
+## 0.1.1 — 修正: 公開されたVSIXに同梱Core Serverが入っていなかった
+
+- 修正: 公開された0.1.0のVSIXには`core/`ディレクトリがそもそも存在せず、
+  Core Serverを起動できなかった問題。
+
+### 詳細
+
+0.1.0は`vsce publish`を直接実行して公開されましたが、このコマンドは本
+プロジェクト独自の`npm run package`ラッパー経由でない限りCore Serverの
+vendoring(`vscode/scripts/copy-core.js`)を自動では行いません。
+`vscode:prepublish`のnpmスクリプトを追加することで構造的に修正しました。
+これは`vsce package`/`vsce publish`のどちらも、どのように呼び出されても
+パッケージング前に自動実行します — この失敗はどの呼び出し経路からも
+起こり得なくなりました。
+
+## 0.1.0 — Apple Silicon Marketplace Preview
+
+- 追加: hover、定義へ移動、documentSymbol、workspace/symbol、参照検索、
+  ガード付きリネーム、補完、signature help。実際のPrismベースのパースと
+  ワークスペース全体のインデックスに支えられています。
+- 追加: opt-in trustのRuntime Agent経由での、ルートとActive Recordモデル
+  に対するRailsを理解した補完・定義へ移動。
+- 追加: RBS/RBIシグネチャ連携と、opt-inのruntime型観測。
+- 追加: 拡張機能と同梱Core Serverの間のバージョン互換ハンドシェイク
+  (`OvalLSP: Show Version Information`)。
+- 追加: mise・asdf・rbenv・Homebrewを横断するRubyインタプリタの自動検出
+  と、見つからない場合の明確な診断
+  (`OvalLSP: Show Environment Diagnostics`)。
+
+最初のMarketplace Pre-Releaseです。macOS Apple Silicon(`darwin-arm64`)と
+Ruby 3.4.xに限定しています。
+
+### 詳細
+
+Core Serverは拡張機能自体に同梱されます — 別途のインストール手順は不要
+で、拡張機能と一体で更新されます。互換性のない、あるいは破損したCore
+Serverのビルドは、黙って、あるいは部分的に失敗させるのではなく明確に報告
+します。
+
+何が検証済みかは
+[docs/SUPPORT_MATRIX.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SUPPORT_MATRIX.ja.md)
+を、このPreviewで意図的に対象外としているものは
+[docs/KNOWN_LIMITATIONS.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md)
+を参照してください。これはPreviewリリースです。外部からのフィードバック・
+issue受付の現状は
+[SUPPORT.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md)
+を参照してください。

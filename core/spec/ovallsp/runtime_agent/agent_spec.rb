@@ -591,6 +591,238 @@ RSpec.describe Ovallsp::RuntimeAgent::Agent do
     expect(build_agent("").run).to eq(0)
   end
 
+  describe "agent/ancestors" do
+    def ancestors_for(names, root: "/app")
+      input =
+        frame(jsonrpc: "2.0", id: 1, method: "agent/ancestors", params: { names: names }) +
+        frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+      build_agent(input, root: root).run
+      sent_messages.first[:result]
+    end
+
+    it "reports the running Object's own ancestors, which is the baseline for every answer" do
+      result = ancestors_for([])
+
+      expect(result[:objectAncestors]).to include("Object", "Kernel", "BasicObject")
+    end
+
+    # The whole point of measuring the baseline rather than assuming it:
+    # an application that mixes into Object gives every class those
+    # ancestors, and they are evidence about the application, not the class.
+    # Asserts against a class rather than by mixing into the real `Object`:
+    # `Object.include` cannot be undone, so that version left the module in
+    # `Object.ancestors` for every later example in the process.
+    it "reports whatever the application mixed in, so the baseline can cancel it out" do
+      stub_const("FixtureAppMixin", Module.new)
+      stub_const("FixtureMixedThing", Class.new { include FixtureAppMixin })
+
+      answer = ancestors_for(["FixtureMixedThing"])[:classes][:FixtureMixedThing]
+
+      expect(answer[:ancestors]).to include("FixtureAppMixin")
+      expect(answer[:ancestors]).to include("Object", "Kernel", "BasicObject")
+    end
+
+    it "reports a class's full ancestry, so a mixed-in module is visible" do
+      stub_const("FixtureMixin", Module.new)
+      stub_const("FixtureThing", Class.new { include FixtureMixin })
+
+      expect(ancestors_for(["FixtureThing"])[:classes][:FixtureThing][:ancestors])
+        .to include("FixtureThing", "FixtureMixin", "Object")
+    end
+
+    it "answers null for a name the application does not define, which is a real answer" do
+      result = ancestors_for(["NoSuchConstantAnywhere"])
+
+      expect(result[:classes]).to have_key(:NoSuchConstantAnywhere)
+      expect(result[:classes][:NoSuchConstantAnywhere]).to be_nil
+    end
+
+    it "answers null for a constant that is not a class or module at all" do
+      stub_const("FixtureNotAModule", 42)
+
+      expect(ancestors_for(["FixtureNotAModule"])[:classes][:FixtureNotAModule]).to be_nil
+    end
+
+    it "resolves a namespaced name" do
+      stub_const("FixtureOuter", Module.new)
+      stub_const("FixtureOuter::Inner", Class.new)
+
+      expect(ancestors_for(["FixtureOuter::Inner"])[:classes][:"FixtureOuter::Inner"][:ancestors])
+        .to include("FixtureOuter::Inner")
+    end
+
+    # Asking about one broken name must not cost the answers for the rest:
+    # these are gathered lazily, and a name that raises would otherwise
+    # take the whole batch with it and be re-asked forever.
+    it "answers null for a name whose resolution raises, and still answers the others" do
+      stub_const("FixtureFine", Class.new)
+      exploding = Module.new do
+        def self.const_defined?(*) = raise("boom")
+      end
+      stub_const("FixtureExploding", exploding)
+
+      result = ancestors_for(["FixtureExploding::Anything", "FixtureFine"])
+
+      expect(result[:classes][:"FixtureExploding::Anything"]).to be_nil
+      expect(result[:classes][:FixtureFine][:ancestors]).to include("FixtureFine")
+    end
+
+    # `Object.const_defined?("Foo")` is true for an autoload-registered
+    # constant, and const_get would then *run* the autoload -- which in a
+    # real application raised Gem::LoadError from a gem that is not in the
+    # bundle. An Agent that loads arbitrary code to answer a diagnostic
+    # question is not one worth having (024.R5).
+    it "never resolves a name the application has only registered for autoload" do
+      loaded = []
+      autoloading = Module.new do
+        define_singleton_method(:const_defined?) { |*| true }
+        define_singleton_method(:const_get) { |*| loaded << :ran; Class.new }
+        define_singleton_method(:autoload?) { |*| "some/gem/path" }
+      end
+      stub_const("FixtureAutoloading", autoloading)
+
+      ancestors_for(["FixtureAutoloading::Lazy"])
+
+      expect(loaded).to be_empty
+    end
+
+    # The guard has to hold for every segment, not just the last one.
+    # Walking to the owner of `Foo::Bar::Baz` resolves `Foo::Bar` on the
+    # way, and resolving *that* through an autoload runs it just as surely.
+    it "never loads an intermediate namespace that is only registered for autoload" do
+      loaded = []
+      outer = Module.new do
+        define_singleton_method(:const_defined?) { |*| true }
+        define_singleton_method(:autoload?) { |*| "some/gem/inner" }
+        define_singleton_method(:const_get) { |*| loaded << :ran; Module.new }
+      end
+      stub_const("FixtureOuterLazy", outer)
+
+      result = ancestors_for(["FixtureOuterLazy::Inner::Leaf"])
+
+      expect(loaded).to be_empty
+      expect(result[:classes][:"FixtureOuterLazy::Inner::Leaf"]).to be_nil
+    end
+
+    # The answer that makes the unloaded case decidable at all. A gem's
+    # own `autoload` registers the bare require path it was written with
+    # ("active_support/test_case"), which is not a file this workspace
+    # owns -- so the class is someone else's, established without loading
+    # it (024.R5).
+    it "reports a constant registered for autoload from a bare require path as defined outside the workspace" do
+      autoloading = Module.new do
+        define_singleton_method(:const_defined?) { |*| true }
+        define_singleton_method(:autoload?) { |*| "active_support/test_case" }
+      end
+      stub_const("FixtureGem", autoloading)
+
+      answer = ancestors_for(["FixtureGem::TestCase"], root: "/workspace")[:classes][:"FixtureGem::TestCase"]
+
+      expect(answer[:definedOutsideWorkspace]).to be(true)
+    end
+
+    it "reports one registered from an absolute path outside the workspace the same way" do
+      autoloading = Module.new do
+        define_singleton_method(:const_defined?) { |*| true }
+        define_singleton_method(:autoload?) { |*| "/elsewhere/gems/thing.rb" }
+      end
+      stub_const("FixtureElsewhere", autoloading)
+
+      answer = ancestors_for(["FixtureElsewhere::Thing"], root: "/workspace")[:classes][:"FixtureElsewhere::Thing"]
+
+      expect(answer[:definedOutsideWorkspace]).to be(true)
+    end
+
+    # The distinguishing case: Zeitwerk registers the application's own
+    # classes by absolute path under the workspace root. Those are the
+    # workspace's own, so the static reading must stand and the check must
+    # keep firing for them.
+    it "says nothing about a constant Zeitwerk registered from inside the workspace" do
+      autoloading = Module.new do
+        define_singleton_method(:const_defined?) { |*| true }
+        define_singleton_method(:autoload?) { |*| "/workspace/app/models/article.rb" }
+      end
+      stub_const("FixtureOwn", autoloading)
+
+      answer = ancestors_for(["FixtureOwn::Article"], root: "/workspace")[:classes][:"FixtureOwn::Article"]
+
+      expect(answer).to be_nil
+    end
+
+    # `Module#autoload?` inherits by default, so a class that genuinely
+    # defines the constant itself would be handed its superclass's
+    # registration and judged foreign on someone else's evidence --
+    # silencing the check for a class the workspace owns.
+    it "does not read a superclass's autoload registration for a constant the class defines itself" do
+      parent = Class.new
+      stub_const("FixtureParent", parent)
+      parent.autoload(:Shared, "some/gem/shared")
+      child = Class.new(parent)
+      stub_const("FixtureChild", child)
+      child.const_set(:Shared, Class.new)
+
+      answer = ancestors_for(["FixtureChild::Shared"], root: "/workspace")[:classes][:"FixtureChild::Shared"]
+
+      expect(answer).not_to be_nil
+      expect(answer[:definedOutsideWorkspace]).to be_nil
+      expect(answer[:ancestors]).to include("Object")
+    end
+
+    # A module can report a name that is the empty string while it is still
+    # being defined. Sending `""` as an ancestor would put an entry in the
+    # registry that matches no workspace constant and no RBS type, i.e. a
+    # foreign ancestor, silencing the check for that receiver.
+    it "omits an ancestor whose name is empty rather than reporting it" do
+      nameless = Module.new
+      allow(nameless).to receive(:name).and_return("")
+      stub_const("FixtureEmptyNamed", Class.new { include nameless })
+
+      answer = ancestors_for(["FixtureEmptyNamed"])[:classes][:FixtureEmptyNamed]
+
+      expect(answer[:ancestors]).not_to include("")
+      expect(answer[:ancestors]).to include("FixtureEmptyNamed")
+    end
+
+    it "answers null for an empty name rather than resolving Object itself" do
+      expect(ancestors_for([""])[:classes][:""]).to be_nil
+    end
+
+    it "answers null when a namespace segment is not a module" do
+      stub_const("FixtureScalar", 42)
+
+      expect(ancestors_for(["FixtureScalar::Inner"])[:classes][:"FixtureScalar::Inner"]).to be_nil
+    end
+
+    # A root that is not absolute cannot decide whose file a path is. With
+    # an empty root, a bare prefix test makes every absolute path look
+    # like the workspace's own, which silences the check everywhere.
+    it "treats nothing as the workspace's own when the root is not an absolute path" do
+      autoloading = Module.new do
+        define_singleton_method(:const_defined?) { |*| true }
+        define_singleton_method(:autoload?) { |*| "/anywhere/at/all.rb" }
+      end
+      stub_const("FixtureRootless", autoloading)
+
+      answer = ancestors_for(["FixtureRootless::Thing"], root: "")[:classes][:"FixtureRootless::Thing"]
+
+      expect(answer[:definedOutsideWorkspace]).to be(true)
+    end
+
+    # A prefix match on the root string alone would call
+    # "/workspace-other/app/thing.rb" the workspace's own.
+    it "does not mistake a sibling directory sharing the root's name prefix for the workspace" do
+      autoloading = Module.new do
+        define_singleton_method(:const_defined?) { |*| true }
+        define_singleton_method(:autoload?) { |*| "/workspace-other/app/thing.rb" }
+      end
+      stub_const("FixtureSibling", autoloading)
+
+      answer = ancestors_for(["FixtureSibling::Thing"], root: "/workspace")[:classes][:"FixtureSibling::Thing"]
+
+      expect(answer[:definedOutsideWorkspace]).to be(true)
+    end
+  end
+
   it "returns MethodNotFound for unknown requests without crashing the loop" do
     input =
       frame(jsonrpc: "2.0", id: 1, method: "agent/thisMethodDoesNotExist", params: {}) +

@@ -109,14 +109,20 @@ Ruby type checker. By design, it does not track:
 - Code paths never exercised by a test run, for opt-in runtime type
   observation specifically (evidence only exists for what actually ran).
 
-One consequence of the third point is visible in every Rails application
-as of 0.1.6. Reopening a class the workspace does not define is
-syntactically identical to defining it, so `test/test_helper.rb`'s
-`class ActiveSupport::TestCase` reads as a plain class with no gem
-parent, and its `parallelize` and `fixtures` calls are reported as
-unknown methods. Two false positives per project, in that one file.
-Fixed in 0.1.7 by asking where the constant was really defined
-(`docs/design/tasks/024-deferred-review-findings.md`, 024.R5).
+The third point had a visible consequence in every Rails application
+through 0.1.6, fixed in 0.1.7. Reopening a class the workspace does not
+define is syntactically identical to defining it, so
+`test/test_helper.rb`'s `class ActiveSupport::TestCase` read as a plain
+class with no gem parent, and its `parallelize` and `fixtures` calls were
+reported as unknown methods. The static reading is now checked against
+the running application rather than trusted
+(`docs/design/tasks/024-deferred-review-findings.md`, 024.R5) — so it
+still applies wherever the running application cannot settle the
+question: an untrusted workspace or a non-Rails project, where there is
+nothing to ask; a gem the Agent's process does not load, since it boots
+in `development` and a `group :test` gem is simply not there; and a gem
+class reopened without mixing anything in, whose ancestry carries no
+evidence either way. 024.R5 lists each case.
 
 ## Conflicts with other extensions
 

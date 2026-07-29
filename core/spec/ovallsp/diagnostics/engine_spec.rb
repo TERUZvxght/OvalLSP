@@ -233,6 +233,303 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
 
       expect(findings.map(&:code)).not_to include("unknown-method")
     end
+
+    # A workspace file that reopens a class living in a gem is
+    # syntactically identical to one that defines it, so the static chain
+    # reads [itself, Object, Kernel, BasicObject] -- complete -- and every
+    # call into the gem's own API is reported. Every Rails application's
+    # test/test_helper.rb has exactly this shape (024.R5).
+    describe "a class the workspace reopens rather than defines" do
+      let(:reopened) do
+        index(<<~RUBY)
+          module ActiveSupport
+            class TestCase
+              fixtures :all
+            end
+          end
+        RUBY
+      end
+
+      let(:ancestry_registry) { Ovallsp::Runtime::AncestryRegistry.new }
+
+      def with_ancestry(**overrides)
+        context(ancestry_registry: ancestry_registry, **overrides)
+      end
+
+      it "still reports it when no Runtime Agent can be asked" do
+        findings = engine.analyze(document: reopened, semantic_context: context, mode: :safe)
+
+        expect(findings.map(&:code)).to include("unknown-method")
+      end
+
+      it "stays silent once the application reports ancestors the workspace never declared" do
+        ancestry_registry.install(
+          object_ancestors: %w[Object Kernel BasicObject],
+          classes: { "ActiveSupport::TestCase" =>
+            { ancestors: %w[ActiveSupport::TestCase ActiveSupport::Testing::Assertions Object Kernel BasicObject] } }
+        )
+
+        findings = engine.analyze(document: reopened, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).not_to include("unknown-method")
+      end
+
+      # The distinguishing case for the rule: the same shape of answer,
+      # with nothing foreign in it, must leave the check firing. A class
+      # the workspace really does define completely carries no ancestors
+      # beyond the running Object's.
+      it "still reports it when the application confirms the workspace's own ancestry" do
+        ancestry_registry.install(
+          object_ancestors: %w[Object Kernel BasicObject],
+          classes: { "ActiveSupport::TestCase" => { ancestors: %w[ActiveSupport::TestCase Object Kernel BasicObject] } }
+        )
+
+        findings = engine.analyze(document: reopened, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).to include("unknown-method")
+      end
+
+      # The case the real application needed. `ActiveSupport::TestCase` is
+      # never loaded in the environment the Agent boots -- test_helper.rb
+      # is the one file that only loads in a different one -- so there is
+      # no ancestry to compare, and the autoload registration is what
+      # settles it.
+      it "stays silent when the class is only registered for autoload, from outside the workspace" do
+        ancestry_registry.install(object_ancestors: %w[Object Kernel BasicObject],
+                                  classes: { "ActiveSupport::TestCase" => { definedOutsideWorkspace: true } })
+
+        findings = engine.analyze(document: reopened, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).not_to include("unknown-method")
+      end
+
+      it "still reports it when the application does not define the class at all" do
+        ancestry_registry.install(object_ancestors: %w[Object Kernel BasicObject],
+                                  classes: { "ActiveSupport::TestCase" => nil })
+
+        findings = engine.analyze(document: reopened, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).to include("unknown-method")
+      end
+
+      # A workspace superclass or concern is not evidence of anything --
+      # it is the workspace's own code, which the static chain already
+      # walked.
+      it "still reports it when every extra ancestor is one the workspace itself declares" do
+        index("module Shared\nend\n", uri: "file:///shared.rb")
+        ancestry_registry.install(
+          object_ancestors: %w[Object Kernel BasicObject],
+          classes: { "ActiveSupport::TestCase" => { ancestors: %w[ActiveSupport::TestCase Shared Object Kernel BasicObject] } }
+        )
+
+        findings = engine.analyze(document: reopened, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).to include("unknown-method")
+      end
+
+      # `include Comparable` is not evidence either: RBS knows what it
+      # contributes, and #rbs_resolves? already resolves calls into it.
+      it "still reports it when every extra ancestor is one RBS knows" do
+        ancestry_registry.install(
+          object_ancestors: %w[Object Kernel BasicObject],
+          classes: { "ActiveSupport::TestCase" => { ancestors: %w[ActiveSupport::TestCase Comparable Object Kernel BasicObject] } }
+        )
+
+        findings = engine.analyze(document: reopened, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).to include("unknown-method")
+      end
+
+      # Before the answer arrives, reporting would be a guess -- and it is
+      # the guess already known to be wrong for this shape. Silence is the
+      # only safe answer, and the question gets asked.
+      it "stays silent and asks the application, when an Agent is connected but has not answered yet" do
+        ancestry_registry.install(object_ancestors: %w[Object Kernel BasicObject], classes: { "Unrelated" => nil })
+
+        findings = engine.analyze(document: reopened, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).not_to include("unknown-method")
+        expect(ancestry_registry.drain_pending).to include("ActiveSupport::TestCase")
+      end
+
+      # `::ActiveSupport::TestCase` names the same class as
+      # `ActiveSupport::TestCase`. Before the name was normalised these
+      # were two registry keys, and the Agent split the prefixed one into
+      # an empty first segment and answered "no such constant" -- which is
+      # a permanent answer, so the whole fix was defeated for any receiver
+      # the user happened to write with a leading `::`.
+      #
+      # Asserts the diagnostic IS produced, not that it is absent. An
+      # absence here is satisfied two ways -- the fix working, or the
+      # receiver failing to resolve at all, which is what an unnormalised
+      # `::ActiveSupport::TestCase` does (it matches no hierarchy entry, so
+      # the check bails before ever reaching the registry). Only a fixture
+      # whose answer *differs* between the two tells them apart.
+      let(:rooted_receiver) do
+        index(<<~RUBY, uri: "file:///rooted.rb")
+          module ActiveSupport
+            class TestCase
+            end
+          end
+
+          t = ::ActiveSupport::TestCase.new
+          t.fixtures
+        RUBY
+      end
+
+      it "resolves a root-prefixed receiver against the unprefixed answer" do
+        ancestry_registry.install(
+          object_ancestors: %w[Object Kernel BasicObject],
+          classes: { "ActiveSupport::TestCase" =>
+            { ancestors: %w[ActiveSupport::TestCase Object Kernel BasicObject] } }
+        )
+
+        findings = engine.analyze(document: rooted_receiver, semantic_context: with_ancestry, mode: :safe)
+
+        # The application confirms the workspace's own ancestry, so the
+        # call really is unknown -- and saying so requires having resolved
+        # `::ActiveSupport::TestCase` to the same class as the answer.
+        expect(findings.map(&:code)).to include("unknown-method")
+      end
+
+      it "asks about a root-prefixed receiver under its unprefixed name" do
+        ancestry_registry.activate!
+
+        engine.analyze(document: rooted_receiver, semantic_context: with_ancestry, mode: :safe)
+
+        expect(ancestry_registry.drain_pending).to include("ActiveSupport::TestCase")
+      end
+
+      it "stays silent for a root-prefixed receiver the application says is foreign" do
+        ancestry_registry.install(
+          object_ancestors: %w[Object Kernel BasicObject],
+          classes: { "ActiveSupport::TestCase" =>
+            { ancestors: %w[ActiveSupport::TestCase ActiveSupport::Testing::Assertions Object Kernel BasicObject] } }
+        )
+
+        findings = engine.analyze(document: rooted_receiver, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).not_to include("unknown-method")
+      end
+
+      # `resolve_type_name` matches by *simple* name, so a workspace module
+      # called `Assertions` used to dismiss the gem's
+      # `ActiveSupport::Testing::Assertions` as the workspace's own -- one
+      # same-named constant anywhere defeats the evidence entirely.
+      it "does not accept a workspace constant that merely shares an ancestor's last segment" do
+        index("module Assertions\nend\n", uri: "file:///assertions.rb")
+        ancestry_registry.install(
+          object_ancestors: %w[Object Kernel BasicObject],
+          classes: { "ActiveSupport::TestCase" =>
+            { ancestors: %w[ActiveSupport::TestCase ActiveSupport::Testing::Assertions Object Kernel BasicObject] } }
+        )
+
+        findings = engine.analyze(document: reopened, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).not_to include("unknown-method")
+      end
+
+      # The common case, and the one the release is actually about: once
+      # `test/test_helper.rb` has reopened `ActiveSupport::TestCase`, that
+      # name is workspace-declared, so every test file inheriting from it
+      # has a static chain that reaches BasicObject through it. Asking only
+      # about the receiver misses that entirely -- the subclass is a
+      # genuine workspace class, and the Agent rightly cannot place it.
+      it "stays silent for a workspace subclass of a class the workspace only reopened" do
+        document = index(<<~RUBY, uri: "file:///subclass_test.rb")
+          module ActiveSupport
+            class TestCase
+            end
+          end
+
+          class ProbeTest < ActiveSupport::TestCase
+            def test_something
+              assert_equal(1, 1)
+            end
+          end
+        RUBY
+        ancestry_registry.install(
+          object_ancestors: %w[Object Kernel BasicObject],
+          classes: { "ActiveSupport::TestCase" => { definedOutsideWorkspace: true }, "ProbeTest" => nil }
+        )
+
+        findings = engine.analyze(document: document, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).not_to include("unknown-method")
+      end
+
+      # The distinguishing case: a subclass of a class the workspace really
+      # does own must still be checked.
+      it "still reports on a workspace subclass of a class the workspace really defines" do
+        document = index(<<~RUBY, uri: "file:///own_subclass.rb")
+          class OwnBase
+          end
+
+          class OwnChild < OwnBase
+            def run
+              totally_bogus_method
+            end
+          end
+        RUBY
+        ancestry_registry.install(
+          object_ancestors: %w[Object Kernel BasicObject],
+          classes: { "OwnBase" => { ancestors: %w[OwnBase Object Kernel BasicObject] },
+                     "OwnChild" => { ancestors: %w[OwnChild OwnBase Object Kernel BasicObject] } }
+        )
+
+        findings = engine.analyze(document: document, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).to include("unknown-method")
+      end
+
+      # A round trip to another process is the most expensive test here,
+      # so it is asked only of a receiver every cheaper one has already
+      # called closed. A model, or anything the static tests rule out,
+      # must not queue a question whose answer cannot change the outcome.
+      it "does not ask about a receiver the static tests have already ruled open" do
+        ancestry_registry.activate!
+        document = index(<<~RUBY, uri: "file:///open.rb")
+          class OpenThing < SomeExternalGemBaseClass
+            def show
+              mystery_call_from_the_gem
+            end
+          end
+        RUBY
+
+        engine.analyze(document: document, semantic_context: with_ancestry, mode: :safe)
+
+        expect(ancestry_registry.drain_pending).to be_empty
+      end
+
+      it "does not ask about a receiver whose class declares method_missing" do
+        ancestry_registry.activate!
+        document = index(<<~RUBY, uri: "file:///dynamic.rb")
+          class DynamicThing
+            def method_missing(name, *)
+              super
+            end
+
+            def show
+              anything_dynamic
+            end
+          end
+        RUBY
+
+        engine.analyze(document: document, semantic_context: with_ancestry, mode: :safe)
+
+        expect(ancestry_registry.drain_pending).to be_empty
+      end
+
+      # An inactive registry is a workspace with no Agent at all: an
+      # untrusted one, or a plain Ruby project. Deferring there would
+      # disable the check permanently, since the answer can never come.
+      it "does not ask, and does not defer, when no Agent has ever answered" do
+        findings = engine.analyze(document: reopened, semantic_context: with_ancestry, mode: :safe)
+
+        expect(findings.map(&:code)).to include("unknown-method")
+        expect(ancestry_registry.drain_pending).to be_empty
+      end
+    end
   end
 
   describe "unresolved-constant" do

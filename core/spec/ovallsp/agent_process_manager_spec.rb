@@ -122,6 +122,36 @@ RSpec.describe Ovallsp::AgentProcessManager do
     expect(@manager.status).to eq(:static_only)
   end
 
+  # The one fetch that must NOT do that. It is triggered by opening any
+  # file, not by a save or a restart, so treating one slow answer about one
+  # class as proof the Agent is gone would tear down routes, models and
+  # completion over a diagnostic detail (024.R5).
+  it "does not degrade to static-only when an ancestors fetch gets no answer" do
+    @manager = described_class.new(
+      command: RbConfig.ruby,
+      args: [File.join(core_root, "spec/fixtures/mute_agent/boot.rb")],
+      chdir: core_root, logger: logger, hello_timeout: 5
+    )
+    expect(@manager.start).to eq(:ready)
+
+    expect(@manager.fetch_ancestors(["Whatever"], timeout: 0.3)).to be_nil
+    expect(@manager.status).to eq(:ready)
+  end
+
+  # The distinguishing case: a fetch that *is* evidence the Agent is gone
+  # still degrades, so the exemption above is specific rather than a hole.
+  it "still degrades to static-only when a models fetch gets no answer" do
+    @manager = described_class.new(
+      command: RbConfig.ruby,
+      args: [File.join(core_root, "spec/fixtures/mute_agent/boot.rb")],
+      chdir: core_root, logger: logger, hello_timeout: 5
+    )
+    expect(@manager.start).to eq(:ready)
+
+    expect(@manager.fetch_models_snapshot(timeout: 0.3)).to be_nil
+    expect(@manager.status).to eq(:static_only)
+  end
+
   it "degrades to static-only instead of getting stuck at :ready when the reader thread crashes on a corrupt frame (Task 008.5)" do
     @manager = described_class.new(
       command: RbConfig.ruby,

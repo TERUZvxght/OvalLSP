@@ -276,6 +276,29 @@ module Ovallsp
       response && response[:result]
     end
 
+    # The ancestors the running application really gives each of `names`,
+    # for the unknown-method check to test its own completeness claim
+    # against (024.R5). Asked for a handful of names at a time, as the
+    # check meets receivers it would otherwise report on, so the timeout
+    # is short: this is answered from constants already in memory, and a
+    # slow answer is better re-asked than waited on.
+    #
+    # Deliberately not #request_while_ready, which every other fetch here
+    # uses: that treats a nil response as proof the Agent is gone and
+    # terminates it, degrading to :static_only. Those fetches are triggered
+    # by a file save or a restart; this one is triggered by opening any
+    # file, and one slow answer to a question about one class is not
+    # evidence worth tearing down routes, models and completion over. A
+    # genuinely dead Agent is still detected, by the reader thread, which
+    # reports it directly rather than waiting for a request to notice
+    # (docs/design/tasks/008.6-agent-and-index-hardening.md).
+    def fetch_ancestors(names, timeout: 10)
+      return nil unless ready?
+
+      response = request("agent/ancestors", { names: names }, timeout: timeout)
+      response && response[:result]
+    end
+
     # Asks the Agent to re-draw routes (and anything else a real reload
     # touches) and returns its { generation:, changedSections:, errors: }
     # result, or nil if unavailable (in which case status degrades to

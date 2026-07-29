@@ -2,7 +2,7 @@
   "name": "ovallsp",
   "displayName": "OvalLSP",
   "description": "Semantic Ruby/Rails language features backed by a standalone Core Language Server.",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publisher": "teruz",
   "private": true,
   "license": "MIT",

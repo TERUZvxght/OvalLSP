@@ -42,15 +42,39 @@ meaning of both.
 
 | Position | Changes when | Examples |
 |---|---|---|
-| patch (`0.1.**5**`) | Nothing a user sees behaves differently | Bug fixes, performance, refactoring, documentation. No row is added to README's capability matrix and no existing ✅ changes |
+| patch (`0.1.**7**`) | The set of capabilities is unchanged — the extension does what it already claimed, and no more | Bug fixes, performance, refactoring, documentation. No row is added to README's capability matrix and no existing ✅ changes |
 | minor (`0.**1**.5`) | A capability is added | A new row in the capability matrix, a `NOT YET` becoming ✅, a new setting or command |
 | major (`**0**.1.5`) | Something a user already relies on stops working | A setting or command removed or renamed, a supported environment tier dropped, an older protocol version no longer accepted, a ✅ row removed |
+
+Note what the patch row does **not** say: that nothing a user sees
+changes. A bug fix changes what a user sees — that is the whole point of
+it — and a rule reading otherwise would have no patch releases in it at
+all. 0.1.7 is the worked example: two false diagnostics stop appearing in
+every Rails project, which every user sees, and it is still a patch
+because the extension gained no capability it did not already claim.
 
 "Capability" means a row of
 [`docs/EXTENSION_CAPABILITIES.md`](EXTENSION_CAPABILITIES.md), which is
 also what README's matrix summarises. That is deliberate: the version
 number and the capability list move together, so "what changed" is
 answerable from the two of them without reading the diff.
+
+It follows that a planned capability names a minor release exactly —
+`0.2.0`, not `0.2.x`. A range spelt with `x` puts the unknown in the
+patch position, which says the capability might arrive in a patch, and
+nothing ever does. Several capabilities may share one minor and ship
+together, as 0.1.6's five did.
+
+A row that records what the extension must **not** report is a regression
+guard, not a capability, and adding one is a patch. `docs/EXTENSION_CAPABILITIES.md`
+carries both kinds — G10 through G14 all read "nothing", because the way
+to state "this false positive does not come back" is to give it a row and
+an E2E example. Reading the rule mechanically as "any new row is a minor"
+would make every bug fix a minor release, which is the opposite of what
+the table above means by "a capability is added". The test is whether a
+user can do something they could not do before, not whether the document
+grew a line. (Written down after 0.1.7, whose whole content was removing
+one wrong report, needed the question settled.)
 
 The protocol version in the Extension/Core handshake is a separate
 integer and is not derived from this version string. Dropping an old
