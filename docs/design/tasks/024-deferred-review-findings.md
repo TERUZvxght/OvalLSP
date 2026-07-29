@@ -209,7 +209,7 @@ so in the version panel's own wording.
 
 ---
 
-## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 0.2.x)
+## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 **Status:** open — roadmap
 **Area:** `core/lib/ovallsp/server.rb`, `core/lib/ovallsp/parser_service.rb`,
@@ -253,3 +253,117 @@ rather than assumed.
 Deferred out of 0.1.6 deliberately: it is an architectural change across
 three files, and 0.1.6's goal is that the capabilities already claimed to
 work actually do.
+
+One of the two things 1.0.0 requires (`docs/PUBLISHING.md`, "0.x, and
+what 1.0.0 requires"): a plain Ruby project must be guaranteed, not only
+a Rails one. Until then README's capability matrix carries ⚠️ for that
+column and this entry is why.
+
+## 024.R2 Argument *type* checking (roadmap, 0.2.x)
+
+**Status:** open — roadmap
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+
+0.1.6 added an argument *count* check (capability G5). Nothing inspects
+what the arguments actually are: passing a String where the parameter is
+only ever used as an Integer is not reported.
+
+Doing it honestly needs more than the count check did. Parameter types
+are not declared in Ruby source, so the expected type has to come from
+RBS/RBI where one exists, or from inference over the method body where it
+does not — and a wrong "expected Integer, got String" on code that runs
+is worse than saying nothing, the same standard G5 was held to.
+
+**Direction:** start where the expected type is stated rather than
+inferred (RBS/RBI-declared parameters, and the built-in container rules),
+and report only when the argument's own inferred type is a concrete
+Nominal that cannot match. Leave everything else silent.
+
+Referenced from README's capability matrix as the version this is planned
+for, so the table's promise and this entry stay in step.
+
+---
+
+## 024.R3 Feature parity roadmap, measured against Pylance
+
+**Status:** open — roadmap
+
+Pylance is the closest well-known reference point for "what a language
+server is expected to do" in a dynamically typed language with optional
+type declarations, so it is a useful yardstick — not a target to copy.
+Rows Pylance has that make no sense here (Jupyter support, IntelliCode's
+ranked completions, Python-specific stub packaging) are deliberately
+absent rather than listed and dismissed.
+
+Current OvalLSP capabilities were read from the `initialize` response and
+the code, not assumed: `hoverProvider`, `documentSymbolProvider`,
+`definitionProvider`, `referencesProvider`, `renameProvider`,
+`workspaceSymbolProvider`, `completionProvider`, `signatureHelpProvider`.
+Everything else below is absent.
+
+| Pylance capability | OvalLSP today | Planned for | Notes |
+|---|---|---|---|
+| Diagnostics across the whole project | Open files only | **0.2.x** | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
+| Docstrings in hover and completion | Type, origin and definition location only | **0.2.x** | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
+| Semantic highlighting (semantic tokens) | None | **0.2.x** | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. |
+| Inlay hints (inferred types, parameter names) | None | **0.3.x** | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |
+| Code actions / quick fixes | None | **0.3.x** | Each existing diagnostic implies one: define the missing method, correct the route helper name, fix the argument count. A diagnostic that only complains is half a feature. |
+| Go to type definition | Go to definition only | **0.3.x** | Cheap given `explainType` already resolves the type: jump from an expression to the class it evaluates to, rather than to the method being called. |
+| Document highlight (occurrences in file) | None | **0.3.x** | Small and self-contained: the reference index already answers this workspace-wide, so scoping it to one file is nearly free. |
+| Call hierarchy | Find references only | **0.3.x** | An incremental step on the same index. Callers/callees of a method, navigable, rather than a flat list. |
+| Auto-import / add `require` | None | **0.4.x** | Much weaker payoff than in Python: Rails autoloads, and plain Ruby projects mostly `require` at the entry point. Worth revisiting only after the plain-Ruby story (024.R1) exists. |
+| Type checking strictness levels | One fixed set of checks | **0.4.x** (as per-check severity) | Pylance's basic/strict switch matters because its checks are numerous and opinionated. With four checks, a per-check severity setting would cover the same need more simply. |
+| Signature help with active parameter tracking | Signature label only | **0.4.x** | Already useful; highlighting which argument the cursor is in is a refinement, not a gap. |
+| Generating type stubs from source | RBS/RBI are read, never written | not planned | Interesting for library authors, irrelevant to the Rails application developer this Preview targets. |
+
+Not planned, and listed only so their absence is a decision rather than
+an oversight: unreachable-code dimming (RuboCop covers the same ground
+for Ruby users), refactoring extractions beyond rename, and anything
+notebook-shaped.
+
+Ordered by what a user notices soonest rather than by effort:
+whole-project diagnostics, then documentation in hover/completion, then
+semantic tokens, then inlay hints and code actions. The first two are
+noticed in the first ten minutes.
+
+These versions are also carried in README.md and README.ja.md's
+capability matrix, which is the user-facing statement of them; this
+section is the reasoning behind each. Keep the two in step.
+
+---
+
+## 024.R4 Only one platform is published or verified (roadmap, 1.0.0)
+
+**Status:** open — roadmap
+**Area:** `vscode/package.json` (`--target darwin-arm64`),
+`.github/workflows/apple-silicon-release.yml`, `vscode/scripts/copy-core.js`
+
+One VSIX is published, for `darwin-arm64`, and it is the only environment
+any capability has been verified in. On every other platform the
+situation is not "probably fine" but "unpublished": VS Code filters
+Marketplace results by target, so there is nothing to install on Windows,
+Linux, or an Intel Mac.
+
+The obstacle is the vendored payload rather than the code. `prism` and
+`rbs` ship as native extensions built for the packaging machine's Ruby
+ABI, OS and CPU, so a VSIX is only valid for the combination
+`PLATFORM_MANIFEST.json` records. Sideloading the darwin-arm64 build
+elsewhere does not crash — `Ovallsp::VendorCompatibility` and
+`platformCompatibility.ts` refuse the payload and explain why (ADR-0005)
+— but it then depends on the user's own Ruby having prism/rbs, which is
+unverified.
+
+`.github/workflows/apple-silicon-release.yml` deliberately asserts an
+arm64 interpreter before building, so it cannot be pointed at another
+target as-is.
+
+**Direction:** a per-target build matrix producing one VSIX per platform,
+each built on that platform (never cross-compiled or emulated, for the
+reason above), each running the capability suite against its own bundled
+Core, and each published. `docs/SUPPORT_MATRIX.md`'s tiers then become
+statements about verified artifacts rather than about one artifact and
+several unknowns.
+
+The other of the two things 1.0.0 requires (`docs/PUBLISHING.md`, "0.x,
+and what 1.0.0 requires").
+
