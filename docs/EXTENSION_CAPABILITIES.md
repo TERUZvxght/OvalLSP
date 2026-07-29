@@ -172,6 +172,15 @@ table — it belongs in the non-goals below.
   flow-sensitive analysis, no generics beyond the built-in container
   shapes, and no exhaustiveness. Nothing inspects the *type* of an
   argument; G5 counts arguments and says nothing about what they are.
+- Syntax colouring. A TextMate grammar decides how a file is tokenised
+  for display, which is a presentation concern and not what this engine
+  knows anything about; VS Code's bundled Ruby extension already
+  associates `.erb`, and other Ruby extensions ship grammars of their
+  own. Registering another would collide with them for no gain.
+  *Semantic* highlighting is a different thing and is planned (README's
+  matrix, 0.2.x): it layers meaning this engine actually has — whether
+  `foo` is a local variable or a call on self — over whatever grammar is
+  in use, in `.rb` files and in an ERB template's Ruby regions alike.
 - Anything about a Ruby file outside a workspace folder.
 - Anything while the workspace is untrusted: the Runtime Agent does not
   start, so every Rails-derived capability (C3, C4, C5, D2, G3, G4)

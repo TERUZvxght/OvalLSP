@@ -74,7 +74,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: wrong argument *type* | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
 | Diagnostics across the whole project, not just open files | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
 | Documentation (RDoc/YARD) in hover and completion | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
-| Semantic highlighting (local variable vs. method call) | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
+| Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | 0.2.x | ⚠️ 0.2.x | ⚠️ 1.0.0 |
 | Inlay hints (inferred types, parameter names) | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
 | Code actions / quick fixes for each diagnostic | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
 | Go to type definition | 0.3.x | ⚠️ 0.3.x | ⚠️ 1.0.0 |
