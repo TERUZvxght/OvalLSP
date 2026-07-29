@@ -55,7 +55,7 @@ module Ovallsp
         content_hash: Digest::SHA256.hexdigest(raw_source),
         document_version: document.version,
         declarations: visitor.declarations,
-        diagnostics: result.errors.map { |error| to_diagnostic(error, lines) },
+        diagnostics: parse_diagnostics(result, lines, erb: erb_document?(document.uri)),
         ancestor_facts: visitor.ancestor_facts,
         alias_facts: visitor.alias_facts,
         reference_candidates: visitor.reference_candidates,
@@ -67,6 +67,21 @@ module Ovallsp
 
     def erb_document?(uri)
       uri.to_s.end_with?(".erb")
+    end
+
+    # An ERB template is compiled into a method body, so `<%= yield %>`
+    # in a layout is legal Ruby there -- but the extracted regions are
+    # parsed at top level, where Prism rejects it. Reporting it made every
+    # Rails layout show a syntax error for its own central line.
+    #
+    # Keyed on Prism's error type rather than its message, which is
+    # wording and can change between versions.
+    ERB_LEGAL_AT_TOP_LEVEL = %i[invalid_yield].freeze
+
+    def parse_diagnostics(result, lines, erb:)
+      errors = result.errors
+      errors = errors.reject { |error| ERB_LEGAL_AT_TOP_LEVEL.include?(error.type) } if erb
+      errors.map { |error| to_diagnostic(error, lines) }
     end
 
     def to_diagnostic(error, lines)
@@ -426,14 +441,22 @@ module Ovallsp
       # it. Recorded as written in source; Semantic::HierarchyIndex
       # resolves it against the workspace's declared types when
       # aggregating ancestor chains.
+      # A superclass that is not a plain constant path -- `class Foo <
+      # ActiveRecord::Migration[8.1]`, `class Bar < base_class_for(x)` --
+      # still has to be recorded, with a nil target meaning "this class
+      # inherits from something we cannot name".
+      #
+      # Dropping it silently was worse than recording nothing: the class
+      # then looked like a plain `class Foo` with no parent, so the
+      # hierarchy gave it Object/Kernel/BasicObject and the unknown-method
+      # check treated it as fully known. Every Rails migration was in that
+      # state, and every call in one -- `create_table`, `add_column` --
+      # was reported as undefined.
       def record_superclass(node, owner)
         return unless node.superclass
 
-        target = raw_constant_name(node.superclass)
-        return unless target
-
         @ancestor_facts << Index::AncestorFact.new(
-          owner: owner, relation: :superclass, target: target,
+          owner: owner, relation: :superclass, target: raw_constant_name(node.superclass),
           location: Index::SourceLocation.to_range(node.superclass.location, @lines)
         )
       end
@@ -656,16 +679,44 @@ module Ovallsp
           elsif (name = raw_constant_name(node.receiver))
             [name, true] # `Foo.bar` -- always a class-level call, regardless of the lexical writing context
           else
+            # One character *inside* the receiver, not one past it. Past
+            # it is the following token -- the `[` of `params[:id]` --
+            # and that position belongs to the enclosing expression too,
+            # so `Article.find(params[:id])` resolved `[]`'s receiver to
+            # Article and reported a missing `[]` on the model. The last
+            # character of the receiver is unambiguously the receiver's.
             position = Index::SourceLocation.to_position(node.receiver.location.end_line,
-                                                           node.receiver.location.end_column, @lines)
+                                                           [node.receiver.location.end_column - 1, 0].max, @lines)
             [{ position: position }, false] # arbitrary expression receiver -- always an instance call
           end
 
         @reference_candidates << Index::ReferenceCandidate.new(
           kind: :method_call, name: node.name.to_s, location: Index::SourceLocation.to_range(node.message_loc, @lines),
           scope_id: nil, owner: current_owner, singleton: singleton, receiver: receiver,
-          lexical_nesting: current_lexical_nesting
+          lexical_nesting: current_lexical_nesting, arguments: call_argument_shape(node)
         )
+      end
+
+      # What a call site passes, in the terms an arity check needs. A
+      # splat makes the positional count a lower bound rather than a
+      # count, and `...` forwarding says nothing at all about arity, so
+      # both are recorded as such instead of being counted -- a diagnostic
+      # that fires on `f(*args)` would be worse than no diagnostic.
+      def call_argument_shape(node)
+        arguments = node.arguments&.arguments || []
+        splat = arguments.any? do |argument|
+          argument.is_a?(Prism::SplatNode) || argument.is_a?(Prism::ForwardingArgumentsNode)
+        end
+        keywords = arguments.count { |argument| argument.is_a?(Prism::KeywordHashNode) }
+        {
+          positional: arguments.count do |argument|
+            !argument.is_a?(Prism::KeywordHashNode) && !argument.is_a?(Prism::SplatNode) &&
+              !argument.is_a?(Prism::ForwardingArgumentsNode) && !argument.is_a?(Prism::BlockArgumentNode)
+          end,
+          splat: splat,
+          keywords: keywords.positive?,
+          block: !node.block.nil?
+        }
       end
 
       def constant_full_name(node)

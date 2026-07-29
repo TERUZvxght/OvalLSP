@@ -198,19 +198,122 @@ module Ovallsp
           model_payload(klass)
         end
 
-        { models: models }
+        { models: models, activeRecordApi: active_record_api }
+      end
+
+      # The Active Record API itself, reported once rather than per model.
+      #
+      # A model's ancestors above ApplicationRecord are outside the
+      # workspace and have no signatures, so Core could see a model's
+      # columns and associations but not `save`, `destroy`, `find` or
+      # `where` -- the methods a Rails developer reaches for constantly.
+      # Completion on a model offered columns only, and the unknown-method
+      # check stayed silent because the receiver was never a closed class.
+      #
+      # Taken from the loaded classes rather than guessed or hardcoded:
+      # this Agent has the real Rails booted, which is the entire reason
+      # it exists (ADR-0002). What ships is therefore what that version of
+      # Rails actually defines, not what some vendored signature claims.
+      #
+      # ActiveRecord::Base's own API is the same for every model, so it is
+      # sent once (~1000 names, ~17KB) instead of once per model, which
+      # for an app with hundreds of models would have been megabytes of
+      # identical strings. Per-model additions (concerns, scopes) already
+      # arrive through each model's own payload.
+      def active_record_api
+        return nil unless active_record_available?
+
+        base = ::ActiveRecord::Base
+        instance = callable_names(base.instance_methods - Object.instance_methods)
+        singleton = callable_names(base.methods - Object.methods)
+        {
+          instance: instance,
+          singleton: singleton,
+          # Which of those accept an argument at all. Rails' own methods
+          # are nearly all `(*, **, &)`, so their parameter *names* are
+          # worthless for completion -- but "takes something" versus
+          # "takes nothing" is exactly what decides whether an editor
+          # should offer `where()` with the cursor inside, or a bare
+          # `save`. That distinction is derivable here and nowhere else.
+          instanceWithArguments: names_taking_arguments(instance) { |name| base.instance_method(name) },
+          singletonWithArguments: names_taking_arguments(singleton) { |name| base.method(name) }
+        }
+      rescue StandardError => e
+        @logger.call("active record api unavailable: #{e.class}: #{e.message}")
+        nil
+      end
+
+      # Operators (`==`, `<=>`, `[]`) are real methods but never useful as
+      # completion items after a dot, so they are dropped here rather than
+      # shipped and filtered by every consumer.
+      #
+      # So are leading-underscore names. Rails' callback and internal
+      # machinery contributes hundreds of them (`__callbacks`,
+      # `_create_callbacks`, `_reflections`, ...) -- measured: they were
+      # most of a 442-item completion list on a three-column model, which
+      # buries the handful of methods anyone is looking for. Ruby's own
+      # convention already reads a leading underscore as "not for you".
+      # A method "takes arguments" when its parameter list contains
+      # anything a caller could pass: required, optional, keyword, or the
+      # variadic forms. A lone block parameter does not count -- `each`
+      # is written `each` in Ruby, not `each()`.
+      def names_taking_arguments(names)
+        names.select do |name|
+          parameters = yield(name).parameters
+          parameters.any? { |kind, _| %i[req opt rest key keyreq keyrest].include?(kind) }
+        rescue StandardError
+          false
+        end
+      end
+
+      def callable_names(names)
+        names.map(&:to_s).select { |name| name.match?(/\A[a-z][A-Za-z0-9_]*[?!=]?\z/) }.sort
       end
 
       def model_payload(klass)
         columns, partial = extract_columns(klass)
+        instance_extras, singleton_extras = model_method_extras(klass)
 
         {
           name: klass.name,
           tableName: safely { klass.table_name },
           columns: columns,
           associations: extract_associations(klass),
-          partial: partial
+          partial: partial,
+          instanceMethods: instance_extras,
+          singletonMethods: singleton_extras
         }
+      end
+
+      # What this model adds on top of ActiveRecord::Base: attribute
+      # readers/writers and their dirty-tracking variants
+      # (`title_changed?`, `saved_change_to_title?`, ...), association
+      # accessors, enum predicates, scopes, concerns, and its own `def`s.
+      #
+      # Reported rather than reconstructed. Rails generates these by
+      # convention, and a convention re-implemented here is a convention
+      # that drifts: every Rails version that adds a variant would produce
+      # a false "no method named" on code that runs fine. Asking the
+      # loaded class removes the guesswork -- including whether the model
+      # defines `method_missing`, which is what decides whether the
+      # unknown-method check may run against it at all.
+      #
+      # `define_attribute_methods` first, because Rails defines attribute
+      # methods lazily: before something touches them, `instance_methods`
+      # genuinely does not list `title` for a model with a title column
+      # (measured: 0 extras before, 119 after). It is the same call Rails
+      # itself makes on first access, so this only does earlier what the
+      # app would do anyway.
+      def model_method_extras(klass)
+        safely { klass.define_attribute_methods }
+        base = ::ActiveRecord::Base
+        [
+          callable_names(klass.instance_methods - base.instance_methods),
+          callable_names(klass.methods - base.methods)
+        ]
+      rescue StandardError => e
+        @logger.call("method list unavailable for #{klass.name}: #{e.class}: #{e.message}")
+        [[], []]
       end
 
       # "constantize前にconstant名を検証する" (docs/03-semantic-engine.md 7.1's

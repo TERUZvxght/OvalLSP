@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+
+require "set"
 module Ovallsp
   module Models
     # `nullable` mirrors the Agent's raw `null` column flag as-is (Task
@@ -10,7 +12,13 @@ module Ovallsp
     # reason to drop the information here.
     Column = Data.define(:name, :ruby_type, :nullable)
     Association = Data.define(:name, :macro, :class_name, :optional)
-    ModelInfo = Data.define(:name, :table_name, :columns, :associations, :partial)
+    # `instance_methods`/`singleton_methods` are what this model adds on
+    # top of ActiveRecord::Base, as reported by the Runtime Agent from the
+    # loaded class -- attribute and dirty-tracking methods, association
+    # accessors, enum predicates, scopes, concerns, own defs. Reported
+    # rather than reconstructed from Rails' conventions, which drift.
+    ModelInfo = Data.define(:name, :table_name, :columns, :associations, :partial,
+                             :instance_methods, :singleton_methods)
 
     # Standard DB-type -> Ruby-type mapping (docs/03-semantic-engine.md
     # section 7.3). Adapters/plugins can override this later; unmapped
@@ -41,11 +49,42 @@ module Ovallsp
     class ModelRegistry
       def initialize
         @models = {}
+        @active_record_api = {
+        instance: [], singleton: [], instance_with_arguments: Set.new, singleton_with_arguments: Set.new
+      }
         @generation = 0
         @mutex = Mutex.new
       end
 
       def generation = @mutex.synchronize { @generation }
+
+      # Active Record's own API, as reported by the Runtime Agent from the
+      # really-loaded classes. Shared by every model, so it is stored once
+      # rather than copied into each ModelInfo.
+      #
+      # Installed only when the Agent actually reports it: a failed or
+      # absent report must leave the last known API in place rather than
+      # blanking it, exactly as a failed model fetch leaves the last
+      # known-good models alone.
+      def install_active_record_api(api)
+        return if api.nil?
+
+        fetch = ->(key) { Array(api[key.to_sym] || api[key.to_s]).map(&:to_s) }
+        instance = fetch.call("instance")
+        singleton = fetch.call("singleton")
+        return if instance.empty? && singleton.empty?
+
+        @mutex.synchronize do
+          @active_record_api = {
+            instance: instance, singleton: singleton,
+            instance_with_arguments: fetch.call("instanceWithArguments").to_set,
+            singleton_with_arguments: fetch.call("singletonWithArguments").to_set
+          }
+          @generation += 1
+        end
+      end
+
+      def active_record_api = @mutex.synchronize { @active_record_api }
 
       # Builds a ModelInfo from an agent/model response's `:result` hash
       # and registers (or overwrites) it in place. `name` is passed
@@ -146,7 +185,9 @@ module Ovallsp
 
         ModelInfo.new(
           name: name, table_name: response[:tableName], columns: columns, associations: associations,
-          partial: response[:partial] == true
+          partial: response[:partial] == true,
+          instance_methods: Array(response[:instanceMethods]).map(&:to_s),
+          singleton_methods: Array(response[:singletonMethods]).map(&:to_s)
         )
       end
     end

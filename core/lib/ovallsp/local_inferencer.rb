@@ -243,6 +243,15 @@ module Ovallsp
           locate(node.receiver, offset, env)
         elsif node.block.is_a?(Prism::BlockNode) && contains?(node.block.location, offset)
           locate_in_block(node, offset, env)
+        elsif (argument = argument_containing(node, offset))
+          # An argument is its own expression and has its own type.
+          # Without this, every position inside an argument list answered
+          # with the *enclosing* call's type: hovering `params` in
+          # `User.find(params[:id])` said User, and -- because the
+          # diagnostics engine resolves a receiver by asking for the type
+          # at the receiver's position -- `params[:id]` was reported as
+          # "User has no method named `[]`".
+          locate(argument, offset, env)
         else
           eval_type(node, env)
         end
@@ -265,7 +274,18 @@ module Ovallsp
       when Prism::SingletonClassNode
         locate_in_singleton_class(node, offset)
       else
-        eval_type(node, env)
+        # Anything not named above may still *contain* the position: a
+        # keyword argument's value, an array element, a hash value, a
+        # `while`/`case`/`begin` body, a `return`'s value. Descending into
+        # whichever child holds the offset is the right default, and
+        # listing node types was the wrong one -- every unlisted composite
+        # answered with its own type instead of the expression under the
+        # cursor, so hovering `"s".upcase` inside `f(a: ...)` said Unknown
+        # and inside `[1, ...]` said Array. Found after the same mistake
+        # in CallNode reported `User.find(params[:id])` as a missing `[]`
+        # on the model.
+        child = node.compact_child_nodes.find { |candidate| contains?(candidate.location, offset) }
+        child ? locate(child, offset, env) : eval_type(node, env)
       end
     end
 
@@ -279,6 +299,10 @@ module Ovallsp
     # most common shape of call in real Ruby) never resolved, the same
     # class of gap as the ClassNode/ModuleNode fix above, just one level
     # deeper.
+    def argument_containing(node, offset)
+      (node.arguments&.arguments || []).find { |argument| contains?(argument.location, offset) }
+    end
+
     def locate_in_namespace(node, offset)
       return Types::UNKNOWN unless contains?(node.location, offset)
 
@@ -426,8 +450,33 @@ module Ovallsp
       when Prism::ParenthesesNode then eval_type(node.body, env)
       when Prism::CallNode then eval_call(node, env)
       when Prism::IfNode, Prism::UnlessNode then eval_conditional(node, env)
+      when Prism::ConstantReadNode, Prism::ConstantPathNode then eval_constant(node)
       else Types::UNKNOWN
       end
+    end
+
+    # A bare constant is the *class object*, not an instance of it, which
+    # is what `ClassOf[X]` means everywhere else in this engine (it is
+    # already what `self` is inside `class << self` and what a singleton
+    # method's receiver resolves to).
+    #
+    # There was no case for this at all, so every constant evaluated to
+    # Unknown -- and since completion asks for the type of whatever
+    # precedes the dot, `User.`, `Article.`, `JSON.` produced an empty
+    # list. That is the single most common completion trigger in Ruby, and
+    # it answered nothing in every released version.
+    #
+    # `Foo.new`/`Foo.find` do not come through here: #eval_call resolves a
+    # constant receiver from the AST directly, which is why those worked
+    # while the receiver's own type did not.
+    def eval_constant(node)
+      name = node.full_name
+      return Types::UNKNOWN if name.nil? || name.empty?
+
+      Types::Generic.new(name: "ClassOf", type_arg: Types::Nominal.new(name: name.delete_prefix("::")))
+    rescue StandardError
+      # `full_name` raises on a dynamic constant path (`Foo::(bar)`).
+      Types::UNKNOWN
     end
 
     # Elements beyond #MAX_ARRAY_ELEMENT_UNION contribute to a widened

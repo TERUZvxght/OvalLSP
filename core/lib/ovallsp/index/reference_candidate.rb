@@ -42,9 +42,16 @@ module Ovallsp
     #   syntax does NOT implicitly add the outer segment to nesting, even
     #   though `owner` looks identical either way). `[]` for a top-level
     #   reference. See Semantic::ReceiverResolution.
-    ReferenceCandidate = Data.define(:kind, :name, :location, :scope_id, :owner, :singleton, :receiver, :lexical_nesting) do
-      def initialize(lexical_nesting: [], **rest)
-        super(lexical_nesting: lexical_nesting, **rest)
+    # - arguments: for :method_call only -- what the call site passes, as
+    #   `{ positional:, splat:, keywords:, block: }`. `nil` for every
+    #   other kind, and for a call whose shape the parser deliberately
+    #   does not model. `splat` being true means the positional count is
+    #   a lower bound, not a count, so no arity conclusion may be drawn
+    #   from it.
+    ReferenceCandidate = Data.define(:kind, :name, :location, :scope_id, :owner, :singleton, :receiver,
+                                      :lexical_nesting, :arguments) do
+      def initialize(lexical_nesting: [], arguments: nil, **rest)
+        super(lexical_nesting: lexical_nesting, arguments: arguments, **rest)
       end
     end
   end

@@ -60,6 +60,7 @@ module Ovallsp
       # layer never silently drops one.
       def resolve(receiver_type:, name:, context: {})
         method_name = name.to_s
+        receiver_type, context = normalize_class_receiver(receiver_type, context)
         types = nominal_members(receiver_type)
         return [] if types.empty?
 
@@ -72,6 +73,7 @@ module Ovallsp
       # visibility. Conditional (Union, not-on-every-member) names sort
       # after unconditional ones.
       def complete(receiver_type:, prefix:, context: {}, limit: 50)
+        receiver_type, context = normalize_class_receiver(receiver_type, context)
         types = nominal_members(receiver_type)
         return [] if types.empty?
 
@@ -80,6 +82,22 @@ module Ovallsp
       end
 
       private
+
+      # `ClassOf[X]` is this engine's representation of the class object
+      # itself -- what a bare constant evaluates to, and what `self` is
+      # inside `class << self`. Looking a method up on it means looking at
+      # X's *singleton* chain.
+      #
+      # Without this, a class receiver reached `nominal_members`, matched
+      # nothing (it is a Generic, not a Nominal), and returned [] -- so
+      # `Widget.` offered no `def self.` methods and no completion at all.
+      # An explicit `singleton: true` from the caller still wins, so the
+      # `class << self` path that already passed one is unaffected.
+      def normalize_class_receiver(receiver_type, context)
+        return [receiver_type, context] unless receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
+
+        [receiver_type.type_arg, context.merge(singleton: true)]
+      end
 
       def nominal_members(type)
         case type

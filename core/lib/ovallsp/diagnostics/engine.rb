@@ -35,6 +35,14 @@ module Ovallsp
         raise ArgumentError, "unknown mode: #{mode.inspect}" unless MODES.include?(mode)
 
         summary = ParserService.new.summarize(document)
+        # Everything below asks the type engine about positions in
+        # `summary`'s coordinates, and for an .erb file those are the
+        # *extracted* Ruby regions -- ParserService extracts before
+        # parsing. Passing the raw template on meant every receiver in a
+        # template was resolved against HTML, so a partial's local read as
+        # a String and its own methods were reported missing. Extraction
+        # preserves line and column layout, so no range needs remapping.
+        document = analysis_document(document)
         resolver = build_resolver(semantic_context)
         resolved = resolver.resolve(document, summary.reference_candidates, uri: document.uri,
                                                                              generation: semantic_context.generation)
@@ -47,11 +55,21 @@ module Ovallsp
           findings.concat(unresolved_constant_findings(summary, semantic_context))
         end
         findings.concat(unknown_route_helper_findings(summary, resolved_locations, semantic_context))
+        findings.concat(argument_count_findings(document, summary, semantic_context))
 
         budget ? findings.first(budget) : findings
       end
 
       private
+
+      def analysis_document(document)
+        return document unless document.uri.to_s.end_with?(".erb")
+
+        TextDocument.new(
+          uri: document.uri, text: Erb::RubyRegionExtractor.extract_ruby_source(document.text),
+          version: document.version, language_id: "ruby"
+        )
+      end
 
       def build_resolver(context)
         Semantic::ReferenceResolver.new(
@@ -90,8 +108,10 @@ module Ovallsp
 
           receiver_type = receiver_type_for(document, candidate, context)
           next unless receiver_type.is_a?(Types::Nominal)
-          next unless closed_nominal?(receiver_type, candidate.singleton, context)
+          next unless closed_nominal?(receiver_type, candidate.singleton, context) ||
+                      model_closed?(receiver_type, context)
           next if rbs_resolves?(candidate, receiver_type, context)
+          next if model_resolves?(candidate, receiver_type, context)
 
           Finding.new(
             code: "unknown-method",
@@ -100,6 +120,77 @@ module Ovallsp
             evidence: { receiver: receiver_type.to_s, ancestors_closed: true }, generation: context.generation
           )
         end
+      end
+
+      # Reports a call that cannot possibly bind, by comparing the call
+      # site's positional arguments against the parameters of the source
+      # declaration it resolves to.
+      #
+      # Deliberately the narrowest useful version. It reports only when
+      # every input is certain:
+      #
+      # - the receiver resolves to exactly one source declaration, so
+      #   there is one parameter list and no overload to choose between;
+      # - the call passes no splat and no `...`, either of which makes the
+      #   positional count a lower bound rather than a count;
+      # - the declaration takes no `*rest`, which makes its maximum
+      #   unbounded.
+      #
+      # Anything outside that says nothing rather than guessing. A false
+      # "wrong number of arguments" on code that runs is worse than no
+      # arity checking at all, which is what shipped until now.
+      def argument_count_findings(document, summary, context)
+        return [] unless context.method_resolver
+
+        summary.reference_candidates.filter_map do |candidate|
+          next unless candidate.kind == :method_call
+          next unless (shape = candidate.arguments)
+          next if shape[:splat]
+
+          declaration = sole_source_declaration(document, candidate, context)
+          next unless declaration
+
+          parameters = declaration.parameters || []
+          next if parameters.any? { |parameter| parameter.kind == :rest }
+
+          required = parameters.count { |parameter| parameter.kind == :required }
+          maximum = required + parameters.count { |parameter| parameter.kind == :optional }
+          passed = shape[:positional]
+          next if passed >= required && passed <= maximum
+
+          Finding.new(
+            code: "argument-count",
+            message: "`#{candidate.name}` takes #{expected_arity(required, maximum)}, but #{passed} given",
+            range: candidate.location, severity: :warning, confidence: :high,
+            evidence: { required: required, maximum: maximum, passed: passed }, generation: context.generation
+          )
+        end
+      end
+
+      def expected_arity(required, maximum)
+        count = required == maximum ? required.to_s : "#{required}..#{maximum}"
+        "#{count} argument#{maximum == 1 ? '' : 's'}"
+      end
+
+      # The one source declaration this call resolves to, or nil when the
+      # answer is not singular: no candidate, a conditional (Union
+      # receiver) candidate, or several declarations for the same name
+      # (a reopened class, an override) whose parameter lists may differ.
+      def sole_source_declaration(document, candidate, context)
+        receiver_type = receiver_type_for(document, candidate, context)
+        return nil unless receiver_type.is_a?(Types::Nominal)
+
+        candidates = context.method_resolver.resolve(
+          receiver_type: receiver_type, name: candidate.name,
+          context: { singleton: candidate.singleton }
+        )
+        return nil unless candidates.size == 1
+        return nil if candidates.first.conditional
+
+        declarations = candidates.first.declarations
+        return nil unless declarations.size == 1
+
+        declarations.first[1]
       end
 
       def unresolved_constant_findings(summary, context)
@@ -162,12 +253,85 @@ module Ovallsp
       # flagged. Also refuses to call anything "closed" if any ancestor
       # declares `method_missing` -- "method_missing、respond_to_missing?、
       # known DSL boundaryを考慮する".
+      # An Active Record model is never *statically* closed: its ancestors
+      # above ApplicationRecord are outside the workspace and have no
+      # signatures, so #closed_nominal? is false for every model and this
+      # check was silently inert for exactly the classes a Rails developer
+      # writes most.
+      #
+      # The Runtime Agent closes it instead, by reporting what the loaded
+      # class actually responds to. Three conditions, all necessary:
+      #
+      # - the model is known, so there is a method list to check against;
+      # - `partial` is false, meaning columns were read successfully -- a
+      #   model whose table is missing reports no attribute methods, and
+      #   flagging `user.email` because the database was not migrated
+      #   would be worse than saying nothing;
+      # - the model does not define `method_missing`, which would make any
+      #   name potentially valid. Read from the reported list rather than
+      #   from the workspace index, so a `method_missing` inherited from a
+      #   gem or a concern counts too.
+      def model_closed?(nominal, context)
+        registry = context.model_registry
+        model = registry && registry.model(nominal.name)
+        return false unless model
+        return false if model.partial
+
+        !model.instance_methods.include?("method_missing")
+      end
+
+      # Everything the running app says this model responds to: Active
+      # Record's own API, plus this model's attribute/dirty/association/
+      # enum/scope methods. Columns and associations are covered by the
+      # method lists (Rails defines a reader for each), but are checked
+      # too so a model whose method list could not be read still resolves
+      # its own columns rather than reporting them as unknown.
+      def model_resolves?(candidate, nominal, context)
+        registry = context.model_registry
+        model = registry && registry.model(nominal.name)
+        return false unless model
+
+        api = registry.active_record_api
+        names = candidate.singleton ? model.singleton_methods + api[:singleton] : model.instance_methods + api[:instance]
+        return true if names.include?(candidate.name)
+
+        !candidate.singleton &&
+          (model.columns.any? { |column| column.name == candidate.name } ||
+            model.associations.any? { |association| association.name == candidate.name })
+      end
+
       def closed_nominal?(nominal, singleton, context)
         entries = context.hierarchy_index.ancestors(nominal.name, singleton: singleton)
         return false if entries.empty?
+        # Always asked of the *instance* chain, even for a singleton
+        # lookup: a singleton chain ends at the class itself and never
+        # reaches BasicObject, so asking it directly would call every
+        # `Foo.bar` open and silence the check entirely.
+        return false unless chain_reaches_root?(context.hierarchy_index.ancestors(nominal.name, singleton: false))
 
         entries.all? { |entry| ancestor_known?(entry, context) } &&
           entries.none? { |entry| declares_method_missing?(entry.name, context) }
+      end
+
+      # Every Ruby class inherits from BasicObject, so a chain that does
+      # not reach it did not end -- it stopped. Two ways that happens, and
+      # both produced false "has no method named" against a real Rails
+      # application:
+      #
+      # - the superclass name resolved to the class itself. `class
+      #   Application < Rails::Application` inside `module Ovaldev` finds
+      #   the workspace's own `Ovaldev::Application` by unqualified name,
+      #   the walk detects the cycle and stops, and the class is left
+      #   looking like its own complete ancestry.
+      # - the superclass named something the workspace does not declare,
+      #   so the walk had nowhere to continue.
+      #
+      # Requiring BasicObject makes both of those open rather than closed,
+      # without needing to tell them apart. A class the workspace really
+      # does define completely always reaches it, through the default
+      # Object chain if it declares no parent at all.
+      def chain_reaches_root?(entries)
+        entries.any? { |entry| entry.name == "BasicObject" }
       end
 
       # A builtin ancestor (Object/Kernel/BasicObject, or any RBS-known
@@ -189,6 +353,9 @@ module Ovallsp
       end
 
       def ancestor_known?(entry, context)
+        # A nameless ancestor is `class Foo < <expression>` -- there is
+        # nothing to look up and nothing to know.
+        return false if entry.name.nil?
         return true if entry.kind
 
         context.signatures && !context.signatures.ancestors("::#{entry.name}").empty?

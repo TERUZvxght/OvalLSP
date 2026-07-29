@@ -35,6 +35,51 @@ manifest when the two disagree, and `npm run package` fails with both
 versions named. There is nothing to remember — a mismatched build cannot
 be produced.
 
+### What each number means
+
+The extension and the bundled Core share one version, so this is the
+meaning of both.
+
+| Position | Changes when | Examples |
+|---|---|---|
+| patch (`0.1.**5**`) | Nothing a user sees behaves differently | Bug fixes, performance, refactoring, documentation. No row is added to README's capability matrix and no existing ✅ changes |
+| minor (`0.**1**.5`) | A capability is added | A new row in the capability matrix, a `NOT YET` becoming ✅, a new setting or command |
+| major (`**0**.1.5`) | Something a user already relies on stops working | A setting or command removed or renamed, a supported environment tier dropped, an older protocol version no longer accepted, a ✅ row removed |
+
+"Capability" means a row of
+[`docs/EXTENSION_CAPABILITIES.md`](EXTENSION_CAPABILITIES.md), which is
+also what README's matrix summarises. That is deliberate: the version
+number and the capability list move together, so "what changed" is
+answerable from the two of them without reading the diff.
+
+The protocol version in the Extension/Core handshake is a separate
+integer and is not derived from this version string. Dropping an old
+protocol version from the accepted range is a major change; adding a new
+one is not.
+
+### 0.x, and what 1.0.0 requires
+
+While the major version is 0, everything above still applies except that
+a breaking change may ship in a minor release rather than forcing a major
+one — the usual pre-1.0 convention.
+
+1.0.0 is reserved for the point where the two "not yet" qualifications in
+README's capability matrix are gone:
+
+1. **Every environment we publish for is guaranteed, not just Apple
+   Silicon.** Today one VSIX is published, `darwin-arm64`, and it is the
+   only environment any capability is verified in. 1.0.0 requires
+   published, verified artifacts for the other targets as well
+   (`darwin-x64`, `win32-x64`, `linux-x64`) — see
+   `docs/design/tasks/024-deferred-review-findings.md` 024.R4.
+2. **A plain Ruby project is guaranteed, not only a Rails one.** Today
+   the Rails conventions have no explicit boundary and nothing specifies
+   or verifies what a non-Rails project should expect — 024.R1.
+
+Both are about the *environment* axis rather than the feature axis. New
+features arrive in minor releases and do not bring 1.0.0 closer; removing
+the asterisks from the environments does.
+
 A Core the extension did *not* build is deliberately exempt:
 
 | Core | Version rule | Judged on |

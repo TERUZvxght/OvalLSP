@@ -528,7 +528,7 @@ module Ovallsp
     # callers never opt into.
     def show_type_evidence_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       summary = @file_summaries[uri]
       return nil unless document && summary
 
@@ -1154,6 +1154,33 @@ module Ovallsp
       uri.end_with?(".erb")
     end
 
+    # The document every position-based query should look at.
+    #
+    # For an .erb file that is the *extracted* Ruby, not the template:
+    # asking the type engine about a position in raw HTML gets whatever
+    # Prism made of the markup, which is how a partial's local was read as
+    # a String and completion inside a template returned nothing at all.
+    # ParserService already extracts before parsing, so every other
+    # consumer has to agree with it or the two disagree about what the
+    # file contains.
+    #
+    # Extraction blanks non-Ruby regions in place, preserving every line
+    # and column, so a position needs no remapping and neither does a
+    # range in the answer.
+    #
+    # Applied once, where documents are fetched, rather than at each of
+    # the ten handlers that take a position -- which is what let hover and
+    # explainType be correct while completion, signature help, definition,
+    # references and rename were not.
+    def analyzable_document(document)
+      return document unless document && erb_view?(document.uri)
+
+      TextDocument.new(
+        uri: document.uri, text: Erb::RubyRegionExtractor.extract_ruby_source(document.text),
+        version: document.version, language_id: "ruby"
+      )
+    end
+
     def explain_type_in_view(document, position, query_context = nil)
       ruby_source = Erb::RubyRegionExtractor.extract_ruby_source(document.text)
       synthetic = TextDocument.new(uri: document.uri, text: ruby_source, version: document.version, language_id: "ruby")
@@ -1365,7 +1392,7 @@ module Ovallsp
     # the type engine.
     def definition_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       return [] unless document
 
       position = params.fetch(:position)
@@ -1430,7 +1457,7 @@ module Ovallsp
     # the exact same #resolve a background reindex would have run.
     def references_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       summary = @file_summaries[uri]
       return [] unless document && summary
 
@@ -1476,7 +1503,7 @@ module Ovallsp
     # renameable under the cursor.
     def prepare_rename_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       summary = @file_summaries[uri]
       return nil unless document && summary
 
@@ -1495,7 +1522,7 @@ module Ovallsp
     # the refusal reason still goes to the log for anyone debugging why.
     def rename_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       summary = @file_summaries[uri]
       return nil unless document && summary
 
@@ -1542,7 +1569,7 @@ module Ovallsp
 
     # LSP CompletionItemKind values used below: Function=3, Method=2,
     # Field=5, Property=10.
-    COMPLETION_KIND = { source: 2, model_column: 5, model_association: 10, signature: 2 }.freeze
+    COMPLETION_KIND = { source: 2, model_column: 5, model_association: 10, signature: 2, model_api: 2 }.freeze
 
     # Route helper completion (Task 006) is unconditional-on-nonempty-
     # prefix, unioned with QueryService member completion (Task 013) when
@@ -1551,7 +1578,7 @@ module Ovallsp
     # receiver's members) and neither should suppress the other.
     def completion_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       return [] unless document
 
       position = params.fetch(:position)
@@ -1566,8 +1593,37 @@ module Ovallsp
       return [] unless receiver_type
 
       @query_service.members_of(receiver_type, prefix: prefix).map do |member|
-        { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s }
+        item = { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s }
+        snippet = completion_snippet(member)
+        item.merge(snippet ? { insertText: snippet, insertTextFormat: SNIPPET_INSERT_FORMAT } : {})
       end
+    end
+
+    # LSP InsertTextFormat.Snippet: `$1`/`${1:name}` become tab stops
+    # rather than literal text.
+    SNIPPET_INSERT_FORMAT = 2
+
+    # Accepting a completion should leave the cursor where the next thing
+    # gets typed, not at the end of a bare name the user then has to add
+    # parentheses to. Three cases, because we know three different amounts
+    # about a method:
+    #
+    # - parameter names known (workspace source): each becomes a tab stop,
+    #   so `takes_two` completes to `takes_two(first, second)` and Tab
+    #   moves between them;
+    # - takes arguments but names unknown: Rails' own methods are nearly
+    #   all `(*, **, &)`, so there is nothing to name -- open the
+    #   parentheses and put the cursor inside, `where($1)`;
+    # - takes nothing: insert the bare name. `save()` is not how Ruby is
+    #   written, and an editor that produces it is worse than one that
+    #   inserts plain text.
+    def completion_snippet(member)
+      parameters = member.parameters
+      return "#{member.name}($1)" if parameters == :unknown_arity
+      return nil if parameters.nil? || parameters.empty?
+
+      stops = parameters.each_with_index.map { |name, index| "${#{index + 1}:#{name}}" }
+      "#{member.name}(#{stops.join(', ')})"
     end
 
     # Finds the call whose argument list the cursor is inside by scanning
@@ -1579,7 +1635,7 @@ module Ovallsp
     # QueryService#signatures_of.
     def signature_help_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       return { signatures: [] } unless document
 
       position = params.fetch(:position)
@@ -1909,6 +1965,9 @@ module Ovallsp
             next unless agent_manager.equal?(@agent_manager)
 
             @index_mutation_mutex.synchronize { route_registry.replace(snapshot[:routes] || []) }
+            # Same reason as #install_agent_snapshot: a file open right
+            # now was diagnosed against the previous route table.
+            republish_open_diagnostics
           end
         end
       rescue StandardError => e
@@ -2039,6 +2098,7 @@ module Ovallsp
               end
               # Committed: these names no longer need to go back.
               outstanding -= responses.map(&:first)
+              republish_open_diagnostics
             end
           ensure
             enqueue_model_names(outstanding) unless outstanding.empty?
@@ -2184,6 +2244,25 @@ module Ovallsp
           @method_summary_store.clear
         end
       end
+      republish_open_diagnostics
+    end
+
+    # Diagnostics are computed when a document is opened or changed, and
+    # the answer depends on Rails data that arrives later: the extension
+    # opens files as soon as it starts, seconds before the Runtime Agent
+    # has reported a single route. Every `*_path` in an already-open file
+    # was therefore marked unresolved permanently -- the only way to clear
+    # it was to edit the file -- while a file opened afterwards was fine.
+    #
+    # So whenever that data lands, everything currently open is answered
+    # again. Failures are per-document: one unparseable buffer must not
+    # stop the rest being corrected.
+    def republish_open_diagnostics
+      @document_store.open_documents.each do |document|
+        publish_diagnostics(document)
+      rescue StandardError => e
+        @logger.error("failed to republish diagnostics for #{document.uri}: #{e.class}: #{e.message}")
+      end
     end
 
     def initialize_result
@@ -2286,6 +2365,12 @@ module Ovallsp
       # #explain_type_in_view already used just above for `type` itself.
       receiver_type = word && !erb_view?(document.uri) && receiver_type_before_dot(document, position)
       if receiver_type
+        # The call's own shape, first: hovering `value.documented(1)` is
+        # most often a question about what to pass, and the answer was
+        # only reachable by retyping `(` to trigger signature help.
+        signature = @query_service.signatures_of(receiver_type, word).first
+        lines.unshift(signature[:label]) if signature && signature[:label]
+
         origin = hover_origin(receiver_type, word)
         lines << "Origin: #{origin}" if origin
 

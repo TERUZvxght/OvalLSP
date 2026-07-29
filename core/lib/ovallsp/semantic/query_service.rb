@@ -24,9 +24,19 @@ module Ovallsp
     #   which rank above a Gem/stdlib signature.
     # - conditional: true if this candidate isn't present on every member
     #   of a Union receiver.
-    Member = Data.define(:name, :origin, :conditional, :visibility, :detail)
+    # `parameters` is what a completion needs to write a call: the
+    # declared parameter names where they are known, `:unknown_arity`
+    # where the method takes arguments whose names are not (Rails' own
+    # `(*, **, &)` methods), and `[]` where it takes none.
+    Member = Data.define(:name, :origin, :conditional, :visibility, :detail, :parameters) do
+      def initialize(parameters: [], **rest)
+        super(parameters: parameters, **rest)
+      end
+    end
 
-    ORIGIN_AUTHORITY = { source: 0, model_column: 1, model_association: 1, signature: 2 }.freeze
+    ORIGIN_AUTHORITY = {
+      source: 0, model_column: 1, model_association: 1, signature: 2, model_api: 3
+    }.freeze
     private_constant :ORIGIN_AUTHORITY
 
     # The shared semantic layer behind Completion/Hover/Definition/
@@ -66,6 +76,7 @@ module Ovallsp
         candidates = {}
         add_source_members(candidates, receiver_type, prefix, context)
         add_model_members(candidates, receiver_type, prefix)
+        add_active_record_api_members(candidates, receiver_type, prefix)
         add_signature_members(candidates, receiver_type, prefix, context)
         normalize_union_conditionals(candidates, receiver_type, context)
 
@@ -167,8 +178,66 @@ module Ovallsp
         return unless @method_resolver
 
         @method_resolver.complete(receiver_type: receiver_type, prefix: prefix, context: context).each do |result|
-          candidates[result[:name]] ||= Member.new(name: result[:name], origin: :source, conditional: result[:conditional],
-                                                     visibility: nil, detail: nil)
+          candidates[result[:name]] ||= Member.new(
+            name: result[:name], origin: :source, conditional: result[:conditional],
+            visibility: nil, detail: nil,
+            parameters: source_parameter_names(receiver_type, result[:name], context)
+          )
+        end
+      end
+
+      # Active Record's own API, as the Runtime Agent read it off the
+      # really-loaded classes. A model's ancestors above ApplicationRecord
+      # are outside the workspace and have no signatures, so without this
+      # completion on a model offered its columns and nothing else -- no
+      # `save`, no `destroy`, and on the class no `find`, `where` or
+      # `all`. Ranked below columns, associations and source declarations,
+      # all of which say something more specific about *this* model.
+      #
+      # `ClassOf[Model]` takes the class API, a plain `Model` the instance
+      # API. That distinction is the whole reason a constant now infers as
+      # a class object rather than Unknown.
+      def add_active_record_api_members(candidates, receiver_type, prefix)
+        return unless @model_registry
+
+        singleton = receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
+        subject = singleton ? receiver_type.type_arg : receiver_type
+        return unless each_nominal(subject).any? { |nominal| @model_registry.known_model?(nominal.name) }
+
+        api = @model_registry.active_record_api
+        names = singleton ? api[:singleton] : api[:instance]
+        # Plus whatever each model adds on top: attribute and dirty
+        # methods, association accessors, enum predicates, scopes.
+        each_nominal(subject).each do |nominal|
+          model = @model_registry.model(nominal.name)
+          next unless model
+
+          names += singleton ? model.singleton_methods : model.instance_methods
+        end
+        takes_arguments = singleton ? api[:singleton_with_arguments] : api[:instance_with_arguments]
+        names.uniq.each do |name|
+          next unless name.start_with?(prefix)
+
+          candidates[name] ||= Member.new(
+            name: name, origin: :model_api, conditional: false, visibility: nil, detail: nil,
+            parameters: takes_arguments&.include?(name) ? :unknown_arity : []
+          )
+        end
+      end
+
+      # Declared parameter names for a source method, in call order, so a
+      # completion can offer them as tab stops. Only positional and
+      # keyword parameters are offered: a block is written after the call,
+      # and a splat has no name worth typing.
+      def source_parameter_names(receiver_type, method_name, context)
+        return [] unless @method_resolver
+
+        found = @method_resolver.resolve(receiver_type: receiver_type, name: method_name, context: context)
+        declaration = found.first&.declarations&.first&.last
+        return [] unless declaration
+
+        Array(declaration.parameters).filter_map do |parameter|
+          parameter.name if %i[required optional keyword keyword_optional].include?(parameter.kind)
         end
       end
 

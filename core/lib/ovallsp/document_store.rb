@@ -43,5 +43,12 @@ module Ovallsp
     def fetch(uri:)
       @documents[uri]
     end
+
+    # Every document the editor currently has open. Copied, so a caller
+    # iterating it (republishing diagnostics, for one) cannot be caught
+    # out by a didClose arriving mid-loop.
+    def open_documents
+      @documents.values.dup
+    end
   end
 end

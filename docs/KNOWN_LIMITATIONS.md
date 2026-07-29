@@ -109,6 +109,15 @@ Ruby type checker. By design, it does not track:
 - Code paths never exercised by a test run, for opt-in runtime type
   observation specifically (evidence only exists for what actually ran).
 
+One consequence of the third point is visible in every Rails application
+as of 0.1.6. Reopening a class the workspace does not define is
+syntactically identical to defining it, so `test/test_helper.rb`'s
+`class ActiveSupport::TestCase` reads as a plain class with no gem
+parent, and its `parallelize` and `fixtures` calls are reported as
+unknown methods. Two false positives per project, in that one file.
+Fixed in 0.1.7 by asking where the constant was really defined
+(`docs/design/tasks/024-deferred-review-findings.md`, 024.R5).
+
 ## Conflicts with other extensions
 
 See [vscode/README.md](../vscode/README.md#known-conflicts-with-other-extensions)
