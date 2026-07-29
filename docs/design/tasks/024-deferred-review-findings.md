@@ -640,3 +640,59 @@ competing design.
   query — the same background/degrade-to-static shape the Agent already
   uses.
 
+
+---
+
+## 024.R8 Completion does nothing until you type a dot (roadmap, 0.2.0)
+
+**Status:** open — roadmap
+**Area:** `core/lib/ovallsp/server.rb` (`completion_result`),
+`core/lib/ovallsp/semantic/query_service.rb`
+
+`completion_result` matches a bare prefix against the route registry and
+nothing else; every other candidate comes from
+`member_completion_items`, which returns immediately unless
+`receiver_type_before_dot` finds a receiver. So typing `A` offers
+`article_path` and stops. The workspace's own classes, the locals in
+scope, and the methods callable on self at that position — most of what
+anyone types — appear only after the name is already written, at which
+point completion has nothing left to do.
+
+This is the most-used completion in any editor, and its absence is the
+kind of gap that reads as "the extension does nothing", the same
+impression 0.1.6 was written to correct.
+
+**Direction:** a fourth source alongside the route helpers, assembled
+from what is already indexed:
+
+- constants the workspace declares (`WorkspaceIndex#search` already
+  answers this for `workspace/symbol`, by simple name, case-insensitively);
+- locals in scope at the position — `LocalInferencer` already builds the
+  environment it would need, but exposes only the type of one expression,
+  not the set of names it knows;
+- methods callable on self, which is `members_of` against the enclosing
+  class's `self` type — the same call `member_completion_items` makes,
+  with the receiver taken from lexical scope rather than from before a
+  dot;
+- RBS-known `Kernel` methods, so `pu` offers `puts`.
+
+**The trap, and why this is not just "call the existing pieces":** a bare
+prefix matches far more than a receiver does. `a` in a large workspace
+matches thousands of symbols, and an editor that answers with all of them
+sorted alphabetically is worse than one that answers with nothing —
+VS Code will show them, the right answer will be on page four, and the
+user learns to stop pressing the key. So the work is mostly *ranking and
+bounding*, which is a different problem from the one the receiver-based
+path solves and has no existing answer here:
+
+- locals before methods on self before workspace constants before
+  `Kernel`, because that is roughly the order of how close the
+  declaration is to the cursor;
+- a hard cap, with `isIncomplete: true` so the editor re-asks as the
+  prefix narrows;
+- and a decision about a one-character prefix, where the honest answer
+  may be to return only locals and enclosing-class methods.
+
+None of that is settled, and settling it needs measurement against a real
+workspace rather than reasoning — which is why this is scoped as its own
+roadmap entry rather than folded into another release's work.

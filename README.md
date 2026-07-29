@@ -59,6 +59,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Completion: Active Record instance API | ✅ | — (no Runtime Agent) | — |
 | Completion: Active Record class API | ✅ | — (no Runtime Agent) | — |
 | Completion: route helpers | ✅ | — (no Runtime Agent) | — |
+| Completion at the start of an identifier — workspace classes, locals in scope, methods callable here | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
 | Completion inserts a call template with tab stops | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Hover on a method shows its parameters | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Go to definition: workspace methods | ✅ | ⚠️ | ⚠️ 1.0.0 |

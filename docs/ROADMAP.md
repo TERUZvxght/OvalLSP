@@ -15,8 +15,13 @@ planned, are in
 [`design/tasks/024-deferred-review-findings.md`](design/tasks/024-deferred-review-findings.md)
 (024.R3).
 
-## 0.2.0 — Beyond the file you are looking at
+## 0.2.0 — Completion from the first keystroke, and diagnostics beyond the open file
 
+- **Typing `A` offers candidates.** Today completion needs a `.` first:
+  a bare prefix matches route helpers and nothing else, so the workspace
+  classes, the locals in scope and the methods callable right there —
+  which is most of what you type — offer nothing until you have typed the
+  whole name. This is the single most-used completion in any editor.
 - **Mistakes in files you have not opened are reported.** Today a
   diagnostic only exists for a file currently open in an editor, so an
   error three directories away is invisible until you happen to look at
