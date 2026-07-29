@@ -1938,6 +1938,9 @@ module Ovallsp
             next unless agent_manager.equal?(@agent_manager)
 
             @index_mutation_mutex.synchronize { route_registry.replace(snapshot[:routes] || []) }
+            # Same reason as #install_agent_snapshot: a file open right
+            # now was diagnosed against the previous route table.
+            republish_open_diagnostics
           end
         end
       rescue StandardError => e
@@ -2068,6 +2071,7 @@ module Ovallsp
               end
               # Committed: these names no longer need to go back.
               outstanding -= responses.map(&:first)
+              republish_open_diagnostics
             end
           ensure
             enqueue_model_names(outstanding) unless outstanding.empty?
@@ -2212,6 +2216,25 @@ module Ovallsp
           @model_registry.commit_replace(prepared_models)
           @method_summary_store.clear
         end
+      end
+      republish_open_diagnostics
+    end
+
+    # Diagnostics are computed when a document is opened or changed, and
+    # the answer depends on Rails data that arrives later: the extension
+    # opens files as soon as it starts, seconds before the Runtime Agent
+    # has reported a single route. Every `*_path` in an already-open file
+    # was therefore marked unresolved permanently -- the only way to clear
+    # it was to edit the file -- while a file opened afterwards was fine.
+    #
+    # So whenever that data lands, everything currently open is answered
+    # again. Failures are per-document: one unparseable buffer must not
+    # stop the rest being corrected.
+    def republish_open_diagnostics
+      @document_store.open_documents.each do |document|
+        publish_diagnostics(document)
+      rescue StandardError => e
+        @logger.error("failed to republish diagnostics for #{document.uri}: #{e.class}: #{e.message}")
       end
     end
 

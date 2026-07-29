@@ -518,6 +518,36 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # Regression: diagnostics were computed once, when a file was opened,
+    # and never again. The extension opens files as soon as it starts --
+    # before the Runtime Agent has reported any routes -- so every
+    # `*_path` in an already-open file was permanently marked unresolved,
+    # and the only way to clear it was to edit the file. Invisible to any
+    # test that waits for `ready-rails` before opening anything, which is
+    # what every other example here does.
+    it "G12: clears a route diagnostic once the Runtime Agent reports routes" do
+      client = E2E::LspClient.new(self.class.workspace)
+      begin
+        client.initialize!
+        path = File.join(self.class.workspace, "app/controllers/early_open_controller.rb")
+        File.write(path, <<~RUBY)
+          class EarlyOpenController < ApplicationController
+            def destroy
+              redirect_to posts_path
+            end
+          end
+        RUBY
+        # Opened immediately, the way the extension does, rather than
+        # after waiting for the Agent.
+        uri = client.open(path)
+        client.wait_until_ready
+
+        expect(client.diagnostic_messages(uri, timeout: 20).join(" ")).not_to match(/no route named/i)
+      ensure
+        client.stop
+      end
+    end
+
     it "G5: reports a call with the wrong number of arguments" do
       with_file("app/models/arity_probe.rb", <<~RUBY) do |uri|
         class ArityProbe
