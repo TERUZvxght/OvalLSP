@@ -32,4 +32,30 @@ RSpec.describe "changelog parity" do
     expect(File.read(CHANGELOG_EN, encoding: "UTF-8")).to include("CHANGELOG.ja.md")
     expect(File.read(CHANGELOG_JA, encoding: "UTF-8")).to include("CHANGELOG.md")
   end
+
+  # A changelog is read to answer "what changed", so every release leads
+  # with that, and the reasoning lives under a Details heading below it.
+  # Pinned because the natural way to write a release entry is to start
+  # explaining, and one entry that does drags the whole file back.
+  def releases(path)
+    File.read(path, encoding: "UTF-8").split(/^## /)[1..].map { |section| section.split(/^### /).first }
+  end
+
+  [["English", CHANGELOG_EN], ["Japanese", CHANGELOG_JA]].each do |language, path|
+    it "leads every #{language} release with a bullet list, before any prose section" do
+      offenders = releases(path).reject { |summary| summary.lines.any? { |line| line.start_with?("- ") } }
+
+      expect(offenders.map { |s| s.lines.first.strip }).to be_empty
+    end
+  end
+
+  it "keeps the same releases explained in detail in both languages" do
+    detailed = lambda do |path|
+      File.read(path, encoding: "UTF-8").split(/^## /)[1..].filter_map do |section|
+        section[/\A(\d+\.\d+\.\d+)/, 1] if section.include?("\n### ")
+      end
+    end
+
+    expect(detailed.call(CHANGELOG_JA)).to eq(detailed.call(CHANGELOG_EN))
+  end
 end
