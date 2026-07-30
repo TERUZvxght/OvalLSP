@@ -243,6 +243,64 @@ RSpec.describe Ovallsp::LocalInferencer do
     expect(inferencer.infer_at(document, { line: 2, character: 1 }).to_s).to eq("Hash[Unknown]")
   end
 
+  # A container value is an instance of its class, so a method the
+  # workspace adds to that class resolves on it. `MethodResolver` learned
+  # this in 0.1.8; `LocalInferencer`'s own instance-level path had the same
+  # gap, and 024.12 is what drives traffic into it -- `{}` used to arrive
+  # here as a plain `Hash` and resolve.
+  #
+  # The asymmetry is what makes it easy to miss: go-to-definition and
+  # completion keep working (those go through MethodResolver), while hover
+  # and anything chained off the call silently degrade to Unknown.
+  it "resolves a workspace method added to a container class, called on a container value" do
+    workspace_index = Ovallsp::WorkspaceIndex.new
+    hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+    source = "class Hash\n  def deep_keys = \"x\"\nend\n\nh = {}\nh.deep_keys\n"
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+    summary = Ovallsp::ParserService.new.summarize(document)
+    workspace_index.replace_file(summary)
+    hierarchy_index.replace_file(summary)
+    resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
+    analyzer = Ovallsp::Semantic::MethodAnalyzer.new(
+      workspace_index: workspace_index, method_resolver: resolver,
+      summary_store: Ovallsp::Semantic::MethodSummaryStore.new
+    )
+    inferencer = described_class.new(method_resolver: resolver, method_analyzer: analyzer)
+
+    expect(inferencer.infer_at(document, { line: 5, character: 4 }).to_s).to eq("String")
+  end
+
+  # Runtime evidence is recorded against the class, so it applies to a
+  # value typed as that class' container form too. Same gap as the one
+  # above, on the other path 024.12 newly routes traffic into.
+  it "applies recorded runtime evidence to a container value" do
+    workspace_index = Ovallsp::WorkspaceIndex.new
+    hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+    source = "class Hash\n  def deep_keys\n  end\nend\n\nh = {}\nh.deep_keys\n"
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+    summary = Ovallsp::ParserService.new.summarize(document)
+    workspace_index.replace_file(summary)
+    hierarchy_index.replace_file(summary)
+    resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
+    analyzer = Ovallsp::Semantic::MethodAnalyzer.new(
+      workspace_index: workspace_index, method_resolver: resolver,
+      summary_store: Ovallsp::Semantic::MethodSummaryStore.new
+    )
+    store = Ovallsp::Observation::Store.new
+    store.replace_run([
+      Ovallsp::Observation::ObservedSignature.new(
+        symbol_id: Ovallsp::Index::SymbolId.new(
+          kind: :instance_method, owner: "::Hash", name: "deep_keys", discriminator: nil
+        ),
+        parameter_types: [], return_type: Ovallsp::Types::Nominal.new(name: "Symbol"),
+        samples: 2, run_id: "run", code_fingerprint: "fingerprint", created_at: Time.now
+      )
+    ])
+    inferencer = described_class.new(method_resolver: resolver, method_analyzer: analyzer, observation_store: store)
+
+    expect(inferencer.infer_at(document, { line: 6, character: 4 }).to_s).to eq("Symbol")
+  end
+
   # The same answer has to survive going through a method summary, or the
   # inconsistency simply moves one call away: hovering `{}` would say one
   # thing and hovering a method that returns `{}` another.

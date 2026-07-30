@@ -446,9 +446,10 @@ module Ovallsp
       when Prism::TrueNode, Prism::FalseNode then Types::Nominal.new(name: "Boolean")
       when Prism::NilNode then Types::NIL
       when Prism::ArrayNode then eval_array(node, env)
-      # Generic, matching `[]` and `Hash.new`: one kind of value renders one
-      # way, whichever spelling produced it (024.12). A bare `Hash` also
-      # gave the container rules nothing to dispatch on.
+      # Generic, matching `[]` and `Hash.new`: one kind of value renders
+      # one way, whichever spelling produced it (024.12). Not for dispatch
+      # -- the container rules have no `Hash` entry -- purely so the same
+      # value does not render two ways depending on how it was written.
       when Prism::HashNode then Types::Generic.new(name: "Hash", type_arg: Types::UNKNOWN)
       when Prism::ParenthesesNode then eval_type(node.body, env)
       when Prism::CallNode then eval_call(node, env)
@@ -673,11 +674,34 @@ module Ovallsp
         if receiver_type.name == "ClassOf"
           resolve_source_method_member(receiver_type.type_arg, method_name, singleton: true)
         else
-          resolve_relation_member(receiver_type, method_name)
+          # A container value is an instance of its class, so a method the
+          # workspace adds to that class resolves on it -- the same reading
+          # MethodResolver#base_nominal already applies. Tried after the
+          # relation rules, so a real `Relation`/`CollectionProxy` member
+          # is never shadowed by a class of that name (024.12).
+          resolve_relation_member(receiver_type, method_name) ||
+            resolve_generic_base_member(receiver_type, method_name)
         end
       when Types::Union
         resolve_union_member(receiver_type, method_name)
       end
+    end
+
+    # The class a Generic is generic over, for the names that denote a real
+    # class. `Types::INTERNAL_GENERIC_NAMES` are shapes this engine mints
+    # rather than classes anyone declares, so they have no base to read.
+    def generic_base(type)
+      return nil unless type.is_a?(Types::Generic)
+      return nil if Types::INTERNAL_GENERIC_NAMES.include?(type.name)
+
+      Types::Nominal.new(name: type.name)
+    end
+
+    def resolve_generic_base_member(receiver_type, method_name)
+      base = generic_base(receiver_type)
+      return nil unless base
+
+      resolve_model_member(base.name, method_name) || resolve_source_method_member(base, method_name)
     end
 
     # A plain, hand-written instance method (not an Active Record column/
@@ -810,6 +834,10 @@ module Ovallsp
         return Types.normalize_union(resolved) unless resolved.empty?
         return nil
       end
+      # Runtime evidence is recorded against the class, so it applies to a
+      # value typed as that class' container form too -- the same reading
+      # #resolve_instance_level uses (024.12).
+      receiver_type = generic_base(receiver_type) || receiver_type
       return nil unless receiver_type.is_a?(Types::Nominal)
 
       owner = receiver_type.name.start_with?("::") ? receiver_type.name : "::#{receiver_type.name}"
