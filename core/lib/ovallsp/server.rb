@@ -115,6 +115,12 @@ module Ovallsp
         local_inferencer: @local_inferencer, method_resolver: @method_resolver, model_registry: @model_registry,
         signatures: @signatures, workspace_index: @workspace_index
       )
+      @workspace_diagnostics = WorkspaceDiagnostics.new(
+        analyze: method(:workspace_findings_for),
+        publish: method(:publish_findings),
+        open_in_buffer: ->(uri) { !@document_store.fetch(uri: uri).nil? },
+        logger: @logger
+      )
       @prefix_completion = Semantic::PrefixCompletion.new(
         query_service: @query_service, workspace_index: @workspace_index
       )
@@ -389,10 +395,7 @@ module Ovallsp
         context = diagnostics_semantic_context
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
       end
-      @writer.write_message(
-        jsonrpc: JSONRPC_VERSION, method: "textDocument/publishDiagnostics",
-        params: { uri: document.uri, version: document.version, diagnostics: findings.map { |f| to_lsp_diagnostic(f) } }
-      )
+      publish_findings(document.uri, findings, version: document.version)
     rescue StandardError => e
       @logger.error("failed to compute diagnostics for #{document.uri}: #{e.class}: #{e.message}")
     ensure
@@ -405,6 +408,41 @@ module Ovallsp
       rescue StandardError => e
         @logger.error("failed to ask the Runtime Agent about pending ancestries: #{e.class}: #{e.message}")
       end
+    end
+
+    def publish_findings(uri, findings, version: nil)
+      @writer.write_message(
+        jsonrpc: JSONRPC_VERSION, method: "textDocument/publishDiagnostics",
+        params: { uri: uri, version: version, diagnostics: findings.map { |f| to_lsp_diagnostic(f) } }
+      )
+    end
+
+    # The same analysis the buffer path runs, minus the notification: the
+    # workspace pass owns when and whether to publish, because it also
+    # owns the decision to abandon a superseded pass mid-file (0.2.0).
+    def workspace_findings_for(document)
+      @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
+      with_index_snapshot do
+        @diagnostics_engine.analyze(document: document, semantic_context: diagnostics_semantic_context,
+                                    mode: @diagnostics_mode)
+      end
+    end
+
+    # Every reason the whole workspace's answers could have changed at
+    # once -- most importantly the Runtime Agent becoming ready, since the
+    # unknown-method check defers rather than guesses without one, and a
+    # file analyzed before that point is under-reported until something
+    # asks again. Supersedes any pass still running.
+    def start_workspace_diagnostics
+      generation = @workspace_diagnostics.begin_pass
+      uris = @workspace_index.uris_by_source(:disk)
+      return if uris.empty?
+
+      @background_tasks.track_thread(Thread.new do
+        @workspace_diagnostics.run(uris, generation)
+      rescue StandardError => e
+        @logger.error("workspace diagnostics pass failed: #{e.class}: #{e.message}")
+      end)
     end
 
     # The unknown-method check cannot judge a receiver whose ancestry only
@@ -997,6 +1035,11 @@ module Ovallsp
                           # rebuild on exactly the "just cold-indexed a
                           # large repo" path.
                           @index_mutation_mutex.synchronize { mark_reference_index_dirty }
+                          # Now, not earlier: a file analyzed before the
+                          # rest of the workspace is indexed resolves
+                          # against a half-built index and reports
+                          # mistakes that are only missing knowledge.
+                          start_workspace_diagnostics
                         }).run
       rescue StandardError => e
         logger.error("cold index failed: #{e.class}: #{e.message}")
@@ -2088,7 +2131,11 @@ module Ovallsp
       document = TextDocument.new(uri: uri, text: File.read(path, encoding: Encoding::UTF_8), version: nil,
                                    language_id: "ruby")
       summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
-      apply_file_summary(summary)
+      applied = apply_file_summary(summary)
+      # One changed file is one file's worth of work, not a workspace
+      # pass -- and it is exactly the case that used to leave a stale
+      # report standing until somebody opened the file (0.2.0).
+      @workspace_diagnostics.publish_for(uri) if applied
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
     end
@@ -2496,12 +2543,22 @@ module Ovallsp
     # So whenever that data lands, everything currently open is answered
     # again. Failures are per-document: one unparseable buffer must not
     # stop the rest being corrected.
+    # Every caller of this is a place where the answers just changed for
+    # reasons that have nothing to do with any one file -- the Runtime
+    # Agent becoming ready or restarting, routes and models being
+    # installed, trust being granted. All of them apply to the workspace
+    # exactly as much as to the open buffers, and before 0.2.0 only the
+    # buffers were re-asked because only the buffers were ever asked.
+    #
+    # Wired here rather than at each of the six call sites so a seventh
+    # cannot be added that quietly refreshes half the workspace.
     def republish_open_diagnostics
       @document_store.open_documents.each do |document|
         publish_diagnostics(document)
       rescue StandardError => e
         @logger.error("failed to republish diagnostics for #{document.uri}: #{e.class}: #{e.message}")
       end
+      start_workspace_diagnostics
     end
 
     def initialize_result
