@@ -276,7 +276,7 @@ module Ovallsp
       end
 
       def rbi_member_names(type_name_string, singleton)
-        owner = type_name_string.start_with?("::") ? type_name_string : "::#{type_name_string}"
+        owner = Index::SymbolId.qualify_owner(type_name_string)
         kind = singleton ? :singleton_method : :instance_method
         @rbi_methods.keys.filter_map { |symbol_id| symbol_id.name if symbol_id.owner == owner && symbol_id.kind == kind }
       end

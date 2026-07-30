@@ -1553,12 +1553,12 @@ module Ovallsp
       effective_visibilities = {}
       documents.each do |ancestor_name, document|
         summary = @file_summaries[document.uri] || @parser_service.summarize(document)
-        canonical_owner = ancestor_name.start_with?("::") ? ancestor_name : "::#{ancestor_name}"
+        canonical_owner = Index::SymbolId.qualify_owner(ancestor_name)
         owner_visibilities = {}
         summary.declarations.each do |declaration|
           symbol = declaration.symbol_id
           next unless symbol.kind == :instance_method
-          next unless symbol.owner == canonical_owner || symbol.owner == ancestor_name
+          next unless symbol.owner == canonical_owner
           next unless method_maps.fetch(ancestor_name).key?(symbol.name)
 
           owner_visibilities[symbol.name] = declaration.visibility

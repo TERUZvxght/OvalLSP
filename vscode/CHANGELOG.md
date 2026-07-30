@@ -6,6 +6,65 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.1.11 — One rule, restated everywhere and remembered nowhere
+
+- Fixed: a method your project declares only in its own `sig/` is no
+  longer reported as an unknown method.
+- Fixed: a root-scoped constant reference (`::JSON`, `::Rails`) is no
+  longer reported as unresolvable.
+- Fixed: the unknown-method check was silently switched off for any class
+  written with `include ::SomeModule`. It now runs there, so such a class
+  may start reporting mistakes it was quietly ignoring.
+- Fixed: a method your workspace adds by reopening a core class
+  (`lib/core_ext/object.rb`) is resolved, offered in completion, and no
+  longer reported as unknown — while a private one there stays out of
+  completion.
+- Fixed: two threads publishing at the same moment could put one
+  message's `Content-Length` in front of another message's body.
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: no
+capability is added. None of these is a regression — they trace back to
+before 0.1.5, so every release so far has shipped with them. They were
+found while building 0.2.0 and are fixed here rather than left waiting
+for it.
+
+### Details
+
+The first two are the report this check exists not to make: one on code
+that runs. The signature environment resolves a *qualified* name, and the
+names reaching it arrive both ways — `HierarchyIndex` returns a class's
+own ancestry entry already qualified (`::Widget`) and its inherited ones
+bare (`Object`), while a constant reference carries whatever the source
+wrote. Prepending `::` rather than normalising it asked for `::::Widget`
+and matched nothing. Describing a class in RBS without also writing the
+method in Ruby is ordinary practice, and `::JSON` is ordinary Ruby; both
+were reported.
+
+The rule was written out in eight places across the codebase. Three of
+them had it inverted, and two more places that needed it did not have it
+at all — those two were found by review, after the first fix, in the index
+and in the method resolver.
+
+It is now stated once, on `SymbolId`, which is the thing that knows what
+an owner is, and every other place delegates to it. The lesson is worth
+stating plainly: a rule restated at each call site is a rule that will be
+written wrong somewhere, and counting how many places had it wrong is how
+this release found the ones nobody had reported yet.
+
+The second was reachable whenever diagnostics were republished from a
+background thread — the Runtime Agent becoming ready, a restart, a routes
+or models refresh, a deferred ancestry answer landing — while the
+dispatch thread was answering a request. A frame left the writer as two
+`write` calls with nothing serialising them, so the header of one message
+could land in front of the body of another. That is the one framing error a client cannot recover
+from: it resynchronises by guessing.
+
+A frame is now both serialised and written in one call, which are two
+different requirements. The mutex gives the first, and is what makes a
+partially-written frame unobservable to a client. The single call gives
+the second, which a mutex cannot: it is no defence against `Thread#kill`,
+and the bounded join at shutdown kills exactly the threads that publish.
+
 ## 0.1.10 — One implementation, and four behaviours brought under test
 
 - Fixed: the controller `before_action` chain has one implementation

@@ -10,13 +10,33 @@ module Ovallsp
     class FramedWriter
       def initialize(output)
         @output = output
+        @mutex = Mutex.new
       end
 
+      # More than one thread reaches this. Diagnostics go out on the
+      # dispatch thread for didOpen/didChange, and *every*
+      # `Server#republish_open_diagnostics` call site runs on a background
+      # one: the Runtime Agent becoming ready, a restart, a routes or
+      # models refresh, a deferred ancestry answer landing.
+      #
+      # The mutex is what makes a frame safe: no two writers are ever
+      # inside the sink at once, so a `Content-Length` can never land in
+      # front of another message's body -- the one framing error a client
+      # cannot recover from, since it resynchronises by guessing.
+      #
+      # Building the frame first and writing it once narrows a second
+      # window the mutex cannot close: `Thread#kill` between two writes,
+      # and the bounded join at shutdown kills exactly these threads. It
+      # narrows rather than closes it -- a write larger than `PIPE_BUF`
+      # is a retry loop underneath, so one call is not an atomicity
+      # guarantee on a real pipe.
       def write_message(message)
         body = JSON.generate(message).b
-        @output.write("Content-Length: #{body.bytesize}\r\n\r\n".b)
-        @output.write(body)
-        @output.flush if @output.respond_to?(:flush)
+        frame = "Content-Length: #{body.bytesize}\r\n\r\n".b + body
+        @mutex.synchronize do
+          @output.write(frame)
+          @output.flush if @output.respond_to?(:flush)
+        end
       end
     end
   end
