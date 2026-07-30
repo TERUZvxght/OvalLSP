@@ -83,6 +83,38 @@ module Ovallsp
     # single request rather than fixed per LocalInferencer instance).
     # Never raises — returns Types::UNKNOWN for anything unresolved, out
     # of budget, or on unexpected parser input.
+    # What is nameable at a cursor position: the local bindings visible
+    # there (name String => Types value) and the type of `self`, or nil
+    # for `self` at the top level of a file, where there is no useful
+    # enclosing type to offer members from.
+    Scope = Data.define(:locals, :self_type)
+
+    # The environment `locate` builds on its way to `offset`, rather than
+    # the type it arrives at. Completion from a bare prefix needs the
+    # names in scope; `infer_at` computes them and then discards them.
+    #
+    # Returns the *innermost* scope containing the position, so a local
+    # declared in a method the cursor is not in does not appear -- the
+    # descent already starts a fresh environment per `def`, which is what
+    # makes that true rather than anything here.
+    def scope_at(document, position, max_steps: nil)
+      offset = document.position_to_byte_offset(position)
+      result = Prism.parse(document.text)
+      @steps = 0
+      @step_budget = max_steps || @max_steps
+      @self_type_stack = []
+      @scope_capture = nil
+      @capturing_scope = true
+
+      locate(result.value.statements, offset, {})
+      @scope_capture || Scope.new(locals: {}, self_type: nil)
+    rescue BudgetExceeded, StandardError
+      @scope_capture || Scope.new(locals: {}, self_type: nil)
+    ensure
+      @capturing_scope = false
+      @scope_capture = nil
+    end
+
     def infer_at(document, position, initial_env: {}, max_steps: nil)
       # Prism node locations are UTF-8 byte offsets, not Ruby character
       # offsets — using #position_to_char_offset here would select the
@@ -157,6 +189,24 @@ module Ovallsp
       raise BudgetExceeded if @steps > @step_budget
     end
 
+    # Recorded on every step of the descent, so the last write is the
+    # innermost scope containing the cursor. `env` is duplicated because
+    # the caller keeps mutating the same Hash as it evaluates the
+    # statements that follow the one we descended into -- holding the
+    # reference would report bindings from after the cursor.
+    #
+    # Guarded at both call sites by `@capturing_scope` rather than here,
+    # so that "an ordinary #infer_at builds no snapshots" is a fact a test
+    # can state directly. The saving is real: this copies the whole
+    # environment, and `locate` runs once per step of the descent.
+    def capture_scope(env)
+      locals = env.each_with_object({}) do |(key, value), acc|
+        name = key.to_s
+        acc[name] = value unless name.start_with?("@")
+      end
+      @scope_capture = Scope.new(locals: locals, self_type: @self_type_stack.last)
+    end
+
     def contains?(location, offset)
       location.start_offset <= offset && offset <= location.end_offset
     end
@@ -166,6 +216,7 @@ module Ovallsp
     # accumulate correctly on the way down to the target.
     def locate(node, offset, env)
       step!
+      capture_scope(env) if @capturing_scope
       return Types::UNKNOWN if node.nil?
 
       case node
@@ -272,9 +323,41 @@ module Ovallsp
       singleton = node.receiver.is_a?(Prism::SelfNode)
       enclosing_self = @self_type_stack.last
       @self_type_stack.push(singleton ? Types::Generic.new(name: "ClassOf", type_arg: enclosing_self) : enclosing_self)
-      locate(node.body, offset, {})
+      locate(node.body, offset, parameter_env(node))
     ensure
       @self_type_stack.pop
+    end
+
+    # A method's parameters are bindings its body can see, so a cursor
+    # inside that body is in their scope. Nothing infers their types
+    # without a call site, so they enter as Unknown -- which is the honest
+    # answer and still lets completion offer the name.
+    #
+    # Only meaningful for `scope_at`; `infer_at` reaches a parameter
+    # reference as a LocalVariableReadNode either way, and Unknown is what
+    # it produced for one before this existed.
+    #
+    # The Symbol keys are the environment's convention everywhere else,
+    # because that is how Prism names a node -- but no test can currently
+    # distinguish them from String keys, and the reason is worth stating
+    # rather than rediscovering: a read misses on the wrong key and
+    # `eval_type` answers Unknown for a miss, which is also what a hit
+    # answers while every parameter enters as Unknown. The choice stops
+    # being unobservable the moment a parameter carries a real type (a
+    # signature, an inferred call site), at which point a String key would
+    # silently un-shadow a same-named method.
+    def parameter_env(def_node)
+      params = def_node.parameters
+      return {} unless params
+
+      names = []
+      names.concat(params.requireds.map { |p| p.respond_to?(:name) ? p.name : nil })
+      names.concat(params.optionals.map(&:name))
+      names.concat(params.keywords.map(&:name))
+      names << params.rest&.name
+      names << params.keyword_rest&.name if params.keyword_rest.respond_to?(:name)
+      names << params.block&.name
+      names.compact.to_h { |name| [name.to_sym, Types::UNKNOWN] }
     end
 
     # A position inside a block (its parameter list or its body) needs its
@@ -333,6 +416,14 @@ module Ovallsp
           # #eval_conditional) already folds its surviving branches'
           # bindings into `env` in place — nothing further needed here.
           eval_type(stmt, env)
+          # A cursor on a blank line sits inside no statement, so the
+          # entry capture in #locate saw only the bindings from before
+          # this one. Re-capturing here is what makes a local assigned on
+          # the previous line visible -- but only for a statement that
+          # *ends before* the cursor, since this loop also walks the
+          # statements that follow it and their bindings are not in scope
+          # yet (0.2.0).
+          capture_scope(env) if @capturing_scope && stmt.location.end_offset <= offset
         end
       end
       result

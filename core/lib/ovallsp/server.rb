@@ -115,6 +115,9 @@ module Ovallsp
         local_inferencer: @local_inferencer, method_resolver: @method_resolver, model_registry: @model_registry,
         signatures: @signatures, workspace_index: @workspace_index
       )
+      @prefix_completion = Semantic::PrefixCompletion.new(
+        query_service: @query_service, workspace_index: @workspace_index
+      )
       @reference_index = Semantic::ReferenceIndex.new
       @reference_state_mutex = Mutex.new
       @reference_rebuild_mutex = Mutex.new
@@ -1786,13 +1789,21 @@ module Ovallsp
     def completion_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       document = analyzable_document(@document_store.fetch(uri: uri))
-      return [] unless document
+      return { isIncomplete: false, items: [] } unless document
 
       position = params.fetch(:position)
       prefix = word_prefix_at_position(document, position)
 
+      # After a receiver dot, the question is "what can be called on this
+      # exact type", which has a precise answer -- so the bare-prefix
+      # sources, whose whole difficulty is that they match too much, must
+      # not be mixed into it.
+      member_items = member_completion_items(document, position, prefix)
+      return { isIncomplete: false, items: member_items } unless member_items.empty?
+
       route_items = prefix.empty? ? [] : @route_registry.completion_names(prefix).map { |name| { label: name, kind: 3 } }
-      route_items + member_completion_items(document, position, prefix)
+      bare = @prefix_completion.items(document: document, position: position, prefix: prefix)
+      { isIncomplete: bare.incomplete, items: route_items + bare.items }
     end
 
     def member_completion_items(document, position, prefix)

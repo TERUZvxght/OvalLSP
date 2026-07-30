@@ -68,6 +68,15 @@ module Ovallsp
         @local_inferencer.infer_at(document, position, initial_env: initial_env, max_steps: budget)
       end
 
+      # The names in scope at a position, rather than the type of the
+      # expression there -- what completion from a bare prefix needs
+      # (0.2.0). Passes through for the same reason `type_at` does: the
+      # inference budget and the inferencer instance are this service's to
+      # own, not every caller's.
+      def scope_at(document, position, budget: nil)
+        @local_inferencer.scope_at(document, position, max_steps: budget)
+      end
+
       # Every distinct member name starting with `prefix` reachable from
       # `receiver_type`, merged across source declarations, Active Record
       # model facts, and RBS/Gem signatures, ranked by

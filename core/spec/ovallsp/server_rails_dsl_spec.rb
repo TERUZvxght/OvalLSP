@@ -59,7 +59,7 @@ RSpec.describe "Ovallsp::Server Rails DSL generated methods (Task 017)" do
 
     build_server(input).run
 
-    labels = sent_messages.first[:result].map { |item| item[:label] }
+    labels = sent_messages.first[:result][:items].map { |item| item[:label] }
     expect(labels).to include("active?")
   end
 
