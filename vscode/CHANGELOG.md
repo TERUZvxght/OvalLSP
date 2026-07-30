@@ -48,8 +48,15 @@ The container rendering was settled in favour of the generic form, and
 the union rule corrected to agree with it. The engine already produced
 `Array[Unknown]` for `[]`, so the union rule was the one out of step.
 Keeping the generic form also keeps a type argument for the container
-rules to dispatch on: collapsing to a plain `Hash` threw away the ability
-to resolve anything called on the result.
+rules to dispatch on, which matters for `Array` and the Active Record
+collections — the rules have no entry for `Hash` or `Set`, so for the two
+types this correction is named after that was not the reason.
+
+One consequence is worth stating because it changes what you see: a value
+that may be one of several types now counts a container member honestly.
+`x = flag ? User.new : []` followed by `x.name` is a call the receiver may
+not have, so it no longer appears in Find References and is not rewritten
+by Rename. 0.1.7 listed it, on the strength of ignoring the `[]` branch.
 
 Independent review then found that settling on the generic form exposed a
 gap rather than closing one: the method resolver understood only a plain
