@@ -26,7 +26,19 @@ roadmap file for the same reason everything else does — one place.
 
 ## 024.1 Duplicate, unused implementation of the controller callback chain
 
-**Status:** open
+**Status:** fixed in 0.1.10 — the unused copy is deleted, along with
+`#infer_ivars_for_method`, `#find_static_render_target`, `#find_method_node`
+and the `MethodLocator` visitor that existed only to serve it. Its specs
+were re-anchored rather than dropped: the ones covering pieces the Server
+still calls now go through those pieces (`method_nodes` +
+`#infer_ivars_for_method_node`, `#static_render_target_for_node`), and the
+seven chain behaviours that had no equivalent on the live path — `except:`
+on both sides of it, an action overriding a callback's assignment, an
+unresolvable `if:` condition, a conditional `skip_before_action`, a
+missing callback method, and the multi-name forms of `before_action` and
+`skip_before_action` — were ported into `server_views_spec.rb`, where each
+fixture was checked to yield a *different* answer under the opposite
+behaviour.
 **Area:** `core/lib/ovallsp/local_inferencer.rb`, `core/lib/ovallsp/server.rb`
 
 `LocalInferencer#infer_ivars_for_action` implements the before_action
@@ -51,48 +63,11 @@ Server path, or make the Server call the LocalInferencer copy so there is
 one implementation. Deleting cascades into `MethodLocator`, so it is not a
 one-line change.
 
-## 024.3 An `untyped` RBS singleton signature still shadows source resolution
-
-**Status:** fixed in 0.1.9 — the non-`new` singleton branch no longer
-returns a signature answer that carries no information. Anything reaching
-that point is Unknown, since the guard above already returned every
-signature result that said something, so it now falls through to the
-class-level finder and the source declaration as `.new` always did.
-**Area:** `core/lib/ovallsp/local_inferencer.rb` (constant-receiver branch)
-
-The `.new` branch treats a `Types::Unknown` from RBS as "no answer" and
-falls through to source/nominal resolution. The sibling branch for every
-*other* singleton call returns the signature result even when it is
-Unknown, so it never reaches `resolve_class_level_finder` or
-`resolve_source_method_member`.
-
-Reproduce: declare `def self.build: (...) -> untyped` in a project `sig/`
-or Sorbet RBI for a class that also defines `self.build` in source; a
-call resolves to Unknown instead of the source return type. Requires a
-project-supplied untyped signature, so it does not occur with stdlib
-alone.
-
-**Direction:** apply the same Unknown filter to the non-`new` branch.
-
-## 024.4 `BeforeActionFinder#record` mutates the Prism AST in place
-
-**Status:** fixed in 0.1.9 — reads the options without consuming them.
-Pinned through the consequence rather than by inspecting the node: the
-same tree visited twice must say the same thing, and it did not — a
-callback scoped to `only: [:show]` was applied to every action on the
-second pass, because the selector had been popped off the first time.
-**Area:** `core/lib/ovallsp/local_inferencer.rb`
-
-`arguments.pop` operates on the array Prism owns, not a copy (verified:
-the node's own `arguments.arguments` shrinks). Harmless today because the
-document is re-parsed on every call and each statement is visited once;
-it becomes a live bug as soon as anything caches or re-walks that tree.
-
-**Direction:** `arguments[0...-1]` instead of `pop`.
-
 ## 024.6 The `seen_uris` spec's comment overclaims
 
-**Status:** open
+**Status:** fixed in 0.1.10 — the buffer case is now a spec of its own,
+so `@seen_uris << uri` sitting above the open-buffer early return is
+pinned rather than merely claimed.
 **Area:** `core/spec/ovallsp/cold_indexer_spec.rb`
 
 The comment says the spec covers a file already open in a buffer, but no
@@ -106,20 +81,57 @@ actually asserts.
 
 ## 024.8 Ownership retirement on `exited() && known.size === 0` is unpinned
 
-**Status:** open
+**Status:** fixed in 0.1.10 — the two assignments are deleted; the
+`ownedSessionId` one is load-bearing and pinned by a new regression test,
+and `ownedGroupId` went with it for symmetry (it is set only from a
+validated root row whose `pgid === pid`, and such a row also satisfies the
+expansion test against `ownedSessionId`, so `known` cannot be empty in the
+same pass — no fixture distinguishes that half). The first attempt at this
+entry deleted them as unable to change any answer, reasoning that the
+branch is only reached with the root absent and the expansion gate
+therefore already closed. Independent review disproved both halves:
+`rootObservedAbsent` is assigned at the *end* of the pass, and the root
+row can be present but untracked, because `known` only takes the root
+while the child has not exited. A Core dying inside the ~57ms pre-`setsid`
+window reaches the branch with ownership still meaningful — on Darwin
+especially, where `sid` is 0 on every row. Since `terminateOnce` and
+`waitForAllExit` both refresh after the interval is cleared, retiring
+ownership there permanently lost the survivor those later passes exist to
+catch. The `clearInterval` in the same branch stays, pinned by its own
+test.
 **Area:** `vscode/src/coreProcess.ts`
 
-Clearing `ownedSessionId`/`ownedGroupId` there is defence-in-depth: the
-expansion gate already prevents the failure it guards against, and no
-concrete failing scenario could be constructed for its removal. Recorded
-because unpinned behavioural lines count as defects in this project.
+As originally recorded, and wrong in its premise — kept here because the
+reasoning is the point: "Clearing `ownedSessionId`/`ownedGroupId` there is
+defence-in-depth: the expansion gate already prevents the failure it
+guards against, and no concrete failing scenario could be constructed for
+its removal. Recorded because unpinned behavioural lines count as defects
+in this project." A scenario *can* be constructed; see the status above.
 
-**Direction:** a test, not a code change — or delete the lines if the
-invariant is genuinely carried elsewhere.
+**Direction (superseded, recorded with the premise above):** a test, not a
+code change — or delete the lines if the invariant is genuinely carried
+elsewhere. Neither applied: the lines were deleted because keeping them
+was actively harmful, not because the invariant was carried elsewhere.
 
 ## 024.10 Four `extension.ts` behaviours cannot be unit-tested
 
-**Status:** open
+**Status:** fixed in 0.1.10 — the four decisions moved into
+`vscode/src/clientTeardown.ts`, which imports no `vscode` and takes the
+lifecycle manager and the per-folder maps as parameters rather than
+reading module state. `extension.ts` now delegates to it and keeps only
+the `vscode` wiring. Fifteen unit tests cover them, and each decision was
+checked by mutating it and confirming the suite goes red.
+
+The fourth took two attempts, and the first one is worth recording:
+exporting the two notification strings for `extension.ts` to choose
+between pinned the *wording* while leaving the command-to-message pairing
+at the call sites, where an independent reviewer swapped it with the
+suite still green. What is pinned now is that there is no choice — each
+command is registered through a helper that names its id once and looks
+the confirmation up from that same id. What a command *does* is still two
+hand-written bodies in `extension.ts` — swapping those would still restart
+the wrong thing — so the confirmation is what this pins, not the whole
+command.
 **Area:** `vscode/src/extension.ts`
 
 `extension.ts` imports `vscode`, which the unit suite cannot load, so
@@ -618,38 +630,6 @@ path solves and has no existing answer here:
 None of that is settled, and settling it needs measurement against a real
 workspace rather than reasoning — which is why this is scoped as its own
 roadmap entry rather than folded into another release's work.
-
----
-
-## 024.12 A hash literal and `Hash.new` still render differently
-
-**Status:** fixed in 0.1.9 — a hash literal infers `Hash[Unknown]`, and
-`MethodAnalyzer` produces the generic form for both container literals
-too, so the answer survives a method summary. Without that second site
-the inconsistency simply moved one call away: hovering `{}` and hovering
-a method that returns `{}` would have disagreed.
-**Area:** `core/lib/ovallsp/local_inferencer.rb` (`Prism::HashNode`)
-
-024.2 settled the canonical rendering of "container with unknown element
-type" on the generic form and aligned `Types.normalize_union` with it.
-One path was missed: a hash literal infers `Nominal("Hash")`, so
-
-```
-{}        => Hash
-[]        => Array[Unknown]
-Hash.new  => Hash[Unknown]
-```
-
-Hovering `{}` and hovering `Hash.new` still disagree about the same kind
-of value, which is the symptom 024.2 was opened about. Found by
-independent review of 0.1.8, which also observed that nothing pins what
-`{}` renders as, so it is free to drift either way.
-
-**Direction:** infer `Generic("Hash", Unknown)` for an empty hash literal,
-matching the array literal, and pin all three renderings together. Held
-back from 0.1.8 only because it changes an inference result rather than
-correcting an inconsistency between two of them, and 0.1.8 was already
-carrying a resolver change made under review.
 
 ---
 

@@ -237,12 +237,16 @@ RSpec.describe Ovallsp::ColdIndexer do
   end
 
   # `seen_uris` is what the Server's deletion sweep subtracts from what it
-  # has indexed, so a file missing from this set reads as "deleted from
-  # disk" and gets evicted even though it is right there. That is the
-  # watcher-vs-cold-index flapping this Result was introduced to end, so
-  # the set has to include every file actually visited -- including one
-  # whose summary went out through `on_summary` and one already open in a
-  # buffer, both of which return early.
+  # has indexed: it is the sweep's only positive evidence that a file was
+  # reached. The sweep does not act on that evidence alone -- it also
+  # requires a `:disk`-sourced summary and re-checks `File.file?` -- so a
+  # missing entry does not by itself evict anything today. What it costs
+  # is the meaning of the set, and with it the sweep's ability to tell
+  # "not seen" from "not there", which is the watcher-vs-cold-index
+  # flapping this Result was introduced to end. So the set has to include
+  # every file actually visited -- including one whose summary went out
+  # through `on_summary` and one already open in a buffer, both of which
+  # return early.
   it "reports every visited file in seen_uris, including ones handled by on_summary" do
     Dir.mktmpdir do |dir|
       scanned = write(dir, "scanned.rb", "class Scanned\nend\n")
@@ -259,6 +263,27 @@ RSpec.describe Ovallsp::ColdIndexer do
       expect(result.seen_uris).to include(
         Ovallsp::UriUtil.from_path(scanned), Ovallsp::UriUtil.from_path(handed_off)
       )
+    end
+  end
+
+  # The other early return the comment above names, and the one that was
+  # never actually exercised: a file already open in a buffer is skipped
+  # before it is read, so whether it lands in `seen_uris` depends entirely
+  # on `@seen_uris << uri` sitting *above* that return. Nothing pinned that
+  # ordering (024.6).
+  it "reports a file already open in a buffer, which is skipped before it is read" do
+    Dir.mktmpdir do |dir|
+      open_in_editor = write(dir, "open_in_editor.rb", "class OpenInEditor\nend\n")
+      uri = Ovallsp::UriUtil.from_path(open_in_editor)
+      document_store.open(uri: uri, text: "class OpenInEditor\nend\n", version: 1, language_id: "ruby")
+      result = nil
+
+      described_class.new(
+        root: dir, parser_service: parser_service, workspace_index: workspace_index,
+        document_store: document_store, logger: logger, on_complete: ->(value) { result = value }
+      ).run
+
+      expect(result.seen_uris).to include(uri)
     end
   end
 

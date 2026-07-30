@@ -3,6 +3,19 @@
 RSpec.describe Ovallsp::LocalInferencer do
   subject(:inferencer) { described_class.new }
 
+  # The deleted `#infer_ivars_for_method` was `find_method_node` -- a
+  # first-match locator deleted along with it -- followed by
+  # `#infer_ivars_for_method_node`. This helper goes through `method_nodes`
+  # instead, which is what `Server` itself calls, so these examples
+  # exercise the path that runs rather than a second copy of it. The two
+  # locators do not agree on everything (`method_nodes` is
+  # last-definition-wins), which is why one fixture below had to be
+  # reordered to keep distinguishing what it claims to (024.1).
+  def ivars_for_method(inferencer, document, owner_name:, method_name:, initial_env: {})
+    node = inferencer.method_nodes(document, owner_name: owner_name)[method_name.to_s]
+    inferencer.infer_ivars_for_method_node(node, initial_env: initial_env, self_type_name: owner_name)
+  end
+
   def infer(source, line:, character:)
     document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
     inferencer.infer_at(document, { line: line, character: character })
@@ -789,33 +802,40 @@ RSpec.describe Ovallsp::LocalInferencer do
     end
   end
 
-  # MethodLocator's `class << self` guard had nothing enforcing it: the
-  # matching guard in MethodMapLocator is pinned through the views spec,
-  # but this locator is reached only from #infer_ivars_for_method, so its
-  # removal was invisible. A `class << self` body's `def`s are
+  # MethodMapLocator's `class << self` guard, pinned here directly rather
+  # than only through the views spec. (It once had a twin in a second
+  # locator that nothing enforced; 024.1 deleted that duplicate along with
+  # the callback chain it served.) A `class << self` body's `def`s are
   # receiverless exactly like instance methods, so without the guard a
   # same-named singleton method is indistinguishable from the real action
   # and can be picked as its body -- handing the view the wrong ivars.
+  #
+  # The singleton `show` comes *last* deliberately. MethodMapLocator is
+  # last-definition-wins, so with the singleton first an unguarded locator
+  # registers it and then overwrites it with the real one -- the same
+  # answer either way, and the example would pass with the guard deleted.
+  # (The order was the other way round when this covered the deleted
+  # first-match locator, where it did distinguish them.)
   it "does not mistake a `class << self` method for the same-named instance method's body" do
     document = Ovallsp::TextDocument.new(
       uri: "file:///c.rb",
       text: <<~RUBY,
         class UsersController
+          def show
+            @actor = User.new
+          end
+
           class << self
             def show
               @actor = Admin.new
             end
-          end
-
-          def show
-            @actor = User.new
           end
         end
       RUBY
       version: 1, language_id: "ruby"
     )
 
-    ivars = inferencer.infer_ivars_for_method(document, owner_name: "::UsersController", method_name: "show")
+    ivars = ivars_for_method(inferencer, document, owner_name: "::UsersController", method_name: "show")
 
     expect(ivars[:@actor].to_s).to eq("User")
   end
@@ -846,49 +866,6 @@ RSpec.describe Ovallsp::LocalInferencer do
 
     expect(first.operations).to be_empty
     expect(second.operations).to eq(first.operations)
-  end
-
-  # The step budget is what bounds a single action's inference, and an
-  # action is callbacks + body. Resetting it per method made the real
-  # bound `max_steps * (callbacks + 1)`, so a controller with a long
-  # before_action chain could do several times the work the budget names
-  # -- on the request path, holding the index lock. Sharing one budget
-  # across the chain is what makes the number mean anything, and the
-  # visible consequence is that the tail of a chain degrades instead of
-  # everything being inferred at any cost.
-  it "spends one step budget across a whole before_action chain, not one per callback" do
-    document = Ovallsp::TextDocument.new(
-      uri: "file:///c.rb",
-      text: <<~RUBY,
-        class PostsController
-          before_action :first_callback
-          before_action :second_callback
-
-          def first_callback
-            @a = User.new
-          end
-
-          def second_callback
-            @b = User.new
-          end
-
-          def show
-            @c = User.new
-          end
-        end
-      RUBY
-      version: 1, language_id: "ruby"
-    )
-    tight = described_class.new(max_steps: 6)
-
-    ivars = tight.infer_ivars_for_action(document, owner_name: "::PostsController", action_name: "show")
-
-    # A budget of 6 covers the first callback only. Per-method resets
-    # would have inferred all three for the same number.
-    expect(ivars.keys).to eq([:@a])
-    expect(described_class.new(max_steps: 100).infer_ivars_for_action(
-      document, owner_name: "::PostsController", action_name: "show"
-    ).keys).to eq(%i[@a @b @c])
   end
 
   it "uses opt-in observed return evidence only when static source and RBS remain Unknown" do
@@ -1237,7 +1214,7 @@ RSpec.describe Ovallsp::LocalInferencer do
     end
   end
 
-  describe "#infer_ivars_for_method (Task 008)" do
+  describe "#infer_ivars_for_method_node (Task 008)" do
     def document(source)
       Ovallsp::TextDocument.new(uri: "file:///controller.rb", text: source, version: 1, language_id: "ruby")
     end
@@ -1252,7 +1229,7 @@ RSpec.describe Ovallsp::LocalInferencer do
         end
       RUBY
 
-      ivars = inferencer.infer_ivars_for_method(document(source), owner_name: "::UsersController", method_name: "show")
+      ivars = ivars_for_method(inferencer, document(source), owner_name: "::UsersController", method_name: "show")
 
       expect(ivars[:@user]).to eq(Ovallsp::Types::Nominal.new(name: "User"))
       expect(ivars[:@count].to_s).to eq("Integer")
@@ -1268,7 +1245,7 @@ RSpec.describe Ovallsp::LocalInferencer do
         end
       RUBY
 
-      ivars = inferencer.infer_ivars_for_method(document(source), owner_name: "::UsersController", method_name: "show")
+      ivars = ivars_for_method(inferencer, document(source), owner_name: "::UsersController", method_name: "show")
 
       expect(ivars[:@user].to_s).to eq("String")
     end
@@ -1276,13 +1253,13 @@ RSpec.describe Ovallsp::LocalInferencer do
     it "returns {} for a method that doesn't exist" do
       source = "class UsersController\n  def show\n  end\nend\n"
 
-      ivars = inferencer.infer_ivars_for_method(document(source), owner_name: "::UsersController", method_name: "index")
+      ivars = ivars_for_method(inferencer, document(source), owner_name: "::UsersController", method_name: "index")
 
       expect(ivars).to eq({})
     end
 
     it "returns {} rather than raising for unparsable source" do
-      ivars = inferencer.infer_ivars_for_method(document("def broken(\n"), owner_name: "::X", method_name: "y")
+      ivars = ivars_for_method(inferencer, document("def broken(\n"), owner_name: "::X", method_name: "y")
 
       expect(ivars).to eq({})
     end
@@ -1297,7 +1274,7 @@ RSpec.describe Ovallsp::LocalInferencer do
       RUBY
       user_type = Ovallsp::Types::Nominal.new(name: "User")
 
-      ivars = inferencer.infer_ivars_for_method(
+      ivars = ivars_for_method(inferencer,
         document(source), owner_name: "::UsersController", method_name: "show", initial_env: { :@user => user_type }
       )
 
@@ -1305,167 +1282,10 @@ RSpec.describe Ovallsp::LocalInferencer do
     end
   end
 
-  describe "#infer_ivars_for_action" do
-    def document(source)
-      Ovallsp::TextDocument.new(uri: "file:///controller.rb", text: source, version: 1, language_id: "ruby")
-    end
-
-    it "runs applicable before_action methods before the action and carries their ivars forward" do
-      source = <<~RUBY
-        class UsersController
-          before_action :load_user
-
-          def load_user
-            @user = User.new
-          end
-
-          def show
-            @copy = @user
-          end
-        end
-      RUBY
-
-      ivars = inferencer.infer_ivars_for_action(
-        document(source), owner_name: "::UsersController", action_name: "show"
-      )
-
-      expect(ivars[:@user].to_s).to eq("User")
-      expect(ivars[:@copy].to_s).to eq("User")
-    end
-
-    it "honors literal only:/except: selectors and multiple callback names" do
-      source = <<~RUBY
-        class UsersController
-          before_action :load_user, :load_team, only: [:show, :edit]
-          before_action :authenticate, except: :show
-
-          def load_user = @user = User.new
-          def load_team = @team = Team.new
-          def authenticate = @auth = true
-          def show; end
-          def index; end
-        end
-      RUBY
-
-      show = inferencer.infer_ivars_for_action(
-        document(source), owner_name: "::UsersController", action_name: "show"
-      )
-      index = inferencer.infer_ivars_for_action(
-        document(source), owner_name: "::UsersController", action_name: "index"
-      )
-
-      expect(show.keys).to contain_exactly(:@user, :@team)
-      expect(index.keys).to contain_exactly(:@auth)
-    end
-
-    it "lets the action override a callback's earlier assignment" do
-      source = <<~RUBY
-        class UsersController
-          before_action :set_value
-          def set_value = @value = 1
-          def show = @value = "final"
-        end
-      RUBY
-
-      ivars = inferencer.infer_ivars_for_action(
-        document(source), owner_name: "::UsersController", action_name: "show"
-      )
-
-      expect(ivars[:@value].to_s).to eq("String")
-    end
-
-    it "ignores callbacks with unresolved runtime conditions" do
-      source = <<~RUBY
-        class UsersController
-          before_action :load_user, if: :signed_in?
-          def load_user = @user = User.new
-          def show; end
-        end
-      RUBY
-
-      ivars = inferencer.infer_ivars_for_action(
-        document(source), owner_name: "::UsersController", action_name: "show"
-      )
-
-      expect(ivars).to be_empty
-    end
-
-    it "applies a same-class skip_before_action selector" do
-      source = <<~RUBY
-        class UsersController
-          before_action :load_user
-          skip_before_action :load_user, only: :show
-          def load_user = @user = User.new
-          def show; end
-        end
-      RUBY
-
-      ivars = inferencer.infer_ivars_for_action(
-        document(source), owner_name: "::UsersController", action_name: "show"
-      )
-
-      expect(ivars).to be_empty
-    end
-
-    it "does not claim callback ivars when a conditional skip may execute" do
-      source = <<~RUBY
-        class UsersController
-          before_action :load_user
-          skip_before_action :load_user, if: :guest?
-          def load_user = @user = User.new
-          def show; end
-        end
-      RUBY
-
-      ivars = inferencer.infer_ivars_for_action(
-        document(source), owner_name: "::UsersController", action_name: "show"
-      )
-
-      expect(ivars).to be_empty
-    end
-
-    it "preserves earlier ivars when a later callback method is missing" do
-      source = <<~RUBY
-        class UsersController
-          before_action :load_user, :missing_callback
-          def load_user = @user = User.new
-          def show; end
-        end
-      RUBY
-
-      ivars = inferencer.infer_ivars_for_action(
-        document(source), owner_name: "::UsersController", action_name: "show"
-      )
-
-      expect(ivars[:@user].to_s).to eq("User")
-    end
-
-    it "preserves earlier ivars when a later callback exceeds the inference budget" do
-      assignments = (1..100).map { |index| "    value_#{index} = #{index}" }.join("\n")
-      source = <<~RUBY
-        class UsersController
-          before_action :load_user, :too_complex
-          def load_user = @user = User.new
-          def too_complex
-      #{assignments}
-          end
-          def show; end
-        end
-      RUBY
-      tiny = described_class.new(max_steps: 20)
-
-      ivars = tiny.infer_ivars_for_action(
-        document(source), owner_name: "::UsersController", action_name: "show"
-      )
-
-      expect(ivars[:@user].to_s).to eq("User")
-    end
-  end
-
   describe "conditional branch environment merging (Task 008.5)" do
     def ivars_for(source)
       document = Ovallsp::TextDocument.new(uri: "file:///controller.rb", text: source, version: 1, language_id: "ruby")
-      inferencer.infer_ivars_for_method(document, owner_name: "::UsersController", method_name: "show")
+      ivars_for_method(inferencer, document, owner_name: "::UsersController", method_name: "show")
     end
 
     def union(*names)
@@ -1618,7 +1438,7 @@ RSpec.describe Ovallsp::LocalInferencer do
     end
   end
 
-  describe "#find_static_render_target (Task 008)" do
+  describe "#static_render_target_for_node (Task 008)" do
     def document(source)
       Ovallsp::TextDocument.new(uri: "file:///controller.rb", text: source, version: 1, language_id: "ruby")
     end
@@ -1626,7 +1446,7 @@ RSpec.describe Ovallsp::LocalInferencer do
     it "finds a literal symbol render target" do
       source = "class PostsController\n  def update\n    render :edit\n  end\nend\n"
 
-      target = inferencer.find_static_render_target(document(source), owner_name: "::PostsController", method_name: "update")
+      target = inferencer.static_render_target_for_node(inferencer.method_nodes(document(source), owner_name: "::PostsController")["update"])
 
       expect(target).to eq("edit")
     end
@@ -1634,7 +1454,7 @@ RSpec.describe Ovallsp::LocalInferencer do
     it "finds a literal string render target" do
       source = "class PostsController\n  def update\n    render \"posts/edit\"\n  end\nend\n"
 
-      target = inferencer.find_static_render_target(document(source), owner_name: "::PostsController", method_name: "update")
+      target = inferencer.static_render_target_for_node(inferencer.method_nodes(document(source), owner_name: "::PostsController")["update"])
 
       expect(target).to eq("posts/edit")
     end
@@ -1642,7 +1462,7 @@ RSpec.describe Ovallsp::LocalInferencer do
     it "returns nil when the method has no render call" do
       source = "class PostsController\n  def update\n    @x = 1\n  end\nend\n"
 
-      target = inferencer.find_static_render_target(document(source), owner_name: "::PostsController", method_name: "update")
+      target = inferencer.static_render_target_for_node(inferencer.method_nodes(document(source), owner_name: "::PostsController")["update"])
 
       expect(target).to be_nil
     end

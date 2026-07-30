@@ -99,19 +99,6 @@ module Ovallsp
       Types::UNKNOWN
     end
 
-    # Walks every statement in `method_name`'s body (declared directly on
-    # `owner_name`, per ParserService's SymbolId#owner convention) and
-    # returns the type of each `@ivar` as of the end of the method — what a
-    # view rendered after this action runs would see
-    # (docs/design/tasks/008-controller-view-propagation.md). Returns {} if
-    # the method can't be found or parsing fails; never raises.
-    def infer_ivars_for_method(document, owner_name:, method_name:, initial_env: {}, self_type_name: owner_name)
-      method_node = find_method_node(document, owner_name, method_name)
-      infer_ivars_for_method_node(method_node, initial_env: initial_env, self_type_name: self_type_name)
-    rescue BudgetExceeded, StandardError
-      ivars_from(initial_env)
-    end
-
     def infer_ivars_for_method_node(method_node, initial_env: {}, self_type_name:, reset_budget: true)
       return ivars_from(initial_env) unless method_node
       return ivars_from(initial_env) unless method_node.body
@@ -141,51 +128,12 @@ module Ovallsp
       @step_budget = @max_steps
     end
 
-    # Evaluates the statically-declared before_action callbacks that apply
-    # to `action_name`, in declaration/argument order, then evaluates the
-    # action itself with their ivar environment. Literal callback names
-    # and literal only:/except: selectors cover the conventional Rails
-    # form; dynamic conditions and callback blocks are deliberately left
-    # unresolved instead of guessed.
-    def infer_ivars_for_action(document, owner_name:, action_name:)
-      nodes = method_nodes(document, owner_name: owner_name)
-      begin_ivar_inference
-      callbacks = before_action_operations(document, owner_name: owner_name, action_name: action_name).each_with_object([]) do |operation, names|
-        verb, name = operation
-        verb == :add ? names << name : names.delete(name)
-      end
-
-      env = callbacks.reduce({}) do |callback_env, callback_name|
-        infer_ivars_for_method_node(
-          nodes[callback_name.to_s], initial_env: callback_env, self_type_name: owner_name, reset_budget: false
-        )
-      end
-      infer_ivars_for_method_node(
-        nodes[action_name.to_s], initial_env: env, self_type_name: owner_name, reset_budget: false
-      )
-    rescue StandardError
-      {}
-    end
-
     def before_action_operations(document, owner_name:, action_name:)
       finder = BeforeActionFinder.new(owner_name, action_name.to_s)
       Prism.parse(document.text).value.accept(finder)
       finder.operations
     rescue StandardError
       []
-    end
-
-    # Finds a literal `render :name` / `render "name"` / `render "dir/name"`
-    # call anywhere in `method_name`'s body and returns its target as a
-    # string, or nil if there's no such call (or it's not statically
-    # resolvable — dynamic render strings are out of scope). Used to
-    # propagate ivars from an action into a *different* action's view when
-    # that action explicitly renders it.
-    def find_static_render_target(document, owner_name:, method_name:)
-      method_node = find_method_node(document, owner_name, method_name)
-      static_render_target_for_node(method_node)
-    rescue StandardError
-      nil
     end
 
     def static_render_target_for_node(method_node)
@@ -202,13 +150,6 @@ module Ovallsp
 
     def ivars_from(env)
       env.select { |key, _| key.to_s.start_with?("@") }
-    end
-
-    def find_method_node(document, owner_name, method_name)
-      result = Prism.parse(document.text)
-      locator = MethodLocator.new(owner_name, method_name.to_s)
-      result.value.accept(locator)
-      locator.found
     end
 
     def step!
@@ -1034,58 +975,6 @@ module Ovallsp
       assume == :truthy ? :falsy : :truthy
     end
 
-    # Finds the single DefNode for an unqualified instance method
-    # (`owner_name`/`method_name`, matching ParserService's SymbolId
-    # convention) anywhere in the file, tracking lexical nesting the same
-    # way ParserService::Visitor does. Stops descending once found.
-    class MethodLocator < Prism::Visitor
-      attr_reader :found
-
-      def initialize(owner_name, method_name)
-        super()
-        @owner_name = owner_name
-        @method_name = method_name
-        @owner_stack = []
-        @found = nil
-      end
-
-      def visit_module_node(node) = visit_namespace(node)
-      def visit_class_node(node) = visit_namespace(node)
-
-      # `class << self` bodies define singleton methods, whose `def`s are
-      # receiverless just like instance methods. Prism::Visitor's default
-      # would recurse straight into them with the owner stack unchanged,
-      # so `class << self; def show; end; end` was indistinguishable from
-      # the real instance `#show` -- and could be picked as the action
-      # body ahead of it. ParserService::Visitor already tracks this
-      # (`visit_singleton_class_node`); these locators must agree with it.
-      def visit_singleton_class_node(node) = nil
-
-      def visit_def_node(node)
-        return if @found
-        return unless node.receiver.nil? && node.name.to_s == @method_name && @owner_stack.last == @owner_name
-
-        @found = node
-      end
-
-      private
-
-      def visit_namespace(node)
-        return if @found
-
-        @owner_stack.push(qualify(node.constant_path.full_name))
-        node.each_child_node { |child| child.accept(self) }
-        @owner_stack.pop
-      end
-
-      def qualify(local_path)
-        return local_path if local_path.start_with?("::")
-
-        @owner_stack.last ? "#{@owner_stack.last}::#{local_path}" : "::#{local_path}"
-      end
-    end
-    private_constant :MethodLocator
-
     class MethodMapLocator < Prism::Visitor
       attr_reader :nodes
 
@@ -1099,9 +988,8 @@ module Ovallsp
       def visit_module_node(node) = visit_namespace(node)
       def visit_class_node(node) = visit_namespace(node)
 
-      # See MethodLocator#visit_singleton_class_node: a `class << self`
-      # body's receiverless defs are singleton methods, not this owner's
-      # instance methods.
+      # A `class << self` body's receiverless defs are singleton methods,
+      # not this owner's instance methods, so the whole node is skipped.
       def visit_singleton_class_node(node) = nil
 
       def visit_def_node(node)
