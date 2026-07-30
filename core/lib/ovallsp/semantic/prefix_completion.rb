@@ -66,8 +66,15 @@ module Ovallsp
         candidates += constants(prefix) + kernel_methods(prefix) if prefix.length >= MIN_PREFIX_FOR_WORKSPACE
 
         ranked = candidates.sort_by { |item| [item[:__group], item[:label]] }
+        # Incomplete for two different reasons. The cap is the obvious
+        # one. The other is that below MIN_PREFIX_FOR_WORKSPACE the answer
+        # *grows a new source* at the next keystroke, which no amount of
+        # client-side filtering can produce -- so an editor told this
+        # answer is complete caches it and filters locally, and a user
+        # typing straight through from the first letter never sees a
+        # workspace constant at all.
         Result.new(items: ranked.first(MAX_ITEMS).map { |item| finalize(item) },
-                   incomplete: ranked.size > MAX_ITEMS)
+                   incomplete: ranked.size > MAX_ITEMS || prefix.length < MIN_PREFIX_FOR_WORKSPACE)
       end
 
       private

@@ -84,6 +84,7 @@ suite in step: every row must have an example, every example a row.
 | H4 | Hovers a literal (`"s"`, `1`, `[1]`) | `String`, `Integer`, `Array[Integer]` | PASS |
 | H5 | Hovers a method call | its parameter list (`documented(first, second)`) | PASS |
 | H6 | Hovers an expression nested in a keyword argument, array, hash, `case`, `while` or `return` | that expression's own type, not the enclosing structure's | PASS |
+| H7 | Hovers a method declared with an RDoc/YARD comment above it | the comment appears in the hover, below the type | PASS |
 
 ## Completion: the single most-used feature
 
@@ -100,6 +101,8 @@ suite in step: every row must have an example, every example a row.
 | C9 | Accepts a completion for a method that takes nothing | the bare name, no parentheses | PASS |
 | C10 | Accepts a completion for a method that takes arguments of unknown shape | `where($1)` — parentheses opened, cursor inside | PASS |
 | C11 | Types `post.` inside an ERB template | the model's members, resolved from the template's Ruby regions rather than its HTML | PASS |
+| C12 | Types `Art` with no receiver in front of it | workspace classes, the locals in scope, and the methods callable at that position | PASS |
+| C13 | Highlights a completion candidate declared with an RDoc/YARD comment | the comment appears as the item's documentation | PASS |
 
 C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
 a bare constant inferred as `Unknown`, so nothing downstream ever saw a
@@ -134,6 +137,8 @@ which is what it is for.
 | G12 | Has a file open from before the Runtime Agent reported routes | the route diagnostic clears once routes arrive, without touching the file | PASS |
 | G13 | Reopens a class that lives in a gem (`test/test_helper.rb`'s `ActiveSupport::TestCase`) | nothing — the workspace does not own that class, whatever the static chain says | PASS |
 | G14 | Writes a test that inherits from a reopened gem class (`class FooTest < ActiveSupport::TestCase`) | nothing — the reopen is in the chain, not just at the receiver | PASS |
+| G15 | Passes an argument whose type cannot be the one an RBS/RBI signature declares | it is reported, on the argument rather than on the whole call | PASS |
+| G16 | Reads an `@ivar` in a view that no controller action or callback assigns | it is reported | PASS |
 
 G4 used to follow from the same missing-ancestor problem as C4 and is now
 closed: the Runtime Agent reports what each model actually responds to,
@@ -160,6 +165,12 @@ table — it belongs in the non-goals below.
 | S2 | Types `(` after a stdlib method | the RBS overload label | PASS |
 | S3 | Types `(` after a route helper | the helper's required parts | PASS |
 
+## Semantic highlighting
+
+| # | What the user does | What must happen | Status |
+|---|---|---|---|
+| T1 | Reads `foo` where it is a local variable, and `foo` where it is a call on self | the two are coloured differently, in `.rb` and in an ERB template's Ruby regions alike | PASS |
+
 ## Workspace-wide
 
 | # | What the user does | What must happen | Status |
@@ -179,10 +190,10 @@ table — it belongs in the non-goals below.
   knows anything about; VS Code's bundled Ruby extension already
   associates `.erb`, and other Ruby extensions ship grammars of their
   own. Registering another would collide with them for no gain.
-  *Semantic* highlighting is a different thing and is planned (README's
-  matrix, 0.2.0): it layers meaning this engine actually has — whether
-  `foo` is a local variable or a call on self — over whatever grammar is
-  in use, in `.rb` files and in an ERB template's Ruby regions alike.
+  *Semantic* highlighting is a different thing and ships as of 0.2.0
+  (S1 below): it layers meaning this engine actually has — whether `foo`
+  is a local variable or a call on self — over whatever grammar is in
+  use, in `.rb` files and in an ERB template's Ruby regions alike.
 - Anything about a Ruby file outside a workspace folder.
 - Anything while the workspace is untrusted: the Runtime Agent does not
   start, so every Rails-derived capability (C3, C4, C5, D2, G3, G4)

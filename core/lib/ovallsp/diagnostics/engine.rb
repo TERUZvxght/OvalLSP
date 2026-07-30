@@ -276,6 +276,9 @@ module Ovallsp
       #   class or any of its descendants.
       #
       # Everything else stays silent.
+      # Converted RBS names that look like Ruby constants and are not.
+      NOT_A_RUBY_CLASS = %w[Boolean].freeze
+
       def argument_type_findings(document, summary, context)
         return [] unless context.signatures
 
@@ -304,6 +307,11 @@ module Ovallsp
           # false positive by construction. A Ruby constant is
           # capitalised; these are not, which is what tells them apart.
           next unless expected.name.to_s.match?(/\A[A-Z]/)
+          # `bool` converts to `Boolean`, which is capitalised and so
+          # survives the rule above -- but there is no such Ruby class, so
+          # its ancestor walk can never succeed and every argument would
+          # be reported.
+          next if NOT_A_RUBY_CLASS.include?(expected.name)
 
           # The *end* of the argument, not its start: at the start of
           # `SmallInteger.new` the innermost node containing the offset is
@@ -326,22 +334,43 @@ module Ovallsp
 
       # A subclass is a perfectly good instance of its parent, and
       # reporting one is the false positive this check most has to avoid:
-      # it fires on correct, idiomatic code. Both ancestry sources are
-      # asked, because a workspace class inheriting a stdlib one has half
-      # its chain in each.
+      # it fires on correct, idiomatic code.
+      #
+      # The two ancestry sources have to be *joined*, not asked in
+      # parallel. A real chain crosses the boundary -- `MyError <
+      # StandardError` is in the workspace index and `StandardError <
+      # Exception` is only in RBS -- so neither source alone contains the
+      # pair, and asking both about the same class answers "no" for a
+      # relation that plainly holds. The workspace chain is walked first,
+      # then RBS is asked about every name it reached.
+      #
+      # Every name is compared bare. `HierarchyIndex` returns a
+      # workspace-resolved entry `::`-prefixed and an external one without,
+      # while a signature always names a type bare -- so comparing raw
+      # meant no workspace-declared ancestor ever matched, including the
+      # class itself.
       def compatible_nominal?(actual, expected, context)
-        return true if actual.name == expected.name
+        target = simple_name(expected.name)
+        reachable = ancestor_names(actual.name, context)
+        reachable.include?(target)
+      end
 
-        workspace_ancestors = context.hierarchy_index.ancestors(actual.name).map(&:name)
-        return true if workspace_ancestors.include?(expected.name)
+      def ancestor_names(name, context)
+        workspace = [name] + context.hierarchy_index.ancestors(name).map(&:name)
+        workspace = workspace.map { |entry| simple_name(entry) }.uniq
 
-        # `Signatures::Environment#ancestors` resolves a *qualified* name
-        # -- `ancestors("Integer")` is empty while `ancestors("::Integer")`
-        # is the real chain. Asking with the bare name reported every
-        # stdlib subclass as incompatible with its parent: an Integer
-        # passed where Numeric is declared, which is as ordinary as this
-        # check gets.
-        (context.signatures.ancestors(qualified_owner(actual.name)) || []).map(&:to_s).include?(expected.name)
+        # `Signatures::Environment#ancestors` resolves a *qualified* name:
+        # `ancestors("Integer")` is empty while `ancestors("::Integer")` is
+        # the real chain.
+        via_signatures = workspace.flat_map do |entry|
+          (context.signatures&.ancestors(qualified_owner(entry)) || []).map { |ancestor| simple_name(ancestor) }
+        end
+
+        (workspace + via_signatures).uniq
+      end
+
+      def simple_name(name)
+        name.to_s.delete_prefix("::")
       end
 
       # The one RBS/RBI overload this call's parameters are declared by, or

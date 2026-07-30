@@ -183,6 +183,13 @@ module Ovallsp
     # logged and swallowed, not left to crash the whole process on its way
     # out.
     def shutdown_background_tasks
+      # Asked to stop *before* the bounded join, not left for it: a
+      # workspace pass checks its token between files, so closing it first
+      # lets it finish the file it is on and return. #close rather than
+      # #begin_pass: a pass is started from inside another background
+      # thread, which could otherwise begin a fresh, valid one after this
+      # point and be killed by the join instead of returning (0.2.0).
+      @workspace_diagnostics&.close
       @background_tasks.shutdown
     rescue StandardError => e
       begin
@@ -266,6 +273,8 @@ module Ovallsp
         respond(id, with_index_snapshot { explain_type_result(message[:params]) })
       when "textDocument/completion"
         respond(id, with_index_snapshot { completion_result(message[:params]) })
+      when "textDocument/semanticTokens/full"
+        respond(id, semantic_tokens_result(message[:params]))
       when "completionItem/resolve"
         respond(id, with_index_snapshot { completion_resolve_result(message[:params]) })
       when "textDocument/signatureHelp"
@@ -428,6 +437,17 @@ module Ovallsp
         @diagnostics_engine.analyze(document: document, semantic_context: diagnostics_semantic_context,
                                     mode: @diagnostics_mode)
       end
+    end
+
+    # One file, analyzed on a background thread. The pass's own generation
+    # is not claimed here: this is not a workspace pass and must not
+    # supersede one that is running.
+    def publish_workspace_diagnostics_later(uri)
+      @background_tasks.track_thread(Thread.new do
+        @workspace_diagnostics.publish_for(uri)
+      rescue StandardError => e
+        @logger.error("failed to publish diagnostics for #{uri}: #{e.class}: #{e.message}")
+      end)
     end
 
     # Every reason the whole workspace's answers could have changed at
@@ -1490,6 +1510,8 @@ module Ovallsp
       return nil if controller_sets_ivars_dynamically?(context[:owner])
 
       documents = controller_ancestor_documents(context[:owner])
+      return nil unless ivar_sources_fully_enumerable?(context[:owner], documents)
+
       method_maps = controller_method_maps(documents)
       actions = contributing_actions(documents, method_maps, context[:action], context[:view_key])
       # No action renders this view, so nothing establishes what it is
@@ -1508,6 +1530,40 @@ module Ovallsp
     def controller_sets_ivars_dynamically?(owner_name)
       controller_ancestor_documents(owner_name).any? do |_ancestor_name, document|
         document.text.match?(DYNAMIC_IVAR_ASSIGNMENT)
+      end
+    end
+
+    # Callback registrations the chain builder understands. Anything else
+    # registers a callback this cannot follow, so the ivars it assigns are
+    # missing from the answer rather than absent from the code.
+    UNMODELLED_CALLBACK = /^\s*(around_action|prepend_before_action|append_before_action|before_action\s*(do\b|\{))/
+    # A module mixed into the chain carries its own methods, and
+    # `controller_ancestor_documents` walks only classes -- so a callback
+    # or an action living in a Rails concern is invisible here.
+    MIXED_IN_MODULE = /^\s*(include|extend|prepend)\s+[A-Z]/
+
+    # Whether the instance variables a view receives can be *completely*
+    # enumerated (0.2.0).
+    #
+    # The chain builder was written for type propagation, where missing a
+    # source is harmless: the ivar simply infers Unknown. Reused as the
+    # input to a diagnostic, every omission becomes a wrong report on code
+    # that runs -- and `around_action`, `prepend_before_action`, a
+    # block-form callback and a Rails concern are not edge cases. So the
+    # answer here is "no" whenever the chain contains anything this cannot
+    # follow, and the check above turns that into silence.
+    def ivar_sources_fully_enumerable?(owner_name, documents)
+      # `:default` entries are Object/Kernel/BasicObject, which every
+      # class has and none of which assigns a controller's ivars. What
+      # matters is a module the workspace mixes in, whose methods
+      # `controller_ancestor_documents` does not walk.
+      mixed_in = @hierarchy_index.ancestors(owner_name).any? do |entry|
+        %i[include extend prepend].include?(entry.origin)
+      end
+      return false if mixed_in
+
+      documents.none? do |_ancestor_name, document|
+        document.text.match?(UNMODELLED_CALLBACK) || document.text.match?(MIXED_IN_MODULE)
       end
     end
 
@@ -1879,12 +1935,17 @@ module Ovallsp
       position = params.fetch(:position)
       prefix = word_prefix_at_position(document, position)
 
-      # After a receiver dot, the question is "what can be called on this
-      # exact type", which has a precise answer -- so the bare-prefix
-      # sources, whose whole difficulty is that they match too much, must
-      # not be mixed into it.
-      member_items = member_completion_items(document, position, prefix)
-      return { isIncomplete: false, items: member_items } unless member_items.empty?
+      # After a receiver dot the question is "what can be called on this
+      # exact type", and the bare-prefix sources -- whose whole difficulty
+      # is that they match too much -- must not be mixed into it.
+      #
+      # The test is whether there *is* a dot, not whether the member path
+      # found anything. A receiver whose type is Unknown is the ordinary
+      # case, and gating on the empty answer offered `thing.art` every
+      # local named `article`.
+      if receiver_dot_before?(document, position)
+        return { isIncomplete: false, items: member_completion_items(document, position, prefix) }
+      end
 
       route_items = prefix.empty? ? [] : @route_registry.completion_names(prefix).map { |name| { label: name, kind: 3 } }
       bare = @prefix_completion.items(document: document, position: position, prefix: prefix)
@@ -2033,6 +2094,15 @@ module Ovallsp
     # Help all share, which is what actually makes Task 013's "同一式に
     # ついてHoverとCompletionが同じreceiver型を利用する" true rather than
     # just documented.
+    def receiver_dot_before?(document, position)
+      text = document.text
+      offset = document.position_to_char_offset(position)
+
+      left = offset
+      left -= 1 while left > 0 && word_char?(text[left - 1])
+      left.positive? && text[left - 1] == "."
+    end
+
     def receiver_type_before_dot(document, position)
       text = document.text
       offset = document.position_to_char_offset(position)
@@ -2188,7 +2258,12 @@ module Ovallsp
       # One changed file is one file's worth of work, not a workspace
       # pass -- and it is exactly the case that used to leave a stale
       # report standing until somebody opened the file (0.2.0).
-      @workspace_diagnostics.publish_for(uri) if applied
+      #
+      # Off the dispatch thread, though: this method is reached from
+      # didChangeWatchedFiles and didClose, and a `git checkout` or a
+      # generator touching a hundred unopened files would otherwise run a
+      # hundred full analyses in front of every hover.
+      publish_workspace_diagnostics_later(uri) if applied
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
     end
@@ -2628,6 +2703,10 @@ module Ovallsp
           renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
           completionProvider: { triggerCharacters: ["."], resolveProvider: true },
+          semanticTokensProvider: {
+            legend: { tokenTypes: SemanticTokens::LEGEND, tokenModifiers: SemanticTokens::MODIFIERS },
+            full: true
+          },
           signatureHelpProvider: { triggerCharacters: ["("] }
         },
         serverInfo: {
@@ -2669,6 +2748,17 @@ module Ovallsp
           payloadSha256: manifest["payloadSha256"]
         }
       }
+    end
+
+    # Semantic highlighting (0.2.0). Answers `{ data: [] }` rather than
+    # nil for a document it has nothing to say about: a null result tells
+    # the client the request failed, and a client told that stops asking.
+    def semantic_tokens_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = @document_store.fetch(uri: uri)
+      return { data: [] } unless document
+
+      { data: SemanticTokens.encode(document) }
     end
 
     # Task 013: a real, type-engine-backed hover. Deliberately conservative

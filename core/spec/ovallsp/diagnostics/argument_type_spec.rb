@@ -41,8 +41,14 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
         def pair: (String first, Integer second) -> void
         def pick: [T] (Array[T] items, Integer count) -> T
         def scale: (Numeric factor) -> void
+        def handle: (Exception error) -> void
+        def flag: (bool value) -> void
+        def outline: (Shape item) -> void
         def slice: (Integer at) -> void
                  | (String at) -> void
+      end
+
+      class Shape
       end
     RBS
   end
@@ -163,6 +169,34 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
   # relation. Half of any real chain lives on each side.
   it "says nothing for a subclass relation only RBS knows about" do
     expect(findings("Widget.new.scale(3)\n")).to be_empty
+  end
+
+  # The chain crosses the boundary between the two ancestry sources:
+  # `MyError < StandardError` is in the workspace index, and
+  # `StandardError < Exception` is only in RBS. Asking both sources about
+  # `MyError` and taking either answer alone says "not compatible" for a
+  # relation that plainly holds.
+  it "says nothing for a chain that runs through both ancestry sources" do
+    index("class MyError < StandardError\nend\n", uri: "file:///err.rb")
+
+    expect(findings("Widget.new.handle(MyError.new)\n")).to be_empty
+  end
+
+  # `HierarchyIndex` returns a workspace-resolved ancestor `::`-prefixed
+  # and an external one bare, while a signature always names a type bare.
+  # Comparing them raw means no workspace-declared ancestor ever matches.
+  it "says nothing for a workspace class two levels below the declared one" do
+    index("class Circle < Shape\nend\n", uri: "file:///shape.rb")
+    index("class SmallCircle < Circle\nend\n", uri: "file:///small.rb")
+
+    expect(findings("Widget.new.outline(SmallCircle.new)\n")).to be_empty
+  end
+
+  # RBS's `bool` converts to `Boolean`, which is capitalised and so passes
+  # the alias rule -- but no such Ruby class exists, so its ancestor walk
+  # can never succeed and every argument would be reported.
+  it "says nothing for `bool`, which converts to a name no class has" do
+    expect(findings(%(Widget.new.flag("yes")\n))).to be_empty
   end
 
   # Everything below is a case where the check does not know enough, and

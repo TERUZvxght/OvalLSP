@@ -169,6 +169,22 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     expect(local[:sortText]).to be < method[:sortText]
   end
 
+  # `sortText` carries the group *and* the label. Without the label an
+  # editor sees one value for every item in a group and falls back to its
+  # own tie-break, which is not the order this computed.
+  it "orders items within a group by name, not only between groups" do
+    result = complete(<<~RUBY)
+      apricot = 1
+      apple = 2
+      apHERE
+    RUBY
+
+    sorted = result[:items].select { |i| %w[apple apricot].include?(i[:label]) }
+    expect(sorted.size).to eq(2)
+    expect(sorted.map { |i| i[:sortText] }.uniq.size).to eq(2)
+    expect(sorted.sort_by { |i| i[:sortText] }.map { |i| i[:label] }).to eq(%w[apple apricot])
+  end
+
   # `WorkspaceIndex#search` answers by substring, because that is what
   # `workspace/symbol` wants. A completion prefix is the *start* of the
   # name: offering `UnrelatedArticle` for `Art` is the noise this feature
@@ -265,6 +281,34 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
   # Completion after a dot is a different question with a different
   # answer, and it was already right -- a bare-prefix source must not
   # leak into it.
+  # The receiver's type being Unknown is the ordinary case, so gating on
+  # "the member path found nothing" instead of "there is a dot" offers
+  # `thing.art` every local named `article`.
+  it "does not add bare-prefix candidates after a dot whose receiver is unknown" do
+    result = complete(<<~RUBY)
+      def go(thing)
+        article = 1
+        thing.artHERE
+      end
+    RUBY
+
+    expect(labels(result)).not_to include("article")
+  end
+
+  # Below the two-character threshold the answer *grows a source* at the
+  # next keystroke, which no client-side filter can produce. An editor
+  # told the answer is complete caches it and filters locally, so a user
+  # typing straight through from the first letter never sees a workspace
+  # constant at all.
+  it "reports a one-character answer as incomplete, because the next keystroke adds sources" do
+    result = complete(<<~RUBY)
+      alpha = Article.new
+      aHERE
+    RUBY
+
+    expect(result[:isIncomplete]).to be(true)
+  end
+
   it "does not add bare-prefix candidates after a receiver dot" do
     result = complete(<<~RUBY)
       article = "text"

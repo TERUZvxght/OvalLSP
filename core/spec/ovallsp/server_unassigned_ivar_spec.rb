@@ -114,6 +114,30 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     expect(run_server(controller: controller, view: "<%= @anything %>\n")).to be_empty
   end
 
+  # The chain builder was written for type propagation, where missing a
+  # source is harmless -- the ivar just infers Unknown. As the input to a
+  # diagnostic, every omission becomes a wrong report on code that runs,
+  # and none of these is an edge case in a Rails app.
+  {
+    "an around_action" => "around_action :with_tenant",
+    "a prepend_before_action" => "prepend_before_action :with_tenant",
+    "a block-form callback" => "before_action { @tenant = Tenant.current }",
+    "a mixed-in concern" => "include Tenantable"
+  }.each do |description, declaration|
+    it "says nothing when the chain contains #{description}" do
+      controller = <<~RUBY
+        class UsersController
+          #{declaration}
+
+          def show
+          end
+        end
+      RUBY
+
+      expect(run_server(controller: controller, view: "<%= @tenant %>\n")).to be_empty
+    end
+  end
+
   it "says nothing when no controller action corresponds to the view" do
     controller = <<~RUBY
       class UsersController

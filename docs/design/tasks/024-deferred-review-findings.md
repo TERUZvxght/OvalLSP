@@ -143,6 +143,36 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.14 Workspace-wide diagnostics do not fire against the real Rails fixture
+
+**Status:** open
+**Area:** `core/lib/ovallsp/workspace_diagnostics.rb`, `core/lib/ovallsp/server.rb`
+
+0.2.0's workspace pass is covered by Server-level specs (a mistake in an
+unopened file is reported, cleared, re-reported on a disk change, and
+refreshed when the answers change workspace-wide) and by unit specs for
+the pass itself. It has **no E2E row**, because the example written for
+one did not pass: a probe file carrying `UnopenedProbe.new
+.definitely_not_here`, present in `spec/fixtures/rails_real` before Core
+starts and never opened, produced no diagnostic within 45 seconds.
+
+The capability row was withdrawn rather than marked PASS on the strength
+of the in-process specs — the document's own rule is that a capability
+with no E2E row is not a capability, and marking it anyway is exactly the
+failure that rule exists to prevent.
+
+Not diagnosed. The pass is started from the cold index's `on_complete`,
+so the plausible causes are that it runs before the Runtime Agent is
+ready and the later refresh does not reach it, that the receiver is not
+`closed_nominal?` in a real Rails app the way it is in the fixture-free
+specs, or that the pass never starts at all in that configuration. The
+in-process specs pass, so whatever it is, it is a difference between them
+and a real workspace.
+
+**Direction:** reproduce against `spec/fixtures/rails_real` directly,
+find which of the three it is, fix it, and restore the row with an E2E
+example behind it.
+
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 **Status:** open — roadmap
@@ -613,7 +643,20 @@ competing design.
 
 ## 024.R8 Completion does nothing until you type a dot (roadmap, 0.2.0)
 
-**Status:** open — roadmap
+**Status:** done — shipped in 0.2.0. The entry's own reading was right:
+the work was mostly ranking and bounding, not calling the existing pieces.
+The order it proposed is the order that shipped (locals, methods on self,
+workspace constants, Kernel), with two decisions it left open settled as
+it suggested — a hard cap with `isIncomplete`, and a one-character prefix
+that returns only the two sources near the cursor.
+
+Two things the entry did not anticipate. The ranking has to be rendered
+into `sortText`: an editor re-sorts a completion list itself, so array
+order alone pins nothing, and a spec checking array positions passes with
+`sortText` deleted. And `WorkspaceIndex#search` matches by substring
+because `workspace/symbol` wants that; a completion prefix means the start
+of the name, so the matches are filtered back down rather than the index's
+own contract being widened.
 **Area:** `core/lib/ovallsp/server.rb` (`completion_result`),
 `core/lib/ovallsp/semantic/query_service.rb`
 

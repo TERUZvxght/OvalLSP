@@ -6,6 +6,77 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.0 — Completion from the first keystroke, and diagnostics beyond the open file
+
+- Added: typing `A` offers candidates. Completion needed a `.` first, so
+  workspace classes, the locals in scope and the methods callable right
+  there offered nothing until the whole name was written.
+- Added: mistakes in files you have not opened are reported. (Verified
+  in-process; see 024.14 for the end-to-end gap still open against a real
+  Rails app.)
+- Added: passing an argument of the wrong type is reported. Only the
+  *number* of arguments was checked before.
+- Added: reading an `@ivar` that is never assigned is reported.
+- Added: hover and completion show the RDoc/YARD documentation.
+- Added: semantic highlighting, in `.rb` and in an ERB template's Ruby
+  regions.
+- Fixed: a method declared only in the project's own `sig/` is no longer
+  reported as unknown.
+- Fixed: two threads publishing at once could interleave one message's
+  header with another's body.
+
+A minor release under the versioning rule in `docs/PUBLISHING.md`: six
+capabilities are added. It closes the last three roadmap entries scheduled
+for it (024.R2, 024.R6, 024.R8).
+
+### Details
+
+Completion from a bare prefix is mostly a *ranking and bounding* problem,
+which is a different problem from the one the receiver-based path solves.
+A receiver narrows the answer to one type's members; a bare prefix matches
+far more, and an editor handed a thousand alphabetically-sorted candidates
+is worse than one handed none — the right answer is on page four and the
+user learns to stop pressing the key. The order is closeness to the
+cursor: locals, then methods on self, then workspace constants, then
+Kernel, rendered into `sortText` because that is what the editor actually
+sorts by. A one-character prefix returns only the first two: the other two
+match essentially everything at that length. The list is capped and says
+`isIncomplete`, so the editor re-asks as the prefix narrows.
+
+Workspace-wide diagnostics run on a background thread, never for a file
+open in a buffer (those belong to the path that knows the buffer's version
+and unsaved text), and abandon a superseded pass between files rather than
+finishing one already known to be stale. They are re-run whenever the
+answers change workspace-wide — most importantly when the Runtime Agent
+becomes ready, since the unknown-method check defers rather than guesses
+without one, and until now every unopened file kept the pre-Agent answer.
+
+The two new checks are held to the standard the argument-count check was
+held to: a wrong report on code that runs is worse than no check at all.
+Argument types are only compared where the expected type is *stated* — an
+RBS/RBI declaration with exactly one overload and no `*rest` — and only
+when both it and the argument's inferred type are concrete classes with no
+ancestor relation. RBS's `int`/`string`/`boolish` are excluded: they mean
+"anything that converts", not a class. The `@ivar` check is scoped to
+views, which are handed exactly what their controller action and callback
+chain assign; its whole safety is the distinction between "no context
+could be established" and "the action assigns nothing", and the first of
+those is silent.
+
+Semantic highlighting reports only what a parser settles and a regex
+cannot — a local variable read against a receiverless call, an instance
+variable, a parameter, a constant. It does not re-colour keywords, strings
+or numbers, which the grammar already gets right and which a second,
+disagreeing opinion would only make flicker. A file that does not parse
+reports nothing rather than half a file, so highlighting does not fall off
+as you type.
+
+Documentation is read from the source, where it already lives; nothing
+indexes comments. Completion goes through `completionItem/resolve` rather
+than putting documentation on the list, since reading the source for every
+candidate is a file read per item for documentation the user sees for one
+of them at most.
+
 ## 0.1.10 — One implementation, and four behaviours brought under test
 
 - Fixed: the controller `before_action` chain has one implementation

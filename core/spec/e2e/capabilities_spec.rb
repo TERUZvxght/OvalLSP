@@ -158,6 +158,22 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    it "H7: shows the RDoc comment above the method being hovered" do
+      with_file("app/models/hover_doc_probe.rb", <<~RUBY) do |uri|
+        class HoverDocProbe
+          # Charges the card.
+          def charge_it
+          end
+
+          def run
+            HoverDocProbe.new.charge_it
+          end
+        end
+      RUBY
+        expect(@client.hover_text(uri, 6, 25)).to include("Charges the card.")
+      end
+    end
+
     it "H3: reports an ivar's type in a view from the action that assigned it" do
       with_file("app/controllers/hover_view_controller.rb", <<~RUBY) do |_uri|
         class HoverViewController < ApplicationController
@@ -377,6 +393,40 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    it "C12: offers workspace classes and locals with no receiver in front" do
+      with_file("app/models/prefix_probe.rb", <<~RUBY) do |uri|
+        class PrefixProbe
+          def run
+            prefix_local = 1
+            pre
+          end
+        end
+      RUBY
+        labels = @client.completion_labels(uri, 3, 7)
+        expect(labels).to include("prefix_local")
+        expect(labels).to include("PrefixProbe")
+      end
+    end
+
+    it "C13: resolves a completion item to the RDoc comment above its declaration" do
+      with_file("app/models/documented_probe.rb", <<~RUBY) do |uri|
+        class DocumentedProbe
+          # Charges the card.
+          def charge_it
+          end
+
+          def run
+            DocumentedProbe.new.cha
+          end
+        end
+      RUBY
+        item = @client.completion_item(uri, 6, 29, "charge_it")
+        expect(item).not_to be_nil
+        resolved = @client.raw_request("completionItem/resolve", item)
+        expect(resolved.dig(:documentation, :value).to_s).to include("Charges the card.")
+      end
+    end
+
     it "C7: offers route helpers by prefix" do
       with_file("app/controllers/route_probe_controller.rb", <<~RUBY) do |uri|
         class RouteProbeController < ApplicationController
@@ -438,6 +488,29 @@ RSpec.describe "Extension capabilities", :e2e do
     end
   end
 
+  describe "semantic highlighting" do
+    it "T1: distinguishes a local variable from a call on self" do
+      with_file("app/models/token_probe.rb", <<~RUBY) do |uri|
+        class TokenProbe
+          def helper
+          end
+
+          def run
+            value = 1
+            value
+            helper
+          end
+        end
+      RUBY
+        data = @client.raw_request("textDocument/semanticTokens/full",
+                               { textDocument: { uri: uri } })[:data]
+        types = data.each_slice(5).map { |token| Ovallsp::SemanticTokens::LEGEND[token[3]] }
+        expect(types).to include("variable")
+        expect(types).to include("method")
+      end
+    end
+  end
+
   describe "diagnostics" do
     it "G1: reports a syntax error" do
       with_file("app/models/syntax_probe.rb", "class SyntaxProbe\n  def broken(\n") do |uri|
@@ -455,6 +528,35 @@ RSpec.describe "Extension capabilities", :e2e do
         end
       RUBY
         expect(@client.diagnostic_messages(uri).join(" ")).to match(/no method named/i)
+      end
+    end
+
+    # Needs a *declared* parameter type, which Ruby source does not carry
+    # -- hence the fixture's own `sig/argument_probe.rbs`, loaded at boot
+    # like any project signature.
+    it "G15: reports an argument whose type cannot be the declared one" do
+      with_file("app/models/argument_call_probe.rb", <<~RUBY) do |uri|
+        class ArgumentCallProbe
+          def run
+            ArgumentProbe.new.resize("large")
+          end
+        end
+      RUBY
+        expect(@client.diagnostic_messages(uri).join(" ")).to match(/expects Integer/i)
+      end
+    end
+
+    it "G16: reports a view reading an ivar no action assigns" do
+      with_file("app/controllers/ivar_probe_controller.rb", <<~RUBY) do |_uri|
+        class IvarProbeController < ApplicationController
+          def show
+            @record = Post.find(1)
+          end
+        end
+      RUBY
+        with_file("app/views/ivar_probe/show.html.erb", "<%= @recrod %>\n") do |view_uri|
+          expect(@client.diagnostic_messages(view_uri).join(" ")).to match(/never assigned/i)
+        end
       end
     end
 

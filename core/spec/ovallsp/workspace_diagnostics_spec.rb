@@ -54,6 +54,24 @@ RSpec.describe Ovallsp::WorkspaceDiagnostics do
     end
   end
 
+  # An analysis takes long enough for a `didOpen` to arrive inside it.
+  # Checking only beforehand lets the pass overwrite the buffer path's
+  # correct diagnostics with disk-derived ones, for text the user is not
+  # looking at, with nothing to correct it until the next edit.
+  it "does not publish for a file that was opened while it was being analyzed" do
+    Dir.mktmpdir do |root|
+      uris = write_files(root, 1)
+      pass = build(root, analyze: lambda do |document|
+        open_uris << document.uri
+        []
+      end)
+
+      pass.run(uris, pass.begin_pass)
+
+      expect(published).to be_empty
+    end
+  end
+
   # Without the cap, a pass over a monorepo is a background thread that
   # never ends -- and every file past the first few hundred is one nobody
   # was going to look at this session anyway.
@@ -86,6 +104,52 @@ RSpec.describe Ovallsp::WorkspaceDiagnostics do
 
       expect(outcome.superseded).to be(true)
       expect(published.size).to be < 5
+    end
+  end
+
+  # `begin_pass` is also how a shutdown asks a running pass to stop: it
+  # invalidates the token the pass is carrying, and the pass returns at
+  # the next file boundary rather than being killed by the join that
+  # follows -- possibly between a frame's header and its body.
+  it "lets a caller with no new work to start stop the pass that is running" do
+    Dir.mktmpdir do |root|
+      uris = write_files(root, 5)
+      pass = build(root)
+      generation = pass.begin_pass
+      pass.begin_pass
+
+      outcome = pass.run(uris, generation)
+
+      expect(outcome.superseded).to be(true)
+      expect(published).to be_empty
+    end
+  end
+
+  # Shutdown's problem is not "stop this pass" but "stop all of them": a
+  # pass is started from inside another background thread, so invalidating
+  # the current one can be undone a moment later by that thread starting a
+  # fresh, valid one -- which then has to be killed by the join.
+  it "refuses to start a pass once it has been closed" do
+    Dir.mktmpdir do |root|
+      uris = write_files(root, 3)
+      pass = build(root)
+      pass.close
+
+      outcome = pass.run(uris, pass.begin_pass)
+
+      expect(outcome.superseded).to be(true)
+      expect(published).to be_empty
+    end
+  end
+
+  it "refuses a single-file publish once it has been closed" do
+    Dir.mktmpdir do |root|
+      uri = write_files(root, 1).first
+      pass = build(root)
+      pass.close
+
+      expect(pass.publish_for(uri)).to be(false)
+      expect(published).to be_empty
     end
   end
 

@@ -59,7 +59,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Completion: Active Record instance API | ✅ | — (no Runtime Agent) | — |
 | Completion: Active Record class API | ✅ | — (no Runtime Agent) | — |
 | Completion: route helpers | ✅ | — (no Runtime Agent) | — |
-| Completion at the start of an identifier — workspace classes, locals in scope, methods callable here | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
+| Completion at the start of an identifier — workspace classes, locals in scope, methods callable here | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion inserts a call template with tab stops | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Hover on a method shows its parameters | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Go to definition: workspace methods | ✅ | ⚠️ | ⚠️ 1.0.0 |
@@ -71,13 +71,13 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown route helper | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: wrong number of arguments | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Diagnostics: reading an `@ivar` that is never assigned | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
+| Diagnostics: reading an `@ivar` that is never assigned | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
 | Find references, rename, workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Diagnostics: wrong argument *type* | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
-| Diagnostics across the whole project, not just open files | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
-| Documentation (RDoc/YARD) in hover and completion | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
-| Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
+| Diagnostics: wrong argument *type* | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics across the whole project, not just open files | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Documentation (RDoc/YARD) in hover and completion | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Inlay hints (inferred types, parameter names) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Code actions / quick fixes for each diagnostic | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Go to type definition | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |

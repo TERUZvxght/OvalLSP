@@ -115,6 +115,23 @@ RSpec.describe "Ovallsp::Server documentation in hover and completion (0.2.0)" d
       expect(resolved[:documentation][:value]).to include("Charges the card.")
     end
 
+    # A Hash literal infers as `Hash[Unknown]`, a Generic -- and a Generic
+    # over a real class *is* an instance of that class, which is what
+    # `Types.base_nominal` says in the one place that says it. Carrying
+    # the receiver as a plain Nominal check instead loses every container
+    # receiver, silently, on a shape as ordinary as `{}`.
+    it "resolves an item whose receiver is a container over a real class" do
+      input = open("file:///hash.rb", "h = {}\nh.ke\n") +
+              frame(jsonrpc: "2.0", id: 1, method: "textDocument/completion",
+                    params: { textDocument: { uri: "file:///hash.rb" }, position: { line: 1, character: 4 } }) +
+              frame(jsonrpc: "2.0", method: "exit", params: nil)
+      Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger).run
+      item = responses.first[:result][:items].find { |i| i[:label] == "keys" }
+
+      expect(item).not_to be_nil
+      expect(item[:data]).to eq(receiver: "Hash", name: "keys")
+    end
+
     it "returns an item it cannot document unchanged, rather than failing" do
       resolved = run(frame(jsonrpc: "2.0", id: 2, method: "completionItem/resolve",
                             params: { label: "mystery", kind: 2 }))
