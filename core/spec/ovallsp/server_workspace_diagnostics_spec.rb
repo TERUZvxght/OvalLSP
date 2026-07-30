@@ -46,8 +46,18 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     published.select { |m| m[:params][:uri] == uri }.last&.dig(:params, :diagnostics)
   end
 
+  # Every server built here starts background threads (cold index, and
+  # now the workspace diagnostics pass). Left running, they read files and
+  # write output *during later examples* -- which is how they were first
+  # noticed: an unrelated spec that counts open file descriptors before
+  # and after a call started failing, because this suite's threads were
+  # still opening files inside it.
+  after { @servers&.each { |server| server.instance_variable_get(:@background_tasks).shutdown } }
+
   def build_server(root)
-    Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: root)
+    server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: root)
+    (@servers ||= []) << server
+    server
   end
 
   # `totally_bogus_method` on a workspace-declared class with a fully

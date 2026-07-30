@@ -708,11 +708,18 @@ module Ovallsp
           argument.is_a?(Prism::SplatNode) || argument.is_a?(Prism::ForwardingArgumentsNode)
         end
         keywords = arguments.count { |argument| argument.is_a?(Prism::KeywordHashNode) }
+        positionals = arguments.reject do |argument|
+          argument.is_a?(Prism::KeywordHashNode) || argument.is_a?(Prism::SplatNode) ||
+            argument.is_a?(Prism::ForwardingArgumentsNode) || argument.is_a?(Prism::BlockArgumentNode)
+        end
         {
-          positional: arguments.count do |argument|
-            !argument.is_a?(Prism::KeywordHashNode) && !argument.is_a?(Prism::SplatNode) &&
-              !argument.is_a?(Prism::ForwardingArgumentsNode) && !argument.is_a?(Prism::BlockArgumentNode)
-          end,
+          positional: positionals.size,
+          # Where each positional argument actually sits, so a check can
+          # ask what type is at that position and report *on the argument*
+          # rather than on the whole call (0.2.0's argument type check).
+          # The count above stays as it was: it is what the arity check
+          # needs, and deriving it from this list is the same number.
+          positional_locations: positionals.map { |argument| Index::SourceLocation.to_range(argument.location, @lines) },
           splat: splat,
           keywords: keywords.positive?,
           block: !node.block.nil?

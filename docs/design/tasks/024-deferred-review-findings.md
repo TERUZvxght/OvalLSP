@@ -195,7 +195,28 @@ column and this entry is why.
 
 ## 024.R2 Argument *type* checking (roadmap, 0.2.0)
 
-**Status:** open — roadmap
+**Status:** done — shipped in 0.2.0, as the narrow version this entry
+described: the expected type comes from an RBS/RBI declaration, the
+signature must have exactly one overload and no `*rest`, and both the
+declared and the inferred type must be concrete classes with no ancestor
+relation between them. Everything else stays silent.
+
+Two false positives were found while building it, both by mutating the
+new code rather than by reading it:
+
+- `Signatures::Environment#ancestors` resolves a *qualified* name, so
+  asking with a bare one reported every stdlib subclass as incompatible
+  with its parent — an `Integer` passed where `Numeric` is declared.
+- RBS's `int`/`string`/`boolish` are aliases meaning "anything that
+  converts", not classes, so an object of an unrelated class satisfies
+  one. They are excluded by the same rule that tells them apart from Ruby
+  constants: capitalisation.
+
+A third, pre-existing, was found on the same lookup: `HierarchyIndex`
+reports a class's own entry already qualified, so `rbs_resolves?` asked
+for `::::Widget` and found nothing — meaning anything a project declared
+in its own `sig/` without also writing it in Ruby was reported as an
+unknown method. Both call sites now share one helper.
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
 
 0.1.6 added an argument *count* check (capability G5). Nothing inspects

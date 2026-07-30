@@ -56,6 +56,7 @@ module Ovallsp
         end
         findings.concat(unknown_route_helper_findings(summary, resolved_locations, semantic_context))
         findings.concat(argument_count_findings(document, summary, semantic_context))
+        findings.concat(argument_type_findings(document, summary, semantic_context))
 
         budget ? findings.first(budget) : findings
       end
@@ -173,6 +174,115 @@ module Ovallsp
             evidence: { required: required, maximum: maximum, passed: passed }, generation: context.generation
           )
         end
+      end
+
+      # Reports a positional argument whose own inferred type cannot be
+      # the type the signature declares for that parameter (0.2.0, closes
+      # 024.R2).
+      #
+      # Held to the same standard as the count check above: a wrong
+      # "expected Integer, got String" on code that runs is worse than no
+      # type checking at all. So this reports only where every input is
+      # stated rather than inferred:
+      #
+      # - the expected type comes from RBS/RBI, not from guessing at what
+      #   a Ruby parameter is "used like" -- Ruby source declares no
+      #   parameter types, and inferring them is a different project;
+      # - the signature has exactly one overload, because an argument that
+      #   cannot match one overload may be exactly right for another, and
+      #   choosing between them is the guessing this refuses to do;
+      # - the declared type is a plain class, not a union or an interface:
+      #   "cannot be any member of this union" is a question this narrow
+      #   version does not answer;
+      # - the argument's own type is a plain class too, and is not that
+      #   class or any of its descendants.
+      #
+      # Everything else stays silent.
+      def argument_type_findings(document, summary, context)
+        return [] unless context.signatures
+
+        summary.reference_candidates.flat_map do |candidate|
+          next [] unless candidate.kind == :method_call
+          next [] unless (shape = candidate.arguments)
+          next [] if shape[:splat]
+
+          overload = sole_declared_overload(document, candidate, context)
+          next [] unless overload
+
+          mismatched_arguments(document, shape, overload, candidate, context)
+        end
+      end
+
+      def mismatched_arguments(document, shape, overload, candidate, context)
+        expected_types = overload.required_positionals + overload.optional_positionals
+        locations = shape[:positional_locations] || []
+
+        locations.each_with_index.filter_map do |range, index|
+          expected = expected_types[index]
+          next unless expected.is_a?(Types::Nominal)
+          # RBS's `int`/`string`/`boolish` are aliases meaning "anything
+          # that converts", not classes -- an object of an entirely
+          # unrelated class satisfies one, so reporting against it is a
+          # false positive by construction. A Ruby constant is
+          # capitalised; these are not, which is what tells them apart.
+          next unless expected.name.to_s.match?(/\A[A-Z]/)
+
+          # The *end* of the argument, not its start: at the start of
+          # `SmallInteger.new` the innermost node containing the offset is
+          # the constant, so the answer was `ClassOf[SmallInteger]` -- the
+          # class object rather than the instance being passed. The end
+          # offset is inclusive, so a literal still resolves to itself.
+          actual = context.local_inferencer.infer_at(document, range[:end])
+          next unless actual.is_a?(Types::Nominal)
+          next if compatible_nominal?(actual, expected, context)
+
+          Finding.new(
+            code: "argument-type",
+            message: "`#{candidate.name}` expects #{expected.name} here, but #{actual.name} is given",
+            range: range, severity: :warning, confidence: :high,
+            evidence: { expected: expected.name, actual: actual.name, position: index },
+            generation: context.generation
+          )
+        end
+      end
+
+      # A subclass is a perfectly good instance of its parent, and
+      # reporting one is the false positive this check most has to avoid:
+      # it fires on correct, idiomatic code. Both ancestry sources are
+      # asked, because a workspace class inheriting a stdlib one has half
+      # its chain in each.
+      def compatible_nominal?(actual, expected, context)
+        return true if actual.name == expected.name
+
+        workspace_ancestors = context.hierarchy_index.ancestors(actual.name).map(&:name)
+        return true if workspace_ancestors.include?(expected.name)
+
+        # `Signatures::Environment#ancestors` resolves a *qualified* name
+        # -- `ancestors("Integer")` is empty while `ancestors("::Integer")`
+        # is the real chain. Asking with the bare name reported every
+        # stdlib subclass as incompatible with its parent: an Integer
+        # passed where Numeric is declared, which is as ordinary as this
+        # check gets.
+        (context.signatures.ancestors(qualified_owner(actual.name)) || []).map(&:to_s).include?(expected.name)
+      end
+
+      # The one RBS/RBI overload this call's parameters are declared by, or
+      # nil when the answer is not singular. Deliberately mirrors
+      # #sole_source_declaration's shape: same receiver rule, same refusal
+      # to choose between candidates.
+      def sole_declared_overload(document, candidate, context)
+        receiver_type = receiver_type_for(document, candidate, context)
+        return nil unless receiver_type.is_a?(Types::Nominal)
+
+        signature = declared_signature_for(receiver_type, candidate, context)
+        return nil unless signature
+        return nil unless signature.overloads.size == 1
+
+        overload = signature.overloads.first
+        # A `*rest` parameter makes the positional list a prefix rather
+        # than a mapping, so index N is no longer necessarily parameter N.
+        return nil if overload.rest_positional
+        overload
       end
 
       def expected_arity(required, maximum)
@@ -440,11 +550,30 @@ module Ovallsp
       def rbs_resolves?(candidate, receiver_type, context)
         return false unless context.signatures
 
-        context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).any? do |entry|
+        !declared_signature_for(receiver_type, candidate, context).nil?
+      end
+
+      # The signature declared for this call on the receiver or any of its
+      # ancestors, or nil.
+      #
+      # `HierarchyIndex` reports a class's *own* entry already qualified
+      # (`::Widget`) while its inherited ones are bare (`Object`), so the
+      # prefix has to be normalized rather than prepended. Prepending it
+      # produced `::::Widget`, which matches nothing -- and the visible
+      # consequence was a false "has no method named" for anything a
+      # project declared in its own `sig/` without also writing it in
+      # Ruby, which is precisely the report this check exists to avoid.
+      def declared_signature_for(receiver_type, candidate, context)
+        context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).filter_map do |entry|
           kind = candidate.singleton && entry.origin != :extend ? :singleton_method : :instance_method
-          symbol_id = Index::SymbolId.new(kind: kind, owner: "::#{entry.name}", name: candidate.name, discriminator: nil)
-          !context.signatures.method_signatures(symbol_id).nil?
-        end
+          symbol_id = Index::SymbolId.new(kind: kind, owner: qualified_owner(entry.name), name: candidate.name,
+                                          discriminator: nil)
+          context.signatures.method_signatures(symbol_id)
+        end.first
+      end
+
+      def qualified_owner(name)
+        "::#{name.to_s.delete_prefix('::')}"
       end
 
       def ancestor_known?(entry, context)
