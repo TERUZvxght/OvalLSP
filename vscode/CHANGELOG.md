@@ -14,13 +14,18 @@ the disproved approaches are kept below it under **Details**.
 - Fixed: a container whose element type is unknown now renders the same
   way everywhere. `Hash.new` and a union arriving at the same value
   disagreed — one said `Hash[Unknown]`, the other `Hash`.
+- Fixed: go-to-definition and completion now work on a container value —
+  anything typed `Hash[Unknown]`, `Array[String]` and so on. They
+  returned nothing there, while the same class reached any other way
+  worked.
 - Removed: dead reference-indexing code, and a line in process ownership
   that could not affect any decision.
 
 A patch release under the versioning rule in `docs/PUBLISHING.md`: no
-capability is added. It clears four entries from
-`docs/design/tasks/024-deferred-review-findings.md` (024.9, 024.2, 024.5,
-024.7).
+capability row is added — the third item is an existing capability that
+was not reaching a receiver it should always have reached. It clears four
+entries from `docs/design/tasks/024-deferred-review-findings.md` (024.9,
+024.2, 024.5, 024.7).
 
 ### Details
 
@@ -45,6 +50,17 @@ the union rule corrected to agree with it. The engine already produced
 Keeping the generic form also keeps a type argument for the container
 rules to dispatch on: collapsing to a plain `Hash` threw away the ability
 to resolve anything called on the result.
+
+Independent review then found that settling on the generic form exposed a
+gap rather than closing one: the method resolver understood only a plain
+class receiver, so definition and completion returned nothing for any
+container value — which had always been true, and this change would have
+made it reachable more often. The resolver now reads a generic receiver as
+the class it is generic over. `Relation` and `CollectionProxy` are
+excluded, because they name Active Record shapes rather than classes
+anyone declares, and reading them as class names sent every
+`Model.where(...)` receiver into whatever a workspace happened to call
+`Relation`.
 
 ## 0.1.7 — The reopened gem class
 

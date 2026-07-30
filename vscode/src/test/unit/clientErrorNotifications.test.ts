@@ -88,10 +88,17 @@ describe('notificationLevelFor', () => {
   it('asks about the generation captured at construction, not whichever is current', () => {
     const source = fs.readFileSync(path.join(__dirname, '../../../src/extension.ts'), 'utf8');
     const startBody = source.slice(source.indexOf('function startClientForFolder('));
+    const captured = startBody.indexOf('const generation = lifecycle.beginStart(key)');
+    const construction = startBody.indexOf('new OvalLspLanguageClient(');
 
+    // Both indices are asserted present first. `indexOf` answers -1 when
+    // the needle is gone, and -1 is less than any real index, so comparing
+    // the two directly would pass with nothing found at all -- a guard
+    // that survives the very edit it exists to catch.
+    assert.ok(captured >= 0, 'expected startClientForFolder to capture a generation');
+    assert.ok(construction >= 0, 'expected startClientForFolder to construct the client');
     assert.ok(
-      startBody.indexOf('const generation = lifecycle.beginStart(key)') <
-        startBody.indexOf('new OvalLspLanguageClient('),
+      captured < construction,
       'expected the generation to be captured before the client that reports against it'
     );
   });
