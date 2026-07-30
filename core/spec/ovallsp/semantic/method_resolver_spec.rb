@@ -55,36 +55,67 @@ RSpec.describe Ovallsp::Semantic::MethodResolver do
     expect(generic_names).to include("deep_symbolize!")
   end
 
-  # `Relation` and `CollectionProxy` are this engine's names for Active
-  # Record shapes, not classes anyone declares. Reading them as class
-  # names sends every `Model.where(...)` receiver into whatever a
-  # workspace happens to call `Relation` -- a plausible name for an app to
-  # use, and go-to-definition would land inside it.
-  it "does not read an engine-internal generic name as a workspace class" do
-    index_source("class Relation\n  def bogus_only_here\n  end\nend\n")
-    relation = Ovallsp::Types::Generic.new(name: "Relation", type_arg: nominal("User"))
+  # These are this engine's names for shapes, not classes anyone declares.
+  # Reading them as class names sends every `Model.where(...)` or
+  # `has_many` receiver into whatever a workspace happens to call
+  # `Relation` or `CollectionProxy` -- plausible names for an app to use,
+  # and go-to-definition would land inside them.
+  #
+  # Driven off the constant rather than naming them: a list one entry
+  # shorter is exactly the regression, and hand-written examples covered
+  # `Relation` while leaving `CollectionProxy` pinned by nothing.
+  # `ClassOf` is excluded here because #normalize_class_receiver unwraps it
+  # before this ever runs; it has its own two examples below.
+  Ovallsp::Types::INTERNAL_GENERIC_NAMES.each do |shape|
+    next if shape == "ClassOf"
 
-    expect(resolver.resolve(receiver_type: relation, name: "bogus_only_here")).to be_empty
-    expect(resolver.complete(receiver_type: relation, prefix: "bog")).to be_empty
+    it "does not read the engine-internal #{shape} as a workspace class" do
+      index_source("class #{shape}\n  def bogus_only_here\n  end\nend\n")
+      generic = Ovallsp::Types::Generic.new(name: shape, type_arg: nominal("User"))
+
+      expect(resolver.resolve(receiver_type: generic, name: "bogus_only_here")).to be_empty
+      expect(resolver.complete(receiver_type: generic, prefix: "bog")).to be_empty
+    end
+
+    it "does not make a candidate conditional because of an engine-internal #{shape} member" do
+      index_source("class User\n  def name\n  end\nend\n")
+      union = Ovallsp::Types.normalize_union(
+        [nominal("User"), Ovallsp::Types::Generic.new(name: shape, type_arg: nominal("User"))]
+      )
+
+      candidates = resolver.resolve(receiver_type: union, name: "name")
+
+      expect(candidates.map(&:owner)).to eq(["::User"])
+      expect(candidates.map(&:conditional)).to eq([false])
+    end
   end
 
-  # A Union member the resolver cannot place used to be dropped, leaving
-  # the remaining candidates unconditional. Reading every Generic as a
-  # class made `Relation[User]` a member it *could* place -- against
-  # nothing -- so `present_count < per_type.size` and the real candidate
-  # came back conditional. Conditional lowers the reference's confidence
-  # below what Find References and Rename require, so the call site went
-  # missing from both, silently.
-  it "does not make a candidate conditional because of an engine-internal generic member" do
+  # Spelled out, because the loop above cannot pin the list's contents: it
+  # generates one example per entry, so a list one entry shorter simply
+  # generates one example fewer and stays green -- which is how
+  # `CollectionProxy` came to be on the list with nothing checking it.
+  # Both directions need a deliberate edit here: removing a shape, and
+  # adding one without deciding it really is a shape rather than a class.
+  it "names exactly the shapes that are not classes" do
+    expect(Ovallsp::Types::INTERNAL_GENERIC_NAMES).to eq(%w[ClassOf Relation CollectionProxy])
+  end
+
+  # The other side of that rule, and a real change from 0.1.7: a Generic
+  # over a class that genuinely exists *is* placeable, so it counts toward
+  # "does every member have this method". `x = flag ? User.new : []` then
+  # `x.name` is conditional, because the receiver really may be an Array.
+  # Before 0.1.8 the Array member was discarded and the candidate came
+  # back unconditional -- more confident than the code justified.
+  it "marks a candidate conditional when a real class in the union does not have the method" do
     index_source("class User\n  def name\n  end\nend\n")
     union = Ovallsp::Types.normalize_union(
-      [nominal("User"), Ovallsp::Types::Generic.new(name: "Relation", type_arg: nominal("User"))]
+      [nominal("User"), Ovallsp::Types::Generic.new(name: "Array", type_arg: nominal("String"))]
     )
 
     candidates = resolver.resolve(receiver_type: union, name: "name")
 
     expect(candidates.map(&:owner)).to eq(["::User"])
-    expect(candidates.map(&:conditional)).to eq([false])
+    expect(candidates.map(&:conditional)).to eq([true])
   end
 
   it "does not make a candidate conditional because of a ClassOf member" do

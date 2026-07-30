@@ -14,10 +14,10 @@ the disproved approaches are kept below it under **Details**.
 - Fixed: a container whose element type is unknown now renders the same
   way everywhere. `Hash.new` and a union arriving at the same value
   disagreed — one said `Hash[Unknown]`, the other `Hash`.
-- Fixed: go-to-definition and completion now work on a container value —
-  anything typed `Hash[Unknown]`, `Array[String]` and so on. They
-  returned nothing there, while the same class reached any other way
-  worked.
+- Fixed: a method your own code adds to a container class — a reopened
+  `Hash`, say — is now found by go-to-definition and completion on a
+  container value (`Hash[Unknown]`, `Array[String]`). Standard-library
+  members always worked there; the workspace's own did not.
 - Removed: dead reference-indexing code, and a line in process ownership
   that could not affect any decision.
 
@@ -53,9 +53,9 @@ to resolve anything called on the result.
 
 Independent review then found that settling on the generic form exposed a
 gap rather than closing one: the method resolver understood only a plain
-class receiver, so definition and completion returned nothing for any
-container value — which had always been true, and this change would have
-made it reachable more often. The resolver now reads a generic receiver as
+class receiver, so a workspace-declared method on a container class was
+invisible on any container value — which had always been true, and this
+change would have made it reachable more often. The resolver now reads a generic receiver as
 the class it is generic over. `Relation` and `CollectionProxy` are
 excluded, because they name Active Record shapes rather than classes
 anyone declares, and reading them as class names sent every

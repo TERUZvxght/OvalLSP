@@ -101,10 +101,13 @@ module Ovallsp
 
       # A `Generic` receiver over a *real* class is read as that class:
       # `Hash[Unknown]`'s own methods live on `Hash`, exactly as `{}`'s do.
-      # Without this, every container constructor resolved through RBS
-      # reached here, matched nothing, and offered no definition and no
-      # completion at all, while the same class reached as a plain Nominal
-      # worked.
+      # Without this, a container receiver reached here and matched
+      # nothing, so a *workspace-declared* method on a reopened container
+      # class was invisible to definition and completion, while the same
+      # class reached as a plain Nominal found it. RBS-backed members were
+      # never affected -- QueryService unwraps a Generic on its own for the
+      # signature paths -- so the gap was specifically the workspace's own
+      # declarations.
       #
       # `Types::INTERNAL_GENERIC_NAMES` are excluded because they name a
       # shape, not a class -- `Relation[User]` is not an instance of
