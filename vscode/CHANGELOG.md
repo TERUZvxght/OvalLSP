@@ -37,6 +37,16 @@ singleton call returned it. Nothing reaching that point can carry
 information, because the guard above it already returned every signature
 answer that did, so the fix is to stop returning there at all.
 
+Rendering a hash literal as a container has one consequence worth
+stating: the unknown-method and argument-count checks ask for a plain
+class name, so a hash-literal receiver is no longer checked. On a
+workspace that reopens `Hash`, `h = {}; h.totally_bogus_method` was
+reported and now is not. The same gate also reported
+`{}.deep_symbolize_keys` — ActiveSupport's, absent from stdlib RBS — as
+unknown, so the false reports go with the true ones. Admitting these
+receivers properly needs to tell "the workspace declares part of this
+class" from "the workspace owns it", which is tracked as 024.13.
+
 The `before_action` mutation was harmless today and only today: `pop`
 operates on the array Prism owns, so reading a declaration destroyed its
 own selector, and nothing noticed because every caller happens to re-parse

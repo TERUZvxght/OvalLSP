@@ -681,16 +681,26 @@ Agent is connected: the Agent reports `Array`'s real ancestors, the check
 sees ancestors it cannot account for, and stays silent. Without an Agent
 (an untrusted workspace, a plain Ruby project) there is nothing to ask.
 
-0.1.9 made this concrete by accident. Teaching the engine to read a
-container receiver as its class — correct everywhere else, and what
-`Types.base_nominal` exists for — would have let array and hash literals
-into both checks for the first time. Found by independent review, with
-`[1,2,3].second` reported against a reopened `Array`. The engine keeps the
-narrower gate instead, so 0.1.9 changed nothing here.
+0.1.9 made this concrete. Array literals already inferred as `Generic`
+and so were never in either check; **hash literals were `Nominal("Hash")`
+and were**. Rendering them as `Hash[Unknown]` (024.12) takes them out,
+because the engine's gates ask for a plain class name.
 
-The cost of that choice is real and worth naming: a genuinely unknown
-method called on a container literal is not reported, where it is on a
-plain receiver. That is the direction this check is supposed to err in.
+Teaching the gates to read a container receiver — correct everywhere
+else, and what `Types.base_nominal` exists for — would have put both
+literals in, array ones for the first time. Independent review measured
+what that costs: `[1,2,3].second` reported as unknown against a workspace
+that reopens `Array`, because ActiveSupport defines it and stdlib RBS does
+not. So the gates keep asking for a plain class name.
+
+What 0.1.9 therefore changes, and it is a change rather than a
+preservation: a hash-literal receiver is no longer checked. On a workspace
+that reopens `Hash`, `h = {}; h.totally_bogus_method` was reported and now
+is not, and so is an argument-count mismatch on such a receiver. The same
+gate previously reported `{}.deep_symbolize_keys` — ActiveSupport's —
+as unknown, which is the false positive this direction avoids. Fewer
+reports either way, which is the direction this check is meant to err in,
+but the true positives are lost with the false ones.
 
 **Direction:** treat "the workspace declares part of this class" as
 distinct from "the workspace owns this class", which is what the Agent

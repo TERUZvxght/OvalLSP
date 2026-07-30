@@ -482,7 +482,55 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
         expect(findings.map(&:code)).to include("unknown-method")
       end
 
-      # A round trip to another process is the most expensive test here,
+      # 024.13. A container literal is deliberately kept out of this check:
+    # a workspace that reopens a core class makes its chain look closed
+    # while gems keep adding to it, so admitting these receivers reported
+    # ActiveSupport's `[1,2,3].second` and `{}.deep_symbolize_keys` as
+    # unknown. Pinned because it is a *change* -- a hash literal inferred
+    # as a plain `Hash` before 0.1.9 and was checked -- and because the
+    # obvious edit (reading the receiver as its class, which is right
+    # everywhere else in the engine) silently undoes it.
+    it "does not report an unknown method on a container-literal receiver" do
+      document = index(<<~RUBY, uri: "file:///container.rb")
+        class Hash
+          def deep_keys
+          end
+        end
+
+        class Widget
+          def show
+            h = {}
+            h.totally_bogus_method
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).not_to include("unknown-method")
+    end
+
+    it "does not count arguments on a container-literal receiver" do
+      document = index(<<~RUBY, uri: "file:///arity.rb")
+        class Hash
+          def deep_dig(a)
+          end
+        end
+
+        class Widget
+          def show
+            h = {}
+            h.deep_dig(1, 2)
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).not_to include("argument-count")
+    end
+
+    # A round trip to another process is the most expensive test here,
       # so it is asked only of a receiver every cheaper one has already
       # called closed. A model, or anything the static tests rule out,
       # must not queue a question whose answer cannot change the outcome.

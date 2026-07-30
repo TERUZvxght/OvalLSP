@@ -836,7 +836,7 @@ module Ovallsp
       # Runtime evidence is recorded against the class, so it applies to a
       # value typed as that class' container form too -- the same reading
       # #resolve_instance_level uses (024.12).
-      receiver_type = Types.base_nominal(receiver_type) || receiver_type
+      receiver_type = Types.base_nominal(receiver_type)
       return nil unless receiver_type.is_a?(Types::Nominal)
 
       owner = receiver_type.name.start_with?("::") ? receiver_type.name : "::#{receiver_type.name}"
