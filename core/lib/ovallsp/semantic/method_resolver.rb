@@ -99,16 +99,21 @@ module Ovallsp
         [receiver_type.type_arg, context.merge(singleton: true)]
       end
 
-      # A `Generic` receiver is read as the class it is generic over:
+      # A `Generic` receiver over a *real* class is read as that class:
       # `Hash[Unknown]`'s own methods live on `Hash`, exactly as `{}`'s do.
-      # Without this, every value the container rules produce -- and every
-      # container constructor resolved through RBS -- reached here, matched
-      # nothing, and offered no definition and no completion at all, while
-      # the same class reached as a plain Nominal worked.
+      # Without this, every container constructor resolved through RBS
+      # reached here, matched nothing, and offered no definition and no
+      # completion at all, while the same class reached as a plain Nominal
+      # worked.
       #
-      # `ClassOf[X]` is already unwrapped before this by
-      # #normalize_class_receiver, so it never arrives here as a class
-      # literally named "ClassOf".
+      # `Types::INTERNAL_GENERIC_NAMES` are excluded because they name a
+      # shape, not a class -- `Relation[User]` is not an instance of
+      # anything called `Relation`. A member this returns nil for is
+      # dropped, which for a Union also keeps it out of the
+      # every-member-has-it count: a shape nobody can look a method up on
+      # is not evidence that the method is conditional, and treating it as
+      # evidence lowered the reference's confidence below what Find
+      # References and Rename accept, dropping real call sites silently.
       def nominal_members(type)
         case type
         when Types::Union then type.members.filter_map { |m| base_nominal(m) }
@@ -119,7 +124,8 @@ module Ovallsp
       def base_nominal(type)
         case type
         when Types::Nominal then type
-        when Types::Generic then Types::Nominal.new(name: type.name)
+        when Types::Generic
+          Types::Nominal.new(name: type.name) unless Types::INTERNAL_GENERIC_NAMES.include?(type.name)
         end
       end
 

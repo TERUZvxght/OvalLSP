@@ -42,6 +42,15 @@ module Ovallsp
       end
     end
 
+    # Generic names that stand for a *shape* this engine models rather than
+    # a class anyone declares: `ClassOf[X]` is X's class object, and
+    # Relation/CollectionProxy are the Active Record collection shapes.
+    # Anything that would otherwise read a Generic's name as a class has to
+    # exclude these -- a workspace is perfectly likely to contain its own
+    # `Relation`, and resolving into it would be resolving into a class the
+    # value has nothing to do with.
+    INTERNAL_GENERIC_NAMES = %w[ClassOf Relation CollectionProxy].freeze
+
     # A normalized set of >= 2 distinct member types. Never nests another
     # Union — use Types.normalize_union to build one safely.
     Union = Data.define(:members) do

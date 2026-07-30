@@ -55,6 +55,49 @@ RSpec.describe Ovallsp::Semantic::MethodResolver do
     expect(generic_names).to include("deep_symbolize!")
   end
 
+  # `Relation` and `CollectionProxy` are this engine's names for Active
+  # Record shapes, not classes anyone declares. Reading them as class
+  # names sends every `Model.where(...)` receiver into whatever a
+  # workspace happens to call `Relation` -- a plausible name for an app to
+  # use, and go-to-definition would land inside it.
+  it "does not read an engine-internal generic name as a workspace class" do
+    index_source("class Relation\n  def bogus_only_here\n  end\nend\n")
+    relation = Ovallsp::Types::Generic.new(name: "Relation", type_arg: nominal("User"))
+
+    expect(resolver.resolve(receiver_type: relation, name: "bogus_only_here")).to be_empty
+    expect(resolver.complete(receiver_type: relation, prefix: "bog")).to be_empty
+  end
+
+  # A Union member the resolver cannot place used to be dropped, leaving
+  # the remaining candidates unconditional. Reading every Generic as a
+  # class made `Relation[User]` a member it *could* place -- against
+  # nothing -- so `present_count < per_type.size` and the real candidate
+  # came back conditional. Conditional lowers the reference's confidence
+  # below what Find References and Rename require, so the call site went
+  # missing from both, silently.
+  it "does not make a candidate conditional because of an engine-internal generic member" do
+    index_source("class User\n  def name\n  end\nend\n")
+    union = Ovallsp::Types.normalize_union(
+      [nominal("User"), Ovallsp::Types::Generic.new(name: "Relation", type_arg: nominal("User"))]
+    )
+
+    candidates = resolver.resolve(receiver_type: union, name: "name")
+
+    expect(candidates.map(&:owner)).to eq(["::User"])
+    expect(candidates.map(&:conditional)).to eq([false])
+  end
+
+  it "does not make a candidate conditional because of a ClassOf member" do
+    index_source("class User\n  def name\n  end\nend\n\nclass Widget\nend\n")
+    union = Ovallsp::Types.normalize_union(
+      [nominal("User"), Ovallsp::Types::Generic.new(name: "ClassOf", type_arg: nominal("Widget"))]
+    )
+
+    candidates = resolver.resolve(receiver_type: union, name: "name")
+
+    expect(candidates.map(&:conditional)).to eq([false])
+  end
+
   # The one Generic that must NOT be read as its own name: `ClassOf[X]` is
   # the class object of X, so its members are X's singleton methods, and
   # reading it as a class literally called "ClassOf" would find nothing.
