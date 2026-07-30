@@ -266,6 +266,8 @@ module Ovallsp
         respond(id, with_index_snapshot { explain_type_result(message[:params]) })
       when "textDocument/completion"
         respond(id, with_index_snapshot { completion_result(message[:params]) })
+      when "completionItem/resolve"
+        respond(id, with_index_snapshot { completion_resolve_result(message[:params]) })
       when "textDocument/signatureHelp"
         respond(id, with_index_snapshot { signature_help_result(message[:params]) })
       when "textDocument/references"
@@ -1894,10 +1896,21 @@ module Ovallsp
       return [] unless receiver_type
 
       @query_service.members_of(receiver_type, prefix: prefix).map do |member|
-        item = { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s }
+        item = { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s,
+                 data: completion_resolve_data(receiver_type, member.name) }
         snippet = completion_snippet(member)
         item.merge(snippet ? { insertText: snippet, insertTextFormat: SNIPPET_INSERT_FORMAT } : {})
       end
+    end
+
+    # What `completionItem/resolve` needs to find this member's
+    # declaration again, and nothing more: it travels to the editor and
+    # back on every item in the list.
+    def completion_resolve_data(receiver_type, name)
+      base = Types.base_nominal(receiver_type)
+      return nil unless base
+
+      { receiver: base.name, name: name }
     end
 
     # LSP InsertTextFormat.Snippet: `$1`/`${1:name}` become tab stops
@@ -2614,7 +2627,7 @@ module Ovallsp
           referencesProvider: true,
           renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
-          completionProvider: { triggerCharacters: ["."] },
+          completionProvider: { triggerCharacters: ["."], resolveProvider: true },
           signatureHelpProvider: { triggerCharacters: ["("] }
         },
         serverInfo: {
@@ -2693,6 +2706,7 @@ module Ovallsp
     # discarding a hover that otherwise has real content to show.
     def hover_lines(document, position, type)
       lines = type == Types::UNKNOWN ? [] : [type.to_s]
+      documentation = nil
 
       word = word_at_position(document, position)
       # Skipped for .erb views: #receiver_type_before_dot queries #type_at
@@ -2711,10 +2725,55 @@ module Ovallsp
         lines << "Origin: #{origin}" if origin
 
         location = @query_service.definitions_of(receiver_type, word).first
-        lines << "Defined: #{location[:uri]}:#{location[:range][:start][:line] + 1}" if location
+        if location
+          lines << "Defined: #{location[:uri]}:#{location[:range][:start][:line] + 1}"
+          documentation = documentation_at(location)
+        end
       end
 
-      lines
+      # Prose, separated from the type/origin/path lines by a blank line
+      # rather than run together with them -- otherwise the comment's
+      # first line reads as part of the signature.
+      documentation ? lines + ["", documentation] : lines
+    end
+
+    # The comment block above a declaration, read from the buffer if the
+    # file is open and from disk otherwise (0.2.0). Nothing indexes
+    # comments: they live in the source, and this is the only place that
+    # wants them.
+    def documentation_at(location)
+      uri = location[:uri]
+      document = @document_store.fetch(uri: uri) || load_document_from_disk(uri)
+      return nil unless document
+
+      Documentation.above(document.text, location.dig(:range, :start, :line))
+    rescue StandardError => e
+      @logger.error("failed to read documentation for #{uri}: #{e.class}: #{e.message}")
+      nil
+    end
+
+    # Fills in the documentation for the one item the editor is actually
+    # showing (0.2.0).
+    #
+    # Reading the source for every candidate would put a file read per
+    # item on the request path, for documentation the user sees for one of
+    # them at most -- so the list carries only `data`, the receiver and
+    # name this needs to find the declaration again.
+    def completion_resolve_result(params)
+      item = params.dup
+      data = item[:data]
+      return item unless data && data[:receiver] && data[:name]
+
+      location = @query_service.definitions_of(Types::Nominal.new(name: data[:receiver]), data[:name]).first
+      return item unless location
+
+      documentation = documentation_at(location)
+      return item unless documentation
+
+      item.merge(documentation: { kind: "markdown", value: documentation })
+    rescue StandardError => e
+      @logger.error("failed to resolve completion item: #{e.class}: #{e.message}")
+      params
     end
 
     HOVER_ORIGIN_LABEL = {
