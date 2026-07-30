@@ -8,10 +8,10 @@ the disproved approaches are kept below it under **Details**.
 
 ## 0.1.9 — Three corrections in the type engine
 
-- Fixed: an empty hash renders like every other container. `{}` said
-  `Hash` while `[]` said `Array[Unknown]` and `Hash.new` said
-  `Hash[Unknown]` — three spellings of "a container whose contents I
-  cannot see", two answers.
+- Fixed: a hash literal renders like every other container. `{}` and
+  `{a: 1}` said `Hash` while `[]` said `Array[Unknown]` and `Hash.new`
+  said `Hash[Unknown]` — spellings of the same kind of value, two
+  answers.
 - Fixed: a project signature that says `untyped` no longer switches the
   method off. Writing `def self.build: (...) -> untyped` in your own
   `sig/` made every call to `build` resolve to nothing, instead of

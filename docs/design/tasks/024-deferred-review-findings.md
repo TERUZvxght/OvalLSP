@@ -51,49 +51,6 @@ Server path, or make the Server call the LocalInferencer copy so there is
 one implementation. Deleting cascades into `MethodLocator`, so it is not a
 one-line change.
 
-## 024.2 `Hash.new` / `Set.new` hover as `Hash[Unknown]` / `Set[Unknown]`
-
-**Status:** fixed in 0.1.8 — settled in favour of the **generic** form,
-and `Types.normalize_union` corrected to agree with it. The engine already
-produced `Array[Unknown]` for an empty array literal, so the union rule
-was the one out of step, not hover. Keeping the generic form also keeps a
-type argument for `GenericRuleRegistry` to dispatch on: collapsing to the
-plain `Hash` threw away the ability to resolve anything called on the
-result. Both sides are now pinned — the union direction in
-`types_spec.rb`, the constructor rendering in `local_inferencer_spec.rb`,
-with a comment in each pointing at the other.
-
-Independent review of that change found it had traded a rendering
-inconsistency for a lost capability: `MethodResolver#nominal_members`
-understood only `Nominal` (and `ClassOf[X]`), so moving the collapsed
-value to the generic branch left definition and completion returning
-nothing on it — reproduced against a workspace reopening `Hash`. The
-justification given was also one-sided: `GenericRuleRegistry` only has
-rules for `Array`/`Relation`/`CollectionProxy`, so for the `Hash` and
-`Set` this entry is named after there was no dispatch to gain. The
-resolver was the thing that was wrong, and now reads any `Generic` as the
-class it is generic over; `ClassOf[X]` keeps its own earlier unwrapping.
-
-One path was left out of that first pass and tracked separately as
-024.12: `{}` still inferred `Nominal("Hash")`, so the two spellings kept
-rendering differently. Closed in 0.1.9.
-**Area:** `core/lib/ovallsp/local_inferencer.rb` (`resolve_call`'s `.new` ladder)
-
-Consulting RBS before the nominal-constructor fallback means `Hash.new`
-resolves through `Hash.new: [K, V]() -> Hash[K, V]` with both parameters
-unbound, so hover shows `Hash[Unknown]` where it used to show `Hash`.
-Same for `Set.new`. (`Array.new` → `Array[Unknown]` is arguably better,
-since it lets the container rules dispatch.)
-
-`Types.normalize_union` already encodes the opposite judgement — it
-collapses `Hash[Unknown]` into `Hash` on the grounds that the generic
-form constrains nothing extra — so the two behaviours disagree about the
-same value. Display-only; no wrong type is produced.
-
-**Direction:** decide once whether `X[Unknown]` or `X` is the canonical
-rendering of "container with no known element type", and apply it in both
-places. Pin whichever is chosen.
-
 ## 024.3 An `untyped` RBS singleton signature still shadows source resolution
 
 **Status:** fixed in 0.1.9 — the non-`new` singleton branch no longer
@@ -133,19 +90,6 @@ it becomes a live bug as soon as anything caches or re-walks that tree.
 
 **Direction:** `arguments[0...-1]` instead of `pop`.
 
-## 024.5 `Server#index_references` is dead
-
-**Status:** fixed in 0.1.8 — deleted. The one comment that named it now
-names `#ensure_reference_index_current`, which is what actually resolves
-that candidate list into ReferenceIndex.
-**Area:** `core/lib/ovallsp/server.rb`
-
-Both former callers now go through `apply_file_summary` plus
-`mark_reference_index_dirty`. The risk is a future change to reference
-resolution being made in the dead copy.
-
-**Direction:** delete.
-
 ## 024.6 The `seen_uris` spec's comment overclaims
 
 **Status:** open
@@ -160,31 +104,6 @@ absence with `File.file?` rather than trusting `seen_uris`.
 **Direction:** add the buffer case, or trim the comment to what the spec
 actually asserts.
 
-## 024.7 `rootIdentity`'s refresh assignment cannot affect any decision
-
-**Status:** fixed in 0.1.8 — the line is deleted and the comment now says
-what is actually true. An attempt to pin it first confirmed the entry's
-own claim that it cannot be: `terminate()` takes two snapshots, and in a
-fixture where the root's pgid changes between them, ownership is never
-established on the first pass either way, so the two candidate
-implementations produce identical output. Deleting was the honest
-resolution rather than adding a test that cannot distinguish them. The
-guarantee the comment credited it with — a post-setsid pgid change is
-tolerated — is real and lives in `sameRootProcess` comparing pid and
-startedAt only, which the corrected comment now says.
-**Area:** `vscode/src/coreProcess.ts`
-
-`this.rootIdentity = rootRow` in the "still our process" branch is
-documented as picking up a post-setsid pgid change, but the only
-comparison it feeds (`sameRootProcess`) looks at `pid` and `startedAt`,
-both invariant over the process's life. The pgid tolerance the comment
-credits it with actually comes from `sameRootProcess` not comparing pgid
-at all. The line is unpinnable by construction — no fixture can
-distinguish it.
-
-**Direction:** delete the line, or correct the comment to say it is
-insurance against `sameRootProcess` tightening later.
-
 ## 024.8 Ownership retirement on `exited() && known.size === 0` is unpinned
 
 **Status:** open
@@ -197,31 +116,6 @@ because unpinned behavioural lines count as defects in this project.
 
 **Direction:** a test, not a code change — or delete the lines if the
 invariant is genuinely carried elsewhere.
-
-## 024.9 A forced crash popup can still appear for deliberate stops
-
-**Status:** fixed in 0.1.8 — the suppression now keys on lifecycle state
-as well as on `data`, and the decision lives in
-`vscode/src/clientErrorNotifications.ts`, which imports no `vscode` and is
-unit-tested. `ClientLifecycleManager#stopWasRequested` answers whether we
-asked *that generation* to stop; a superseded generation counts as
-stopped, since it was torn down to make way for its replacement and its
-client can still report the closure afterwards.
-**Area:** `vscode/src/extension.ts` (`OvalLspLanguageClient.error`)
-
-The suppression keys off the branded rejection arriving as `data`. That
-covers the two paths that carry it, but not vscode-languageclient's
-`DoNotRestart` notice, which passes `data === undefined` with `'force'`.
-
-Reproduce: stop the client five times within three minutes while it is
-still `starting` (repeated *OvalLSP: Restart Server* during the
-compatibility probe). `stopClient` deliberately does not call
-`client.stop()` in that state — it terminates Core directly — so the
-library sees five connection closures and reports *"The OvalLSP server
-crashed 5 times in the last 3 minutes"*, about five deliberate stops.
-
-**Direction:** key the suppression on lifecycle state or the message,
-rather than on `data` alone.
 
 ## 024.10 Four `extension.ts` behaviours cannot be unit-tested
 
@@ -236,26 +130,6 @@ a workspace folder is added, and the restart notification wording.
 
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
-
-## 024.11 Core reports version 0.0.1 while the extension reports 0.1.5
-
-**Status:** fixed — `Ovallsp::VERSION` now tracks the extension version,
-and `copy-core.js` refuses to build a bundled payload where the two
-disagree. The rule and its exemptions are in `docs/PUBLISHING.md`.
-**Area:** `core/lib/ovallsp/version.rb`, surfaced by `OvalLSP: Show Version Information`
-
-`Ovallsp::VERSION` has been `0.0.1` since the rebrand, so `initialize`
-answers `serverInfo.version` / `ovallspInfo.coreVersion` as `0.0.1` while
-the extension reports its own `0.1.5`. Compatibility is judged on the
-protocol range, not on these strings, so nothing misbehaves — but the
-version panel shows a pairing that looks wrong to anyone reading it, and
-a bug report quoting "Core 0.0.1" is hard to map to a release.
-
-**Direction:** decide whether the gem version tracks the extension
-version or is deliberately independent, and either bump it in step or say
-so in the version panel's own wording.
-
----
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

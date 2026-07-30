@@ -124,13 +124,7 @@ module Ovallsp
         end
       end
 
-      def base_nominal(type)
-        case type
-        when Types::Nominal then type
-        when Types::Generic
-          Types::Nominal.new(name: type.name) unless Types::INTERNAL_GENERIC_NAMES.include?(type.name)
-        end
-      end
+      def base_nominal(type) = Types.base_nominal(type)
 
       def candidates_for_type(nominal, method_name, context)
         singleton = context[:singleton] == true

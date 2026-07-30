@@ -675,33 +675,32 @@ module Ovallsp
           resolve_source_method_member(receiver_type.type_arg, method_name, singleton: true)
         else
           # A container value is an instance of its class, so a method the
-          # workspace adds to that class resolves on it -- the same reading
-          # MethodResolver#base_nominal already applies. Tried after the
-          # relation rules, so a real `Relation`/`CollectionProxy` member
-          # is never shadowed by a class of that name (024.12).
-          resolve_relation_member(receiver_type, method_name) ||
-            resolve_generic_base_member(receiver_type, method_name)
+          # workspace adds to that class resolves on it (024.12).
+          #
+          # Tried *before* the built-in relation rules, because that is what
+          # Ruby does: a workspace that reopens `Array` and defines its own
+          # `first` has replaced the one the rules model. The rules still
+          # answer everything the workspace does not declare, since
+          # #resolve_source_method_member returns nil when there is no
+          # declaration -- so this only changes the answer where a
+          # workspace really did override the method.
+          #
+          # `Relation` and `CollectionProxy` cannot reach the base lookup
+          # at all (`Types.base_nominal` refuses them), so the order is
+          # decided entirely by `Array`, the one name in both sets.
+          resolve_generic_base_member(receiver_type, method_name) ||
+            resolve_relation_member(receiver_type, method_name)
         end
       when Types::Union
         resolve_union_member(receiver_type, method_name)
       end
     end
 
-    # The class a Generic is generic over, for the names that denote a real
-    # class. `Types::INTERNAL_GENERIC_NAMES` are shapes this engine mints
-    # rather than classes anyone declares, so they have no base to read.
-    def generic_base(type)
-      return nil unless type.is_a?(Types::Generic)
-      return nil if Types::INTERNAL_GENERIC_NAMES.include?(type.name)
-
-      Types::Nominal.new(name: type.name)
-    end
-
     def resolve_generic_base_member(receiver_type, method_name)
-      base = generic_base(receiver_type)
+      base = Types.base_nominal(receiver_type)
       return nil unless base
 
-      resolve_model_member(base.name, method_name) || resolve_source_method_member(base, method_name)
+      resolve_source_method_member(base, method_name)
     end
 
     # A plain, hand-written instance method (not an Active Record column/
@@ -837,7 +836,7 @@ module Ovallsp
       # Runtime evidence is recorded against the class, so it applies to a
       # value typed as that class' container form too -- the same reading
       # #resolve_instance_level uses (024.12).
-      receiver_type = generic_base(receiver_type) || receiver_type
+      receiver_type = Types.base_nominal(receiver_type) || receiver_type
       return nil unless receiver_type.is_a?(Types::Nominal)
 
       owner = receiver_type.name.start_with?("::") ? receiver_type.name : "::#{receiver_type.name}"

@@ -106,8 +106,10 @@ module Ovallsp
           # already treats as always-available.
           next if candidate.singleton && candidate.name == "new"
 
-          receiver_type = receiver_type_for(document, candidate, context)
-          next unless receiver_type.is_a?(Types::Nominal)
+          # A container value is an instance of its class, so a check that
+          # applies to `Hash` applies to `Hash[Unknown]` (024.12).
+          receiver_type = Types.base_nominal(receiver_type_for(document, candidate, context))
+          next unless receiver_type
           next unless closed_nominal?(receiver_type, candidate.singleton, context) ||
                       model_closed?(receiver_type, context)
           next if rbs_resolves?(candidate, receiver_type, context)
@@ -177,8 +179,8 @@ module Ovallsp
       # receiver) candidate, or several declarations for the same name
       # (a reopened class, an override) whose parameter lists may differ.
       def sole_source_declaration(document, candidate, context)
-        receiver_type = receiver_type_for(document, candidate, context)
-        return nil unless receiver_type.is_a?(Types::Nominal)
+        receiver_type = Types.base_nominal(receiver_type_for(document, candidate, context))
+        return nil unless receiver_type
 
         candidates = context.method_resolver.resolve(
           receiver_type: receiver_type, name: candidate.name,

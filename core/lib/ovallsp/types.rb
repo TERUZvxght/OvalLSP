@@ -84,6 +84,24 @@ module Ovallsp
 
     module_function
 
+    # The class a value's type is an instance of, or nil when the type does
+    # not name one. A `Generic` over a real class reads as that class:
+    # `Hash[Unknown]` is a Hash, and a method the workspace adds to `Hash`
+    # applies to it.
+    #
+    # Lives here because three separate consumers needed it and each was
+    # taught separately, a release apart: MethodResolver in 0.1.8, then
+    # LocalInferencer's instance-level and observed-evidence paths, then
+    # the diagnostics engine -- each time as a fresh bug, because there was
+    # no single place saying what a Generic receiver means.
+    def base_nominal(type)
+      case type
+      when Nominal then type
+      when Generic
+        Nominal.new(name: type.name) unless INTERNAL_GENERIC_NAMES.include?(type.name)
+      end
+    end
+
     # Flattens nested unions, removes duplicate members (structural
     # equality — Nominal/Union are Data classes), and unwraps to a bare
     # type when only one distinct member remains. Member order is
