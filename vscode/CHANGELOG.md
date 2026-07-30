@@ -6,6 +6,79 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.1.10 — One implementation, and four behaviours brought under test
+
+- Fixed: the controller `before_action` chain has one implementation
+  again. A second, unused copy of the same rule sat next to the one that
+  runs, so a fix to either could silently miss the other.
+- Changed: the extension's client shutdown logic moved out of the module
+  that cannot be unit-tested, and is now covered by tests.
+- Fixed: on macOS, a Runtime Agent left behind by a Core that died during
+  its first ~57ms is now terminated instead of leaking.
+- Changed: the Cold Index test now actually covers a file open in a
+  buffer.
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: no
+capability is added. It clears the last four defect entries from
+`docs/design/tasks/024-deferred-review-findings.md` (024.1, 024.6,
+024.8, 024.10), leaving only roadmap items and 024.13.
+
+### Details
+
+The duplicate callback chain was the expensive kind of duplication: both
+copies were correct, so nothing was visibly wrong, and a regression test
+written against the wrong one pinned nothing about the path that
+actually runs. Deleting it cascaded through `#infer_ivars_for_method`,
+`#find_static_render_target`, `#find_method_node` and the `MethodLocator`
+visitor, which existed only to serve it.
+
+Its tests were not deleted with it. Those covering pieces the server
+still calls were re-anchored onto exactly those pieces. Seven behaviours —
+`except:` on both sides of it, an action overriding a callback's
+assignment, an `if:` condition that cannot be resolved statically, a
+conditional `skip_before_action`, a missing callback method, and the
+multi-name forms of `before_action` and `skip_before_action` — had no
+equivalent on the live path at all, so they were rewritten as end-to-end
+tests against the server. Each of those seven fixtures was then checked
+to produce a *different* answer under the opposite behaviour, because a
+fixture that cannot tell the two apart passes either way.
+
+The macOS leak was found while trying to *remove* the two lines that
+cause it, on the belief that they could not change any answer. They can —
+removing them is the fix. When Core exits, the tracker retires its
+polling; it used to retire its pid-derived ownership at the same moment,
+and the argument for deleting that was that the branch is only reached
+once the root is known absent, by which point ownership grants nothing.
+Neither half is true — the absence flag is set at the end of the pass,
+and the root row can be present and still untracked, since a root is only
+tracked while the child is alive. A Core that dies before
+`core-session.rb` reaches `setsid` lands exactly there, and on macOS
+nothing else identifies its rows (`ps -o sess=` reports 0 for every
+process). Ownership was then retired permanently, while the passes that
+do the actual killing run afterwards. The removal stands, with a
+regression test that fails if the session-id retirement returns. (Its
+group-id twin was removed alongside it for symmetry; that half provably
+cannot change an answer, so no test can pin it.)
+
+`extension.ts` imports `vscode`, which the unit suite cannot load, so
+anything living there was verified only by hand. Four decisions were in
+that position — three about not leaving an orphaned Core process behind
+(awaiting the client's stop rather than firing it off, draining
+outstanding process retirements when a folder has no tracked generation,
+and refusing to start a server for a workspace folder added while the
+host is already shutting down), and one about which restart the user is
+told about. They now live in a module that imports nothing from `vscode`.
+Each was verified by mutating it and confirming the suite goes red.
+
+The last of those took two attempts worth recording. Exporting the two
+notification strings for `extension.ts` to pick between pinned the
+wording and nothing else: the pairing of command to message stayed at the
+call sites, where swapping it left the suite green. What is pinned now is
+the absence of a choice — each command names its id once, and its
+confirmation is looked up from that same id. Which *action* each command
+runs is still ordinary `vscode` code, verified by hand like the rest of
+it.
+
 ## 0.1.9 — Three corrections in the type engine
 
 - Fixed: a hash literal renders like every other container. `{}` and

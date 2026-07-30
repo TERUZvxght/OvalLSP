@@ -343,6 +343,67 @@ describe('SpawnedCoreProcess', () => {
     assert.ok(signalled.includes(200));
   });
 
+  // Regression (024.8): `refreshDescendants` used to retire
+  // `ownedSessionId`/`ownedGroupId` whenever it found the root exited and
+  // nothing tracked. That was justified as unreachable-in-effect, on the
+  // grounds that reaching it means the root was absent and the expansion
+  // gate is already closed. It isn't: `rootObservedAbsent` is assigned at
+  // the *end* of the pass, and a root row can be present and still not be
+  // tracked, because `known` only takes the root while the child has not
+  // exited. On Darwin that is the ordinary pre-`setsid` shape -- `sid` is
+  // 0 for every row and `pgid` is still the host's, so neither ownership
+  // test matches the root either -- and a Core that dies inside the
+  // ~57ms setsid window lands there exactly.
+  //
+  // Retiring ownership then was permanent, and later passes do exist:
+  // `terminateOnce` and `waitForAllExit` both refresh after the interval
+  // is cleared. So the runner that appears in the *next* snapshot, in the
+  // group our child's pid leads, was never adopted and never signalled --
+  // the same leak the Darwin test below was written about, reached by a
+  // different route.
+  it('adopts a runner that only appears after the Core root died pre-setsid on Darwin', async () => {
+    let snapshots = 0;
+    let entries: ProcessIdentity[] = [
+      // Pre-setsid: still in the host's group (pgid 7), and Darwin
+      // reports sess=0, so nothing here identifies the row as ours.
+      { pid: 100, ppid: 1, pgid: 7, sid: 0, startedAt: 'our-core' }
+    ];
+    const signalled: number[] = [];
+    const inspector: ProcessTreeInspector = {
+      snapshot: async () => {
+        snapshots += 1;
+        if (snapshots > 1) {
+          // setsid completed before the crash after all: the runner is in
+          // the group led by our child's pid.
+          entries = [{ pid: 200, ppid: 1, pgid: 100, sid: 0, startedAt: 'runner' }];
+        }
+        return entries.map((entry) => ({ ...entry }));
+      },
+      signal: async (identity) => {
+        signalled.push(identity.pid);
+        entries = entries.filter((entry) => entry.pgid !== identity.pgid);
+      },
+      terminateWindowsTree: async () => undefined
+    };
+    const fakeChild = {
+      pid: 100,
+      exitCode: 1,
+      signalCode: null,
+      kill: () => true
+    } as unknown as ChildProcess;
+
+    const owner = new SpawnedCoreProcess(fakeChild, 'darwin', 1, 1, inspector, true);
+    // Let the first pass -- the one that sees an exited root and owns
+    // nothing -- complete before terminating.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await owner.terminate();
+
+    assert.ok(
+      signalled.includes(200),
+      'expected the runner to still be adoptable after a pass that owned nothing'
+    );
+  });
+
   // Regression: every other session test here hands the owner a snapshot
   // whose `sid` is a real session id. macOS never produces that -- `ps -o
   // sess=` reports 0 for every process on Darwin (verified on a real
@@ -770,7 +831,7 @@ describe('SpawnedCoreProcess', () => {
   // exited, its orphans carried our old pgid with no row at the pid
   // itself: nothing could fire, the union adopted them, and terminate()
   // SIGTERMed and SIGKILLed an unrelated user's process group.
-  it('retires pid-derived ownership once the Core is gone and nothing of ours survived', async () => {
+  it('never negates a group inherited from our recycled pid once a snapshot showed it free', async () => {
     let entries: ProcessIdentity[] = [{ pid: 100, ppid: 1, pgid: 100, sid: 0, startedAt: 'core' }];
     const groupSignals: number[] = [];
     const pidSignals: number[] = [];
@@ -808,7 +869,10 @@ describe('SpawnedCoreProcess', () => {
   });
 
   // The same defect with our own survivor still alive, so `known` never
-  // empties and the retire-on-empty rule above cannot fire. Ownership
+  // empties. (The example above reaches the same safety by the same
+  // mechanism -- `rootObservedAbsent` closing the expansion gate -- not by
+  // any retirement of the pid-derived fields: 024.8 deleted that, and this
+  // pair of examples passes either way.) Ownership
   // must stop *expanding* by pid once a snapshot has shown that pid free,
   // while everything already tracked stays tracked.
   it('stops adopting new group members once a snapshot has shown our pid free', async () => {

@@ -535,14 +535,38 @@ export class SpawnedCoreProcess implements CoreProcessHandle {
     // process. Each tick also spawns a `ps`, which itself consumes pids
     // and hurries that wraparound along.
     if (this.exited() && this.known.size === 0) {
-      // Retire the pid-derived authority along with the polling: with
-      // nothing of ours left, our old pid grants nothing. The expansion
-      // gate above is what actually closes the stranger-adoption defect
-      // (and is what the two regression tests pin); this states the same
-      // invariant at the other end so the fields cannot outlive their
-      // meaning.
-      this.ownedSessionId = undefined;
-      this.ownedGroupId = undefined;
+      // `ownedSessionId` is deliberately *not* retired here, and that is
+      // load-bearing rather than a tidy-up (024.8). `ownedGroupId` went
+      // with it for symmetry only: it is set solely from a validated root
+      // row with `pgid === pid`, and such a row also matches the
+      // expansion test against `ownedSessionId`, so `known` cannot be
+      // empty in the same pass -- and if that row is absent instead,
+      // `rootObservedAbsent` closes the gate permanently. Recorded rather
+      // than left to be re-derived, because the last attempt at reasoning
+      // about this branch got it wrong.
+      // Retiring them was defended as unable to change any answer, on the
+      // grounds that reaching this branch means the root was absent and
+      // the expansion gate is therefore already closed. Neither half
+      // holds: `rootObservedAbsent` is assigned at the *end* of this
+      // pass, and a root row can be present here and still untracked,
+      // because `known` only takes the root while the child has not
+      // exited. A Core that dies inside the ~57ms pre-`setsid` window
+      // lands here with its row visible and nothing *tracked* -- on Darwin
+      // especially, where `sid` is 0 on every row and `pgid` is still the
+      // host's, so no ownership test matches the root either.
+      //
+      // Since `terminateOnce` and `waitForAllExit` both refresh again
+      // after this interval is cleared, retiring the fields here was
+      // permanent and cost us the survivor those later passes exist to
+      // catch. The `ownedSessionId` half is pinned by "adopts a runner
+      // that only appears after the Core root died pre-setsid on Darwin";
+      // the `ownedGroupId` half is inert for the reason given above, and
+      // no fixture can distinguish it.
+      //
+      // Stopping the polling, on the other hand, is real work: a handle
+      // outlives its process for as long as a client is kept, and every
+      // tick spawns a `ps` that consumes pids and hurries the wraparound
+      // this class defends against.
       if (this.descendantMonitor) {
         clearInterval(this.descendantMonitor);
         this.descendantMonitor = undefined;

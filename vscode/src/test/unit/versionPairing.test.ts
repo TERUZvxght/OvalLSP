@@ -93,3 +93,30 @@ describe('bundled Core version pairing', () => {
     );
   });
 });
+
+// A version bump touches `package.json`, `core/lib/ovallsp/version.rb`,
+// `core/Gemfile.lock` and `package-lock.json`. The first three are
+// checked -- by `assertBundledVersionsAgree` above and by bundler
+// respectively -- and the lock file was the one nothing looked at, so
+// 0.1.10 was prepared with it still declaring 0.1.9. `npm ci` does not
+// care, so the only consequence is a public repo whose lock file names
+// the wrong release; the reason to check it here is that "nothing
+// catches this" is how it happened.
+describe('package-lock version pairing', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fs = require('fs') as typeof import('fs');
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const path = require('path') as typeof import('path');
+
+  const read = (name: string): Record<string, unknown> =>
+    JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', '..', name), 'utf8')) as Record<string, unknown>;
+
+  it('declares the extension version in both of the lock file places that carry it', () => {
+    const version = read('package.json').version as string;
+    const lock = read('package-lock.json');
+    const rootPackage = (lock.packages as Record<string, { version?: string }>)[''];
+
+    assert.strictEqual(lock.version, version, 'package-lock.json root version is stale');
+    assert.strictEqual(rootPackage.version, version, 'package-lock.json packages[""] version is stale');
+  });
+});

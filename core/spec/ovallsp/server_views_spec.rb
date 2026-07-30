@@ -464,11 +464,13 @@ RSpec.describe "Ovallsp::Server controller-to-view instance variable propagation
   end
 
   # The step budget bounds one action's inference, and an action is its
-  # before_action chain plus its body. This is the *production* path:
-  # LocalInferencer has a second, unused implementation of the same rule,
-  # and a spec against that one pins nothing here (found in round 14 --
-  # deleting `reset_budget: false` from both call sites below left the
-  # whole suite green). Resetting per method makes the real bound
+  # before_action chain plus its body. This is the *production* path, and
+  # for a while it was the only one that mattered while a second, unused
+  # implementation of the same rule sat in LocalInferencer: a spec against
+  # that copy pinned nothing here (found in round 14 -- deleting
+  # `reset_budget: false` from both call sites in `server.rb` left the
+  # whole suite green). 024.1 deleted the copy; this spec is why the
+  # decision it hid stays covered. Resetting per method makes the real bound
   # `max_steps * (callbacks + 1)`, spent on the request thread while
   # holding the index lock that now serialises every read request.
   it "spends one step budget across a controller's whole before_action chain" do
@@ -649,5 +651,121 @@ RSpec.describe "Ovallsp::Server controller-to-view instance variable propagation
 
     symbols = sent_messages.first[:result]
     expect(symbols.map { |s| s[:name] }).to include("WidgetLimit")
+  end
+
+  # These callback-chain behaviours were pinned only against
+  # LocalInferencer#infer_ivars_for_action -- a second implementation of
+  # the chain that Server never called, and that 024.1 deleted. Re-anchored
+  # here, against the composition that actually runs on the request path.
+  describe "before_action chain selectors and guards (024.1)" do
+    def ivar_type(controller_source, ivar: "@user", action: "show")
+      # Each call runs a fresh server against the shared `output` buffer,
+      # so a second call in one example would otherwise read the first
+      # call's reply back as its own.
+      output.truncate(0)
+      output.rewind
+      view_uri = "file:///app/views/users/#{action}.html.erb"
+      input =
+        open("file:///app/controllers/users_controller.rb", controller_source) +
+        open(view_uri, "<%= #{ivar} %>\n", language_id: "erb") +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "ovallsp/explainType",
+          params: { textDocument: { uri: view_uri }, position: { line: 0, character: 4 } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+      sent_messages.first[:result][:type]
+    end
+
+    # Both halves, deliberately. Asserting only the excluded action cannot
+    # tell "this declaration excludes `show`" from "this declaration was
+    # not understood at all" -- an unresolved callback also contributes
+    # nothing, so the spec would pass either way.
+    it "honors a literal except: selector, on both sides of it" do
+      source = <<~RUBY
+        class UsersController
+          before_action :load_user, except: :show
+          def load_user = @user = User.new
+          def show; end
+          def index; end
+        end
+      RUBY
+
+      expect(ivar_type(source, action: "show")).to eq("Unknown")
+      expect(ivar_type(source, action: "index")).to eq("User")
+    end
+
+    it "lets the action override a callback's earlier assignment" do
+      expect(ivar_type(<<~RUBY)).to eq("Account")
+        class UsersController
+          before_action :load_user
+          def load_user = @user = User.new
+          def show
+            @user = Account.new
+          end
+        end
+      RUBY
+    end
+
+    it "ignores a callback whose runtime condition cannot be resolved" do
+      expect(ivar_type(<<~RUBY)).to eq("Unknown")
+        class UsersController
+          before_action :load_user, if: :signed_in?
+          def load_user = @user = User.new
+          def show; end
+        end
+      RUBY
+    end
+
+    it "does not claim callback ivars when a conditional skip may execute" do
+      expect(ivar_type(<<~RUBY)).to eq("Unknown")
+        class UsersController
+          before_action :load_user
+          skip_before_action :load_user, if: :admin?
+          def load_user = @user = User.new
+          def show; end
+        end
+      RUBY
+    end
+
+    it "preserves earlier ivars when a later callback method is missing" do
+      expect(ivar_type(<<~RUBY)).to eq("User")
+        class UsersController
+          before_action :load_user
+          before_action :load_missing
+          def load_user = @user = User.new
+          def show; end
+        end
+      RUBY
+    end
+
+    # One declaration naming two callbacks is a separate branch from two
+    # declarations, and nothing else in the suite runs it. The second name
+    # has to be the one that decides the answer -- a fixture where
+    # dropping it changes nothing passes whether the branch loops or not.
+    it "runs every callback named in a single before_action declaration" do
+      expect(ivar_type(<<~RUBY)).to eq("Account")
+        class UsersController
+          before_action :load_user, :promote_user
+          def load_user = @user = User.new
+          def promote_user = @user = Account.new
+          def show; end
+        end
+      RUBY
+    end
+
+    it "skips every callback named in a single skip_before_action declaration" do
+      expect(ivar_type(<<~RUBY)).to eq("Unknown")
+        class UsersController
+          before_action :load_user
+          before_action :promote_user
+          skip_before_action :load_user, :promote_user
+          def load_user = @user = User.new
+          def promote_user = @user = Account.new
+          def show; end
+        end
+      RUBY
+    end
   end
 end

@@ -27,6 +27,15 @@ import {
 } from './clientLifecycle';
 import { notificationLevelFor } from './clientErrorNotifications';
 import { SpawnedCoreProcess } from './coreProcess';
+import {
+  ClientRegistry,
+  RESTART_AGENT_COMMAND,
+  RESTART_SERVER_COMMAND,
+  restartMessageFor,
+  shouldStartAddedFolder,
+  stopClient as stopClientWith,
+  stopSupersededClient
+} from './clientTeardown';
 
 /**
  * Exists solely to keep our own deliberate teardowns out of the user's
@@ -81,6 +90,9 @@ const versionDiagnostics = new Map<string, VersionDiagnostic>();
 // first command overwrites the second command's already-running client,
 // leaving that process unreachable from `clients`.
 const clientTransitions = new KeyedTransitionQueue();
+// The maps clientTeardown.ts operates on, bundled once so teardown reads
+// the same state `activate` writes.
+const registry: ClientRegistry = { clients, watchers, versionDiagnostics };
 const shutdownBarrier = new ShutdownBarrier();
 
 // Task 020's priority order: an explicit path setting always wins outright
@@ -358,10 +370,7 @@ function startClientForFolder(
           outputChannel.appendLine(
             `OvalLSP: Core Server for ${folder.name} finished starting after a stop was requested -- stopping it immediately.`
           );
-          await client.stop()
-            .catch(() => undefined)
-            .then(() => lifecycle.terminateProcess(key, generation))
-            .then(() => lifecycle.markStopped(key, generation));
+          await stopSupersededClient(client, key, generation, lifecycle);
           return;
         }
         runVersionHandshake(folder, client, context, classification, outputChannel);
@@ -578,25 +587,37 @@ function registerEnvironmentCommands(
   context: vscode.ExtensionContext,
   outputChannel: vscode.OutputChannel
 ): void {
-  context.subscriptions.push(
-    vscode.commands.registerCommand('ovallsp.restartServer', async () => {
-      for (const folder of vscode.workspace.workspaceFolders ?? []) {
-        await restartClientForFolder(folder, outputChannel, context);
-      }
-      void vscode.window.showInformationMessage('OvalLSP: Core Server restart requested.');
-    })
-  );
+  // Each restart command names its id exactly once, and its confirmation
+  // is looked up from that same id -- so no call site can pair a command
+  // with the wrong message, which a table plus two hand-written
+  // `showInformationMessage` calls would still have allowed (024.10).
+  // What each command *does* is still the two bodies below, which need
+  // `vscode` and are verified by hand.
+  const registerRestartCommand = (commandId: string, run: () => Promise<boolean>): void => {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(commandId, async () => {
+        if (await run()) {
+          void vscode.window.showInformationMessage(restartMessageFor(commandId)!);
+        }
+      })
+    );
+  };
 
-  context.subscriptions.push(
-    vscode.commands.registerCommand('ovallsp.restartAgent', async () => {
-      const client = clientForActiveEditor(outputChannel);
-      if (!client) {
-        return;
-      }
-      await client.sendRequest('ovallsp/restartAgent', {});
-      void vscode.window.showInformationMessage('OvalLSP: Runtime Agent restart requested.');
-    })
-  );
+  registerRestartCommand(RESTART_SERVER_COMMAND, async () => {
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+      await restartClientForFolder(folder, outputChannel, context);
+    }
+    return true;
+  });
+
+  registerRestartCommand(RESTART_AGENT_COMMAND, async () => {
+    const client = clientForActiveEditor(outputChannel);
+    if (!client) {
+      return false;
+    }
+    await client.sendRequest('ovallsp/restartAgent', {});
+    return true;
+  });
 
   context.subscriptions.push(
     vscode.commands.registerCommand('ovallsp.showLogs', () => outputChannel.show())
@@ -687,33 +708,7 @@ function registerEnvironmentCommands(
 }
 
 function stopClient(key: string): Thenable<void> {
-  const generation = lifecycle.getGeneration(key);
-
-  watchers.get(key)?.dispose();
-  watchers.delete(key);
-  versionDiagnostics.delete(key);
-
-  const client = clients.get(key);
-  if (!client) {
-    lifecycle.requestStop(key);
-    return generation === undefined
-      ? lifecycle.drainRetirements()
-      : lifecycle.terminateProcess(key, generation).then(() => lifecycle.markStopped(key, generation));
-  }
-  clients.delete(key);
-
-  // Recording the stop intent and deciding whether `client.stop()` is
-  // currently safe are one atomic lifecycle operation. Splitting them
-  // previously changed `running` to `stopping` before testing for
-  // `running`, so a normal restart never stopped its old Core process.
-  return lifecycle.requestStopAndStopIfRunning(key, () => client.stop())
-    .catch(() => false)
-    .then(async () => {
-      if (generation !== undefined) {
-        await lifecycle.terminateProcess(key, generation);
-        lifecycle.markStopped(key, generation);
-      }
-    });
+  return stopClientWith(key, registry, lifecycle);
 }
 
 function queueClientTransition(key: string, transition: () => Promise<void>): Promise<void> {
@@ -782,7 +777,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.workspace.onDidChangeWorkspaceFolders((event) => {
       for (const folder of event.added) {
         const key = folder.uri.toString();
-        if (shutdownBarrier.permitsStart() && !clients.has(key)) {
+        if (shouldStartAddedFolder(shutdownBarrier.permitsStart(), clients.has(key))) {
           clients.set(key, startClientForFolder(folder, outputChannel, context));
         }
       }
