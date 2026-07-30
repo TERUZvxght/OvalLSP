@@ -446,7 +446,11 @@ module Ovallsp
       when Prism::TrueNode, Prism::FalseNode then Types::Nominal.new(name: "Boolean")
       when Prism::NilNode then Types::NIL
       when Prism::ArrayNode then eval_array(node, env)
-      when Prism::HashNode then Types::Nominal.new(name: "Hash")
+      # Generic, matching `[]` and `Hash.new`: one kind of value renders
+      # one way, whichever spelling produced it (024.12). Not for dispatch
+      # -- the container rules have no `Hash` entry -- purely so the same
+      # value does not render two ways depending on how it was written.
+      when Prism::HashNode then Types::Generic.new(name: "Hash", type_arg: Types::UNKNOWN)
       when Prism::ParenthesesNode then eval_type(node.body, env)
       when Prism::CallNode then eval_call(node, env)
       when Prism::IfNode, Prism::UnlessNode then eval_conditional(node, env)
@@ -534,8 +538,13 @@ module Ovallsp
           return singleton_method || inherited_signature || constant_type
         end
 
-        return signature_method if signature_method
-
+        # Nothing to return here: the guard above already returned any
+        # signature answer that carried information, so anything still held
+        # in `signature_method` is Unknown -- which is what a project
+        # writing `-> untyped` is saying, and it says nothing. Returning it
+        # switched the method off, skipping the class-level finder and the
+        # source declaration below (024.3). The `.new` branch had always
+        # filtered it; this branch had not.
         class_level = resolve_class_level_finder(node.receiver.full_name, node.name)
         return class_level if class_level
 
@@ -665,11 +674,33 @@ module Ovallsp
         if receiver_type.name == "ClassOf"
           resolve_source_method_member(receiver_type.type_arg, method_name, singleton: true)
         else
-          resolve_relation_member(receiver_type, method_name)
+          # A container value is an instance of its class, so a method the
+          # workspace adds to that class resolves on it (024.12).
+          #
+          # Tried *before* the built-in relation rules, because that is what
+          # Ruby does: a workspace that reopens `Array` and defines its own
+          # `first` has replaced the one the rules model. The rules still
+          # answer everything the workspace does not declare, since
+          # #resolve_source_method_member returns nil when there is no
+          # declaration -- so this only changes the answer where a
+          # workspace really did override the method.
+          #
+          # `Relation` and `CollectionProxy` cannot reach the base lookup
+          # at all (`Types.base_nominal` refuses them), so the order is
+          # decided entirely by `Array`, the one name in both sets.
+          resolve_generic_base_member(receiver_type, method_name) ||
+            resolve_relation_member(receiver_type, method_name)
         end
       when Types::Union
         resolve_union_member(receiver_type, method_name)
       end
+    end
+
+    def resolve_generic_base_member(receiver_type, method_name)
+      base = Types.base_nominal(receiver_type)
+      return nil unless base
+
+      resolve_source_method_member(base, method_name)
     end
 
     # A plain, hand-written instance method (not an Active Record column/
@@ -802,6 +833,10 @@ module Ovallsp
         return Types.normalize_union(resolved) unless resolved.empty?
         return nil
       end
+      # Runtime evidence is recorded against the class, so it applies to a
+      # value typed as that class' container form too -- the same reading
+      # #resolve_instance_level uses (024.12).
+      receiver_type = Types.base_nominal(receiver_type)
       return nil unless receiver_type.is_a?(Types::Nominal)
 
       owner = receiver_type.name.start_with?("::") ? receiver_type.name : "::#{receiver_type.name}"
@@ -1160,7 +1195,13 @@ module Ovallsp
         return unless %i[before_action skip_before_action].include?(node.name)
 
         arguments = node.arguments&.arguments || []
-        options = arguments.last.is_a?(Prism::KeywordHashNode) ? arguments.pop : nil
+        # Not `pop`: that array belongs to Prism, so consuming the options
+        # here destroyed the declaration's own `only:`/`except:` selector
+        # in the tree. Every caller re-parses today, which is the only
+        # reason it never showed -- and that is the callers' property, not
+        # this method's.
+        options = arguments.last.is_a?(Prism::KeywordHashNode) ? arguments.last : nil
+        arguments = arguments[0...-1] if options
         selector = selector_status(options)
         return if selector == :excluded
 

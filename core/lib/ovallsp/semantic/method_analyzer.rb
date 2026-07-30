@@ -222,8 +222,14 @@ module Ovallsp
         when Prism::SymbolNode then literal(Types::Nominal.new(name: "Symbol"))
         when Prism::TrueNode, Prism::FalseNode then literal(Types::Nominal.new(name: "Boolean"))
         when Prism::NilNode then flow(Types::NIL, false)
-        when Prism::ArrayNode then literal(Types::Nominal.new(name: "Array"))
-        when Prism::HashNode then literal(Types::Nominal.new(name: "Hash"))
+        # Generic with an unknown element type: otherwise hovering `{}`
+        # and hovering a method that returns `{}` disagree, which is 024.12
+        # one call away. The element type is genuinely unknown here --
+        # unlike LocalInferencer, this analyzer does not evaluate the
+        # elements, so `["a"]` summarises as `Array[Unknown]` where the
+        # literal itself infers `Array[String]`.
+        when Prism::ArrayNode then literal(Types::Generic.new(name: "Array", type_arg: Types::UNKNOWN))
+        when Prism::HashNode then literal(Types::Generic.new(name: "Hash", type_arg: Types::UNKNOWN))
         else
           ctx[:degraded] = true
           flow(Types::UNKNOWN, false)
