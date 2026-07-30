@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>セキュリティとプライバシー — OvalLSP</title>
+<meta name="description" content="OvalLSP の脅威モデル、ワークスペース信頼の境界、プラグインのサンドボックス、ログの秘匿処理、そしてプライバシー方針。テレメトリなし、実行時のネットワークアクセスなし。">
+<link rel="canonical" href="https://teruzvxght.github.io/OvalLSP/ja/security.html">
+<link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/security.html">
+<link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/security.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="OvalLSP">
+<meta property="og:title" content="セキュリティとプライバシー — OvalLSP">
+<meta property="og:description" content="テレメトリなし、実行時のネットワークアクセスなし。Runtime Agent はフェイルクローズで信頼境界を守ります。">
+<meta property="og:image" content="https://teruzvxght.github.io/OvalLSP/assets/img/icon.png">
+<meta name="theme-color" content="#0a090c">
+<link rel="icon" href="../assets/img/icon.png">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script>
+  document.documentElement.classList.add("js");
+  (function () {
+    try {
+      var stored = localStorage.getItem("ovallsp-theme");
+      var light = stored ? stored === "light"
+        : window.matchMedia("(prefers-color-scheme: light)").matches;
+      if (light) document.documentElement.setAttribute("data-theme", "light");
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">本文へスキップ</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img class="brand-mark" src="../assets/img/icon.png" width="28" height="28" alt="" decoding="async">
+      <span>OvalLSP</span>
+      <span class="brand-sub">Ruby Semantic LSP</span>
+    </a>
+
+    <nav class="nav" id="site-nav" aria-label="メイン">
+      <a href="index.html">概要</a>
+      <a href="capabilities.html">機能マトリクス</a>
+      <a href="roadmap.html">ロードマップ</a>
+      <a href="getting-started.html">導入</a>
+      <a href="security.html" aria-current="page">セキュリティとプライバシー</a>
+    </nav>
+
+    <div class="header-tools">
+      <a class="lang-switch" href="../security.html" hreflang="en" lang="en" data-lang-switch="en">EN</a>
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="配色テーマを切り替える">
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>
+        </svg>
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 14.5A8.2 8.2 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/>
+        </svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/TERUZvxght/OvalLSP" aria-label="GitHub の OvalLSP">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.8 18.3 5 18.3 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/>
+        </svg>
+      </a>
+      <button class="icon-btn nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="ナビゲーションを開閉">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="page-hero">
+    <div class="wrap">
+      <p class="breadcrumb"><a href="index.html">ホーム</a><span>/</span>セキュリティとプライバシー</p>
+      <h1>ローカルのツールであり、ローカルに留まります</h1>
+      <p class="lede">
+        OvalLSP はネットワークのリスナーを持たず、実行時にネットワークリクエストを行いません。この種のツールで実際に問題になるリスクはそれとは別のものであり、「起こらないはず」で済ませず、明示的に扱っています。
+      </p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="wrap">
+      <div class="grid grid--3">
+        <div class="stat">
+          <span class="stat-value">テレメトリなし</span>
+          <span class="stat-label">分析 SDK も、クラッシュレポータも、利用状況の追跡もありません</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">通信なし</span>
+          <span class="stat-label">Core にも拡張機能にも送信系の HTTP クライアントは存在しません</span>
+        </div>
+        <div class="stat">
+          <span class="stat-value">アップロードなし</span>
+          <span class="stat-label">ソースコードが端末の外に出ることはありません</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="threat-model">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">脅威モデル</span>
+        <h2>ここで本当に問題になる 3 つのリスク</h2>
+        <p>
+          stdio で VS Code と話す言語サーバーに、遠隔からの攻撃面はほとんどありません。代わりにあるのは、「どこか他所から来たもの」を実行し、ログに書く習性です。
+        </p>
+      </div>
+
+      <div class="grid grid--3">
+        <article class="card">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 4.5 6.2v5.4c0 4.6 3.1 8.4 7.5 9.6 4.4-1.2 7.5-5 7.5-9.6V6.2z"/><path d="M9.5 12.2l1.8 1.8 3.4-3.6"/></svg>
+          </div>
+          <h3>信頼されていないワークスペース</h3>
+          <p>
+            他人のリポジトリを開いたり、悪意ある Pull Request をチェックアウトしたりしただけで、
+            Core プロセスや開発者のマシンが侵害されてはなりません。
+          </p>
+        </article>
+
+        <article class="card">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M8 14h5"/></svg>
+          </div>
+          <h3>信頼されていないプラグイン</h3>
+          <p>
+            サードパーティ製の OvalLSP プラグインが、Core の内部状態を乗っ取ったり、
+            LSP のプロトコルストリームそのものに手を出したりできてはなりません。
+          </p>
+        </article>
+
+        <article class="card">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5h16M4 12h11M4 18.5h7"/><circle cx="18" cy="17" r="3.2"/><path d="M20.4 19.4 22 21"/></svg>
+          </div>
+          <h3>ログへの秘密情報の流出</h3>
+          <p>
+            Core は対象 Rails アプリの例外テキストをそのままログに出すことが多く、そこはまさに資格情報が現れやすい場所です。
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="mitigations">
+    <div class="wrap wrap--narrow">
+      <div class="section-head">
+        <span class="eyebrow">対策</span>
+        <h2>それぞれに実際に何をしているか</h2>
+      </div>
+
+      <ul class="feature-list" style="gap:22px">
+        <li>
+          <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
+          <span>
+            <strong>Runtime Agent はフェイルクローズです。</strong>
+            対象アプリケーション自身のコードを実行しうるため、VS Code でワークスペースが明示的に
+            <em>信頼済み</em> とされたときにのみ起動します。信頼シグナルが欠けている、
+            <code>false</code> である、そもそも存在しない — いずれの場合も「起動しない」として扱い、既定で許可することはありません。
+          </span>
+        </li>
+        <li>
+          <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
+          <span>
+            <strong>プラグインは本物の OS プロセス境界の内側で動きます。</strong>
+            同一プロセス内の名前空間的なサンドボックスではなく、実際の fork です。
+            Core の生きた LSP トランスポートにも内部インデックスのオブジェクトにもアクセスできず、境界を越えるのは Marshal 可能な素のデータだけです。
+          </span>
+        </li>
+        <li>
+          <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
+          <span>
+            <strong>最も権限の高いランタイムプラグインは、未信頼のワークスペースでは一切ロードされません。</strong>
+          </span>
+        </li>
+        <li>
+          <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
+          <span>
+            <strong>ログはどこかに書き出される前に秘匿処理されます。</strong>
+            Bearer トークン、Basic 認証、データベース接続文字列、既知のベンダーキー形式、ラベル付きの資格情報は、すべて先に秘匿パイプラインを通ります。
+          </span>
+        </li>
+        <li>
+          <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
+          <span>
+            <strong>すべてのプロトコル境界でバージョンの完全一致を要求します。</strong>
+            Agent ↔ Core も、プラグイン ↔ Core も同様で、不一致は許容せず拒否します。
+          </span>
+        </li>
+      </ul>
+
+      <div class="callout mt-3">
+        脅威モデルと対策の完全な一覧は <code>docs/SECURITY_CHECKLIST.md</code> にあり、その要約が
+        <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.ja.md">SECURITY.ja.md</a>
+        にあります。
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="privacy">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">プライバシー</span>
+        <h2>端末の外に出るもの: ありません</h2>
+        <p>
+          これは宣言ではなく、実際のコードベースに対して検証されています。
+          Core Server にも拡張機能にも、ネットワーククライアントのコード、テレメトリ／分析ライブラリ、送信系の HTTP 呼び出しは存在しません。
+        </p>
+      </div>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <h3>プロジェクト内で唯一ネットワークを使う場所</h3>
+          <p>
+            <strong>パッケージング時、リリースをビルドするマシンでのみ:</strong>
+            VSIX に同梱するために、Core の実行時依存（Prism、RBS）を RubyGems.org から取得します。エンドユーザーの端末で起きることは決してありません。
+          </p>
+          <p>
+            <strong>VS Code 自身の Marketplace 更新</strong>は VS Code の挙動であり、OvalLSP のものではありません。それ以外に自動ダウンロードや自己更新の仕組みはありません — Core は拡張機能の中に同梱され、拡張機能と一緒にアトミックに更新されます。
+          </p>
+        </div>
+        <div class="card">
+          <h3>ディスクに書かれるもの</h3>
+          <p>
+            出力チャンネルと Core の stderr には、OvalLSP 自身の動作に関する診断メッセージ（起動、インデックスの進行、エラー、バージョンハンドシェイク）が出ます。これらは VS Code の出力パネルに留まり、どこにも送信されません。
+          </p>
+          <p>
+            OvalLSP 自身がディスクに書くのは <code>~/.cache/ovallsp/</code> の永続的な解析キャッシュだけです。内容は解析済みの宣言と型で、ワークスペースとツールチェーンのバージョンでキー付けされています。ソースコードの中身ではなく、どこにも送信されません。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="observation">
+    <div class="wrap wrap--narrow">
+      <span class="eyebrow">オプトイン</span>
+      <h2>ランタイム型観測</h2>
+      <p class="lede">
+        <strong>OvalLSP: Run Tests with Type Observation</strong> は、あなた自身のテストスイートを実行し、そこで実際に通ったメソッド呼び出しの「形」を記録して、実測の根拠を型エンジンに戻します。
+      </p>
+      <p>
+        記録するのは<em>形</em>です — どのクラスのどのメソッドが、いくつのどんな型の引数で呼ばれ、何を返したか。引数や戻り値の<em>値</em>は決して記録しません。実行されるのはあなたが明示的に起動したときだけで、コマンドは
+        <code>ovallsp.observation.testCommand</code>（既定値 <code>bundle exec rspec</code>）に従います。記録された内容はすべて端末内に留まります。
+        <strong>OvalLSP: Clear Observed Types</strong> で破棄でき、
+        <strong>OvalLSP: Show Type Evidence</strong> でその推論が何に基づいたかを確認できます。
+      </p>
+      <div class="callout callout--info mt-2">
+        完全な記述は
+        <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/PRIVACY.ja.md">PRIVACY.ja.md</a>
+        にあり、観測が<em>記録しないもの</em>も明記されています。
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="reporting">
+    <div class="wrap wrap--narrow prose">
+      <span class="eyebrow">報告</span>
+      <h2>脆弱性を見つけたら</h2>
+      <p>
+        公開 Issue ではなく、非公開で報告してください。GitHub の非公開脆弱性報告（リポジトリの <strong>Security</strong> タブ →
+        <strong>Report a vulnerability</strong>）をご利用ください。
+      </p>
+      <p>次の情報を含めていただけると助かります。</p>
+      <ul>
+        <li>脆弱性の説明と、想定される影響。</li>
+        <li>再現手順（関連する場合は、最小の Ruby / Rails プロジェクトのフィクスチャ）。</li>
+        <li>
+          拡張機能のバージョン、Core Server のバージョン、実行環境。
+          <strong>OvalLSP: Show Version Information</strong> の出力が良い出発点になります。
+        </li>
+      </ul>
+      <p>
+        報告にはできる限り速やかに受領の連絡をし、内容を把握したうえで対応時期をお伝えします。対応が済むまでは公開を控えていただけますようお願いします。
+      </p>
+
+      <div class="btn-row mt-3">
+        <a class="btn btn--primary" href="https://github.com/TERUZvxght/OvalLSP/security">脆弱性を報告する</a>
+        <a class="btn btn--ghost" href="https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.ja.md">ポリシー全文を読む</a>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-about">
+        <a class="brand" href="index.html">
+          <img class="brand-mark" src="../assets/img/icon.png" width="28" height="28" alt="" decoding="async">
+          <span>OvalLSP</span>
+        </a>
+        <p>
+          Ruby / Rails のためのセマンティック言語サーバーと、それと会話する VS Code 拡張機能。
+          MIT ライセンス、オープンに開発されています。
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h4>プロダクト</h4>
+        <ul>
+          <li><a href="capabilities.html">機能マトリクス</a></li>
+          <li><a href="roadmap.html">ロードマップ</a></li>
+          <li><a href="getting-started.html">導入</a></li>
+          <li><a href="security.html">セキュリティとプライバシー</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>ドキュメント</h4>
+        <ul>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/README.ja.md">README</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SUPPORT_MATRIX.ja.md">サポートマトリクス</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md">既知の制限</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>プロジェクト</h4>
+        <ul>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP">GitHub</a></li>
+          <li><a href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">Marketplace</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md">サポート</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/CODE_OF_CONDUCT.ja.md">行動規範</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>© <span data-year>2026</span> OvalLSP contributors · MIT License</p>
+      <p>Microsoft、GitHub、Shopify、Ruby および Rails プロジェクトとは無関係です。</p>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/js/site.js" defer></script>
+</body>
+</html>

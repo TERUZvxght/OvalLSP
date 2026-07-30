@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://teruzvxght.github.io/OvalLSP/sitemap.xml

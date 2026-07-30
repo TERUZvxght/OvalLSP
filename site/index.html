@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OvalLSP — a semantic language server for Ruby and Rails</title>
+<meta name="description" content="OvalLSP is a semantic Ruby/Rails language server for VS Code. Real parsing with Prism, a workspace-wide index, and a Runtime Agent that asks your Rails app what its routes and models actually are. No telemetry, no network access.">
+<link rel="canonical" href="https://teruzvxght.github.io/OvalLSP/">
+<link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/">
+<link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/">
+<link rel="alternate" hreflang="x-default" href="https://teruzvxght.github.io/OvalLSP/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="OvalLSP">
+<meta property="og:title" content="OvalLSP — a semantic language server for Ruby and Rails">
+<meta property="og:description" content="Real parsing with Prism, a workspace-wide index, and a Runtime Agent that asks your Rails app what its routes and models actually are.">
+<meta property="og:url" content="https://teruzvxght.github.io/OvalLSP/">
+<meta property="og:image" content="https://teruzvxght.github.io/OvalLSP/assets/img/icon.png">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0a090c">
+<link rel="icon" href="assets/img/icon.png">
+<link rel="apple-touch-icon" href="assets/img/icon.png">
+<link rel="stylesheet" href="assets/css/site.css">
+<script>
+  document.documentElement.classList.add("js");
+  (function () {
+    try {
+      var stored = localStorage.getItem("ovallsp-theme");
+      var light = stored ? stored === "light"
+        : window.matchMedia("(prefers-color-scheme: light)").matches;
+      if (light) document.documentElement.setAttribute("data-theme", "light");
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img class="brand-mark" src="assets/img/icon.png" width="28" height="28" alt="" decoding="async">
+      <span>OvalLSP</span>
+      <span class="brand-sub">Ruby Semantic LSP</span>
+    </a>
+
+    <nav class="nav" id="site-nav" aria-label="Main">
+      <a href="index.html" aria-current="page">Overview</a>
+      <a href="capabilities.html">Capabilities</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="security.html">Security &amp; privacy</a>
+    </nav>
+
+    <div class="header-tools">
+      <a class="lang-switch" href="ja/index.html" hreflang="ja" lang="ja" data-lang-switch="ja">日本語</a>
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="Switch colour theme">
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>
+        </svg>
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 14.5A8.2 8.2 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/>
+        </svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/TERUZvxght/OvalLSP" aria-label="OvalLSP on GitHub">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.8 18.3 5 18.3 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/>
+        </svg>
+      </a>
+      <button class="icon-btn nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="Toggle navigation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-copy">
+        <div class="badge-row">
+          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.1.10</span>
+          <span class="badge">VS Code extension</span>
+          <span class="badge">MIT</span>
+        </div>
+
+        <h1>Ruby the editor<br><span class="accent">actually understands.</span></h1>
+
+        <p class="hero-lede">
+          OvalLSP is a semantic language server for Ruby and Rails. It parses your code
+          with <a href="https://github.com/ruby/prism">Prism</a>, indexes the whole
+          workspace, and — in a trusted Rails workspace — asks your application itself
+          what its routes and models really are. No regex guessing, no telemetry,
+          no network access at runtime.
+        </p>
+
+        <div class="btn-row mt-2">
+          <a class="btn btn--primary" href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 12.9 8.1 17l1.6-1.3-3.4-2.8 3.4-2.8L8.1 8.8 3 12.9zm18 0L15.9 8.8l-1.6 1.3 3.4 2.8-3.4 2.8 1.6 1.3L21 12.9zM13.7 5l-1.9-.5-2.6 14.9 1.9.5L13.7 5z"/></svg>
+            Install from the Marketplace
+          </a>
+          <a class="btn btn--ghost" href="capabilities.html">
+            See what is verified
+          </a>
+        </div>
+
+        <p class="hero-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M12 8.5v5M12 16.8v.2"/><circle cx="12" cy="12" r="9.2"/></svg>
+          <span>
+            This is a Pre-Release Preview. The published build targets
+            <strong>macOS on Apple Silicon</strong> with <strong>Ruby 3.4.x</strong> only —
+            see <a href="getting-started.html#requirements">requirements</a> before installing.
+          </span>
+        </p>
+      </div>
+
+      <div class="hero-visual">
+        <div class="editor" role="img" aria-label="Editor mock-up: hovering the comments call in a controller shows it returns a CollectionProxy of Comment, resolved from the has_many association the Runtime Agent reported.">
+          <div class="editor-bar">
+            <span class="editor-dots"><i></i><i></i><i></i></span>
+            <span class="editor-file">app/controllers/articles_controller.rb</span>
+          </div>
+          <div class="editor-body">
+            <ol class="code-lines">
+              <li><span class="t-key">class</span> <span class="t-cls">ArticlesController</span> &lt; <span class="t-cls">ApplicationController</span></li>
+              <li>  <span class="t-key">before_action</span> <span class="t-sym">:set_article</span>, only: [<span class="t-sym">:show</span>, <span class="t-sym">:edit</span>]</li>
+              <li></li>
+              <li>  <span class="t-key">def</span> <span class="t-mth">show</span></li>
+              <li class="hl">    <span class="t-var">@comments</span> = <span class="t-var">@article</span>.<span class="t-mth">comments</span>.<span class="t-mth">published</span></li>
+              <li class="annot">
+                <div class="hover-card">
+                  <div class="hover-sig"><span class="t-mth">comments</span> → <span class="t-cls">ActiveRecord::Associations::CollectionProxy</span>[<span class="t-cls">Comment</span>]</div>
+                  <div class="hover-sig" style="margin-top:5px"><span class="t-com">has_many :comments, dependent: :destroy</span></div>
+                  <div class="hover-meta">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>
+                    <span>association reported by the <b>Runtime Agent</b> · app/models/article.rb:14</span>
+                  </div>
+                </div>
+              </li>
+              <li>  <span class="t-key">end</span></li>
+              <li></li>
+              <li>  <span class="t-key">private</span></li>
+              <li></li>
+              <li>  <span class="t-key">def</span> <span class="t-mth">set_article</span></li>
+              <li>    <span class="t-var">@article</span> = <span class="t-cls">Article</span>.<span class="t-mth">find</span>(<span class="t-var">params</span>[<span class="t-sym">:id</span>])</li>
+              <li>  <span class="t-key">end</span></li>
+              <li><span class="t-key">end</span></li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STAT STRIP ============ -->
+  <section class="section section--tight section--alt">
+    <div class="wrap">
+      <div class="grid grid--4">
+        <div class="stat reveal">
+          <span class="stat-value">LSP 3.17</span>
+          <span class="stat-label">over stdio, Content-Length framed</span>
+        </div>
+        <div class="stat reveal">
+          <span class="stat-value">0 bytes</span>
+          <span class="stat-label">of telemetry, ever — verified against the code</span>
+        </div>
+        <div class="stat reveal">
+          <span class="stat-value">Prism</span>
+          <span class="stat-label">the real Ruby parser, not a heuristic one</span>
+        </div>
+        <div class="stat reveal">
+          <span class="stat-value">E2E</span>
+          <span class="stat-label">every ✅ has a test that fails when it breaks</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FEATURES ============ -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">What it does</span>
+        <h2>Language features that come from understanding the code</h2>
+        <p>
+          Every answer below is derived from a real parse tree, a workspace-wide index of
+          declarations, and — where Rails is involved — the application's own runtime
+          introspection. Where OvalLSP cannot know something, it says nothing rather
+          than guessing.
+        </p>
+      </div>
+
+      <div class="grid grid--3">
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H10l-4 4v-4H4z"/></svg>
+          </div>
+          <h3>Hover with inferred types</h3>
+          <p>
+            Literals, constructors, locals, method returns, Active Record finders and
+            instance variables carried from a controller into its ERB view. Backed by a
+            local type inference engine with RBS/RBI signature integration.
+          </p>
+        </article>
+
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9M4 12h13M4 18h7"/><path d="M17 15l3 3-3 3"/></svg>
+          </div>
+          <h3>Completion that knows your app</h3>
+          <p>
+            Model columns and associations, the Active Record instance and class API,
+            <code>*_path</code>/<code>*_url</code> route helpers, stdlib methods from RBS,
+            and every class in your workspace — inserted as a call template with tab stops.
+          </p>
+        </article>
+
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>
+          </div>
+          <h3>Navigation across the workspace</h3>
+          <p>
+            Go to definition for workspace methods, model columns and associations, and
+            into the RBS signature for the stdlib. Find references, guarded rename,
+            document symbols and workspace symbols on the same index.
+          </p>
+        </article>
+
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.5 18a1.7 1.7 0 0 0 1.5 2.6h16a1.7 1.7 0 0 0 1.5-2.6L13.7 4.3a1.7 1.7 0 0 0-3 0z"/><path d="M12 9.5v4M12 17.2v.2"/></svg>
+          </div>
+          <h3>Diagnostics that refuse to guess</h3>
+          <p>
+            Syntax errors, unknown methods on a class whose whole ancestry is known,
+            unknown route helpers, and the wrong number of arguments. On a class that
+            inherits from a gem, the check stays deliberately silent — reporting there
+            would mean guessing.
+          </p>
+        </article>
+
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7.5h.01M7 17h.01"/></svg>
+          </div>
+          <h3>A Runtime Agent, on your terms</h3>
+          <p>
+            In a trusted workspace containing <code>bin/rails</code>, a background agent
+            introspects your own routes and models. In an untrusted workspace it never
+            starts, and every Rails-derived feature degrades to its static answer by design.
+          </p>
+        </article>
+
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 4.3v8.6L12 20.2 4.5 15.9V7.3z"/><path d="M12 12v8.2M12 12 4.5 7.7M12 12l7.5-4.3"/></svg>
+          </div>
+          <h3>Extensible, and sandboxed</h3>
+          <p>
+            A Plugin API for both static and runtime plugins, executed in an
+            OS-process-isolated sandbox, plus opt-in runtime type observation that records
+            the call shapes your own test suite exercises — shapes only, never values.
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RAILS ============ -->
+  <section class="section section--alt" id="rails">
+    <div class="wrap">
+      <div class="grid grid--2" style="align-items:center; gap:clamp(28px,4vw,56px)">
+        <div>
+          <span class="eyebrow">Rails</span>
+          <h2>It doesn't infer your schema. It asks.</h2>
+          <p class="lede">
+            A Rails application's real shape lives in code that only runs: routes drawn at
+            boot, columns read from the database, associations declared through DSLs. Static
+            analysis alone has to approximate all of it.
+          </p>
+          <p>
+            When a workspace root contains <code>bin/rails</code> and the workspace is
+            trusted, OvalLSP starts a Runtime Agent on a background thread, takes a snapshot
+            of the routes and models your application actually defines, and feeds that into
+            completion, definition and type inference. It never blocks on the agent: if the
+            app can't be introspected, the agent crashes, or there is no Rails at all,
+            OvalLSP carries on with static analysis alone.
+          </p>
+          <ul class="feature-list mt-2">
+            <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span><strong>Columns and associations</strong> with their real types, from the real schema.</span></li>
+            <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span><strong>Route helpers</strong> — completion, signature help and go-to-definition into <code>config/routes.rb</code>.</span></li>
+            <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span><strong>Rails DSLs</strong> — <code>enum</code>, <code>scope</code> and <code>delegate</code> resolved to the methods they define.</span></li>
+            <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span><strong>Controller → view</strong> — an <code>@ivar</code> in an ERB template gets the type its action assigned.</span></li>
+            <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span><strong>Reopened gem classes</strong> — <code>class ActiveSupport::TestCase</code> in your test helper is recognised as a reopening, not a definition, so it produces no false diagnostics.</span></li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="editor" role="img" aria-label="Editor mock-up: completion after a dot on an instance variable in an ERB template lists the model's real columns, associations and enum predicates.">
+            <div class="editor-bar">
+              <span class="editor-dots"><i></i><i></i><i></i></span>
+              <span class="editor-file">app/views/articles/show.html.erb</span>
+            </div>
+            <div class="editor-body">
+              <ol class="code-lines">
+                <li>&lt;<span class="t-key">h1</span>&gt;&lt;%= <span class="t-var">@article</span>.<span class="t-mth">title</span> %&gt;&lt;/<span class="t-key">h1</span>&gt;</li>
+                <li></li>
+                <li class="hl">&lt;%= <span class="t-var">@article</span>.<span class="t-var">|</span></li>
+                <li class="annot">
+                  <div class="completion">
+                    <div class="completion-item is-active"><span class="ci-kind k-col">C</span> published_at <span class="ci-detail">ActiveSupport::TimeWithZone?</span></div>
+                    <div class="completion-item"><span class="ci-kind k-col">C</span> title <span class="ci-detail">String</span></div>
+                    <div class="completion-item"><span class="ci-kind k-assoc">A</span> author <span class="ci-detail">belongs_to → Author</span></div>
+                    <div class="completion-item"><span class="ci-kind k-assoc">A</span> comments <span class="ci-detail">has_many → Comment</span></div>
+                    <div class="completion-item"><span class="ci-kind">M</span> published? <span class="ci-detail">enum :status</span></div>
+                  </div>
+                </li>
+                <li></li>
+                <li>&lt;%= <span class="t-mth">link_to</span> <span class="t-str">"Edit"</span>, <span class="t-mth">edit_article_path</span>(<span class="t-var">@article</span>) %&gt;</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="callout callout--info mt-2">
+            <strong>Trust is the boundary.</strong> The Runtime Agent executes your
+            workspace's own Rails and Bundler code, so it only ever starts once you have
+            marked the workspace trusted in VS Code. Everything static keeps working either way.
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EVIDENCE ============ -->
+  <section class="section" id="evidence">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">The honest part</span>
+        <h2>A ✅ means a test proves it. Nothing else does.</h2>
+        <p>
+          This project shipped several versions in a row that installed cleanly, started
+          cleanly, reported healthy status — and did almost nothing a user would notice.
+          Every check answered a question no user asks. So the capability list was rewritten
+          as things a user does and must see, and each one is verified end to end against a
+          real Rails application.
+        </p>
+      </div>
+
+      <div class="table-scroll reveal">
+        <table class="data">
+          <caption class="visually-hidden">Selected capabilities and their verification status per environment</caption>
+          <thead>
+            <tr>
+              <th scope="col">Capability</th>
+              <th scope="col" class="col-status">Rails, trusted</th>
+              <th scope="col" class="col-status">Rails, untrusted</th>
+              <th scope="col" class="col-status">Plain Ruby</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Hover: literals, constructors, locals</td>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td>
+              <td class="col-status"><span class="mark mark--warn">Unverified</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+            <tr>
+              <td>Completion: model columns and associations</td>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td>
+              <td class="col-status"><span class="mark mark--none">n/a</span></td>
+              <td class="col-status"><span class="mark mark--none">n/a</span></td>
+            </tr>
+            <tr>
+              <td>Go to definition: workspace methods</td>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td>
+              <td class="col-status"><span class="mark mark--warn">Unverified</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+            <tr>
+              <td>Diagnostics: unknown route helper</td>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td>
+              <td class="col-status"><span class="mark mark--none">n/a</span></td>
+              <td class="col-status"><span class="mark mark--none">n/a</span></td>
+            </tr>
+            <tr>
+              <td>Find references, rename, workspace symbols</td>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td>
+              <td class="col-status"><span class="mark mark--warn">Unverified</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+            <tr>
+              <td>Completion at the start of an identifier</td>
+              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+            <tr>
+              <td>Diagnostics across the whole project, not just open files</td>
+              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+            <tr>
+              <td>Inlay hints (inferred types, parameter names)</td>
+              <td class="col-status"><span class="mark mark--plan">0.3.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">0.3.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="legend">
+        <div><span class="mark mark--yes">Verified</span> a test fails if it breaks</div>
+        <div><span class="mark mark--warn">Unverified</span> may well work; nothing promises it</div>
+        <div><span class="mark mark--plan">0.2.0</span> not built yet — the release it is planned for</div>
+        <div><span class="mark mark--none">n/a</span> needs Rails data no agent can supply here</div>
+      </div>
+
+      <div class="btn-row mt-3">
+        <a class="btn btn--ghost btn--sm" href="capabilities.html">Full capability matrix — 39 rows</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ARCHITECTURE ============ -->
+  <section class="section section--alt" id="architecture">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Architecture</span>
+        <h2>Four processes, one of which is yours</h2>
+        <p>
+          The extension is a thin LSP client. All the analysis lives in a standalone Ruby
+          Core Server, which ships inside the extension and updates atomically with it.
+        </p>
+      </div>
+
+      <div class="arch reveal">
+        <svg viewBox="0 0 925 360" role="img" aria-labelledby="archTitle archDesc">
+          <title id="archTitle">OvalLSP architecture</title>
+          <desc id="archDesc">VS Code talks to the OvalLSP extension, which speaks LSP 3.17 over stdio to the Ruby Core Server. The Core Server drives a static engine, and — only in a trusted workspace — a Runtime Agent that introspects your Rails application. Nothing leaves the machine.</desc>
+          <defs>
+            <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" class="arch-arrow"/>
+            </marker>
+            <marker id="arwA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" class="arch-arrow-accent"/>
+            </marker>
+          </defs>
+
+          <!-- Row 1 -->
+          <rect x="10" y="44" width="140" height="84" rx="12" class="arch-fill arch-stroke"/>
+          <text x="80" y="80" text-anchor="middle" class="arch-text">VS Code</text>
+          <text x="80" y="100" text-anchor="middle" class="arch-sub">editor host</text>
+
+          <rect x="215" y="44" width="190" height="84" rx="12" class="arch-fill arch-stroke"/>
+          <text x="310" y="80" text-anchor="middle" class="arch-text">OvalLSP extension</text>
+          <text x="310" y="100" text-anchor="middle" class="arch-sub">TypeScript · LSP client</text>
+
+          <rect x="500" y="44" width="200" height="84" rx="12" class="arch-fill-2 arch-stroke arch-stroke-accent"/>
+          <text x="600" y="80" text-anchor="middle" class="arch-text">Core Server</text>
+          <text x="600" y="100" text-anchor="middle" class="arch-sub">Ruby · ovallsp --stdio</text>
+
+          <rect x="775" y="44" width="140" height="84" rx="12" class="arch-fill arch-stroke"/>
+          <text x="845" y="74" text-anchor="middle" class="arch-text">Runtime Agent</text>
+          <text x="845" y="94" text-anchor="middle" class="arch-sub">your app's own</text>
+          <text x="845" y="109" text-anchor="middle" class="arch-sub">Ruby process</text>
+
+          <!-- Row 1 connections -->
+          <line x1="152" y1="86" x2="211" y2="86" class="arch-line" marker-end="url(#arw)"/>
+          <line x1="407" y1="86" x2="496" y2="86" class="arch-line" marker-end="url(#arw)" marker-start="url(#arw)"/>
+          <text x="452" y="72" text-anchor="middle" class="arch-label">LSP 3.17</text>
+          <text x="452" y="106" text-anchor="middle" class="arch-label">stdio</text>
+
+          <line x1="702" y1="86" x2="771" y2="86" class="arch-line-accent" marker-end="url(#arwA)" marker-start="url(#arwA)"/>
+          <text x="737" y="70" text-anchor="middle" class="arch-label">JSON-RPC</text>
+          <text x="737" y="108" text-anchor="middle" class="arch-label">trusted only</text>
+
+          <!-- Row 2 -->
+          <line x1="600" y1="130" x2="600" y2="196" class="arch-line" marker-end="url(#arw)"/>
+          <rect x="440" y="200" width="320" height="68" rx="12" class="arch-fill arch-stroke"/>
+          <text x="600" y="228" text-anchor="middle" class="arch-text">Static engine</text>
+          <text x="600" y="248" text-anchor="middle" class="arch-sub">Prism declarations · workspace index · RBS/RBI · type inference</text>
+
+          <line x1="845" y1="130" x2="845" y2="196" class="arch-line-accent" marker-end="url(#arwA)"/>
+          <rect x="775" y="200" width="140" height="68" rx="12" class="arch-fill arch-stroke"/>
+          <text x="845" y="228" text-anchor="middle" class="arch-text">Your Rails app</text>
+          <text x="845" y="248" text-anchor="middle" class="arch-sub">routes · models</text>
+
+          <!-- Cache -->
+          <line x1="440" y1="234" x2="330" y2="234" class="arch-line" marker-end="url(#arw)" marker-start="url(#arw)"/>
+          <rect x="170" y="200" width="160" height="68" rx="12" class="arch-fill arch-stroke" stroke-dasharray="5 4"/>
+          <text x="250" y="228" text-anchor="middle" class="arch-text">Persistent cache</text>
+          <text x="250" y="248" text-anchor="middle" class="arch-sub">~/.cache/ovallsp</text>
+
+          <!-- Footnote band -->
+          <rect x="10" y="300" width="905" height="40" rx="10" fill="none" class="arch-stroke" stroke-dasharray="4 5"/>
+          <text x="462" y="325" text-anchor="middle" class="arch-sub">Every box above runs on your machine. OvalLSP makes no network request at runtime.</text>
+        </svg>
+      </div>
+
+      <div class="grid grid--3 mt-3">
+        <div class="card card--flat reveal">
+          <h3>No second download</h3>
+          <p>
+            The Core Server and its own runtime dependencies (Prism, RBS) ship inside the
+            VSIX. No <code>bundle install</code>, no repository checkout, no background
+            updater. Update the extension and the Core moves with it, atomically.
+          </p>
+        </div>
+        <div class="card card--flat reveal">
+          <h3>A handshake before any work</h3>
+          <p>
+            Extension and Core exchange version, protocol, build and Ruby/platform
+            information at startup. On a mismatch OvalLSP stops and explains, rather than
+            serving a half-broken session.
+          </p>
+        </div>
+        <div class="card card--flat reveal">
+          <h3>Nothing survives the window</h3>
+          <p>
+            Core Server and Runtime Agent lifetimes are tied to the workspace that started
+            them, with crash-loop protection and exponential-backoff restart — and a
+            verified guarantee that closing the window leaves no process behind.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LIMITS ============ -->
+  <section class="section" id="limits">
+    <div class="wrap wrap--narrow">
+      <div class="section-head">
+        <span class="eyebrow">Deliberate limits</span>
+        <h2>What OvalLSP is not</h2>
+        <p>
+          It is a confidence-aware heuristic engine for editor features — not a Ruby type
+          checker. These are design boundaries, not open bugs.
+        </p>
+      </div>
+
+      <div class="grid" style="gap:14px">
+        <div class="callout reveal">
+          <h4>Dynamic definition is out of scope</h4>
+          <p>
+            <code>method_missing</code> and <code>define_method</code> outside the known
+            Rails DSLs, <code>class_eval</code>/<code>instance_eval</code> with string
+            arguments, and constant resolution that only exists at runtime are not modelled.
+            Guessing at them would produce confident wrong answers.
+          </p>
+        </div>
+        <div class="callout callout--warn reveal">
+          <h4>One platform, for now</h4>
+          <p>
+            The published VSIX is built for <code>darwin-arm64</code> and bundles native
+            extensions compiled for it. On anything else the payload is not loaded and you
+            get a clear diagnostic instead of a degraded session. Intel Macs, including
+            under Rosetta 2, are not supported in this Preview; nor are WSL, Dev Containers
+            or Remote SSH.
+          </p>
+        </div>
+        <div class="callout callout--warn reveal">
+          <h4>Gem-derived methods aren't indexed yet</h4>
+          <p>
+            The unknown-method check only fires when a receiver's whole ancestry is known.
+            A class inheriting from a gem — <code>ApplicationController</code>, and so most
+            controllers and jobs — is silent instead. Indexing what the gems define is what
+            lifts that, and is planned for <a href="roadmap.html#v030">0.3.0</a>.
+          </p>
+        </div>
+        <div class="callout callout--info reveal">
+          <h4>Other Ruby language servers will overlap</h4>
+          <p>
+            VS Code combines results from every active provider rather than picking one, so
+            running OvalLSP alongside another Ruby language server shows both sets of
+            results at once. Nothing crashes; the suggestions just double up. Disable the
+            others per workspace if you want only OvalLSP's answers.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ QUICK START ============ -->
+  <section class="section section--alt" id="quickstart">
+    <div class="wrap">
+      <div class="grid grid--2" style="gap:clamp(28px,4vw,56px); align-items:start">
+        <div>
+          <span class="eyebrow">Quick start</span>
+          <h2>Three steps, assuming a Ruby 3.4</h2>
+          <ol class="steps mt-2">
+            <li>
+              <h3>Install the extension</h3>
+              <p>From the VS Code Marketplace, on the Pre-Release channel.</p>
+            </li>
+            <li>
+              <h3>Open a Ruby or Rails project</h3>
+              <p>Open any <code>.rb</code> file and the Core Server starts on its own. Trust the workspace when prompted to enable the Rails-aware features.</p>
+            </li>
+            <li>
+              <h3>Confirm what is running</h3>
+              <p>Run <strong>OvalLSP: Show Version Information</strong> to see the Extension and Core versions, protocol compatibility, and which Ruby was selected.</p>
+            </li>
+          </ol>
+          <div class="btn-row mt-3">
+            <a class="btn btn--ghost btn--sm" href="getting-started.html">Full installation guide</a>
+          </div>
+        </div>
+
+        <div>
+          <div class="codeblock" data-copy-label="Copy" data-copied-label="Copied">
+<pre><span class="c-com"># Install from the command line</span>
+<span class="c-cmd">code</span> --install-extension teruz.ovallsp --pre-release
+
+<span class="c-com"># Check that a supported Ruby is reachable</span>
+<span class="c-cmd">ruby</span> -v
+<span class="c-com"># ruby 3.4.7 (…) [arm64-darwin24]</span>
+
+<span class="c-com"># If VS Code can't find it, pin it in settings.json</span>
+<span class="c-cmd">"ovallsp.rubyExecutablePath"</span>: "/opt/homebrew/bin/ruby"</pre>
+          </div>
+          <p class="small text-mute mt-2">
+            OvalLSP does not install Ruby and cannot. It needs some Ruby 3.4.x already
+            reachable — via mise, asdf, rbenv, Homebrew, your <code>PATH</code>, or an
+            explicit setting. Everything else it needs is inside the VSIX.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ROADMAP TEASER ============ -->
+  <section class="section" id="roadmap-teaser">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Roadmap</span>
+        <h2>A version number is a promise about what arrives together</h2>
+        <p>
+          Not a date. Patch releases add nothing a user sees, so they never appear here;
+          a capability can only ever arrive in a minor release.
+        </p>
+      </div>
+
+      <div class="grid grid--4">
+        <a class="card card--hover reveal" href="roadmap.html#v020" style="text-decoration:none">
+          <h3 class="mono" style="color:var(--ruby-bright)">0.2.0</h3>
+          <p><strong>Completion from the first keystroke</strong>, project-wide diagnostics, documentation in hover, semantic highlighting, argument types, unassigned <code>@ivar</code>.</p>
+        </a>
+        <a class="card card--hover reveal" href="roadmap.html#v030" style="text-decoration:none">
+          <h3 class="mono">0.3.0</h3>
+          <p><strong>Knowing what the gems define</strong> — plus inlay hints, quick fixes, go to type definition, document highlight and call hierarchy.</p>
+        </a>
+        <a class="card card--hover reveal" href="roadmap.html#v040" style="text-decoration:none">
+          <h3 class="mono">0.4.0</h3>
+          <p><strong>Refinements</strong> — per-check severity settings, auto-<code>require</code> insertion, active-parameter highlighting in signature help.</p>
+        </a>
+        <a class="card card--hover reveal" href="roadmap.html#v100" style="text-decoration:none">
+          <h3 class="mono">1.0.0</h3>
+          <p><strong>Guarantees, not features.</strong> Every published platform verified, and a plain Ruby project guaranteed rather than merely likely.</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section class="section section--alt" id="faq">
+    <div class="wrap wrap--narrow">
+      <div class="section-head">
+        <span class="eyebrow">FAQ</span>
+        <h2>Questions worth asking first</h2>
+      </div>
+
+      <div class="faq">
+        <details class="qa">
+          <summary>Does it work right after installing, with no extra setup?</summary>
+          <div class="qa-body">
+            <p>
+              Yes, provided a compatible Ruby is already reachable on your system. OvalLSP
+              needs <em>some</em> Ruby 3.4.x present — via mise, asdf, rbenv, Homebrew, or an
+              explicit <code>ovallsp.rubyExecutablePath</code>. Given that, everything else
+              needed to run ships inside the VSIX: no second download, no
+              <code>bundle install</code>, no checkout.
+            </p>
+            <p>
+              If no compatible Ruby is found, OvalLSP does not half-start — it shows a
+              diagnostic explaining what is wrong and what to do about it.
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>Does it send my code anywhere?</summary>
+          <div class="qa-body">
+            <p>
+              No. There is no telemetry integration of any kind, and no outbound HTTP client
+              anywhere in the Core Server or the extension. The only network access in the
+              whole project happens on the machine that <em>builds</em> a release, fetching
+              gems from RubyGems.org to bundle into the VSIX. See
+              <a href="security.html">Security &amp; privacy</a> for the full statement.
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>What does the Runtime Agent actually run?</summary>
+          <div class="qa-body">
+            <p>
+              Your application's own Rails and Bundler code, in a separate process, to read
+              back the routes and models it defines. Because that is arbitrary code from the
+              workspace, it only starts once you have marked the workspace trusted in VS
+              Code. In an untrusted workspace it never starts and every Rails-derived
+              capability degrades to its static answer — by design, not as a failure.
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>Can I use it with a plain Ruby project, no Rails?</summary>
+          <div class="qa-body">
+            <p>
+              Almost certainly it works — most of the engine is environment-independent, and
+              the Runtime Agent simply never starts. But nothing in the test suite verifies
+              it yet, so nothing is promised. Specifying and guaranteeing the plain-Ruby
+              experience is one of the two things
+              <a href="roadmap.html#v100">1.0.0</a> is reserved for.
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>Why Apple Silicon only?</summary>
+          <div class="qa-body">
+            <p>
+              The VSIX bundles native extensions (Prism, RBS) compiled for one specific
+              Ruby ABI, OS and CPU combination. Rather than shipping a build that might
+              load and might not, OvalLSP publishes for the combination it can actually
+              verify and refuses the payload elsewhere with an explanation. Publishing and
+              verifying the remaining platforms is the other half of
+              <a href="roadmap.html#v100">1.0.0</a>.
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>Can I contribute?</summary>
+          <div class="qa-body">
+            <p>
+              Not right now. The project is under active single-developer development, and
+              external issues and pull requests are not being accepted, because reviewing
+              them would be deprioritised against work already in progress and risk
+              overlapping with it. The reasoning is in
+              <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>.
+              Security reports are the exception — see
+              <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.md">SECURITY.md</a>.
+            </p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="section">
+    <div class="wrap">
+      <div class="cta reveal">
+        <h2>Try it on a real Rails app</h2>
+        <p>
+          Installation is one command, and the first thing you should do afterwards is ask
+          OvalLSP what it thinks it is running.
+        </p>
+        <div class="btn-row">
+          <a class="btn btn--primary" href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">Install from the Marketplace</a>
+          <a class="btn btn--ghost" href="https://github.com/TERUZvxght/OvalLSP">Read the source</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-about">
+        <a class="brand" href="index.html">
+          <img class="brand-mark" src="assets/img/icon.png" width="28" height="28" alt="" decoding="async">
+          <span>OvalLSP</span>
+        </a>
+        <p>
+          A semantic language server for Ruby and Rails, and a VS Code extension that
+          speaks to it. MIT licensed, developed in the open.
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h4>Product</h4>
+        <ul>
+          <li><a href="capabilities.html">Capabilities</a></li>
+          <li><a href="roadmap.html">Roadmap</a></li>
+          <li><a href="getting-started.html">Getting started</a></li>
+          <li><a href="security.html">Security &amp; privacy</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Documentation</h4>
+        <ul>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/README.md">README</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SUPPORT_MATRIX.md">Support matrix</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.md">Known limitations</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.md">Changelog</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>Project</h4>
+        <ul>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP">GitHub</a></li>
+          <li><a href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">Marketplace</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.md">Support</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/CODE_OF_CONDUCT.md">Code of conduct</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>© <span data-year>2026</span> OvalLSP contributors · MIT License</p>
+      <p>Not affiliated with Microsoft, GitHub, Shopify, or the Ruby or Rails projects.</p>
+    </div>
+  </div>
+</footer>
+
+<script src="assets/js/site.js" defer></script>
+</body>
+</html>
