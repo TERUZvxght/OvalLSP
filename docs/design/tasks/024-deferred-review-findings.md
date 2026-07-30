@@ -650,3 +650,49 @@ matching the array literal, and pin all three renderings together. Held
 back from 0.1.8 only because it changes an inference result rather than
 correcting an inconsistency between two of them, and 0.1.8 was already
 carrying a resolver change made under review.
+
+---
+
+## 024.13 A reopened core class looks closed, in both directions (0.3.x)
+
+**Status:** open
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+
+`closed_nominal?` calls a receiver closed when every ancestor is
+workspace-declared or RBS-known. A workspace that reopens a core class —
+`lib/core_ext/array.rb`, idiomatic in Rails — satisfies that: `Array`'s
+chain is `Array, Object, Kernel, BasicObject`, all known. But the
+workspace does not own `Array`, and gems keep adding to it, so the check
+is wrong in both directions on such a receiver:
+
+```ruby
+class Array
+  def to_sentence_ish = "x"     # any reopening closes the chain
+end
+
+a = [1, 2, 3]
+a.second                        # ActiveSupport's; reported as unknown
+a.totally_bogus_method          # genuinely unknown; correctly reported
+```
+
+This is 024.R5's problem one level out — the class is *partly* the
+workspace's — and 024.R5's machinery already solves it when a Runtime
+Agent is connected: the Agent reports `Array`'s real ancestors, the check
+sees ancestors it cannot account for, and stays silent. Without an Agent
+(an untrusted workspace, a plain Ruby project) there is nothing to ask.
+
+0.1.9 made this concrete by accident. Teaching the engine to read a
+container receiver as its class — correct everywhere else, and what
+`Types.base_nominal` exists for — would have let array and hash literals
+into both checks for the first time. Found by independent review, with
+`[1,2,3].second` reported against a reopened `Array`. The engine keeps the
+narrower gate instead, so 0.1.9 changed nothing here.
+
+The cost of that choice is real and worth naming: a genuinely unknown
+method called on a container literal is not reported, where it is on a
+plain receiver. That is the direction this check is supposed to err in.
+
+**Direction:** treat "the workspace declares part of this class" as
+distinct from "the workspace owns this class", which is what the Agent
+already answers for 024.R5. Scheduled with 024.R7, since a gem index is
+what makes the answer available without an Agent too.

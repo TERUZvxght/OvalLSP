@@ -106,10 +106,16 @@ module Ovallsp
           # already treats as always-available.
           next if candidate.singleton && candidate.name == "new"
 
-          # A container value is an instance of its class, so a check that
-          # applies to `Hash` applies to `Hash[Unknown]` (024.12).
-          receiver_type = Types.base_nominal(receiver_type_for(document, candidate, context))
-          next unless receiver_type
+          # Deliberately *not* `Types.base_nominal` here, unlike everywhere
+          # else that reads a container receiver. A workspace that reopens
+          # a core class makes its chain look closed while gems keep adding
+          # to it, so admitting container receivers reported
+          # `[1,2].second` -- ActiveSupport's, absent from stdlib RBS -- as
+          # unknown. That trade is the wrong way round for this check,
+          # whose whole policy is that a false report is worse than a
+          # missed one. See 024.13.
+          receiver_type = receiver_type_for(document, candidate, context)
+          next unless receiver_type.is_a?(Types::Nominal)
           next unless closed_nominal?(receiver_type, candidate.singleton, context) ||
                       model_closed?(receiver_type, context)
           next if rbs_resolves?(candidate, receiver_type, context)
@@ -179,8 +185,10 @@ module Ovallsp
       # receiver) candidate, or several declarations for the same name
       # (a reopened class, an override) whose parameter lists may differ.
       def sole_source_declaration(document, candidate, context)
-        receiver_type = Types.base_nominal(receiver_type_for(document, candidate, context))
-        return nil unless receiver_type
+        # Same as #unknown_method_findings: a container receiver is kept out
+        # of this check rather than admitted (024.13).
+        receiver_type = receiver_type_for(document, candidate, context)
+        return nil unless receiver_type.is_a?(Types::Nominal)
 
         candidates = context.method_resolver.resolve(
           receiver_type: receiver_type, name: candidate.name,

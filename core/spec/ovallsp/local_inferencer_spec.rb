@@ -348,6 +348,40 @@ RSpec.describe Ovallsp::LocalInferencer do
     expect(inferencer.infer_at(document, { line: 6, character: 4 }).to_s).to eq("Symbol")
   end
 
+  # The guard belongs to every consumer of the shared reading, not just the
+  # one written first. Runtime evidence recorded against a workspace class
+  # named `Relation` must not leak onto an Active Record relation, which is
+  # a different thing that merely shares the name.
+  it "does not apply a workspace class's runtime evidence to a relation that shares its name" do
+    workspace_index = Ovallsp::WorkspaceIndex.new
+    hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+    source = "class Relation\n  def tag\n  end\nend\n"
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+    summary = Ovallsp::ParserService.new.summarize(document)
+    workspace_index.replace_file(summary)
+    hierarchy_index.replace_file(summary)
+    resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
+    analyzer = Ovallsp::Semantic::MethodAnalyzer.new(
+      workspace_index: workspace_index, method_resolver: resolver,
+      summary_store: Ovallsp::Semantic::MethodSummaryStore.new
+    )
+    store = Ovallsp::Observation::Store.new
+    store.replace_run([
+      Ovallsp::Observation::ObservedSignature.new(
+        symbol_id: Ovallsp::Index::SymbolId.new(
+          kind: :instance_method, owner: "::Relation", name: "tag", discriminator: nil
+        ),
+        parameter_types: [], return_type: Ovallsp::Types::Nominal.new(name: "Symbol"),
+        samples: 2, run_id: "run", code_fingerprint: "fingerprint", created_at: Time.now
+      )
+    ])
+    inferencer = described_class.new(method_resolver: resolver, method_analyzer: analyzer, observation_store: store)
+    relation = Ovallsp::Types::Generic.new(name: "Relation", type_arg: Ovallsp::Types::Nominal.new(name: "User"))
+    node = Prism.parse("x.tag").value.statements.body.first
+
+    expect(inferencer.send(:resolve_observed_call, relation, node)).to be_nil
+  end
+
   # The same answer has to survive going through a method summary, or the
   # inconsistency simply moves one call away: hovering `{}` would say one
   # thing and hovering a method that returns `{}` another.
