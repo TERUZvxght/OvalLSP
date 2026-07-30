@@ -218,8 +218,20 @@ module Ovallsp
     # instance method declared in "::User", across however many files
     # reopen it). Semantic::MethodResolver#complete uses this to enumerate
     # a type's own method names rather than checking one name at a time.
+    # `owner` arrives qualified or bare depending on where the caller got
+    # it: declarations are indexed qualified (`::Object`), while
+    # `HierarchyIndex`'s default chain names its entries bare. Comparing
+    # the two raw answered "nothing" for half the callers -- and the
+    # visible consequence was a workspace reopening `class Object` with
+    # `method_missing` still getting a false `unknown-method` on every
+    # closed receiver.
+    #
+    # `SymbolId` now stores every owner qualified, so the stored side needs
+    # no work; this only has to put the *argument* through the same rule
+    # (0.1.11).
     def method_symbol_ids(owner, kind:)
-      @mutex.synchronize { @by_symbol.keys.select { |sid| sid.owner == owner && sid.kind == kind } }
+      needle = Index::SymbolId.qualify_owner(owner)
+      @mutex.synchronize { @by_symbol.keys.select { |sid| sid.owner == needle && sid.kind == kind } }
     end
 
     # Workspace symbol search: case-insensitive substring match on the

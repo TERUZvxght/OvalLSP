@@ -47,6 +47,25 @@ Two further rules follow from that experience:
 - Every fix needs a regression test that fails without the fix — see "Test-first discipline" above for the order to write them in and for why passing that check alone is not enough.
 - When you discover a bug, flaky test, or other fixable issue while working on something else in this repo, fix it in place, in the same session, immediately — do not spawn it off as a separate/background/recommended task. Established after a flaky mtime race in `core/spec/ovallsp/cache/store_spec.rb` was found mid-session during Task 022.2's verification loop and initially deferred via a spawned task instead of being fixed directly; the user explicitly redirected that this must not happen going forward. This applies regardless of whether the issue is related to the task currently in progress.
 
+## Documentation is part of the change (mandatory)
+
+Before finishing any change a user could notice, open
+[`docs/DOCUMENTATION_MAP.md`](docs/DOCUMENTATION_MAP.md) and walk its
+trigger table. It lists every document that a given kind of change makes
+stale — including the public site under `site/`, which is *not* generated
+from the Markdown docs and therefore propagates nothing on its own.
+
+Do not rely on remembering the list, and do not rely on a review agent to
+find what was missed: that was the previous arrangement and it is why the
+map exists. Read the file each time. It is short, and it names which
+checks already enforce which pairs, so the parts a machine can catch are
+marked as such.
+
+Established after 0.2.0 shipped six capabilities without adding a single
+row to `docs/EXTENSION_CAPABILITIES.md` — the document `docs/PUBLISHING.md`
+defines a "capability" by — leaving the release's own version number
+unjustifiable on the project's own terms until a reviewer caught it.
+
 ## Public repository privacy and secret handling
 
 - This repository is public. Never commit or push secrets, credentials, tokens, private keys, private URLs, personal information, or personal email addresses.

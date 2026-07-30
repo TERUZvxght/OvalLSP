@@ -218,7 +218,7 @@ module Ovallsp
       end
 
       def rbs_known_constant?(name, signatures)
-        !signatures.ancestors("::#{name}").empty?
+        !signatures.ancestors(qualified_owner(name)).empty?
       rescue StandardError
         false
       end
@@ -405,7 +405,7 @@ module Ovallsp
         resolved = context.workspace_index.resolve_type_name(name)
         return true if resolved && resolved.delete_prefix("::") == name.delete_prefix("::")
 
-        context.signatures && !context.signatures.ancestors("::#{name}").empty?
+        context.signatures && !context.signatures.ancestors(qualified_owner(name)).empty?
       end
 
       # Every Ruby class inherits from BasicObject, so a chain that does
@@ -437,14 +437,37 @@ module Ovallsp
       # call to a Kernel method would misfire as "unknown method". Tried
       # across the whole ancestor chain, not just the receiver's own
       # name, the same reason #closed_nominal? checks every ancestor.
+      # `HierarchyIndex` reports a class's *own* entry already qualified
+      # (`::Widget`) while its inherited ones are bare (`Object`), so the
+      # prefix has to be normalized rather than prepended. Prepending it
+      # asked for `::::Widget`, which matches nothing -- and the visible
+      # consequence was a false "has no method named" for anything a
+      # project declared in its own `sig/` without also writing it in
+      # Ruby, which is precisely the report this check exists not to make.
       def rbs_resolves?(candidate, receiver_type, context)
         return false unless context.signatures
 
         context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).any? do |entry|
           kind = candidate.singleton && entry.origin != :extend ? :singleton_method : :instance_method
-          symbol_id = Index::SymbolId.new(kind: kind, owner: "::#{entry.name}", name: candidate.name, discriminator: nil)
+          symbol_id = Index::SymbolId.new(kind: kind, owner: entry.name, name: candidate.name,
+                                          discriminator: nil)
           !context.signatures.method_signatures(symbol_id).nil?
         end
+      end
+
+      # `Signatures::Environment` resolves a *qualified* name, and the
+      # names reaching it arrive both ways: `HierarchyIndex` returns a
+      # class's own entry already qualified (`::Widget`) and its inherited
+      # ones bare (`Object`), while a constant reference carries whatever
+      # the source wrote (`::JSON` or `JSON`). Prepending rather than
+      # normalizing asked for `::::JSON`, which matches nothing.
+      #
+      # Every caller goes through here, including the one whose input is
+      # always plain today (`locally_accounted_for?`, whose name comes
+      # from the Agent): four call sites and three of them wrong is what
+      # having the rule stated in four places bought.
+      def qualified_owner(name)
+        Index::SymbolId.qualify_owner(name)
       end
 
       def ancestor_known?(entry, context)
@@ -453,7 +476,7 @@ module Ovallsp
         return false if entry.name.nil?
         return true if entry.kind
 
-        context.signatures && !context.signatures.ancestors("::#{entry.name}").empty?
+        context.signatures && !context.signatures.ancestors(qualified_owner(entry.name)).empty?
       end
 
       def declares_method_missing?(owner, context)

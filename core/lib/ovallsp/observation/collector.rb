@@ -509,12 +509,12 @@ module Ovallsp
           owner_name = attached.is_a?(Module) ? attached.name : nil
           return nil unless owner_name
 
-          Index::SymbolId.new(kind: :singleton_method, owner: "::#{owner_name}", name: tp.method_id.to_s, discriminator: nil)
+          Index::SymbolId.new(kind: :singleton_method, owner: owner_name, name: tp.method_id.to_s, discriminator: nil)
         else
           owner_name = defined_class.name
           return nil unless owner_name
 
-          Index::SymbolId.new(kind: :instance_method, owner: "::#{owner_name}", name: tp.method_id.to_s, discriminator: nil)
+          Index::SymbolId.new(kind: :instance_method, owner: owner_name, name: tp.method_id.to_s, discriminator: nil)
         end
       end
 

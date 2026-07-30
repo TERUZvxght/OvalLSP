@@ -686,9 +686,14 @@ module Ovallsp
       receiver_type = Types::Nominal.new(name: receiver_type.name) if receiver_type.is_a?(Types::Generic)
       return nil unless receiver_type.is_a?(Types::Nominal)
 
-      owner = receiver_type.name.start_with?("::") ? receiver_type.name : "::#{receiver_type.name}"
+      # `owner` is reused below to ask the signature environment for the
+      # receiver's own type parameters, which is a *type name* query and
+      # not a `SymbolId` -- so the qualified form is still needed as a
+      # value here, rather than only inside the SymbolId.
+      owner = Index::SymbolId.qualify_owner(receiver_type.name)
       symbol_id = Index::SymbolId.new(
-        kind: singleton ? :singleton_method : :instance_method, owner: owner, name: node.name.to_s, discriminator: nil
+        kind: singleton ? :singleton_method : :instance_method, owner: owner,
+        name: node.name.to_s, discriminator: nil
       )
       signature = @signatures.method_signatures(symbol_id)
       return nil unless signature
@@ -780,7 +785,7 @@ module Ovallsp
       receiver_type = Types.base_nominal(receiver_type)
       return nil unless receiver_type.is_a?(Types::Nominal)
 
-      owner = receiver_type.name.start_with?("::") ? receiver_type.name : "::#{receiver_type.name}"
+      owner = Index::SymbolId.qualify_owner(receiver_type.name)
       symbol_ids = [Index::SymbolId.new(
         kind: singleton ? :singleton_method : :instance_method, owner: owner, name: node.name.to_s, discriminator: nil
       )]

@@ -371,10 +371,10 @@ module Ovallsp
 
       # Signatures::Environment keys everything by RBS's fully-qualified
       # "::Name" form; the internal type model uses bare simple names
-      # (Types::Nominal#name) — this is the one place QueryService bridges
-      # the two naming conventions.
+      # (Types::Nominal#name). Delegates rather than restating the rule:
+      # writing it per call site is what 0.1.11 was spent undoing.
       def qualify(name)
-        name.start_with?("::") ? name : "::#{name}"
+        Index::SymbolId.qualify_owner(name)
       end
     end
   end
