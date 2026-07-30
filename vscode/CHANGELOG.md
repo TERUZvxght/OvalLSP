@@ -6,6 +6,46 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.1.9 — Three corrections in the type engine
+
+- Fixed: an empty hash renders like every other container. `{}` said
+  `Hash` while `[]` said `Array[Unknown]` and `Hash.new` said
+  `Hash[Unknown]` — three spellings of "a container whose contents I
+  cannot see", two answers.
+- Fixed: a project signature that says `untyped` no longer switches the
+  method off. Writing `def self.build: (...) -> untyped` in your own
+  `sig/` made every call to `build` resolve to nothing, instead of
+  falling through to what the source says.
+- Fixed: reading a `before_action` no longer consumes its own
+  `only:`/`except:` selector.
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: no
+capability is added. It clears three entries from
+`docs/design/tasks/024-deferred-review-findings.md` (024.12, 024.3,
+024.4).
+
+### Details
+
+The container rendering is fixed in two places, not one. Correcting only
+the literal would have moved the inconsistency a single call away —
+hovering `{}` and hovering a method that returns `{}` would then have
+disagreed — so the method-summary analyzer produces the generic form too.
+
+The `untyped` case was already handled correctly for `.new`, which
+filtered a no-information answer out and carried on. Every other
+singleton call returned it. Nothing reaching that point can carry
+information, because the guard above it already returned every signature
+answer that did, so the fix is to stop returning there at all.
+
+The `before_action` mutation was harmless today and only today: `pop`
+operates on the array Prism owns, so reading a declaration destroyed its
+own selector, and nothing noticed because every caller happens to re-parse
+the document first. That is a property of the callers, not of the code —
+the first thing to cache or re-walk a tree would have inherited a silent
+wrong answer. It is pinned through the consequence rather than by
+inspecting the node: visited twice, the same tree must say the same thing,
+and it did not.
+
 ## 0.1.8 — Deferred corrections
 
 - Fixed: repeatedly restarting the server no longer produces "The OvalLSP

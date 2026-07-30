@@ -446,7 +446,10 @@ module Ovallsp
       when Prism::TrueNode, Prism::FalseNode then Types::Nominal.new(name: "Boolean")
       when Prism::NilNode then Types::NIL
       when Prism::ArrayNode then eval_array(node, env)
-      when Prism::HashNode then Types::Nominal.new(name: "Hash")
+      # Generic, matching `[]` and `Hash.new`: one kind of value renders one
+      # way, whichever spelling produced it (024.12). A bare `Hash` also
+      # gave the container rules nothing to dispatch on.
+      when Prism::HashNode then Types::Generic.new(name: "Hash", type_arg: Types::UNKNOWN)
       when Prism::ParenthesesNode then eval_type(node.body, env)
       when Prism::CallNode then eval_call(node, env)
       when Prism::IfNode, Prism::UnlessNode then eval_conditional(node, env)
@@ -534,8 +537,13 @@ module Ovallsp
           return singleton_method || inherited_signature || constant_type
         end
 
-        return signature_method if signature_method
-
+        # Nothing to return here: the guard above already returned any
+        # signature answer that carried information, so anything still held
+        # in `signature_method` is Unknown -- which is what a project
+        # writing `-> untyped` is saying, and it says nothing. Returning it
+        # switched the method off, skipping the class-level finder and the
+        # source declaration below (024.3). The `.new` branch had always
+        # filtered it; this branch had not.
         class_level = resolve_class_level_finder(node.receiver.full_name, node.name)
         return class_level if class_level
 
@@ -1160,7 +1168,13 @@ module Ovallsp
         return unless %i[before_action skip_before_action].include?(node.name)
 
         arguments = node.arguments&.arguments || []
-        options = arguments.last.is_a?(Prism::KeywordHashNode) ? arguments.pop : nil
+        # Not `pop`: that array belongs to Prism, so consuming the options
+        # here destroyed the declaration's own `only:`/`except:` selector
+        # in the tree. Every caller re-parses today, which is the only
+        # reason it never showed -- and that is the callers' property, not
+        # this method's.
+        options = arguments.last.is_a?(Prism::KeywordHashNode) ? arguments.last : nil
+        arguments = arguments[0...-1] if options
         selector = selector_status(options)
         return if selector == :excluded
 

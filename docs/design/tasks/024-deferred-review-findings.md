@@ -74,9 +74,9 @@ rules for `Array`/`Relation`/`CollectionProxy`, so for the `Hash` and
 resolver was the thing that was wrong, and now reads any `Generic` as the
 class it is generic over; `ClassOf[X]` keeps its own earlier unwrapping.
 
-Still open, and deliberately not folded in here: `{}` infers
-`Nominal("Hash")` while `Hash.new` infers `Generic("Hash", Unknown)`, so
-the two still render differently. Recorded as 024.12.
+One path was left out of that first pass and tracked separately as
+024.12: `{}` still inferred `Nominal("Hash")`, so the two spellings kept
+rendering differently. Closed in 0.1.9.
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`resolve_call`'s `.new` ladder)
 
 Consulting RBS before the nominal-constructor fallback means `Hash.new`
@@ -96,7 +96,11 @@ places. Pin whichever is chosen.
 
 ## 024.3 An `untyped` RBS singleton signature still shadows source resolution
 
-**Status:** open
+**Status:** fixed in 0.1.9 — the non-`new` singleton branch no longer
+returns a signature answer that carries no information. Anything reaching
+that point is Unknown, since the guard above already returned every
+signature result that said something, so it now falls through to the
+class-level finder and the source declaration as `.new` always did.
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (constant-receiver branch)
 
 The `.new` branch treats a `Types::Unknown` from RBS as "no answer" and
@@ -115,7 +119,11 @@ alone.
 
 ## 024.4 `BeforeActionFinder#record` mutates the Prism AST in place
 
-**Status:** open
+**Status:** fixed in 0.1.9 — reads the options without consuming them.
+Pinned through the consequence rather than by inspecting the node: the
+same tree visited twice must say the same thing, and it did not — a
+callback scoped to `only: [:show]` was applied to every action on the
+second pass, because the selector had been popped off the first time.
 **Area:** `core/lib/ovallsp/local_inferencer.rb`
 
 `arguments.pop` operates on the array Prism owns, not a copy (verified:
@@ -739,9 +747,13 @@ roadmap entry rather than folded into another release's work.
 
 ---
 
-## 024.12 A hash literal and `Hash.new` still render differently (0.2.0)
+## 024.12 A hash literal and `Hash.new` still render differently
 
-**Status:** open
+**Status:** fixed in 0.1.9 — a hash literal infers `Hash[Unknown]`, and
+`MethodAnalyzer` produces the generic form for both container literals
+too, so the answer survives a method summary. Without that second site
+the inconsistency simply moved one call away: hovering `{}` and hovering
+a method that returns `{}` would have disagreed.
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`Prism::HashNode`)
 
 024.2 settled the canonical rendering of "container with unknown element

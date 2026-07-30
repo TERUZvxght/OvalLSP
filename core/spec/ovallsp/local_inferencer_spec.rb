@@ -226,6 +226,45 @@ RSpec.describe Ovallsp::LocalInferencer do
     expect(type.to_s).to eq("String")
   end
 
+  # 024.12, and the last piece of 024.2: one kind of value, one rendering.
+  # `[]` said `Array[Unknown]` and `Hash.new` said `Hash[Unknown]` while
+  # `{}` said a bare `Hash`, so hovering two spellings of "a hash whose
+  # contents I cannot see" gave two different answers.
+  it "renders every empty container the same way, whichever spelling produced it" do
+    signatures = Ovallsp::Signatures::Environment.new
+    signatures.load(workspace_root: nil)
+    inferencer = described_class.new(signatures: signatures)
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", text: "h = {}\na = []\nn = Hash.new\n", version: 1, language_id: "ruby"
+    )
+
+    expect(inferencer.infer_at(document, { line: 0, character: 1 }).to_s).to eq("Hash[Unknown]")
+    expect(inferencer.infer_at(document, { line: 1, character: 1 }).to_s).to eq("Array[Unknown]")
+    expect(inferencer.infer_at(document, { line: 2, character: 1 }).to_s).to eq("Hash[Unknown]")
+  end
+
+  # The same answer has to survive going through a method summary, or the
+  # inconsistency simply moves one call away: hovering `{}` would say one
+  # thing and hovering a method that returns `{}` another.
+  it "renders a container returned by a workspace method the same way as the literal" do
+    workspace_index = Ovallsp::WorkspaceIndex.new
+    hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+    source = "class Bag\n  def empty_hash = {}\n  def empty_array = []\nend\n\nBag.new.empty_hash\nBag.new.empty_array\n"
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+    summary = Ovallsp::ParserService.new.summarize(document)
+    workspace_index.replace_file(summary)
+    hierarchy_index.replace_file(summary)
+    resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
+    analyzer = Ovallsp::Semantic::MethodAnalyzer.new(
+      workspace_index: workspace_index, method_resolver: resolver,
+      summary_store: Ovallsp::Semantic::MethodSummaryStore.new
+    )
+    inferencer = described_class.new(method_resolver: resolver, method_analyzer: analyzer)
+
+    expect(inferencer.infer_at(document, { line: 5, character: 12 }).to_s).to eq("Hash[Unknown]")
+    expect(inferencer.infer_at(document, { line: 6, character: 12 }).to_s).to eq("Array[Unknown]")
+  end
+
   # The other half of 024.2. A container constructor resolves through
   # RBS with its type parameters unbound, which is `Hash[Unknown]` --
   # honest, and the same rendering `[]` already produces for an empty
@@ -279,6 +318,42 @@ RSpec.describe Ovallsp::LocalInferencer do
 
     type = signature_inferencer.infer_at(document, { line: 1, character: 2 })
     expect(type.to_s).not_to match(/\b[KEUV]\b/)
+  end
+
+  # A project signature that says `untyped` says nothing, and the `.new`
+  # branch already treated it that way -- it filtered an Unknown answer out
+  # and carried on to the source. Every *other* singleton call returned the
+  # signature's Unknown outright, so declaring `def self.build: (...) ->
+  # untyped` anywhere in a project's own `sig/` silently switched that
+  # method off: the class-level finder and the source declaration were
+  # never reached (024.3). Needs a project-supplied signature, so it never
+  # occurs with stdlib alone.
+  it "falls through an untyped project signature to the source declaration, as `.new` already did" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sig"))
+      File.write(File.join(root, "sig", "gadget.rbs"), "class Gadget\n  def self.build: () -> untyped\nend\n")
+      signatures = Ovallsp::Signatures::Environment.new
+      signatures.load(workspace_root: root)
+      workspace_index = Ovallsp::WorkspaceIndex.new
+      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      source = "class Widget\nend\n\nclass Gadget\n  def self.build = Widget.new\nend\n\nGadget.build\n"
+      document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+      summary = Ovallsp::ParserService.new.summarize(document)
+      workspace_index.replace_file(summary)
+      hierarchy_index.replace_file(summary)
+      resolver = Ovallsp::Semantic::MethodResolver.new(
+        workspace_index: workspace_index, hierarchy_index: hierarchy_index
+      )
+      analyzer = Ovallsp::Semantic::MethodAnalyzer.new(
+        workspace_index: workspace_index, method_resolver: resolver,
+        summary_store: Ovallsp::Semantic::MethodSummaryStore.new
+      )
+      inferencer = described_class.new(
+        method_resolver: resolver, method_analyzer: analyzer, signatures: signatures
+      )
+
+      expect(inferencer.infer_at(document, { line: 7, character: 8 }).to_s).to eq("Widget")
+    end
   end
 
   it "prefers an explicit project signature over a conflicting source-body inference" do
@@ -604,6 +679,34 @@ RSpec.describe Ovallsp::LocalInferencer do
     ivars = inferencer.infer_ivars_for_method(document, owner_name: "::UsersController", method_name: "show")
 
     expect(ivars[:@actor].to_s).to eq("User")
+  end
+
+  # `arguments.pop` operated on the array Prism owns, not a copy, so
+  # reading a `before_action` declaration destroyed its own `only:`/
+  # `except:` selector. Nothing noticed while every caller re-parsed the
+  # document first -- the tree was fresh each time -- but that is a
+  # property of the callers, not of this code, and the first thing to
+  # cache or re-walk a tree would have inherited a silent wrong answer.
+  #
+  # Asserted through the consequence rather than by inspecting the node:
+  # visited twice, the same tree must say the same thing. It did not --
+  # the selector was gone by the second pass, so a callback scoped to
+  # `only: [:show]` was applied to `index` as well.
+  it "does not consume a before_action's selector by reading it" do
+    finder_class = described_class.const_get(:BeforeActionFinder)
+    tree = Prism.parse(<<~RUBY).value
+      class UsersController
+        before_action :set_user, only: [:show]
+      end
+    RUBY
+
+    first = finder_class.new("::UsersController", "index")
+    tree.accept(first)
+    second = finder_class.new("::UsersController", "index")
+    tree.accept(second)
+
+    expect(first.operations).to be_empty
+    expect(second.operations).to eq(first.operations)
   end
 
   # The step budget is what bounds a single action's inference, and an
