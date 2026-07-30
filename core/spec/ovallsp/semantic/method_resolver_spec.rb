@@ -26,6 +26,121 @@ RSpec.describe Ovallsp::Semantic::MethodResolver do
     expect(candidates.first.origin).to eq(:superclass)
   end
 
+  # A container's own methods live on its class, whatever its element type
+  # is. Before this, only `ClassOf[X]` was unwrapped and every other
+  # Generic fell through to `[]` -- so a workspace that reopens `Hash` got
+  # definition and completion on `{}` (a Nominal) and neither on
+  # `Hash.new` or on anything the container rules returned (a Generic).
+  #
+  # Found by independent review of 0.1.8: settling 024.2 on the generic
+  # form moved values from the branch the resolver handles to the branch
+  # it did not, which turned a rendering inconsistency into a lost
+  # capability. The resolver is the thing that was wrong.
+  it "resolves a method on a generic receiver against the class it is generic over" do
+    index_source("class Hash\n  def deep_symbolize!\n  end\nend\n")
+    generic = Ovallsp::Types::Generic.new(name: "Hash", type_arg: Ovallsp::Types::UNKNOWN)
+
+    candidates = resolver.resolve(receiver_type: generic, name: "deep_symbolize!")
+
+    expect(candidates.map(&:owner)).to eq(["::Hash"])
+  end
+
+  it "completes a generic receiver's members the same way it completes the plain type" do
+    index_source("class Hash\n  def deep_symbolize!\n  end\nend\n")
+    generic = Ovallsp::Types::Generic.new(name: "Hash", type_arg: Ovallsp::Types::UNKNOWN)
+
+    generic_names = resolver.complete(receiver_type: generic, prefix: "deep").map { |r| r[:name] }
+
+    expect(generic_names).to eq(resolver.complete(receiver_type: nominal("Hash"), prefix: "deep").map { |r| r[:name] })
+    expect(generic_names).to include("deep_symbolize!")
+  end
+
+  # These are this engine's names for shapes, not classes anyone declares.
+  # Reading them as class names sends every `Model.where(...)` or
+  # `has_many` receiver into whatever a workspace happens to call
+  # `Relation` or `CollectionProxy` -- plausible names for an app to use,
+  # and go-to-definition would land inside them.
+  #
+  # Driven off the constant rather than naming them: a list one entry
+  # shorter is exactly the regression, and hand-written examples covered
+  # `Relation` while leaving `CollectionProxy` pinned by nothing.
+  # `ClassOf` is excluded here because #normalize_class_receiver unwraps it
+  # before this ever runs; it has its own two examples below.
+  Ovallsp::Types::INTERNAL_GENERIC_NAMES.each do |shape|
+    next if shape == "ClassOf"
+
+    it "does not read the engine-internal #{shape} as a workspace class" do
+      index_source("class #{shape}\n  def bogus_only_here\n  end\nend\n")
+      generic = Ovallsp::Types::Generic.new(name: shape, type_arg: nominal("User"))
+
+      expect(resolver.resolve(receiver_type: generic, name: "bogus_only_here")).to be_empty
+      expect(resolver.complete(receiver_type: generic, prefix: "bog")).to be_empty
+    end
+
+    it "does not make a candidate conditional because of an engine-internal #{shape} member" do
+      index_source("class User\n  def name\n  end\nend\n")
+      union = Ovallsp::Types.normalize_union(
+        [nominal("User"), Ovallsp::Types::Generic.new(name: shape, type_arg: nominal("User"))]
+      )
+
+      candidates = resolver.resolve(receiver_type: union, name: "name")
+
+      expect(candidates.map(&:owner)).to eq(["::User"])
+      expect(candidates.map(&:conditional)).to eq([false])
+    end
+  end
+
+  # Spelled out, because the loop above cannot pin the list's contents: it
+  # generates one example per entry, so a list one entry shorter simply
+  # generates one example fewer and stays green -- which is how
+  # `CollectionProxy` came to be on the list with nothing checking it.
+  # Both directions need a deliberate edit here: removing a shape, and
+  # adding one without deciding it really is a shape rather than a class.
+  it "names exactly the shapes that are not classes" do
+    expect(Ovallsp::Types::INTERNAL_GENERIC_NAMES).to eq(%w[ClassOf Relation CollectionProxy])
+  end
+
+  # The other side of that rule, and a real change from 0.1.7: a Generic
+  # over a class that genuinely exists *is* placeable, so it counts toward
+  # "does every member have this method". `x = flag ? User.new : []` then
+  # `x.name` is conditional, because the receiver really may be an Array.
+  # Before 0.1.8 the Array member was discarded and the candidate came
+  # back unconditional -- more confident than the code justified.
+  it "marks a candidate conditional when a real class in the union does not have the method" do
+    index_source("class User\n  def name\n  end\nend\n")
+    union = Ovallsp::Types.normalize_union(
+      [nominal("User"), Ovallsp::Types::Generic.new(name: "Array", type_arg: nominal("String"))]
+    )
+
+    candidates = resolver.resolve(receiver_type: union, name: "name")
+
+    expect(candidates.map(&:owner)).to eq(["::User"])
+    expect(candidates.map(&:conditional)).to eq([true])
+  end
+
+  it "does not make a candidate conditional because of a ClassOf member" do
+    index_source("class User\n  def name\n  end\nend\n\nclass Widget\nend\n")
+    union = Ovallsp::Types.normalize_union(
+      [nominal("User"), Ovallsp::Types::Generic.new(name: "ClassOf", type_arg: nominal("Widget"))]
+    )
+
+    candidates = resolver.resolve(receiver_type: union, name: "name")
+
+    expect(candidates.map(&:conditional)).to eq([false])
+  end
+
+  # The one Generic that must NOT be read as its own name: `ClassOf[X]` is
+  # the class object of X, so its members are X's singleton methods, and
+  # reading it as a class literally called "ClassOf" would find nothing.
+  it "still treats ClassOf as the class object rather than as a class named ClassOf" do
+    index_source("class Widget\n  def self.build\n  end\nend\n")
+    class_of = Ovallsp::Types::Generic.new(name: "ClassOf", type_arg: nominal("Widget"))
+
+    candidates = resolver.resolve(receiver_type: class_of, name: "build")
+
+    expect(candidates.map(&:owner)).to eq(["::Widget"])
+  end
+
   # "prepend methodがclass methodより先に解決される"
   it "resolves a prepended module's method before the class' own method, ranked first" do
     index_source(<<~RUBY)

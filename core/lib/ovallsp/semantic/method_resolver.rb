@@ -99,11 +99,36 @@ module Ovallsp
         [receiver_type.type_arg, context.merge(singleton: true)]
       end
 
+      # A `Generic` receiver over a *real* class is read as that class:
+      # `Hash[Unknown]`'s own methods live on `Hash`, exactly as `{}`'s do.
+      # Without this, a container receiver reached here and matched
+      # nothing, so a *workspace-declared* method on a reopened container
+      # class was invisible to definition and completion, while the same
+      # class reached as a plain Nominal found it. RBS-backed members were
+      # never affected -- QueryService unwraps a Generic on its own for the
+      # signature paths -- so the gap was specifically the workspace's own
+      # declarations.
+      #
+      # `Types::INTERNAL_GENERIC_NAMES` are excluded because they name a
+      # shape, not a class -- `Relation[User]` is not an instance of
+      # anything called `Relation`. A member this returns nil for is
+      # dropped, which for a Union also keeps it out of the
+      # every-member-has-it count: a shape nobody can look a method up on
+      # is not evidence that the method is conditional, and treating it as
+      # evidence lowered the reference's confidence below what Find
+      # References and Rename accept, dropping real call sites silently.
       def nominal_members(type)
         case type
-        when Types::Union then type.members.select { |m| m.is_a?(Types::Nominal) }
-        when Types::Nominal then [type]
-        else []
+        when Types::Union then type.members.filter_map { |m| base_nominal(m) }
+        else Array(base_nominal(type))
+        end
+      end
+
+      def base_nominal(type)
+        case type
+        when Types::Nominal then type
+        when Types::Generic
+          Types::Nominal.new(name: type.name) unless Types::INTERNAL_GENERIC_NAMES.include?(type.name)
         end
       end
 

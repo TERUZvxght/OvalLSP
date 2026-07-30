@@ -113,6 +113,50 @@ describe('ClientLifecycleManager', () => {
     assert.strictEqual(lifecycle.getState('never-started'), undefined);
   });
 
+  describe('stopWasRequested', () => {
+    it('is false for a generation that is still starting or running', () => {
+      const lifecycle = new ClientLifecycleManager();
+      const generation = lifecycle.beginStart('folder-a');
+      lifecycle.markStarting('folder-a', generation);
+
+      assert.strictEqual(lifecycle.stopWasRequested('folder-a', generation), false);
+
+      lifecycle.markRunning('folder-a', generation);
+      assert.strictEqual(lifecycle.stopWasRequested('folder-a', generation), false);
+    });
+
+    it('is true once a stop has been asked for, and stays true after it completes', () => {
+      const lifecycle = new ClientLifecycleManager();
+      const generation = lifecycle.beginStart('folder-a');
+      lifecycle.markStarting('folder-a', generation);
+
+      lifecycle.requestStop('folder-a');
+      assert.strictEqual(lifecycle.stopWasRequested('folder-a', generation), true);
+
+      lifecycle.markStopped('folder-a', generation);
+      assert.strictEqual(lifecycle.stopWasRequested('folder-a', generation), true);
+    });
+
+    // A superseded generation was necessarily stopped to make way for the
+    // one that replaced it -- and its client can still report the closure
+    // afterwards, which is exactly when this is asked.
+    it('is true for a generation a later start has superseded', () => {
+      const lifecycle = new ClientLifecycleManager();
+      const first = lifecycle.beginStart('folder-a');
+      lifecycle.markStarting('folder-a', first);
+      const second = lifecycle.beginStart('folder-a');
+
+      assert.strictEqual(lifecycle.stopWasRequested('folder-a', first), true);
+      assert.strictEqual(lifecycle.stopWasRequested('folder-a', second), false);
+    });
+
+    it('is false for a key that never started at all', () => {
+      const lifecycle = new ClientLifecycleManager();
+
+      assert.strictEqual(lifecycle.stopWasRequested('never-started', 1), false);
+    });
+  });
+
   it('markStopped finalizes the state, and only for the generation it was called for', () => {
     const lifecycle = new ClientLifecycleManager();
     const generation = lifecycle.beginStart('folder-a');

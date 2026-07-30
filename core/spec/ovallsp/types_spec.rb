@@ -17,16 +17,29 @@ RSpec.describe Ovallsp::Types do
       expect(result.members).to contain_exactly(user, described_class::NIL)
     end
 
-    # `Hash` and `Hash[Unknown]` say exactly the same thing -- a Generic
-    # whose argument is Unknown constrains nothing beyond its name -- so
-    # keeping both presents one type as two alternatives. Reachable from
-    # any union of a bare container literal with a call that returns the
-    # same container generically, e.g. `reduce({}) { |acc, x| acc.merge(x => x) }`.
-    it "collapses a Generic whose argument is Unknown into the same-named plain type" do
+    # `Hash` and `Hash[Unknown]` say exactly the same thing, so keeping
+    # both presents one type as two alternatives. Reachable from any union
+    # of a bare container literal with a call that returns the same
+    # container generically, e.g. `reduce({}) { |acc, x| acc.merge(x => x) }`.
+    #
+    # The *generic* form is the one kept, which is the correction 024.2
+    # asked for. It used to keep the plain one, so the same value rendered
+    # as `Hash[Unknown]` on hover and `Hash` through a union -- and, worse,
+    # the surviving plain form carries no type argument for the container
+    # rules to dispatch on, so collapsing that way lost the ability to
+    # resolve anything called on it.
+    it "collapses a plain type into the same-named Generic whose argument is Unknown" do
       hash = described_class::Nominal.new(name: "Hash")
       generic = described_class::Generic.new(name: "Hash", type_arg: described_class::UNKNOWN)
 
-      expect(described_class.normalize_union([hash, generic])).to eq(hash)
+      expect(described_class.normalize_union([hash, generic])).to eq(generic)
+    end
+
+    it "renders that survivor the same way the rest of the engine does" do
+      hash = described_class::Nominal.new(name: "Hash")
+      generic = described_class::Generic.new(name: "Hash", type_arg: described_class::UNKNOWN)
+
+      expect(described_class.normalize_union([hash, generic]).to_s).to eq("Hash[Unknown]")
     end
 
     it "keeps a Generic that carries a real argument alongside the plain type" do

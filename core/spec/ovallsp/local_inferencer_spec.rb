@@ -226,6 +226,25 @@ RSpec.describe Ovallsp::LocalInferencer do
     expect(type.to_s).to eq("String")
   end
 
+  # The other half of 024.2. A container constructor resolves through
+  # RBS with its type parameters unbound, which is `Hash[Unknown]` --
+  # honest, and the same rendering `[]` already produces for an empty
+  # array literal. Pinned here because the union rule in Types was
+  # corrected to agree with *this*, so the two must be kept in step: if
+  # this ever renders as a bare `Hash`, the union rule is now the odd one
+  # out rather than the other way round.
+  it "renders a container constructor with its element type unknown, the way an empty literal does" do
+    signatures = Ovallsp::Signatures::Environment.new
+    signatures.load(workspace_root: nil)
+    signature_inferencer = described_class.new(signatures: signatures)
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", text: "h = Hash.new\ns = Set.new\n", version: 1, language_id: "ruby"
+    )
+
+    expect(signature_inferencer.infer_at(document, { line: 0, character: 1 }).to_s).to eq("Hash[Unknown]")
+    expect(signature_inferencer.infer_at(document, { line: 1, character: 1 }).to_s).to eq("Set[Unknown]")
+  end
+
   it "substitutes a generic receiver's element type into an RBS return type" do
     signatures = Ovallsp::Signatures::Environment.new
     signatures.load(workspace_root: nil)

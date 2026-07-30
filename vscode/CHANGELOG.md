@@ -6,6 +6,69 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.1.8 — Deferred corrections
+
+- Fixed: repeatedly restarting the server no longer produces "The OvalLSP
+  server crashed 5 times in the last 3 minutes". Those closures were the
+  extension's own deliberate stops, reported back to you as crashes.
+- Fixed: a container whose element type is unknown now renders the same
+  way everywhere. `Hash.new` and a union arriving at the same value
+  disagreed — one said `Hash[Unknown]`, the other `Hash`.
+- Fixed: a method your own code adds to a container class — a reopened
+  `Hash`, say — is now found by go-to-definition and completion on a
+  container value (`Hash[Unknown]`, `Array[String]`). Standard-library
+  members always worked there; the workspace's own did not.
+- Removed: dead reference-indexing code, and a line in process ownership
+  that could not affect any decision.
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: no
+capability row is added — the third item is an existing capability that
+was not reaching a receiver it should always have reached. It clears four
+entries from `docs/design/tasks/024-deferred-review-findings.md` (024.9,
+024.2, 024.5, 024.7).
+
+### Details
+
+The crash notice is vscode-languageclient's, and it counts every
+connection closure it did not initiate. Some of those are ours: stopping
+a client that is still `starting` terminates Core directly, because
+calling `client.stop()` in that state is unsafe. The library cannot tell
+that from a crash, so the suppression now keys on lifecycle state as well
+as on the branded rejection it already recognised — if we asked *that
+generation* to stop, the closure is ours. A superseded generation counts
+as stopped, since it was torn down to make way for its replacement and
+its client can still report the closure afterwards. A client nobody asked
+to stop is still reported however it failed.
+
+That decision now lives in a module that imports no `vscode`, so it is
+unit-tested rather than manually verified — the first piece of 024.10 to
+come out of `extension.ts`.
+
+The container rendering was settled in favour of the generic form, and
+the union rule corrected to agree with it. The engine already produced
+`Array[Unknown]` for `[]`, so the union rule was the one out of step.
+Keeping the generic form also keeps a type argument for the container
+rules to dispatch on, which matters for `Array` and the Active Record
+collections — the rules have no entry for `Hash` or `Set`, so for the two
+types this correction is named after that was not the reason.
+
+One consequence is worth stating because it changes what you see: a value
+that may be one of several types now counts a container member honestly.
+`x = flag ? User.new : []` followed by `x.name` is a call the receiver may
+not have, so it no longer appears in Find References and is not rewritten
+by Rename. 0.1.7 listed it, on the strength of ignoring the `[]` branch.
+
+Independent review then found that settling on the generic form exposed a
+gap rather than closing one: the method resolver understood only a plain
+class receiver, so a workspace-declared method on a container class was
+invisible on any container value — which had always been true, and this
+change would have made it reachable more often. The resolver now reads a generic receiver as
+the class it is generic over. `Relation` and `CollectionProxy` are
+excluded, because they name Active Record shapes rather than classes
+anyone declares, and reading them as class names sent every
+`Model.where(...)` receiver into whatever a workspace happened to call
+`Relation`.
+
 ## 0.1.7 — The reopened gem class
 
 - Fixed: a class the workspace *reopens* rather than defines is no longer
