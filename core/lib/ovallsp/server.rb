@@ -392,7 +392,7 @@ module Ovallsp
       # deferring is only right when an answer can actually arrive.
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
       findings = with_index_snapshot do
-        context = diagnostics_semantic_context
+        context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
       end
       publish_findings(document.uri, findings, version: document.version)
@@ -1467,6 +1467,46 @@ module Ovallsp
                                           signature_generation: @signatures.generation)
 
       @logger.warn("query for #{query_context.uri} at #{query_context.position} became stale mid-computation")
+    end
+
+    # The instance variables this document is *given*, or nil when nobody
+    # can say (0.2.0's unassigned-@ivar check).
+    #
+    # Only a view has an answer: it is handed exactly what its controller
+    # action and callback chain assign, which is already computed for
+    # type propagation. Everything else -- a controller, a model, a plain
+    # Ruby file -- receives its ivars from wherever it likes, and nil is
+    # the honest answer rather than the empty set.
+    def assigned_ivars_for(uri)
+      return nil unless erb_view?(uri)
+
+      context = view_action_context(uri)
+      return nil unless context
+      # An `instance_variable_set` anywhere in the chain assigns names
+      # this cannot enumerate, so the set stops being a complete answer
+      # and there is nothing safe to report against.
+      return nil if controller_sets_ivars_dynamically?(context[:owner])
+
+      documents = controller_ancestor_documents(context[:owner])
+      method_maps = controller_method_maps(documents)
+      actions = contributing_actions(documents, method_maps, context[:action], context[:view_key])
+      # No action renders this view, so nothing establishes what it is
+      # given. That is a different fact from "the action assigns nothing",
+      # and the empty set would say the second while meaning the first.
+      return nil if actions.empty?
+
+      ivars_for_view(uri).keys.map(&:to_s)
+    rescue StandardError => e
+      @logger.error("failed to compute assigned ivars for #{uri}: #{e.class}: #{e.message}")
+      nil
+    end
+
+    DYNAMIC_IVAR_ASSIGNMENT = /\binstance_variable_set\b/
+
+    def controller_sets_ivars_dynamically?(owner_name)
+      controller_ancestor_documents(owner_name).any? do |_ancestor_name, document|
+        document.text.match?(DYNAMIC_IVAR_ASSIGNMENT)
+      end
     end
 
     # No caching here by design: recomputed fresh from the controller's

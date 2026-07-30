@@ -13,12 +13,19 @@ module Ovallsp
     # every check that doesn't depend on it.
     SemanticContext = Data.define(
       :workspace_index, :hierarchy_index, :method_resolver, :local_inferencer, :model_registry, :route_registry,
-      :signatures, :generation, :ancestry_registry
+      :signatures, :generation, :ancestry_registry, :assigned_ivars
     ) do
+      # `assigned_ivars` is the set of instance variable names this
+      # document is known to receive, or nil for "nobody worked it out"
+      # (0.2.0). The distinction is the whole safety of the check that
+      # reads it: an empty set means an action that assigns nothing, and
+      # nil means there is no action -- and reporting every `@ivar` in a
+      # file for which no context could be established is the failure mode
+      # this must not have. nil is therefore the default.
       def initialize(model_registry: nil, route_registry: nil, signatures: nil, generation: nil,
-                     ancestry_registry: nil, **rest)
+                     ancestry_registry: nil, assigned_ivars: nil, **rest)
         super(model_registry: model_registry, route_registry: route_registry, signatures: signatures,
-              generation: generation, ancestry_registry: ancestry_registry, **rest)
+              generation: generation, ancestry_registry: ancestry_registry, assigned_ivars: assigned_ivars, **rest)
       end
     end
   end

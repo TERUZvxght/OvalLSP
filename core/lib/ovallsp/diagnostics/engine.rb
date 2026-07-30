@@ -57,6 +57,7 @@ module Ovallsp
         findings.concat(unknown_route_helper_findings(summary, resolved_locations, semantic_context))
         findings.concat(argument_count_findings(document, summary, semantic_context))
         findings.concat(argument_type_findings(document, summary, semantic_context))
+        findings.concat(unassigned_ivar_findings(document, summary, semantic_context))
 
         budget ? findings.first(budget) : findings
       end
@@ -173,6 +174,83 @@ module Ovallsp
             range: candidate.location, severity: :warning, confidence: :high,
             evidence: { required: required, maximum: maximum, passed: passed }, generation: context.generation
           )
+        end
+      end
+
+      # Reports a read of an instance variable that nothing assigns
+      # (0.2.0, closes 024.R6).
+      #
+      # Ruby answers `nil` for an unassigned ivar rather than raising, so
+      # `@usr` where the code meant `@user` is a mistake the language
+      # never surfaces -- the view renders empty and nobody is told why.
+      #
+      # Runs only where a caller has worked out what this document is
+      # actually given: `assigned_ivars` nil means no such context exists,
+      # and reporting every `@ivar` in a file nobody established a context
+      # for is exactly the wrong report. An *empty* set is a real answer
+      # (an action that assigns nothing) and is checked.
+      def unassigned_ivar_findings(document, summary, context)
+        assigned = context.assigned_ivars
+        return [] unless assigned
+
+        # A name the document assigns itself is assigned, whatever its
+        # caller does or does not hand it.
+        local = ivar_writes(document)
+
+        return [] if local.nil?
+
+        summary.reference_candidates.filter_map do |candidate|
+          next unless candidate.kind == :ivar
+          next if local.include?(candidate.name)
+          next if assigned.include?(candidate.name)
+
+          Finding.new(
+            code: "unassigned-ivar",
+            message: "`#{candidate.name}` is never assigned before this is read",
+            range: candidate.location, severity: :warning, confidence: :high,
+            evidence: { ivar: candidate.name }, generation: context.generation
+          )
+        end
+      end
+
+      # The parser records a read and a write as the same `:ivar`
+      # candidate kind -- rename and references both want them together --
+      # so the writes are recovered here instead. This is what makes
+      # `<% @total = 1 %><%= @total %>` in a view not a mistake.
+      def ivar_writes(document)
+        result = Prism.parse(document.text)
+        # A document that will not parse has already been reported as a
+        # syntax error, and Prism still hands back whatever it could make
+        # of it -- so the assignments below the break are simply missing
+        # rather than absent. Reporting from that list adds a second,
+        # wrong finding to a file whose real problem is already named.
+        return nil if result.failure?
+
+        collector = IvarWriteCollector.new
+        result.value.accept(collector)
+        collector.names
+      rescue StandardError
+        nil
+      end
+
+      # Every form of `@x = ...`: plain, `||=`/`&&=`, `+=` and friends,
+      # and a block/rescue target. Missing one reports a variable the file
+      # visibly assigns two lines up.
+      class IvarWriteCollector < Prism::Visitor
+        attr_reader :names
+
+        def initialize
+          @names = []
+          super
+        end
+
+        %i[instance_variable_write_node instance_variable_or_write_node
+           instance_variable_and_write_node instance_variable_operator_write_node
+           instance_variable_target_node].each do |suffix|
+          define_method(:"visit_#{suffix}") do |node|
+            @names << node.name.to_s
+            super(node)
+          end
         end
       end
 

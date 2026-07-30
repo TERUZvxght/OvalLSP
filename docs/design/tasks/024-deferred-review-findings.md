@@ -519,7 +519,20 @@ wherever there is no Runtime Agent to ask.
 
 ## 024.R6 Reading an instance variable that is never assigned (roadmap, 0.2.0)
 
-**Status:** open — roadmap
+**Status:** done — shipped in 0.2.0, scoped to views, which is where the
+symptom the entry describes actually appears. A view is handed exactly
+what its controller action and callback chain assign, and that set was
+already computed for type propagation; everything else receives its ivars
+from wherever it likes, so nothing is reported there.
+
+The safety of the check is one distinction: the set is `nil` when nobody
+worked out a context and *empty* when an action genuinely assigns
+nothing. Collapsing the two would report every `@ivar` in any file no
+context could be established for. `nil` is therefore also the answer for
+a view outside the naming convention, a view no action renders, a
+controller chain containing `instance_variable_set`, and a document whose
+Ruby does not parse — each pinned by asserting nothing was logged, since
+the rescue above them produces the same silence for the wrong reason.
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
 
 Nothing reports `@usr` where the code meant `@user`. Ruby returns `nil`
