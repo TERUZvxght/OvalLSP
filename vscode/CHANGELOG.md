@@ -10,6 +10,11 @@ the disproved approaches are kept below it under **Details**.
 
 - Fixed: `send`, `__send__`, `public_send` and `instance_exec` are no
   longer reported as unknown methods.
+- Fixed: `::User.find(1)` resolves to `User`, as `User.find(1)` already
+  did. A root-scoped model receiver lost its type, and the Active Record
+  method check went quiet for it.
+- Fixed: signature help no longer shows `()` for a method that takes
+  keywords. `Array#shuffle` read as taking nothing.
 - Fixed: a class written `< ::BasicObject` no longer has its unknown-method
   check silently switched off. As in 0.1.11, a class that was silent may
   now start reporting mistakes it was quietly ignoring.
@@ -74,6 +79,20 @@ The list was found by an independent check of the project's own website,
 which had enumerated it correctly while the privacy document had not. The
 disk claim was found by a reviewer reading the observation runner rather
 than the document.
+
+Round 3 found two more instances of this release's own subject. `::User`
+never matched `ModelRegistry`, which is keyed by Rails' bare `model.name`
+— normalised in the registry rather than at its four callers, for the
+reason 0.1.11 exists. And the signature label, fixed in round 2 for
+`*rest`, still asserted zero arity for anything keyword-only.
+
+Round 3 also caught two things this release had said about itself that
+were wrong. The newly-written privacy sentence claimed a call that raised
+"contributes nothing", when it contributes its count and its parameter
+classes and only the return type is withheld. And a note claimed two
+fields could not be pinned — written after a mutation that silently never
+applied. Both corrected. The second is worth naming: a sweep result is
+worth exactly what the edit behind it was, and that one was worth nothing.
 
 ## 0.1.11 — One rule, restated everywhere and remembered nowhere
 

@@ -26,6 +26,10 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
           class Untyped
             def plain: (?) -> String
             def generic: [U] (?) -> U
+            def opts: (**untyped) -> void
+            def required_kw: (name: String) -> void
+            def opt_kw: (?limit: Integer) -> void
+            def splat: (*Integer) -> void
           end
         RBS
         @root = root
@@ -35,19 +39,22 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
 
     let(:project) { Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace_root: @root) } }
 
+    def label_for(name)
+      Ovallsp::Semantic::QueryService.new(
+        local_inferencer: Ovallsp::LocalInferencer.new, signatures: project
+      ).signatures_of(Ovallsp::Types::Nominal.new(name: "Untyped"), name).first[:label]
+    end
+
     def overload_for(name)
       project.method_signatures(
         Ovallsp::Index::SymbolId.new(kind: :instance_method, owner: "::Untyped", name: name, discriminator: nil)
       ).overloads.first
     end
 
-    # End-to-end, not a pin on `untyped_overload`'s own fields: RBS's
-    # definition builder normalises a project `(?)` before this code sees
-    # it, so hard-coding those two fields to Unknown/[] leaves these
-    # green. Recorded rather than left implying a guarantee -- the fields
-    # are still what a `(?)` reaching `untyped_overload` unnormalised
-    # would need, and stdlib's own such methods all return `untyped`, so
-    # nothing available today distinguishes them.
+    # A project `sig/` reaches `untyped_overload` unnormalised, which is
+    # what makes these two fixtures able to see the fields at all --
+    # stdlib's own `(?)` methods all return `untyped` with no type
+    # parameters, so nothing there could distinguish them.
     it "answers with the declared return type" do
       expect(overload_for("plain").return_type.to_s).to eq("String")
     end
@@ -64,6 +71,34 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
 
       expect(overload.rest_positional).not_to be_nil
       expect(overload.rest_keyword).not_to be_nil
+    end
+
+    # `**untyped` is the other half of "accepts more than it names". A
+    # label built only from the named slots drops it silently, and stdlib
+    # has no method with a rest-keyword and no rest-positional to show it
+    # with -- so the fixture states it directly.
+    it "marks a signature that accepts arbitrary keywords" do
+      expect(label_for("opts")).to include("...")
+    end
+
+    # A required keyword is the one a caller *must* type, so leaving it out
+    # of the label is the worst of the four omissions -- and no stdlib
+    # method reachable here has one, which is why it is stated directly.
+    # `?` is the only thing in the label separating a keyword the caller
+    # must supply from one they may omit, so asserting the bare name
+    # leaves the marker itself untested.
+    it "names a required keyword in the label, without an optional marker" do
+      expect(label_for("required_kw")).to include("(name:")
+    end
+
+    it "marks an optional keyword as optional" do
+      expect(label_for("opt_kw")).to include("?limit:")
+    end
+
+    # `*rest` and `**rest` each independently mean "accepts more than it
+    # names"; a marker driven by only one of them is silent for the other.
+    it "marks a signature that accepts arbitrary positionals" do
+      expect(label_for("splat")).to include("...")
     end
 
     # RBS refuses to parse a block on an untyped method type, so these two
@@ -125,6 +160,24 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
   # A label built from the positional lists alone reads as zero arity --
   # which is a worse answer than the "no signature at all" these had before
   # they could be built.
+  # The same failure one field over: a signature with no positionals and
+  # only keywords also rendered as `name()`. 29 method types in the RBS
+  # core this loads have that shape -- `Array#shuffle` among them -- so
+  # the label asserted zero arity for each while the user typed keywords
+  # into it.
+  it "does not label a keyword-only method as taking no arguments" do
+    query_service = Ovallsp::Semantic::QueryService.new(
+      local_inferencer: Ovallsp::LocalInferencer.new, signatures: signatures
+    )
+
+    label = query_service.signatures_of(Ovallsp::Types::Nominal.new(name: "Array"), "shuffle").first[:label]
+
+    # The keyword's own name, not merely "something other than `()`" --
+    # a `...` from the rest slot would satisfy that while still telling
+    # the user nothing about what to type.
+    expect(label).to include("random:")
+  end
+
   it "does not label a `(?)` method as taking no arguments" do
     query_service = Ovallsp::Semantic::QueryService.new(
       local_inferencer: Ovallsp::LocalInferencer.new, signatures: signatures

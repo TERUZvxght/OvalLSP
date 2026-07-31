@@ -168,7 +168,13 @@ module Ovallsp
       def resolve_delegate_return_type(fact)
         return Types::UNKNOWN unless @model_registry
 
-        owner_name = fact.owner.to_s.split("::").last
+        # The owner as written, minus a leading `::` -- not its simple
+        # name. `split("::").last` is match-by-simple-name, so
+        # `Admin::User`, which is not a model at all, resolved its
+        # delegates against the top-level `User`'s associations. The
+        # registry keys itself; this only has to stop mangling the name
+        # before handing it over (0.1.12).
+        owner_name = ReceiverResolution.canonical_receiver_name(fact.owner)
         association = @model_registry.association(owner_name, fact.metadata[:to])
         return Types::UNKNOWN unless association
 

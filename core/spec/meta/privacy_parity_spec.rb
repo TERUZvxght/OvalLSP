@@ -21,7 +21,11 @@ RSpec.describe "privacy document parity" do
 
   def sections(path) = read_utf8(path).scan(/^## (.+)$/).flatten
 
-  it "documents the same sections, in the same order, in both languages" do
+  # Counted, not compared: the headings are translated, so nothing here can
+  # check that section 3 is *about* the same thing in both. What it can
+  # check is that neither file grew or lost one, which is how a section
+  # added to one language and not the other shows up.
+  it "documents the same number of sections in both languages" do
     expect(sections(PRIVACY_JA).size).to eq(sections(PRIVACY_EN).size)
   end
 
@@ -45,7 +49,7 @@ RSpec.describe "privacy document parity" do
     end
   end
 
-  # Resolved against , where PRIVACY itself lives -- a repo-root
+  # Resolved against `vscode/`, the directory PRIVACY itself lives in -- a repo-root
   # README has different headings, and pointing the check at the wrong one
   # makes it fail on links that are fine.
   #

@@ -266,12 +266,10 @@ module Ovallsp
       # an expression reading it would imply a case that cannot arise.
       #
       # The return type and the type parameters are the two things a `(?)`
-      # declaration still states, and both are carried through. No fixture
-      # distinguishes them: RBS's definition builder normalises a project
-      # `(?)` before it reaches here, and every stdlib method that does
-      # reach here returns `untyped` with no type parameters. Written the
-      # honest way rather than hard-coded to Unknown/[], and recorded as
-      # unpinned rather than left looking checked.
+      # declaration still states, and both are carried through:
+      # `def f: (?) -> String` really does return a String, and
+      # `[U] (?) -> U` really does declare `U`. A project `sig/` reaches
+      # here unnormalised, so both are pinned by fixtures.
       def untyped_overload(method_type, fn)
         Overload.new(
           required_positionals: [], optional_positionals: [], rest_positional: Types::UNKNOWN,

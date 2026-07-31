@@ -152,22 +152,42 @@ module Ovallsp
       end
 
       def known_model?(name)
-        @mutex.synchronize { @models.key?(name) }
+        @mutex.synchronize { @models.key?(lookup_key(name)) }
       end
 
       def model(name)
-        @mutex.synchronize { @models[name] }
+        @mutex.synchronize { @models[lookup_key(name)] }
       end
 
       def association(model_name, association_name)
-        @mutex.synchronize { @models[model_name]&.associations&.find { |a| a.name == association_name.to_s } }
+        @mutex.synchronize do
+          @models[lookup_key(model_name)]&.associations&.find { |a| a.name == association_name.to_s }
+        end
       end
 
       def column(model_name, column_name)
-        @mutex.synchronize { @models[model_name]&.columns&.find { |c| c.name == column_name.to_s } }
+        @mutex.synchronize do
+          @models[lookup_key(model_name)]&.columns&.find { |c| c.name == column_name.to_s }
+        end
       end
 
       private
+
+      # The registry is keyed by Rails' own `model.name`, which is always
+      # bare (`User`). A constant receiver arrives as whatever the source
+      # wrote -- `Prism::ConstantPathNode#full_name` answers `::User` for
+      # `::User.find(1)` -- so an exact lookup missed, the finder's type
+      # was lost, and the Agent-backed model check went quiet for that
+      # receiver without saying so.
+      #
+      # Normalized here rather than at each caller: there are four, and
+      # 0.1.11 was spent on what happens when a rule like this is written
+      # at call sites instead of in the one place that knows the keys.
+      # Only a leading `::` is ignored, so `Admin::User` stays a different
+      # class.
+      def lookup_key(name)
+        name.to_s.delete_prefix("::")
+      end
 
       def build_model_info(name, response)
         columns = (response[:columns] || []).map do |c|

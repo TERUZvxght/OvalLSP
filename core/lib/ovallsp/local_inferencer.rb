@@ -451,7 +451,12 @@ module Ovallsp
 
     def resolve_call(node, receiver_type, env)
       if constant_receiver?(node.receiver)
-        constant_type = Types::Nominal.new(name: node.receiver.full_name)
+        # The class, not the spelling the call site used. `::Widget` and
+        # `Widget` are one class, and letting both through makes two
+        # different Nominals -- whose union is not a single Nominal, which
+        # is what the unknown-method check requires, so the check goes
+        # silent for a variable assigned both ways (0.1.12).
+        constant_type = Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.receiver.full_name))
         signature_method = resolve_signature_call(
           constant_type, node, singleton: true, direct: true
         )
@@ -593,7 +598,12 @@ module Ovallsp
     def resolve_class_level_finder(class_name, method_name)
       return nil unless @model_registry.known_model?(class_name)
 
-      model_type = Types::Nominal.new(name: class_name)
+      # The *model's* name, not the spelling the call site used: `::User`
+      # and `User` are one class, and letting the receiver's spelling
+      # through produced a `Nominal("::User")` that hovered as `::User`
+      # and matched nothing downstream, since every other name in the type
+      # model is bare.
+      model_type = Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(class_name))
       case method_name
       when :find then model_type
       when :find_by then Types.normalize_union([model_type, Types::NIL])
@@ -972,7 +982,10 @@ module Ovallsp
         return unless assume == :truthy
 
         arg = predicate.arguments&.arguments&.first
-        env[receiver.name] = Types::Nominal.new(name: arg.full_name) if constant_receiver?(arg)
+        if constant_receiver?(arg)
+          env[receiver.name] =
+            Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(arg.full_name))
+        end
       end
     end
 

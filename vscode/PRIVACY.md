@@ -50,9 +50,11 @@ own [persistent parse cache](README.md#troubleshooting) under
 `~/.cache/ovallsp/`, keyed by workspace and toolchain version. **It
 contains parts of your source code.** Alongside the parsed
 declarations and types it stores each method's body text and each
-parameter's default expression, verbatim, because that is what lets it
-tell whether a method has changed since it was indexed. It also stores
-each file's absolute path. Nothing in it is transmitted anywhere, and
+parameter's default expression, verbatim — the body so a method's return
+type can be inferred later without re-reading the file, the default
+expression because the parser records it. It also stores each file's
+absolute path. (Whether a file has changed is decided by a hash of it,
+not by this text.) Nothing in it is transmitted anywhere, and
 deleting `~/.cache/ovallsp/` is safe at any time — it is rebuilt by
 re-indexing.
 
@@ -69,8 +71,9 @@ exercised by your own test run:
 - for each positional parameter, the set of **classes** seen at that
   position — the class names, never the objects;
 - the set of classes the method **returned**, on the same terms;
-- how many calls contributed (a call that raised contributes nothing and
-  is not recorded as having raised);
+- how many calls contributed. A call that raised still contributes its
+  count and the classes it was given — only the return type is withheld,
+  and nothing records that it raised;
 - an identifier for the run, made from its start time, Core's process id
   and a random number;
 - a digest of the **file** the observed method is in, plus that method's
@@ -91,8 +94,9 @@ unlinked when the run ends:
 
 - the run's results, as described above;
 - a log file, which is where **your test command's own standard output
-  and standard error are redirected**. OvalLSP does not read or index
-  that log — it exists so a failed run can report why — but it contains
+  and standard error are redirected**. OvalLSP never reads that log; it
+  exists because in `--stdio` mode file descriptor 1 is the live LSP
+  transport, and the child's output must not land there. But it contains
   whatever your test suite prints, which in a Rails app routinely
   includes SQL, and can include anything else your code or your
   environment logs. The "never records" guarantee above is about what

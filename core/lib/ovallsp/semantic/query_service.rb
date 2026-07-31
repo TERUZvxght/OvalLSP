@@ -354,15 +354,26 @@ module Ovallsp
         "#{method_name}(#{parameters.map(&:name).join(', ')})"
       end
 
+      # The label is what signature help shows while the user is typing
+      # arguments into the call, so anything it leaves out reads as "this
+      # takes nothing more".
+      #
+      # Positionals were all it rendered. That made `(?)` -- RBS for
+      # "takes anything", which `Proc#call` and `Method#call` are declared
+      # as -- come out as `call()`, and made every signature with no
+      # positionals but some keyword come out the same way (29 of them in
+      # the RBS core this loads, `Array#shuffle` among them; counted, not
+      # estimated). Before 0.1.12 the `(?)` ones failed to build at all so
+      # nothing was shown; making them build has to not make them lie, and
+      # the keyword case was already lying.
       def rbs_signature_label(method_name, overload)
         parts = overload.required_positionals.map(&:to_s) + overload.optional_positionals.map { |t| "?#{t}" }
-        # A `*rest` is where the "and anything else" lives, and dropping it
-        # turns `(?)` -- RBS for "takes anything", which `Proc#call` and
-        # `Method#call` are declared as -- into a label asserting zero
-        # arity while the user types arguments into it. Before 0.1.12 those
-        # signatures failed to build at all, so no label was shown; making
-        # them build has to not make them lie.
-        parts << "..." if overload.rest_positional
+        parts.concat(overload.required_keywords.keys.map { |name| "#{name}:" })
+        parts.concat(overload.optional_keywords.keys.map { |name| "?#{name}:" })
+        # One marker for either rest slot: the label says the call accepts
+        # more than it names, and which slot that came from is not
+        # something a reader of the label can act on.
+        parts << "..." if overload.rest_positional || overload.rest_keyword
         "#{method_name}(#{parts.join(', ')}) -> #{overload.return_type}"
       end
 
