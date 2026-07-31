@@ -42,8 +42,9 @@
   限り再配布を許可しています — 各パッケージ自身の`LICENSE`/
   `LICENSE.txt`ファイル(上記の通り同梱)がこれを満たします。
 - Ruby license(`logger`と`tsort`が使用、いずれもRuby自身の標準
-  ライブラリの一部)はGPLとのデュアルライセンスです。いずれも本
-  プロジェクトのMIT licenseとの再配布上の互換性があります。
+  ライブラリの一部)は2-clause BSD licenseとのデュアルライセンスです
+  (同梱の`COPYING`/`LICENSE.txt`自身がそう明記しています)。いずれを
+  選んでも本プロジェクトのMIT licenseとの再配布上の互換性があります。
 - OvalLSP自体(この拡張機能とそのCore Server)はMIT licenseです —
   [LICENSE](LICENSE)を参照。
 
