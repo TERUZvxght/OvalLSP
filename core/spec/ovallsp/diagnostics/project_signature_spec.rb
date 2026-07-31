@@ -87,6 +87,34 @@ RSpec.describe "Ovallsp::Diagnostics::Engine against a project's own sig/ (0.1.1
     expect(findings.size).to eq(1)
   end
 
+  # The last place the rule was written by hand rather than delegated
+  # (0.1.12). `chain_reaches_root?` asks `entry.name == "BasicObject"`,
+  # and a class written `< ::BasicObject` produces an entry named
+  # `::BasicObject` -- so the chain is judged not to reach the root, the
+  # receiver is not "closed", and the unknown-method check switches off
+  # for that class without saying so. `ROOT_SUPERCLASS_NAMES` in the same
+  # subsystem already lists both forms, which is what makes this an
+  # oversight rather than a decision.
+  it "still reports an unknown method on a class written `< ::BasicObject`" do
+    index("class Rooted < ::BasicObject\nend\n", uri: "file:///rooted_base.rb")
+    findings = engine.analyze(document: index("Rooted.new.definitely_not_here\n"),
+                              semantic_context: context, mode: :standard)
+                     .select { |f| f.code == "unknown-method" }
+
+    expect(findings.size).to eq(1)
+  end
+
+  # The bare form has always worked; both must, and the pair is what
+  # shows the two spellings are the same class.
+  it "still reports an unknown method on a class written `< BasicObject`" do
+    index("class Bare < BasicObject\nend\n", uri: "file:///bare_base.rb")
+    findings = engine.analyze(document: index("Bare.new.definitely_not_here\n"),
+                              semantic_context: context, mode: :standard)
+                     .select { |f| f.code == "unknown-method" }
+
+    expect(findings.size).to eq(1)
+  end
+
   # The same prefix again, in the ancestry walk. An entry that is
   # `::`-prefixed *and* carries no kind -- which is what `include ::Foo`
   # produces -- slipped past the kind short-circuit and asked for

@@ -6,6 +6,75 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.1.12 — The last copy of the rule, and a privacy list that under-described itself
+
+- Fixed: `send`, `__send__`, `public_send` and `instance_exec` are no
+  longer reported as unknown methods.
+- Fixed: a class written `< ::BasicObject` no longer has its unknown-method
+  check silently switched off. As in 0.1.11, a class that was silent may
+  now start reporting mistakes it was quietly ignoring.
+- Fixed: `PRIVACY.md` now describes everything type observation records.
+  It recorded more than it said — nothing sensitive, but a privacy
+  document that under-describes itself is wrong whichever direction the
+  gap runs in.
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: no
+capability is added.
+
+### Details
+
+0.1.11 moved one rule — "an owner name is qualified" — into `SymbolId`
+and routed every caller through it. This is the copy that survived,
+because it does not build a `SymbolId` at all: `chain_reaches_root?`
+asked `entry.name == "BasicObject"`, and a class written
+`< ::BasicObject` produces an entry carrying the `::`. Its chain was
+judged not to reach the root, the receiver was not "closed", and the
+check went quiet for that class without saying so. Written by hand, one
+spelling, exactly like the eight before it — and `ROOT_SUPERCLASS_NAMES`
+one subsystem over already listed both forms, which is what makes it an
+oversight rather than a decision.
+
+The `send` family is a separate defect the `::BasicObject` fix made
+urgent. RBS writes "takes anything" as `(?)`, and models it as a function
+object carrying no parameter lists at all. Two different declarations run
+into it: `Proc#call` and `Method#call` are `(?)` themselves, while
+`send`, `__send__`, `public_send` and `instance_exec` have ordinary
+signatures whose *block* is `?{ (?) -> untyped }`. Both converters asked
+such a function for its positional parameters regardless, the resulting
+error was swallowed by the blanket rescue around signature building, and
+the method came back as "no signature" — which the unknown-method check
+reads as "RBS does not declare this". So `send` was reported on every
+closed receiver. It became urgent because `__send__` is
+core idiom in exactly the proxy and delegator code people write
+`< BasicObject` for: the fix above would have turned a false report on
+precisely the classes it un-silenced.
+
+The privacy list said observation records "class/module name, method
+identifier, parameter position, call count, and whether the call raised".
+It also records the set of classes seen *at* each parameter position, the
+set of classes the method returned, a digest of the file the method is in
+together with its line number (used only to notice that the method may
+have been edited since), and the time the run finished. None of that is a value from your program —
+the distinction the document now makes explicitly is class *names* versus
+the objects themselves: `User` is recorded, the user is not. The
+guarantee never changed; the list of what it covers was incomplete.
+
+A second correction to the same document matters more than the list did.
+It said nothing is written to disk beyond the parse cache. An observation
+run writes two temporary files, and one of them is where your own test
+command's stdout and stderr are redirected — which in a Rails app
+routinely contains SQL. OvalLSP neither reads nor keeps that log, and it
+is unlinked when the run ends, but "nothing is written to disk" was not
+true while it existed. The document now says what those files are, and
+draws the line the old text left implicit: the "never records" guarantee
+is about what OvalLSP extracts and keeps, not about what your own suite
+prints.
+
+The list was found by an independent check of the project's own website,
+which had enumerated it correctly while the privacy document had not. The
+disk claim was found by a reviewer reading the observation runner rather
+than the document.
+
 ## 0.1.11 — One rule, restated everywhere and remembered nowhere
 
 - Fixed: a method your project declares only in its own `sig/` is no

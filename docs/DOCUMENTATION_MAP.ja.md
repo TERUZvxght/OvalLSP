@@ -30,6 +30,7 @@
 | **ロードマップ項目**(提供開始・取り下げ・移動) | `docs/ROADMAP.md` + `.ja.md`、READMEのマトリクス、`site/roadmap.html` + `site/ja/roadmap.html`、`docs/design/tasks/024-deferred-review-findings.md` の対応する `024.R*` | `core/spec/meta/roadmap_parity_spec.rb`(README⇔ロードマップ) |
 | **先送り項目**(`024.*`) | `docs/design/tasks/024-deferred-review-findings.md` の status 行。修正の1リリース後にエントリを削除 | — |
 | **導入手順・前提条件・拡張機能ID** | `README.md` + `.ja.md`、`docs/PUBLISHING.md` + `.ja.md`、`site/getting-started.html` + `site/ja/getting-started.html` | — |
+| **拡張機能が記録する・保持する・ディスクに書くもの** | `vscode/PRIVACY.md` + `.ja.md`(これが唯一の正)。他所(`docs/design/docs/12-release-and-support.md`)で一覧を書き直さず、そこを指すこと。加えて `site/security.html` + `site/ja/security.html` | — |
 | **Runtime Agent・ワークスペースの信頼・拡張機能が実行するものに関すること** | `SECURITY.md` + `.ja.md`、`site/security.html` + `site/ja/security.html`、`docs/EXTENSION_CAPABILITIES.md` の「約束しないこと」節 | — |
 | **既知の制限** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`、およびそれと反することを書いているサイトのページ | — |
 | **進め方の取り決め**(構築・レビュー・リリースの方法) | `CLAUDE.md`、`AGENTS.md`、`CONTRIBUTING.md` + `.ja.md` | — |

@@ -29,6 +29,7 @@ updated in the same change, not "later".
 | **A roadmap item** (shipped, dropped, moved) | `docs/ROADMAP.md` + `.ja.md`, README's matrix, `site/roadmap.html` + `site/ja/roadmap.html`, the matching `024.R*` entry in `docs/design/tasks/024-deferred-review-findings.md` | `core/spec/meta/roadmap_parity_spec.rb` (README ⇔ roadmap) |
 | **A deferred finding** (`024.*`) | its status line in `docs/design/tasks/024-deferred-review-findings.md`; delete the entry one release after it is fixed | — |
 | **Install steps, prerequisites, or the extension id** | `README.md` + `.ja.md`, `docs/PUBLISHING.md` + `.ja.md`, `site/getting-started.html` + `site/ja/getting-started.html` | — |
+| **What the extension records, keeps, or writes to disk** | `vscode/PRIVACY.md` + `.ja.md` — the single source of truth for this; anything restating the list elsewhere (`docs/design/docs/12-release-and-support.md`) must point at it rather than copy it, and `site/security.html` + `site/ja/security.html` | — |
 | **Anything about the Runtime Agent, workspace trust, or what the extension executes** | `SECURITY.md` + `.ja.md`, `site/security.html` + `site/ja/security.html`, `docs/EXTENSION_CAPABILITIES.md`'s "does not promise" section | — |
 | **A known limitation** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`, and the site page that claims the opposite, if any | — |
 | **A working agreement** (how this project is built, reviewed or released) | `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md` + `.ja.md` | — |

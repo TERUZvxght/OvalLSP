@@ -1540,7 +1540,7 @@ module Ovallsp
     # breaks. The name is already fully qualified and unique, so asking by
     # it answers every shape at once.
     def find_controller_uri(owner_name)
-      canonical = owner_name.start_with?("::") ? owner_name : "::#{owner_name}"
+      canonical = Index::SymbolId.qualify_owner(owner_name)
       @workspace_index.class_declaration_uris(canonical).first
     end
 

@@ -425,8 +425,18 @@ module Ovallsp
       # without needing to tell them apart. A class the workspace really
       # does define completely always reaches it, through the default
       # Object chain if it declares no parent at all.
+      # Both spellings, because both reach here: `HierarchyIndex`'s default
+      # chain names `BasicObject` bare, while a class written
+      # `< ::BasicObject` produces an entry carrying the `::`. Comparing
+      # one spelling judged such a class's chain not to reach the root,
+      # which switched the unknown-method check off for it silently.
+      #
+      # One more place this rule was written by hand instead of delegated
+      # (0.1.12) -- `SymbolId.qualify_owner` is the rule, and
+      # `ROOT_SUPERCLASS_NAMES` in `HierarchyIndex` already listed both
+      # forms, which is what made this an oversight rather than a choice.
       def chain_reaches_root?(entries)
-        entries.any? { |entry| entry.name == "BasicObject" }
+        entries.any? { |entry| Index::SymbolId.qualify_owner(entry.name) == "::BasicObject" }
       end
 
       # A builtin ancestor (Object/Kernel/BasicObject, or any RBS-known

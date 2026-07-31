@@ -22,7 +22,15 @@ constant names — not application data), `Index::SymbolId` values, sample
 counts, and a source-file content digest + line number (`code_fingerprint`
 — a fingerprint, never the source text itself). No argument value,
 `#inspect` output, SQL, environment variable, or file content is ever
-read, held, or written anywhere in this feature.
+read or held by this feature.
+
+It does *write* one, and 0.1.12 corrected the claim that it did not: the
+observed test command's own stdout and stderr are redirected to a
+temporary log for the length of the run, so a failed run can report why.
+Nothing reads or indexes that log and it is unlinked when the run ends,
+but while it exists it contains whatever the suite printed — in a Rails
+app, routinely SQL. `vscode/PRIVACY.md` is the single source of truth for
+what is recorded and what is written; do not restate either list here.
 
 `Observation::Collector#workspace_method?` filters to methods whose own
 *definition* — not merely their call site — is under the workspace root,

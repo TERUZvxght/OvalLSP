@@ -67,8 +67,25 @@ module Ovallsp
       # `RBS::Types::Block` (a method's `{ ... }` parameter) -- both wrap an
       # `RBS::Types::Function` the same way.
       def convert_function(fn)
-        params = fn.required_positionals.map { |p| convert(p.type) }
-        Types::ProcType.new(parameters: params, return_type: convert(fn.return_type))
+        Types::ProcType.new(parameters: positional_parameter_types(fn), return_type: convert(fn.return_type))
+      end
+
+      # RBS models `(?)` -- "takes anything" -- as `UntypedFunction`, which
+      # carries a return type and *no* parameter lists at all. Asking it for
+      # `required_positionals` raises, and the blanket rescue around
+      # signature building turned that into "this method has no signature",
+      # which the unknown-method check reads as "RBS does not declare it".
+      # `send`, `__send__`, `public_send`, `instance_exec` and `Proc#call`
+      # are all declared that way, so ordinary Ruby was reported as a
+      # mistake on every closed receiver (0.1.12).
+      #
+      # No parameters is the honest answer for such a function: nothing is
+      # declared about them, and an empty list is what every caller here
+      # already means by "nothing known".
+      def positional_parameter_types(fn)
+        return [] unless fn.respond_to?(:required_positionals)
+
+        fn.required_positionals.map { |p| convert(p.type) }
       end
 
       # RBS type names are fully-qualified with a leading "::" — the

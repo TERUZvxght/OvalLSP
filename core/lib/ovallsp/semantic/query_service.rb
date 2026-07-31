@@ -356,6 +356,13 @@ module Ovallsp
 
       def rbs_signature_label(method_name, overload)
         parts = overload.required_positionals.map(&:to_s) + overload.optional_positionals.map { |t| "?#{t}" }
+        # A `*rest` is where the "and anything else" lives, and dropping it
+        # turns `(?)` -- RBS for "takes anything", which `Proc#call` and
+        # `Method#call` are declared as -- into a label asserting zero
+        # arity while the user types arguments into it. Before 0.1.12 those
+        # signatures failed to build at all, so no label was shown; making
+        # them build has to not make them lie.
+        parts << "..." if overload.rest_positional
         "#{method_name}(#{parts.join(', ')}) -> #{overload.return_type}"
       end
 
