@@ -651,6 +651,84 @@ roadmap entry rather than folded into another release's work.
 
 ---
 
+## 024.15 The index's answers depend on which file was edited last (0.1.13)
+
+**Status:** open
+**Area:** `core/lib/ovallsp/workspace_index.rb`
+
+`@by_symbol` maps a SymbolId to a list of `[uri, declaration]`, and
+`@by_simple_name` maps a name to a Set of SymbolIds. Both are in
+*insertion* order, and `replace_file` removes a uri's entries and then
+appends the new ones — so re-indexing a file moves its entries to the
+back of every list they are in. Editing a file, without changing a single
+declaration, changes the order.
+
+Five readers then take `.first` of such a list, or truncate it:
+
+| reader | what changes |
+|---|---|
+| `Server#find_controller_uri` | which controller file supplies a view's instance variables |
+| `QueryService#model_definition_locations` | where go-to-definition on a column or association lands |
+| `find_by_simple_name` | where go-to-definition on a bare constant lands |
+| `resolve_type_symbol_locked` | which class an ambiguous bare name resolves to — and with it the ancestry chain, the unknown-method check, find references and rename |
+| `QueryService#source_signatures`, `MethodResolver#build_candidate` | whose parameters signature help shows, and whose visibility gates a private-method check |
+| `search` | which symbols survive `workspace/symbol`'s result limit |
+
+All measured, all reproducible by adding one comment line to a file. This
+predates 0.1.12 and has shipped in every published version.
+
+### Why it is deferred rather than fixed
+
+0.1.12 tried to fix it four times and produced three incomplete fixes and
+two regressions:
+
+- round 8 pinned `.first` with a spec asserting the current answer, which
+  turned out to be an accident rather than a behaviour;
+- round 9 sorted `class_declarations` by uri — one reader of six, and
+  `sort_by` is not a stable sort, so entries sharing a uri were still
+  arbitrary, and the *source* order that insertion had at least preserved
+  within a file was lost;
+- round 10 replaced that with a per-SymbolId `ordered_entries`, which
+  dropped the cross-SymbolId ordering round 9 had added — a straight
+  regression of the same bug, in the same method;
+- round 11 added a second sort on top to restore it.
+
+Each attempt bolted an ordering onto a *reader*. That is fixing the
+symptom: the readers are not wrong to want a stable answer, the storage
+is wrong to have an unstable one. Every reader added is a new place to
+forget, which is the same structural mistake 0.1.11 was spent on for
+qualification.
+
+### The fix this actually needs
+
+One of these two, decided before any code is written:
+
+1. **Make the storage ordered.** `@by_symbol`'s per-SymbolId list and
+   `@by_simple_name`'s Set are maintained sorted by `[uri, line,
+   character]` at write time in `replace_file`. Every reader then
+   inherits the order without knowing about it, and there is exactly one
+   place that knows what the order is. Cost: `replace_file` does an
+   insertion sort per declaration; measure it against Cold Index on the
+   real Rails fixture before committing to it.
+2. **Stop taking `.first` of a collection with no order.** Go-to-definition
+   and find-references are `Location[]` in LSP — a class reopened across
+   four files genuinely has four definitions, and answering with all of
+   them is a better answer than answering with an arbitrary one. This is
+   a larger behavioural change and needs the `.first` callers examined
+   one at a time; `find_controller_uri` cannot return several, so it
+   would still need a stated rule.
+
+Option 1 is the smaller change and the one that matches this codebase's
+own habit of putting a rule in the one place that owns the data. Option 2
+is the better answer for the three readers that are LSP list responses.
+They are not exclusive.
+
+Whichever is chosen, the spec has to exercise **re-indexing** — every
+0.1.12 attempt was pinned by a spec that built the index once, which is
+exactly the state in which the bug is invisible.
+
+---
+
 ## 024.13 A reopened core class looks closed, in both directions (0.3.x)
 
 **Status:** open

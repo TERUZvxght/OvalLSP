@@ -170,25 +170,6 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       expect(locations.first[:uri]).to eq("file:///admin/company.rb")
     end
 
-    # A model reopened across two files has two class declarations, and
-    # this answers with one of them. Which one was nobody's decision until
-    # now -- `.last` passed the whole suite (0.1.12, round 8). Pinned to
-    # the first-indexed file so the answer is at least stable; offering
-    # every declaration would be a better answer and is not a patch's job.
-    it "answers with the first-indexed declaration for a model reopened across two files" do
-      index_source("class Company\nend\n", uri: "file:///a_company.rb")
-      index_source("class Company\n  def extra\n  end\nend\n", uri: "file:///b_company.rb")
-      model_registry.register_from_agent_response(
-        "Company",
-        { tableName: "companies", partial: false, columns: [],
-          associations: [{ name: "orders", macro: "has_many", className: "Order", optional: false }] }
-      )
-
-      locations = service.definitions_of(nominal("Company"), "orders")
-
-      expect(locations.map { |l| l[:uri] }).to eq(["file:///a_company.rb"])
-    end
-
     it "falls back to the same declaration when the model is written in the compact form" do
       index_source("class Admin::Company\nend\n", uri: "file:///admin/company.rb")
       model_registry.register_from_agent_response(

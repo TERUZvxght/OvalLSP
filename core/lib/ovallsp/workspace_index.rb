@@ -109,7 +109,7 @@ module Ovallsp
 
     # All Declarations sharing this SymbolId, across every indexed file.
     def declarations(symbol_id)
-      @mutex.synchronize { ordered_entries(symbol_id).map { |(_uri, decl)| decl } }
+      @mutex.synchronize { @by_symbol.fetch(symbol_id, []).map { |(_uri, decl)| decl } }
     end
 
     # Same as #declarations, but paired with the contributing uri. Declaration
@@ -117,7 +117,7 @@ module Ovallsp
     # LSP Location need one, so this is an intentional, documented addition
     # to the task's required interface rather than a change to it.
     def declarations_with_uri(symbol_id)
-      @mutex.synchronize { ordered_entries(symbol_id) }
+      @mutex.synchronize { @by_symbol.fetch(symbol_id, []).dup }
     end
 
     # Every Declaration currently indexed for `uri` (regardless of which
@@ -209,7 +209,7 @@ module Ovallsp
           next unless %i[class module].include?(symbol_id.kind)
           next unless symbol_id.name == qualified_name
 
-          ordered_entries(symbol_id).each { |(uri, decl)| results << { uri: uri, range: decl.location } }
+          @by_symbol.fetch(symbol_id, []).each { |(uri, decl)| results << { uri: uri, range: decl.location } }
         end
         results
       end
@@ -351,37 +351,17 @@ module Ovallsp
       # normalising that side too was a branch no input could reach
       # (0.1.12, round 8).
       qualified = Index::SymbolId.qualify_owner(raw)
-      # Sorted before the fallback: `@by_simple_name` is a Set in insertion
-      # order, so without this an ambiguous bare name resolved to whichever
-      # namespace happened to be indexed first -- and re-indexing either
-      # file swapped the answer, taking the ancestry chain, find-references
-      # and rename with it (0.1.12, round 10).
-      candidates.find { |sid| sid.name == qualified } || candidates.min_by(&:name)
-    end
-
-    # `sort_by` is not a stable sort, and this result is truncated by the
-    # caller -- so ties decided by index order changed which symbols
-    # survived `limit:` after any edit. The name/uri/line tail makes the
-    # order total (0.1.12, round 10).
-    # One order for every reader of `@by_symbol`. Insertion order is *index*
-    # order and `replace_file` removes-then-appends, so a re-index moved a
-    # file's declarations to the back of each list they are in -- and these
-    # lists are what `.first` is taken of for go-to-definition, for a
-    # method's parameters in signature help, for its visibility, and for a
-    # controller's contribution to a view. Uri then source position, so a
-    # class reopened twice in one file is ordered too: `sort_by` alone is
-    # not stable and scrambles equal keys from eight entries up.
-    def ordered_entries(symbol_id)
-      @by_symbol.fetch(symbol_id, []).sort_by do |(uri, decl)|
-        [uri, decl.location[:start][:line], decl.location[:start][:character]]
-      end
+      # `.first` here, and in this index's other readers, is index order --
+      # which moves when a file is re-indexed. That is a real defect and it
+      # predates 0.1.12; it is recorded as 024.15 with the fix it actually
+      # needs, which is not a sort bolted onto each reader. Four rounds of
+      # this release tried that and produced three incomplete fixes and two
+      # regressions. See docs/design/tasks/024-deferred-review-findings.md.
+      candidates.find { |sid| sid.name == qualified } || candidates.first
     end
 
     def rank(matches, needle)
-      matches.sort_by do |m|
-        [simple_name(m[:symbol_id]).downcase == needle ? 0 : 1,
-         m[:symbol_id].name.to_s, m[:uri], m[:location][:start][:line]]
-      end
+      matches.sort_by { |m| simple_name(m[:symbol_id]).downcase == needle ? 0 : 1 }
     end
   end
 end
