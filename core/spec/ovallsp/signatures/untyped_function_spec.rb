@@ -30,6 +30,8 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
             def required_kw: (name: String) -> void
             def opt_kw: (?limit: Integer) -> void
             def both_kw: (name: String, ?limit: Integer) -> void
+            def mixed: (String, ?count: Integer) -> void
+            def trailing: (String, *Integer) -> void
             def splat: (*Integer) -> void
           end
         RBS
@@ -101,6 +103,22 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
     # nothing failing (0.1.12, round 9).
     it "lists a required keyword before an optional one" do
       expect(label_for("both_kw")).to eq("both_kw(name:, ?limit:) -> Unknown")
+    end
+
+    # Positionals before keywords, in the order a call is written. The
+    # label's whole job is to describe the call shape, and the order *is*
+    # the description -- `Array#pack` really is `pack(string, ?buffer:)`,
+    # and swapping the two `concat` lines that build it renders
+    # `pack(?buffer:, string)` with nothing failing. 141 method types in
+    # the RBS core this loads have both (0.1.12).
+    it "lists positionals before keywords" do
+      expect(label_for("mixed")).to eq("mixed(String, ?count:) -> Unknown")
+    end
+
+    # And `...` last: it means "and more beyond what is named", which is
+    # only true after the names.
+    it "puts the rest marker after the parts it names" do
+      expect(label_for("trailing")).to eq("trailing(String, ...) -> Unknown")
     end
 
     # `*rest` and `**rest` each independently mean "accepts more than it

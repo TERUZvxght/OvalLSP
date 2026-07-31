@@ -10,7 +10,7 @@ the disproved approaches are kept below it under **Details**.
 
 Every fix here repairs something OvalLSP already claimed to do. Most of
 them are the same defect wearing different clothes: one rule about class
-names, written out by hand in eleven places.
+names, written out by hand wherever it was needed.
 
 **Privacy and the parse cache** — corrections to what the documents said,
 not to what the code does:
@@ -79,11 +79,15 @@ capability is added.
 
 ### Details
 
-**One rule, written out eleven times.** 0.1.11 moved "a class or owner
-name is qualified" into `SymbolId` and routed its callers through it.
-Copies survived, and this release spent eleven rounds finding them —
-every count it published along the way was too small, which is the real
-finding. `chain_reaches_root?` asked `entry.name == "BasicObject"`, and a
+**One rule, written out at every call site that needed it.** 0.1.11 moved
+"a class or owner name is qualified" into `SymbolId` and routed its
+callers through it. Copies survived, and this release spent eleven rounds
+finding them. It also published a count of them five times and was wrong
+every time, always low — which is the finding. There is no count here;
+`git diff main...HEAD -- core/lib` shows the removed sites, and how many
+there are depends on whether you count `entry.name == "BasicObject"` and
+`split("::").last` as the same rule, which is exactly the ambiguity that
+kept producing a different number. `chain_reaches_root?` asked `entry.name == "BasicObject"`, and a
 class written `< ::BasicObject` produces an entry carrying the `::`, so
 its chain was judged not to reach the root, the receiver was not
 "closed", and the unknown-method check switched off for that class
@@ -97,8 +101,8 @@ was visible: hovering `k` in `k = ::Widget` read `ClassOf[::Widget]`
 where `k = Widget` read `ClassOf[Widget]`.
 
 `Index::SymbolId` now owns all three directions of that one decision —
-`qualify_owner`, `bare_name` and `qualify_within` — and every one of the
-eleven copies delegates to it, including
+`qualify_owner`, `bare_name` and `qualify_within` — and every copy
+delegates to it, including
 `ReceiverResolution.canonical_receiver_name`, whose old body was one of
 the two byte-identical to what it now calls. The type also enforces the
 invariant it had only documented: a class's own name is qualified, which

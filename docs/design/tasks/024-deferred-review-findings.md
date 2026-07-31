@@ -663,8 +663,9 @@ appends the new ones — so re-indexing a file moves its entries to the
 back of every list they are in. Editing a file, without changing a single
 declaration, changes the order.
 
-Six readers then take `.first` of such a list, or truncate it — convert
-all six, or repeat round 9's mistake of converting one:
+Seven readers then take `.first` of such a list, or truncate it. Convert
+all seven; converting a subset is round 9's mistake, and this list was
+itself miscounted twice before it was written one reader per row:
 
 | reader | what changes |
 |---|---|
@@ -672,7 +673,8 @@ all six, or repeat round 9's mistake of converting one:
 | `QueryService#model_definition_locations` | where go-to-definition on a column or association lands |
 | `find_by_simple_name` | where go-to-definition on a bare constant lands |
 | `resolve_type_symbol_locked` | which class an ambiguous bare name resolves to — and with it the ancestry chain, the unknown-method check, find references and rename |
-| `QueryService#source_signatures`, `MethodResolver#build_candidate` | whose parameters signature help shows, and whose visibility gates a private-method check |
+| `QueryService#source_signatures` | whose parameters signature help shows |
+| `MethodResolver#build_candidate` | whose visibility gates the private-method check |
 | `search` | which symbols survive `workspace/symbol`'s result limit |
 
 All measured, all reproducible by adding one comment line to a file. This
