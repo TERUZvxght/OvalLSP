@@ -58,10 +58,7 @@
 2. `cd core && bundle exec rspec spec/meta spec/e2e/capability_coverage_spec.rb` — 対応関係と網羅性の検査。
 3. 両CHANGELOG: 先頭に箇条書き、その下に詳細、日英が同じことを言っている
    こと。
-4. `gitleaks detect --source . --log-opts="--all"` を全履歴に対して実行
-   — `make-final-review-bundle.sh`が実際に走らせているものと同じ呼び出し。
-   本リポジトリに`.gitleaks.toml`は存在しない。以前のこの行はそれを指定
-   しており、実行した者にはそのまま失敗していた。
+4. `gitleaks detect --config .gitleaks.toml` を全履歴に対して実行。
 5. 直前のバージョン番号でリポジトリ全体をgrepし、履歴以外でそれを名乗って
    いるものが残っていれば古い。
 

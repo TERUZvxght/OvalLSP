@@ -57,10 +57,7 @@ than not having the page.
 2. `cd core && bundle exec rspec spec/meta spec/e2e/capability_coverage_spec.rb` — the parity and coverage guards.
 3. Both changelogs: bullets first, details below, EN and JA saying the
    same thing.
-4. `gitleaks detect --source . --log-opts="--all"` over the full history —
-   the same invocation `make-final-review-bundle.sh` runs. There is no
-   `.gitleaks.toml` in this repository; an earlier version of this line
-   named one, and the command failed outright for anyone who ran it.
+4. `gitleaks detect --config .gitleaks.toml` over the full history.
 5. Grep the previous version number across the repo; anything still
    naming it that is not history is stale.
 
