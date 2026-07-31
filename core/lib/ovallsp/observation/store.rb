@@ -76,8 +76,13 @@ module Ovallsp
       end
 
       # Drops any stored signature whose `code_fingerprint` no longer
-      # matches `current_fingerprints[symbol_id]` (the method's live
-      # Declaration#body_source digest) -- "code fingerprint変更時に古い
+      # matches `current_fingerprints[symbol_id]` -- a digest of the whole
+      # buffer or file the method is in, plus its line number
+      # (`Server#current_observation_fingerprint`), never a digest of the
+      # method body. Any edit anywhere in the file invalidates every
+      # observation in it; that coarseness is deliberate and errs in the
+      # safe direction. Described as a `body_source` digest until 0.1.12
+      # in three separate files; it never was one. -- "code fingerprint変更時に古い
       # 観測をstale化する" / "source変更後に古い観測を使用しない". A
       # symbol_id absent from `current_fingerprints` entirely (the
       # method itself was deleted) is dropped too, for the same reason:

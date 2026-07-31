@@ -151,11 +151,12 @@ describes it accurately, and says plainly that the "never records"
 promise is about what OvalLSP extracts and keeps, not about what your own
 test suite prints.
 
-**What eleven rounds of review cost this document.** Eight numbers
-published in these notes were wrong, including two example counts, a
-mutation count, and three separate counts of the copies described above.
-Two release titles made completeness claims that the next round
-falsified. The strongest correction in the release — the parse cache
+**What eleven rounds of review cost this document.** Most of the numbers
+these notes published were wrong at least once and had to be re-derived:
+two suite counts, a mutation count, and the count of the copies described
+above three separate times. There is no total here, because a total would
+be one more number nobody could check. Two release titles made
+completeness claims that the next round falsified. The strongest correction in the release — the parse cache
 holding source — went unmentioned in any bullet through ten rounds, in a
 document eleven reviewers had each read. And one thread was rolled back
 rather than shipped: four rounds spent on the index returning results in

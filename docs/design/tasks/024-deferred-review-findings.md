@@ -663,7 +663,8 @@ appends the new ones — so re-indexing a file moves its entries to the
 back of every list they are in. Editing a file, without changing a single
 declaration, changes the order.
 
-Five readers then take `.first` of such a list, or truncate it:
+Six readers then take `.first` of such a list, or truncate it — convert
+all six, or repeat round 9's mistake of converting one:
 
 | reader | what changes |
 |---|---|
