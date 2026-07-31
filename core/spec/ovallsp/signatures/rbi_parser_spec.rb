@@ -251,6 +251,91 @@ RSpec.describe Ovallsp::Signatures::RbiParser do
       expect(overload.required_positionals).to eq([Ovallsp::Types::UNKNOWN, Ovallsp::Types::UNKNOWN])
     end
 
+    # Not every node in a parameter list answers `#name`. Reading shape
+    # from the def means meeting the whole grammar, and three legal forms
+    # have no name at all: `...`, `**nil`, and a destructured
+    # `(b, c)`. Asking them for one raised, `handle_sig`'s blanket rescue
+    # turned that into a warning, and the method's signature was dropped
+    # entirely -- so a `.rbi` that parsed before this release stopped
+    # producing hover, signature help and a declaration for that method.
+    # Caught in round 6; it was introduced in round 5.
+    it "parses a sig over `def f(...)` rather than dropping the signature" do
+      result = parse(<<~RBI)
+        class Foo
+          sig { params(x: Integer).returns(String) }
+          def forward(...)
+          end
+        end
+      RBI
+
+      expect(result.diagnostics).to be_empty
+      expect(result.signature_methods.map { |sm| sm.symbol_id.name }).to eq(["forward"])
+    end
+
+    # `...` forwards positionals, keywords and a block alike, so both rest
+    # slots have to be open or a forwarding method rejects arguments it
+    # does in fact accept.
+    it "treats `...` as accepting both positionals and keywords" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(x: Integer).returns(String) }
+          def forward(...)
+          end
+        end
+      RBI
+
+      expect(overload.rest_positional).to eq(Ovallsp::Types::UNKNOWN)
+      expect(overload.rest_keyword).to eq(Ovallsp::Types::UNKNOWN)
+    end
+
+    # The opposite of `...`, and the pair is what shows the two are being
+    # told apart rather than both waved through: `**nil` declares that the
+    # method takes no keywords at all.
+    it "gives `**nil` no keyword-rest slot" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(x: Integer).returns(String) }
+          def strict(x, **nil)
+          end
+        end
+      RBI
+
+      expect(overload.rest_keyword).to be_nil
+      expect(overload.required_positionals).to eq([Ovallsp::Types::Nominal.new(name: "Integer")])
+    end
+
+    it "keeps a destructured positional as a positional, typed Unknown" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(a: Integer).returns(String) }
+          def pairs(a, (b, c))
+          end
+        end
+      RBI
+
+      expect(overload.required_positionals).to eq([Ovallsp::Types::Nominal.new(name: "Integer"), Ovallsp::Types::UNKNOWN])
+    end
+
+    # `empty_slots` is reached by every sig over a parameter-less def, and
+    # nothing asserted what it contains -- reverting the whole method only
+    # proved the method existed (CLAUDE.md's named blind spot).
+    it "gives a sig over a parameter-less def no argument slots at all" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { returns(Integer) }
+          def count
+          end
+        end
+      RBI
+
+      expect(overload.required_positionals).to be_empty
+      expect(overload.optional_positionals).to be_empty
+      expect(overload.rest_positional).to be_nil
+      expect(overload.required_keywords).to be_empty
+      expect(overload.optional_keywords).to be_empty
+      expect(overload.rest_keyword).to be_nil
+    end
+
     # A `params(...)` entry naming something the def does not declare is a
     # broken RBI. It must not invent an argument the method cannot take.
     it "ignores a params entry with no matching parameter" do

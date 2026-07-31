@@ -45,7 +45,7 @@ OvalLSP自身の動作(起動、インデックス進行状況、エラー、ver
 あなたのマシン上(VS Code自身のOutputパネル)に留まり、どこにも送信
 されません。output channelを閉じて再度開くことでクリアできます。
 通常の利用でOvalLSP自身がディスクに書き込むのは、`$XDG_CACHE_HOME/ovallsp/`
-(この環境変数が未設定なら `~/.cache/ovallsp/`)配下の
+(この環境変数が未設定または空なら `~/.cache/ovallsp/`)配下の
 [永続parseキャッシュ](README.ja.md#トラブルシューティング)のみです。
 workspaceとtoolchainのversionをキーにしています。**このキャッシュには
 あなたのソースコードの一部が含まれます。** parse済みの宣言と型に加えて、

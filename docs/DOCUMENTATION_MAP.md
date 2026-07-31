@@ -27,9 +27,9 @@ updated in the same change, not "later".
 | **A capability** (anything a user can now do, or can no longer do) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md` (add/alter the row **and** its E2E example), README's matrix in `README.md` + `README.ja.md`, `site/capabilities.html` + `site/ja/capabilities.html`, both changelogs | `core/spec/e2e/capability_coverage_spec.rb` (row ⇔ E2E example), `core/spec/meta/*_parity_spec.rb` (EN ⇔ JA) |
 | **A version number** | `core/lib/ovallsp/version.rb`, `core/Gemfile.lock`, `vscode/package.json`, `vscode/package-lock.json` (two places), both changelogs | `core/spec/meta/changelog_parity_spec.rb`, `vscode/src/test/unit/versionPairing.test.ts` |
 | **A roadmap item** (shipped, dropped, moved) | `docs/ROADMAP.md` + `.ja.md`, README's matrix, `site/roadmap.html` + `site/ja/roadmap.html`, the matching `024.R*` entry in `docs/design/tasks/024-deferred-review-findings.md` | `core/spec/meta/roadmap_parity_spec.rb` (README ⇔ roadmap) |
-| **A deferred finding** (`024.*`) | its status line in `docs/design/tasks/024-deferred-review-findings.md`; delete the entry one release after it is fixed | — |
+| **A deferred finding** (`024.*`) | its status line in `docs/design/tasks/024-deferred-review-findings.md`; delete the entry once nothing in the tree still cites it by number — grep first, do not go by the calendar (see that file's own legend) | — |
 | **Install steps, prerequisites, or the extension id** | `README.md` + `.ja.md`, `docs/PUBLISHING.md` + `.ja.md`, `site/getting-started.html` + `site/ja/getting-started.html` | — |
-| **What the extension records, keeps, or writes to disk** | `vscode/PRIVACY.md` + `.ja.md` — the single source of truth for this; anything restating the list elsewhere (`docs/design/docs/12-release-and-support.md`) must point at it rather than copy it, and `site/security.html` + `site/ja/security.html` | — |
+| **What the extension records, keeps, or writes to disk** | `vscode/PRIVACY.md` + `.ja.md` — the single source of truth for this; `site/security.html` + `site/ja/security.html`; and the five files 0.1.12 found restating the list or the cache path, which must point at PRIVACY rather than copy it: `docs/design/docs/12-release-and-support.md`, `docs/design/tasks/019-runtime-observation.md`, `019-runtime-observation-notes.md`, `021-persistent-cache-notes.md`, and the cache paragraph in `vscode/README.md` + `.ja.md` | — |
 | **Anything about the Runtime Agent, workspace trust, or what the extension executes** | `SECURITY.md` + `.ja.md`, `site/security.html` + `site/ja/security.html`, `docs/EXTENSION_CAPABILITIES.md`'s "does not promise" section | — |
 | **A known limitation** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`, and the site page that claims the opposite, if any | — |
 | **A working agreement** (how this project is built, reviewed or released) | `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md` + `.ja.md` | — |
@@ -94,6 +94,9 @@ saying opposite things a week apart. The rest of the list is order-independent:
   These are not cosmetic like the rest of this list — they are the
   release's own corrections, unmade on the public page. Fix them with
   the others before merging, and do not ship the site carrying them.
+  The same paragraph also hard-codes `~/.cache/ovallsp/`, which 0.1.12
+  corrected to `$XDG_CACHE_HOME/ovallsp/` (falling back to `~/.cache`
+  when that is unset or empty) in six other documents.
 
 Note also that `vscode/package.json`'s `homepage` on that branch already
 points at the Pages URL, which 404s until Pages is switched on and the

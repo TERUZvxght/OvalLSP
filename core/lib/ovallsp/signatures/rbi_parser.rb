@@ -171,19 +171,59 @@ module Ovallsp
         parameters = def_node&.parameters
         return RbiParser.empty_slots unless parameters
 
-        type_of = ->(node) { declared.fetch(node.name, Types::UNKNOWN) }
+        forwarding = parameters.keyword_rest.is_a?(Prism::ForwardingParameterNode)
         {
-          required_positionals: (parameters.requireds + parameters.posts).map(&type_of),
-          optional_positionals: parameters.optionals.map(&type_of),
-          rest_positional: parameters.rest && type_of.call(parameters.rest),
-          required_keywords: keyword_slot(parameters, Prism::RequiredKeywordParameterNode, type_of),
-          optional_keywords: keyword_slot(parameters, Prism::OptionalKeywordParameterNode, type_of),
-          rest_keyword: parameters.keyword_rest && type_of.call(parameters.keyword_rest)
+          required_positionals: (parameters.requireds + parameters.posts).map { |n| type_of(declared, n) },
+          optional_positionals: parameters.optionals.map { |n| type_of(declared, n) },
+          rest_positional: rest_slot(declared, parameters.rest, forwarding),
+          required_keywords: keyword_slot(parameters, Prism::RequiredKeywordParameterNode, declared),
+          optional_keywords: keyword_slot(parameters, Prism::OptionalKeywordParameterNode, declared),
+          rest_keyword: keyword_rest_slot(declared, parameters.keyword_rest)
         }
       end
 
-      def keyword_slot(parameters, node_class, type_of)
-        parameters.keywords.grep(node_class).to_h { |node| [node.name, type_of.call(node)] }
+      # Not every node in a parameter list answers `#name`. A destructured
+      # positional (`def f(a, (b, c))`) is a `MultiTargetNode`, and both
+      # `...` and `**nil` put a nameless node in the keyword-rest slot.
+      # Asking any of them for a name raised, `handle_sig`'s blanket
+      # rescue turned that into a warning, and the whole method's
+      # signature was dropped -- so a `.rbi` that parsed before 0.1.12
+      # stopped producing one. A slot with no name still exists; it just
+      # has no type to look up (0.1.12, round 6).
+      def type_of(declared, node)
+        return Types::UNKNOWN unless node.respond_to?(:name)
+
+        declared.fetch(node.name, Types::UNKNOWN)
+      end
+
+      # `def f(...)` forwards positionals, keywords and a block alike, and
+      # Prism records the whole of it as a single keyword-rest node -- so
+      # the positional rest slot has to be opened from there too, or a
+      # forwarding method rejects arguments it does accept.
+      def rest_slot(declared, rest_node, forwarding)
+        return Types::UNKNOWN if forwarding
+        return nil unless rest_node
+
+        type_of(declared, rest_node)
+      end
+
+      # `**nil` is the opposite of `**rest`: it declares that the method
+      # takes no keywords at all, so it must leave the slot closed rather
+      # than open it to anything.
+      #
+      # `...` needs no branch of its own: it is nameless, so `type_of`
+      # already answers Unknown, which is what an open slot is. A branch
+      # for it was written here and removed once a mutation showed nothing
+      # could tell the two paths apart -- the behaviour is pinned by the
+      # `...` specs either way, and an unreachable line is worse than none.
+      def keyword_rest_slot(declared, node)
+        return nil if node.nil? || node.is_a?(Prism::NoKeywordsParameterNode)
+
+        type_of(declared, node)
+      end
+
+      def keyword_slot(parameters, node_class, declared)
+        parameters.keywords.grep(node_class).to_h { |node| [node.name, type_of(declared, node)] }
       end
 
       # `def f(*)` / `def f(**)` are anonymous: the node has no name, so

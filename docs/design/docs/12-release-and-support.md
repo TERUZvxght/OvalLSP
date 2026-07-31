@@ -99,7 +99,7 @@ enum・scope・delegate)の型推論、RBS/RBI連携、opt-inのruntime型観測
 4. ステータスバーの表示(`Indexing`/`Ready (static)`/`Ready (Rails)`/
    `Agent unavailable`)で現在の状態を確認できる。
 5. キャッシュが壊れていると疑われる場合、キャッシュは
-   `$XDG_CACHE_HOME/ovallsp/`(未設定なら`~/.cache/ovallsp/`)
+   `$XDG_CACHE_HOME/ovallsp/`(未設定または空なら`~/.cache/ovallsp/`)
    以下にworkspace/Ruby/Prism/Gemfile.lock/RBSの組合せごとに分離されて
    いるため、該当ディレクトリを削除すれば強制的にcold re-indexされる。
 

@@ -105,7 +105,7 @@ module Ovallsp
       return ivars_from(initial_env) unless method_node.body
 
       begin_ivar_inference if reset_budget
-      @self_type_stack = [Types::Nominal.new(name: self_type_name.to_s.delete_prefix("::"))]
+      @self_type_stack = [Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(self_type_name))]
       env = initial_env.dup
       eval_type(method_node.body, env)
       # Symbol-keyed (":@user", not "@user") to match how Prism names
@@ -248,7 +248,15 @@ module Ovallsp
     def locate_in_namespace(node, offset)
       return Types::UNKNOWN unless contains?(node.location, offset)
 
-      @self_type_stack.push(Types::Nominal.new(name: node.constant_path.full_name))
+      # `full_name` answers `::Widget` for `class ::Widget`, and the type
+      # model's names are bare. Measured: every consumer of this stack
+      # normalises on its own today, so no probe could tell the two
+      # spellings apart -- which is exactly why it is worth fixing rather
+      # than leaving correctness resting on each consumer remembering
+      # (0.1.12, round 6).
+      @self_type_stack.push(
+        Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.constant_path.full_name))
+      )
       locate(node.body, offset, {})
     ensure
       @self_type_stack.pop
@@ -419,7 +427,10 @@ module Ovallsp
       name = node.full_name
       return Types::UNKNOWN if name.nil? || name.empty?
 
-      Types::Generic.new(name: "ClassOf", type_arg: Types::Nominal.new(name: name.delete_prefix("::")))
+      Types::Generic.new(
+        name: "ClassOf",
+        type_arg: Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(name))
+      )
     rescue StandardError
       # `full_name` raises on a dynamic constant path (`Foo::(bar)`).
       Types::UNKNOWN

@@ -28,9 +28,9 @@
 | **ケイパビリティ**(ユーザーにできることが増えた・減った) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md`(行**と**そのE2E例の両方)、`README.md` + `README.ja.md` のマトリクス、`site/capabilities.html` + `site/ja/capabilities.html`、両CHANGELOG | `core/spec/e2e/capability_coverage_spec.rb`(行⇔E2E例)、`core/spec/meta/*_parity_spec.rb`(EN⇔JA) |
 | **バージョン番号** | `core/lib/ovallsp/version.rb`、`core/Gemfile.lock`、`vscode/package.json`、`vscode/package-lock.json`(2箇所)、両CHANGELOG | `core/spec/meta/changelog_parity_spec.rb`、`vscode/src/test/unit/versionPairing.test.ts` |
 | **ロードマップ項目**(提供開始・取り下げ・移動) | `docs/ROADMAP.md` + `.ja.md`、READMEのマトリクス、`site/roadmap.html` + `site/ja/roadmap.html`、`docs/design/tasks/024-deferred-review-findings.md` の対応する `024.R*` | `core/spec/meta/roadmap_parity_spec.rb`(README⇔ロードマップ) |
-| **先送り項目**(`024.*`) | `docs/design/tasks/024-deferred-review-findings.md` の status 行。修正の1リリース後にエントリを削除 | — |
+| **先送り項目**(`024.*`) | `docs/design/tasks/024-deferred-review-findings.md` の status 行。エントリの削除は、その番号を引用している箇所がツリーに1つも無くなってから——暦ではなく grep で判断する(同ファイルの凡例を参照) | — |
 | **導入手順・前提条件・拡張機能ID** | `README.md` + `.ja.md`、`docs/PUBLISHING.md` + `.ja.md`、`site/getting-started.html` + `site/ja/getting-started.html` | — |
-| **拡張機能が記録する・保持する・ディスクに書くもの** | `vscode/PRIVACY.md` + `.ja.md`(これが唯一の正)。他所(`docs/design/docs/12-release-and-support.md`)で一覧を書き直さず、そこを指すこと。加えて `site/security.html` + `site/ja/security.html` | — |
+| **拡張機能が記録する・保持する・ディスクに書くもの** | `vscode/PRIVACY.md` + `.ja.md`(これが唯一の正)。`site/security.html` + `site/ja/security.html`。加えて、0.1.12 が「一覧またはキャッシュパスを書き写している」と特定した5箇所——`docs/design/docs/12-release-and-support.md`、`docs/design/tasks/019-runtime-observation.md`、`019-runtime-observation-notes.md`、`021-persistent-cache-notes.md`、`vscode/README.md` + `.ja.md` のキャッシュ段落——は書き直さず PRIVACY を指すこと | — |
 | **Runtime Agent・ワークスペースの信頼・拡張機能が実行するものに関すること** | `SECURITY.md` + `.ja.md`、`site/security.html` + `site/ja/security.html`、`docs/EXTENSION_CAPABILITIES.md` の「約束しないこと」節 | — |
 | **既知の制限** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`、およびそれと反することを書いているサイトのページ | — |
 | **進め方の取り決め**(構築・レビュー・リリースの方法) | `CLAUDE.md`、`AGENTS.md`、`CONTRIBUTING.md` + `.ja.md` | — |
@@ -93,7 +93,9 @@
   行番号・実行識別子・実行終了時刻が抜けている点。これらは他の項目と違って
   体裁の問題ではなく、このリリース自身の訂正が公開ページに反映されていない
   という問題。取り込み前に他と一緒に直し、この状態のままサイトを公開しない
-  こと。
+  こと。同じ段落は `~/.cache/ovallsp/` も直書きしているが、0.1.12 はこれを
+  `$XDG_CACHE_HOME/ovallsp/`(未設定または空なら `~/.cache`)へ他の6文書で
+  訂正済み。
 
 また、そのブランチの `vscode/package.json` の `homepage` は既に Pages の
 URL を指しています。Pages を有効化してサイトが `main` に載るまでは404に

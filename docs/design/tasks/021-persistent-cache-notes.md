@@ -10,7 +10,7 @@ deliberately deferred.
 (declarations, ancestor/alias facts, reference candidates, generated
 method facts — everything `ColdIndexer` produces per file), under
 `$XDG_CACHE_HOME/ovallsp/<workspace_digest>/<sha256(path)>.cache`, falling
-back to `~/.cache` when that variable is unset. `MethodSummary`
+back to `~/.cache` when that variable is unset or empty. `MethodSummary`
 (Task 010's per-method body-summary/call-chain cache) is **not**
 persisted in this pass — it's already cheap to recompute on first query
 (one method body, not a whole-workspace walk), and Cold Index warming is

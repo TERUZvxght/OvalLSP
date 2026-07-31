@@ -6,7 +6,7 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
-## 0.1.12 — The last copy of the rule, and a privacy list that under-described itself
+## 0.1.12 — Every remaining copy of the rule, and a privacy list that under-described itself
 
 - Fixed: `send`, `__send__`, `public_send` and `instance_exec` are no
   longer reported as unknown methods.
@@ -30,6 +30,9 @@ the disproved approaches are kept below it under **Details**.
 - Fixed: go-to-definition on an Active Record column or association
   reaches models written `module Admin; class Company`, not only those
   written `class Admin::Company`.
+- Fixed: a Sorbet `.rbi` declaring `def f(...)`, `def f(**nil)` or a
+  destructured `def f(a, (b, c))` keeps its signature. Introduced and
+  fixed inside this release; no published version shipped it.
 - Fixed: `PRIVACY.md` now describes everything type observation records.
   It recorded more than it said — nothing sensitive, but a privacy
   document that under-describes itself is wrong whichever direction the
@@ -103,12 +106,16 @@ own documentation map says a change like this makes stale, and it still
 carries the two claims corrected here. The disk claim was found by a
 reviewer reading the observation runner rather than the document.
 
-Round 3 found two more instances of this release's own subject. `::User`
-never matched `ModelRegistry`, which is keyed by Rails' bare `model.name`
-— normalised in the registry's four lookup methods rather than at the
-twenty-one call sites, across five subsystems, that use them; for the
-reason 0.1.11 exists. And the signature label, fixed in round 2 for `*rest`,
-still asserted zero arity for anything keyword-only.
+Rounds 3 and 4 found three more instances of this release's own subject.
+`::User` never matched `ModelRegistry`, which is keyed by Rails' bare
+`model.name` — normalised in the registry's four lookup methods rather
+than at the twenty-one call sites, across five subsystems, that use them;
+for the reason 0.1.11 exists. `LocalInferencer` built `::`-prefixed
+Nominals in two more places, a constant receiver and an `is_a?`
+narrowing. And `MethodAnalyzer` matched a delegate's owner by *simple
+name*, so `Admin::User` borrowed the top-level `User`'s associations.
+Separately, the signature label, fixed in round 2 for `*rest`, still
+asserted zero arity for anything keyword-only.
 
 Round 3 also caught two things this release had said about itself that
 were wrong. The newly-written privacy sentence claimed a call that raised
@@ -121,7 +128,8 @@ worth exactly what the edit behind it was, and that one was worth nothing.
 Round 5 found three more places carrying the same rule by hand, and all
 three were in code the earlier rounds had read. `MethodAnalyzer` built a
 type straight from `::Widget.new`'s source spelling — the exact line
-round 1 had fixed in `LocalInferencer`, one subsystem over, untouched —
+rounds 3 and 4 had fixed in `LocalInferencer`, one subsystem over,
+untouched —
 and gave `self` the *index's* spelling of its owner, so `self` and
 `Widget.new` were two different types inside the same class. Both make a
 union where there should be one Nominal, and a union is what switches the
@@ -149,6 +157,28 @@ each overload counts separately, and 29 is neither. Corrected to say
 which is being counted — the number was only ever there to show the shape
 is common rather than exotic, and a number that needs an unstated filter
 to reproduce does not show that.
+
+Round 6 found that round 5's own RBI fix had broken three legal parameter
+forms. Reading shape from the `def` means meeting the whole of Ruby's
+parameter grammar, and `def f(...)`, `def f(**nil)` and a destructured
+`def f(a, (b, c))` all put a node in the list that answers no `#name` at
+all. Asking raised; `handle_sig`'s blanket rescue turned that into a
+warning; the method's signature was dropped entirely. A `.rbi` that
+parsed before this release stopped producing hover, signature help and a
+declaration for those methods. This is the one genuine regression in
+0.1.12 and it existed only between rounds 5 and 6. `...` now opens both
+rest slots, `**nil` closes the keyword one, and a destructured parameter
+keeps its positional slot typed Unknown.
+
+Round 6 also read the release's own title and found it false. "The last
+copy of the rule" was written when one copy was thought to remain; five
+more were found afterwards, in three later rounds. Retitled. The same
+round corrected an attribution — the `LocalInferencer` fix credited to
+round 1 was rounds 3 and 4 — and the last three inline copies of the
+qualification rule in `LocalInferencer` now go through the shared helper.
+Measured, none of those three could change an answer today, because every
+consumer normalises on its own; that is the reason to fix them rather
+than a reason not to.
 
 ## 0.1.11 — One rule, restated everywhere and remembered nowhere
 

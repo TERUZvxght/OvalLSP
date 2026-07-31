@@ -25,14 +25,15 @@ above exists. The invariant this file *does* own is that no argument
 value, `#inspect` output, SQL, environment variable, or file content is
 ever read or held: names and counts cross, values do not.
 
-It does *write* one file, and 0.1.12 corrected the claim that it did not:
-the observed test command's own stdout and stderr are redirected to a
-temporary log for the length of the run. Nothing reads, indexes or
-surfaces that log — the redirect exists only because in `--stdio` mode
-Core's file descriptor 1 is the live LSP transport, so the child's output
-must not land there. It is unlinked when the run ends, but while it
-exists it contains whatever the suite printed — in a Rails app, routinely
-SQL.
+It does *write* two files, and 0.1.12 corrected the claim that it wrote
+none: the `Marshal`'d results the boundary above is described in terms of
+(`Harness.dump`), and a log the observed test command's own stdout and
+stderr are redirected to for the length of the run. Nothing reads,
+indexes or surfaces that log — the redirect exists only because in
+`--stdio` mode Core's file descriptor 1 is the live LSP transport, so the
+child's output must not land there. Both are unlinked when the run ends,
+but while the log exists it contains whatever the suite printed — in a
+Rails app, routinely SQL.
 
 `Observation::Collector#workspace_method?` filters to methods whose own
 *definition* — not merely their call site — is under the workspace root,
