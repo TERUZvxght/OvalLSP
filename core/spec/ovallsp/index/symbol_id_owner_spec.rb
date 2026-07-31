@@ -67,6 +67,17 @@ RSpec.describe Ovallsp::Index::SymbolId do
                                discriminator: nil).name).to eq("build")
   end
 
+  # Reading `kind`/`name` in the initializer must not make them optional:
+  # a nil name indexes under "", matches nothing, and surfaces much later
+  # as a `NoMethodError` inside an unrelated request rather than an
+  # `ArgumentError` at the call site that got it wrong (round 10).
+  it "still requires a kind and a name" do
+    expect { described_class.new(kind: :class, owner: nil, discriminator: nil) }
+      .to raise_error(ArgumentError, /name/)
+    expect { described_class.new(name: "::Widget", owner: nil, discriminator: nil) }
+      .to raise_error(ArgumentError, /kind/)
+  end
+
   it "makes the two spellings of a class one key" do
     bare = described_class.new(kind: :class, owner: nil, name: "Widget", discriminator: nil)
     qualified = described_class.new(kind: :class, owner: nil, name: "::Widget", discriminator: nil)

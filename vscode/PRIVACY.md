@@ -59,8 +59,8 @@ not by this text.) Nothing in it is transmitted anywhere, and
 deleting that directory is safe at any time — it is rebuilt by
 re-indexing.
 
-Running type observation writes two more files, for the length of that
-run only — see below.
+Running type observation writes two more files, normally for the length
+of that run only — see below for exactly when they outlive it.
 
 ## Runtime type observation (opt-in)
 
@@ -95,8 +95,8 @@ Two temporary files exist for the length of an observation run, both
 created with owner-only permissions in your system temp directory and
 unlinked when the run ends — but not guaranteed to be. Deleting them is
 deliberately allowed to fail quietly rather than replace an error already
-being raised, so a read-only or full temp directory leaves them; and a
-crash or a kill skips the deletion step entirely:
+being raised, so a temp directory that has gone read-only leaves
+them; and a crash or a kill skips the deletion step entirely:
 
 - the run's results, as described above;
 - a log file, which is where **your test command's own standard output

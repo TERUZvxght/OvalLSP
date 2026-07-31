@@ -86,7 +86,14 @@ module Ovallsp
       # rather than re-guarded at the one read site round 8 removed a
       # guard from: the invariant is this type's, not the reader's
       # (0.1.12, round 9).
-      def initialize(kind: nil, name: nil, owner: nil, **rest)
+      # `kind:` and `name:` stay required. Round 9 declared them with nil
+      # defaults purely to read them here, and in doing so turned a missing
+      # keyword from an `ArgumentError` at the offending call site into a
+      # SymbolId with a nil name -- which indexes under "" , matches
+      # nothing, and finally raises `NoMethodError` inside
+      # `DocumentSymbolBuilder` as an internal error on an unrelated
+      # request (0.1.12, round 10).
+      def initialize(kind:, name:, owner: nil, **rest)
         qualified_name = %i[class module].include?(kind) ? SymbolId.qualify_owner(name) : name
         super(kind: kind, name: qualified_name, owner: SymbolId.qualify_owner(owner), **rest)
       end

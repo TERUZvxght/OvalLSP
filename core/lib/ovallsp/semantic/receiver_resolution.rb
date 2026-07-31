@@ -51,8 +51,9 @@ module Ovallsp
       # directions of this one decision, and this is the semantic layer's
       # name for reading it. Round 7 of the 0.1.12 review found eleven
       # hand-written copies of the rule still in the tree, across its three
-      # directions. This method's old body was the one that was
-      # byte-identical to what it now calls (0.1.12).
+      # directions. This method's old body was one of the two that were
+      # byte-identical to what it now calls; `ModelRegistry#lookup_key`
+      # was the other (0.1.12).
       def canonical_receiver_name(name)
         Index::SymbolId.bare_name(name)
       end

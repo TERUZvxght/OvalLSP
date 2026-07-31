@@ -8,6 +8,18 @@ the disproved approaches are kept below it under **Details**.
 
 ## 0.1.12 — The rule that kept being rewritten, and a privacy list that under-described itself
 
+- **Changed: `PRIVACY.md` no longer says the parse cache holds "not your
+  source code's contents". It holds parts of it** — each method's body
+  text and each parameter's default expression, verbatim, plus each
+  file's absolute path. Nothing about what the cache stores changed; the
+  document was wrong about it, in every version through 0.1.11.
+- Fixed: a view's instance variables, and go-to-definition on a class
+  reopened across files, no longer depend on which file you edited last.
+- Fixed: a plugin registering a class declaration could make an
+  unqualified name resolve to the wrong class.
+- Documented: the parse cache lives under `$XDG_CACHE_HOME/ovallsp/`, not
+  always `~/.cache/ovallsp/`. The troubleshooting step that says to delete
+  it was wrong for anyone with that variable set.
 - Fixed: `send`, `__send__`, `public_send` and `instance_exec` are no
   longer reported as unknown methods.
 - Fixed: `::User.find(1)` resolves to `User`, as `User.find(1)` already
@@ -50,9 +62,9 @@ capability is added.
 and routed every caller through it, and this release began by finding two
 copies that had survived, both because they build no `SymbolId` at all.
 Only one had a symptom. (Round 7 later established that "two" was itself
-too small — four had, counting only that direction. Every count this
-release published before round 7 was wrong; the ones below have been
-re-derived since.) `chain_reaches_root?`
+too small — four had, counting only that direction. Every count this release published *of these
+copies* before round 7 was wrong; the ones below have been re-derived
+since.) `chain_reaches_root?`
 asked `entry.name == "BasicObject"`, and a class written
 `< ::BasicObject` produces an entry carrying the `::`. Its chain was
 judged not to reach the root, the receiver was not "closed", and the
@@ -207,7 +219,8 @@ calls its owner accessor. So the title no longer claims a
 count, and `Index::SymbolId` now owns all three directions:
 `qualify_owner`, `bare_name`, and `qualify_within`. All eleven delegate
 to it, `ReceiverResolution.canonical_receiver_name` among them — its old
-body was the one copy byte-identical to what it now calls. Nothing changed behaviour —
+body was one of the two copies byte-identical to what it now calls, the
+other being `ModelRegistry#lookup_key`. Nothing changed behaviour —
 the full suite green across the consolidation — which is the point: the
 copies were not wrong, they were waiting to be. (The example count that
 stood here was wrong twice running. It is in the commit messages, where
@@ -231,16 +244,16 @@ now, along with `class_declarations`' untested `module` branch. Two lines
 went the other way and were deleted rather than pinned: a nil guard and a
 ternary whose two arms produce the same string.
 
-Rounds 8 and 9 found no wrong answer the code gives — seventy-four
-mutations between them, and every finding was an unpinned or unreachable
-line, or a sentence. Five unreachable lines were deleted across the two
-rounds, two of them added by the round that had just deleted three for
-being unreachable. Six lines gained the pin they had been missing,
+Rounds 8 and 9 found one wrong answer the code gives — the ordering bug
+below — and otherwise unpinned or unreachable lines, and sentences. Four
+unreachable branches were removed across the two rounds, two of them
+added by the round that had just removed two for being unreachable. Six
+lines gained the pin they had been missing,
 including one field of `untyped_overload` that would have made
 `Proc#call` advertise an argument it does not take.
 
-The one real defect in that pair was an ordering bug round 8 introduced
-by pinning it. `WorkspaceIndex` appends a file's declarations on
+The ordering bug is older than this release — every published version
+through 0.1.11 had it — and round 8 made it visible by pinning it wrong. `WorkspaceIndex` appends a file's declarations on
 re-index, so a class reopened across two files changed which declaration
 came first every time either file was edited — and go-to-definition, and
 which controller file supplied a view's instance variables, changed with
@@ -254,6 +267,33 @@ Round 9 also closed the last hole in the rule this release is named for.
 it only for `owner`; a plugin registering a declaration could put a bare
 name straight into the index, where it matched a qualified needle and
 resolved the wrong class. The type enforces its own invariant now.
+
+The retracted privacy claim is the oldest thing in this release and the
+last thing it noticed. `PRIVACY.md` said the parse cache holds "not your
+source code's contents"; it holds each method's body text and each
+parameter's default expression verbatim, and has since the cache existed.
+Nothing about the cache changed — the document was wrong about it in
+every published version, and stayed wrong through ten review rounds of
+this release, each of which read that file. It took a reviewer asking why
+the strongest user-facing correction here had no bullet.
+
+Round 10 then found the ordering defect in three more places than round 9
+had fixed, all measured rather than argued: `workspace/symbol` dropped
+the class in the file you had just edited out of a truncated result; an
+ambiguous bare `User` resolved to `Admin::User` or `Api::User` depending
+on which file was touched last, taking the ancestry chain, find-references
+and rename with it; and signature help showed a reopened method's
+parameters from the other file. Fixing one caller was the wrong shape.
+The index now orders every list it hands out — by uri, then by source
+position — in one place, so `.first` means the same thing to all of them.
+
+Two of round 10's findings were round 9's own. `sort_by` is not a stable
+sort: the "stability" fix scrambled ties from eight entries up, and
+before it, insertion order had at least been *source* order within a file.
+And giving `SymbolId`'s `kind:` and `name:` nil defaults — done only so
+the initializer could read them — quietly made them optional, turning a
+caller's `ArgumentError` into a `NoMethodError` raised much later inside
+an unrelated request.
 
 ## 0.1.11 — One rule, restated everywhere and remembered nowhere
 

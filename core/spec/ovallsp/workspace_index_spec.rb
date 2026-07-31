@@ -142,6 +142,118 @@ RSpec.describe Ovallsp::WorkspaceIndex do
     end
   end
 
+  # Every answer this index gives has to be a property of the workspace,
+  # not of the order files happened to reach it. `replace_file` removes a
+  # uri's entries and appends the new ones, so re-indexing a file moves
+  # its symbols to the back of every list they are in — and each of these
+  # readers takes `.first` of such a list, or truncates it.
+  #
+  # Round 9 fixed exactly one of them (`class_declarations`) and the rest
+  # were still live; round 10 measured each. Editing a file with no
+  # declaration change was enough to move a symbol out of a truncated
+  # `workspace/symbol` result, to resolve a bare name to a different
+  # namespace, and to show a reopened method's parameters from the other
+  # file (0.1.12, round 10).
+  describe "determinism under re-indexing" do
+    def index_two_widget_files
+      %w[z a].each do |letter|
+        index.replace_file(
+          summary(uri: "file:///#{letter}.rb",
+                  declarations: [declaration(kind: :class, owner: nil, name: "::Widget", line: 1)],
+                  content_hash: "#{letter}1")
+        )
+      end
+    end
+
+    def reindex(letter)
+      index.replace_file(
+        summary(uri: "file:///#{letter}.rb",
+                declarations: [declaration(kind: :class, owner: nil, name: "::Widget", line: 1)],
+                content_hash: "#{letter}2")
+      )
+    end
+
+    it "returns a symbol's declarations in the same order before and after a re-index" do
+      index_two_widget_files
+      before = index.declarations_with_uri(
+        Ovallsp::Index::SymbolId.new(kind: :class, owner: nil, name: "::Widget", discriminator: nil)
+      ).map(&:first)
+      reindex("a")
+
+      after = index.declarations_with_uri(
+        Ovallsp::Index::SymbolId.new(kind: :class, owner: nil, name: "::Widget", discriminator: nil)
+      ).map(&:first)
+
+      expect(after).to eq(before)
+      expect(after).to eq(["file:///a.rb", "file:///z.rb"])
+    end
+
+    # Ties are the case `sort_by` alone cannot answer: it is not a stable
+    # sort, and a class reopened twice in one file gives two entries with
+    # the same uri. Eight is where CRuby's sort starts scrambling equal
+    # keys, so eight is what this uses.
+    it "orders declarations within one file by source position" do
+      decls = (0...8).map { |i| declaration(kind: :class, owner: nil, name: "::Widget", line: i * 10) }
+      index.replace_file(summary(uri: "file:///w.rb", declarations: decls))
+
+      lines = index.class_declarations("Widget").map { |d| d[:range][:start][:line] }
+
+      expect(lines).to eq((0...8).map { |i| i * 10 })
+    end
+
+    # Byte order, not case-insensitive order. Which of two files wins is
+    # arbitrary either way; what is not arbitrary is that the choice be
+    # written down, because it decides which controller supplies a view's
+    # instance variables. A `.downcase`d key passed the whole suite
+    # (0.1.12, round 10).
+    it "orders uris by byte, so case decides between two files" do
+      %w[Zebra apple].each do |name|
+        index.replace_file(
+          summary(uri: "file:///#{name}.rb",
+                  declarations: [declaration(kind: :class, owner: nil, name: "::Widget", line: 1)],
+                  content_hash: name)
+        )
+      end
+
+      expect(index.class_declaration_uris("Widget")).to eq(["file:///Zebra.rb", "file:///apple.rb"])
+    end
+
+    it "keeps workspace/symbol results stable across a re-index that changes no declaration" do
+      %w[z a].each do |letter|
+        index.replace_file(
+          summary(uri: "file:///#{letter}.rb",
+                  declarations: [declaration(kind: :class, owner: nil, name: "::Widget#{letter}", line: 1)],
+                  content_hash: "#{letter}1")
+        )
+      end
+      before = index.search("widget", limit: 1)
+      reindex_source = summary(uri: "file:///z.rb",
+                               declarations: [declaration(kind: :class, owner: nil, name: "::Widgetz", line: 1)],
+                               content_hash: "z2")
+      index.replace_file(reindex_source)
+
+      expect(index.search("widget", limit: 1)).to eq(before)
+    end
+
+    it "resolves an ambiguous simple name to the same class across a re-index" do
+      %w[Api Admin].each do |ns|
+        index.replace_file(
+          summary(uri: "file:///#{ns.downcase}.rb",
+                  declarations: [declaration(kind: :class, owner: "::#{ns}", name: "::#{ns}::User", line: 1)],
+                  content_hash: "#{ns}1")
+        )
+      end
+      before = index.resolve_type_name("User")
+      index.replace_file(
+        summary(uri: "file:///api.rb",
+                declarations: [declaration(kind: :class, owner: "::Api", name: "::Api::User", line: 1)],
+                content_hash: "Api2")
+      )
+
+      expect(index.resolve_type_name("User")).to eq(before)
+    end
+  end
+
   describe "#search" do
     it "ranks an exact name match above a substring match" do
       user = declaration(kind: :class, owner: nil, name: "::User")
