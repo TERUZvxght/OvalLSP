@@ -82,6 +82,57 @@ RSpec.describe "Ovallsp root-scoped model receivers (0.1.12)" do
       end
     end
 
+    # `Prism::ConstantPathNode#full_name` raises on a path whose segments
+    # are not all constants -- `klass::Error` is legal Ruby and idiomatic
+    # in factory and delegator code. `resolve_call` asked for it
+    # unguarded, and the raise escaped all the way to
+    # `infer_ivars_for_method_node`'s blanket rescue, which answers with
+    # the *initial* environment: one such expression anywhere in a
+    # controller action silently voided every instance variable in it, so
+    # the view got no types at all. Both sibling sites already guarded
+    # this -- `constant_path_type` here, and
+    # `MethodAnalyzer#eval_constant_receiver_call` -- which is what makes
+    # it an oversight rather than a decision (0.1.12).
+    it "keeps a method's other ivars when it contains a dynamic constant path" do
+      source = <<~RUBY
+        class PostsController
+          def show
+            @title = "hello"
+            x = klass::Error.new
+            @count = 1
+          end
+        end
+      RUBY
+      document = Ovallsp::TextDocument.new(uri: "file:///c.rb", text: source, version: 1, language_id: "ruby")
+      nodes = inferencer.method_nodes(document, owner_name: "::PostsController")
+
+      env = inferencer.infer_ivars_for_method_node(
+        nodes["show"], initial_env: {}, self_type_name: "::PostsController"
+      )
+
+      expect(env.transform_values(&:to_s)).to eq({ "@title": "String", "@count": "Integer" })
+    end
+
+    it "types the dynamic constant path itself as Unknown rather than raising" do
+      source = "x = klass::Error.new
+x
+"
+      document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+
+      expect(inferencer.infer_at(document, { line: 1, character: 0 }).to_s).to eq("Unknown")
+    end
+
+    # The guard's other half: a receiver that is not a constant at all must
+    # not be read as one. `#full_name` exists on several Prism nodes, so
+    # dropping the kind check does not raise -- it silently answers with a
+    # *call's* name, typing `helper.new` as `Nominal("helper")`.
+    it "does not treat a method-call receiver as a constant" do
+      source = "def run\n  h = helper\n  y = h.new\n  y\nend\n"
+      document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+
+      expect(inferencer.infer_at(document, { line: 3, character: 2 }).to_s).to eq("Unknown")
+    end
+
     it "narrows `is_a?(::Widget)` to the same type as `is_a?(Widget)`" do
       source = "def run(x)\n  return unless x.is_a?(::Widget)\n\n  x\nend\n"
       document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")

@@ -56,6 +56,11 @@ not to what the code does:
   one.
 - A plugin registering a class declaration could make an unqualified name
   resolve to the wrong class.
+- One `klass::Error.new` no longer costs a whole method its instance
+  variable types. A constant path with a non-constant segment is legal
+  Ruby and common in factory code; asking Prism for its name raised, and
+  the raise was caught far enough away that the method's entire
+  inference was discarded — so a view got no types at all.
 
 **Signature help:**
 
@@ -98,7 +103,11 @@ use them. `MethodAnalyzer` matched a delegate's owner by *simple* name,
 so `Admin::User` borrowed the top-level `User`'s associations.
 `LocalInferencer` built `::`-prefixed types in six places, one of which
 was visible: hovering `k` in `k = ::Widget` read `ClassOf[::Widget]`
-where `k = Widget` read `ClassOf[Widget]`.
+where `k = Widget` read `ClassOf[Widget]`. The seventh site in that file
+asked Prism for a constant path's name without the guard its two
+neighbours already had, so `klass::Error.new` raised and took the whole
+method's instance variables with it; all of them now go through one
+helper that answers nil rather than raising.
 
 `Index::SymbolId` now owns all three directions of that one decision —
 `qualify_owner`, `bare_name` and `qualify_within` — and every copy

@@ -336,6 +336,27 @@ RSpec.describe Ovallsp::Signatures::RbiParser do
       expect(overload.rest_keyword).to be_nil
     end
 
+    # `params` given something other than a keyword hash -- a constant, a
+    # splatted variable, anything this parser does not model -- must
+    # degrade to "no types known", which is the parser's stated contract
+    # ("対応不能なRBIはdiagnosticへ記録し、serverを落とさない"). Reading it
+    # as a hash regardless raises inside `handle_sig`, whose blanket rescue
+    # turns the raise into a dropped signature: the method loses hover,
+    # signature help and its declaration entirely (0.1.12).
+    it "keeps the signature when `params` is given something that is not a keyword hash" do
+      result = parse(<<~RBI)
+        class Foo
+          sig { params(PARAM_TYPES).returns(Integer) }
+          def f(x)
+          end
+        end
+      RBI
+
+      expect(result.diagnostics).to be_empty
+      expect(result.signature_methods.map { |sm| sm.symbol_id.name }).to eq(["f"])
+      expect(result.signature_methods.first.overloads.first.required_positionals).to eq([Ovallsp::Types::UNKNOWN])
+    end
+
     # A `params(...)` entry naming something the def does not declare is a
     # broken RBI. It must not invent an argument the method cannot take.
     it "ignores a params entry with no matching parameter" do

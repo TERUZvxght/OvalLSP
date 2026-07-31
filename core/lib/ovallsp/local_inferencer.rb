@@ -475,13 +475,13 @@ module Ovallsp
     end
 
     def resolve_call(node, receiver_type, env)
-      if constant_receiver?(node.receiver)
+      if (receiver_name = constant_receiver_name(node.receiver))
         # The class, not the spelling the call site used. `::Widget` and
         # `Widget` are one class, and letting both through makes two
         # different Nominals -- whose union is not a single Nominal, which
         # is what the unknown-method check requires, so the check goes
         # silent for a variable assigned both ways (0.1.12).
-        constant_type = Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.receiver.full_name))
+        constant_type = Types::Nominal.new(name: receiver_name)
         signature_method = resolve_signature_call(
           constant_type, node, singleton: true, direct: true
         )
@@ -887,6 +887,31 @@ module Ovallsp
 
     def constant_receiver?(node)
       node.is_a?(Prism::ConstantReadNode) || node.is_a?(Prism::ConstantPathNode)
+    end
+
+    # The canonical name of a constant receiver, or nil when it is not one
+    # -- and nil, rather than a raise, when it is a constant path whose
+    # segments are not all constants (`klass::Error.new`, legal Ruby and
+    # idiomatic in factory code). `#full_name` raises there, and asking it
+    # unguarded meant the raise escaped to
+    # `infer_ivars_for_method_node`'s blanket rescue, which answers with
+    # the *initial* environment: one such expression anywhere in a
+    # controller action silently voided every instance variable in it.
+    # `#constant_path_type` and `MethodAnalyzer#eval_constant_receiver_call`
+    # both already guarded this; this call site did not (0.1.12).
+    # Measured: the kind check is redundant with the rescue below -- of
+    # Prism's five node classes answering `#full_name`, only the two this
+    # asks for can be a call receiver, so a non-constant receiver reaches
+    # `NoMethodError` and comes back nil either way, and no input
+    # distinguishes them. It stays because asking the question is not the
+    # same as discovering the answer by exception, and a sweep that finds
+    # this line unpinned should stop here rather than churn on it.
+    def constant_receiver_name(node)
+      return nil unless constant_receiver?(node)
+
+      Semantic::ReceiverResolution.canonical_receiver_name(node.full_name)
+    rescue StandardError
+      nil
     end
 
     # One branch's outcome: the type its body evaluates to, the (narrowed,
