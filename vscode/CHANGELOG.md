@@ -6,7 +6,7 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
-## 0.1.12 — Every remaining copy of the rule, and a privacy list that under-described itself
+## 0.1.12 — The rule that kept being rewritten, and a privacy list that under-described itself
 
 - Fixed: `send`, `__send__`, `public_send` and `instance_exec` are no
   longer reported as unknown methods.
@@ -109,10 +109,10 @@ reviewer reading the observation runner rather than the document.
 Rounds 3 and 4 found three more instances of this release's own subject.
 `::User` never matched `ModelRegistry`, which is keyed by Rails' bare
 `model.name` — normalised in the registry's four lookup methods rather
-than at the twenty-one call sites, across five subsystems, that use them;
-for the reason 0.1.11 exists. `LocalInferencer` built `::`-prefixed
-Nominals in two more places, a constant receiver and an `is_a?`
-narrowing. And `MethodAnalyzer` matched a delegate's owner by *simple
+than at the twenty-two call sites — twenty lines, across five subsystems —
+that use them; for the reason 0.1.11 exists. `LocalInferencer` built `::`-prefixed
+Nominals in three more places — a constant receiver, the Active Record
+class-level finder, and an `is_a?` narrowing. And `MethodAnalyzer` matched a delegate's owner by *simple
 name*, so `Admin::User` borrowed the top-level `User`'s associations.
 Separately, the signature label, fixed in round 2 for `*rest`, still
 asserted zero arity for anything keyword-only.
@@ -125,8 +125,8 @@ fields could not be pinned — written after a mutation that silently never
 applied. Both corrected. The second is worth naming: a sweep result is
 worth exactly what the edit behind it was, and that one was worth nothing.
 
-Round 5 found three more places carrying the same rule by hand, and all
-three were in code the earlier rounds had read. `MethodAnalyzer` built a
+Round 5 found two more places carrying the same rule by hand, both in code
+the earlier rounds had read, and a third defect of the same family. `MethodAnalyzer` built a
 type straight from `::Widget.new`'s source spelling — the exact line
 rounds 3 and 4 had fixed in `LocalInferencer`, one subsystem over,
 untouched —
@@ -135,6 +135,15 @@ and gave `self` the *index's* spelling of its owner, so `self` and
 union where there should be one Nominal, and a union is what switches the
 unknown-method check off. Neither had a symptom anyone would report: the
 check simply stops finding things.
+
+That third one is the go-to-definition bullet above. `QueryService` looked
+a model's class up by rebuilding a `SymbolId` with `owner: nil`, and an
+owner is recorded *lexically* — `module Admin; class Company` indexes
+under owner `::Admin`, so the reconstructed key matched only the compact
+`class Admin::Company` spelling. Jumping to an Agent-backed column or
+association silently returned nothing for every model written the ordinary
+way. It now asks `WorkspaceIndex` by qualified name, which is the same move
+`find_controller_uri` made earlier in this release.
 
 The RBI defect round 5 found is the one worth reading twice, because this
 release caused it. Sorbet's `params(x: Integer)` is a name-to-type map;
@@ -171,14 +180,38 @@ rest slots, `**nil` closes the keyword one, and a destructured parameter
 keeps its positional slot typed Unknown.
 
 Round 6 also read the release's own title and found it false. "The last
-copy of the rule" was written when one copy was thought to remain; five
-more were found afterwards, in three later rounds. Retitled. The same
-round corrected an attribution — the `LocalInferencer` fix credited to
-round 1 was rounds 3 and 4 — and the last three inline copies of the
-qualification rule in `LocalInferencer` now go through the shared helper.
-Measured, none of those three could change an answer today, because every
-consumer normalises on its own; that is the reason to fix them rather
-than a reason not to.
+copy of the rule" was written when one copy was thought to remain, and
+later rounds kept finding more. It corrected two attributions with it —
+the `LocalInferencer` fix credited to round 1 belongs to rounds 3 and 4,
+and "round 3 found two more instances" was three — and routed three more
+`LocalInferencer` sites through the shared helper. Two of those three
+were byte-equivalent refactors; the third had no normalisation at all,
+and could not change an answer only because every consumer normalises on
+its own.
+
+Round 7 then falsified the *replacement* title. "Every remaining copy"
+lasted a day: a grep found ten hand-written copies of one direction of
+the rule or the other still in the tree, and one of them — `ModelRegistry`'s
+`lookup_key` — had been written by this very release. Four were
+byte-identical copies of a lexical-qualify method, in `ParserService`,
+`LocalInferencer` twice, and `RbiParser`. So the title no longer claims a
+count, and `Index::SymbolId` now owns all three directions:
+`qualify_owner`, `bare_name`, and `qualify_within`. Every one of the ten
+delegates to it, including `ReceiverResolution.canonical_receiver_name`,
+whose old body was one of the one-liners. Nothing changed behaviour —
+1275 examples green across the consolidation — which is the point: the
+copies were not wrong, they were waiting to be.
+
+Round 7 also found the fifth wrong number this release has published.
+"Twenty-one call sites" was mine, written one round after correcting
+"four callers", and it is twenty-two expressions across twenty lines.
+And it found something better than a wrong number: a normalisation site I
+had personally declared unobservable was observable. Hovering `k` in
+`k = ::Widget` read `ClassOf[::Widget]` where `k = Widget` read
+`ClassOf[Widget]` — a user-visible difference no test could see. Pinned
+now, along with `class_declarations`' untested `module` branch. Two lines
+went the other way and were deleted rather than pinned: a nil guard and a
+ternary whose two arms produce the same string.
 
 ## 0.1.11 — One rule, restated everywhere and remembered nowhere
 

@@ -43,4 +43,53 @@ RSpec.describe Ovallsp::Index::SymbolId do
   it "leaves a nil owner as nil" do
     expect(described_class.new(kind: :class, owner: nil, name: "::Widget", discriminator: nil).owner).to be_nil
   end
+
+  # The same decision read the other way, for the type model and for
+  # `ModelRegistry`, whose keys are Rails' own bare `model.name`. Round 7
+  # of the 0.1.12 review found three one-line copies of exactly this.
+  describe ".bare_name" do
+    it "drops a leading `::`" do
+      expect(described_class.bare_name("::Admin::Widget")).to eq("Admin::Widget")
+    end
+
+    it "leaves an already-bare name alone" do
+      expect(described_class.bare_name("Admin::Widget")).to eq("Admin::Widget")
+    end
+
+    # Only the *leading* prefix. Collapsing to the simple name is a
+    # different rule, and it is the one that made `Admin::User` borrow the
+    # top-level `User`'s associations.
+    it "keeps every inner namespace segment" do
+      expect(described_class.bare_name("::A::B::C")).to eq("A::B::C")
+    end
+
+    it "answers `\"\"` for nil rather than raising" do
+      expect(described_class.bare_name(nil)).to eq("")
+    end
+  end
+
+  # Lexical qualification: a *different* operation from the two above,
+  # because it prepends the enclosing owner rather than only normalising a
+  # prefix. Four byte-identical copies of it lived in `ParserService`,
+  # `LocalInferencer` (twice) and `RbiParser`.
+  describe ".qualify_within" do
+    it "prepends the enclosing owner" do
+      expect(described_class.qualify_within("::Admin", "Widget")).to eq("::Admin::Widget")
+    end
+
+    it "root-scopes a name written at the top level" do
+      expect(described_class.qualify_within(nil, "Widget")).to eq("::Widget")
+    end
+
+    # An already-absolute path is absolute regardless of where it is
+    # written -- this is the branch that makes the operation different
+    # from plain concatenation, and the pair is what shows it.
+    it "leaves an already-root-scoped path alone, even inside an owner" do
+      expect(described_class.qualify_within("::Admin", "::Widget")).to eq("::Widget")
+    end
+
+    it "keeps a multi-segment local path intact under its owner" do
+      expect(described_class.qualify_within("::Api", "V1::Widget")).to eq("::Api::V1::Widget")
+    end
+  end
 end

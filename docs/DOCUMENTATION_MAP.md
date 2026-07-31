@@ -94,7 +94,8 @@ saying opposite things a week apart. The rest of the list is order-independent:
   These are not cosmetic like the rest of this list — they are the
   release's own corrections, unmade on the public page. Fix them with
   the others before merging, and do not ship the site carrying them.
-  The same paragraph also hard-codes `~/.cache/ovallsp/`, which 0.1.12
+  The parse-cache paragraph on the same page also hard-codes
+  `~/.cache/ovallsp/`, which 0.1.12
   corrected to `$XDG_CACHE_HOME/ovallsp/` (falling back to `~/.cache`
   when that is unset or empty) in six other documents.
 

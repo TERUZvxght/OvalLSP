@@ -21,6 +21,39 @@ module Ovallsp
         owner.nil? ? nil : "::#{owner.to_s.delete_prefix('::')}"
       end
 
+      # The same rule read the other way: the name without its leading
+      # `::`. This is the form the type model, `Models::ModelRegistry`
+      # (keyed by Rails' own bare `model.name`) and RBS's own `Nominal`
+      # names use, so the two directions are one decision and belong in
+      # one place. `Semantic::ReceiverResolution.canonical_receiver_name`
+      # is the semantic layer's name for this and now delegates here
+      # (0.1.12, round 7).
+      def self.bare_name(name)
+        name.to_s.delete_prefix("::")
+      end
+
+      # Lexical qualification, which is a *different* operation from the
+      # two above: it prepends the enclosing owner rather than only
+      # normalising a prefix. An already-root-scoped path is already
+      # absolute and is left alone.
+      #
+      # Four byte-identical copies of this lived in `ParserService`,
+      # `LocalInferencer` (twice) and `Signatures::RbiParser`. Nothing was
+      # wrong with any of them, which is the point: 0.1.11 was spent on
+      # what happens to a rule written once per call site, and four is
+      # how many copies of the *previous* rule had to be found the hard
+      # way (0.1.12, round 7).
+      # The four copies each wrote this as a ternary on `owner`. It does
+      # not need one: a nil owner interpolates to "", so the single form
+      # produces "::Widget" at the top level and "::Admin::Widget" inside
+      # one. The ternary's two arms are the same string, which is why a
+      # mutation collapsing them changed nothing (0.1.12, round 7).
+      def self.qualify_within(owner, local_path)
+        return local_path if local_path.to_s.start_with?("::")
+
+        "#{owner}::#{local_path}"
+      end
+
       # An owner is stored qualified, whichever form the caller had
       # (0.1.11).
       #

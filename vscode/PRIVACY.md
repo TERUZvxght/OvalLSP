@@ -86,8 +86,10 @@ environment variables, or file contents — the normalizer that builds
 this evidence never calls `#inspect`/`#to_s` on anything it observes.
 The distinction that matters is class *names* versus the objects
 themselves: `User` is recorded, the user is not.
-The aggregated result is held in memory only — it is not written to the
-parse cache, and it does not survive restarting the server.
+The aggregated result is not written to the parse cache and does not
+survive restarting the server. The only copy that touches disk is the
+temporary run file described just below, which is unlinked when the run
+ends.
 
 Two temporary files exist for the length of an observation run, both
 created with owner-only permissions in your system temp directory and

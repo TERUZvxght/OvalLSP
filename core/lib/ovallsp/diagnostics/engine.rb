@@ -375,7 +375,7 @@ module Ovallsp
         # Agent would split a leading "::" into an empty first namespace
         # segment and answer "no such constant", which is a permanent
         # answer. Normalised here, at the one boundary between them.
-        name = raw_name.delete_prefix("::")
+        name = Index::SymbolId.bare_name(raw_name)
         entry = registry.entry(name)
         if entry.nil?
           registry.request(name)
@@ -403,7 +403,7 @@ module Ovallsp
       # anywhere in the project silently defeated the evidence.
       def locally_accounted_for?(name, context)
         resolved = context.workspace_index.resolve_type_name(name)
-        return true if resolved && resolved.delete_prefix("::") == name.delete_prefix("::")
+        return true if resolved && Index::SymbolId.bare_name(resolved) == Index::SymbolId.bare_name(name)
 
         context.signatures && !context.signatures.ancestors(qualified_owner(name)).empty?
       end

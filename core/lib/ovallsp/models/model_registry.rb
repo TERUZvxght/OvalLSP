@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-
 require "set"
+require_relative "../index/symbol_id"
+
 module Ovallsp
   module Models
     # `nullable` mirrors the Agent's raw `null` column flag as-is (Task
@@ -180,13 +181,14 @@ module Ovallsp
       # was lost, and the Agent-backed model check went quiet for that
       # receiver without saying so.
       #
-      # Normalized here rather than at each caller: there are four, and
+      # Normalized here rather than at each of the twenty-two call sites,
+      # across five subsystems, that reach these four lookup methods, and
       # 0.1.11 was spent on what happens when a rule like this is written
       # at call sites instead of in the one place that knows the keys.
       # Only a leading `::` is ignored, so `Admin::User` stays a different
       # class.
       def lookup_key(name)
-        name.to_s.delete_prefix("::")
+        Index::SymbolId.bare_name(name)
       end
 
       def build_model_info(name, response)

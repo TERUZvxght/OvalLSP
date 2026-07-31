@@ -1043,9 +1043,7 @@ module Ovallsp
       end
 
       def qualify(local_path)
-        return local_path if local_path.start_with?("::")
-
-        @owner_stack.last ? "#{@owner_stack.last}::#{local_path}" : "::#{local_path}"
+        Index::SymbolId.qualify_within(@owner_stack.last, local_path)
       end
     end
     private_constant :MethodMapLocator
@@ -1103,9 +1101,7 @@ module Ovallsp
       end
 
       def qualify(local_path)
-        return local_path if local_path.start_with?("::")
-
-        @owner_stack.last ? "#{@owner_stack.last}::#{local_path}" : "::#{local_path}"
+        Index::SymbolId.qualify_within(@owner_stack.last, local_path)
       end
 
       def record(node)

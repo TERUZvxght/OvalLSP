@@ -67,6 +67,21 @@ RSpec.describe "Ovallsp root-scoped model receivers (0.1.12)" do
       expect(type_of("::Widget.new\n")).to eq("Widget")
     end
 
+    # A constant used as a *value* rather than a receiver reaches the type
+    # model through `constant_path_type`, which had its own copy of the
+    # normalisation. Hover is the observable difference: the same class
+    # named two ways must not read as two different types (0.1.12, round
+    # 7 -- the one normalisation site in this file that a test could see
+    # and none did).
+    it "types `k = ::Widget` as ClassOf[Widget], the same as `k = Widget`" do
+      %w[::Widget Widget].each do |spelling|
+        source = "class Holder\n  def run\n    k = #{spelling}\n    k\n  end\nend\n"
+        document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+
+        expect(inferencer.infer_at(document, { line: 3, character: 4 }).to_s).to eq("ClassOf[Widget]")
+      end
+    end
+
     it "narrows `is_a?(::Widget)` to the same type as `is_a?(Widget)`" do
       source = "def run(x)\n  return unless x.is_a?(::Widget)\n\n  x\nend\n"
       document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")

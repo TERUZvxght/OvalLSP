@@ -430,9 +430,7 @@ module Ovallsp
       end
 
       def qualify(local_path)
-        return local_path if local_path.start_with?("::")
-
-        current_owner ? "#{current_owner}::#{local_path}" : "::#{local_path}"
+        Index::SymbolId.qualify_within(current_owner, local_path)
       end
 
       # Deliberately NOT qualified via #qualify — a superclass/included

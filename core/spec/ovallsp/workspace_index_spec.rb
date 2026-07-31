@@ -396,5 +396,28 @@ RSpec.describe Ovallsp::WorkspaceIndex do
     it "answers #class_declaration_uris on the same terms" do
       expect(index.class_declaration_uris("Admin::Company")).to eq(["file:///admin/company.rb"])
     end
+
+    # The method's own name says class, its filter and its doc comment say
+    # class *or module*, and nothing exercised the second half of that
+    # (0.1.12, round 7).
+    it "finds a module, not only a class" do
+      index.replace_file(
+        summary(uri: "file:///shared.rb",
+                declarations: [declaration(kind: :module, owner: nil, name: "::Shared")])
+      )
+
+      expect(index.class_declarations("Shared").map { |d| d[:uri] }).to eq(["file:///shared.rb"])
+    end
+
+    # A method is not one of the two kinds this answers for, even when it
+    # is the only thing carrying the name.
+    it "does not answer for a declaration that is neither a class nor a module" do
+      index.replace_file(
+        summary(uri: "file:///m.rb",
+                declarations: [declaration(kind: :instance_method, owner: "::Holder", name: "::Solo")])
+      )
+
+      expect(index.class_declarations("Solo")).to eq([])
+    end
   end
 end

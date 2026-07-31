@@ -197,10 +197,12 @@ module Ovallsp
     # prefix by hand, and a caller that forgot would have lost a whole
     # controller's ivars with no error anywhere. The lookup is the one
     # place that knows what shape its own keys are.
+    # No nil guard: `qualify_owner(nil)` is nil, `simple_name_of(nil)` is
+    # `""`, and nothing is indexed under `""` — so a nil name already
+    # returns []. A guard here would be a line no input can reach, which
+    # is the same defect as an untested one (0.1.12, round 7).
     def class_declarations(name)
       qualified_name = Index::SymbolId.qualify_owner(name)
-      return [] unless qualified_name
-
       @mutex.synchronize do
         results = []
         @by_simple_name.fetch(simple_name_of(qualified_name).downcase, []).each do |symbol_id|
@@ -344,7 +346,8 @@ module Ovallsp
       end
       return nil if candidates.empty?
 
-      candidates.find { |sid| sid.name == raw || sid.name == "::#{raw}" } || candidates.first
+      qualified = Index::SymbolId.qualify_owner(raw)
+      candidates.find { |sid| Index::SymbolId.qualify_owner(sid.name) == qualified } || candidates.first
     end
 
     def rank(matches, needle)

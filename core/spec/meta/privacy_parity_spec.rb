@@ -58,16 +58,40 @@ RSpec.describe "privacy document parity" do
   # Counted, like the sections: the entries are translated, so no test can
   # check that bullet 4 is *about* the same field in both. What it can
   # check is that neither list is shorter than the other.
-  def observation_record_bullets(path)
+  # The section holds *two* lists -- what is recorded, and the two
+  # temporary files -- and counting them together meant a record dropped
+  # from one language could be masked by a temp-file bullet added to it.
+  # Split at the temporary-files paragraph so the counts mean what their
+  # example names say (0.1.12, round 7).
+  def observation_bullet_counts(path)
     body = read_utf8(path)
     section = body[/^## (?:Runtime type observation|Runtime型観測).*?(?=^## |\z)/m]
     raise "no runtime observation section in #{File.basename(path)}" unless section
 
-    section.lines.count { |line| line.start_with?("- ") }
+    split_at = section.index(/Two temporary files|一時ファイルが2つ/)
+    raise "no temporary-files paragraph in #{File.basename(path)}" unless split_at
+
+    [section[0...split_at], section[split_at..]].map do |part|
+      part.lines.count { |line| line.start_with?("- ") }
+    end
   end
 
   it "lists the same number of recorded items in both languages" do
-    expect(observation_record_bullets(PRIVACY_JA)).to eq(observation_record_bullets(PRIVACY_EN))
+    expect(observation_bullet_counts(PRIVACY_JA).first).to eq(observation_bullet_counts(PRIVACY_EN).first)
+  end
+
+  it "describes the same number of temporary files in both languages" do
+    expect(observation_bullet_counts(PRIVACY_JA).last).to eq(observation_bullet_counts(PRIVACY_EN).last)
+  end
+
+  # Non-vacuous: if either list were empty the two guards above would pass
+  # while checking nothing.
+  it "finds both lists non-empty in both languages" do
+    [PRIVACY_EN, PRIVACY_JA].each do |path|
+      records, temp_files = observation_bullet_counts(path)
+      expect(records).to be >= 5, "#{File.basename(path)} lists only #{records} recorded items"
+      expect(temp_files).to eq(2), "#{File.basename(path)} describes #{temp_files} temporary files"
+    end
   end
 
   # Resolved against `vscode/`, the directory PRIVACY itself lives in -- a repo-root
