@@ -188,6 +188,22 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
     expect(label).to include("...")
   end
 
+  # `include("...")` alone cannot see a slot that should be empty: an
+  # invented positional would render `call(Unknown, ...)` and still pass.
+  # `(?)` says "takes anything" and nothing else, so every named slot of
+  # the overload it builds must be empty and both rest slots open
+  # (0.1.12, round 8 -- `untyped_overload` was added wholesale and this
+  # was the one field of the seven nothing pinned).
+  it "labels a `(?)` method as `...` and nothing else" do
+    query_service = Ovallsp::Semantic::QueryService.new(
+      local_inferencer: Ovallsp::LocalInferencer.new, signatures: signatures
+    )
+
+    label = query_service.signatures_of(Ovallsp::Types::Nominal.new(name: "Proc"), "call").first[:label]
+
+    expect(label).to eq("call(...) -> Unknown")
+  end
+
   # The engine's whole reason for asking: a method RBS declares must not be
   # reported as one nobody declares.
   it "does not report `__send__` as an unknown method on a workspace class" do

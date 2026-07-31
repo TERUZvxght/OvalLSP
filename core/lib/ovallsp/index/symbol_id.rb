@@ -49,7 +49,7 @@ module Ovallsp
       # one. The ternary's two arms are the same string, which is why a
       # mutation collapsing them changed nothing (0.1.12, round 7).
       def self.qualify_within(owner, local_path)
-        return local_path if local_path.to_s.start_with?("::")
+        return local_path if local_path.start_with?("::")
 
         "#{owner}::#{local_path}"
       end

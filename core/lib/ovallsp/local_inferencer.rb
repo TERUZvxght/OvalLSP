@@ -249,11 +249,24 @@ module Ovallsp
       return Types::UNKNOWN unless contains?(node.location, offset)
 
       # `full_name` answers `::Widget` for `class ::Widget`, and the type
-      # model's names are bare. Measured: every consumer of this stack
-      # normalises on its own today, so no probe could tell the two
-      # spellings apart -- which is exactly why it is worth fixing rather
-      # than leaving correctness resting on each consumer remembering
-      # (0.1.12, round 6).
+      # model's names are bare.
+      #
+      # This line and the `self_type_name` seed in #infer_ivars_for_method_node
+      # are both **unpinned and known to be**: reverting either leaves the
+      # whole suite green (rounds 6 and 8 both measured it). Every reader of
+      # `@self_type_stack` re-normalises -- `MethodResolver` through
+      # `resolve_type_name`, `ModelRegistry` through `lookup_key`,
+      # `SymbolId` through `qualify_owner` -- so the spelling is absorbed
+      # before it reaches an answer, and no probe has produced a
+      # distinguishing input.
+      #
+      # Kept rather than reverted, and the reason is not confidence. Round 7
+      # constructed the distinguishing input for `constant_path_type` after
+      # round 6 had declared that site unobservable too: hovering
+      # `k = ::Widget` really did read `ClassOf[::Widget]`. "No consumer
+      # can see it" has already been wrong once here. Normalising costs
+      # nothing; being wrong about it a second time would not
+      # (0.1.12, rounds 6-8).
       @self_type_stack.push(
         Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.constant_path.full_name))
       )

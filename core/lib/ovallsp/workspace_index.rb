@@ -346,8 +346,12 @@ module Ovallsp
       end
       return nil if candidates.empty?
 
+      # Only `raw` needs normalising: it is a name as written, and may be
+      # bare. An indexed class/module name always carries the `::`, so
+      # normalising that side too was a branch no input could reach
+      # (0.1.12, round 8).
       qualified = Index::SymbolId.qualify_owner(raw)
-      candidates.find { |sid| Index::SymbolId.qualify_owner(sid.name) == qualified } || candidates.first
+      candidates.find { |sid| sid.name == qualified } || candidates.first
     end
 
     def rank(matches, needle)

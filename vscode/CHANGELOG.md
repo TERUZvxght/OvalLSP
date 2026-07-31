@@ -44,9 +44,11 @@ capability is added.
 ### Details
 
 0.1.11 moved one rule — "an owner name is qualified" — into `SymbolId`
-and routed every caller through it. Two copies survived, both because
-they build no `SymbolId` at all, and only one of them had a symptom.
-`chain_reaches_root?`
+and routed every caller through it, and this release began by finding two
+copies that had survived, both because they build no `SymbolId` at all.
+Only one had a symptom. (Round 7 later established that "two" was itself
+too small — see below; the count is not the point, and every count this
+release put on it has been wrong.) `chain_reaches_root?`
 asked `entry.name == "BasicObject"`, and a class written
 `< ::BasicObject` produces an entry carrying the `::`. Its chain was
 judged not to reach the root, the receiver was not "closed", and the
@@ -190,21 +192,26 @@ and could not change an answer only because every consumer normalises on
 its own.
 
 Round 7 then falsified the *replacement* title. "Every remaining copy"
-lasted a day: a grep found ten hand-written copies of one direction of
-the rule or the other still in the tree, and one of them — `ModelRegistry`'s
-`lookup_key` — had been written by this very release. Four were
+lasted a day: a grep found eleven hand-written copies of the rule — in
+any of its three directions — still in the tree, and one of them,
+`ModelRegistry`'s `lookup_key`, had been written by this very release. Four were
 byte-identical copies of a lexical-qualify method, in `ParserService`,
 `LocalInferencer` twice, and `RbiParser`. So the title no longer claims a
 count, and `Index::SymbolId` now owns all three directions:
-`qualify_owner`, `bare_name`, and `qualify_within`. Every one of the ten
-delegates to it, including `ReceiverResolution.canonical_receiver_name`,
-whose old body was one of the one-liners. Nothing changed behaviour —
-1275 examples green across the consolidation — which is the point: the
-copies were not wrong, they were waiting to be.
+`qualify_owner`, `bare_name`, and `qualify_within`. All eleven delegate
+to it, `ReceiverResolution.canonical_receiver_name` among them — its old
+body was the one copy byte-identical to what it now calls. Nothing changed behaviour —
+the full suite green across the consolidation (1285 examples at this
+release's head) — which is the point: the copies were not wrong, they
+were waiting to be.
 
-Round 7 also found the fifth wrong number this release has published.
-"Twenty-one call sites" was mine, written one round after correcting
-"four callers", and it is twenty-two expressions across twenty lines.
+Round 7 also found more wrong numbers — enough that this release has
+stopped ordinalising them. "Twenty-one call sites" was mine, written one
+round after correcting "four callers", and it is twenty-two expressions
+across twenty lines. Round 8 then found that the paragraph above this one
+had said 1275 where the suite is 1285: a figure true of the minute the
+consolidation was measured and reproducible at no commit, which is the
+same objection the "29" correction makes.
 And it found something better than a wrong number: a normalisation site I
 had personally declared unobservable was observable. Hovering `k` in
 `k = ::Widget` read `ClassOf[::Widget]` where `k = Widget` read

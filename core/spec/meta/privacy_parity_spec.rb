@@ -89,7 +89,7 @@ RSpec.describe "privacy document parity" do
   it "finds both lists non-empty in both languages" do
     [PRIVACY_EN, PRIVACY_JA].each do |path|
       records, temp_files = observation_bullet_counts(path)
-      expect(records).to be >= 5, "#{File.basename(path)} lists only #{records} recorded items"
+      expect(records).to eq(6), "#{File.basename(path)} lists #{records} recorded items, not the 6 the code has"
       expect(temp_files).to eq(2), "#{File.basename(path)} describes #{temp_files} temporary files"
     end
   end

@@ -61,12 +61,13 @@ OvalLSPはローカル開発マシン上で動くLSPサーバーであり、ネ�
 | 実行時の型観測(Task 019)が引数/戻り値の実値やその文字列表現を保存してしまう | `TypeNormalizer`は観測対象の値に対して`#nil?`/`#is_a?`/`.class`/`.name`しか呼ばない。`#inspect`/`#to_s`は一切呼ばない | `core/lib/ovallsp/observation/type_normalizer.rb` |
 | 敵対的に`#class`/`#name`をオーバーライドしたオブジェクトが、非String値をJSON応答(`ovallsp/showTypeEvidence`)に紛れ込ませる | `as_nominal_name`が`.name`の戻り値が`String`であることを検証し、そうでなければ`Types::UNKNOWN`に丸める(019-022レビューRound 1で発見・修正) | `core/lib/ovallsp/observation/type_normalizer.rb` |
 | 型観測がCoreプロセス自身の中で(本番のLSPサービング処理と同じプロセスで)動いてしまう | `Observation::Collector`はワークスペース自身のテストコマンドに`RUBYOPT`経由で注入される、完全に別のOSプロセス内でのみ動作する。Core自身のプロセスへの注入は設計上スコープ外 | `core/lib/ovallsp/observation/runner.rb` |
+| 観測実行中の一時ログに、テストスイート自身の出力(Railsアプリなら日常的にSQL)がそのまま入る | **意図的に未対策(accepted risk)**。`--stdio`モードではfd 1が稼働中のLSPトランスポートであるため、子プロセスの出力をそこへ流すわけにいかない。所有者のみ読み書き可能な権限で作成し、実行終了時に削除する(削除は静かに失敗しうる——クラッシュ・強制終了・読み取り専用の一時ディレクトリでは残る)。OvalLSPはこのログを読みも索引もしない。0.1.12 で「パースキャッシュ以外ディスクには何も書かない」という記述が誤りであると判明し訂正した。記録内容の唯一の正は`vscode/PRIVACY.ja.md` | `core/lib/ovallsp/observation/runner.rb` |
 
 ### 5. 永続キャッシュのデシリアライズ
 
 | 脅威 | 緩和策 | 根拠 |
 |---|---|---|
-| キャッシュファイルが改竄され、`Marshal.load`によって任意コード実行につながる | **意図的に未対策(accepted risk)**。`is_a?(Index::FileSummary)`チェックは`Marshal.load`より後に行われるため、デシリアライズ自体の安全性は保証しない。ただしキャッシュディレクトリは`$XDG_CACHE_HOME`/`~/.cache`配下(このOSユーザーのみ書き込み可能、ワークスペース/リポジトリの外)にあるため、そこに悪意あるエントリを仕込めるレベルの攻撃者は既に同等の任意コード実行能力を持っている(=このデシリアライズを堅牢化しても実質的な権限境界は増えない)。キャッシュルートの置き場所が将来変わる場合は要再検討 | `core/lib/ovallsp/cache/store.rb`(class doc), `core/lib/ovallsp/server.rb`(`build_cache_store`) |
+| キャッシュファイルが改竄され、`Marshal.load`によって任意コード実行につながる | **意図的に未対策(accepted risk)**。`is_a?(Index::FileSummary)`チェックは`Marshal.load`より後に行われるため、デシリアライズ自体の安全性は保証しない。ただしキャッシュディレクトリは`$XDG_CACHE_HOME`/`~/.cache`配下(このOSユーザーのみ書き込み可能、ワークスペース/リポジトリの外)にあるため、そこに悪意あるエントリを仕込めるレベルの攻撃者は既に同等の任意コード実行能力を持っている(=このデシリアライズを堅牢化しても実質的な権限境界は増えない)。キャッシュルートの置き場所が将来変わる場合は要再検討。なお、このキャッシュは**各メソッドの本文テキストとパラメータのデフォルト式をそのまま保持する**(0.1.12 で明記)——改竄だけでなく読み取りも、ソースコードの一部への読み取りである | `core/lib/ovallsp/cache/store.rb`(class doc), `core/lib/ovallsp/server.rb`(`build_cache_store`) |
 
 ## 既知の未対応ギャップ(この文書時点)
 

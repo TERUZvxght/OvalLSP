@@ -166,7 +166,7 @@ module Ovallsp
       # worse than having no type for it.
       def parameter_slots(params_call, def_node)
         declared = declared_param_types(params_call)
-        parameters = def_node&.parameters
+        parameters = def_node.parameters
         return RbiParser.empty_slots unless parameters
 
         forwarding = parameters.keyword_rest.is_a?(Prism::ForwardingParameterNode)

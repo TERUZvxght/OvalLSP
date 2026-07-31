@@ -49,10 +49,10 @@ module Ovallsp
       # what #resolve_via_model_registry needs.
       # Delegates rather than restating: `Index::SymbolId` owns both
       # directions of this one decision, and this is the semantic layer's
-      # name for reading it. Round 7 of the 0.1.12 review found ten
-      # hand-written copies of one direction or the other still in the
-      # tree, three of them one-liners identical to this method's old body
-      # (0.1.12).
+      # name for reading it. Round 7 of the 0.1.12 review found eleven
+      # hand-written copies of the rule still in the tree, across its three
+      # directions. This method's old body was the one that was
+      # byte-identical to what it now calls (0.1.12).
       def canonical_receiver_name(name)
         Index::SymbolId.bare_name(name)
       end
