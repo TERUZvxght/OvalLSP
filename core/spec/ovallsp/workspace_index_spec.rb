@@ -359,4 +359,42 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       expect(index.declarations_for_uri("file:///a.rb")).to eq([new_decl])
     end
   end
+
+  # Indexed class names are always `::`-qualified, so a bare argument
+  # matches nothing. The normalisation used to sit in `Server`, in one
+  # caller, written by hand -- the shape 0.1.11 was spent removing. It
+  # belongs to the lookup: every caller needs it, and here it is a
+  # difference a test can see (0.1.12, round 5).
+  describe "#class_declarations" do
+    before do
+      index.replace_file(
+        summary(uri: "file:///admin/company.rb",
+                declarations: [declaration(kind: :class, owner: "::Admin", name: "::Admin::Company", line: 1)])
+      )
+    end
+
+    it "finds a class asked for by its qualified name" do
+      expect(index.class_declarations("::Admin::Company").map { |d| d[:uri] }).to eq(["file:///admin/company.rb"])
+    end
+
+    it "finds the same class asked for without the leading `::`" do
+      expect(index.class_declarations("Admin::Company").map { |d| d[:uri] }).to eq(["file:///admin/company.rb"])
+    end
+
+    it "carries each declaration's own range, not just its uri" do
+      expect(index.class_declarations("Admin::Company").first[:range]).to eq(
+        { start: { line: 1, character: 0 }, end: { line: 1, character: 1 } }
+      )
+    end
+
+    # Normalising a prefix is not matching by simple name.
+    it "does not answer for a same-named class in another namespace" do
+      expect(index.class_declarations("Sales::Company")).to eq([])
+      expect(index.class_declarations("Company")).to eq([])
+    end
+
+    it "answers #class_declaration_uris on the same terms" do
+      expect(index.class_declaration_uris("Admin::Company")).to eq(["file:///admin/company.rb"])
+    end
+  end
 end

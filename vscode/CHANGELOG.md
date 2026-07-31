@@ -15,9 +15,21 @@ the disproved approaches are kept below it under **Details**.
   method check went quiet for it.
 - Fixed: signature help no longer shows `()` for a method that takes
   keywords. `Array#shuffle` read as taking nothing.
+- Fixed: signature help no longer tells you to type `x:` for a method
+  declared in a Sorbet `.rbi` that takes plain positional arguments.
 - Fixed: a class written `< ::BasicObject` no longer has its unknown-method
   check silently switched off. As in 0.1.11, a class that was silent may
   now start reporting mistakes it was quietly ignoring.
+- Fixed: a namespaced class no longer borrows a same-named top-level
+  model's data. `Admin::User#name`, delegated to `:company`, was answered
+  from the top-level `User`'s associations — a confident wrong type, not
+  a missing one.
+- Fixed: `self` and `Widget.new` now have the same type inside `Widget`.
+  They did not, so a variable assigned from both became a union and the
+  unknown-method check went quiet for it — as it did for `::Widget.new`.
+- Fixed: go-to-definition on an Active Record column or association
+  reaches models written `module Admin; class Company`, not only those
+  written `class Admin::Company`.
 - Fixed: `PRIVACY.md` now describes everything type observation records.
   It recorded more than it said — nothing sensitive, but a privacy
   document that under-describes itself is wrong whichever direction the
@@ -29,22 +41,30 @@ capability is added.
 ### Details
 
 0.1.11 moved one rule — "an owner name is qualified" — into `SymbolId`
-and routed every caller through it. This is the copy that survived,
-because it does not build a `SymbolId` at all: `chain_reaches_root?`
+and routed every caller through it. Two copies survived, both because
+they build no `SymbolId` at all, and only one of them had a symptom.
+`chain_reaches_root?`
 asked `entry.name == "BasicObject"`, and a class written
 `< ::BasicObject` produces an entry carrying the `::`. Its chain was
 judged not to reach the root, the receiver was not "closed", and the
 check went quiet for that class without saying so. Written by hand, one
 spelling, exactly like the eight before it — and `ROOT_SUPERCLASS_NAMES`
 one subsystem over already listed both forms, which is what makes it an
-oversight rather than a decision.
+oversight rather than a decision. The second copy was
+`Server#find_controller_uri`, prefixing `::` by hand before a lookup;
+measured, both of its callers already pass a qualified name, so it never
+misbehaved and nothing could ever have caught it if it had. It now
+delegates — and the normalisation moved into the lookup itself, which is
+the only place that knows what shape its own keys are.
 
 The `send` family is a separate defect the `::BasicObject` fix made
 urgent. RBS writes "takes anything" as `(?)`, and models it as a function
 object carrying no parameter lists at all. Two different declarations run
 into it: `Proc#call` and `Method#call` are `(?)` themselves, while
 `send`, `__send__`, `public_send` and `instance_exec` have ordinary
-signatures whose *block* is `?{ (?) -> untyped }`. Both converters asked
+signatures carrying a `(?)` *block* — spelled `?{ (?) -> untyped }` for
+the first three, and `{ (?) [self: self] -> U }` for `instance_exec`,
+whose block is required and self-bound. Both converters asked
 such a function for its positional parameters regardless, the resulting
 error was swallowed by the blanket rescue around signature building, and
 the method came back as "no signature" — which the unknown-method check
@@ -59,7 +79,8 @@ identifier, parameter position, call count, and whether the call raised".
 It also records the set of classes seen *at* each parameter position, the
 set of classes the method returned, a digest of the file the method is in
 together with its line number (used only to notice that the method may
-have been edited since), and the time the run finished. None of that is a value from your program —
+have been edited since), an identifier for the run, and the time the run
+finished. None of that is a value from your program —
 the distinction the document now makes explicitly is class *names* versus
 the objects themselves: `User` is recorded, the user is not. The
 guarantee never changed; the list of what it covers was incomplete.
@@ -75,16 +96,19 @@ draws the line the old text left implicit: the "never records" guarantee
 is about what OvalLSP extracts and keeps, not about what your own suite
 prints.
 
-The list was found by an independent check of the project's own website,
-which had enumerated it correctly while the privacy document had not. The
-disk claim was found by a reviewer reading the observation runner rather
-than the document.
+The gap was found by an independent check of the project's own website —
+which turns out to describe less than the privacy document did, not more.
+Neither was right; the website is now on the list of pages this release's
+own documentation map says a change like this makes stale, and it still
+carries the two claims corrected here. The disk claim was found by a
+reviewer reading the observation runner rather than the document.
 
 Round 3 found two more instances of this release's own subject. `::User`
 never matched `ModelRegistry`, which is keyed by Rails' bare `model.name`
-— normalised in the registry rather than at its four callers, for the
-reason 0.1.11 exists. And the signature label, fixed in round 2 for
-`*rest`, still asserted zero arity for anything keyword-only.
+— normalised in the registry's four lookup methods rather than at the
+twenty-one call sites, across five subsystems, that use them; for the
+reason 0.1.11 exists. And the signature label, fixed in round 2 for `*rest`,
+still asserted zero arity for anything keyword-only.
 
 Round 3 also caught two things this release had said about itself that
 were wrong. The newly-written privacy sentence claimed a call that raised
@@ -93,6 +117,38 @@ classes and only the return type is withheld. And a note claimed two
 fields could not be pinned — written after a mutation that silently never
 applied. Both corrected. The second is worth naming: a sweep result is
 worth exactly what the edit behind it was, and that one was worth nothing.
+
+Round 5 found three more places carrying the same rule by hand, and all
+three were in code the earlier rounds had read. `MethodAnalyzer` built a
+type straight from `::Widget.new`'s source spelling — the exact line
+round 1 had fixed in `LocalInferencer`, one subsystem over, untouched —
+and gave `self` the *index's* spelling of its owner, so `self` and
+`Widget.new` were two different types inside the same class. Both make a
+union where there should be one Nominal, and a union is what switches the
+unknown-method check off. Neither had a symptom anyone would report: the
+check simply stops finding things.
+
+The RBI defect round 5 found is the one worth reading twice, because this
+release caused it. Sorbet's `params(x: Integer)` is a name-to-type map;
+it describes `def f(x)` and `def f(x:)` identically, and the parser filed
+every entry as a required *keyword* with a comment saying this was only
+"for arity matching purposes". Nothing rendered keywords, so nothing
+showed. Then this release taught the signature label to render them — and
+a method declared `def combine(x, y)` began telling the user to type
+`x:`. The label was not the bug; it made an existing lie legible. The fix
+is the one the comment had deferred: the `def` under the sig is the
+authority on parameter shape and the parser has always had that node, so
+shape now comes from the def and type from `params(...)`. That also
+corrects arity in both directions — a `sig { void }` over a
+two-argument method used to claim it took nothing.
+
+Two counts this release published were wrong, both mine. "Its four
+callers" counted methods on the registry, not callers. And the
+keyword-only signature count was given as 29; it is 26 methods, or 30 if
+each overload counts separately, and 29 is neither. Corrected to say
+which is being counted — the number was only ever there to show the shape
+is common rather than exotic, and a number that needs an unstated filter
+to reproduce does not show that.
 
 ## 0.1.11 — One rule, restated everywhere and remembered nowhere
 

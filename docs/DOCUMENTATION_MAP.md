@@ -85,7 +85,15 @@ saying opposite things a week apart. The rest of the list is order-independent:
 - "a patch means nothing a user sees changed" appears six times, and
   `docs/PUBLISHING.md` explicitly rejects that phrasing;
 - the requirements list omits the VS Code 1.85 floor;
-- `404.html` alone advertises an issue tracker.
+- `404.html` alone advertises an issue tracker;
+- **`site/security.html` and `site/ja/security.html` carry both claims
+  0.1.12 retracted**: that the parse cache holds "not your source code's
+  contents" (it holds method bodies and default expressions verbatim),
+  and a description of what observation records that omits the file
+  digest, the line number, the run identifier and the run-finish time.
+  These are not cosmetic like the rest of this list — they are the
+  release's own corrections, unmade on the public page. Fix them with
+  the others before merging, and do not ship the site carrying them.
 
 Note also that `vscode/package.json`'s `homepage` on that branch already
 points at the Pages URL, which 404s until Pages is switched on and the

@@ -156,12 +156,20 @@ RSpec.describe Ovallsp::Semantic::MethodAnalyzer do
   end
 
   # "self return"
+  #
+  # `SymbolId#owner` is always `::`-qualified -- that is the index's own
+  # domain, enforced by `SymbolId.qualify_owner` -- and the type model's
+  # is bare, which is what every other Nominal in this file asserts.
+  # Spelling `self`'s type in the index's domain made it a *different*
+  # Nominal from the one `Widget.new` produces, so a variable assigned
+  # from both became a two-member union and the unknown-method check,
+  # which needs a single Nominal, went quiet (0.1.12).
   it "resolves self to the owner's Nominal type in an instance method" do
     index_source("class Widget\n  def itself_typed\n    self\n  end\nend\n")
 
     summary = analyzer.summarize(symbol_id: method_symbol("::Widget", "itself_typed"))
 
-    expect(summary.return_type).to eq(Ovallsp::Types::Nominal.new(name: "::Widget"))
+    expect(summary.return_type).to eq(Ovallsp::Types::Nominal.new(name: "Widget"))
   end
 
   it "resolves self to ClassOf[Owner] in a singleton method" do
@@ -170,7 +178,53 @@ RSpec.describe Ovallsp::Semantic::MethodAnalyzer do
     summary = analyzer.summarize(symbol_id: method_symbol("::Widget", "itself_typed", singleton: true))
 
     expect(summary.return_type).to eq(
-      Ovallsp::Types::Generic.new(name: "ClassOf", type_arg: Ovallsp::Types::Nominal.new(name: "::Widget"))
+      Ovallsp::Types::Generic.new(name: "ClassOf", type_arg: Ovallsp::Types::Nominal.new(name: "Widget"))
+    )
+  end
+
+  # `self` and a constant receiver name the same class, so they must
+  # produce the same Nominal -- the union is what the pair rules out.
+  it "gives `self` and `Widget.new` one type, not a two-member union" do
+    index_source(<<~RUBY)
+      class Widget
+        def either(flag)
+          flag ? self : Widget.new
+        end
+      end
+    RUBY
+
+    summary = analyzer.summarize(symbol_id: method_symbol("::Widget", "either"))
+
+    expect(summary.return_type).to eq(Ovallsp::Types::Nominal.new(name: "Widget"))
+  end
+
+  # `Prism::ConstantPathNode#full_name` answers `::Widget` for a
+  # root-scoped receiver, and this fed it straight into the type model --
+  # the untouched twin of the same fix in `LocalInferencer#resolve_call`.
+  # Each of the three call names is a separate decision.
+  it "types `::Widget.new` the same as `Widget.new`" do
+    index_source("class Factory\n  def build\n    ::Widget.new\n  end\nend\n")
+
+    summary = analyzer.summarize(symbol_id: method_symbol("::Factory", "build"))
+
+    expect(summary.return_type).to eq(Ovallsp::Types::Nominal.new(name: "Widget"))
+  end
+
+  it "types `::Widget.find(1)` the same as `Widget.find(1)`" do
+    index_source("class Factory\n  def fetch\n    ::Widget.find(1)\n  end\nend\n")
+
+    summary = analyzer.summarize(symbol_id: method_symbol("::Factory", "fetch"))
+
+    expect(summary.return_type).to eq(Ovallsp::Types::Nominal.new(name: "Widget"))
+  end
+
+  it "types `::Widget.find_by(...)` the same as `Widget.find_by(...)`" do
+    index_source("class Factory\n  def lookup\n    ::Widget.find_by(id: 1)\n  end\nend\n")
+
+    summary = analyzer.summarize(symbol_id: method_symbol("::Factory", "lookup"))
+
+    expect(summary.return_type).to eq(
+      Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "Widget"), Ovallsp::Types::NIL])
     )
   end
 
@@ -357,6 +411,30 @@ RSpec.describe Ovallsp::Semantic::MethodAnalyzer do
       index_generated_source("class Widget\n  delegate :name, to: :nonexistent_thing\nend\n")
 
       summary = analyzer.summarize(symbol_id: method_symbol("::Widget", "name"))
+
+      expect(summary.return_type).to eq(Ovallsp::Types::UNKNOWN)
+    end
+
+    # The owner reached the registry through `split("::").last`, which is
+    # match-by-simple-name: `Admin::Widget` is not a model at all, and it
+    # borrowed the top-level `Widget`'s associations to answer with a
+    # confident `String` (0.1.12). The pair is the point -- the same
+    # `delegate :name, to: :company` line has to resolve in one namespace
+    # and not in the other, which is what tells the two rules apart.
+    it "does not resolve a namespaced class's delegate against the same-named top-level model" do
+      model_registry.register_from_agent_response(
+        "Widget",
+        { tableName: "widgets", partial: false, columns: [],
+          associations: [{ name: "company", macro: "belongs_to", className: "Company", optional: false }] }
+      )
+      model_registry.register_from_agent_response(
+        "Company",
+        { tableName: "companies", partial: false, columns: [{ name: "name", type: "string", null: false }],
+          associations: [] }
+      )
+      index_generated_source("module Admin\n  class Widget\n    delegate :name, to: :company\n  end\nend\n")
+
+      summary = analyzer.summarize(symbol_id: method_symbol("::Admin::Widget", "name"))
 
       expect(summary.return_type).to eq(Ovallsp::Types::UNKNOWN)
     end

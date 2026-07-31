@@ -21,8 +21,10 @@ RSpec.describe Ovallsp::Signatures::RbiParser do
     expect(sm.symbol_id).to eq(Ovallsp::Index::SymbolId.new(kind: :instance_method, owner: "::Foo", name: "bar", discriminator: nil))
     expect(sm.source_kind).to eq(:rbi)
     overload = sm.overloads.first
-    expect(overload.required_keywords[:a]).to eq(Ovallsp::Types::Nominal.new(name: "Integer"))
-    expect(overload.required_keywords[:b]).to eq(Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "String"), Ovallsp::Types::NIL]))
+    expect(overload.required_positionals).to eq(
+      [Ovallsp::Types::Nominal.new(name: "Integer"),
+       Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "String"), Ovallsp::Types::NIL])]
+    )
     expect(overload.return_type).to eq(Ovallsp::Types::Nominal.new(name: "String"))
   end
 
@@ -68,7 +70,7 @@ RSpec.describe Ovallsp::Signatures::RbiParser do
 
     overload = parse(source).signature_methods.first.overloads.first
 
-    expect(overload.required_keywords[:x]).to eq(
+    expect(overload.required_positionals.first).to eq(
       Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "Integer"), Ovallsp::Types::Nominal.new(name: "String")])
     )
     expect(overload.return_type).to eq(Ovallsp::Types::NIL)
@@ -116,5 +118,153 @@ RSpec.describe Ovallsp::Signatures::RbiParser do
     RBI
 
     expect { parse(source) }.not_to raise_error
+  end
+
+  # Sorbet's `params(...)` is a name-to-type map and says nothing about
+  # parameter *shape*: `params(x: Integer)` describes `def f(x)` and
+  # `def f(x:)` identically. The `def` immediately below the sig is the
+  # authority on shape, and this parser has always had that node in hand.
+  #
+  # Filing every entry as a required keyword "for arity matching purposes"
+  # was invisible while nothing rendered it. 0.1.12 made the signature
+  # label render keywords, at which point a method declared
+  # `def combine(x, y)` started telling the user to type `x:` (0.1.12,
+  # round 5).
+  describe "parameter shape comes from the def, types from params(...)" do
+    def overload_for(source)
+      parse(source).signature_methods.first.overloads.first
+    end
+
+    it "files a positional parameter as a positional, not a keyword" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(x: Integer, y: String).returns(Integer) }
+          def combine(x, y)
+          end
+        end
+      RBI
+
+      expect(overload.required_positionals).to eq(
+        [Ovallsp::Types::Nominal.new(name: "Integer"), Ovallsp::Types::Nominal.new(name: "String")]
+      )
+      expect(overload.required_keywords).to be_empty
+    end
+
+    it "files a keyword parameter as a keyword" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(x: Integer).returns(Integer) }
+          def only_kw(x:)
+          end
+        end
+      RBI
+
+      expect(overload.required_keywords).to eq({ x: Ovallsp::Types::Nominal.new(name: "Integer") })
+      expect(overload.required_positionals).to be_empty
+    end
+
+    # The same `params(...)` line, two different defs -- which is the pair
+    # that shows the shape is being read from the def rather than guessed.
+    it "distinguishes an optional positional from a required one" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(x: Integer, y: String).returns(Integer) }
+          def combine(x, y = "d")
+          end
+        end
+      RBI
+
+      expect(overload.required_positionals).to eq([Ovallsp::Types::Nominal.new(name: "Integer")])
+      expect(overload.optional_positionals).to eq([Ovallsp::Types::Nominal.new(name: "String")])
+    end
+
+    it "distinguishes an optional keyword from a required one" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(x: Integer, y: String).returns(Integer) }
+          def combine(x:, y: "d")
+          end
+        end
+      RBI
+
+      expect(overload.required_keywords).to eq({ x: Ovallsp::Types::Nominal.new(name: "Integer") })
+      expect(overload.optional_keywords).to eq({ y: Ovallsp::Types::Nominal.new(name: "String") })
+    end
+
+    it "puts a splat in the rest slot and a double splat in the keyword-rest slot" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(args: Integer, opts: String).returns(Integer) }
+          def spread(*args, **opts)
+          end
+        end
+      RBI
+
+      expect(overload.rest_positional).to eq(Ovallsp::Types::Nominal.new(name: "Integer"))
+      expect(overload.rest_keyword).to eq(Ovallsp::Types::Nominal.new(name: "String"))
+      expect(overload.required_positionals).to be_empty
+    end
+
+    it "keeps a trailing required positional required" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(a: Integer, rest: String, z: Symbol).returns(Integer) }
+          def trailing(a, *rest, z)
+          end
+        end
+      RBI
+
+      expect(overload.required_positionals).to eq(
+        [Ovallsp::Types::Nominal.new(name: "Integer"), Ovallsp::Types::Nominal.new(name: "Symbol")]
+      )
+    end
+
+    # A block parameter is not something the caller types in the argument
+    # list, so it must not occupy a slot -- but the sig names it, and the
+    # old code turned every name into one.
+    it "does not give a block parameter an argument slot" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(x: Integer, blk: T.untyped).returns(Integer) }
+          def each_thing(x, &blk)
+          end
+        end
+      RBI
+
+      expect(overload.required_positionals).to eq([Ovallsp::Types::Nominal.new(name: "Integer")])
+      expect(overload.required_keywords).to be_empty
+      expect(overload.rest_keyword).to be_nil
+    end
+
+    # `sig { void }` says nothing about parameters, but the def still has
+    # them -- and a signature claiming zero arity for a two-argument
+    # method is the same lie in the other direction.
+    it "gives an untyped slot to a parameter the sig does not mention" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { void }
+          def build(a, b)
+          end
+        end
+      RBI
+
+      expect(overload.required_positionals).to eq([Ovallsp::Types::UNKNOWN, Ovallsp::Types::UNKNOWN])
+    end
+
+    # A `params(...)` entry naming something the def does not declare is a
+    # broken RBI. It must not invent an argument the method cannot take.
+    it "ignores a params entry with no matching parameter" do
+      overload = overload_for(<<~RBI)
+        class Foo
+          sig { params(x: Integer, ghost: String).returns(Integer) }
+          def combine(x)
+          end
+        end
+      RBI
+
+      expect(overload.required_positionals).to eq([Ovallsp::Types::Nominal.new(name: "Integer")])
+      expect(overload.required_keywords).to be_empty
+      expect(overload.optional_keywords).to be_empty
+    end
   end
 end

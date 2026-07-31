@@ -4,6 +4,7 @@ require "prism"
 require_relative "types"
 require_relative "models/model_registry"
 require_relative "semantic/generic_rule_registry"
+require_relative "semantic/receiver_resolution"
 require_relative "signatures/overload_resolver"
 
 module Ovallsp

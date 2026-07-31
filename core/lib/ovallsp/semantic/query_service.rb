@@ -314,9 +314,13 @@ module Ovallsp
           next unless @model_registry.known_model?(nominal.name)
           next unless @model_registry.column(nominal.name, method_name) || @model_registry.association(nominal.name, method_name)
 
-          class_symbol = Index::SymbolId.new(kind: :class, owner: nil, name: qualify(nominal.name), discriminator: nil)
-          @workspace_index.declarations_with_uri(class_symbol).first
-        end.map { |uri, decl| { uri: uri, range: decl.location } }
+          # Ask by qualified name, never by a reconstructed SymbolId:
+          # `owner` is recorded lexically, so `module Admin; class
+          # Company` and `class Admin::Company` are two different keys for
+          # one class and an `owner: nil` guess only ever matches the
+          # second (0.1.12, the same move as `Server#find_controller_uri`).
+          @workspace_index.class_declarations(nominal.name).first
+        end
       end
 
       def source_signatures(receiver_type, method_name, context)
@@ -361,9 +365,11 @@ module Ovallsp
       # Positionals were all it rendered. That made `(?)` -- RBS for
       # "takes anything", which `Proc#call` and `Method#call` are declared
       # as -- come out as `call()`, and made every signature with no
-      # positionals but some keyword come out the same way (29 of them in
-      # the RBS core this loads, `Array#shuffle` among them; counted, not
-      # estimated). Before 0.1.12 the `(?)` ones failed to build at all so
+      # positionals but some keyword come out the same way (26 methods in
+      # the RBS core this loads, 30 counting each overload separately,
+      # `Array#shuffle` among them; counted, not estimated -- an earlier
+      # revision of this comment said 29, which is neither count).
+      # Before 0.1.12 the `(?)` ones failed to build at all so
       # nothing was shown; making them build has to not make them lie, and
       # the keyword case was already lying.
       def rbs_signature_label(method_name, overload)

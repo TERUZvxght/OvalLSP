@@ -49,6 +49,23 @@ RSpec.describe "changelog parity" do
     end
   end
 
+  # Same releases, same headline count. Round 4 of the 0.1.12 review found
+  # the Japanese changelog missing a bullet the English one had -- the
+  # exact failure this file exists to prevent, and every guard above it
+  # passed. A count is not a translation check, but a dropped bullet is
+  # the way this file actually goes wrong, and it is the part a machine
+  # can see (0.1.12, round 5).
+  it "gives every release the same number of headline bullets in both languages" do
+    bullets = lambda do |path|
+      File.read(path, encoding: "UTF-8").split(/^## /)[1..].to_h do |section|
+        summary = section.split(/^### /).first
+        [section[/\A(\d+\.\d+\.\d+)/, 1], summary.lines.count { |line| line.start_with?("- ") }]
+      end
+    end
+
+    expect(bullets.call(CHANGELOG_JA)).to eq(bullets.call(CHANGELOG_EN))
+  end
+
   it "keeps the same releases explained in detail in both languages" do
     detailed = lambda do |path|
       File.read(path, encoding: "UTF-8").split(/^## /)[1..].filter_map do |section|

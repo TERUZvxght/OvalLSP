@@ -49,6 +49,27 @@ RSpec.describe "privacy document parity" do
     end
   end
 
+  # The list of what observation records is the part of this document a
+  # reader is actually relying on, and it is the part that was wrong twice
+  # in 0.1.12 -- both times by being shorter than the truth. Nothing
+  # compared the two languages' copies of it, so dropping a record from
+  # one would have passed every guard above (0.1.12, round 5).
+  #
+  # Counted, like the sections: the entries are translated, so no test can
+  # check that bullet 4 is *about* the same field in both. What it can
+  # check is that neither list is shorter than the other.
+  def observation_record_bullets(path)
+    body = read_utf8(path)
+    section = body[/^## (?:Runtime type observation|Runtime型観測).*?(?=^## |\z)/m]
+    raise "no runtime observation section in #{File.basename(path)}" unless section
+
+    section.lines.count { |line| line.start_with?("- ") }
+  end
+
+  it "lists the same number of recorded items in both languages" do
+    expect(observation_record_bullets(PRIVACY_JA)).to eq(observation_record_bullets(PRIVACY_EN))
+  end
+
   # Resolved against `vscode/`, the directory PRIVACY itself lives in -- a repo-root
   # README has different headings, and pointing the check at the wrong one
   # makes it fail on links that are fine.

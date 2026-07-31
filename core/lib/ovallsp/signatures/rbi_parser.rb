@@ -79,7 +79,7 @@ module Ovallsp
       end
 
       def handle_sig(sig_call, def_node)
-        overload = parse_sig_body(sig_call.block.body)
+        overload = parse_sig_body(sig_call.block.body, def_node)
         return unless overload
 
         singleton = def_node.receiver.is_a?(Prism::SelfNode)
@@ -103,7 +103,7 @@ module Ovallsp
       # `override.`/`.checked(...)` prefixes and anything else this doesn't
       # recognize fall through to nil (recorded as a skipped signature by
       # the caller, not a crash).
-      def parse_sig_body(block_body)
+      def parse_sig_body(block_body, def_node)
         return nil unless block_body
 
         chain = block_body.body.last
@@ -113,8 +113,7 @@ module Ovallsp
         return nil unless params_call || return_type
 
         Overload.new(
-          required_positionals: [], optional_positionals: [], rest_positional: nil,
-          **keyword_params(params_call),
+          **parameter_slots(params_call, def_node),
           block_required: false, block_type: nil,
           return_type: return_type || Types::UNKNOWN
         )
@@ -142,23 +141,65 @@ module Ovallsp
         node.name == :params ? node : find_params(node.receiver)
       end
 
-      def keyword_params(params_call)
-        return { required_keywords: {}, optional_keywords: {}, rest_keyword: nil } unless params_call&.arguments
+      def self.empty_slots
+        { required_positionals: [], optional_positionals: [], rest_positional: nil,
+          required_keywords: {}, optional_keywords: {}, rest_keyword: nil }
+      end
+
+      # Sorbet's `params(...)` is a name-to-type map and nothing more:
+      # `params(x: Integer)` describes `def f(x)` and `def f(x:)`
+      # identically, so it cannot say which slot a parameter occupies.
+      # The `def` immediately below the sig can, and `handle_sig` already
+      # has that node -- so shape is read from the def and type is looked
+      # up by name.
+      #
+      # The previous rule filed every entry as a required keyword, with a
+      # comment that this was only "for arity matching purposes". That was
+      # invisible until 0.1.12 taught the signature label to render
+      # keywords, at which point `def combine(x, y)` began telling the
+      # user to type `x:`. It was also wrong about arity in both
+      # directions: a positional call did not match, and a `sig { void }`
+      # over a two-argument def claimed the method took nothing.
+      #
+      # A parameter the sig does not mention still gets its slot, typed
+      # Unknown -- the method takes it either way. A `params` entry naming
+      # something the def does not declare is a broken RBI and is dropped:
+      # inventing an argument the method cannot accept is the one outcome
+      # worse than having no type for it.
+      def parameter_slots(params_call, def_node)
+        declared = declared_param_types(params_call)
+        parameters = def_node&.parameters
+        return RbiParser.empty_slots unless parameters
+
+        type_of = ->(node) { declared.fetch(node.name, Types::UNKNOWN) }
+        {
+          required_positionals: (parameters.requireds + parameters.posts).map(&type_of),
+          optional_positionals: parameters.optionals.map(&type_of),
+          rest_positional: parameters.rest && type_of.call(parameters.rest),
+          required_keywords: keyword_slot(parameters, Prism::RequiredKeywordParameterNode, type_of),
+          optional_keywords: keyword_slot(parameters, Prism::OptionalKeywordParameterNode, type_of),
+          rest_keyword: parameters.keyword_rest && type_of.call(parameters.keyword_rest)
+        }
+      end
+
+      def keyword_slot(parameters, node_class, type_of)
+        parameters.keywords.grep(node_class).to_h { |node| [node.name, type_of.call(node)] }
+      end
+
+      # `def f(*)` / `def f(**)` are anonymous: the node has no name, so
+      # there is nothing to look a type up by, and `nil` must not become a
+      # hash key that a named parameter could collide with.
+      def declared_param_types(params_call)
+        return {} unless params_call&.arguments
 
         hash_node = params_call.arguments.arguments.first
-        return { required_keywords: {}, optional_keywords: {}, rest_keyword: nil } unless hash_node.is_a?(Prism::KeywordHashNode)
+        return {} unless hash_node.is_a?(Prism::KeywordHashNode)
 
-        keywords = hash_node.elements.filter_map do |assoc|
+        hash_node.elements.filter_map do |assoc|
           next unless assoc.is_a?(Prism::AssocNode) && assoc.key.is_a?(Prism::SymbolNode)
 
           [assoc.key.unescaped.to_sym, convert_type_expr(assoc.value)]
         end.to_h
-
-        # Sorbet's `params` doesn't itself distinguish required/optional --
-        # that comes from the `def`'s own parameter list, which this
-        # parser doesn't cross-reference (MVP scope) -- so every declared
-        # parameter is treated as required for arity matching purposes.
-        { required_keywords: keywords, optional_keywords: {}, rest_keyword: nil }
       end
 
       # `Integer`, `T.nilable(X)`, `T.any(X, Y)`, `T::Array[X]`,

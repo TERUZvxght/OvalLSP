@@ -14,8 +14,24 @@ Each entry states the symptom, who it affects, how to reproduce it, and a
 proposed direction. Nothing here is a shipping blocker; every item was
 triaged as such by the reviewer that raised it.
 
-Status legend: **open** — not started. **fixed** — resolved; entry kept
-until the next release, then deleted.
+Status legend: **open** — not started. **fixed** / **done** — resolved.
+
+A resolved entry is deleted once nothing in the tree cites it. It is
+**not** deleted while source or spec comments still name it by number:
+those comments say "this is the way it is because of 024.N", and the
+number is the only way to reach the reason. Every resolved entry below
+was checked against a repo-wide grep and is cited — 024.1 from
+`server_views_spec.rb` and `local_inferencer_spec.rb`, 024.6 from
+`cold_indexer_spec.rb`, 024.8 and 024.10 from `coreProcess.ts` and
+`extension.ts` and their unit tests, 024.R5 from fifteen places including
+`ancestry_registry.rb`, which says its measurements "are recorded in
+024.R5".
+
+The legend previously promised deletion "at the next release" with no
+such exception, and four entries then sat two releases past that deadline
+because deleting them would have broken live references. Round 5 of the
+0.1.12 review reported the entries as stale; the deadline was the part
+that was wrong. Run the grep before deleting, not the calendar.
 
 Entries numbered `024.R*` are roadmap items rather than defects: work
 that is understood, deliberately not scheduled for the current release,

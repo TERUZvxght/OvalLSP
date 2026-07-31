@@ -161,7 +161,7 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
   # which is a worse answer than the "no signature at all" these had before
   # they could be built.
   # The same failure one field over: a signature with no positionals and
-  # only keywords also rendered as `name()`. 29 method types in the RBS
+  # only keywords also rendered as `name()`. 30 method types in the RBS
   # core this loads have that shape -- `Array#shuffle` among them -- so
   # the label asserted zero arity for each while the user typed keywords
   # into it.

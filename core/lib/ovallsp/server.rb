@@ -1539,9 +1539,14 @@ module Ovallsp
     # views; enumerating candidate owners only moves which spelling
     # breaks. The name is already fully qualified and unique, so asking by
     # it answers every shape at once.
+    # The `::` normalisation this used to do by hand now lives in
+    # `class_declaration_uris` itself, where every caller gets it and a
+    # test can see the difference — measured: both of this method's own
+    # callers already pass a qualified name, so the hand-written copy
+    # could not change any answer and nothing could ever have pinned it
+    # (0.1.12, round 5).
     def find_controller_uri(owner_name)
-      canonical = Index::SymbolId.qualify_owner(owner_name)
-      @workspace_index.class_declaration_uris(canonical).first
+      @workspace_index.class_declaration_uris(owner_name).first
     end
 
     # An action contributes its ivars to this view if it either *is* the

@@ -203,7 +203,8 @@ server extensions for that workspace.
 5. The status bar shows the current state: Indexing / Ready (static) /
    Ready (Rails) / Agent unavailable.
 6. If a persistent cache seems corrupted, it lives under
-   `~/.cache/ovallsp/`, keyed per workspace/Ruby/Prism/Gemfile.lock/RBS
+   `$XDG_CACHE_HOME/ovallsp/` (`~/.cache/ovallsp/` when that variable is
+   unset), keyed per workspace/Ruby/Prism/Gemfile.lock/RBS
    combination — deleting the relevant directory forces a fresh index.
 
 ## Privacy and telemetry

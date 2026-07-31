@@ -14,23 +14,25 @@ argument. `spec/ovallsp/observation/type_normalizer_spec.rb`'s "never calls
 #inspect or #to_s" example asserts this directly against a poisoned test
 double whose `#inspect`/`#to_s` raise if ever invoked.
 
-What actually crosses the process boundary (`Observation::Collector` in
-the isolated runner process → `Observation::Runner` in Core, via
-`Marshal.dump`/`Marshal.load` of an `Array<ObservedSignature>`) is
-exclusively: class/module names (as plain Strings, already public
-constant names — not application data), `Index::SymbolId` values, sample
-counts, and a source-file content digest + line number (`code_fingerprint`
-— a fingerprint, never the source text itself). No argument value,
-`#inspect` output, SQL, environment variable, or file content is ever
-read or held by this feature.
+What crosses the process boundary is the fields of `ObservedSignature`,
+carried from `Observation::Collector` in the isolated runner process to
+`Observation::Runner` in Core via `Marshal.dump`/`Marshal.load` of an
+`Array<ObservedSignature>`. **`vscode/PRIVACY.md` is the single source of
+truth for what those fields are; do not restate the list here.** The
+enumeration that used to sit in this paragraph was itself incomplete —
+it omitted `run_id` and `created_at` — which is the whole reason the rule
+above exists. The invariant this file *does* own is that no argument
+value, `#inspect` output, SQL, environment variable, or file content is
+ever read or held: names and counts cross, values do not.
 
-It does *write* one, and 0.1.12 corrected the claim that it did not: the
-observed test command's own stdout and stderr are redirected to a
-temporary log for the length of the run, so a failed run can report why.
-Nothing reads or indexes that log and it is unlinked when the run ends,
-but while it exists it contains whatever the suite printed — in a Rails
-app, routinely SQL. `vscode/PRIVACY.md` is the single source of truth for
-what is recorded and what is written; do not restate either list here.
+It does *write* one file, and 0.1.12 corrected the claim that it did not:
+the observed test command's own stdout and stderr are redirected to a
+temporary log for the length of the run. Nothing reads, indexes or
+surfaces that log — the redirect exists only because in `--stdio` mode
+Core's file descriptor 1 is the live LSP transport, so the child's output
+must not land there. It is unlinked when the run ends, but while it
+exists it contains whatever the suite printed — in a Rails app, routinely
+SQL.
 
 `Observation::Collector#workspace_method?` filters to methods whose own
 *definition* — not merely their call site — is under the workspace root,

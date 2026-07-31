@@ -47,7 +47,8 @@ reopening the output channel.
 
 The only thing OvalLSP itself writes to disk during ordinary use is its
 own [persistent parse cache](README.md#troubleshooting) under
-`~/.cache/ovallsp/`, keyed by workspace and toolchain version. **It
+`$XDG_CACHE_HOME/ovallsp/`, or `~/.cache/ovallsp/` when that variable is
+unset, keyed by workspace and toolchain version. **It
 contains parts of your source code.** Alongside the parsed
 declarations and types it stores each method's body text and each
 parameter's default expression, verbatim — the body so a method's return
@@ -55,7 +56,7 @@ type can be inferred later without re-reading the file, the default
 expression because the parser records it. It also stores each file's
 absolute path. (Whether a file has changed is decided by a hash of it,
 not by this text.) Nothing in it is transmitted anywhere, and
-deleting `~/.cache/ovallsp/` is safe at any time — it is rebuilt by
+deleting that directory is safe at any time — it is rebuilt by
 re-indexing.
 
 Running type observation writes two more files, for the length of that
