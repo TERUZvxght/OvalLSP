@@ -43,8 +43,10 @@ bundled and is not listed here.
   `LICENSE`/`LICENSE.txt` file (bundled as described above) satisfies
   this.
 - The Ruby license (used by `logger` and `tsort`, both part of Ruby's own
-  standard library) is dual-licensed with the GPL; both are compatible
-  with this project's MIT license for redistribution purposes.
+  standard library) is dual-licensed with the 2-clause BSD license, as
+  stated by the bundled `COPYING`/`LICENSE.txt` files themselves; both
+  options are compatible with this project's MIT license for
+  redistribution purposes.
 - OvalLSP itself (this extension and its Core Server) is MIT-licensed —
   see [LICENSE](LICENSE).
 
