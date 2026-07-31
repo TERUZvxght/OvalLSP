@@ -29,6 +29,7 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
             def opts: (**untyped) -> void
             def required_kw: (name: String) -> void
             def opt_kw: (?limit: Integer) -> void
+            def both_kw: (name: String, ?limit: Integer) -> void
             def splat: (*Integer) -> void
           end
         RBS
@@ -93,6 +94,13 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
 
     it "marks an optional keyword as optional" do
       expect(label_for("opt_kw")).to include("?limit:")
+    end
+
+    # Required before optional, as a `def` writes them. Two `concat` lines
+    # produce this and swapping them rendered `f(?limit:, name:)` with
+    # nothing failing (0.1.12, round 9).
+    it "lists a required keyword before an optional one" do
+      expect(label_for("both_kw")).to eq("both_kw(name:, ?limit:) -> Unknown")
     end
 
     # `*rest` and `**rest` each independently mean "accepts more than it

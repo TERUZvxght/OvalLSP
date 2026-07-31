@@ -211,7 +211,15 @@ module Ovallsp
 
           @by_symbol.fetch(symbol_id, []).each { |(uri, decl)| results << { uri: uri, range: decl.location } }
         end
-        results
+        # Sorted, because callers take `.first` of this and insertion order
+        # is *index* order: `replace_file` removes a uri's entries and then
+        # appends the new ones, so editing one file of a class reopened
+        # across several moved it to the back -- silently changing which
+        # declaration go-to-definition answered with, and which controller
+        # file supplied a view's ivars. Ordering by uri makes the answer a
+        # property of the workspace rather than of what was typed in last
+        # (0.1.12, round 9).
+        results.sort_by { |entry| entry[:uri] }
       end
     end
 

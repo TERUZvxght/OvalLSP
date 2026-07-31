@@ -409,6 +409,42 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       expect(index.class_declarations("Shared").map { |d| d[:uri] }).to eq(["file:///shared.rb"])
     end
 
+    # A class reopened across files has several declarations, and callers
+    # take `.first` of them. Insertion order is *index* order, and
+    # `replace_file` removes then appends -- so editing one of the files
+    # moved it to the back and silently changed which declaration
+    # go-to-definition answered with, and which controller file supplied a
+    # view's ivars. Ordering by uri makes the answer a property of the
+    # workspace rather than of what the user happened to type in last
+    # (0.1.12, round 9).
+    it "orders declarations by uri, not by when each file was indexed" do
+      index.replace_file(
+        summary(uri: "file:///b_widget.rb",
+                declarations: [declaration(kind: :class, owner: nil, name: "::Widget")], content_hash: "b1")
+      )
+      index.replace_file(
+        summary(uri: "file:///a_widget.rb",
+                declarations: [declaration(kind: :class, owner: nil, name: "::Widget")], content_hash: "a1")
+      )
+
+      expect(index.class_declaration_uris("Widget")).to eq(["file:///a_widget.rb", "file:///b_widget.rb"])
+    end
+
+    it "keeps that order after one of the files is re-indexed" do
+      %w[a b].each do |letter|
+        index.replace_file(
+          summary(uri: "file:///#{letter}_widget.rb",
+                  declarations: [declaration(kind: :class, owner: nil, name: "::Widget")], content_hash: "#{letter}1")
+        )
+      end
+      index.replace_file(
+        summary(uri: "file:///a_widget.rb",
+                declarations: [declaration(kind: :class, owner: nil, name: "::Widget")], content_hash: "a2")
+      )
+
+      expect(index.class_declaration_uris("Widget")).to eq(["file:///a_widget.rb", "file:///b_widget.rb"])
+    end
+
     # A method is not one of the two kinds this answers for, even when it
     # is the only thing carrying the name.
     it "does not answer for a declaration that is neither a class nor a module" do

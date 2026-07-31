@@ -33,6 +33,9 @@ the disproved approaches are kept below it under **Details**.
 - Fixed: a Sorbet `.rbi` declaring `def f(...)`, `def f(**nil)` or a
   destructured `def f(a, (b, c))` keeps its signature. Introduced and
   fixed inside this release; no published version shipped it.
+- Fixed: `PRIVACY.md` no longer says nothing is written to disk beyond
+  the parse cache. An observation run writes two temporary files, one of
+  which receives your own test command's output.
 - Fixed: `PRIVACY.md` now describes everything type observation records.
   It recorded more than it said — nothing sensitive, but a privacy
   document that under-describes itself is wrong whichever direction the
@@ -47,8 +50,9 @@ capability is added.
 and routed every caller through it, and this release began by finding two
 copies that had survived, both because they build no `SymbolId` at all.
 Only one had a symptom. (Round 7 later established that "two" was itself
-too small — see below; the count is not the point, and every count this
-release put on it has been wrong.) `chain_reaches_root?`
+too small — four had, counting only that direction. Every count this
+release published before round 7 was wrong; the ones below have been
+re-derived since.) `chain_reaches_root?`
 asked `entry.name == "BasicObject"`, and a class written
 `< ::BasicObject` produces an entry carrying the `::`. Its chain was
 judged not to reach the root, the receiver was not "closed", and the
@@ -95,8 +99,10 @@ It said nothing is written to disk beyond the parse cache. An observation
 run writes two temporary files, and one of them is where your own test
 command's stdout and stderr are redirected — which in a Rails app
 routinely contains SQL. OvalLSP neither reads nor keeps that log, and it
-is unlinked when the run ends, but "nothing is written to disk" was not
-true while it existed. The document now says what those files are, and
+is unlinked when the run ends — though a crash or a kill can leave it
+behind, which `PRIVACY.md` now says and this paragraph did not until
+round 9 caught the pair disagreeing. Either way, "nothing is written to
+disk" was not true while it existed. The document now says what those files are, and
 draws the line the old text left implicit: the "never records" guarantee
 is about what OvalLSP extracts and keeps, not about what your own suite
 prints.
@@ -194,24 +200,29 @@ its own.
 Round 7 then falsified the *replacement* title. "Every remaining copy"
 lasted a day: a grep found eleven hand-written copies of the rule — in
 any of its three directions — still in the tree, and one of them,
-`ModelRegistry`'s `lookup_key`, had been written by this very release. Four were
-byte-identical copies of a lexical-qualify method, in `ParserService`,
-`LocalInferencer` twice, and `RbiParser`. So the title no longer claims a
+`ModelRegistry`'s `lookup_key`, had been written by this very release. Four were copies of one
+lexical-qualify method — three byte-identical, in `LocalInferencer` twice
+and `RbiParser`, and a fourth in `ParserService` differing only in what it
+calls its owner accessor. So the title no longer claims a
 count, and `Index::SymbolId` now owns all three directions:
 `qualify_owner`, `bare_name`, and `qualify_within`. All eleven delegate
 to it, `ReceiverResolution.canonical_receiver_name` among them — its old
 body was the one copy byte-identical to what it now calls. Nothing changed behaviour —
-the full suite green across the consolidation (1285 examples at this
-release's head) — which is the point: the copies were not wrong, they
-were waiting to be.
+the full suite green across the consolidation — which is the point: the
+copies were not wrong, they were waiting to be. (The example count that
+stood here was wrong twice running. It is in the commit messages, where
+it is checkable against the tree it describes; a changelog is the wrong
+place for a number that changes with every added spec.)
 
 Round 7 also found more wrong numbers — enough that this release has
 stopped ordinalising them. "Twenty-one call sites" was mine, written one
 round after correcting "four callers", and it is twenty-two expressions
 across twenty lines. Round 8 then found that the paragraph above this one
-had said 1275 where the suite is 1285: a figure true of the minute the
-consolidation was measured and reproducible at no commit, which is the
-same objection the "29" correction makes.
+had published an example count that was stale the moment it was written —
+twice over, because round 8's own correction of it was stale again by the
+time it shipped. The count is gone from this document; the objection the
+"29" correction makes applies to any number needing a particular minute
+to reproduce.
 And it found something better than a wrong number: a normalisation site I
 had personally declared unobservable was observable. Hovering `k` in
 `k = ::Widget` read `ClassOf[::Widget]` where `k = Widget` read
@@ -219,6 +230,30 @@ had personally declared unobservable was observable. Hovering `k` in
 now, along with `class_declarations`' untested `module` branch. Two lines
 went the other way and were deleted rather than pinned: a nil guard and a
 ternary whose two arms produce the same string.
+
+Rounds 8 and 9 found no wrong answer the code gives — seventy-four
+mutations between them, and every finding was an unpinned or unreachable
+line, or a sentence. Five unreachable lines were deleted across the two
+rounds, two of them added by the round that had just deleted three for
+being unreachable. Six lines gained the pin they had been missing,
+including one field of `untyped_overload` that would have made
+`Proc#call` advertise an argument it does not take.
+
+The one real defect in that pair was an ordering bug round 8 introduced
+by pinning it. `WorkspaceIndex` appends a file's declarations on
+re-index, so a class reopened across two files changed which declaration
+came first every time either file was edited — and go-to-definition, and
+which controller file supplied a view's instance variables, changed with
+it. Round 8's new spec only ever saw a freshly-built index, so it pinned
+the accident rather than the behaviour. Declarations are now ordered by
+uri, which makes the answer a property of the workspace instead of of
+what was typed in last.
+
+Round 9 also closed the last hole in the rule this release is named for.
+`SymbolId` documented that a class's own name is qualified and enforced
+it only for `owner`; a plugin registering a declaration could put a bare
+name straight into the index, where it matched a qualified needle and
+resolved the wrong class. The type enforces its own invariant now.
 
 ## 0.1.11 — One rule, restated everywhere and remembered nowhere
 

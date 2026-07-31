@@ -92,7 +92,7 @@ module Ovallsp
           source_kind: :rbi, generation: 0
         )
       rescue StandardError => e
-        @diagnostics << { severity: :warning, message: "failed to convert sig for #{def_node&.name}: #{e.message}",
+        @diagnostics << { severity: :warning, message: "failed to convert sig for #{def_node.name}: #{e.message}",
                            location: Index::SourceLocation.to_range(sig_call.location, @lines) }
       end
 

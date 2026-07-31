@@ -52,6 +52,30 @@ RSpec.describe "Ovallsp::Server controller-to-view instance variable propagation
     expect(sent_messages.first[:result]).to eq(type: "User")
   end
 
+  # A controller reopened across two files gives `find_controller_uri` two
+  # candidates and it takes `.first`. Until round 9 that was *index* order,
+  # so editing either file changed which one supplied the view's ivars --
+  # `@post` would resolve in one keystroke and not the next. The pair here
+  # opens the alphabetically-later file first, so a `.first` over index
+  # order picks the wrong one and this fails (0.1.12, round 9).
+  it "takes a reopened controller's actions from the same file regardless of index order" do
+    input =
+      open("file:///app/controllers/z_posts_controller.rb",
+           "class PostsController\n  def show\n    @post = 42\n  end\nend\n") +
+      open("file:///app/controllers/a_posts_controller.rb",
+           "class PostsController\n  def show\n    @post = \"a string\"\n  end\nend\n") +
+      open("file:///app/views/posts/show.html.erb", "<%= @post %>\n", language_id: "erb") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "ovallsp/explainType",
+        params: { textDocument: { uri: "file:///app/views/posts/show.html.erb" }, position: { line: 0, character: 5 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.first[:result]).to eq(type: "String")
+  end
+
   it "propagates ivars from an action that explicitly renders another view (render :edit)" do
     input =
       open("file:///app/controllers/posts_controller.rb", <<~RUBY) +

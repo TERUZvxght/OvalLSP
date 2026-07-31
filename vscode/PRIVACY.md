@@ -88,15 +88,15 @@ The distinction that matters is class *names* versus the objects
 themselves: `User` is recorded, the user is not.
 The aggregated result is not written to the parse cache and does not
 survive restarting the server. The only copy that touches disk is the
-temporary run file described just below, which is unlinked when the run
-ends.
+temporary run file described just below, and its lifetime is described
+there.
 
 Two temporary files exist for the length of an observation run, both
 created with owner-only permissions in your system temp directory and
-unlinked when the run ends. Deleting them is deliberately allowed to fail
-quietly rather than replace the error that is already being raised, so a
-run interrupted by a crash, a kill, or a read-only temp directory can
-leave them behind:
+unlinked when the run ends — but not guaranteed to be. Deleting them is
+deliberately allowed to fail quietly rather than replace an error already
+being raised, so a read-only or full temp directory leaves them; and a
+crash or a kill skips the deletion step entirely:
 
 - the run's results, as described above;
 - a log file, which is where **your test command's own standard output

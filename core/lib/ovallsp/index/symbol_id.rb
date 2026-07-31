@@ -74,8 +74,21 @@ module Ovallsp
       # Only a leading `::` is normalized: `Admin::Object` remains a
       # different class from `::Object`. A nil owner stays nil -- a
       # class-level symbol has none, and `"::"` is not a class.
-      def initialize(owner: nil, **rest)
-        super(owner: SymbolId.qualify_owner(owner), **rest)
+      # A class/module's own `name` is qualified too, and until 0.1.12 that
+      # was documented (see this class's header) without being enforced.
+      # `ParserService` always produced it that way, so nothing noticed --
+      # but `Server#plugin_declaration` copies a plugin-supplied `SymbolId`
+      # into the index verbatim, and `partition_plugin_facts` validates
+      # only that it *is* a `SymbolId`. A plugin registering
+      # `kind: :class, name: "Widget"` put a bare name into the index,
+      # where `resolve_type_symbol_locked` then matched it against a
+      # qualified needle and resolved the wrong class. Enforced here
+      # rather than re-guarded at the one read site round 8 removed a
+      # guard from: the invariant is this type's, not the reader's
+      # (0.1.12, round 9).
+      def initialize(kind: nil, name: nil, owner: nil, **rest)
+        qualified_name = %i[class module].include?(kind) ? SymbolId.qualify_owner(name) : name
+        super(kind: kind, name: qualified_name, owner: SymbolId.qualify_owner(owner), **rest)
       end
     end
   end

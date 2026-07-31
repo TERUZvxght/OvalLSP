@@ -44,6 +44,37 @@ RSpec.describe Ovallsp::Index::SymbolId do
     expect(described_class.new(kind: :class, owner: nil, name: "::Widget", discriminator: nil).owner).to be_nil
   end
 
+  # A class/module's own `name` is qualified too — documented in this
+  # type's header since 0.1.11 and enforced nowhere until 0.1.12.
+  # `ParserService` happened to always produce it that way, so the gap
+  # only opened where something else builds a SymbolId: a plugin's
+  # registered declaration reaches the index verbatim, and a bare `name`
+  # there made `resolve_type_symbol_locked` match a qualified needle
+  # against it and answer with the wrong class (round 9).
+  it "qualifies a class's own name, not just its owner" do
+    expect(described_class.new(kind: :class, owner: nil, name: "Widget", discriminator: nil).name).to eq("::Widget")
+  end
+
+  it "qualifies a module's own name" do
+    expect(described_class.new(kind: :module, owner: nil, name: "Admin", discriminator: nil).name).to eq("::Admin")
+  end
+
+  # A method's name is plain (`company`, not `::company`), so the rule
+  # must apply to the two kinds that carry a qualified name and no others
+  # — that pair is what tells the rule from a blanket prefix.
+  it "leaves a method's own name alone" do
+    expect(described_class.new(kind: :instance_method, owner: "::Widget", name: "build",
+                               discriminator: nil).name).to eq("build")
+  end
+
+  it "makes the two spellings of a class one key" do
+    bare = described_class.new(kind: :class, owner: nil, name: "Widget", discriminator: nil)
+    qualified = described_class.new(kind: :class, owner: nil, name: "::Widget", discriminator: nil)
+
+    expect(bare).to eq(qualified)
+    expect(bare.hash).to eq(qualified.hash)
+  end
+
   # The same decision read the other way, for the type model and for
   # `ModelRegistry`, whose keys are Rails' own bare `model.name`. Round 7
   # of the 0.1.12 review found three one-line copies of exactly this.
