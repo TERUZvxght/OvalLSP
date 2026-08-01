@@ -31,9 +31,10 @@ none: the `Marshal`'d results the boundary above is described in terms of
 stderr are redirected to for the length of the run. Nothing reads,
 indexes or surfaces that log — the redirect exists only because in
 `--stdio` mode Core's file descriptor 1 is the live LSP transport, so the
-child's output must not land there. Both are unlinked when the run ends,
-but while the log exists it contains whatever the suite printed — in a
-Rails app, routinely SQL.
+child's output must not land there. Both are deleted when the run ends,
+though not guaranteed to be — `vscode/PRIVACY.md` owns that qualification
+and states it. While the log exists it contains whatever the suite
+printed; in a Rails app, routinely SQL.
 
 `Observation::Collector#workspace_method?` filters to methods whose own
 *definition* — not merely their call site — is under the workspace root,

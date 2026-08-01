@@ -260,13 +260,17 @@ module Ovallsp
       # before it reaches an answer, and no probe has produced a
       # distinguishing input.
       #
-      # Kept rather than reverted, and the reason is not confidence. Round 7
-      # constructed the distinguishing input for `constant_path_type` after
-      # round 6 had declared that site unobservable too: hovering
-      # `k = ::Widget` really did read `ClassOf[::Widget]`. "No consumer
-      # can see it" has already been wrong once here. Normalising costs
-      # nothing; being wrong about it a second time would not
-      # (0.1.12, rounds 6-8).
+      # Kept rather than reverted, and the reason is cost rather than
+      # doubt: normalising here is free, and a consumer that stops
+      # normalising would be a silent wrong answer rather than a loud one.
+      #
+      # An earlier version of this comment cited `constant_path_type` as a
+      # precedent -- "a site declared unobservable that turned out to be
+      # observable". That was wrong. 0.1.11 already normalised that site;
+      # the difference a later round measured came from a *mutation* of
+      # it, which proves the line was untested, not that it was broken.
+      # The distinction matters because the two call for different things:
+      # untested wants a spec, broken wants a fix (0.1.12).
       @self_type_stack.push(
         Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.constant_path.full_name))
       )

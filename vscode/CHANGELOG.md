@@ -101,9 +101,11 @@ so `::User` matched nothing — normalised now in its four lookup methods
 rather than at the twenty-two call sites, across five subsystems, that
 use them. `MethodAnalyzer` matched a delegate's owner by *simple* name,
 so `Admin::User` borrowed the top-level `User`'s associations.
-`LocalInferencer` built `::`-prefixed types in six places, one of which
-was visible: hovering `k` in `k = ::Widget` read `ClassOf[::Widget]`
-where `k = Widget` read `ClassOf[Widget]`. The seventh site in that file
+`LocalInferencer` built `::`-prefixed types in six places. (An earlier
+revision of this paragraph said one of them was user-visible, citing a
+hover difference on `k = ::Widget`. That was wrong: 0.1.11 already
+normalised that site, and the difference existed only under a mutation.
+It was untested, not broken.) The seventh site in that file
 asked Prism for a constant path's name without the guard its two
 neighbours already had, so `klass::Error.new` raised and took the whole
 method's instance variables with it; all of them now go through one
@@ -134,9 +136,10 @@ would have turned a false report on precisely the classes it un-silenced.
 
 The label those signatures produce was asserting zero arity for anything
 it could not name: 26 methods in the RBS core this loads have keywords and
-no positionals (30 counting each overload), and 106 name nothing at all
-but accept a rest slot. Both now render. (160 methods have a rest slot;
-the other 54 already named something, so they never rendered as `()`.)
+no *named* positionals (33 counting each overload), and 106 name nothing
+at all but accept a rest slot. Both now render. Three of the 29 also take
+a `*rest` — `Dir.[]`, `Kernel#warn`, `Ractor.new` — so 135 methods in all
+rendered as `()` while accepting arguments.
 
 The RBI defect is the one this release caused. Sorbet's
 `params(x: Integer)` is a name-to-type map; it describes `def f(x)` and

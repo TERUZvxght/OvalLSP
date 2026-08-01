@@ -365,10 +365,12 @@ module Ovallsp
       # Positionals were all it rendered. That made `(?)` -- RBS for
       # "takes anything", which `Proc#call` and `Method#call` are declared
       # as -- come out as `call()`, and made every signature with no
-      # positionals but some keyword come out the same way (26 methods in
-      # the RBS core this loads, 30 counting each overload separately,
-      # `Array#shuffle` among them; counted, not estimated -- an earlier
-      # revision of this comment said 29, which is neither count).
+      # *named* positionals but some keyword come out the same way (29
+      # methods in the RBS core this loads, 33 counting each overload,
+      # `Array#shuffle` among them; three of them -- `Dir.[]`,
+      # `Kernel#warn`, `Ractor.new` -- also take a `*rest`, which is the
+      # difference between this count and the 26 an earlier revision of
+      # this comment gave).
       # Before 0.1.12 the `(?)` ones failed to build at all so
       # nothing was shown; making them build has to not make them lie, and
       # the keyword case was already lying.
