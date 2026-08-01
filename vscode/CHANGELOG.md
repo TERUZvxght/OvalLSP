@@ -40,9 +40,13 @@ one place that reads the simple-name index orders it by qualified name.
 tail, because its result is truncated and a tie decided by index order
 changes which symbols survive.
 
-Every example added for this re-indexes. That is the state the bug lives
-in, and the state all four earlier attempts were pinned without — which
-is why each of them passed while the defect stayed.
+Every example that could regress on re-index re-indexes — that is the
+state the bug lives in, and the state all four earlier attempts were
+pinned without. It is not sufficient on its own: the `workspace/symbol`
+tail shipped unpinned behind a re-indexing fixture whose eight files all
+declared one class, so the entry list `replace_file` already sorts was
+the only thing it exercised. Ties across *distinct* symbols are what that
+part is for, and they need their own fixture.
 
 Two testing gaps found alongside it, neither user-visible:
 

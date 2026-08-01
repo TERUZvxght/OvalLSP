@@ -5,6 +5,7 @@ import {
   STATUS_ERROR_TEXT,
   STATUS_LABELS,
   documentSelectorFor,
+  resolveStatus,
   statusPresentation
 } from '../../clientPresentation';
 
@@ -42,6 +43,46 @@ describe('documentSelectorFor', () => {
         `filter is not scoped to the folder: ${filter.pattern}`
       );
     }
+  });
+});
+
+describe('resolveStatus', () => {
+  it('reports no client when the folder has none', async () => {
+    assert.deepStrictEqual(await resolveStatus(undefined), { hasClient: false });
+  });
+
+  it('reports the state the server answered with', async () => {
+    const client = { sendRequest: async <T>() => ({ state: 'ready-rails' }) as T };
+
+    assert.deepStrictEqual(await resolveStatus(client), { hasClient: true, state: 'ready-rails' });
+  });
+
+  // The distinction the whole feature turns on: a client that threw is
+  // not the same as no client, and reporting it as "no client" hides a
+  // crashed server behind an empty status bar. Splitting this decision
+  // from its rendering is how it went untested the first time.
+  it('reports a failed request as a client that did not answer, not as no client', async () => {
+    const client = {
+      sendRequest: async <T>(): Promise<T> => {
+        throw new Error('connection closed');
+      }
+    };
+
+    assert.deepStrictEqual(await resolveStatus(client), { hasClient: true, failed: true });
+  });
+
+  it('asks for ovallsp/status', async () => {
+    const asked: string[] = [];
+    const client = {
+      sendRequest: async <T>(method: string) => {
+        asked.push(method);
+        return { state: 'indexing' } as T;
+      }
+    };
+
+    await resolveStatus(client);
+
+    assert.deepStrictEqual(asked, ['ovallsp/status']);
   });
 });
 
@@ -99,11 +140,18 @@ describe('extension.ts uses the extracted decisions', () => {
     );
   });
 
-  it('drives the status bar from statusPresentation', () => {
-    assert.ok(source.includes('statusPresentation('), 'extension.ts does not call statusPresentation');
+  it('drives the status bar from resolveStatus and statusPresentation', () => {
+    assert.ok(
+      /statusPresentation\(await resolveStatus\(/.test(source),
+      'extension.ts does not build its status outcome through resolveStatus'
+    );
     assert.ok(
       !source.includes('STATUS_LABELS['),
       'extension.ts still indexes STATUS_LABELS itself instead of asking statusPresentation'
+    );
+    assert.ok(
+      !/hasClient:\s*(true|false)/.test(source),
+      'extension.ts still decides hasClient itself; that decision belongs in resolveStatus'
     );
   });
 });

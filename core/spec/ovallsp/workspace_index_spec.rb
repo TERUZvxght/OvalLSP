@@ -153,9 +153,17 @@ RSpec.describe Ovallsp::WorkspaceIndex do
   #
   # 0.1.12 tried to fix this four times by sorting one more *reader* each
   # round, produced two regressions, and was rolled back to 024.15. The
-  # order lives in the storage now. **Every example here re-indexes**:
-  # that is the state the bug lives in, and the state every one of those
-  # four attempts was pinned without (024.15, 0.1.13).
+  # order lives in the storage now.
+  #
+  # **Every example that could regress on re-index re-indexes.** That is
+  # the state the bug lives in, and the state every one of those four
+  # attempts was pinned without. The rest fix an order that a single index
+  # already decides -- ties within a file, byte-vs-case, the exact-match
+  # bucket -- and adding a re-index to those would test nothing extra.
+  # Re-indexing is not sufficient either: the `search` tail shipped
+  # unpinned behind a re-indexing fixture whose eight files shared one
+  # SymbolId, so the entry list `replace_file` already sorts was the only
+  # thing it exercised (024.15, 0.1.13).
   describe "determinism across re-indexing" do
     def widget_in(letter, hash:, line: 1)
       summary(uri: "file:///#{letter}.rb", content_hash: hash,
@@ -255,6 +263,32 @@ RSpec.describe Ovallsp::WorkspaceIndex do
     # present: sorting by name alone puts `Widget` after `WidgetFactory`
     # only by luck of the alphabet, and reverses for a name where it does
     # not hold.
+    # The tie the tail exists for is across *distinct* SymbolIds, not
+    # within one: `search` walks `@by_symbol` in Hash key order, and a key
+    # is deleted and re-inserted when the last file declaring it is
+    # re-indexed. Six classes sharing the substring but not the exact
+    # match all land in the same bucket, so without the tail the bucket's
+    # order is index order and the truncation drops a different one each
+    # time. A fixture of one class in eight files cannot see this — the
+    # entry list `replace_file` already sorts is the only thing it
+    # exercises, which is how this shipped unpinned once.
+    it "keeps a truncated result stable when the tie is across several SymbolIds" do
+      %w[A B C D E F].each do |suffix|
+        index.replace_file(
+          summary(uri: "file:///widget#{suffix.downcase}.rb", content_hash: suffix,
+                  declarations: [declaration(kind: :class, owner: nil, name: "::Widget#{suffix}")])
+        )
+      end
+      before = index.search("widget", limit: 3).map { |m| m[:symbol_id].name }
+      index.replace_file(
+        summary(uri: "file:///widgeta.rb", content_hash: "A2",
+                declarations: [declaration(kind: :class, owner: nil, name: "::WidgetA")])
+      )
+
+      expect(index.search("widget", limit: 3).map { |m| m[:symbol_id].name }).to eq(before)
+      expect(before).to eq(%w[::WidgetA ::WidgetB ::WidgetC])
+    end
+
     it "still ranks an exact name match first, ahead of the uri and name order" do
       index.replace_file(summary(uri: "file:///a.rb", content_hash: "a",
                                  declarations: [declaration(kind: :class, owner: nil, name: "::AbstractWidget")]))

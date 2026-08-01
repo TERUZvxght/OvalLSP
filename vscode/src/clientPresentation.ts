@@ -38,6 +38,35 @@ export function documentSelectorFor(folderPath: string): DocumentFilter[] {
   ];
 }
 
+export interface StatusClient {
+  sendRequest<T>(method: string, params: object): Thenable<T>;
+}
+
+export interface StatusOutcome {
+  hasClient: boolean;
+  state?: string;
+  failed?: boolean;
+}
+
+/**
+ * What one poll found. Here rather than at the call site because the
+ * distinction it draws — no client versus a client that did not answer —
+ * is the whole decision `statusPresentation` then renders, and leaving
+ * the two halves apart meant a call site could report a failure as
+ * "no client" with every test still passing (024.17).
+ */
+export async function resolveStatus(client: StatusClient | undefined): Promise<StatusOutcome> {
+  if (!client) {
+    return { hasClient: false };
+  }
+  try {
+    const result = await client.sendRequest<{ state: string }>('ovallsp/status', {});
+    return { hasClient: true, state: result.state };
+  } catch {
+    return { hasClient: true, failed: true };
+  }
+}
+
 export interface StatusPresentation {
   visible: boolean;
   text?: string;
@@ -70,11 +99,7 @@ export const STATUS_ERROR_TEXT = '$(error) OvalLSP: Configuration error';
  * the error text: the server said something, and reporting a
  * configuration error for it would be a lie.
  */
-export function statusPresentation(outcome: {
-  hasClient: boolean;
-  state?: string;
-  failed?: boolean;
-}): StatusPresentation {
+export function statusPresentation(outcome: StatusOutcome): StatusPresentation {
   if (!outcome.hasClient) {
     return { visible: false };
   }

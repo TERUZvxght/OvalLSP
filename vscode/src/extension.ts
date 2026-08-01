@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { documentSelectorFor, statusPresentation } from './clientPresentation';
+import { documentSelectorFor, resolveStatus, statusPresentation } from './clientPresentation';
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import {
@@ -555,17 +555,7 @@ function startStatusPolling(statusBarItem: vscode.StatusBarItem): vscode.Disposa
       const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : vscode.workspace.workspaceFolders?.[0];
       const client = folder ? clients.get(folder.uri.toString()) : undefined;
 
-      let outcome: { hasClient: boolean; state?: string; failed?: boolean } = { hasClient: false };
-      if (client) {
-        try {
-          const result = await client.sendRequest<{ state: string }>('ovallsp/status', {});
-          outcome = { hasClient: true, state: result.state };
-        } catch {
-          outcome = { hasClient: true, failed: true };
-        }
-      }
-
-      const shown = statusPresentation(outcome);
+      const shown = statusPresentation(await resolveStatus(client));
       if (!shown.visible) {
         statusBarItem.hide();
         return;

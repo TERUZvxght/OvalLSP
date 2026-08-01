@@ -105,9 +105,17 @@ module Ovallsp
         # which symbols survived `workspace/symbol`'s limit.
         #
         # Sorted once per touched symbol per file rather than inserted in
-        # place: the lists are 1-3 entries in every ordinary workspace, and
-        # a `sort_by` per symbol measures at the same 7ms as before over
-        # 2,000 files with one class reopened in 500 of them (024.15).
+        # place. Cost is quadratic in a symbol's *fan-out* -- Cold Index
+        # re-sorts a list of length i on the i-th file that joins it -- and
+        # the fan-out that matters is a reopened namespace module, not a
+        # class: 78 of this project's own 79 `lib` files declare
+        # `module Ovallsp`, so that one list reaches 78. Measured on real
+        # trees, `replace_file` totals: `core/lib` 79 files 1.4 -> 3.5ms,
+        # `activerecord/lib` 397 files 9.5 -> 32.5ms. Negligible against
+        # parsing. It stops being negligible only at a fan-out no real tree
+        # has shown -- a synthetic 4,000-file single-namespace workspace
+        # measures 80ms -> 3.0s -- which is the shape to re-measure if this
+        # ever feels slow (024.15).
         touched.uniq.each { |symbol_id| @by_symbol[symbol_id].sort_by!(&method(:entry_order)) }
         @generation += 1
         true
@@ -238,7 +246,9 @@ module Ovallsp
     # already uses: match by unqualified simple name, then prefer whichever
     # candidate's own full name exactly matches what was written. An
     # ambiguous simple name (two same-named classes in different
-    # namespaces) resolves to whichever was indexed first.
+    # namespaces) resolves to the alphabetically first qualified name --
+    # arbitrary, but a property of the workspace rather than of which file
+    # was edited last, which is what it was until 0.1.13 (024.15).
     def resolve_type_name(name)
       @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
     end
@@ -366,12 +376,10 @@ module Ovallsp
       # normalising that side too was a branch no input could reach
       # (0.1.12, round 8).
       qualified = Index::SymbolId.qualify_owner(raw)
-      # `.first` here, and in this index's other readers, is index order --
-      # which moves when a file is re-indexed. That is a real defect and it
-      # predates 0.1.12; it is recorded as 024.15 with the fix it actually
-      # needs, which is not a sort bolted onto each reader. Four rounds of
-      # this release tried that and produced three incomplete fixes and two
-      # regressions. See docs/design/tasks/024-deferred-review-findings.md.
+      # `.first` is safe here because `candidates` came from
+      # `ordered_symbol_ids`, not from the Set directly. Until 0.1.13 it
+      # was index order, so an ambiguous bare name resolved to a different
+      # class whenever either file was re-indexed (024.15).
       candidates.find { |sid| sid.name == qualified } || candidates.first
     end
 

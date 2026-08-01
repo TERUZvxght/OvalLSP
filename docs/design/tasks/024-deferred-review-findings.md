@@ -723,8 +723,10 @@ share a name. `search`'s `rank` keeps exact-match-first and gains a tail,
 since a truncated result cannot have ties decided by index order.
 Measured as the entry asked: 2,000 files with one class reopened in 500
 of them goes 7ms -> 61ms in `replace_file`, negligible against Cold
-Index. Every spec added re-indexes, and all eight decisions were pinned
-by mutation.
+Index. Every spec that could regress on re-index re-indexes, and all nine
+decisions are pinned by mutation -- the `search` tail needed a fixture
+with several distinct SymbolIds, having first shipped unpinned behind one
+whose eight files shared a single SymbolId.
 **Area:** `core/lib/ovallsp/workspace_index.rb`
 
 `@by_symbol` maps a SymbolId to a list of `[uri, declaration]`, and
