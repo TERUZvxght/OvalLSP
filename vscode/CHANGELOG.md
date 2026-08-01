@@ -134,8 +134,9 @@ would have turned a false report on precisely the classes it un-silenced.
 
 The label those signatures produce was asserting zero arity for anything
 it could not name: 26 methods in the RBS core this loads have keywords and
-no positionals (30 counting each overload), and 106 accept a rest slot.
-Both now render.
+no positionals (30 counting each overload), and 106 name nothing at all
+but accept a rest slot. Both now render. (160 methods have a rest slot;
+the other 54 already named something, so they never rendered as `()`.)
 
 The RBI defect is the one this release caused. Sorbet's
 `params(x: Integer)` is a name-to-type map; it describes `def f(x)` and

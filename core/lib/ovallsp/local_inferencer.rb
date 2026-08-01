@@ -1032,9 +1032,12 @@ module Ovallsp
         return unless assume == :truthy
 
         arg = predicate.arguments&.arguments&.first
-        if constant_receiver?(arg)
-          env[receiver.name] =
-            Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(arg.full_name))
+        # Through the helper, not `#full_name` directly: `is_a?`'s argument
+        # is the second place a constant receiver's name is read, and a
+        # dynamic path there raised exactly as it did in `resolve_call`,
+        # taking the whole method's instance variables with it (0.1.12).
+        if (arg_name = constant_receiver_name(arg))
+          env[receiver.name] = Types::Nominal.new(name: arg_name)
         end
       end
     end

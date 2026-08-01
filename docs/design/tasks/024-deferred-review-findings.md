@@ -687,7 +687,8 @@ two regressions:
 
 - round 8 pinned `.first` with a spec asserting the current answer, which
   turned out to be an accident rather than a behaviour;
-- round 9 sorted `class_declarations` by uri — one reader of six, and
+- round 9 sorted `class_declarations` by uri — which backs two of the
+  seven rows above and leaves five, and
   `sort_by` is not a stable sort, so entries sharing a uri were still
   arbitrary, and the *source* order that insertion had at least preserved
   within a file was lost;

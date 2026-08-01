@@ -71,7 +71,7 @@ change set drifts while every individual round looks productive.
 Established after 0.1.12, where the index's ordering instability was
 "fixed" in rounds 8, 9, 10 and 11 — each attempt bolting a sort onto one
 more *reader* of a collection whose *storage* had no order. Round 8
-pinned an accident, round 9 fixed one reader of six with an unstable
+pinned an accident, round 9 fixed two readers of seven with an unstable
 sort, round 10 regressed round 9's fix, round 11 restored it. Four rounds,
 zero net progress, and the release grew to 47 files and 2,463 added lines
 — larger than 0.1.9, 0.1.10 and 0.1.11 combined. The thread was rolled

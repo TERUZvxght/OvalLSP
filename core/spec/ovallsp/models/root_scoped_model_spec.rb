@@ -122,15 +122,44 @@ x
       expect(inferencer.infer_at(document, { line: 1, character: 0 }).to_s).to eq("Unknown")
     end
 
-    # The guard's other half: a receiver that is not a constant at all must
-    # not be read as one. `#full_name` exists on several Prism nodes, so
-    # dropping the kind check does not raise -- it silently answers with a
-    # *call's* name, typing `helper.new` as `Nominal("helper")`.
+    # A receiver that is not a constant must not be read as one. This pins
+    # the *outcome*, not the kind check that produces it: measured,
+    # neither `CallNode` nor `LocalVariableReadNode` answers `#full_name`,
+    # so removing the check reaches the rescue and returns nil anyway, and
+    # this fixture cannot tell the two apart. An earlier version of this
+    # comment claimed it could, on an untested assumption about which
+    # Prism nodes carry `#full_name` (0.1.12).
     it "does not treat a method-call receiver as a constant" do
       source = "def run\n  h = helper\n  y = h.new\n  y\nend\n"
       document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
 
       expect(inferencer.infer_at(document, { line: 3, character: 2 }).to_s).to eq("Unknown")
+    end
+
+    # The same raise, through the *other* path that reads a constant
+    # receiver's name -- `is_a?`'s argument, which narrows a local. This
+    # release edited that line without giving it the guard its sibling
+    # got, so `result.is_a?(gateway.class::Failure)` -- idiomatic Ruby --
+    # still cost the whole action its instance variables (0.1.12).
+    it "keeps a method's ivars when `is_a?` narrows against a dynamic constant path" do
+      source = <<~RUBY
+        class OrdersController
+          def create
+            @order = Order.new
+            result = charge
+            @error = 1 if result.is_a?(gateway.class::Failure)
+            @total = "42"
+          end
+        end
+      RUBY
+      document = Ovallsp::TextDocument.new(uri: "file:///o.rb", text: source, version: 1, language_id: "ruby")
+      nodes = inferencer.method_nodes(document, owner_name: "::OrdersController")
+
+      env = inferencer.infer_ivars_for_method_node(
+        nodes["create"], initial_env: {}, self_type_name: "::OrdersController"
+      )
+
+      expect(env.keys).to eq(%i[@order @error @total])
     end
 
     it "narrows `is_a?(::Widget)` to the same type as `is_a?(Widget)`" do
