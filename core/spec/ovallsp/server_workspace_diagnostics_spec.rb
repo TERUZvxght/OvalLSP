@@ -156,6 +156,27 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     end
   end
 
+  # The buffer path drains pending ancestry questions in an `ensure`;
+  # the workspace path raised them and never asked. A receiver the check
+  # defers on in an unopened file was answered only if an open buffer
+  # happened to trigger a drain later.
+  it "asks the Runtime Agent about ancestries the workspace pass deferred on" do
+    Dir.mktmpdir do |root|
+      workspace_with_a_mistake(root)
+      server = build_server(root)
+      asked = 0
+      allow(server).to receive(:answer_pending_ancestry_questions).and_wrap_original do |original|
+        asked += 1
+        original.call
+      end
+
+      server.send(:start_cold_index)
+      wait_until { asked.positive? }
+
+      expect(asked).to be_positive
+    end
+  end
+
   it "publishes nothing for a file that has no mistakes" do
     Dir.mktmpdir do |root|
       workspace_with_a_mistake(root)

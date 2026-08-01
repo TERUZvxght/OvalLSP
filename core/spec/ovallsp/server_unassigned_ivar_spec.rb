@@ -200,6 +200,41 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     expect(run_server(controller: controller, view: "<%= @user.name %>")).to be_empty
   end
 
+  # The set the check compares against came from the *type-propagation*
+  # walk, which folds the statement shapes it models and infers `Unknown`
+  # for the rest. That is harmless for types and wrong for a diagnostic:
+  # a shape the walk does not fold produces a complete-looking set with a
+  # name missing, which is a warning on a view that renders. `||=` and
+  # `respond_to do |format|` are not edge cases -- they are two of the
+  # most common lines in a Rails action.
+  {
+    "an ||= assignment" => "@user ||= User.find(params[:id])",
+    "an &&= assignment" => "@user = 1
+    @user &&= User.find(params[:id])",
+    "an assignment inside a block" => "[1].each { |n| @user = n }",
+    "an assignment inside respond_to" => "respond_to { |f| @user = 1 }",
+    "an assignment inside a case" => "case params[:id]
+    when \"1\" then @user = 1
+    else @user = 2
+    end",
+    "an assignment inside begin/end" => "begin
+      @user = 1
+    end",
+    "an assignment inside a while" => "while false
+      @user = 1
+    end",
+    "an assignment in a rescue clause" => "@user = 1
+  rescue StandardError
+    @user = 2",
+    "a multiple assignment" => "@acct, @user = 1, 2"
+  }.each do |description, body|
+    it "says nothing about an @ivar assigned by #{description}" do
+      controller = "class UsersController\n  def show\n    #{body}\n  end\nend\n"
+
+      expect(run_server(controller: controller, view: "<%= @user.name %>")).to be_empty
+    end
+  end
+
   it "says nothing when the controller uses instance_variable_set" do
     controller = <<~RUBY
       class UsersController

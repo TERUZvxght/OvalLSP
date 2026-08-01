@@ -391,11 +391,15 @@ module Ovallsp
     # turn that already owns `document`'s current version -- there's no
     # background/async gap for a result to go stale in, so "stale document
     # versionのdiagnosticをpublishしない" holds by construction rather than
-    # needing its own generation check. Only wired into the didOpen/
-    # didChange path (buffer content the client can actually see) --
-    # #reindex_from_disk (files nobody has open) doesn't publish, since
-    # there's no LSP client-side buffer to attach the notification to
-    # meaningfully.
+    # needing its own generation check.
+    #
+    # This is the *buffer* path. Until 0.2.0 it was the only one, on the
+    # reasoning that an unopened file has no client-side buffer to attach
+    # a notification to -- which `WorkspaceDiagnostics`' own header
+    # rejects, because LSP does not work that way: a client shows a
+    # `publishDiagnostics` for any uri. `#reindex_from_disk` now publishes
+    # too, through the workspace pass rather than here, so that the two
+    # cannot both claim the last word on one uri.
     def publish_diagnostics(document)
       # Whether there is a running application to ask has to be known
       # *before* the check runs, not after: a receiver it cannot judge
@@ -444,6 +448,17 @@ module Ovallsp
       with_index_snapshot do
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
+      end
+    ensure
+      # `analyze` *records* the ancestries it had to defer on; something
+      # has to ask. The buffer path drains in its own `ensure` and this
+      # one did not, so a receiver deferred in an unopened file waited
+      # until an open buffer happened to trigger a drain -- which, on a
+      # workspace where nothing is open, is never.
+      begin
+        answer_pending_ancestry_questions
+      rescue StandardError => e
+        @logger.error("failed to ask the Runtime Agent about pending ancestries: #{e.class}: #{e.message}")
       end
     end
 
@@ -1526,9 +1541,24 @@ module Ovallsp
       # given. That is a different fact from "the action assigns nothing",
       # and the empty set would say the second while meaning the first.
       return nil if actions.empty?
-      return nil if delegates_to_unwalked_method?(documents, method_maps, actions)
 
-      ivars_for_view(uri).keys.map(&:to_s)
+      # The union of what the inference walk resolved and every ivar the
+      # controller chain assigns *syntactically*. The walk's set is the
+      # attributed one -- which action assigns what -- but it folds only
+      # the statement shapes it models, and a shape it does not fold
+      # arrives here as a complete-looking set with a name missing, which
+      # is a warning on a view that renders (`@user ||= ...`, an
+      # assignment inside `respond_to do |format|`, a `case`, a `rescue`,
+      # a multiple assignment).
+      #
+      # Widening to the whole chain rather than to the contributing
+      # action's body alone is deliberate: an ivar assigned in a sibling
+      # action silences this check for this view, which is a missed
+      # report. The standard here is that a missed report beats a wrong
+      # one, and a name the controller never writes at all -- the typo
+      # this check exists for -- is still caught.
+      (ivars_for_view(uri).keys.map(&:to_s) +
+       documents.flat_map { |_, document| @local_inferencer.assigned_ivar_names(document) }).uniq
     rescue StandardError => e
       @logger.error("failed to compute assigned ivars for #{uri}: #{e.class}: #{e.message}")
       nil
@@ -1561,31 +1591,6 @@ module Ovallsp
     # block-form callback and a Rails concern are not edge cases. So the
     # answer here is "no" whenever the chain contains anything this cannot
     # follow, and the check above turns that into silence.
-    # The other half of "can these ivars be enumerated completely", and the
-    # half that needs the action bodies rather than the file's text.
-    #
-    # The walk reads the callback chain and the action's own body. An
-    # action that calls a sibling method -- `def show; load_user; end` --
-    # assigns through a body it never reads, and the set it then produces
-    # is not incomplete-looking, it is a complete-looking set with a name
-    # missing. That is a warning on a view that renders, which is the one
-    # outcome this check is designed never to produce.
-    #
-    # Only calls to methods *this controller chain defines*: `render`,
-    # `params`, a helper, anything Rails supplies is not a body that could
-    # have assigned an ivar here, and treating every call as unwalkable
-    # would switch the check off for every action that does anything.
-    def delegates_to_unwalked_method?(documents, method_maps, actions)
-      defined_here = method_maps.each_value.flat_map(&:keys).to_set
-
-      actions.any? do |action_name|
-        node = documents.filter_map { |ancestor, _| method_maps.fetch(ancestor)[action_name] }.first
-        next false unless node
-
-        @local_inferencer.self_call_names(node).any? { |name| defined_here.include?(name) }
-      end
-    end
-
     def ivar_sources_fully_enumerable?(owner_name, documents)
       # `:default` entries are Object/Kernel/BasicObject, which every
       # class has and none of which assigns a controller's ivars. What

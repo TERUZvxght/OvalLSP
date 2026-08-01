@@ -21,9 +21,11 @@ the disproved approaches are kept below it under **Details**.
 - Added: semantic highlighting, in `.rb` and in an ERB template's Ruby
   regions.
 
-A minor release under the versioning rule in `docs/PUBLISHING.md`: five
-capability rows are added. Six features ship; workspace-wide diagnostics
-has no row, because the E2E example written for it did not pass and
+A minor release under the versioning rule in `docs/PUBLISHING.md`: six
+capability rows are added (H7, C12, C13, G15, G16, T1 — documentation is
+one feature and two rows, in hover and in completion). Six features ship
+too, but not the same six: workspace-wide diagnostics has no row, because
+the E2E example written for it did not pass and
 `docs/EXTENSION_CAPABILITIES.md`'s own rule is that a capability with no
 row is not a capability (024.14). It is in the list above with that
 qualification rather than left unmentioned. It closes the last three roadmap entries scheduled

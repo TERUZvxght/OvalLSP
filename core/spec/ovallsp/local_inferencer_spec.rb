@@ -1703,4 +1703,34 @@ RSpec.describe Ovallsp::LocalInferencer do
       expect(widened).to eq(Ovallsp::Types::UNKNOWN) # budget exhausted -> degrades, doesn't raise
     end
   end
+
+  # `infer_at` parses the document, and the argument-type check asks it
+  # once per positional argument, so the parse is remembered. The key has
+  # to be the document, not merely "there is a cached tree": two files
+  # open at once, both at version 1, would otherwise answer each other's
+  # question -- and a hover would report a type from a different file.
+  describe "the remembered parse" do
+    def doc(uri, text) = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
+
+    it "does not answer one document's question from another's tree" do
+      inferencer = described_class.new
+      first = doc("file:///a.rb", "x = 1\nx\n")
+      second = doc("file:///b.rb", "y = \"s\"\ny\n")
+
+      inferencer.infer_at(first, { line: 1, character: 0 })
+
+      expect(inferencer.infer_at(second, { line: 1, character: 0 }).to_s).to eq("String")
+    end
+
+    it "re-parses when the same document's text changes" do
+      inferencer = described_class.new
+      before = doc("file:///a.rb", "x = 1\nx\n")
+      after = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: "x = \"s\"\nx\n", version: 1,
+                                        language_id: "ruby")
+
+      inferencer.infer_at(before, { line: 1, character: 0 })
+
+      expect(inferencer.infer_at(after, { line: 1, character: 0 }).to_s).to eq("String")
+    end
+  end
 end

@@ -336,6 +336,22 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     expect(result[:items].map { |i| i[:label] }).to include("Artzzz")
   end
 
+  # The exact-match rule inside the index decides *survival of the
+  # truncation*, not the order the user sees -- `items` is re-sorted by
+  # label before it goes out. So the fixture has to overflow the cap, and
+  # the exact match has to be one the qualified-name order would cut:
+  # `Zzz::Art` sorts after every `Artxxx`, and typing the whole of a short
+  # name is exactly when the user has already said which one they mean.
+  it "keeps an exact match when more candidates start with the prefix than fit" do
+    crowd = (1..250).map { |i| "class Art#{format('%03d', i)}; end" }.join("\n")
+    both = "module Zzz\n  class Art; end\nend\n"
+    result = complete(<<~RUBY, extra_opens: did_open("file:///crowd.rb", crowd) + did_open("file:///art.rb", both))
+      ArtHERE
+    RUBY
+
+    expect(result[:items].map { |i| i[:label] }).to include("Art")
+  end
+
   # `search` returns every declared symbol, methods included, and this
   # group is documented as workspace constants and labels each item
   # `CompletionItemKind.Class`. A method arriving here wore a class icon.

@@ -682,7 +682,11 @@ module Ovallsp
       # because 0.2.0's argument check needs the parameter list, and
       # `rbs_resolves?` above only needs to know whether there was one.
       def declared_signature_for(receiver_type, candidate, context)
-        context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).filter_map do |entry|
+        # `lazy`, because this stops at the first ancestor that declares
+        # the method and the chain can be long -- the shape it replaced
+        # (`any?`) short-circuited, and turning it into a value lookup
+        # lost that.
+        context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).lazy.filter_map do |entry|
           kind = candidate.singleton && entry.origin != :extend ? :singleton_method : :instance_method
           # `owner:` is not qualified here: `SymbolId#initialize` does it
           # (0.1.12). This call site needed it before that existed, and

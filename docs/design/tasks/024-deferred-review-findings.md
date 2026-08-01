@@ -174,6 +174,33 @@ one did not pass: a probe file carrying `UnopenedProbe.new
 .definitely_not_here`, present in `spec/fixtures/rails_real` before Core
 starts and never opened, produced no diagnostic within 45 seconds.
 
+**A diagnosed cause, not yet fixed.** `republish_open_diagnostics` ends
+with `start_workspace_diagnostics`, which calls `begin_pass` --
+invalidating whatever pass is running -- and `WorkspaceDiagnostics#run`
+restarts from `uris.first` with no resume point. That method is called
+from seven sites, two of which are *loops*: the ancestry drain
+(`server.rb:578`, which drains until the queue is empty) and the
+model-refresh batch (`server.rb:2562`, once per batch). On a real Rails
+app each iteration therefore aborts an O(workspace) pass and starts a new
+one from zero, and each new one takes the same global index mutex. That
+is a credible mechanism for the 45-second silence above, and it is not
+among the three causes guessed at below.
+
+The direction is to coalesce rather than restart: a request arriving
+while a pass runs should set "run once more when this one finishes"
+instead of spawning a pass of its own. Deliberately *not* done in this
+release. It is a concurrency change, the harm is reasoned rather than
+measured, and the deterministic test it needs -- one that makes the
+overlap real rather than racing it -- is the part that is not cheap. A
+half-tested concurrency change made late in a review loop is how a change
+set drifts. Its own task, with the 45-second reproduction as the
+acceptance test.
+
+What *was* fixed here: `workspace_findings_for` recorded deferred
+ancestry questions and never asked them. The buffer path drains in an
+`ensure`; this one now does too, so a receiver deferred in an unopened
+file is answered rather than waiting for someone to open a buffer.
+
 A second gap in the same pass was found when 0.1.11-0.1.13 were merged
 in and the whole branch was reviewed: `workspace_findings_for` built its
 semantic context without `assigned_ivars:`, and

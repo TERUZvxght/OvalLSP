@@ -100,7 +100,7 @@ module Ovallsp
     # makes that true rather than anything here.
     def scope_at(document, position, max_steps: nil)
       offset = document.position_to_byte_offset(position)
-      result = Prism.parse(document.text)
+      result = parse_cached(document)
       @steps = 0
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
@@ -122,7 +122,7 @@ module Ovallsp
       # wrong node whenever a multibyte character appears anywhere before
       # the target position (docs/design/tasks/008.5-runtime-and-index-corrections.md).
       offset = document.position_to_byte_offset(position)
-      result = Prism.parse(document.text)
+      result = parse_cached(document)
       @steps = 0
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
@@ -179,14 +179,44 @@ module Ovallsp
       nil
     end
 
-    # The names `node`'s body calls on self, in source order. Public
-    # because `Server` asks it about a controller action: a call to a
-    # method the controller itself defines is a body that may assign
-    # instance variables and that the ivar walk does not read.
-    def self_call_names(node)
-      finder = SelfCallFinder.new
-      node.body&.accept(finder)
-      finder.names
+    # Every instance variable `document` assigns anywhere, by any of the
+    # five write shapes Ruby has.
+    #
+    # Syntactic on purpose. The inference walk above answers "what type
+    # does this ivar have", and folds only the statement shapes it models
+    # -- which is right for types, where an unfolded shape infers Unknown
+    # and nothing is lost, and wrong for "was it assigned at all", where
+    # an unfolded shape produces a complete-looking set with a name
+    # missing. `@user ||= ...`, an assignment inside `respond_to do
+    # |format|`, inside a `case`, inside a `rescue`, and a multiple
+    # assignment all reached that second question and each produced a
+    # warning on a view that renders (0.2.0).
+    def assigned_ivar_names(document)
+      collector = Diagnostics::Engine::IvarWriteCollector.new
+      Prism.parse(document.text).value.accept(collector)
+      collector.names.uniq
+    rescue StandardError
+      []
+    end
+
+    # One parse, remembered, because the argument-type check asks for a
+    # type at each positional argument of each call and `infer_at` parsed
+    # the whole file again every time -- on a 1,000-line file that is
+    # 5,001 parses where 3,001 would do, on the path the workspace pass
+    # runs over every file while holding the index mutex.
+    #
+    # Keyed by uri, version and text so a hit cannot be another document's
+    # tree, and stored as one frozen pair so a reader sees either the
+    # whole entry or the previous one. One entry is enough: the callers
+    # that repeat are repeating within one document.
+    def parse_cached(document)
+      key = [document.uri, document.version, document.text.hash].freeze
+      cached = @parse_cache
+      return cached[1] if cached && cached[0] == key
+
+      parsed = Prism.parse(document.text)
+      @parse_cache = [key, parsed].freeze
+      parsed
     end
 
     private
@@ -1215,32 +1245,6 @@ module Ovallsp
     end
     private_constant :RenderTargetFinder
 
-    # Every receiverless call name in a method body, at any depth.
-    #
-    # Used to answer a question the ivar analysis has to be able to ask:
-    # is there a body that assigns instance variables which this walk does
-    # not read? A receiverless call whose name the controller itself
-    # defines is exactly that, and the difference between reporting a
-    # complete set and reporting a set that happens to be missing one name
-    # is the difference between a diagnostic and a wrong diagnostic
-    # (0.2.0).
-    class SelfCallFinder < Prism::Visitor
-      attr_reader :names
-
-      def initialize
-        @names = []
-        super()
-      end
-
-      # Strings, because the method maps a caller compares against are
-      # keyed by `node.name.to_s` -- Symbols here would match nothing and
-      # the check would silently never fire.
-      def visit_call_node(node)
-        @names << node.name.to_s if node.receiver.nil?
-        super
-      end
-    end
-    private_constant :SelfCallFinder
 
 
     # Extracts receiver-less before_action declarations directly from the
