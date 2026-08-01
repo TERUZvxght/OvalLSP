@@ -75,13 +75,24 @@ jobs:
                 warn "#{path} contributed zero examples -- was it even loaded?"
                 exit 1
               end
-              skipped = examples.select { |ex| ex.fetch("status") == "pending" }
+              # Not every pending example. docs/EXTENSION_CAPABILITIES.md
+              # defines a `NOT YET` row as one that is "specified, has an
+              # E2E row, currently failing or pending" -- a state the
+              # document tells authors to use, and that
+              # capability_coverage_spec.rb accepts. Failing on those
+              # would make the documented state unexpressible. What this
+              # guard is actually about is the environment skip, so a
+              # pending example has to say `NOT YET` to be allowed
+              # through, and anything else -- including the
+              # rails/sqlite3 skip, whose message does not -- is a
+              # failure.
+              skipped = examples.reject { |ex| ex.fetch("status") != "pending" || ex.fetch("pending_message").to_s.include?("NOT YET") }
               unless skipped.empty?
                 warn "#{skipped.size}/#{examples.size} #{label} examples were skipped in CI (rails/sqlite3 must be installed, not optional, here):"
                 skipped.each { |ex| warn "  - #{ex.fetch("full_description")} (#{ex.fetch("pending_message")})" }
                 exit 1
               end
-              puts "All #{examples.size} #{label} examples ran (none skipped)."
+              puts "All #{examples.size} #{label} examples ran (none skipped for want of an environment)."
             end
           '
 

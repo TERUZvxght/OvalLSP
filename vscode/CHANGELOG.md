@@ -37,7 +37,9 @@ for fixing the storage rather than the readers.
 and produced two regressions before the whole thread was rolled back and
 recorded as `024.15`. The order lives in the storage now: entry lists are
 ordered by uri and then source position when they are written, and the
-one place that reads the simple-name index orders it by qualified name.
+one place a query reads the simple-name index orders it by qualified
+name, kind and owner — one class has as many entries there as there are
+ways to spell it, and those share a name.
 `workspace/symbol`'s ranking keeps its exact-match-first rule and gains a
 tail, because its result is truncated and a tie decided by index order
 changes which symbols survive.
@@ -48,7 +50,12 @@ pinned without. It is not sufficient on its own: the `workspace/symbol`
 tail shipped unpinned behind a re-indexing fixture whose eight files all
 declared one class, so the entry list `replace_file` already sorts was
 the only thing it exercised. Ties across *distinct* symbols are what that
-part is for, and they need their own fixture.
+part is for, and they need their own fixture. Three more fixtures were
+found the same way afterwards: one that ordered its files and its line
+numbers alike, so either half of the key satisfied it; one that used a
+single name in two files, which is a single symbol, so it never walked
+the collection it was written for; and one that re-indexed the
+first-inserted file, which lands on the right answer by accident.
 
 Two testing gaps found alongside it, neither user-visible:
 

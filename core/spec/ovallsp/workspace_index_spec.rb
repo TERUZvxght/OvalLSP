@@ -217,28 +217,46 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       expect(before).to eq(["file:///a.rb", "file:///z.rb"])
     end
 
+    # Two *distinct* SymbolIds, deliberately. One name in two files is a
+    # single SymbolId, so a fixture built that way exercises only the
+    # entry list `replace_file` already sorts and leaves the outer walk
+    # -- the thing under test -- unpinned.
     it "orders #find_by_simple_name and keeps it across a re-index" do
-      index_z_then_a
-      before = index.find_by_simple_name("Widget").map { |r| r[:uri] }
-      index.replace_file(widget_in("z", hash: "z2"))
+      index.replace_file(summary(uri: "file:///admin.rb", content_hash: "ad1",
+                                 declarations: [declaration(kind: :class, owner: "::Admin", name: "::Admin::Thing")]))
+      index.replace_file(summary(uri: "file:///api.rb", content_hash: "ap1",
+                                 declarations: [declaration(kind: :class, owner: "::Api", name: "::Api::Thing")]))
+      before = index.find_by_simple_name("Thing").map { |r| r[:uri] }
+      index.replace_file(summary(uri: "file:///admin.rb", content_hash: "ad2",
+                                 declarations: [declaration(kind: :class, owner: "::Admin", name: "::Admin::Thing")]))
 
-      expect(index.find_by_simple_name("Widget").map { |r| r[:uri] }).to eq(before)
-      expect(before).to eq(["file:///a.rb", "file:///z.rb"])
+      expect(index.find_by_simple_name("Thing").map { |r| r[:uri] }).to eq(before)
+      expect(before).to eq(["file:///admin.rb", "file:///api.rb"])
     end
 
     # Which class an ambiguous bare name resolves to drives the ancestry
     # chain, the unknown-method check, find-references and rename.
+    #
+    # `Api` first and `admin.rb` re-indexed, not the other way round: a
+    # re-index deletes its symbol from the Set and re-adds it, so
+    # re-indexing the *first*-inserted file lands on the ordered answer by
+    # accident and the fixture cannot fail. Both are written `class
+    # Api::User`, so both carry owner nil and kind :class -- which leaves
+    # the qualified name as the only element of the key that can separate
+    # them.
     it "resolves an ambiguous simple name to the same class across a re-index" do
       %w[Api Admin].each do |ns|
         index.replace_file(
           summary(uri: "file:///#{ns.downcase}.rb", content_hash: ns,
-                  declarations: [declaration(kind: :class, owner: "::#{ns}", name: "::#{ns}::User")])
+                  declarations: [declaration(kind: :class, owner: nil, name: "::#{ns}::User")])
         )
       end
-      index.replace_file(summary(uri: "file:///api.rb", content_hash: "Api2",
-                                 declarations: [declaration(kind: :class, owner: "::Api", name: "::Api::User")]))
+      before = index.resolve_type_name("User")
+      index.replace_file(summary(uri: "file:///admin.rb", content_hash: "Admin2",
+                                 declarations: [declaration(kind: :class, owner: nil, name: "::Admin::User")]))
 
-      expect(index.resolve_type_name("User")).to eq("::Admin::User")
+      expect(index.resolve_type_name("User")).to eq(before)
+      expect(before).to eq("::Admin::User")
     end
 
     # `workspace/symbol` truncates, so an unstable order changes the
@@ -364,6 +382,36 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       index.replace_file(summary(uri: "file:///w.rb", declarations: decls.reverse))
 
       expect(index.search("widget", limit: 8).map { |m| m[:location][:start][:line] }).to eq((0...8).to_a)
+    end
+
+    # The name element of the ranking key, on its own: the fixtures above
+    # name each file after the class it declares, so uri order and name
+    # order coincide and either element alone satisfies them.
+    it "orders search results by qualified name before uri, when the two disagree" do
+      index.replace_file(
+        summary(uri: "file:///one.rb", content_hash: "one",
+                declarations: [declaration(kind: :class, owner: nil, name: "::ZWidget", line: 1),
+                               declaration(kind: :class, owner: nil, name: "::AWidget", line: 9)])
+      )
+
+      expect(index.search("widget", limit: 2).map { |m| m[:symbol_id].name }).to eq(%w[::AWidget ::ZWidget])
+    end
+
+    # The kind element of the tail. Its tie is the one a plugin makes:
+    # `Server#apply_plugin_context` gives every declaration it registers
+    # the same `plugin://` uri and a frozen line-0/char-0 location, so an
+    # instance method and a singleton method of the same name on the same
+    # owner agree on every earlier element of the key.
+    it "orders search results by kind before owner, when everything earlier ties" do
+      declarations = %w[::A ::B ::C ::D].flat_map do |owner|
+        [declaration(kind: :singleton_method, owner: owner, name: "save"),
+         declaration(kind: :instance_method, owner: owner, name: "save")]
+      end
+      index.replace_file(summary(uri: "plugin://rails", content_hash: "p", declarations: declarations))
+
+      expect(index.search("save", limit: 8).map { |m| [m[:symbol_id].kind, m[:symbol_id].owner] })
+        .to eq(%w[::A ::B ::C ::D].map { |o| [:instance_method, o] } +
+               %w[::A ::B ::C ::D].map { |o| [:singleton_method, o] })
     end
 
     it "keeps a truncated result stable when every match shares a uri and a location" do

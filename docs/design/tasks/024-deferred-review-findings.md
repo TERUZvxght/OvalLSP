@@ -656,7 +656,19 @@ roadmap entry rather than folded into another release's work.
 **Status:** fixed in 0.1.13 -- `ci.yml`'s skip guard now checks both
 `spec/integration/real_rails_spec.rb` and `spec/e2e/capabilities_spec.rb`,
 by table rather than by a second copy of the check.
-**Area:** `.github/workflows/ci.yml`, `core/spec/e2e/capabilities_spec.rb`
+
+Two things the one-line direction below did not anticipate. First, a
+guard that failed on *any* pending example would have made this
+document's own `NOT YET` status -- "specified, has an E2E row, currently
+failing or pending", which `capability_coverage_spec.rb` accepts --
+unexpressible; the guard therefore exempts a pending message that says
+`NOT YET`, and `spec/meta/ci_skip_guard_spec.rb` asserts that neither
+suite's environment-skip message says it. Second, the guard was itself
+pinned by nothing: deleting the capability row leaves every check in this
+repository green, which is the same shape as the gap it closes. That is
+what the meta spec is for, following `versionPairing.test.ts`.
+**Area:** `.github/workflows/ci.yml`, `core/spec/e2e/capabilities_spec.rb`,
+`core/spec/meta/ci_skip_guard_spec.rb`
 
 `docs/EXTENSION_CAPABILITIES.md` states two rules. "A capability with no
 E2E row is not a capability" is enforced by
@@ -727,10 +739,23 @@ share a name. `search`'s `rank` keeps exact-match-first and gains a tail,
 since a truncated result cannot have ties decided by index order.
 Measured as the entry asked: 2,000 files with one class reopened in 500
 of them goes 7ms -> 61ms in `replace_file`, negligible against Cold
-Index. Every spec that could regress on re-index re-indexes, and all nine
-decisions are pinned by mutation -- the `search` tail needed a fixture
-with several distinct SymbolIds, having first shipped unpinned behind one
-whose eight files shared a single SymbolId.
+Index. The *read* paths needed measuring too and were not measured at
+first: a bucket is keyed on the simple name, so `resolve_type_name`
+sorting a whole bucket before its caller filtered it cost 3.7ms per call
+in a workspace of 1,200 service objects each defining `call`. Filtering
+before sorting -- the two commute here -- restores 51us with the same
+order.
+
+Every spec that could regress on re-index re-indexes, and all fifteen
+decisions are pinned by mutation. Reaching that took three passes, and
+the misses are the instructive part: the `search` tail first shipped
+behind a fixture whose eight files shared a single SymbolId; the ranking
+key's `uri` and `line` elements were satisfied by fixtures that ordered
+files and lines the same way; `find_by_simple_name`'s spec used one name
+in two files, which is one SymbolId, so it never walked the collection it
+was written for; and the ambiguous-name spec re-indexed the
+*first*-inserted file, which lands on the ordered answer by accident. A
+fixture that passes has not shown that anything is tested.
 **Area:** `core/lib/ovallsp/workspace_index.rb`
 
 `@by_symbol` maps a SymbolId to a list of `[uri, declaration]`, and
