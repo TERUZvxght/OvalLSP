@@ -33,7 +33,7 @@ plain Ruby project is explicitly *not* covered by these rows yet: much of
 the engine works there, but nothing here has been specified or verified
 for it, and half-supporting it would make both stories worse. Giving the
 Rails conventions an explicit boundary and specifying the plain-Ruby
-experience is roadmap item 024.R1, for 0.2.0.
+experience is roadmap item 024.R1, for 1.0.0.
 
 Untrusted workspaces stay as described at the end of this document: the
 Runtime Agent does not start, and every Rails-derived capability degrades

@@ -1526,6 +1526,7 @@ module Ovallsp
       # given. That is a different fact from "the action assigns nothing",
       # and the empty set would say the second while meaning the first.
       return nil if actions.empty?
+      return nil if delegates_to_unwalked_method?(documents, method_maps, actions)
 
       ivars_for_view(uri).keys.map(&:to_s)
     rescue StandardError => e
@@ -1560,6 +1561,31 @@ module Ovallsp
     # block-form callback and a Rails concern are not edge cases. So the
     # answer here is "no" whenever the chain contains anything this cannot
     # follow, and the check above turns that into silence.
+    # The other half of "can these ivars be enumerated completely", and the
+    # half that needs the action bodies rather than the file's text.
+    #
+    # The walk reads the callback chain and the action's own body. An
+    # action that calls a sibling method -- `def show; load_user; end` --
+    # assigns through a body it never reads, and the set it then produces
+    # is not incomplete-looking, it is a complete-looking set with a name
+    # missing. That is a warning on a view that renders, which is the one
+    # outcome this check is designed never to produce.
+    #
+    # Only calls to methods *this controller chain defines*: `render`,
+    # `params`, a helper, anything Rails supplies is not a body that could
+    # have assigned an ivar here, and treating every call as unwalkable
+    # would switch the check off for every action that does anything.
+    def delegates_to_unwalked_method?(documents, method_maps, actions)
+      defined_here = method_maps.each_value.flat_map(&:keys).to_set
+
+      actions.any? do |action_name|
+        node = documents.filter_map { |ancestor, _| method_maps.fetch(ancestor)[action_name] }.first
+        next false unless node
+
+        @local_inferencer.self_call_names(node).any? { |name| defined_here.include?(name) }
+      end
+    end
+
     def ivar_sources_fully_enumerable?(owner_name, documents)
       # `:default` entries are Object/Kernel/BasicObject, which every
       # class has and none of which assigns a controller's ivars. What
@@ -2180,6 +2206,15 @@ module Ovallsp
           needs_signature_reload = true
         elsif change.fetch(:type) == FILE_CHANGE_DELETED && @document_store.fetch(uri: uri).nil?
           @index_mutation_mutex.synchronize { remove_index_contribution(uri) }
+          # And retract what the workspace pass published for it. Before
+          # 0.2.0 an unopened file had no diagnostics and there was
+          # nothing to clear; now the Problems panel would keep a finding
+          # about a file that no longer exists, and nothing else ever
+          # publishes for that uri again -- `WorkspaceDiagnostics#publish_for`
+          # returns early on a path that is gone. A rename arrives here as
+          # a delete plus a create, so this is not only the `git checkout`
+          # case.
+          publish_findings(uri, [])
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
           # reindex from disk for files nobody currently has open.

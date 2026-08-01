@@ -299,7 +299,9 @@ for, so the table's promise and this entry stay in step.
 
 ## 024.R3 Feature parity roadmap, measured against Pylance
 
-**Status:** open — roadmap
+**Status:** open — roadmap. Its three 0.2.0 rows are done; the table
+below carries a **shipped in** column so the entry can be read as a
+record rather than only as a plan.
 
 Pylance is the closest well-known reference point for "what a language
 server is expected to do" in a dynamically typed language with optional
@@ -308,26 +310,27 @@ Rows Pylance has that make no sense here (Jupyter support, IntelliCode's
 ranked completions, Python-specific stub packaging) are deliberately
 absent rather than listed and dismissed.
 
-Current OvalLSP capabilities were read from the `initialize` response and
-the code, not assumed: `hoverProvider`, `documentSymbolProvider`,
+Capabilities were read from the `initialize` response and the code, not
+assumed. As of 0.2.0: `hoverProvider`, `documentSymbolProvider`,
 `definitionProvider`, `referencesProvider`, `renameProvider`,
-`workspaceSymbolProvider`, `completionProvider`, `signatureHelpProvider`.
-Everything else below is absent.
+`workspaceSymbolProvider`, `completionProvider`, `signatureHelpProvider`
+and `semanticTokensProvider`. Everything below without a "shipped in" is
+still absent.
 
-| Pylance capability | OvalLSP today | Planned for | Notes |
-|---|---|---|---|
-| Diagnostics across the whole project | Open files only | **0.2.0** | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
-| Docstrings in hover and completion | Type, origin and definition location only | **0.2.0** | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
-| Semantic highlighting (semantic tokens) | None | **0.2.0** | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. Covers ERB templates' Ruby regions too, which the shared extraction path now makes free. Distinct from shipping a TextMate grammar, which is a non-goal: VS Code already associates `.erb`, and another grammar would only collide. |
-| Inlay hints (inferred types, parameter names) | None | **0.3.0** | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |
-| Code actions / quick fixes | None | **0.3.0** | Each existing diagnostic implies one: define the missing method, correct the route helper name, fix the argument count. A diagnostic that only complains is half a feature. |
-| Go to type definition | Go to definition only | **0.3.0** | Cheap given `explainType` already resolves the type: jump from an expression to the class it evaluates to, rather than to the method being called. |
-| Document highlight (occurrences in file) | None | **0.3.0** | Small and self-contained: the reference index already answers this workspace-wide, so scoping it to one file is nearly free. |
-| Call hierarchy | Find references only | **0.3.0** | An incremental step on the same index. Callers/callees of a method, navigable, rather than a flat list. |
-| Auto-import / add `require` | None | **0.4.0** | Much weaker payoff than in Python: Rails autoloads, and plain Ruby projects mostly `require` at the entry point. Worth revisiting only after the plain-Ruby story (024.R1) exists. |
-| Type checking strictness levels | One fixed set of checks | **0.4.0** (as per-check severity) | Pylance's basic/strict switch matters because its checks are numerous and opinionated. With four checks, a per-check severity setting would cover the same need more simply. |
-| Signature help with active parameter tracking | Signature label only | **0.4.0** | Already useful; highlighting which argument the cursor is in is a refinement, not a gap. |
-| Generating type stubs from source | RBS/RBI are read, never written | not planned | Interesting for library authors, irrelevant to the Rails application developer this Preview targets. |
+| Pylance capability | OvalLSP before it | Planned for | Shipped in | Notes |
+|---|---|---|---|---|
+| Diagnostics across the whole project | Open files only | **0.2.0** | 0.2.0 | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
+| Docstrings in hover and completion | Type, origin and definition location only | **0.2.0** | 0.2.0 | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
+| Semantic highlighting (semantic tokens) | None | **0.2.0** | 0.2.0 | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. Covers ERB templates' Ruby regions too, which the shared extraction path now makes free. Distinct from shipping a TextMate grammar, which is a non-goal: VS Code already associates `.erb`, and another grammar would only collide. |
+| Inlay hints (inferred types, parameter names) | None | **0.3.0** | — | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |
+| Code actions / quick fixes | None | **0.3.0** | — | Each existing diagnostic implies one: define the missing method, correct the route helper name, fix the argument count. A diagnostic that only complains is half a feature. |
+| Go to type definition | Go to definition only | **0.3.0** | — | Cheap given `explainType` already resolves the type: jump from an expression to the class it evaluates to, rather than to the method being called. |
+| Document highlight (occurrences in file) | None | **0.3.0** | — | Small and self-contained: the reference index already answers this workspace-wide, so scoping it to one file is nearly free. |
+| Call hierarchy | Find references only | **0.3.0** | — | An incremental step on the same index. Callers/callees of a method, navigable, rather than a flat list. |
+| Auto-import / add `require` | None | **0.4.0** | — | Much weaker payoff than in Python: Rails autoloads, and plain Ruby projects mostly `require` at the entry point. Worth revisiting only after the plain-Ruby story (024.R1) exists. |
+| Type checking strictness levels | One fixed set of checks | **0.4.0** (as per-check severity) | — | Pylance's basic/strict switch matters because its checks are numerous and opinionated. With the checks this engine has, a per-check severity setting would cover the same need more simply. |
+| Signature help with active parameter tracking | Signature label only | **0.4.0** | — | Already useful; highlighting which argument the cursor is in is a refinement, not a gap. |
+| Generating type stubs from source | RBS/RBI are read, never written | not planned | — | Interesting for library authors, irrelevant to the Rails application developer this Preview targets. |
 
 Not planned, and listed only so their absence is a decision rather than
 an oversight: unreachable-code dimming (RuboCop covers the same ground

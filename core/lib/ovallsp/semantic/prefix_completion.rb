@@ -114,18 +114,21 @@ module Ovallsp
         end
       end
 
-      # `WorkspaceIndex#search` already answers "which declared symbols
-      # look like this" for `workspace/symbol`, but by substring -- a
-      # completion prefix means the *start* of the simple name, so the
-      # substring matches are filtered back down here rather than widening
-      # the index's own contract.
+      # `WorkspaceIndex#prefix_search`, not `#search`. `search` answers
+      # `workspace/symbol`'s question -- substring, every kind -- and
+      # narrowing its answer afterwards narrows what survived *its*
+      # truncation: on a workspace with more than `limit` substring
+      # matches the prefix matches can all have been dropped already, and
+      # this group came back empty. `search` also returns methods, which
+      # were being offered here as `CompletionItemKind.Class` under a
+      # group documented as constants.
+      CONSTANT_KINDS = %i[class module constant].freeze
+
       def constants(prefix)
         seen = {}
-        @workspace_index.search(prefix, limit: MAX_ITEMS * 4).each do |match|
-          name = match[:symbol_id].name.to_s.split("::").last
-          next unless matches?(name, prefix)
-
-          seen[name] ||= { label: name, kind: KIND_CLASS, detail: match[:symbol_id].name.to_s, __group: GROUP_CONSTANT }
+        @workspace_index.prefix_search(prefix, limit: MAX_ITEMS * 4, kinds: CONSTANT_KINDS).each do |symbol_id|
+          name = symbol_id.name.to_s.split("::").last
+          seen[name] ||= { label: name, kind: KIND_CLASS, detail: symbol_id.name.to_s, __group: GROUP_CONSTANT }
         end
         seen.values
       end

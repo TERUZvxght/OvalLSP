@@ -98,14 +98,17 @@ release they are planned for, ordered by what a user notices soonest.
 Each names a **minor** release exactly, never a `0.2.x`-style range,
 because a capability can only ever arrive in a minor one — that is what
 minor means here. A patch never adds a row. Several rows sharing a
-version ship together in that release, the way 0.1.6 shipped five. The
-first three are measured against Pylance, the closest well-known
-reference point for a language server in a dynamically typed language:
-project-wide diagnostics (today a mistake in a file you are not looking
-at is invisible), documentation in hover (hover says what a thing is,
-never what it is for), and semantic highlighting (Ruby's `foo` is
-ambiguous between a local variable and a method call — the engine already
-knows which, the editor does not). Rationale for each, and for the
+version ship together in that release, the way 0.1.6 shipped five.
+
+Three of the rows above were measured against Pylance, the closest
+well-known reference point for a language server in a dynamically typed
+language, and 0.2.0 ships all three: project-wide diagnostics (a mistake
+in a file you are not looking at used to be invisible), documentation in
+hover (hover said what a thing is and never what it is for), and
+semantic highlighting (Ruby's `foo` is ambiguous between a local
+variable and a method call — the engine already knew which, the editor
+did not). The rows that still carry a version are measured the same way.
+Rationale for each, and for the
 Pylance features deliberately *not* planned, is in
 [`docs/design/tasks/024-deferred-review-findings.md`](docs/design/tasks/024-deferred-review-findings.md)
 (024.R3). [`docs/ROADMAP.md`](docs/ROADMAP.md) states the same plan

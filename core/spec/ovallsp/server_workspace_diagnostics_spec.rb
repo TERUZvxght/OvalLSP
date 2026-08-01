@@ -112,6 +112,50 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     end
   end
 
+  # Before 0.2.0 a file nobody opened had no diagnostics, so there was
+  # nothing to clear when it went away. Now there is: `git checkout` to a
+  # branch without the file, or a rename -- which VS Code sends as a
+  # delete plus a create, so the new path is reported and the old one is
+  # stranded. Nothing else ever publishes for that URI again, and the
+  # Problems panel keeps a finding about a file that does not exist.
+  it "clears the diagnostics of an unopened file that is deleted" do
+    Dir.mktmpdir do |root|
+      workspace_with_a_mistake(root)
+      user_path = File.join(root, "app/services/widget_user.rb")
+      user_uri = Ovallsp::UriUtil.from_path(user_path)
+      server = build_server(root)
+
+      server.send(:start_cold_index)
+      wait_until { !(diagnostics_for(user_uri) || []).empty? }
+      File.delete(user_path)
+      server.send(:handle_did_change_watched_files, changes: [{ uri: user_uri, type: 3 }])
+
+      expect(wait_until { diagnostics_for(user_uri) == [] }).to be(true),
+             "a deleted file's diagnostics were never cleared"
+    end
+  end
+
+  # `apply_file_summary` answers false when the summary changes nothing --
+  # an unchanged content hash, or a disk read that lost a race with a
+  # newer one. Re-analysing then is pure cost on a path a `git checkout`
+  # can fire a hundred times, and it republishes an answer already on
+  # screen.
+  it "does not re-analyse a watched file whose content did not change" do
+    Dir.mktmpdir do |root|
+      workspace_with_a_mistake(root)
+      user_uri = Ovallsp::UriUtil.from_path(File.join(root, "app/services/widget_user.rb"))
+      server = build_server(root)
+
+      server.send(:start_cold_index)
+      wait_until { !(diagnostics_for(user_uri) || []).empty? }
+      before = published.count { |m| m[:params][:uri] == user_uri }
+      server.send(:reindex_from_disk, user_uri)
+      sleep 0.2
+
+      expect(published.count { |m| m[:params][:uri] == user_uri }).to eq(before)
+    end
+  end
+
   it "publishes nothing for a file that has no mistakes" do
     Dir.mktmpdir do |root|
       workspace_with_a_mistake(root)

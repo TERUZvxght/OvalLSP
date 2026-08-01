@@ -509,6 +509,24 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(types).to include("method")
       end
     end
+
+    # The row promises the distinction holds "in `.rb` and in an ERB
+    # template's Ruby regions alike", and a row is what this document
+    # says a capability is -- so the ERB half needs to be in the row, not
+    # only in `semantic_tokens_spec.rb`.
+    it "T1: makes the same distinction inside an ERB template's Ruby regions" do
+      with_file("app/views/probes/show.html.erb", <<~ERB) do |uri|
+        <% value = 1 %>
+        <%= value %>
+        <%= helper %>
+      ERB
+        data = @client.raw_request("textDocument/semanticTokens/full",
+                               { textDocument: { uri: uri } })[:data]
+        types = data.each_slice(5).map { |token| Ovallsp::SemanticTokens::LEGEND[token[3]] }
+        expect(types).to include("variable")
+        expect(types).to include("method")
+      end
+    end
   end
 
   describe "diagnostics" do

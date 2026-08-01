@@ -281,6 +281,28 @@ module Ovallsp
       @mutex.synchronize { @by_symbol.keys.select { |sid| sid.owner == needle && sid.kind == kind } }
     end
 
+    # Completion's question, which is not `search`'s. A completion prefix
+    # means the *start* of the simple name and only certain kinds are
+    # offerable, and both predicates have to run before the truncation:
+    # filtering `search`'s already-truncated answer filters what is left
+    # after `limit` substring matches were kept, and on any workspace with
+    # more than `limit` of those, every prefix match can already be gone.
+    # Measured before this existed: 250 classes named `Aaa001Artish`... and
+    # one named `Artzzz`, typing `art` returned nothing at all.
+    #
+    # Distinct SymbolIds rather than declarations, because `limit:` should
+    # count names a user could pick, and one class reopened in forty files
+    # is one name.
+    def prefix_search(prefix, limit:, kinds:)
+      needle = prefix.to_s.downcase
+      @mutex.synchronize do
+        @by_symbol.keys.select { |sid| kinds.include?(sid.kind) && simple_name(sid).downcase.start_with?(needle) }
+                  .sort_by { |sid| [simple_name(sid).downcase == needle ? 0 : 1, sid.name.to_s, sid.kind.to_s,
+                                    sid.owner.to_s] }
+                  .first(limit)
+      end
+    end
+
     # Workspace symbol search: case-insensitive substring match on the
     # symbol's own (unqualified) name, exact matches ranked first.
     def search(query, limit:)

@@ -318,4 +318,36 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     expect(labels(result)).to include("upcase")
     expect(labels(result)).not_to include("article")
   end
+
+  # The index answers `workspace/symbol` by *substring* and completion by
+  # *prefix*, and the two differ by more than wording: filtering the
+  # substring answer after it was truncated filters what survived the
+  # truncation. Two hundred classes whose names merely contain `art`
+  # crowd out every class that starts with it, and the group comes back
+  # empty on exactly the workspace size it exists for.
+  it "offers a class that starts with the prefix even when many others merely contain it" do
+    crowd = (1..250).map { |i| "class Aaa#{format('%03d', i)}Artish; end" }.join("\n")
+    result = complete(<<~RUBY, extra_opens: did_open("file:///crowd.rb", crowd))
+      class Artzzz; end
+
+      artHERE
+    RUBY
+
+    expect(result[:items].map { |i| i[:label] }).to include("Artzzz")
+  end
+
+  # `search` returns every declared symbol, methods included, and this
+  # group is documented as workspace constants and labels each item
+  # `CompletionItemKind.Class`. A method arriving here wore a class icon.
+  it "does not offer a workspace method among the constants" do
+    result = complete(<<~RUBY, extra_opens: did_open("file:///z.rb", "class Zzz\n  def artisanal_thing; end\nend\n"))
+      class Artzzz; end
+
+      artHERE
+    RUBY
+
+    labels = result[:items].select { |i| i[:kind] == 7 }.map { |i| i[:label] }
+    expect(labels).to include("Artzzz")
+    expect(labels).not_to include("artisanal_thing")
+  end
 end

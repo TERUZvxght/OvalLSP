@@ -102,6 +102,104 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
   # Every silence below is a case where an assignment could exist somewhere
   # this cannot see, and the standard is the one every other check here is
   # held to: a wrong report is worse than a missed one.
+  # The enumeration walks the callback chain and the action's own body.
+  # An action that calls a sibling method assigns through a body it never
+  # reads -- and the answer it produces then looks like a complete set
+  # that happens not to contain `@user`, which is a warning on code that
+  # renders correctly. The whole check is built on being able to say "I
+  # cannot enumerate this" instead.
+  it "says nothing when the action delegates the assignment to another method" do
+    controller = <<~RUBY
+      class UsersController
+        def show
+          load_user
+        end
+
+        def load_user
+          @user = User.find(params[:id])
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= @user.name %>")).to be_empty
+  end
+
+  # Private, because that is how such a helper is usually written and the
+  # visibility filter is a different code path.
+  it "says nothing when the action delegates to a private method" do
+    controller = <<~RUBY
+      class UsersController
+        def show
+          load_user
+        end
+
+        private
+
+        def load_user
+          @user = User.find(params[:id])
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= @user.name %>")).to be_empty
+  end
+
+  # The gate is about calls this analysis cannot follow, not about calls.
+  # An action calling something the controller does not define -- Rails'
+  # own `render`, a helper, anything -- is still fully enumerable, and
+  # treating it otherwise would switch the check off for every action.
+  it "still reports when the action's calls are not to methods of this controller" do
+    controller = <<~RUBY
+      class UsersController
+        def show
+          @user = User.find(params[:id])
+          render :show
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= @usr.name %>").size).to eq(1)
+  end
+
+  # A call *with* a receiver reaches a different object's body, which
+  # cannot assign this controller's instance variables however the method
+  # happens to be named. Counting it would switch the check off for any
+  # action that calls something sharing a name with a controller method.
+  it "still reports when a call naming a controller method has a receiver" do
+    controller = <<~RUBY
+      class UsersController
+        def show
+          presenter.load_user
+        end
+
+        def load_user
+          @user = User.find(params[:id])
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= @usr.name %>").size).to eq(1)
+  end
+
+  # The hierarchy index knows the chain; the text regex knows the file.
+  # `include(Concerns::Loader)` -- parenthesised, which is ordinary Ruby
+  # -- is invisible to `MIXED_IN_MODULE` and plain to the chain, so this
+  # is the fixture that says which of the two is load-bearing. The module
+  # carries its own methods, and `controller_ancestor_documents` walks
+  # only classes.
+  it "says nothing when a module is mixed in by a call the text guard cannot see" do
+    controller = <<~RUBY
+      class UsersController
+        include(Concerns::Loader)
+
+        def show
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= @user.name %>")).to be_empty
+  end
+
   it "says nothing when the controller uses instance_variable_set" do
     controller = <<~RUBY
       class UsersController

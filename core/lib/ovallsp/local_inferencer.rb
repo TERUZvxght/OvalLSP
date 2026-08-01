@@ -179,6 +179,16 @@ module Ovallsp
       nil
     end
 
+    # The names `node`'s body calls on self, in source order. Public
+    # because `Server` asks it about a controller action: a call to a
+    # method the controller itself defines is a body that may assign
+    # instance variables and that the ivar walk does not read.
+    def self_call_names(node)
+      finder = SelfCallFinder.new
+      node.body&.accept(finder)
+      finder.names
+    end
+
     private
 
     def ivars_from(env)
@@ -1204,6 +1214,34 @@ module Ovallsp
       end
     end
     private_constant :RenderTargetFinder
+
+    # Every receiverless call name in a method body, at any depth.
+    #
+    # Used to answer a question the ivar analysis has to be able to ask:
+    # is there a body that assigns instance variables which this walk does
+    # not read? A receiverless call whose name the controller itself
+    # defines is exactly that, and the difference between reporting a
+    # complete set and reporting a set that happens to be missing one name
+    # is the difference between a diagnostic and a wrong diagnostic
+    # (0.2.0).
+    class SelfCallFinder < Prism::Visitor
+      attr_reader :names
+
+      def initialize
+        @names = []
+        super()
+      end
+
+      # Strings, because the method maps a caller compares against are
+      # keyed by `node.name.to_s` -- Symbols here would match nothing and
+      # the check would silently never fire.
+      def visit_call_node(node)
+        @names << node.name.to_s if node.receiver.nil?
+        super
+      end
+    end
+    private_constant :SelfCallFinder
+
 
     # Extracts receiver-less before_action declarations directly from the
     # requested class body. This intentionally does not descend into

@@ -8,7 +8,7 @@ RSpec.describe Ovallsp::Semantic::PrefixCompletion do
   let(:query_service) do
     instance_double(Ovallsp::Semantic::QueryService, scope_at: scope, members_of: [])
   end
-  let(:workspace_index) { instance_double(Ovallsp::WorkspaceIndex, search: []) }
+  let(:workspace_index) { instance_double(Ovallsp::WorkspaceIndex, prefix_search: []) }
   let(:document) { Ovallsp::TextDocument.new(uri: "file:///a.rb", text: "", version: 1, language_id: "ruby") }
 
   subject(:completion) do
