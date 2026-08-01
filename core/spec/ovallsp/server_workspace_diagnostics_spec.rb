@@ -82,6 +82,36 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     end
   end
 
+  # The pass visits `.erb` too -- `WorkspaceDiagnostics#language_id_for`
+  # exists for exactly that. So the one check that only fires for views,
+  # the unassigned `@ivar` read (0.2.0, 024.R6), is the one this path can
+  # silently omit: `Engine#unassigned_ivar_findings` returns [] unless the
+  # context carries `assigned_ivars`, and a context built without it looks
+  # like a view whose controller could not be enumerated rather than like
+  # a bug.
+  it "reports an unassigned @ivar in a view nobody opened" do
+    Dir.mktmpdir do |root|
+      write(root, "app/controllers/users_controller.rb", <<~RUBY)
+        class UsersController
+          def show
+            @user = User.find(params[:id])
+          end
+        end
+      RUBY
+      write(root, "app/views/users/show.html.erb", "<%= @usr.name %>\n")
+      view_uri = Ovallsp::UriUtil.from_path(File.join(root, "app/views/users/show.html.erb"))
+      server = build_server(root)
+
+      server.send(:start_cold_index)
+      found = wait_until do
+        (diagnostics_for(view_uri) || []).any? { |d| d[:code] == "unassigned-ivar" }
+      end
+
+      expect(found).to be(true), "expected an unassigned-ivar diagnostic for a view nobody opened"
+      expect(diagnostics_for(view_uri).find { |d| d[:code] == "unassigned-ivar" }[:message]).to include("@usr")
+    end
+  end
+
   it "publishes nothing for a file that has no mistakes" do
     Dir.mktmpdir do |root|
       workspace_with_a_mistake(root)

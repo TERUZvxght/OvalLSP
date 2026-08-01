@@ -20,10 +20,6 @@ the disproved approaches are kept below it under **Details**.
 - Added: hover and completion show the RDoc/YARD documentation.
 - Added: semantic highlighting, in `.rb` and in an ERB template's Ruby
   regions.
-- Fixed: a method declared only in the project's own `sig/` is no longer
-  reported as unknown.
-- Fixed: two threads publishing at once could interleave one message's
-  header with another's body.
 
 A minor release under the versioning rule in `docs/PUBLISHING.md`: six
 capabilities are added. It closes the last three roadmap entries scheduled

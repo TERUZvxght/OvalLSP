@@ -75,7 +75,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
 | Find references, rename, workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: wrong argument *type* | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Diagnostics across the whole project, not just open files | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics across the whole project, not just open files | ⚠️ [^ws] | ⚠️ | ⚠️ 1.0.0 |
 | Documentation (RDoc/YARD) in hover and completion | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Inlay hints (inferred types, parameter names) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
@@ -86,6 +86,12 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+
+[^ws]: More than ⚠️ promises and less than ✅ requires. The workspace-wide
+    pass is covered by Server-level and unit specs, but it has no
+    end-to-end row in `docs/EXTENSION_CAPABILITIES.md`: the example
+    written for one — a never-opened probe file in the real Rails fixture
+    — produced no diagnostic in 45 seconds. Recorded as 024.14, open.
 
 Rows carrying a version are not built anywhere yet; the version is the
 release they are planned for, ordered by what a user notices soonest.

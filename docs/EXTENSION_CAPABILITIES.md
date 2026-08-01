@@ -190,15 +190,17 @@ table — it belongs in the non-goals below.
 
 - Type checking in the sense a static type checker means it. There is no
   flow-sensitive analysis, no generics beyond the built-in container
-  shapes, and no exhaustiveness. Nothing inspects the *type* of an
-  argument; G5 counts arguments and says nothing about what they are.
+  shapes, and no exhaustiveness. Argument *types* are checked as of 0.2.0
+  (G15), but only where a signature declares one and the argument's type
+  is known — G5 still counts arguments, and a call neither can judge is
+  left alone rather than guessed at.
 - Syntax colouring. A TextMate grammar decides how a file is tokenised
   for display, which is a presentation concern and not what this engine
   knows anything about; VS Code's bundled Ruby extension already
   associates `.erb`, and other Ruby extensions ship grammars of their
   own. Registering another would collide with them for no gain.
   *Semantic* highlighting is a different thing and ships as of 0.2.0
-  (S1 below): it layers meaning this engine actually has — whether `foo`
+  (T1 above): it layers meaning this engine actually has — whether `foo`
   is a local variable or a call on self — over whatever grammar is in
   use, in `.rb` files and in an ERB template's Ruby regions alike.
 - Anything about a Ruby file outside a workspace folder.

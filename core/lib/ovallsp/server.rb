@@ -431,11 +431,19 @@ module Ovallsp
     # The same analysis the buffer path runs, minus the notification: the
     # workspace pass owns when and whether to publish, because it also
     # owns the decision to abandon a superseded pass mid-file (0.2.0).
+    #
+    # `assigned_ivars:` included, for the same reason it is on the buffer
+    # path. The pass visits `.erb` as well as `.rb`, and
+    # `unassigned_ivar_findings` returns [] when the context does not
+    # carry it -- so leaving it out silently switched that check off for
+    # every view nobody had open, which is most of them. It is the same
+    # call in the same place inside the snapshot, so the two paths cannot
+    # answer differently about one view.
     def workspace_findings_for(document)
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
       with_index_snapshot do
-        @diagnostics_engine.analyze(document: document, semantic_context: diagnostics_semantic_context,
-                                    mode: @diagnostics_mode)
+        context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri))
+        @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
       end
     end
 

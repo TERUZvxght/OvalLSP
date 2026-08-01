@@ -370,7 +370,7 @@ module Ovallsp
       end
 
       def simple_name(name)
-        name.to_s.delete_prefix("::")
+        Index::SymbolId.bare_name(name)
       end
 
       # The one RBS/RBI overload this call's parameters are declared by, or
@@ -684,7 +684,10 @@ module Ovallsp
       def declared_signature_for(receiver_type, candidate, context)
         context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).filter_map do |entry|
           kind = candidate.singleton && entry.origin != :extend ? :singleton_method : :instance_method
-          symbol_id = Index::SymbolId.new(kind: kind, owner: qualified_owner(entry.name), name: candidate.name,
+          # `owner:` is not qualified here: `SymbolId#initialize` does it
+          # (0.1.12). This call site needed it before that existed, and
+          # keeping it made a line no input could reach.
+          symbol_id = Index::SymbolId.new(kind: kind, owner: entry.name, name: candidate.name,
                                           discriminator: nil)
           context.signatures.method_signatures(symbol_id)
         end.first

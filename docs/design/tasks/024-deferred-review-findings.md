@@ -174,6 +174,16 @@ one did not pass: a probe file carrying `UnopenedProbe.new
 .definitely_not_here`, present in `spec/fixtures/rails_real` before Core
 starts and never opened, produced no diagnostic within 45 seconds.
 
+A second gap in the same pass was found when 0.1.11-0.1.13 were merged
+in and the whole branch was reviewed: `workspace_findings_for` built its
+semantic context without `assigned_ivars:`, and
+`Engine#unassigned_ivar_findings` returns [] without it -- so the
+unassigned-`@ivar` check (G16) never ran for any view nobody had open,
+which is most of them. The pass does visit `.erb`;
+`WorkspaceDiagnostics#language_id_for` exists for that. Fixed on the
+merge branch, with a spec that fails without it. It is listed here rather
+than as its own entry because it is the same capability's E2E story.
+
 The capability row was withdrawn rather than marked PASS on the strength
 of the in-process specs — the document's own rule is that a capability
 with no E2E row is not a capability, and marking it anyway is exactly the
