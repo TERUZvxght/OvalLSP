@@ -776,14 +776,21 @@ against 24ms, on a query the user asks for and waits on.
 Every spec that could regress on re-index re-indexes, and all
 twenty-three decisions are pinned by mutation -- deletions and
 *permutations* both, which is a distinction the count did not make until
-four keys turned out to survive having their elements reordered. Reaching that took three passes, and
+four keys turned out to survive having their elements reordered.
+
+Reaching that took several passes, and
 the misses are the instructive part: the `search` tail first shipped
 behind a fixture whose eight files shared a single SymbolId; the ranking
 key's `uri` and `line` elements were satisfied by fixtures that ordered
 files and lines the same way; `find_by_simple_name`'s spec used one name
 in two files, which is one SymbolId, so it never walked the collection it
-was written for; and the ambiguous-name spec re-indexed the
-*first*-inserted file, which lands on the ordered answer by accident; and
+was written for; the ambiguous-name spec asserted only an absolute answer
+while re-indexing the first-inserted file, which lands on that answer by
+accident -- and correcting it went one step too far, gaining a
+before/after assertion *and* moving to the second-inserted file, which
+leaves the collection in the order it already had, so the new assertion
+could not fail either. Which file to re-index depends on the assertion
+shape, and an example carrying both needs the first-inserted one. And
 the `line`/`character` pair went the same way as the `uri`/`line` pair
 had, each fixture holding one of the two at zero while varying the other,
 which any order of the pair satisfies. Then the same again one level up:

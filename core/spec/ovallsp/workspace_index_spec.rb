@@ -237,13 +237,20 @@ RSpec.describe Ovallsp::WorkspaceIndex do
     # Which class an ambiguous bare name resolves to drives the ancestry
     # chain, the unknown-method check, find-references and rename.
     #
-    # `Api` first and `admin.rb` re-indexed, not the other way round: a
-    # re-index deletes its symbol from the Set and re-adds it, so
-    # re-indexing the *first*-inserted file lands on the ordered answer by
-    # accident and the fixture cannot fail. Both are written `class
-    # Api::User`, so both carry owner nil and kind :class -- which leaves
-    # the qualified name as the only element of the key that can separate
-    # them.
+    # `Api` first and `api.rb` re-indexed -- the *first*-inserted file. A
+    # re-index deletes its symbol from the Set and re-adds it at the back,
+    # so re-indexing the second-inserted file leaves the order it already
+    # had and `eq(before)` cannot fail; only the absolute assertion could.
+    # Re-indexing the first-inserted one makes both able to fail, which is
+    # what "the state the bug lives in" has to mean for an example that
+    # asserts a before and an after. (Which one is stronger depends on the
+    # assertion shape: with an absolute assertion alone, re-indexing the
+    # first-inserted file lands on the ordered answer by accident. That is
+    # why this example carries both.)
+    #
+    # Both are written `class Api::User`, so both carry owner nil and kind
+    # :class -- which leaves the qualified name as the only element of the
+    # key that can separate them.
     it "resolves an ambiguous simple name to the same class across a re-index" do
       %w[Api Admin].each do |ns|
         index.replace_file(
@@ -252,8 +259,8 @@ RSpec.describe Ovallsp::WorkspaceIndex do
         )
       end
       before = index.resolve_type_name("User")
-      index.replace_file(summary(uri: "file:///admin.rb", content_hash: "Admin2",
-                                 declarations: [declaration(kind: :class, owner: nil, name: "::Admin::User")]))
+      index.replace_file(summary(uri: "file:///api.rb", content_hash: "Api2",
+                                 declarations: [declaration(kind: :class, owner: nil, name: "::Api::User")]))
 
       expect(index.resolve_type_name("User")).to eq(before)
       expect(before).to eq("::Admin::User")
