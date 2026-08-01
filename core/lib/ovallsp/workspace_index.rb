@@ -383,6 +383,14 @@ module Ovallsp
       candidates.find { |sid| sid.name == qualified } || candidates.first
     end
 
+    # One collection is deliberately left in insertion order:
+    # `#method_symbol_ids` returns `@by_symbol.keys`, which a re-index does
+    # move. All three callers are order-insensitive -- two `.any?` it, and
+    # `MethodResolver` feeds it to `merge_names`, which sorts on a total
+    # key -- so ordering it would buy nothing and cost a sort on the
+    # completion path. "The order lives in the storage" is a claim about
+    # the collections whose order a caller can observe.
+    #
     # `[uri, line, character]`. Uri first because that is what a caller
     # taking `.first` is choosing between; source position breaks the tie
     # a class reopened twice in one file creates, which `sort_by` alone

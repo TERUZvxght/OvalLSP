@@ -716,9 +716,10 @@ from, and the constant against itself. Relabelling `indexing`, deleting
 `agent-unavailable` and emptying the error text each left the suite
 green, and a deleted key falls through to the raw-state branch -- the
 status bar would read `OvalLSP: agent-unavailable`. The literals are
-asserted now, and the fifteenth example reads the four states out of
-`Server#status_result` rather than restating them, so a state added on
-the Core side without a label here fails the extension's own suite. The remaining
+asserted now, and a further example -- `labels exactly the states the
+Core emits` -- reads the four states out of `Server#status_result` rather
+than restating them, so a state added on the Core side without a label
+here fails the extension's own suite. The remaining
 `vscode` wiring -- command registrations, the client bootstrap, the poll
 loop's timer -- is still integration-only; running that suite in CI is
 the part not done.
