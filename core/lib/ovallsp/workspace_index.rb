@@ -462,11 +462,17 @@ module Ovallsp
       # `min_by(limit)`, not `sort_by { }.first(limit)`. The key is total,
       # so the two answer identically -- but the picker opens with an
       # empty query, so every declaration in the workspace matches, on a
-      # keystroke path that holds this mutex. Measured on 30,000 matches
-      # (2,000 files of 15 methods each): sorting all of them on this key
-      # is 68ms, taking the hundred asked for is 23.6ms, and the
-      # one-element key this replaced cost 23.7ms sorted. The key grew
-      # sevenfold and the query did not get slower.
+      # keystroke path that holds this mutex. Ranking 32,000 matches
+      # (2,000 files of 15 methods each) measures 68ms sorting all of them
+      # on this key, 17ms taking the hundred asked for, and 10ms for the
+      # one-element key this replaced. So the key does cost about 7ms more
+      # than it used to, not nothing: `min_by` recovers four fifths of
+      # what the wider key added, and the rest buys an answer whose
+      # membership does not depend on which file was saved last.
+      #
+      # (An earlier note here claimed parity, from an end-to-end
+      # measurement of `search` -- where building the match list dominates
+      # and hid the difference. Time the ranking, not the query.)
       #
       # `[kind, owner]` last is what makes it total: two declarations that
       # agree on name, uri and position are the same symbol or differ in

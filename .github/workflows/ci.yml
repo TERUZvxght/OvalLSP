@@ -18,8 +18,10 @@ jobs:
           bundler-cache: true
           working-directory: core
 
-      # The real-Rails integration suite (spec/integration/real_rails_spec.rb)
-      # is *designed* to skip itself, not fail, when `rails`/`sqlite3`
+      # Both real-Rails-backed suites -- spec/integration/real_rails_spec.rb
+      # and spec/e2e/capabilities_spec.rb, which share the
+      # spec/fixtures/rails_real bundle -- are *designed* to skip
+      # themselves, not fail, when `rails`/`sqlite3`
       # aren't resolvable as local gems -- that's deliberate for local
       # development on a machine without them. In CI it must never
       # silently skip: a skip here means the suite that catches bugs Fake
@@ -30,7 +32,7 @@ jobs:
       # Installing real rails/sqlite3 gems here up front is what makes
       # `bundle install --local` inside spec/fixtures/rails_real succeed
       # instead of skipping.
-      - name: Install real Rails/sqlite3 (required for spec/integration/real_rails_spec.rb)
+      - name: Install real Rails/sqlite3 (required by the real-Rails and capability suites)
         run: |
           sudo apt-get update
           sudo apt-get install -y libsqlite3-dev

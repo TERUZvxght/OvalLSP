@@ -59,7 +59,8 @@ first-inserted file, which lands on the right answer by accident.
 
 Two testing gaps found alongside it, neither user-visible:
 
-The capability E2E suite could skip all 41 rows and still exit 0.
+The capability E2E suite could skip every one of its 41 examples --
+covering all 42 rows, one of which is a pair -- and still exit 0.
 `docs/EXTENSION_CAPABILITIES.md` says "a capability whose row is skipped
 is not shipped"; CI enforced that for the real-Rails integration suite
 only, and `capability_coverage_spec.rb` cannot see it because it reads

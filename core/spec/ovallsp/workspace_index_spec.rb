@@ -529,8 +529,11 @@ RSpec.describe Ovallsp::WorkspaceIndex do
     # Byte order, not case-insensitive order. Which of two files wins is
     # arbitrary either way; that the choice is written down is not,
     # because it decides where go-to-definition lands.
+    # `apple` indexed *first*, so the asserted answer is not also the
+    # insertion order: with `Zebra` first this example passed with the
+    # write-time sort deleted outright, which is pinning an accident.
     it "orders uris by byte, so case decides between two files" do
-      %w[Zebra apple].each do |name|
+      %w[apple Zebra].each do |name|
         index.replace_file(
           summary(uri: "file:///#{name}.rb", content_hash: name,
                   declarations: [declaration(kind: :class, owner: nil, name: "::Widget")])

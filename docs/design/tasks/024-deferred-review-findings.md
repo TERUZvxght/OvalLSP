@@ -770,12 +770,18 @@ in a workspace of 1,200 service objects each defining `call`. Filtering
 before sorting -- the two commute here -- restores 51us with the same
 order.
 
-`search`'s ranking key grew from one element to seven, which would have
-been the largest cost this change adds to a read -- 30,000 matches sort
-in 68ms against the 23.7ms the one-element key cost, on a path the picker
-walks with an empty query and the index mutex held. `min_by(limit)`
-answers identically, because the key is total, and takes 23.6ms: the key
-grew sevenfold and the query did not get slower.
+`search`'s ranking key grew from one element to seven, which is the
+largest cost this change adds to a read: the picker opens with an empty
+query, so every declaration in the workspace is a match, and the index
+mutex is held throughout. Ranking 32,000 matches measures 68ms sorting
+all of them, 17ms with `min_by(limit)` -- which answers identically
+because the key is total -- against 10ms for the one-element key it
+replaced. About 7ms more per query, for an answer whose membership no
+longer depends on which file was saved last.
+
+The first version of that paragraph claimed parity, measured end to end
+through `search`, where building the 32,000-entry match list dominates
+and hid the difference. A cost claim about a sort has to time the sort.
 
 Neither that nor the filter-before-sort above is a *behavioural* line, so
 no example in the suite fails when either is reversed -- which is exactly

@@ -42,6 +42,14 @@ RSpec.describe "WorkspaceIndex's two cost decisions" do
     expect(body).not_to include("matches.sort_by")
   end
 
+  # A file that reopens one class ten times touches one symbol ten times.
+  # Re-sorting an already-sorted list is correct, so nothing behavioural
+  # fails without the `uniq` -- it is the same class of decision as the
+  # two above.
+  it "sorts each touched symbol once per file, not once per declaration" do
+    expect(body_of("replace_file")).to include("touched.uniq.each")
+  end
+
   # The limit reaching `rank` needs no assertion of its own: taking it
   # back out of the signature leaves `min_by(limit)` referring to nothing,
   # which is a NameError on the first query rather than a silent revert.
