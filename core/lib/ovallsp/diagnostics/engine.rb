@@ -370,18 +370,34 @@ module Ovallsp
       # declared is what an array index or `String#*` actually breaks on.
       COERCES_TO = { "Integer" => %w[Float Complex Rational] }.freeze
 
-      # A binary operator between two non-space characters, outside a
-      # string literal's own content. Deliberately crude and deliberately
-      # over-eager: every false match here costs a report this check would
-      # rather not make.
-      OPERATOR_IN_ARGUMENT = %r{[^\s](\s*)(\*\*|[-+*/%]|<<)(\1)[^\s=]}
+      # A name a Ruby method can have *and* a reader would call an
+      # identifier. Anything else -- `<=>`, `==`, `..`, `!`, `[]`, `<<`,
+      # `+` -- is an operator, and the node at the argument's end offset
+      # is then its right operand rather than the argument.
+      IDENTIFIER_METHOD_NAME = /\A[A-Za-z_]\w*[?!]?\z/
 
+      # Node types that are a composition rather than a value: their end
+      # offset belongs to a sub-expression whose type is not the
+      # argument's.
+      COMPOSED_ARGUMENT_NODES = [Prism::RangeNode, Prism::AndNode, Prism::OrNode,
+                                 Prism::IfNode, Prism::UnlessNode].freeze
+
+      # Parsed rather than pattern-matched. The first version of this
+      # listed the arithmetic operators, which is a list that cannot be
+      # finished -- `"a" <=> "b"` is an Integer and was reported as a
+      # String, and `1..5` as an Integer. Asking Prism what the argument
+      # *is* answers for every shape at once, and an argument that does
+      # not parse on its own is declined rather than guessed at.
       def operator_expression?(document, range)
         first = document.position_to_char_offset(range[:start])
         last = document.position_to_char_offset(range[:end])
-        return false unless first && last && last > first
+        return true unless first && last && last > first
 
-        document.text[first...last].to_s.match?(OPERATOR_IN_ARGUMENT)
+        node = Prism.parse(document.text[first...last].to_s).value.statements.body.first
+        return true if node.nil?
+        return true if COMPOSED_ARGUMENT_NODES.any? { |type| node.is_a?(type) }
+
+        node.is_a?(Prism::CallNode) && !node.name.to_s.match?(IDENTIFIER_METHOD_NAME)
       rescue StandardError
         true
       end

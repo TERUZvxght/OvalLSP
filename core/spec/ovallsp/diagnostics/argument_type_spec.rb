@@ -152,6 +152,21 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     end
   end
 
+  # Enumerating operators cannot be finished: `<=>`, `==`, `..`, `&&`,
+  # `!` and a dozen others all put a different node at the argument's end
+  # offset. `"a" <=> "b"` is an Integer and was reported as a String.
+  {
+    "a comparison" => 'Widget.new.label("a" <=> "b")',
+    "a range" => "Widget.new.label(1..5)",
+    "a negation" => "Widget.new.label(!1)",
+    "a conjunction" => "Widget.new.label(1 && 2)",
+    "a shift" => "Widget.new.label([] << 1)"
+  }.each do |description, call|
+    it "says nothing about #{description}" do
+      expect(findings(call)).to be_empty
+    end
+  end
+
   it "says nothing when the argument matches the declared type" do
     expect(findings("Widget.new.resize(3)\n")).to be_empty
   end

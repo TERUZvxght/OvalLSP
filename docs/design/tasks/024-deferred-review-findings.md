@@ -263,9 +263,9 @@ starts and never opened, produced no diagnostic within 45 seconds.
 with `start_workspace_diagnostics`, which calls `begin_pass` --
 invalidating whatever pass is running -- and `WorkspaceDiagnostics#run`
 restarts from `uris.first` with no resume point. That method is called
-from seven sites, two of which are *loops*: the ancestry drain
-(`server.rb:578`, which drains until the queue is empty) and the
-model-refresh batch (`server.rb:2562`, once per batch). On a real Rails
+from six sites, two of which are *loops*: the ancestry drain (which
+drains until the queue is empty) and the model-refresh batch (once per
+batch). On a real Rails
 app each iteration therefore aborts an O(workspace) pass and starts a new
 one from zero, and each new one takes the same global index mutex. That
 is a credible mechanism for the 45-second silence above, and it is not
@@ -301,17 +301,16 @@ of the in-process specs — the document's own rule is that a capability
 with no E2E row is not a capability, and marking it anyway is exactly the
 failure that rule exists to prevent.
 
-Not diagnosed. The pass is started from the cold index's `on_complete`,
-so the plausible causes are that it runs before the Runtime Agent is
-ready and the later refresh does not reach it, that the receiver is not
-`closed_nominal?` in a real Rails app the way it is in the fixture-free
-specs, or that the pass never starts at all in that configuration. The
-in-process specs pass, so whatever it is, it is a difference between them
-and a real workspace.
+Three causes were guessed at before the one above was found, and they
+are kept because none is ruled out and any could compound it: the pass
+runs before the Runtime Agent is ready and the later refresh does not
+reach it; the receiver is not `closed_nominal?` in a real Rails app the
+way it is in the fixture-free specs; the pass never starts at all in that
+configuration.
 
-**Direction:** reproduce against `spec/fixtures/rails_real` directly,
-find which of the three it is, fix it, and restore the row with an E2E
-example behind it.
+**Direction:** fix the restart-without-resume above, then reproduce
+against `spec/fixtures/rails_real` directly to see whether anything is
+left, and restore the row with an E2E example behind it.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
