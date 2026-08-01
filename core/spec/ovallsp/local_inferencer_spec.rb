@@ -1704,6 +1704,21 @@ RSpec.describe Ovallsp::LocalInferencer do
     end
   end
 
+  # `parameter_env` listed requireds, optionals, keywords, rest, keyword
+  # rest and block -- and not `posts`, the required parameters that come
+  # *after* a splat. `def go(a, *rest, z)` is legal Ruby and `z` was
+  # missing from the locals completion offers.
+  it "offers a required parameter that follows a splat" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", version: 1, language_id: "ruby",
+      text: "def go(alpha, *rest, omega)\n  \nend\n"
+    )
+
+    locals = described_class.new.scope_at(document, { line: 1, character: 2 }).locals
+
+    expect(locals.keys.map(&:to_s)).to include("omega")
+  end
+
   # `infer_at` parses the document, and the argument-type check asks it
   # once per positional argument, so the parse is remembered. The key has
   # to be the document, not merely "there is a cached tree": two files

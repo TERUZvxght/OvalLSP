@@ -78,6 +78,7 @@ indexes comments. Completion goes through `completionItem/resolve` rather
 than putting documentation on the list, since reading the source for every
 candidate is a file read per item for documentation the user sees for one
 of them at most.
+
 ## 0.1.13 — the index answers the workspace, not your editing history
 
 - Fixed: go-to-definition, find references, rename, signature help and
@@ -386,6 +387,7 @@ different requirements. The mutex gives the first, and is what makes a
 partially-written frame unobservable to a client. The single call gives
 the second, which a mutex cannot: it is no defence against `Thread#kill`,
 and the bounded join at shutdown kills exactly the threads that publish.
+
 ## 0.1.10 — One implementation, and four behaviours brought under test
 
 - Fixed: the controller `before_action` chain has one implementation

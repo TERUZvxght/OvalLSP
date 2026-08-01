@@ -177,6 +177,44 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     end
   end
 
+  # Activation has to happen *before* the check runs, or the check does
+  # not defer: it decides whether a receiver it cannot judge statically is
+  # worth asking the Agent about, and a non-activated registry means it
+  # answers from static knowledge alone -- a false "has no method named"
+  # on every unopened file, which is what 024.R5 exists to prevent. The
+  # buffer path says so in a comment; the workspace path had the call and
+  # nothing that noticed its removal.
+  #
+  # Asserted on the source rather than the behaviour, deliberately. The
+  # difference only appears with a live Agent answering, which this suite
+  # has no way to stand up -- and a fixture that cannot distinguish the
+  # two candidate behaviours is not a test of them. What this does catch
+  # is the line going away.
+  it "activates the ancestry registry before analysing an unopened file" do
+    source = File.read(File.expand_path("../../lib/ovallsp/server.rb", __dir__), encoding: "UTF-8")
+    body = source[/    def workspace_findings_for.*?\n    end\n/m]
+
+    expect(body).not_to be_nil, "workspace_findings_for has been renamed"
+    expect(body).to include("@ancestry_registry.activate!")
+  end
+
+  # `close` and not `begin_pass`: a pass is *started* from another
+  # background thread (the cold index, on completion), so a plain
+  # invalidation at shutdown can be undone a moment later by a fresh,
+  # valid pass -- which the join then has to kill instead of joining.
+  it "refuses later passes at shutdown rather than only invalidating the current one" do
+    Dir.mktmpdir do |root|
+      workspace_with_a_mistake(root)
+      server = build_server(root)
+      diagnostics = server.instance_variable_get(:@workspace_diagnostics)
+
+      server.send(:shutdown_background_tasks)
+
+      expect(diagnostics.closed?).to be(true)
+      expect(diagnostics.current?(diagnostics.begin_pass)).to be(false)
+    end
+  end
+
   it "publishes nothing for a file that has no mistakes" do
     Dir.mktmpdir do |root|
       workspace_with_a_mistake(root)

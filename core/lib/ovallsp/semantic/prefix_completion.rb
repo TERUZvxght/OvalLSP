@@ -44,6 +44,13 @@ module Ovallsp
       # rendered into it rather than left implicit in the array order.
       GROUP_LOCAL = 0
       GROUP_SELF_METHOD = 1
+      # Route helpers are assembled by `Server` rather than here, because
+      # they come from the Runtime Agent rather than from the index -- but
+      # they are merged into this list, so they need a band from the same
+      # scale. Without one an item sorts by its label, and every band
+      # prefix (`0-`..`3-`) sorts before a letter, which put route helpers
+      # below everything. They are methods callable on self.
+      GROUP_ROUTE_HELPER = GROUP_SELF_METHOD
       GROUP_CONSTANT = 2
       GROUP_KERNEL = 3
 
@@ -81,9 +88,15 @@ module Ovallsp
 
       # `sortText` carries the group so the editor preserves this order;
       # `__group` is internal bookkeeping and must not reach the wire.
+      # The band format, so a caller assembling items elsewhere can put
+      # them on the same scale rather than guessing the string.
+      def self.sort_text(group, label)
+        format("%<group>d-%<label>s", group: group, label: label)
+      end
+
       def finalize(item)
         group = item.fetch(:__group)
-        item.except(:__group).merge(sortText: format("%<group>d-%<label>s", group: group, label: item[:label]))
+        item.except(:__group).merge(sortText: PrefixCompletion.sort_text(group, item[:label]))
       end
 
       def matches?(name, prefix)

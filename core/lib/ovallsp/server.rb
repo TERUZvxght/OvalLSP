@@ -1533,6 +1533,7 @@ module Ovallsp
       return nil if controller_sets_ivars_dynamically?(context[:owner])
 
       documents = controller_ancestor_documents(context[:owner])
+      return nil unless whole_chain_was_read?(context[:owner], documents)
       return nil unless ivar_sources_fully_enumerable?(context[:owner], documents)
 
       method_maps = controller_method_maps(documents)
@@ -1591,6 +1592,37 @@ module Ovallsp
     # block-form callback and a Rails concern are not edge cases. So the
     # answer here is "no" whenever the chain contains anything this cannot
     # follow, and the check above turns that into silence.
+    # `controller_ancestor_documents` drops an ancestor whose file it
+    # cannot resolve, and says nothing about having done so -- so a class
+    # this walk never read looks exactly like a class that assigns
+    # nothing. `class UsersController < ApplicationController` analyzed
+    # before the cold index reaches the parent reported the parent's
+    # `@current_user` as never assigned, on a view that renders; and for a
+    # controller whose parent lives outside the workspace it never stops.
+    #
+    # The chain from the hierarchy index is the authority on what should
+    # have been read, and this is where the two are compared, because
+    # nowhere else has both.
+    def whole_chain_was_read?(owner_name, documents)
+      # The *immediate* superclass, whatever its `kind`. One the index has
+      # not seen declared arrives with `kind: nil`, which is the case that
+      # matters: `controller_ancestor_documents` filters on
+      # `kind == :class` and so never even tries to read it.
+      #
+      # Only the immediate one, because the chain does not end in the
+      # workspace -- every Rails controller reaches `ActionController::Base`
+      # and beyond, which no document will ever be produced for, so
+      # demanding the whole chain switches the check off for every real
+      # controller. A framework base does not assign the instance
+      # variables a view reads; the class the user wrote `< X` against
+      # does, and that is the one worth insisting on.
+      parent = @hierarchy_index.ancestors(owner_name).find { |entry| entry.origin == :superclass }
+      return true unless parent
+
+      read = documents.map { |name, _| Index::SymbolId.qualify_owner(name) }
+      read.include?(Index::SymbolId.qualify_owner(parent.name))
+    end
+
     def ivar_sources_fully_enumerable?(owner_name, documents)
       # `:default` entries are Object/Kernel/BasicObject, which every
       # class has and none of which assigns a controller's ivars. What
@@ -1991,7 +2023,17 @@ module Ovallsp
         return { isIncomplete: false, items: member_completion_items(document, position, prefix) }
       end
 
-      route_items = prefix.empty? ? [] : @route_registry.completion_names(prefix).map { |name| { label: name, kind: 3 } }
+      route_items =
+        if prefix.empty?
+          []
+        else
+          @route_registry.completion_names(prefix).map do |name|
+            { label: name, kind: 3,
+              sortText: Semantic::PrefixCompletion.sort_text(
+                Semantic::PrefixCompletion::GROUP_ROUTE_HELPER, name
+              ) }
+          end
+        end
       bare = @prefix_completion.items(document: document, position: position, prefix: prefix)
       { isIncomplete: bare.incomplete, items: route_items + bare.items }
     end

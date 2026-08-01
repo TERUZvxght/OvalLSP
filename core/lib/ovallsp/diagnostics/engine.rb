@@ -349,8 +349,19 @@ module Ovallsp
       # while a signature always names a type bare -- so comparing raw
       # meant no workspace-declared ancestor ever matched, including the
       # class itself.
+      # Ruby's numeric tower is not its class hierarchy. `Integer` does
+      # not inherit `Float`, but `zoom(2)` where a Float is declared is
+      # ordinary working code: Ruby coerces, and every arithmetic
+      # operation such a method can perform accepts both. `Numeric` needs
+      # no entry -- `Integer < Numeric` is a real ancestry. The other
+      # direction stays reported, because a Float where an Integer is
+      # declared is what an array index or `String#*` actually breaks on.
+      COERCES_TO = { "Integer" => %w[Float Complex Rational] }.freeze
+
       def compatible_nominal?(actual, expected, context)
         target = simple_name(expected.name)
+        return true if COERCES_TO.fetch(simple_name(actual.name), []).include?(target)
+
         reachable = ancestor_names(actual.name, context)
         reachable.include?(target)
       end

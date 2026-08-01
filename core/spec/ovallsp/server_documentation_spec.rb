@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "stringio"
+require "tmpdir"
 
 # Documentation in hover and completion (0.2.0).
 #
@@ -60,6 +61,27 @@ RSpec.describe "Ovallsp::Server documentation in hover and completion (0.2.0)" d
 
   it "shows the comment block above the method being hovered" do
     expect(hover_at(0, 13)).to include("Charges the card.").and include("Raises on a declined payment.")
+  end
+
+  # The declaring file open in a buffer is the *easy* half. Every other
+  # example here opens `widget.rb`, so the disk half -- which is the case
+  # the capability is for, hovering a call to a method declared in a file
+  # you have never opened -- was covered nowhere, and could have been
+  # deleted with the suite green.
+  it "reads the comment from disk when the declaring file is not open" do
+    Dir.mktmpdir do |root|
+      File.write(File.join(root, "widget.rb"), WIDGET)
+      widget_uri = Ovallsp::UriUtil.from_path(File.join(root, "widget.rb"))
+      server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: root)
+      server.send(:reindex_from_disk, widget_uri)
+      server.send(:handle_did_open, textDocument: { uri: "file:///use.rb", text: "Widget.new.charge\n",
+                                                    version: 1, languageId: "ruby" })
+
+      result = server.send(:hover_result, textDocument: { uri: "file:///use.rb" },
+                                          position: { line: 0, character: 13 })
+
+      expect(result[:contents][:value]).to include("Charges the card.")
+    end
   end
 
   it "still answers for a method with no comment above it" do

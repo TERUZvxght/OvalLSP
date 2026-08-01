@@ -235,6 +235,25 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     end
   end
 
+  # `controller_ancestor_documents` drops any ancestor whose file it
+  # cannot resolve, silently. The chain is then short one class, and a
+  # class this walk never read is indistinguishable from a class that
+  # assigns nothing -- so the parent's `@current_user` looks unassigned.
+  # This is the ordinary startup ordering: the editor restores a group and
+  # sends didOpen for a view before the cold index has reached
+  # `application_controller.rb`. And it is permanent for any controller
+  # whose parent lives outside the workspace.
+  it "says nothing when an ancestor of the controller could not be read" do
+    controller = <<~RUBY
+      class UsersController < ApplicationController
+        def show
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= @current_user.name %>")).to be_empty
+  end
+
   it "says nothing when the controller uses instance_variable_set" do
     controller = <<~RUBY
       class UsersController

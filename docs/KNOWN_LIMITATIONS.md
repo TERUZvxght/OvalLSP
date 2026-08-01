@@ -124,6 +124,31 @@ in `development` and a `group :test` gem is simply not there; and a gem
 class reopened without mixing anything in, whose ancestry carries no
 evidence either way. 024.R5 lists each case.
 
+## What 0.2.0's new checks deliberately do not cover
+
+Both diagnostics 0.2.0 adds are held to "a wrong report is worse than a
+missed one", so each is narrow on purpose. What that costs a user:
+
+- **Argument types** are checked only where every input is *stated*: the
+  expected type comes from an RBS/RBI declaration (Ruby source declares
+  no parameter types), the signature has exactly one overload, and both
+  the declared and the argument's own type are plain classes. A call the
+  check cannot judge is left alone rather than guessed at, so a genuine
+  mismatch in a union, an interface, a generic, or a method with several
+  overloads is not reported.
+- **Reading an `@ivar` nothing assigns** is reported in ERB views only,
+  and only when the whole set of assignments can be enumerated: the
+  controller chain is fully readable, nothing uses
+  `instance_variable_set`, no module is mixed in, and no callback form
+  the analysis does not model appears. Any of those silences the check
+  for that view entirely. An ivar assigned by a sibling action also
+  silences it, deliberately.
+- **Diagnostics for files nobody has opened** work in-process but have no
+  end-to-end verification against a real Rails app: the example written
+  for one produced nothing in 45 seconds. The cause is diagnosed and the
+  fix is scoped to its own task (024.14). The README matrix marks this
+  row ⚠️ rather than ✅ for that reason.
+
 ## Conflicts with other extensions
 
 See [vscode/README.md](../vscode/README.md#known-conflicts-with-other-extensions)

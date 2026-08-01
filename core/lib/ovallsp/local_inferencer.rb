@@ -419,6 +419,9 @@ module Ovallsp
       names = []
       names.concat(params.requireds.map { |p| p.respond_to?(:name) ? p.name : nil })
       names.concat(params.optionals.map(&:name))
+      # `posts` are the requireds that follow a splat -- `def go(a, *rest,
+      # z)`. Legal Ruby, and `z` was simply absent from the locals.
+      names.concat(params.posts.map { |p| p.respond_to?(:name) ? p.name : nil })
       names.concat(params.keywords.map(&:name))
       names << params.rest&.name
       names << params.keyword_rest&.name if params.keyword_rest.respond_to?(:name)

@@ -39,6 +39,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
         def many: (String label, *Integer sizes) -> void
         def attach: (Widget other) -> void
         def pair: (String first, Integer second) -> void
+        def zoom: (Float factor) -> void
         def pick: [T] (Array[T] items, Integer count) -> T
         def scale: (Numeric factor) -> void
         def handle: (Exception error) -> void
@@ -120,6 +121,21 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
 
     expect(result.size).to eq(1)
     expect(result.first.message).to include("Integer").and include("String")
+  end
+
+  # Ruby's numeric tower is not its class hierarchy: `Integer` is not a
+  # `Float`, but `scale(2)` where a Float is declared is ordinary working
+  # code -- Ruby coerces, and every arithmetic operation the method can
+  # perform accepts both. Reporting it is the wrong-report-on-code-that-
+  # runs this check refuses to make.
+  it "says nothing about an Integer passed where a Float is declared" do
+    expect(findings("Widget.new.zoom(2)")).to be_empty
+  end
+
+  # The other direction stays reported: a Float where an Integer is
+  # declared is the one a `String#*` or an array index actually breaks on.
+  it "still reports a Float passed where an Integer is declared" do
+    expect(findings("Widget.new.resize(1.5)").size).to eq(1)
   end
 
   it "says nothing when the argument matches the declared type" do

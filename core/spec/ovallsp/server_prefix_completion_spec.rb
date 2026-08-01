@@ -366,4 +366,24 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     expect(labels).to include("Artzzz")
     expect(labels).not_to include("artisanal_thing")
   end
+
+  # Route helpers are merged in beside the bare-prefix candidates, which
+  # carry a `sortText` that bands them. An item with none falls back to
+  # its label, and every band prefix (`0-`..`3-`) sorts before a letter --
+  # so route helpers dropped below everything. They are methods callable
+  # on self, and belong in that band.
+  it "bands route helpers with the other methods callable on self" do
+    registry = Ovallsp::Routes::RouteRegistry.new
+    registry.replace([{ name: "users", verb: "GET", path: "/users", controller: "users", action: "index" }])
+    server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, route_registry: registry)
+    server.send(:handle_did_open, textDocument: { uri: "file:///a.rb", text: "us\n", version: 1,
+                                                  languageId: "ruby" })
+
+    result = server.send(:completion_result, textDocument: { uri: "file:///a.rb" },
+                                             position: { line: 0, character: 2 })
+    helper = result[:items].find { |i| i[:label] == "users_path" }
+
+    expect(helper).not_to be_nil, "the fixture registered no route helper"
+    expect(helper[:sortText]).to start_with("1-")
+  end
 end
