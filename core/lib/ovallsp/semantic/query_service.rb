@@ -368,9 +368,11 @@ module Ovallsp
       # *named* positionals but some keyword come out the same way (29
       # methods in the RBS core this loads, 33 counting each overload,
       # `Array#shuffle` among them; three of them -- `Dir.[]`,
-      # `Kernel#warn`, `Ractor.new` -- also take a `*rest`, which is the
-      # difference between this count and the 26 an earlier revision of
-      # this comment gave).
+      # `Kernel#warn`, `Ractor.new` -- also take a `*rest` *positional*,
+      # which is the whole difference between this count and the 26 an
+      # earlier revision gave. `Exception#detailed_message` has a `**`
+      # rest and is not one of the three; a reviewer read "`*rest`" as
+      # "any rest slot" and made it four, so it is spelled out here).
       # Before 0.1.12 the `(?)` ones failed to build at all so
       # nothing was shown; making them build has to not make them lie, and
       # the keyword case was already lying.

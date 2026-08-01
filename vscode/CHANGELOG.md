@@ -135,11 +135,13 @@ code people write `< BasicObject` for, so the `::BasicObject` fix above
 would have turned a false report on precisely the classes it un-silenced.
 
 The label those signatures produce was asserting zero arity for anything
-it could not name: 26 methods in the RBS core this loads have keywords and
+it could not name: 29 methods in the RBS core this loads have keywords and
 no *named* positionals (33 counting each overload), and 106 name nothing
 at all but accept a rest slot. Both now render. Three of the 29 also take
-a `*rest` — `Dir.[]`, `Kernel#warn`, `Ractor.new` — so 135 methods in all
-rendered as `()` while accepting arguments.
+a `*rest` *positional* — `Dir.[]`, `Kernel#warn`, `Ractor.new` — which is
+the whole difference between 29 and the 26 an earlier revision gave; a
+fourth, `Exception#detailed_message`, has a `**` rest and so is not among
+them. 135 methods in all rendered as `()` while accepting arguments.
 
 The RBI defect is the one this release caused. Sorbet's
 `params(x: Integer)` is a name-to-type map; it describes `def f(x)` and
