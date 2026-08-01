@@ -28,8 +28,10 @@ were in. Typing one character in an unrelated file was enough: a bare
 ancestry chain and the unknown-method check with it; the class in the
 file you were looking at dropped out of a truncated `workspace/symbol`
 result; signature help showed a reopened method's parameters from the
-other definition. Seven readers, all taking `.first` of a collection
-whose storage had no order.
+other definition. At least eleven readers, all taking `.first` of a
+collection whose storage had no order — "at least" because the list was
+miscounted twice and then grew again under review, which is the argument
+for fixing the storage rather than the readers.
 
 0.1.12 tried to fix this four times, each round sorting one more reader,
 and produced two regressions before the whole thread was rolled back and

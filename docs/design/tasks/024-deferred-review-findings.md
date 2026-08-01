@@ -686,9 +686,13 @@ for widening past its own subject.
 
 **Status:** fixed in 0.1.13 for the two decisions a user notices --
 `documentSelectorFor` and `statusPresentation` moved into
-`vscode/src/clientPresentation.ts`, which imports no `vscode`, with ten
-unit tests including two that assert `extension.ts` actually calls them
-(024.10's first attempt left the original copy in place). The remaining
+`vscode/src/clientPresentation.ts`, which imports no `vscode`, with
+fourteen unit tests -- twelve behavioural, plus two that assert
+`extension.ts` actually calls them (024.10's first attempt left the
+original copy in place). `resolveStatus` was added in a second pass: the
+extraction had left the "no client" / "the client did not answer"
+decision at the call site, where a mutation reporting a failure as "no
+client" passed all 167 tests. The remaining
 `vscode` wiring -- command registrations, the client bootstrap, the poll
 loop's timer -- is still integration-only; running that suite in CI is
 the part not done.
@@ -717,7 +721,7 @@ remaining decisions the way 024.10 extracted `clientTeardown.ts`.
 
 **Status:** fixed in 0.1.13 by option 1 below -- the storage is ordered.
 Entry lists are sorted by `[uri, line, character]` in `replace_file`, and
-`ordered_symbol_ids` is the one place `@by_simple_name` is read, ordered
+`ordered_symbol_ids` is the one place a query reads `@by_simple_name`, ordered
 by `[name, kind, owner]` because one class has several SymbolIds that
 share a name. `search`'s `rank` keeps exact-match-first and gains a tail,
 since a truncated result cannot have ties decided by index order.
@@ -736,9 +740,14 @@ appends the new ones — so re-indexing a file moves its entries to the
 back of every list they are in. Editing a file, without changing a single
 declaration, changes the order.
 
-Seven readers then take `.first` of such a list, or truncate it. Convert
-all seven; converting a subset is round 9's mistake, and this list was
-itself miscounted twice before it was written one reader per row:
+These readers then take `.first` of such a list, or truncate it. The list
+was miscounted twice before it was written one reader per row, and a
+later review found four more (`Server#current_observation_fingerprint`,
+`MethodResolver#names_for_type`'s visibility lookup,
+`Server#route_helper_definitions`, `Rename::Planner#locations_for`) — so
+it is a sample, not an inventory. That is an argument *for* the storage
+fix rather than against it: ordering the storage covers readers nobody
+enumerated, which is exactly what converting a subset does not.
 
 | reader | what changes |
 |---|---|

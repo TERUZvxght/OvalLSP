@@ -393,7 +393,9 @@ module Ovallsp
       [uri, decl.location[:start][:line], decl.location[:start][:character]]
     end
 
-    # The one place `@by_simple_name` is read. It is a Set, so its order is
+    # The one place a *query* reads `@by_simple_name` -- `remove_file_locked`
+    # reads it too, to drop a name whose last declarer is gone.
+    # It is a Set, so its order is
     # insertion order -- which moves on re-index for the same reason the
     # entry lists did. Ordered by qualified name: a bare name that matches
     # several classes resolves to the same one whichever file was edited
@@ -413,10 +415,28 @@ module Ovallsp
       # The exact-match bucket was the whole key, so everything inside a
       # bucket was decided by `@by_symbol`'s insertion order -- and this
       # result is *truncated*, so that changed which symbols survived
-      # `limit:` after any edit. The tail makes the order total (024.15).
+      # `limit:` after any edit.
+      #
+      # The tail has to be *total*, not merely longer. A first attempt
+      # stopped at `[name, uri, line]` and still scrambled: `sort_by` is
+      # not stable from eight tied elements up, and ties survive that key
+      # in two shapes that both occur. One class declared several times on
+      # one line of one file ties on all three -- `search` then returned
+      # the columns in a different order than `class_declarations` did,
+      # one method away. And every declaration a plugin registers shares
+      # its `plugin://` uri and a frozen line-0/char-0 location
+      # (`Server#apply_plugin_context`), so a plugin generating one method
+      # name across ten models ties on all of them; which three survived
+      # `limit:` depended on registration order.
+      #
+      # `[kind, owner]` last is what makes it total: two declarations that
+      # agree on name, uri and position are the same symbol or differ in
+      # identity, and nothing else distinguishes them (024.15).
       matches.sort_by do |m|
         [simple_name(m[:symbol_id]).downcase == needle ? 0 : 1,
-         m[:symbol_id].name.to_s, m[:uri], m[:location][:start][:line]]
+         m[:symbol_id].name.to_s, m[:uri],
+         m[:location][:start][:line], m[:location][:start][:character],
+         m[:symbol_id].kind.to_s, m[:symbol_id].owner.to_s]
       end
     end
   end

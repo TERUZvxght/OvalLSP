@@ -141,10 +141,16 @@ describe('extension.ts uses the extracted decisions', () => {
   });
 
   it('drives the status bar from resolveStatus and statusPresentation', () => {
-    assert.ok(
-      /statusPresentation\(await resolveStatus\(/.test(source),
-      'extension.ts does not build its status outcome through resolveStatus'
-    );
+    // Both identifiers somewhere inside the polling function -- not the
+    // two literally nested in one expression, which an ordinary
+    // `const outcome = await resolveStatus(client)` refactor would break
+    // while changing no behaviour. Textual *order* is not asserted for
+    // the same reason: today's nested form puts the renderer first.
+    const start = source.indexOf('function startStatusPolling');
+    assert.ok(start >= 0, 'extension.ts no longer has a startStatusPolling function');
+    const pollBody = source.slice(start, source.indexOf('\nfunction ', start + 1));
+    assert.ok(pollBody.includes('resolveStatus('), 'startStatusPolling does not call resolveStatus');
+    assert.ok(pollBody.includes('statusPresentation('), 'startStatusPolling does not call statusPresentation');
     assert.ok(
       !source.includes('STATUS_LABELS['),
       'extension.ts still indexes STATUS_LABELS itself instead of asking statusPresentation'
