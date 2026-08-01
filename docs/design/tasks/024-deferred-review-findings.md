@@ -703,12 +703,22 @@ for widening past its own subject.
 **Status:** fixed in 0.1.13 for the two decisions a user notices --
 `documentSelectorFor` and `statusPresentation` moved into
 `vscode/src/clientPresentation.ts`, which imports no `vscode`, with
-fourteen unit tests -- twelve behavioural, plus two that assert
+fifteen unit tests -- thirteen behavioural, plus two that assert
 `extension.ts` actually calls them (024.10's first attempt left the
 original copy in place). `resolveStatus` was added in a second pass: the
 extraction had left the "no client" / "the client did not answer"
 decision at the call site, where a mutation reporting a failure as "no
-client" passed all 167 tests. The remaining
+client" passed all 167 tests.
+
+Three of the extracted decisions were then found unpinned, all the same
+shape: the specs compared the render against the very table it renders
+from, and the constant against itself. Relabelling `indexing`, deleting
+`agent-unavailable` and emptying the error text each left the suite
+green, and a deleted key falls through to the raw-state branch -- the
+status bar would read `OvalLSP: agent-unavailable`. The literals are
+asserted now, and the fifteenth example reads the four states out of
+`Server#status_result` rather than restating them, so a state added on
+the Core side without a label here fails the extension's own suite. The remaining
 `vscode` wiring -- command registrations, the client bootstrap, the poll
 loop's timer -- is still integration-only; running that suite in CI is
 the part not done.

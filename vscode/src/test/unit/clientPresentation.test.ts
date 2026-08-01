@@ -18,6 +18,11 @@ describe('documentSelectorFor', () => {
 
     assert.ok(ruby, 'no filter matches Ruby by language id');
     assert.strictEqual(ruby.scheme, 'file');
+    // Every file under the folder, not `**/*.rb`: the language id is the
+    // point, and `Gemfile`, `Rakefile` and `*.rake` carry it without
+    // carrying the extension. Narrowing the glob leaves every other
+    // assertion here true.
+    assert.strictEqual(ruby.pattern, '/w/**/*');
   });
 
   // VS Code assigns no built-in language id to `.erb`, so a language-id
@@ -96,17 +101,49 @@ describe('statusPresentation', () => {
   it('shows an error rather than hiding when the client fails to answer', () => {
     assert.deepStrictEqual(statusPresentation({ hasClient: true, failed: true }), {
       visible: true,
-      text: STATUS_ERROR_TEXT
+      text: '$(error) OvalLSP: Configuration error'
     });
+    // The literal, once: comparing against the symbol is true of any
+    // value, including the empty string, which would put the item on
+    // screen showing nothing -- the "reads as fine" failure this text
+    // exists to prevent.
+    assert.strictEqual(STATUS_ERROR_TEXT, '$(error) OvalLSP: Configuration error');
   });
 
+  // The literal strings, not `STATUS_LABELS[state]`. Comparing the render
+  // against the same table it renders from is true of any table: with
+  // `indexing` relabelled and `agent-unavailable` deleted outright, that
+  // form still passed, and a deleted key falls through to the raw-state
+  // branch -- the status bar reads "OvalLSP: agent-unavailable".
   it('renders each state the server reports', () => {
-    for (const [state, label] of Object.entries(STATUS_LABELS)) {
-      assert.deepStrictEqual(statusPresentation({ hasClient: true, state }), {
-        visible: true,
-        text: label
-      });
+    const expected: Record<string, string> = {
+      indexing: '$(sync~spin) OvalLSP: Indexing',
+      'ready-static': '$(check) OvalLSP: Ready (static)',
+      'ready-rails': '$(check) OvalLSP: Ready (Rails)',
+      'agent-unavailable': '$(warning) OvalLSP: Agent unavailable'
+    };
+
+    for (const [state, text] of Object.entries(expected)) {
+      assert.deepStrictEqual(statusPresentation({ hasClient: true, state }), { visible: true, text });
     }
+    assert.deepStrictEqual(Object.keys(STATUS_LABELS).sort(), Object.keys(expected).sort());
+  });
+
+  // The other half of the same contract: the four states are the Core's
+  // to define, and a state added there with no label here degrades to its
+  // own raw name. Read out of `server.rb` rather than restated, because a
+  // restated list is what went stale.
+  it('labels exactly the states the Core emits', () => {
+    const serverSource = fs.readFileSync(
+      path.join(__dirname, '../../../../core/lib/ovallsp/server.rb'),
+      'utf8'
+    );
+    const statusBody = serverSource.slice(serverSource.indexOf('def status_result'));
+    const emitted = (statusBody.slice(0, statusBody.indexOf('\n    end')).match(/"[a-z-]+"/g) ?? [])
+      .map((quoted) => quoted.slice(1, -1));
+
+    assert.ok(emitted.length > 0, 'found no states in server.rb -- has status_result been renamed?');
+    assert.deepStrictEqual([...new Set(emitted)].sort(), Object.keys(STATUS_LABELS).sort());
   });
 
   // A state the server added and nobody mapped here shows its own name.

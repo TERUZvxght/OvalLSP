@@ -450,7 +450,11 @@ module Ovallsp
       #
       # `[kind, owner]` last is what makes it total: two declarations that
       # agree on name, uri and position are the same symbol or differ in
-      # identity, and nothing else distinguishes them (024.15).
+      # identity, and nothing else distinguishes them (024.15). "Nothing
+      # else" assumes `SymbolId#discriminator` stays nil, which every
+      # construction in this tree does -- but `Server#plugin_declaration`
+      # copies a plugin's own SymbolId verbatim, so a plugin that starts
+      # populating it would put an index-order tie back.
       matches.sort_by do |m|
         [simple_name(m[:symbol_id]).downcase == needle ? 0 : 1,
          m[:symbol_id].name.to_s, m[:uri],
