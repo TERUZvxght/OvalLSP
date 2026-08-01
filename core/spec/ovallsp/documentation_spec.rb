@@ -95,4 +95,24 @@ RSpec.describe Ovallsp::Documentation do
   it "returns nil rather than raising when the line is past the end of the text" do
     expect(above("def charge\nend\n", 99)).to be_nil
   end
+
+  # Each directive listed in DIRECTIVE, one fixture per entry. Two of the
+  # seven were covered; the other five could be deleted from the pattern
+  # with the suite green, and each one deleted puts a machine-readable
+  # line into the hover for the first declaration in a file.
+  {
+    "an encoding comment" => "# encoding: utf-8",
+    "a warn_indent directive" => "# warn_indent: true",
+    "a shareable_constant_value directive" => "# shareable_constant_value: literal",
+    "an RDoc :nodoc: marker" => "# :nodoc:",
+    "an Emacs mode line" => "# -*- coding: utf-8 -*-"
+  }.each do |description, line|
+    it "keeps #{description} out of the hover" do
+      expect(above("#{line}\ndef charge\nend\n", 1)).to be_nil
+    end
+
+    it "keeps #{description} out of a block that also has prose" do
+      expect(above("#{line}\n# Charges the card.\ndef charge\nend\n", 2)).to eq("Charges the card.")
+    end
+  end
 end

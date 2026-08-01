@@ -2262,7 +2262,11 @@ module Ovallsp
       # `@@count` included -- its nearest neighbour is still an `@`.
       return true if BOUND_PREFIX_SIGILS.include?(text[left - 1])
 
-      text[...left].match?(/(?:\A|[^\w.])def\s+\z/)
+      # `undef` names a method the same way `def` does -- a name being
+      # declared or removed, not one to resolve. The boundary is `def`
+      # the keyword rather than the three letters: `predef use` is an
+      # ordinary call and still gets the workspace's answer.
+      text[...left].match?(/(?:\A|[^\w.])(?:un)?def\s+\z/)
     end
 
     def receiver_dot_before?(document, position)

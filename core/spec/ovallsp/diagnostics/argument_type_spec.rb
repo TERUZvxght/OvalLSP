@@ -40,6 +40,8 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
         def attach: (Widget other) -> void
         def pair: (String first, Integer second) -> void
         def zoom: (Float factor) -> void
+        def rotate: (Complex turns) -> void
+        def divide: (Rational parts) -> void
         def pick: [T] (Array[T] items, Integer count) -> T
         def scale: (Numeric factor) -> void
         def handle: (Exception error) -> void
@@ -130,6 +132,16 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
   # runs this check refuses to make.
   it "says nothing about an Integer passed where a Float is declared" do
     expect(findings("Widget.new.zoom(2)")).to be_empty
+  end
+
+  # `Complex` and `Rational` are on the same table as `Float` and were
+  # there on the strength of one spec covering `Float` alone.
+  it "says nothing about an Integer passed where a Complex is declared" do
+    expect(findings("Widget.new.rotate(2)")).to be_empty
+  end
+
+  it "says nothing about an Integer passed where a Rational is declared" do
+    expect(findings("Widget.new.divide(2)")).to be_empty
   end
 
   # The other direction stays reported: a Float where an Integer is

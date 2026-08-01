@@ -349,6 +349,27 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     expect(run_server(controller: controller, view: "<%= @usr.name %>").size).to eq(1)
   end
 
+  # `render` the method, not the six letters. A view calling
+  # `post.render` or naming a local `pre_render` is not rendering a
+  # partial, and silencing a whole view on the substring would switch the
+  # check off wherever those appear.
+  {
+    "a method named render on a receiver" => "<%= post.render %>",
+    "an identifier that merely contains render" => "<%= pre_render %>"
+  }.each do |description, extra|
+    it "still reports for a view containing #{description}" do
+      controller = <<~RUBY
+        class UsersController
+          def show
+            @user = User.find(params[:id])
+          end
+        end
+      RUBY
+
+      expect(run_server(controller: controller, view: "#{extra}\n<%= @usr.name %>").size).to eq(1)
+    end
+  end
+
   it "says nothing when the controller uses instance_variable_set" do
     controller = <<~RUBY
       class UsersController

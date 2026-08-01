@@ -352,6 +352,26 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     expect(result[:items].map { |i| i[:label] }).to include("Art")
   end
 
+  # The secondary key of the index's own ordering decides *which*
+  # candidates survive its cap, and `PrefixCompletion` re-sorts by label
+  # afterwards -- so no ordering assertion can see it. Two hundred and
+  # fifty classes declared in reverse name order overflow the cap: with
+  # the key, the first two hundred by name survive and `Art001` is among
+  # them; without it, the survivors are whichever two hundred the index
+  # happened to store first.
+  it "keeps the alphabetically first candidates when more match than the cap allows" do
+    crowd = (1..1000).map { |i| "class Art#{format('%04d', i)}; end" }.reverse.join("\n")
+    result = complete(<<~RUBY, extra_opens: did_open("file:///crowd.rb", crowd))
+      ArtHERE
+    RUBY
+
+    # The index keeps the two hundred alphabetically first, and the fifty
+    # shown are the front of those -- so the last label is `Art0050`
+    # exactly. Without the key the survivors are scattered through the
+    # thousand and the fiftieth is far higher.
+    expect(result[:items].map { |i| i[:label] }.max).to eq("Art0050")
+  end
+
   # `search` returns every declared symbol, methods included, and this
   # group is documented as workspace constants and labels each item
   # `CompletionItemKind.Class`. A method arriving here wore a class icon.
@@ -397,7 +417,8 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     "an instance variable" => "@use",
     "a global" => "$use",
     "a symbol" => ":use",
-    "a method being defined" => "def use"
+    "a method being defined" => "def use",
+    "a method being removed" => "undef use"
   }.each do |description, line|
     it "offers nothing from the workspace after #{description}" do
       result = complete(<<~RUBY, extra_opens: did_open("file:///p.rb", "class UserProfile; end\n"))
@@ -406,5 +427,16 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
 
       expect(result[:items].map { |i| i[:label] }).not_to include("UserProfile")
     end
+  end
+
+  # `def` the keyword, not the three letters: `predef` is an ordinary
+  # method call, and suppressing the workspace source for every
+  # identifier ending in "def" would be a silent hole.
+  it "still offers from the workspace after a call whose name ends in def" do
+    result = complete(<<~RUBY, extra_opens: did_open("file:///p.rb", "class UserProfile; end\n"))
+      predef useHERE
+    RUBY
+
+    expect(result[:items].map { |i| i[:label] }).to include("UserProfile")
   end
 end
