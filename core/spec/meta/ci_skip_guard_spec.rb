@@ -13,7 +13,15 @@
 # Actions job is not executable from here, and the decision worth pinning
 # is which suites are named, which is text.
 RSpec.describe "the CI guard against a silently skipped suite" do
-  let(:workflow) { File.read(File.expand_path("../../../.github/workflows/ci.yml", __dir__)) }
+  let(:workflow) { read_utf8(File.expand_path("../../../.github/workflows/ci.yml", __dir__)) }
+
+  # The Japanese capability document is not ASCII, and this suite runs
+  # under whatever locale the machine has -- `File.read` alone raises
+  # `invalid byte sequence in US-ASCII` on a CI runner with none set,
+  # which is the same trap the workflow's own guard names.
+  def read_utf8(path)
+    File.read(path, encoding: "UTF-8")
+  end
 
   # Both paths, and both must be the *real* spec files -- a typo'd path
   # yields zero examples, which the guard's own "contributed zero
@@ -36,6 +44,15 @@ RSpec.describe "the CI guard against a silently skipped suite" do
 
     expect(skip_branch).to include("exit 1")
     expect(guard).to include('ex.fetch("status") != "pending"')
+
+    # And the other branch, on its own terms. A path that stops matching
+    # any example -- a typo, a renamed spec file -- is the failure the
+    # example above cites as its reason for checking the paths, so
+    # leaving its `exit 1` unasserted would pin the reason and not the
+    # mechanism.
+    empty_branch = guard[/if examples\.empty\?.*?\n              end/m]
+
+    expect(empty_branch).to include("exit 1")
   end
 
   # docs/EXTENSION_CAPABILITIES.md tells authors to mark a row that cannot
@@ -54,9 +71,13 @@ RSpec.describe "the CI guard against a silently skipped suite" do
   # one.
   it "is documented in the capability document that defines the status" do
     %w[docs/EXTENSION_CAPABILITIES.md docs/EXTENSION_CAPABILITIES.ja.md].each do |doc|
-      text = File.read(File.expand_path("../../../#{doc}", __dir__))
+      text = read_utf8(File.expand_path("../../../#{doc}", __dir__))
 
-      expect(text).to include("NOT YET")
+      # Not merely that `NOT YET` appears -- it is the status's own name
+      # and appears in both documents already. The authoring rule is that
+      # a *pending* row's message must carry it, and that sentence is
+      # what has to survive.
+      expect(text).to include("`pending`/`skip`")
       expect(text).to include(".github/workflows/ci.yml")
     end
   end
@@ -65,7 +86,7 @@ RSpec.describe "the CI guard against a silently skipped suite" do
   # suite's environment-skip message may contain the escape hatch.
   it "does not exempt the environment skip it exists to catch" do
     %w[spec/integration/real_rails_spec.rb spec/e2e/capabilities_spec.rb].each do |path|
-      source = File.read(File.expand_path("../../#{path}", __dir__))
+      source = read_utf8(File.expand_path("../../#{path}", __dir__))
       skip_messages = source.scan(/^\s*skip\s+"([^"]+)"/).flatten
 
       expect(skip_messages).not_to be_empty

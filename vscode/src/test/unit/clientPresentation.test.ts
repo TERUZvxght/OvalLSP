@@ -34,6 +34,10 @@ describe('documentSelectorFor', () => {
 
     assert.ok(erb, 'no filter matches .erb');
     assert.strictEqual(erb.language, undefined, '.erb must not be matched by language id');
+    // `file`, not `untitled`: an unsaved buffer has no path for the
+    // controller-to-view link to run through, and getting this wrong
+    // attaches the client to no .erb file on disk at all.
+    assert.strictEqual(erb.scheme, 'file');
   });
 
   // A multi-root workspace runs one client per folder. An unscoped

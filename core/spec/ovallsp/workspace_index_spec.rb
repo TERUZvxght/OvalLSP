@@ -402,6 +402,23 @@ RSpec.describe Ovallsp::WorkspaceIndex do
         .to eq(positions)
     end
 
+    # `name` *first*, not merely present. A key of `[kind, name, owner]`
+    # ties on nothing and passes every other fixture here, but it makes
+    # the answer to an ambiguous bare name depend on how the two
+    # candidates happen to be declared -- and the documented rule, three
+    # methods above `resolve_type_name`, is the alphabetically first
+    # qualified name. `::Admin::Thing` is a module and `::Api::Thing` a
+    # class, so the alphabet and the kinds order opposite.
+    it "resolves an ambiguous simple name by qualified name before kind" do
+      index.replace_file(summary(uri: "file:///admin.rb", content_hash: "ad",
+                                 declarations: [declaration(kind: :module, owner: nil, name: "::Admin::Thing")]))
+      index.replace_file(summary(uri: "file:///api.rb", content_hash: "ap",
+                                 declarations: [declaration(kind: :class, owner: nil, name: "::Api::Thing")]))
+
+      expect(index.resolve_type_name("Thing")).to eq("::Admin::Thing")
+      expect(index.find_by_simple_name("Thing").map { |r| r[:uri] }).to eq(["file:///admin.rb", "file:///api.rb"])
+    end
+
     # The kind element of the ordering key. `class Thing` and `module
     # Thing` in two files agree on the qualified name and on the owner
     # (both nil), so they tie on everything else -- and `type_kind` is
@@ -423,16 +440,36 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       expect(before).to eq(:class)
     end
 
+    # `kind` before `owner`, which only one shape can show: one class
+    # written `module Api; class Thing` in one file and `module
+    # Api::Thing` in another has a single qualified name and two owners,
+    # so the key's first element ties and the last two decide. `:class`
+    # sorts before `:module`, and the owners order the other way.
+    it "orders the spellings of one qualified name by kind before owner" do
+      index.replace_file(summary(uri: "file:///nested.rb", content_hash: "n",
+                                 declarations: [declaration(kind: :class, owner: "::Api", name: "::Api::Thing")]))
+      index.replace_file(summary(uri: "file:///flat.rb", content_hash: "f",
+                                 declarations: [declaration(kind: :module, owner: nil, name: "::Api::Thing")]))
+
+      expect(index.type_kind("Api::Thing")).to eq(:class)
+      expect(index.class_declaration_uris("Api::Thing")).to eq(["file:///nested.rb", "file:///flat.rb"])
+    end
+
     # The name element of the ranking key, on its own: the fixtures above
     # name each file after the class it declares, so uri order and name
     # order coincide and either element alone satisfies them.
     it "orders search results by qualified name before uri, when the two disagree" do
-      index.replace_file(
-        summary(uri: "file:///one.rb", content_hash: "one",
-                declarations: [declaration(kind: :class, owner: nil, name: "::ZWidget", line: 1),
-                               declaration(kind: :class, owner: nil, name: "::AWidget", line: 9)])
-      )
+      index.replace_file(summary(uri: "file:///z.rb", content_hash: "z",
+                                 declarations: [declaration(kind: :class, owner: nil, name: "::AWidget", line: 1)]))
+      index.replace_file(summary(uri: "file:///a.rb", content_hash: "a",
+                                 declarations: [declaration(kind: :class, owner: nil, name: "::ZWidget", line: 9)]))
 
+      # Two files whose names order opposite to the classes they declare.
+      # Both in one file would tie the uri element, which is the same
+      # correlation this example was written to break, moved into a
+      # constant -- and `limit: 1` is the point: an unstable order does
+      # not reorder the answer, it changes which symbol is in it.
+      expect(index.search("widget", limit: 1).map { |m| m[:symbol_id].name }).to eq(["::AWidget"])
       expect(index.search("widget", limit: 2).map { |m| m[:symbol_id].name }).to eq(%w[::AWidget ::ZWidget])
     end
 

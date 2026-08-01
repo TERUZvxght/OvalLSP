@@ -746,7 +746,15 @@ remaining decisions the way 024.10 extracted `clientTeardown.ts`.
 
 ## 024.15 The index's answers depend on which file was edited last
 
-**Status:** fixed in 0.1.13 by option 1 below -- the storage is ordered.
+**Status:** fixed in 0.1.13 by option 1 below, in the half of it that
+carries the cost. Option 1 called for both collections to be maintained
+sorted at write time; `@by_symbol`'s entry lists are, and
+`@by_simple_name` is still an unordered Set sorted per read -- but by one
+centralised reader rather than by each of eleven, which is the property
+the option was chosen for. Sorting a Set on insert would have cost every
+`replace_file` a sort of every bucket its declarations touch, against a
+read path that filters first and so sorts a handful of elements.
+
 Entry lists are sorted by `[uri, line, character]` in `replace_file`, and
 `ordered_symbol_ids` is the one place a query reads `@by_simple_name`, ordered
 by `[name, kind, owner]` because one class has several SymbolIds that
@@ -765,8 +773,10 @@ order.
 largest cost this change adds to a read: 30,000 matches sort in 72ms
 against 24ms, on a query the user asks for and waits on.
 
-Every spec that could regress on re-index re-indexes, and all nineteen
-decisions are pinned by mutation. Reaching that took three passes, and
+Every spec that could regress on re-index re-indexes, and all
+twenty-three decisions are pinned by mutation -- deletions and
+*permutations* both, which is a distinction the count did not make until
+four keys turned out to survive having their elements reordered. Reaching that took three passes, and
 the misses are the instructive part: the `search` tail first shipped
 behind a fixture whose eight files shared a single SymbolId; the ranking
 key's `uri` and `line` elements were satisfied by fixtures that ordered
@@ -776,7 +786,12 @@ was written for; and the ambiguous-name spec re-indexed the
 *first*-inserted file, which lands on the ordered answer by accident; and
 the `line`/`character` pair went the same way as the `uri`/`line` pair
 had, each fixture holding one of the two at zero while varying the other,
-which any order of the pair satisfies. The
+which any order of the pair satisfies. Then the same again one level up:
+deleting an element of a key is not the only way to break it, and
+`[kind, name, owner]`, `[name, owner, kind]`, `rank` with uri before the
+name and `rank` with owner before kind each passed the whole suite while
+changing where go-to-definition lands. Every element of a sort key is two
+decisions -- that it is there, and where. The
 last of those was then made twice: the fixture written for the ordering
 key's `kind` element re-indexed the second-inserted file, so it could not
 fail either, and the round that added it published "all fifteen decisions
