@@ -219,6 +219,21 @@ module Ovallsp
       parsed
     end
 
+    # Receiverless calls made directly in `owner_name`'s class body --
+    # not inside its method bodies, where a same-named call is an ordinary
+    # call rather than a class-level declaration.
+    #
+    # `BeforeActionFinder` walks the same statements looking for the two
+    # names it models; this reports all of them, so a caller can ask the
+    # different question of whether anything *unmodelled* is there.
+    def class_body_call_names(document, owner_name:)
+      finder = ClassBodyCallFinder.new(owner_name)
+      Prism.parse(document.text).value.accept(finder)
+      finder.names
+    rescue StandardError
+      []
+    end
+
     private
 
     def ivars_from(env)
@@ -1254,6 +1269,36 @@ module Ovallsp
     # requested class body. This intentionally does not descend into
     # method bodies or nested namespaces, where a same-named call is not a
     # Rails controller callback declaration.
+    class ClassBodyCallFinder < Prism::Visitor
+      attr_reader :names
+
+      def initialize(owner_name)
+        super()
+        @owner_name = owner_name
+        @owner_stack = []
+        @names = []
+      end
+
+      def visit_module_node(node) = visit_namespace(node)
+      def visit_class_node(node) = visit_namespace(node)
+
+      private
+
+      def visit_namespace(node)
+        @owner_stack.push(Index::SymbolId.qualify_within(@owner_stack.last, node.constant_path.full_name))
+        if @owner_stack.last == @owner_name
+          node.body&.body&.each do |statement|
+            @names << statement.name.to_s if statement.is_a?(Prism::CallNode) && statement.receiver.nil?
+          end
+        else
+          node.each_child_node { |child| child.accept(self) }
+        end
+      ensure
+        @owner_stack.pop
+      end
+    end
+    private_constant :ClassBodyCallFinder
+
     class BeforeActionFinder < Prism::Visitor
       attr_reader :operations
 

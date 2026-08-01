@@ -163,8 +163,15 @@ module, or add an integration test host.
 
 ## 024.18 The unassigned-`@ivar` check cannot enumerate what it needs to
 
-**Status:** open. Recorded under the rule in `CLAUDE.md` about a fix
-aimed at a symptom: three consecutive review rounds each found a *new*
+**Status:** open, and **blocked on 024.R7** for the part that needs it.
+Three of the five shapes are closed in 0.2.0 by staying silent rather
+than guessing: a class-body call this analysis does not model (which
+covers every gem macro), a view that renders anything, and everything
+rounds 3 and 4 fixed. What is left is *precision* -- turning those two
+silences back into answers -- and one shape that is still wrong rather
+than silent (a view rendered by another controller's action).
+
+Recorded under the rule in `CLAUDE.md` about a fix aimed at a symptom: three consecutive review rounds each found a *new*
 shape where this check warns on code that renders, and each round's fix
 addressed the shape rather than the class.
 
@@ -742,6 +749,22 @@ every query.
   starts meaning "we know its full method set", which is the honest
   question. Most receivers in a Rails app become closed, and the check
   becomes useful where the code actually is.
+
+**It is also what 024.18 waits for.** The unassigned-`@ivar` check
+currently stays silent whenever a controller's class body calls anything
+it does not model, because a gem's macro
+(`load_and_authorize_resource`, `expose`, Devise, ActiveAdmin) installs a
+callback that assigns at runtime and nothing can tell that call apart
+from a harmless one. With this index, such a call is attributable: "a
+method CanCanCan defines, whose body this analysis has not read" is a
+sound reason to stay silent, and a class-body call that resolves to a
+*workspace* method that *was* read is a sound reason to report. That
+narrows the guard rather than replacing it -- every answer the check
+gives today it still gives, and it starts covering controllers it
+currently declines. Doing it before this index exists would mean
+guessing, which is the thing this check refuses to do. **This is a
+required part of R7, not an optional extension of it: 024.18 is not
+closed until it lands.**
 
 It also subsumes several entries above: 024.R5's reopened-gem-class case
 (the index knows `ActiveSupport::TestCase` is a gem class), and the

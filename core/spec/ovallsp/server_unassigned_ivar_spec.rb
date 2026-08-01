@@ -254,6 +254,80 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     expect(run_server(controller: controller, view: "<%= @current_user.name %>")).to be_empty
   end
 
+  # A gem's class-level macro installs a callback that assigns at
+  # runtime: `load_and_authorize_resource` (CanCanCan) produces `@users`,
+  # and `expose`, Devise and ActiveAdmin do the same shape. None of them
+  # is visible to a walk over `def` bodies, and every one of them is an
+  # ordinary line in an ordinary controller.
+  #
+  # Until 024.R7 lets the index attribute such a call to the gem that
+  # defines it, the honest answer is that a class-body call this analysis
+  # does not model is a contributor it has not read. R7 narrows this to
+  # the calls it still cannot account for, which widens the check rather
+  # than changing its answers.
+  it "says nothing when the class body calls something this analysis does not model" do
+    controller = <<~RUBY
+      class ApplicationController
+      end
+
+      class UsersController < ApplicationController
+        load_and_authorize_resource
+
+        def show
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= @user.name %>")).to be_empty
+  end
+
+  # Not every class-body call: the visibility modifiers and the callback
+  # forms the chain builder already reads are accounted for by definition,
+  # and treating them as unknown would switch the check off for every
+  # controller that writes `private`.
+  it "still reports for a controller whose class body only declares visibility and callbacks" do
+    controller = <<~RUBY
+      class ApplicationController
+      end
+
+      class UsersController < ApplicationController
+        before_action :set_user
+
+        def show
+        end
+
+        private
+
+        def set_user
+          @user = User.find(params[:id])
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= @usr.name %>").size).to eq(1)
+  end
+
+  # A view that renders a partial receives whatever the partial assigns,
+  # and `<% @breadcrumbs = [] %>` at the top of `_header.html.erb` is an
+  # ordinary thing to write. The walk reads the view's own text only, so
+  # the read below looked unassigned.
+  #
+  # Resolving the partial is the precise answer and is left to the same
+  # task as the rest (024.18); until then a render this analysis cannot
+  # account for means the set is not complete, which is the answer the
+  # check is built on.
+  it "says nothing about a view that renders a partial" do
+    controller = <<~RUBY
+      class UsersController
+        def show
+          @user = User.find(params[:id])
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= render \"header\" %>\n<%= @breadcrumbs %>")).to be_empty
+  end
+
   it "says nothing when the controller uses instance_variable_set" do
     controller = <<~RUBY
       class UsersController

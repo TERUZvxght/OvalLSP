@@ -1535,6 +1535,13 @@ module Ovallsp
       documents = controller_ancestor_documents(context[:owner])
       return nil unless whole_chain_was_read?(context[:owner], documents)
       return nil unless ivar_sources_fully_enumerable?(context[:owner], documents)
+      return nil unless class_body_is_accounted_for?(documents)
+      # A view that renders a partial receives whatever the partial
+      # assigns, and this walk reads the view's own text only. Resolving
+      # the partial and reading it is the precise answer and belongs with
+      # the rest of 024.18; until then a render is a contributor that has
+      # not been read.
+      return nil if renders_something?(uri)
 
       method_maps = controller_method_maps(documents)
       actions = contributing_actions(documents, method_maps, context[:action], context[:view_key])
@@ -1621,6 +1628,47 @@ module Ovallsp
 
       read = documents.map { |name, _| Index::SymbolId.qualify_owner(name) }
       read.include?(Index::SymbolId.qualify_owner(parent.name))
+    end
+
+    # The class-level declarations this analysis accounts for. Everything
+    # else in a controller's class body is a call whose effect it has not
+    # read -- and a gem's macro is the ordinary case: CanCanCan's
+    # `load_and_authorize_resource`, `expose`, Devise and ActiveAdmin all
+    # install a callback that assigns at runtime, none of it visible to a
+    # walk over `def` bodies.
+    #
+    # A whitelist rather than a blacklist, because the failure direction
+    # matters: a name nobody thought of has to mean "stay silent", not
+    # "assume harmless". `private`/`protected`/`public` and the callback
+    # forms the chain builder reads are the ones accounted for by
+    # construction.
+    #
+    # This is the blunt form of the question. 024.R7 lets the index
+    # attribute a class-body call to the gem that defines it, at which
+    # point this narrows to the calls still unaccounted for -- which
+    # *widens* the check rather than changing an answer it gives today.
+    MODELLED_CLASS_BODY_CALLS = %w[
+      private protected public
+      before_action skip_before_action
+    ].freeze
+
+    # Any `render` in the template's own Ruby regions. Deliberately not
+    # only the partial forms: `render` with a non-literal target is
+    # exactly the case that cannot be resolved later either.
+    def renders_something?(view_uri)
+      document = @document_store.fetch(uri: view_uri) || load_document_from_disk(view_uri)
+      return false unless document
+
+      Erb::RubyRegionExtractor.extract_ruby_source(document.text).match?(/(?:\A|[^\w.:])render\b/)
+    rescue StandardError
+      true
+    end
+
+    def class_body_is_accounted_for?(documents)
+      documents.all? do |ancestor_name, document|
+        (@local_inferencer.class_body_call_names(document, owner_name: Index::SymbolId.qualify_owner(ancestor_name)) -
+          MODELLED_CLASS_BODY_CALLS).empty?
+      end
     end
 
     def ivar_sources_fully_enumerable?(owner_name, documents)

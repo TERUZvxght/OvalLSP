@@ -137,12 +137,23 @@ missed one", so each is narrow on purpose. What that costs a user:
   mismatch in a union, an interface, a generic, or a method with several
   overloads is not reported.
 - **Reading an `@ivar` nothing assigns** is reported in ERB views only,
-  and only when the whole set of assignments can be enumerated: the
-  controller chain is fully readable, nothing uses
-  `instance_variable_set`, no module is mixed in, and no callback form
-  the analysis does not model appears. Any of those silences the check
-  for that view entirely. An ivar assigned by a sibling action also
-  silences it, deliberately.
+  and only when the whole set of assignments can be enumerated. That is a
+  high bar, and any of these silences the check for a view entirely: the
+  controller's immediate superclass has not been read, something uses
+  `instance_variable_set`, a module is mixed in, a callback form the
+  analysis does not model appears, **the controller's class body calls
+  anything beyond `private`/`protected`/`public` and the callback forms**
+  (which covers every gem macro — `load_and_authorize_resource`,
+  `expose`, Devise, ActiveAdmin — because what such a call installs is
+  invisible until 024.R7 lets the index attribute it), or **the view
+  renders anything**. An ivar assigned by a sibling action also silences
+  it, deliberately.
+
+  What that leaves reported: a controller written in plain Ruby, whose
+  view renders no partial. One shape is still wrong rather than merely
+  silent — a view rendered by a *different* controller's action
+  (`render "users/show"` from elsewhere) sees only its own controller's
+  ivars. It is recorded as 024.18 with the rest.
 - **Diagnostics for files nobody has opened** work in-process but have no
   end-to-end verification against a real Rails app: the example written
   for one produced nothing in 45 seconds. The cause is diagnosed and the
