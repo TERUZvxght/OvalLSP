@@ -64,7 +64,14 @@ suite in step: every row must have an example, every example a row.
 
 - **PASS** — verified by an E2E row that fails if the behaviour breaks.
 - **NOT YET** — specified, has an E2E row, currently failing or pending.
-  The extension is not claimed to do this.
+  The extension is not claimed to do this. If the row is *pending* rather
+  than failing, its `pending`/`skip` message must contain the words
+  `NOT YET`: CI fails the build on any skipped example in this suite that
+  does not say so,
+  because a suite that skips itself for want of rails/sqlite3 would
+  otherwise report every capability as shipped, and that string is what
+  tells a deliberate gap apart from a broken environment
+  (`.github/workflows/ci.yml`, `core/spec/meta/ci_skip_guard_spec.rb`).
 
 ## Baseline: the extension is actually running
 

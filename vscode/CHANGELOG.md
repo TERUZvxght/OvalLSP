@@ -6,6 +6,75 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.1.13 — the index answers the workspace, not your editing history
+
+- Fixed: go-to-definition, find references, rename, signature help and
+  `workspace/symbol` no longer change their answer depending on which
+  file you edited last. A class declared in more than one file — a
+  reopened model, a controller split across concerns, two spellings of
+  one namespace — had its declarations reordered every time any of those
+  files was re-indexed, and each of those features takes the first one,
+  or truncates the list.
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: no
+capability is added.
+
+### Details
+
+`WorkspaceIndex` removes a uri's entries and appends the new ones on
+re-index, so a file's declarations moved to the back of every list they
+were in. Typing one character in an unrelated file was enough: a bare
+`User` resolved to `Admin::User` and then to `Api::User`, taking the
+ancestry chain and the unknown-method check with it; the class in the
+file you were looking at dropped out of a truncated `workspace/symbol`
+result; signature help showed a reopened method's parameters from the
+other definition. At least eleven readers, all taking `.first` of a
+collection whose storage had no order, or truncating it — "at least" because the list was
+miscounted twice and then grew again under review, which is the argument
+for fixing the storage rather than the readers.
+
+0.1.12 tried to fix this four times, each round sorting one more reader,
+and produced two regressions before the whole thread was rolled back and
+recorded as `024.15`. The order lives in the storage now: entry lists are
+ordered by uri and then source position when they are written, and the
+one place a query reads the simple-name index orders it by qualified
+name, kind and owner — one class has as many entries there as there are
+ways to spell it, and those share a name.
+`workspace/symbol`'s ranking keeps its exact-match-first rule and gains a
+tail, because its result is truncated and a tie decided by index order
+changes which symbols survive.
+
+Every example that could regress on re-index re-indexes — that is the
+state the bug lives in, and the state all four earlier attempts were
+pinned without. It is not sufficient on its own: the `workspace/symbol`
+tail shipped unpinned behind a re-indexing fixture whose eight files all
+declared one class, so the entry list `replace_file` already sorts was
+the only thing it exercised. Ties across *distinct* symbols are what that
+part is for, and they need their own fixture. Three more fixtures were
+found the same way afterwards: one that ordered its files and its line
+numbers alike, so either half of the key satisfied it; one that used a
+single name in two files, which is a single symbol, so it never walked
+the collection it was written for; and one that re-indexed the
+first-inserted file, which lands on the right answer by accident.
+
+Two testing gaps found alongside it, neither user-visible:
+
+The capability E2E suite could skip every one of its 41 examples --
+covering all 42 rows, one of which is a pair -- and still exit 0.
+`docs/EXTENSION_CAPABILITIES.md` says "a capability whose row is skipped
+is not shipped"; CI enforced that for the real-Rails integration suite
+only, and `capability_coverage_spec.rb` cannot see it because it reads
+the spec file's source text rather than its results. Both suites are
+checked now.
+
+And `extension.ts` — the extension's largest module — was covered only by
+an integration suite that runs in no workflow. Two decisions a user
+notices moved out of it into a module that imports no `vscode`: which
+files the client attaches to (Ruby by language id, ERB by extension,
+because VS Code assigns `.erb` no built-in id), and what the status bar
+says — including the difference between "no client here", which hides,
+and "the client did not answer", which must not.
+
 ## 0.1.12 — The rule that kept being rewritten, and a privacy list that under-described itself
 
 Every fix here repairs something OvalLSP already claimed to do. Most of

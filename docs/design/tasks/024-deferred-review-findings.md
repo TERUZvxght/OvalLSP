@@ -651,10 +651,28 @@ roadmap entry rather than folded into another release's work.
 
 ---
 
-## 024.16 The capability E2E suite can skip in full while CI stays green (0.1.13)
+## 024.16 The capability E2E suite can skip in full while CI stays green
 
-**Status:** open
-**Area:** `.github/workflows/ci.yml`, `core/spec/e2e/capabilities_spec.rb`
+**Status:** fixed in 0.1.13 -- `ci.yml`'s skip guard now checks both
+`spec/integration/real_rails_spec.rb` and `spec/e2e/capabilities_spec.rb`,
+by table rather than by a second copy of the check.
+
+Two things the one-line direction below did not anticipate. First, a
+guard that failed on *any* pending example would have made this
+document's own `NOT YET` status -- "specified, has an E2E row, currently
+failing or pending", which `capability_coverage_spec.rb` accepts --
+unexpressible; the guard therefore exempts a pending message that says
+`NOT YET`, and `spec/meta/ci_skip_guard_spec.rb` asserts that neither
+suite's environment-skip message says it. That exemption is an authoring
+rule -- a pending row has to *say* `NOT YET` -- so both language versions
+of `EXTENSION_CAPABILITIES.md` state it, and the meta spec asserts they
+do: a CI-enforced rule recorded only in a YAML comment is one an author
+meets as a red build with no way to find out why. Second, the guard was itself
+pinned by nothing: deleting the capability row leaves every check in this
+repository green, which is the same shape as the gap it closes. That is
+what the meta spec is for, following `versionPairing.test.ts`.
+**Area:** `.github/workflows/ci.yml`, `core/spec/e2e/capabilities_spec.rb`,
+`core/spec/meta/ci_skip_guard_spec.rb`
 
 `docs/EXTENSION_CAPABILITIES.md` states two rules. "A capability with no
 E2E row is not a capability" is enforced by
@@ -680,9 +698,32 @@ One line. Recorded rather than fixed in 0.1.12 because it is a CI gap,
 not a defect in the release, and 0.1.12 has already been rolled back once
 for widening past its own subject.
 
-## 024.17 `vscode/src/extension.ts` is covered by no test that runs anywhere (0.1.13)
+## 024.17 `vscode/src/extension.ts` is covered by no test that runs anywhere
 
-**Status:** open
+**Status:** fixed in 0.1.13 for the two decisions a user notices --
+`documentSelectorFor` and `statusPresentation` moved into
+`vscode/src/clientPresentation.ts`, which imports no `vscode`, with
+fifteen unit tests -- thirteen behavioural, plus two that assert
+`extension.ts` actually calls them (024.10's first attempt exported the
+strings but left the choice between them at the call site, so the tests
+described code the extension did not reach). `resolveStatus` was added in a second pass: the
+extraction had left the "no client" / "the client did not answer"
+decision at the call site, where a mutation reporting a failure as "no
+client" passed all 167 tests.
+
+Three of the extracted decisions were then found unpinned, all the same
+shape: the specs compared the render against the very table it renders
+from, and the constant against itself. Relabelling `indexing`, deleting
+`agent-unavailable` and emptying the error text each left the suite
+green, and a deleted key falls through to the raw-state branch -- the
+status bar would read `OvalLSP: agent-unavailable`. The literals are
+asserted now, and a further example -- `labels exactly the states the
+Core emits` -- reads the four states out of `Server#status_result` rather
+than restating them, so a state added on the Core side without a label
+here fails the extension's own suite. The remaining
+`vscode` wiring -- command registrations, the client bootstrap, the poll
+loop's timer -- is still integration-only; running that suite in CI is
+the part not done.
 **Area:** `vscode/src/extension.ts`, `.github/workflows/ci.yml`
 
 Nine of the extension's ten modules have unit tests. `extension.ts` — the
@@ -704,9 +745,83 @@ remaining decisions the way 024.10 extracted `clientTeardown.ts`.
 
 ---
 
-## 024.15 The index's answers depend on which file was edited last (0.1.13)
+## 024.15 The index's answers depend on which file was edited last
 
-**Status:** open
+**Status:** fixed in 0.1.13 by option 1 below, in the half of it that
+carries the cost. Option 1 called for both collections to be maintained
+sorted at write time; `@by_symbol`'s entry lists are, and
+`@by_simple_name` is still an unordered Set sorted per read -- but by one
+centralised reader rather than by each of eleven, which is the property
+the option was chosen for. Sorting a Set on insert would have cost every
+`replace_file` a sort of every bucket its declarations touch, against a
+read path that filters first and so sorts a handful of elements.
+
+Entry lists are sorted by `[uri, line, character]` in `replace_file`, and
+`ordered_symbol_ids` is the one place a query reads `@by_simple_name`, ordered
+by `[name, kind, owner]` because one class has several SymbolIds that
+share a name. `search`'s `rank` keeps exact-match-first and gains a tail,
+since a truncated result cannot have ties decided by index order.
+Measured as the entry asked: 2,000 files with one class reopened in 500
+of them goes 7ms -> 61ms in `replace_file`, negligible against Cold
+Index. The *read* paths needed measuring too and were not measured at
+first: a bucket is keyed on the simple name, so `resolve_type_name`
+sorting a whole bucket before its caller filtered it cost 3.7ms per call
+in a workspace of 1,200 service objects each defining `call`. Filtering
+before sorting -- the two commute here -- restores 51us with the same
+order.
+
+`search`'s ranking key grew from one element to seven, which is the
+largest cost this change adds to a read: the picker opens with an empty
+query, so every declaration in the workspace is a match, and the index
+mutex is held throughout. Ranking the 32,000 matches an empty query
+returns for 2,000 files that each declare a class and fifteen methods
+measures 68ms sorting
+all of them, 17ms with `min_by(limit)` -- which answers identically
+because the key is total -- against 10ms for the one-element key it
+replaced. About 7ms more per query, for an answer whose membership no
+longer depends on which file was saved last.
+
+The first version of that paragraph claimed parity, measured end to end
+through `search`, where building the 32,000-entry match list dominates
+and hid the difference. A cost claim about a sort has to time the sort.
+
+Neither that nor the filter-before-sort above is a *behavioural* line, so
+no example in the suite fails when either is reversed -- which is exactly
+why they need `spec/meta/workspace_index_cost_spec.rb`. Both read as
+tidying: a `select` after a `sort` looks no worse than before it, and
+`sort_by { }.first(n)` is the more familiar idiom.
+
+Every spec that could regress on re-index re-indexes, and all
+twenty-three decisions are pinned by mutation -- deletions and
+*permutations* both, which is a distinction the count did not make until
+four keys turned out to survive having their elements reordered.
+
+Reaching that took several passes, and
+the misses are the instructive part: the `search` tail first shipped
+behind a fixture whose eight files shared a single SymbolId; the ranking
+key's `uri` and `line` elements were satisfied by fixtures that ordered
+files and lines the same way; `find_by_simple_name`'s spec used one name
+in two files, which is one SymbolId, so it never walked the collection it
+was written for; the ambiguous-name spec asserted only an absolute answer
+while re-indexing the first-inserted file, which lands on that answer by
+accident -- and correcting it went one step too far, gaining a
+before/after assertion *and* moving to the second-inserted file, which
+leaves the collection in the order it already had, so the new assertion
+could not fail either. Which file to re-index depends on the assertion
+shape, and an example carrying both needs the first-inserted one. And
+the `line`/`character` pair went the same way as the `uri`/`line` pair
+had, each fixture holding one of the two at zero while varying the other,
+which any order of the pair satisfies. Then the same again one level up:
+deleting an element of a key is not the only way to break it, and
+`[kind, name, owner]`, `[name, owner, kind]`, `rank` with uri before the
+name and `rank` with owner before kind each passed the whole suite while
+changing where go-to-definition lands. Every element of a sort key is two
+decisions -- that it is there, and where. The
+last of those was then made twice: the fixture written for the ordering
+key's `kind` element re-indexed the second-inserted file, so it could not
+fail either, and the round that added it published "all fifteen decisions
+are pinned" on its strength. A fixture that passes has not shown that
+anything is tested.
 **Area:** `core/lib/ovallsp/workspace_index.rb`
 
 `@by_symbol` maps a SymbolId to a list of `[uri, declaration]`, and
@@ -716,9 +831,14 @@ appends the new ones — so re-indexing a file moves its entries to the
 back of every list they are in. Editing a file, without changing a single
 declaration, changes the order.
 
-Seven readers then take `.first` of such a list, or truncate it. Convert
-all seven; converting a subset is round 9's mistake, and this list was
-itself miscounted twice before it was written one reader per row:
+These readers then take `.first` of such a list, or truncate it. The list
+was miscounted twice before it was written one reader per row, and a
+later review found four more (`Server#current_observation_fingerprint`,
+`MethodResolver#names_for_type`'s visibility lookup,
+`Server#route_helper_definitions`, `Rename::Planner#locations_for`) — so
+it is a sample, not an inventory. That is an argument *for* the storage
+fix rather than against it: ordering the storage covers readers nobody
+enumerated, which is exactly what converting a subset does not.
 
 | reader | what changes |
 |---|---|

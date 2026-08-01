@@ -18,8 +18,10 @@ jobs:
           bundler-cache: true
           working-directory: core
 
-      # The real-Rails integration suite (spec/integration/real_rails_spec.rb)
-      # is *designed* to skip itself, not fail, when `rails`/`sqlite3`
+      # Both real-Rails-backed suites -- spec/integration/real_rails_spec.rb
+      # and spec/e2e/capabilities_spec.rb, which share the
+      # spec/fixtures/rails_real bundle -- are *designed* to skip
+      # themselves, not fail, when `rails`/`sqlite3`
       # aren't resolvable as local gems -- that's deliberate for local
       # development on a machine without them. In CI it must never
       # silently skip: a skip here means the suite that catches bugs Fake
@@ -30,7 +32,7 @@ jobs:
       # Installing real rails/sqlite3 gems here up front is what makes
       # `bundle install --local` inside spec/fixtures/rails_real succeed
       # instead of skipping.
-      - name: Install real Rails/sqlite3 (required for spec/integration/real_rails_spec.rb)
+      - name: Install real Rails/sqlite3 (required by the real-Rails and capability suites)
         run: |
           sudo apt-get update
           sudo apt-get install -y libsqlite3-dev
@@ -47,28 +49,53 @@ jobs:
 
       # `bundle exec rspec` exits 0 as long as nothing *failed* -- a
       # skipped example (RSpec's `pending`) doesn't fail the run on its
-      # own, which is exactly how the real-Rails suite behaves when it
-      # can't find rails/sqlite3 locally. This step turns that into a
-      # hard CI failure specifically for the :real_rails-tagged examples,
-      # so a broken/missing real-Rails setup in CI can never masquerade
-      # as "tests passed".
-      - name: Fail if the real-Rails integration suite was skipped instead of run
+      # own, which is exactly how both real-Rails-backed suites behave
+      # when they can't find rails/sqlite3 locally. This step turns that
+      # into a hard CI failure, so a broken/missing real-Rails setup can
+      # never masquerade as "tests passed".
+      #
+      # Both suites, not just the integration one. `capabilities_spec.rb`
+      # uses the identical skip-when-unavailable mechanism, and
+      # `capability_coverage_spec.rb` cannot catch it -- that guard scans
+      # the spec file's *source text* for `it "C5: ..."`, so it cannot
+      # tell a row that ran from a row that was skipped. Measured: with
+      # the fixture unavailable, the e2e suite gives "45 examples, 0
+      # failures, 41 pending" and exit status 0, which is exactly what
+      # EXTENSION_CAPABILITIES.md's "a capability whose row is skipped is
+      # not shipped" exists to prevent (024.16).
+      - name: Fail if the real-Rails or capability suites were skipped instead of run
         working-directory: core
         run: |
           ruby -rjson -e '
             result = JSON.parse(File.read("tmp/rspec.json", encoding: "UTF-8"))
-            real_rails_examples = result.fetch("examples").select { |ex| ex.fetch("file_path").include?("spec/integration/real_rails_spec.rb") }
-            if real_rails_examples.empty?
-              warn "real_rails_spec.rb contributed zero examples -- was it even loaded?"
-              exit 1
+            {
+              "real-Rails integration" => "spec/integration/real_rails_spec.rb",
+              "capability E2E" => "spec/e2e/capabilities_spec.rb"
+            }.each do |label, path|
+              examples = result.fetch("examples").select { |ex| ex.fetch("file_path").include?(path) }
+              if examples.empty?
+                warn "#{path} contributed zero examples -- was it even loaded?"
+                exit 1
+              end
+              # Not every pending example. docs/EXTENSION_CAPABILITIES.md
+              # defines a `NOT YET` row as one that is "specified, has an
+              # E2E row, currently failing or pending" -- a state the
+              # document tells authors to use, and that
+              # capability_coverage_spec.rb accepts. Failing on those
+              # would make the documented state unexpressible. What this
+              # guard is actually about is the environment skip, so a
+              # pending example has to say `NOT YET` to be allowed
+              # through, and anything else -- including the
+              # rails/sqlite3 skip, whose message does not -- is a
+              # failure.
+              skipped = examples.reject { |ex| ex.fetch("status") != "pending" || ex.fetch("pending_message").to_s.include?("NOT YET") }
+              unless skipped.empty?
+                warn "#{skipped.size}/#{examples.size} #{label} examples were skipped in CI. Either rails/sqlite3 are missing (they must be installed here, not optional), or a deliberately pending row does not say NOT YET in its message, which docs/EXTENSION_CAPABILITIES.md requires:"
+                skipped.each { |ex| warn "  - #{ex.fetch("full_description")} (#{ex.fetch("pending_message")})" }
+                exit 1
+              end
+              puts "All #{examples.size} #{label} examples ran (none skipped for want of an environment)."
             end
-            skipped = real_rails_examples.select { |ex| ex.fetch("status") == "pending" }
-            unless skipped.empty?
-              warn "#{skipped.size}/#{real_rails_examples.size} real-Rails integration examples were skipped in CI (rails/sqlite3 must be installed, not optional, here):"
-              skipped.each { |ex| warn "  - #{ex.fetch("full_description")} (#{ex.fetch("pending_message")})" }
-              exit 1
-            end
-            puts "All #{real_rails_examples.size} real-Rails integration examples ran (none skipped)."
           '
 
   vscode:
