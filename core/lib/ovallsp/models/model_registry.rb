@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-
 require "set"
+require_relative "../index/symbol_id"
+
 module Ovallsp
   module Models
     # `nullable` mirrors the Agent's raw `null` column flag as-is (Task
@@ -94,7 +95,7 @@ module Ovallsp
       def register_from_agent_response(name, response)
         info = prepare_replace(name => response).fetch(name)
         @mutex.synchronize do
-          @models[name] = info
+          @models[lookup_key(name)] = info
           @generation += 1
         end
       end
@@ -121,7 +122,7 @@ module Ovallsp
 
       def commit_replace(replacement)
         @mutex.synchronize do
-          @models = replacement.dup
+          @models = replacement.to_h { |name, info| [lookup_key(name), info] }
           @generation += 1
         end
       end
@@ -132,8 +133,8 @@ module Ovallsp
       def commit_updates(prepared, removals: [])
         @mutex.synchronize do
           replacement = @models.dup
-          removals.each { |name| replacement.delete(name) }
-          prepared.each { |name, info| replacement[name] = info }
+          removals.each { |name| replacement.delete(lookup_key(name)) }
+          prepared.each { |name, info| replacement[lookup_key(name)] = info }
           @models = replacement
           @generation += 1
         end
@@ -145,29 +146,65 @@ module Ovallsp
       # of lingering with its last-known columns/associations.
       def remove(name)
         @mutex.synchronize do
-          removed = @models.delete(name)
+          removed = @models.delete(lookup_key(name))
           @generation += 1 if removed
           removed
         end
       end
 
       def known_model?(name)
-        @mutex.synchronize { @models.key?(name) }
+        @mutex.synchronize { @models.key?(lookup_key(name)) }
       end
 
       def model(name)
-        @mutex.synchronize { @models[name] }
+        @mutex.synchronize { @models[lookup_key(name)] }
       end
 
       def association(model_name, association_name)
-        @mutex.synchronize { @models[model_name]&.associations&.find { |a| a.name == association_name.to_s } }
+        @mutex.synchronize do
+          @models[lookup_key(model_name)]&.associations&.find { |a| a.name == association_name.to_s }
+        end
       end
 
       def column(model_name, column_name)
-        @mutex.synchronize { @models[model_name]&.columns&.find { |c| c.name == column_name.to_s } }
+        @mutex.synchronize do
+          @models[lookup_key(model_name)]&.columns&.find { |c| c.name == column_name.to_s }
+        end
       end
 
       private
+
+      # The registry is keyed by Rails' own `model.name`, which is always
+      # bare (`User`). A constant receiver arrives as whatever the source
+      # wrote -- `Prism::ConstantPathNode#full_name` answers `::User` for
+      # `::User.find(1)` -- so an exact lookup missed, the finder's type
+      # was lost, and the Agent-backed model check went quiet for that
+      # receiver without saying so.
+      #
+      # Both sides of the map, not just reads: all four writers
+      # (`commit_replace`, `commit_updates` and its `removals:`,
+      # `register_from_agent_response`, `remove`) key through this, as do
+      # the four lookups. Every writer today feeds a bare Rails
+      # `model.name`, so this changes no answer now -- but a registry that
+      # normalises one side only is a registry whose keys depend on which
+      # door you came in, and this release is about what that costs.
+      #
+      # The first attempt normalised `register_from_agent_response` and
+      # `remove` -- the two with no caller in `lib/` -- and left the two
+      # production actually uses, which made a `::`-keyed entry written
+      # through them reachable by *neither* spelling, worse than before.
+      # The spec pins all four doors now, not the two that were easy to
+      # reach from a unit test (0.1.12).
+      #
+      # Normalized here rather than at each of the twenty-two call sites,
+      # across five subsystems, that reach these four lookup methods, and
+      # 0.1.11 was spent on what happens when a rule like this is written
+      # at call sites instead of in the one place that knows the keys.
+      # Only a leading `::` is ignored, so `Admin::User` stays a different
+      # class.
+      def lookup_key(name)
+        Index::SymbolId.bare_name(name)
+      end
 
       def build_model_info(name, response)
         columns = (response[:columns] || []).map do |c|

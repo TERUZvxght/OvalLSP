@@ -14,8 +14,26 @@ Each entry states the symptom, who it affects, how to reproduce it, and a
 proposed direction. Nothing here is a shipping blocker; every item was
 triaged as such by the reviewer that raised it.
 
-Status legend: **open** — not started. **fixed** — resolved; entry kept
-until the next release, then deleted.
+Status legend: **open** — not started. **fixed** / **done** — resolved.
+
+A resolved entry is deleted once nothing in the tree cites it. It is
+**not** deleted while source or spec comments still name it by number:
+those comments say "this is the way it is because of 024.N", and the
+number is the only way to reach the reason. Every resolved entry below
+was checked against a repo-wide grep and is cited — 024.1 from
+`server_views_spec.rb` and `local_inferencer_spec.rb`, 024.6 from
+`cold_indexer_spec.rb`, 024.8 from `coreProcess.ts` and its unit test,
+024.10 from `extension.ts`, `clientTeardown.ts` and
+`clientErrorNotifications.ts`, 024.R5 from fifteen places including
+`ancestry_registry.rb`, which says its measurements "are recorded in
+024.R5".
+
+The legend previously promised deletion "at the next release" with no
+such exception, and four entries — fixed in 0.1.10, so due for deletion
+in 0.1.11 — then sat a release past that deadline because deleting them
+would have broken live references. Round 5 of the
+0.1.12 review reported the entries as stale; the deadline was the part
+that was wrong. Run the grep before deleting, not the calendar.
 
 Entries numbered `024.R*` are roadmap items rather than defects: work
 that is understood, deliberately not scheduled for the current release,
@@ -630,6 +648,141 @@ path solves and has no existing answer here:
 None of that is settled, and settling it needs measurement against a real
 workspace rather than reasoning — which is why this is scoped as its own
 roadmap entry rather than folded into another release's work.
+
+---
+
+## 024.16 The capability E2E suite can skip in full while CI stays green (0.1.13)
+
+**Status:** open
+**Area:** `.github/workflows/ci.yml`, `core/spec/e2e/capabilities_spec.rb`
+
+`docs/EXTENSION_CAPABILITIES.md` states two rules. "A capability with no
+E2E row is not a capability" is enforced by
+`core/spec/e2e/capability_coverage_spec.rb`. "A capability whose row is
+skipped is not shipped" is enforced by nothing.
+
+`capabilities_spec.rb` skips every example when its real-Rails fixture
+cannot be prepared (`before(:all)` → `skip` when `available?` is false).
+CI has exactly the right guard — "Fail if the real-Rails integration
+suite was skipped instead of run" — but it filters on
+`spec/integration/real_rails_spec.rb` and does not cover the e2e path.
+Measured: forcing `available?` false gives `45 examples, 0 failures, 41
+pending` and **exit status 0**, with `capability_coverage_spec.rb` still
+green, because it scans the spec file's source text for `it "C5: …"` and
+cannot tell a row that ran from a row that was skipped.
+
+Latent rather than live today: `real_rails_spec.rb`'s own guard
+incidentally forces the fixture's gems to exist. But nothing states that
+dependency, and the two suites reach the fixture by different code paths.
+
+**Direction:** widen the existing CI step's file filter to both paths.
+One line. Recorded rather than fixed in 0.1.12 because it is a CI gap,
+not a defect in the release, and 0.1.12 has already been rolled back once
+for widening past its own subject.
+
+## 024.17 `vscode/src/extension.ts` is covered by no test that runs anywhere (0.1.13)
+
+**Status:** open
+**Area:** `vscode/src/extension.ts`, `.github/workflows/ci.yml`
+
+Nine of the extension's ten modules have unit tests. `extension.ts` — the
+largest at 812 lines — has none. What covers it is
+`vscode/src/test/integration/`, and `npm run test:integration` appears in
+no workflow; `ci.yml` runs `test:unit` only.
+`vscode/scripts/verify-installed-extension.sh` is likewise manual.
+
+The uncovered surface is exactly the layer `EXTENSION_CAPABILITIES.md`
+says the E2E suite structurally cannot see: the `documentSelector`, all
+nine command registrations, the `ovallsp/status` poll loop, and the
+client bootstrap. No defect was found in it by reading — the `.erb`
+selector, the watcher glob and the version handshake are all correct —
+but "the extension's tests are meaningful" is true only of the nine
+modules that have them.
+
+**Direction:** either run the integration suite in CI, or extract the
+remaining decisions the way 024.10 extracted `clientTeardown.ts`.
+
+---
+
+## 024.15 The index's answers depend on which file was edited last (0.1.13)
+
+**Status:** open
+**Area:** `core/lib/ovallsp/workspace_index.rb`
+
+`@by_symbol` maps a SymbolId to a list of `[uri, declaration]`, and
+`@by_simple_name` maps a name to a Set of SymbolIds. Both are in
+*insertion* order, and `replace_file` removes a uri's entries and then
+appends the new ones — so re-indexing a file moves its entries to the
+back of every list they are in. Editing a file, without changing a single
+declaration, changes the order.
+
+Seven readers then take `.first` of such a list, or truncate it. Convert
+all seven; converting a subset is round 9's mistake, and this list was
+itself miscounted twice before it was written one reader per row:
+
+| reader | what changes |
+|---|---|
+| `Server#find_controller_uri` | which controller file supplies a view's instance variables |
+| `QueryService#model_definition_locations` | where go-to-definition on a column or association lands |
+| `find_by_simple_name` | where go-to-definition on a bare constant lands |
+| `resolve_type_symbol_locked` | which class an ambiguous bare name resolves to — and with it the ancestry chain, the unknown-method check, find references and rename |
+| `QueryService#source_signatures` | whose parameters signature help shows |
+| `MethodResolver#build_candidate` | whose visibility gates the private-method check |
+| `search` | which symbols survive `workspace/symbol`'s result limit |
+
+All measured, all reproducible by adding one comment line to a file. This
+predates 0.1.12 and has shipped in every published version.
+
+### Why it is deferred rather than fixed
+
+0.1.12 tried to fix it four times and produced three incomplete fixes and
+two regressions:
+
+- round 8 pinned `.first` with a spec asserting the current answer, which
+  turned out to be an accident rather than a behaviour;
+- round 9 sorted `class_declarations` by uri — which backs two of the
+  seven rows above and leaves five, and
+  `sort_by` is not a stable sort, so entries sharing a uri were still
+  arbitrary, and the *source* order that insertion had at least preserved
+  within a file was lost;
+- round 10 replaced that with a per-SymbolId `ordered_entries`, which
+  dropped the cross-SymbolId ordering round 9 had added — a straight
+  regression of the same bug, in the same method;
+- round 11 added a second sort on top to restore it.
+
+Each attempt bolted an ordering onto a *reader*. That is fixing the
+symptom: the readers are not wrong to want a stable answer, the storage
+is wrong to have an unstable one. Every reader added is a new place to
+forget, which is the same structural mistake 0.1.11 was spent on for
+qualification.
+
+### The fix this actually needs
+
+One of these two, decided before any code is written:
+
+1. **Make the storage ordered.** `@by_symbol`'s per-SymbolId list and
+   `@by_simple_name`'s Set are maintained sorted by `[uri, line,
+   character]` at write time in `replace_file`. Every reader then
+   inherits the order without knowing about it, and there is exactly one
+   place that knows what the order is. Cost: `replace_file` does an
+   insertion sort per declaration; measure it against Cold Index on the
+   real Rails fixture before committing to it.
+2. **Stop taking `.first` of a collection with no order.** Go-to-definition
+   and find-references are `Location[]` in LSP — a class reopened across
+   four files genuinely has four definitions, and answering with all of
+   them is a better answer than answering with an arbitrary one. This is
+   a larger behavioural change and needs the `.first` callers examined
+   one at a time; `find_controller_uri` cannot return several, so it
+   would still need a stated rule.
+
+Option 1 is the smaller change and the one that matches this codebase's
+own habit of putting a rule in the one place that owns the data. Option 2
+is the better answer for the three readers that are LSP list responses.
+They are not exclusive.
+
+Whichever is chosen, the spec has to exercise **re-indexing** — every
+0.1.12 attempt was pinned by a spec that built the index once, which is
+exactly the state in which the bug is invisible.
 
 ---
 

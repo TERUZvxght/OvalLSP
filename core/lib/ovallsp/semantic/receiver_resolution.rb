@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "../types"
+require_relative "../index/symbol_id"
 
 module Ovallsp
   module Semantic
@@ -46,8 +47,15 @@ module Ovallsp
       # matching actually work; ModelRegistry's own keys (Rails' own
       # `model.name`) never carry a leading "::" either, so this is also
       # what #resolve_via_model_registry needs.
+      # Delegates rather than restating: `Index::SymbolId` owns both
+      # directions of this one decision, and this is the semantic layer's
+      # name for reading it. Round 7 of the 0.1.12 review found eleven
+      # hand-written copies of the rule still in the tree, across its three
+      # directions. This method's old body was one of the two that were
+      # byte-identical to what it now calls; `ModelRegistry#lookup_key`
+      # was the other (0.1.12).
       def canonical_receiver_name(name)
-        name.to_s.delete_prefix("::")
+        Index::SymbolId.bare_name(name)
       end
 
       # An explicit constant receiver written unqualified (`Bar.foo`, no

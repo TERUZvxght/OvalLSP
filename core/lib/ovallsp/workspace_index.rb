@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "set"
+require_relative "index/symbol_id"
 
 module Ovallsp
   # Workspace-wide aggregation of FileSummary declarations, keyed by
@@ -181,15 +182,36 @@ module Ovallsp
     # name should ask by name. `name` is always absolute-qualified, so
     # this cannot collide with a same-named class in another namespace.
     def class_declaration_uris(qualified_name)
+      class_declarations(qualified_name).map { |entry| entry[:uri] }
+    end
+
+    # The same lookup, with each declaration's own range — for callers
+    # that want to jump to it rather than merely name its file. One
+    # implementation of the matching rule, for the reason this release
+    # exists: the alternative is a second place that has to remember that
+    # `owner` is lexical.
+    #
+    # The `::` is normalised here rather than by the caller. Indexed names
+    # always carry it, so a bare argument silently matches nothing —
+    # and "silently" is the problem: `Server#find_controller_uri` used to
+    # prefix by hand, and a caller that forgot would have lost a whole
+    # controller's ivars with no error anywhere. The lookup is the one
+    # place that knows what shape its own keys are.
+    # No nil guard: `qualify_owner(nil)` is nil, `simple_name_of(nil)` is
+    # `""`, and nothing is indexed under `""` — so a nil name already
+    # returns []. A guard here would be a line no input can reach, which
+    # is the same defect as an untested one (0.1.12, round 7).
+    def class_declarations(name)
+      qualified_name = Index::SymbolId.qualify_owner(name)
       @mutex.synchronize do
-        uris = []
+        results = []
         @by_simple_name.fetch(simple_name_of(qualified_name).downcase, []).each do |symbol_id|
           next unless %i[class module].include?(symbol_id.kind)
           next unless symbol_id.name == qualified_name
 
-          @by_symbol.fetch(symbol_id, []).each { |(uri, _decl)| uris << uri }
+          @by_symbol.fetch(symbol_id, []).each { |(uri, decl)| results << { uri: uri, range: decl.location } }
         end
-        uris
+        results
       end
     end
 
@@ -324,7 +346,18 @@ module Ovallsp
       end
       return nil if candidates.empty?
 
-      candidates.find { |sid| sid.name == raw || sid.name == "::#{raw}" } || candidates.first
+      # Only `raw` needs normalising: it is a name as written, and may be
+      # bare. An indexed class/module name always carries the `::`, so
+      # normalising that side too was a branch no input could reach
+      # (0.1.12, round 8).
+      qualified = Index::SymbolId.qualify_owner(raw)
+      # `.first` here, and in this index's other readers, is index order --
+      # which moves when a file is re-indexed. That is a real defect and it
+      # predates 0.1.12; it is recorded as 024.15 with the fix it actually
+      # needs, which is not a sort bolted onto each reader. Four rounds of
+      # this release tried that and produced three incomplete fixes and two
+      # regressions. See docs/design/tasks/024-deferred-review-findings.md.
+      candidates.find { |sid| sid.name == qualified } || candidates.first
     end
 
     def rank(matches, needle)

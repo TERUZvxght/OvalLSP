@@ -55,6 +55,20 @@ RSpec.describe Ovallsp::Signatures::TypeConverter do
                             ))
     end
 
+    # `^(?)` is a proc that takes anything, and RBS models the "anything"
+    # as an `UntypedFunction` carrying no parameter lists at all — the
+    # same shape `Proc#call` has, reached through a different path.
+    # Answering with a parameter here would name an argument the
+    # declaration does not have, exactly as an invented positional did in
+    # `untyped_overload`; that field was pinned in round 8 and this one,
+    # its sibling in the code the same release added, was not (round 9).
+    it "converts an `(?)` proc to one taking anything, not one taking a single Unknown" do
+      result = described_class.convert(rbs_type("^(?) -> untyped"))
+
+      expect(result).to eq(Ovallsp::Types::ProcType.new(parameters: [], return_type: Ovallsp::Types::UNKNOWN))
+      expect(result.to_s).to eq("() -> Unknown")
+    end
+
     it "never raises for a type it doesn't recognize, widening to Unknown instead" do
       expect { described_class.convert(nil) }.not_to raise_error
       expect(described_class.convert(nil)).to eq(Ovallsp::Types::UNKNOWN)

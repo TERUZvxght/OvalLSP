@@ -217,10 +217,13 @@ module Ovallsp
       # stdout/stderr -- in `--stdio` mode fd 1 is the live LSP JSON-RPC
       # transport, the same class of leak already found and fixed for
       # Plugins::Loader (Task 014-018's independent review) -- both
-      # streams are captured to `log_path` instead, purely for the
-      # caller's own diagnostics (e.g. surfacing the test command's
-      # output back to the editor), never forwarded to this process' own
-      # fd 1/2.
+      # streams are captured to `log_path` instead, never forwarded to
+      # this process' own fd 1/2. Keeping them off fd 1 is the *only*
+      # reason the file exists: nothing opens, reads, indexes or surfaces
+      # it, and it is unlinked when the run ends. An earlier revision of
+      # this comment said it was "for the caller's own diagnostics (e.g.
+      # surfacing the test command's output back to the editor)", which
+      # describes a feature that does not exist (0.1.12).
       #
       # `pgroup: true` makes the child the leader of its own process
       # group, so #kill can signal the whole tree rather than just the

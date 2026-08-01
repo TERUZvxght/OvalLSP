@@ -6,6 +6,187 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.1.12 — The rule that kept being rewritten, and a privacy list that under-described itself
+
+Every fix here repairs something OvalLSP already claimed to do. Most of
+them are the same defect wearing different clothes: one rule about class
+names, written out by hand wherever it was needed.
+
+**Privacy and the parse cache** — corrections to what the documents said,
+not to what the code does:
+
+- **`PRIVACY.md` no longer says the parse cache holds "not your source
+  code's contents". It holds parts of it** — each method's body text and
+  each parameter's default expression, verbatim, plus each file's
+  absolute path. The cache has always stored these; the document was
+  wrong about it, in every version through 0.1.11.
+- `PRIVACY.md` no longer says nothing is written to disk beyond the parse
+  cache. An observation run writes two temporary files, one of which
+  receives your own test command's output — routinely SQL, in a Rails app.
+- `PRIVACY.md` now lists everything type observation records, and stops
+  listing one thing it does not. It recorded more than it said (the
+  classes seen at each parameter, the classes returned, a file digest and
+  line, a run identifier, a finish time) and claimed to record whether a
+  call raised, which nothing does.
+- The parse cache lives under `$XDG_CACHE_HOME/ovallsp/`, not always
+  `~/.cache/ovallsp/`. The troubleshooting step that says to delete it was
+  wrong for anyone with that variable set to a non-empty value.
+
+**False reports removed** — code that runs, reported as broken:
+
+- `send`, `__send__`, `public_send`, `instance_exec`, `Proc#call` and
+  `Method#call` are no longer reported as unknown methods. The first four
+  and the last two failed for the same reason through two different code
+  paths.
+- A class written `< ::BasicObject` no longer has its unknown-method
+  check silently switched off. As in 0.1.11, a class that was silent may
+  now start reporting mistakes it was quietly ignoring.
+
+**Types that were wrong or missing:**
+
+- `::User.find(1)` resolves to `User`, as `User.find(1)` already did. A
+  root-scoped model receiver lost its type, and the Active Record method
+  check went quiet for it.
+- `self` and `Widget.new` now have the same type inside `Widget`. They did
+  not, so a variable assigned from both became a union and the
+  unknown-method check went quiet for it — as it did for `::Widget.new`.
+- A namespaced class no longer borrows a same-named top-level model's
+  data. `Admin::User#name`, delegated to `:company`, was answered from the
+  top-level `User`'s associations — a confident wrong type, not a missing
+  one.
+- A plugin registering a class declaration could make an unqualified name
+  resolve to the wrong class.
+- One `klass::Error.new` no longer costs a whole method its instance
+  variable types. A constant path with a non-constant segment is legal
+  Ruby and common in factory code; asking Prism for its name raised, and
+  the raise was caught far enough away that the method's entire
+  inference was discarded — so a view got no types at all.
+
+**Signature help:**
+
+- No longer shows `()` for a method that accepts arguments it does not
+  name. `Array#shuffle` read as taking nothing; so did 106 methods that
+  accept `*rest` or `**rest`, including `Array#push` and `#concat`.
+- No longer tells you to type `x:` for a method declared in a Sorbet
+  `.rbi` that takes plain positional arguments.
+- A Sorbet `.rbi` declaring `def f(...)`, `def f(**nil)` or a destructured
+  `def f(a, (b, c))` keeps its signature. Introduced and fixed inside this
+  release; no published version shipped it.
+
+**Go-to-definition:**
+
+- Go-to-definition on an Active Record column or association reaches
+  models written `module Admin; class Company`, not only those written
+  `class Admin::Company`.
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: no
+capability is added.
+
+### Details
+
+**One rule, written out at every call site that needed it.** 0.1.11 moved
+"a class or owner name is qualified" into `SymbolId` and routed its
+callers through it. Copies survived, and this release spent eleven rounds
+finding them. It also published a count of them five times and was wrong
+every time, always low — which is the finding. There is no count here;
+`git diff main...HEAD -- core/lib` shows the removed sites, and how many
+there are depends on whether you count `entry.name == "BasicObject"` and
+`split("::").last` as the same rule, which is exactly the ambiguity that
+kept producing a different number. `chain_reaches_root?` asked `entry.name == "BasicObject"`, and a
+class written `< ::BasicObject` produces an entry carrying the `::`, so
+its chain was judged not to reach the root, the receiver was not
+"closed", and the unknown-method check switched off for that class
+without saying so. `ModelRegistry` is keyed by Rails' bare `model.name`,
+so `::User` matched nothing — normalised now in its four lookup methods
+rather than at the twenty-two call sites, across five subsystems, that
+use them. `MethodAnalyzer` matched a delegate's owner by *simple* name,
+so `Admin::User` borrowed the top-level `User`'s associations.
+`LocalInferencer` built `::`-prefixed types in six places. (An earlier
+revision of this paragraph said one of them was user-visible, citing a
+hover difference on `k = ::Widget`. That was wrong: 0.1.11 already
+normalised that site, and the difference existed only under a mutation.
+It was untested, not broken.) The seventh site in that file
+asked Prism for a constant path's name without the guard its two
+neighbours already had, so `klass::Error.new` raised and took the whole
+method's instance variables with it; all of them now go through one
+helper that answers nil rather than raising.
+
+`Index::SymbolId` now owns all three directions of that one decision —
+`qualify_owner`, `bare_name` and `qualify_within` — and every copy
+delegates to it, including
+`ReceiverResolution.canonical_receiver_name`, whose old body was one of
+the two byte-identical to what it now calls. The type also enforces the
+invariant it had only documented: a class's own name is qualified, which
+until now was true because `ParserService` happened to produce it that
+way, and not true of a declaration registered by a plugin.
+
+**RBS and RBI signatures.** RBS writes "takes anything" as `(?)` and
+models it as a function object carrying no parameter lists at all. Two
+different declarations run into it: `Proc#call` and `Method#call` are
+`(?)` themselves, while `send`, `__send__`, `public_send` and
+`instance_exec` carry a `(?)` *block* — spelled `?{ (?) -> untyped }` for
+the first three, and `{ (?) [self: self] -> U }` for `instance_exec`,
+whose block is required and self-bound. Both converters asked such a
+function for its positional parameters, the error was swallowed by the
+blanket rescue around signature building, and the method came back as "no
+signature" — which the unknown-method check reads as "RBS does not
+declare this". `__send__` is core idiom in exactly the proxy and delegator
+code people write `< BasicObject` for, so the `::BasicObject` fix above
+would have turned a false report on precisely the classes it un-silenced.
+
+The label those signatures produce was asserting zero arity for anything
+it could not name: 29 methods in the RBS core this loads have keywords and
+no *named* positionals (33 counting each overload), and 106 name nothing
+at all but accept a rest slot. Both now render. Three of the 29 also take
+a `*rest` *positional* — `Dir.[]`, `Kernel#warn`, `Ractor.new` — which is
+the whole difference between 29 and the 26 an earlier revision gave; a
+fourth, `Exception#detailed_message`, has a `**` rest and so is not among
+them. 135 methods in all rendered as `()` while accepting arguments.
+
+The RBI defect is the one this release caused. Sorbet's
+`params(x: Integer)` is a name-to-type map; it describes `def f(x)` and
+`def f(x:)` identically, and the parser filed every entry as a required
+*keyword*, with a comment saying this was only "for arity matching
+purposes". Nothing rendered keywords, so nothing showed — until this
+release taught the label to render them, and `def combine(x, y)` began
+telling the user to type `x:`. The label was not the bug; it made an
+existing lie legible. The `def` under the sig is the authority on
+parameter shape and the parser always had that node, so shape now comes
+from the def and type from `params(...)`. That first attempt then raised
+on three legal parameter forms — `def f(...)`, `def f(**nil)`, and a
+destructured `def f(a, (b, c))` all put a node in the list answering no
+`#name` — and the blanket rescue turned each raise into a dropped
+signature. Fixed within the release; no published version shipped it.
+
+**What the privacy documents got wrong.** Three claims, all older than
+this release. The parse cache does hold parts of your source code. Two
+temporary files are written during an observation run, one of them
+receiving your suite's own output. And the list of what observation
+records was wrong in both directions at once — short by five fields, and
+claiming a field that does not exist. None of this changed what the code
+does; the guarantee that no *value* from your program is recorded held
+throughout, and still does. What changed is that the document now
+describes it accurately, and says plainly that the "never records"
+promise is about what OvalLSP extracts and keeps, not about what your own
+test suite prints.
+
+**What eleven rounds of review cost this document.** Most of the numbers
+these notes published were wrong at least once and had to be re-derived:
+two suite counts, a mutation count, and the count of the copies described
+above three separate times. There is no total here, because a total would
+be one more number nobody could check. Two release titles made
+completeness claims that the next round falsified. The strongest correction in the release — the parse cache
+holding source — went unmentioned in any bullet through ten rounds, in a
+document eleven reviewers had each read. And one thread was rolled back
+rather than shipped: four rounds spent on the index returning results in
+whichever order files were last edited, each attempt sorting one more
+reader of a collection whose storage has no order. Round 10 regressed
+round 9's fix in the same method. That defect predates this release and
+now has an entry of its own (024.15) naming the fix it actually needs,
+which is to order the storage rather than each reader. The notes above
+have been re-derived from the code rather than from earlier drafts of
+themselves; where a number appears, it was counted.
+
 ## 0.1.11 — One rule, restated everywhere and remembered nowhere
 
 - Fixed: a method your project declares only in its own `sig/` is no

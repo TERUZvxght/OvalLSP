@@ -43,11 +43,24 @@ output contain diagnostic messages about OvalLSP's own operation
 (startup, indexing progress, errors, the version-compatibility
 handshake). These logs stay on your machine (VS Code's own Output panel)
 and are never transmitted anywhere. You can clear them by closing/
-reopening the output channel; nothing is written to disk by OvalLSP
-itself beyond its own [persistent parse cache](README.md#performance-tuning)
-under `~/.cache/ovallsp/` (parsed declarations/types, keyed by workspace
-and toolchain version — not your source code's contents, and not
-transmitted anywhere).
+reopening the output channel.
+
+The only thing OvalLSP itself writes to disk during ordinary use is its
+own [persistent parse cache](README.md#troubleshooting) under
+`$XDG_CACHE_HOME/ovallsp/`, or `~/.cache/ovallsp/` when that variable is
+unset or empty, keyed by workspace and toolchain version. **It
+contains parts of your source code.** Alongside the parsed
+declarations and types it stores each method's body text and each
+parameter's default expression, verbatim — the body so a method's return
+type can be inferred later without re-reading the file, the default
+expression because the parser records it. It also stores each file's
+absolute path. (Whether a file has changed is decided by a hash of it,
+not by this text.) Nothing in it is transmitted anywhere, and
+deleting that directory is safe at any time — it is rebuilt by
+re-indexing.
+
+Running type observation writes two more files, normally for the length
+of that run only — see below for exactly when they outlive it.
 
 ## Runtime type observation (opt-in)
 
@@ -55,14 +68,48 @@ transmitted anywhere).
 until you explicitly run the command) and records, for methods actually
 exercised by your own test run:
 
-- class/module name, method identifier, parameter position, call count,
-  and whether the call raised.
+- the class/module name and method identifier;
+- for each positional parameter, the set of **classes** seen at that
+  position — the class names, never the objects;
+- the set of classes the method **returned**, on the same terms;
+- how many calls contributed. A call that raised still contributes its
+  count and the classes it was given — only the return type is withheld,
+  and nothing records that it raised;
+- an identifier for the run, made from its start time, Core's process id
+  and a random number;
+- a digest of the **file** the observed method is in, plus that method's
+  line number, used only to notice when the method may have been edited
+  since; and the time the run finished.
 
 It never records argument values, return values, string contents, SQL,
 environment variables, or file contents — the normalizer that builds
 this evidence never calls `#inspect`/`#to_s` on anything it observes.
-This data stays local (in-memory / the same local cache above) and is
-never transmitted anywhere.
+The distinction that matters is class *names* versus the objects
+themselves: `User` is recorded, the user is not.
+The aggregated result is not written to the parse cache and does not
+survive restarting the server. The only copy that touches disk is the
+temporary run file described just below, and its lifetime is described
+there.
+
+Two temporary files exist for the length of an observation run, both
+created with owner-only permissions in your system temp directory and
+unlinked when the run ends — but not guaranteed to be. Deleting them is
+deliberately allowed to fail quietly rather than replace an error already
+being raised, so a temp directory that has gone read-only leaves
+them; and a crash or a kill skips the deletion step entirely:
+
+- the run's results, as described above;
+- a log file, which is where **your test command's own standard output
+  and standard error are redirected**. OvalLSP never reads that log; it
+  exists because in `--stdio` mode file descriptor 1 is the live LSP
+  transport, and the child's output must not land there. But it contains
+  whatever your test suite prints, which in a Rails app routinely
+  includes SQL, and can include anything else your code or your
+  environment logs. The "never records" guarantee above is about what
+  OvalLSP *extracts and keeps*; it is not a claim about your own suite's
+  output, which is your program's, not ours.
+
+Nothing from either file is transmitted anywhere.
 
 ## The Runtime Agent
 

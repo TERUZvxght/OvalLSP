@@ -115,6 +115,30 @@ RSpec.describe Ovallsp::Signatures::Environment do
         expect(environment.member_names("::Widget", prefix: "lab")).to include("label")
       end
     end
+
+    # What the user actually sees. Sorbet's `params(...)` names its
+    # entries whatever the `def`'s parameters are called, and the parser
+    # used to file all of them as required *keywords* -- harmless while
+    # nothing rendered keywords, and a direct instruction to type `x:`
+    # into a positional method once 0.1.12's label did (0.1.12, round 5).
+    it "labels an RBI-declared positional method with positionals, not keywords" do
+      Dir.mktmpdir do |root|
+        rbi_dir = File.join(root, "sorbet", "rbi")
+        FileUtils.mkdir_p(rbi_dir)
+        File.write(
+          File.join(rbi_dir, "widget.rbi"),
+          "class Widget\n  sig { params(x: Integer, y: String).returns(Integer) }\n  def combine(x, y); end\nend\n"
+        )
+        environment.load(workspace_root: root)
+
+        query_service = Ovallsp::Semantic::QueryService.new(
+          local_inferencer: Ovallsp::LocalInferencer.new, signatures: environment
+        )
+        label = query_service.signatures_of(Ovallsp::Types::Nominal.new(name: "Widget"), "combine").first[:label]
+
+        expect(label).to eq("combine(Integer, String) -> Integer")
+      end
+    end
   end
 
   describe "Gem signature fixture" do

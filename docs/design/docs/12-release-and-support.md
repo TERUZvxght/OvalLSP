@@ -98,7 +98,8 @@ enum・scope・delegate)の型推論、RBS/RBI連携、opt-inのruntime型観測
    を試す。それでも直らない場合はWorkspace Trustが付与されているか確認する。
 4. ステータスバーの表示(`Indexing`/`Ready (static)`/`Ready (Rails)`/
    `Agent unavailable`)で現在の状態を確認できる。
-5. キャッシュが壊れていると疑われる場合、キャッシュは`~/.cache/ovallsp/`
+5. キャッシュが壊れていると疑われる場合、キャッシュは
+   `$XDG_CACHE_HOME/ovallsp/`(未設定または空なら`~/.cache/ovallsp/`)
    以下にworkspace/Ruby/Prism/Gemfile.lock/RBSの組合せごとに分離されて
    いるため、該当ディレクトリを削除すれば強制的にcold re-indexされる。
 
@@ -128,10 +129,13 @@ enum・scope・delegate)の型推論、RBS/RBI連携、opt-inのruntime型観測
 `docs/design/tasks/019-runtime-observation-notes.md`を参照。要点:
 
 - 明示的なコマンド実行時のみ動作する(既定で無効)。
-- 保存されるのは class/module名・method識別子・引数位置・呼び出し回数・
-  例外終了の有無のみ。実際の引数値・戻り値・文字列内容・SQL・環境変数・
-  ファイル内容は一切保存しない(`Observation::TypeNormalizer`は
-  `#inspect`/`#to_s`を一切呼ばない)。
+- 保存される内容の唯一の正は `vscode/PRIVACY.ja.md` とする。ここで一覧を
+  書き写すと、そちらだけが更新されて食い違う(0.1.12 で実際にそうなった)。
+  実際の引数値・戻り値・文字列内容・SQL・環境変数・ファイル内容を一切
+  保存しないという保証は変わらない(`Observation::TypeNormalizer`は
+  `#inspect`/`#to_s`を一切呼ばない)。ただしこの保証は OvalLSP が*抽出して
+  保持するもの*についてであり、観測実行中に一時ファイルへリダイレクトされる
+  テストコマンド自身の出力は対象外である点も `PRIVACY.ja.md` に明記した。
 - Observationはあくまで低authorityな補助証拠であり、明示的なRBS
   signatureを上書きしない。
 

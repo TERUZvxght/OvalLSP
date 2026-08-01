@@ -3,6 +3,7 @@
 require "prism"
 require_relative "../types"
 require_relative "method_summary_store"
+require_relative "receiver_resolution"
 
 module Ovallsp
   module Semantic
@@ -168,7 +169,13 @@ module Ovallsp
       def resolve_delegate_return_type(fact)
         return Types::UNKNOWN unless @model_registry
 
-        owner_name = fact.owner.to_s.split("::").last
+        # The owner as written, minus a leading `::` -- not its simple
+        # name. `split("::").last` is match-by-simple-name, so
+        # `Admin::User`, which is not a model at all, resolved its
+        # delegates against the top-level `User`'s associations. The
+        # registry keys itself; this only has to stop mangling the name
+        # before handing it over (0.1.12).
+        owner_name = ReceiverResolution.canonical_receiver_name(fact.owner)
         association = @model_registry.association(owner_name, fact.metadata[:to])
         return Types::UNKNOWN unless association
 
@@ -186,8 +193,12 @@ module Ovallsp
         fact.metadata[:allow_nil] ? Types.normalize_union([type, Types::NIL]) : type
       end
 
+      # `SymbolId#owner` is always `::`-qualified -- `SymbolId.qualify_owner`
+      # guarantees it -- and that is the index's domain, not the type
+      # model's. Spelling `self`'s type `::Widget` made it a different
+      # Nominal from the `Widget` a constant receiver produces (0.1.12).
       def self_type_for(symbol_id)
-        owner = Types::Nominal.new(name: symbol_id.owner.to_s)
+        owner = Types::Nominal.new(name: ReceiverResolution.canonical_receiver_name(symbol_id.owner))
         symbol_id.kind == :singleton_method ? Types::Generic.new(name: "ClassOf", type_arg: owner) : owner
       end
 
@@ -316,7 +327,14 @@ module Ovallsp
         receiver = node.receiver
         return flow(Types::UNKNOWN, false) unless receiver.respond_to?(:full_name)
 
-        class_name = receiver.full_name
+        # `full_name` answers whatever the source wrote, so `::Widget.new`
+        # gives `::Widget` where `Widget.new` gives `Widget`. The type
+        # model's names are bare; leaving the prefix on made the two
+        # spellings two different Nominals, and a variable fed by both
+        # became a union -- which the unknown-method check cannot use, so
+        # it stopped reporting (0.1.12, the same fix as
+        # `LocalInferencer#resolve_call`).
+        class_name = ReceiverResolution.canonical_receiver_name(receiver.full_name)
         case node.name
         when :new
           flow(Types::Nominal.new(name: class_name), false)

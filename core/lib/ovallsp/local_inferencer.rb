@@ -4,6 +4,7 @@ require "prism"
 require_relative "types"
 require_relative "models/model_registry"
 require_relative "semantic/generic_rule_registry"
+require_relative "semantic/receiver_resolution"
 require_relative "signatures/overload_resolver"
 
 module Ovallsp
@@ -104,7 +105,7 @@ module Ovallsp
       return ivars_from(initial_env) unless method_node.body
 
       begin_ivar_inference if reset_budget
-      @self_type_stack = [Types::Nominal.new(name: self_type_name.to_s.delete_prefix("::"))]
+      @self_type_stack = [Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(self_type_name))]
       env = initial_env.dup
       eval_type(method_node.body, env)
       # Symbol-keyed (":@user", not "@user") to match how Prism names
@@ -247,7 +248,32 @@ module Ovallsp
     def locate_in_namespace(node, offset)
       return Types::UNKNOWN unless contains?(node.location, offset)
 
-      @self_type_stack.push(Types::Nominal.new(name: node.constant_path.full_name))
+      # `full_name` answers `::Widget` for `class ::Widget`, and the type
+      # model's names are bare.
+      #
+      # This line and the `self_type_name` seed in #infer_ivars_for_method_node
+      # are both **unpinned and known to be**: reverting either leaves the
+      # whole suite green (rounds 6 and 8 both measured it). Every reader of
+      # `@self_type_stack` re-normalises -- `MethodResolver` through
+      # `resolve_type_name`, `ModelRegistry` through `lookup_key`,
+      # `SymbolId` through `qualify_owner` -- so the spelling is absorbed
+      # before it reaches an answer, and no probe has produced a
+      # distinguishing input.
+      #
+      # Kept rather than reverted, and the reason is cost rather than
+      # doubt: normalising here is free, and a consumer that stops
+      # normalising would be a silent wrong answer rather than a loud one.
+      #
+      # An earlier version of this comment cited `constant_path_type` as a
+      # precedent -- "a site declared unobservable that turned out to be
+      # observable". That was wrong. 0.1.11 already normalised that site;
+      # the difference a later round measured came from a *mutation* of
+      # it, which proves the line was untested, not that it was broken.
+      # The distinction matters because the two call for different things:
+      # untested wants a spec, broken wants a fix (0.1.12).
+      @self_type_stack.push(
+        Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.constant_path.full_name))
+      )
       locate(node.body, offset, {})
     ensure
       @self_type_stack.pop
@@ -418,7 +444,10 @@ module Ovallsp
       name = node.full_name
       return Types::UNKNOWN if name.nil? || name.empty?
 
-      Types::Generic.new(name: "ClassOf", type_arg: Types::Nominal.new(name: name.delete_prefix("::")))
+      Types::Generic.new(
+        name: "ClassOf",
+        type_arg: Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(name))
+      )
     rescue StandardError
       # `full_name` raises on a dynamic constant path (`Foo::(bar)`).
       Types::UNKNOWN
@@ -450,8 +479,13 @@ module Ovallsp
     end
 
     def resolve_call(node, receiver_type, env)
-      if constant_receiver?(node.receiver)
-        constant_type = Types::Nominal.new(name: node.receiver.full_name)
+      if (receiver_name = constant_receiver_name(node.receiver))
+        # The class, not the spelling the call site used. `::Widget` and
+        # `Widget` are one class, and letting both through makes two
+        # different Nominals -- whose union is not a single Nominal, which
+        # is what the unknown-method check requires, so the check goes
+        # silent for a variable assigned both ways (0.1.12).
+        constant_type = Types::Nominal.new(name: receiver_name)
         signature_method = resolve_signature_call(
           constant_type, node, singleton: true, direct: true
         )
@@ -486,7 +520,7 @@ module Ovallsp
         # switched the method off, skipping the class-level finder and the
         # source declaration below (024.3). The `.new` branch had always
         # filtered it; this branch had not.
-        class_level = resolve_class_level_finder(node.receiver.full_name, node.name)
+        class_level = resolve_class_level_finder(receiver_name, node.name)
         return class_level if class_level
 
         # `Widget.some_class_method` -- an ordinary (non-Active-Record)
@@ -593,7 +627,12 @@ module Ovallsp
     def resolve_class_level_finder(class_name, method_name)
       return nil unless @model_registry.known_model?(class_name)
 
-      model_type = Types::Nominal.new(name: class_name)
+      # The *model's* name, not the spelling the call site used: `::User`
+      # and `User` are one class, and letting the receiver's spelling
+      # through produced a `Nominal("::User")` that hovered as `::User`
+      # and matched nothing downstream, since every other name in the type
+      # model is bare.
+      model_type = Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(class_name))
       case method_name
       when :find then model_type
       when :find_by then Types.normalize_union([model_type, Types::NIL])
@@ -854,6 +893,31 @@ module Ovallsp
       node.is_a?(Prism::ConstantReadNode) || node.is_a?(Prism::ConstantPathNode)
     end
 
+    # The canonical name of a constant receiver, or nil when it is not one
+    # -- and nil, rather than a raise, when it is a constant path whose
+    # segments are not all constants (`klass::Error.new`, legal Ruby and
+    # idiomatic in factory code). `#full_name` raises there, and asking it
+    # unguarded meant the raise escaped to
+    # `infer_ivars_for_method_node`'s blanket rescue, which answers with
+    # the *initial* environment: one such expression anywhere in a
+    # controller action silently voided every instance variable in it.
+    # `#constant_path_type` and `MethodAnalyzer#eval_constant_receiver_call`
+    # both already guarded this; this call site did not (0.1.12).
+    # Measured: the kind check is redundant with the rescue below -- of
+    # Prism's five node classes answering `#full_name`, only the two this
+    # asks for can be a call receiver, so a non-constant receiver reaches
+    # `NoMethodError` and comes back nil either way, and no input
+    # distinguishes them. It stays because asking the question is not the
+    # same as discovering the answer by exception, and a sweep that finds
+    # this line unpinned should stop here rather than churn on it.
+    def constant_receiver_name(node)
+      return nil unless constant_receiver?(node)
+
+      Semantic::ReceiverResolution.canonical_receiver_name(node.full_name)
+    rescue StandardError
+      nil
+    end
+
     # One branch's outcome: the type its body evaluates to, the (narrowed,
     # possibly-mutated) environment as of its end, and whether it
     # unconditionally exits (return/next/break/raise) — a terminated
@@ -972,7 +1036,13 @@ module Ovallsp
         return unless assume == :truthy
 
         arg = predicate.arguments&.arguments&.first
-        env[receiver.name] = Types::Nominal.new(name: arg.full_name) if constant_receiver?(arg)
+        # Through the helper, not `#full_name` directly: `is_a?`'s argument
+        # is the second place a constant receiver's name is read, and a
+        # dynamic path there raised exactly as it did in `resolve_call`,
+        # taking the whole method's instance variables with it (0.1.12).
+        if (arg_name = constant_receiver_name(arg))
+          env[receiver.name] = Types::Nominal.new(name: arg_name)
+        end
       end
     end
 
@@ -1018,9 +1088,7 @@ module Ovallsp
       end
 
       def qualify(local_path)
-        return local_path if local_path.start_with?("::")
-
-        @owner_stack.last ? "#{@owner_stack.last}::#{local_path}" : "::#{local_path}"
+        Index::SymbolId.qualify_within(@owner_stack.last, local_path)
       end
     end
     private_constant :MethodMapLocator
@@ -1078,9 +1146,7 @@ module Ovallsp
       end
 
       def qualify(local_path)
-        return local_path if local_path.start_with?("::")
-
-        @owner_stack.last ? "#{@owner_stack.last}::#{local_path}" : "::#{local_path}"
+        Index::SymbolId.qualify_within(@owner_stack.last, local_path)
       end
 
       def record(node)

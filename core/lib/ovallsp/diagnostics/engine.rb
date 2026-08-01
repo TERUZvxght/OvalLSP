@@ -375,7 +375,7 @@ module Ovallsp
         # Agent would split a leading "::" into an empty first namespace
         # segment and answer "no such constant", which is a permanent
         # answer. Normalised here, at the one boundary between them.
-        name = raw_name.delete_prefix("::")
+        name = Index::SymbolId.bare_name(raw_name)
         entry = registry.entry(name)
         if entry.nil?
           registry.request(name)
@@ -403,7 +403,7 @@ module Ovallsp
       # anywhere in the project silently defeated the evidence.
       def locally_accounted_for?(name, context)
         resolved = context.workspace_index.resolve_type_name(name)
-        return true if resolved && resolved.delete_prefix("::") == name.delete_prefix("::")
+        return true if resolved && Index::SymbolId.bare_name(resolved) == Index::SymbolId.bare_name(name)
 
         context.signatures && !context.signatures.ancestors(qualified_owner(name)).empty?
       end
@@ -425,8 +425,18 @@ module Ovallsp
       # without needing to tell them apart. A class the workspace really
       # does define completely always reaches it, through the default
       # Object chain if it declares no parent at all.
+      # Both spellings, because both reach here: `HierarchyIndex`'s default
+      # chain names `BasicObject` bare, while a class written
+      # `< ::BasicObject` produces an entry carrying the `::`. Comparing
+      # one spelling judged such a class's chain not to reach the root,
+      # which switched the unknown-method check off for it silently.
+      #
+      # One more place this rule was written by hand instead of delegated
+      # (0.1.12) -- `SymbolId.qualify_owner` is the rule, and
+      # `ROOT_SUPERCLASS_NAMES` in `HierarchyIndex` already listed both
+      # forms, which is what made this an oversight rather than a choice.
       def chain_reaches_root?(entries)
-        entries.any? { |entry| entry.name == "BasicObject" }
+        entries.any? { |entry| Index::SymbolId.qualify_owner(entry.name) == "::BasicObject" }
       end
 
       # A builtin ancestor (Object/Kernel/BasicObject, or any RBS-known

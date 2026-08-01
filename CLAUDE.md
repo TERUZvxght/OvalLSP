@@ -47,6 +47,48 @@ Two further rules follow from that experience:
 - Every fix needs a regression test that fails without the fix — see "Test-first discipline" above for the order to write them in and for why passing that check alone is not enough.
 - When you discover a bug, flaky test, or other fixable issue while working on something else in this repo, fix it in place, in the same session, immediately — do not spawn it off as a separate/background/recommended task. Established after a flaky mtime race in `core/spec/ovallsp/cache/store_spec.rb` was found mid-session during Task 022.2's verification loop and initially deferred via a spawned task instead of being fixed directly; the user explicitly redirected that this must not happen going forward. This applies regardless of whether the issue is related to the task currently in progress.
 
+## Two rounds in a row on the same code: stop and roll back (mandatory)
+
+If a review round's findings are mostly about **the previous round's own
+changes**, and that happens **twice in a row**, stop the loop. Do not run
+another round. Instead:
+
+1. **Roll back** the whole thread of changes those rounds produced — not
+   the last one, the whole thread back to where it started.
+2. **Write down the root cause and the direction that was actually
+   needed**, as an entry in `docs/design/tasks/024-deferred-review-findings.md`.
+   Name the attempts and say why each was the wrong shape. That entry is
+   the deliverable; the code change is not.
+3. **Re-scope**: the problem goes to its own release or its own task, and
+   the current change set returns to what it was about.
+4. Only then resume the loop.
+
+Two consecutive self-referential rounds is the signal that the fix is
+aimed at a symptom. A correct fix does not need the next round to repair
+it; if it does, the round after that will need repairing too, and the
+change set drifts while every individual round looks productive.
+
+Established after 0.1.12, where the index's ordering instability was
+"fixed" in rounds 8, 9, 10 and 11 — each attempt bolting a sort onto one
+more *reader* of a collection whose *storage* had no order. Round 8
+pinned an accident, round 9 fixed two readers of seven with an unstable
+sort, round 10 regressed round 9's fix, round 11 restored it. Four rounds,
+zero net progress, and the release grew to 47 files and 2,463 added lines
+— larger than 0.1.9, 0.1.10 and 0.1.11 combined. The thread was rolled
+back and recorded as 024.15.
+
+Two supporting rules follow from the same episode:
+
+- **Do not tell a reviewer to assume the previous round broke something.**
+  Doing that manufactures the self-referential findings this rule exists
+  to detect, and hides the signal. Ask for defects; do not name where.
+- **Centralising a rule into a type's constructor is not free.** 0.1.12
+  moved three naming rules and an invariant into `Index::SymbolId`, and
+  one of the rounds' regressions existed *only* because logic had moved
+  into `initialize` (reading `kind:`/`name:` there silently made two
+  required keywords optional). A module function that callers invoke is
+  usually the cheaper form of "one place that knows the rule".
+
 ## Documentation is part of the change (mandatory)
 
 Before finishing any change a user could notice, open
