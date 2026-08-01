@@ -196,22 +196,37 @@ elsewhere -- README says the unknown-method check stays silent on classes
 inheriting from a gem, "so most controllers and jobs", because reporting
 there means guessing. This check reports there.
 
-**Direction, and it is a re-scope rather than a sixth guard.** Either:
+**Direction: ask the Runtime Agent, rather than adding a sixth static
+guard.** This is the answer to the question the static approach cannot
+reach, and it closes a whole class rather than a shape.
 
-1. Withdraw the capability from 0.2.0. Five capability rows, five
-   features. The code comes out with it; shipping it disabled is worse
-   than not shipping it.
-2. Or narrow it to a case where completeness is actually attainable --
-   the strongest candidate being "the controller chain's class bodies
-   contain nothing but `def`s and callback forms this analysis models,
-   the view renders no partials, and no other controller renders this
-   view". That is a much smaller feature than the changelog describes,
-   and it needs its own acceptance criteria before any code moves.
+The Agent has the real application loaded. It cannot say *what* a gem's
+macro assigns -- that would mean executing the action -- but it can
+report a controller's actual `_process_action_callbacks` chain, which is
+exactly where `load_and_authorize_resource`, `expose`, Devise and
+ActiveAdmin install themselves. Comparing that chain against the methods
+the workspace defines answers the question this check actually needs:
 
-Option 1 is what the project's own standard points at: "a wrong report is
-worse than a missed one" is this check's stated bar, and it has not met
-it in three attempts. Whichever is chosen, it is a decision about what
-0.2.0 ships, not a defect to patch in the current change set.
+> is every source that contributes to this action one this analysis has
+> read?
+
+A callback the workspace cannot account for means stay silent. That
+subsumes the gem-macro shape, the concern shape, and every framework
+callback at once -- and it is the same shape of question the ancestry
+registry already asks the Agent, so the transport, the deferral and the
+"answer arrives later" handling all exist.
+
+Two of the five known shapes are *not* covered by it and stay static
+work: an ivar assigned in a partial the view renders (collect ivar writes
+from the partials a template renders, which is a parse away), and a view
+rendered by another controller's action (`render "users/show"` from
+`AdminController`; the index already knows every literal render target,
+so this is a reverse lookup rather than new information).
+
+Until that exists the check does not meet its own stated bar -- "a wrong
+report is worse than a missed one" -- on gem-backed controllers, which is
+most of them. Whether 0.2.0 ships it meanwhile is a decision about the
+release, not a defect to patch in the current change set.
 
 ## 024.14 Workspace-wide diagnostics do not fire against the real Rails fixture
 
