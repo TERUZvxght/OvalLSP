@@ -138,6 +138,20 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     expect(findings("Widget.new.resize(1.5)").size).to eq(1)
   end
 
+  # `infer_at` is asked for the type at the argument's *end* offset, and
+  # the innermost node containing that offset is the right operand of any
+  # binary expression -- not the argument. `"=" * 80` is a String and was
+  # reported as an Integer. Ordinary, working Ruby.
+  {
+    "a repeated string" => 'Widget.new.label("=" * 80)',
+    "an indent expression" => 'Widget.new.label("  " * 2)',
+    "a sum" => 'Widget.new.label("a" + "b" * 2)'
+  }.each do |description, call|
+    it "says nothing about #{description}" do
+      expect(findings(call)).to be_empty
+    end
+  end
+
   it "says nothing when the argument matches the declared type" do
     expect(findings("Widget.new.resize(3)\n")).to be_empty
   end

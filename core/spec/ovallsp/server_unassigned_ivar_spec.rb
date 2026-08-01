@@ -328,6 +328,27 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     expect(run_server(controller: controller, view: "<%= render \"header\" %>\n<%= @breadcrumbs %>")).to be_empty
   end
 
+  # `skip_before_action` is on the whitelist because the chain builder
+  # reads it -- without this fixture, removing it from the list left the
+  # whole suite green while switching the check off for every controller
+  # that skips an inherited callback.
+  it "still reports for a controller whose class body skips a callback" do
+    controller = <<~RUBY
+      class ApplicationController
+      end
+
+      class UsersController < ApplicationController
+        skip_before_action :verify_authenticity_token
+
+        def show
+          @user = User.find(params[:id])
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= @usr.name %>").size).to eq(1)
+  end
+
   it "says nothing when the controller uses instance_variable_set" do
     controller = <<~RUBY
       class UsersController

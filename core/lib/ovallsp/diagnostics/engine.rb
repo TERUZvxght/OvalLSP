@@ -318,6 +318,18 @@ module Ovallsp
           # the constant, so the answer was `ClassOf[SmallInteger]` -- the
           # class object rather than the instance being passed. The end
           # offset is inclusive, so a literal still resolves to itself.
+          # An argument whose source carries a top-level operator is not
+          # judged at all. `infer_at` answers about the innermost node at
+          # the offset it is given, and for `"=" * 80` that is the right
+          # operand -- so the end offset says Integer about a String
+          # argument, and the start offset says `ClassOf[...]` about
+          # `SmallInteger.new`, which is why the end is used at all.
+          # Neither is the argument's own type, and asking for that means
+          # carrying the argument *node* here rather than a range. Until
+          # it does, an expression is a shape this check declines rather
+          # than one it guesses at.
+          next if operator_expression?(document, range)
+
           actual = context.local_inferencer.infer_at(document, range[:end])
           next unless actual.is_a?(Types::Nominal)
           next if compatible_nominal?(actual, expected, context)
@@ -357,6 +369,22 @@ module Ovallsp
       # direction stays reported, because a Float where an Integer is
       # declared is what an array index or `String#*` actually breaks on.
       COERCES_TO = { "Integer" => %w[Float Complex Rational] }.freeze
+
+      # A binary operator between two non-space characters, outside a
+      # string literal's own content. Deliberately crude and deliberately
+      # over-eager: every false match here costs a report this check would
+      # rather not make.
+      OPERATOR_IN_ARGUMENT = %r{[^\s](\s*)(\*\*|[-+*/%]|<<)(\1)[^\s=]}
+
+      def operator_expression?(document, range)
+        first = document.position_to_char_offset(range[:start])
+        last = document.position_to_char_offset(range[:end])
+        return false unless first && last && last > first
+
+        document.text[first...last].to_s.match?(OPERATOR_IN_ARGUMENT)
+      rescue StandardError
+        true
+      end
 
       def compatible_nominal?(actual, expected, context)
         target = simple_name(expected.name)

@@ -150,10 +150,12 @@ missed one", so each is narrow on purpose. What that costs a user:
   it, deliberately.
 
   What that leaves reported: a controller written in plain Ruby, whose
-  view renders no partial. One shape is still wrong rather than merely
-  silent — a view rendered by a *different* controller's action
-  (`render "users/show"` from elsewhere) sees only its own controller's
-  ivars. It is recorded as 024.18 with the rest.
+  view renders no partial. Two shapes are still wrong rather than merely
+  silent, both recorded as 024.18: a view rendered by a *different*
+  controller's action (`render "users/show"` from elsewhere) sees only
+  its own controller's ivars, and a controller three or more classes deep
+  whose topmost workspace class has not been read yet is guarded only at
+  the first level.
 - **Diagnostics for files nobody has opened** work in-process but have no
   end-to-end verification against a real Rails app: the example written
   for one produced nothing in 45 seconds. The cause is diagnosed and the

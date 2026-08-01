@@ -1623,6 +1623,16 @@ module Ovallsp
       # controller. A framework base does not assign the instance
       # variables a view reads; the class the user wrote `< X` against
       # does, and that is the one worth insisting on.
+      # The view's own controller's immediate superclass, and only that
+      # one. Applying the same rule to every class that was read is the
+      # correct depth -- `UsersController < BaseController <
+      # ApplicationController` with the top unread is the same failure one
+      # level up, and it is not caught here -- but it cannot be told from
+      # the ordinary case: the last class the workspace declares inherits
+      # from a gem, which no document will ever exist for, so demanding it
+      # silences every real controller. Separating "a workspace class not
+      # read yet" from "a base class in a gem" is what 024.R7's index
+      # provides, and 024.18 records this as waiting on it.
       parent = @hierarchy_index.ancestors(owner_name).find { |entry| entry.origin == :superclass }
       return true unless parent
 

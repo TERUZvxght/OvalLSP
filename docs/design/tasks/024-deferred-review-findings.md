@@ -169,7 +169,18 @@ than guessing: a class-body call this analysis does not model (which
 covers every gem macro), a view that renders anything, and everything
 rounds 3 and 4 fixed. What is left is *precision* -- turning those two
 silences back into answers -- and one shape that is still wrong rather
-than silent (a view rendered by another controller's action).
+than silent, and one that is wrong only at depth two or more:
+
+- a view rendered by *another* controller's action (`render "users/show"`
+  from elsewhere) sees only its own controller's ivars;
+- `UsersController < BaseController < ApplicationController` with the top
+  of the chain not yet read. The depth-1 guard covers
+  `UsersController < ApplicationController`; applying the same rule to
+  every class read is the correct depth but cannot be told from the
+  ordinary case, because the last class a workspace declares inherits
+  from a gem that no document will ever exist for. Separating "a
+  workspace class not read yet" from "a base class in a gem" is exactly
+  what R7's attribution provides.
 
 Recorded under the rule in `CLAUDE.md` about a fix aimed at a symptom: three consecutive review rounds each found a *new*
 shape where this check warns on code that renders, and each round's fix
