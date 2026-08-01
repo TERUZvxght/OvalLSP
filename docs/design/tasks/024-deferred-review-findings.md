@@ -663,7 +663,11 @@ document's own `NOT YET` status -- "specified, has an E2E row, currently
 failing or pending", which `capability_coverage_spec.rb` accepts --
 unexpressible; the guard therefore exempts a pending message that says
 `NOT YET`, and `spec/meta/ci_skip_guard_spec.rb` asserts that neither
-suite's environment-skip message says it. Second, the guard was itself
+suite's environment-skip message says it. That exemption is an authoring
+rule -- a pending row has to *say* `NOT YET` -- so both language versions
+of `EXTENSION_CAPABILITIES.md` state it, and the meta spec asserts they
+do: a CI-enforced rule recorded only in a YAML comment is one an author
+meets as a red build with no way to find out why. Second, the guard was itself
 pinned by nothing: deleting the capability row leaves every check in this
 repository green, which is the same shape as the gap it closes. That is
 what the meta spec is for, following `versionPairing.test.ts`.
@@ -746,7 +750,7 @@ in a workspace of 1,200 service objects each defining `call`. Filtering
 before sorting -- the two commute here -- restores 51us with the same
 order.
 
-Every spec that could regress on re-index re-indexes, and all fifteen
+Every spec that could regress on re-index re-indexes, and all seventeen
 decisions are pinned by mutation. Reaching that took three passes, and
 the misses are the instructive part: the `search` tail first shipped
 behind a fixture whose eight files shared a single SymbolId; the ranking
@@ -754,8 +758,12 @@ key's `uri` and `line` elements were satisfied by fixtures that ordered
 files and lines the same way; `find_by_simple_name`'s spec used one name
 in two files, which is one SymbolId, so it never walked the collection it
 was written for; and the ambiguous-name spec re-indexed the
-*first*-inserted file, which lands on the ordered answer by accident. A
-fixture that passes has not shown that anything is tested.
+*first*-inserted file, which lands on the ordered answer by accident. The
+last of those was then made twice: the fixture written for the ordering
+key's `kind` element re-indexed the second-inserted file, so it could not
+fail either, and the round that added it published "all fifteen decisions
+are pinned" on its strength. A fixture that passes has not shown that
+anything is tested.
 **Area:** `core/lib/ovallsp/workspace_index.rb`
 
 `@by_symbol` maps a SymbolId to a list of `[uri, declaration]`, and

@@ -88,7 +88,7 @@ jobs:
               # failure.
               skipped = examples.reject { |ex| ex.fetch("status") != "pending" || ex.fetch("pending_message").to_s.include?("NOT YET") }
               unless skipped.empty?
-                warn "#{skipped.size}/#{examples.size} #{label} examples were skipped in CI (rails/sqlite3 must be installed, not optional, here):"
+                warn "#{skipped.size}/#{examples.size} #{label} examples were skipped in CI. Either rails/sqlite3 are missing (they must be installed here, not optional), or a deliberately pending row does not say NOT YET in its message, which docs/EXTENSION_CAPABILITIES.md requires:"
                 skipped.each { |ex| warn "  - #{ex.fetch("full_description")} (#{ex.fetch("pending_message")})" }
                 exit 1
               end

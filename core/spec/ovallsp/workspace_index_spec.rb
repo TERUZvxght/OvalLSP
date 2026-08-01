@@ -384,6 +384,27 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       expect(index.search("widget", limit: 8).map { |m| m[:location][:start][:line] }).to eq((0...8).to_a)
     end
 
+    # The kind element of the ordering key. `class Thing` and `module
+    # Thing` in two files agree on the qualified name and on the owner
+    # (both nil), so they tie on everything else -- and `type_kind` is
+    # what `Semantic::HierarchyIndex` asks to decide whether a receiver
+    # implicitly inherits `Object`'s methods. The *class*'s own file is
+    # the one re-indexed: a re-index moves its symbol to the back of the
+    # collection, so re-saving the module's file would leave the accepted
+    # answer in front and the fixture could not fail.
+    it "resolves a name declared as both a class and a module to the same kind across a re-index" do
+      index.replace_file(summary(uri: "file:///c.rb", content_hash: "c1",
+                                 declarations: [declaration(kind: :class, owner: nil, name: "::Thing")]))
+      index.replace_file(summary(uri: "file:///m.rb", content_hash: "m1",
+                                 declarations: [declaration(kind: :module, owner: nil, name: "::Thing")]))
+      before = index.type_kind("Thing")
+      index.replace_file(summary(uri: "file:///c.rb", content_hash: "c2",
+                                 declarations: [declaration(kind: :class, owner: nil, name: "::Thing")]))
+
+      expect(index.type_kind("Thing")).to eq(before)
+      expect(before).to eq(:class)
+    end
+
     # The name element of the ranking key, on its own: the fixtures above
     # name each file after the class it declares, so uri order and name
     # order coincide and either element alone satisfies them.

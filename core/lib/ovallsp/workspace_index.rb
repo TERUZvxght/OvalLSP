@@ -182,9 +182,9 @@ module Ovallsp
     def find_by_simple_name(name)
       @mutex.synchronize do
         results = []
-        matching = ordered_symbol_ids(name) do |sid|
+        matching = ordered_symbol_ids(name, matching: lambda { |sid|
           %i[class module constant].include?(sid.kind) && simple_name(sid) == name
-        end
+        })
         matching.each do |symbol_id|
           @by_symbol.fetch(symbol_id, []).each { |(uri, decl)| results << { uri: uri, range: decl.location } }
         end
@@ -228,9 +228,9 @@ module Ovallsp
       qualified_name = Index::SymbolId.qualify_owner(name)
       @mutex.synchronize do
         results = []
-        matching = ordered_symbol_ids(simple_name_of(qualified_name)) do |sid|
+        matching = ordered_symbol_ids(simple_name_of(qualified_name), matching: lambda { |sid|
           %i[class module].include?(sid.kind) && sid.name == qualified_name
-        end
+        })
         matching.each do |symbol_id|
           @by_symbol.fetch(symbol_id, []).each { |(uri, decl)| results << { uri: uri, range: decl.location } }
         end
@@ -366,9 +366,9 @@ module Ovallsp
     def resolve_type_symbol_locked(name)
       raw = name.to_s
       simple = raw.split("::").last
-      candidates = ordered_symbol_ids(simple) do |sid|
+      candidates = ordered_symbol_ids(simple, matching: lambda { |sid|
         %i[class module].include?(sid.kind) && simple_name(sid) == simple
-      end
+      })
       return nil if candidates.empty?
 
       # Only `raw` needs normalising: it is a name as written, and may be
@@ -417,10 +417,17 @@ module Ovallsp
     # candidate and `HierarchyIndex` per ancestry lookup. Filtering commutes
     # with sorting here -- the key reads one element -- so the order is
     # identical either way.
-    def ordered_symbol_ids(simple, &filter)
-      ids = @by_simple_name.fetch(simple.to_s.downcase, [])
-      ids = ids.select(&filter) if filter
-      ids.sort_by { |sid| [sid.name.to_s, sid.kind.to_s, sid.owner.to_s] }
+    #
+    # `matching:` is a required keyword rather than a block so that
+    # omitting it is an `ArgumentError` from Ruby. A block would be `nil`
+    # when absent, and `select(&nil)` returns an enumerator of everything
+    # -- silently unfiltered -- so guarding it would have meant an `if`
+    # that all three call sites make unreachable, which this file already
+    # calls the same defect as an untested line (0.1.12, round 7).
+    def ordered_symbol_ids(simple, matching:)
+      @by_simple_name.fetch(simple.to_s.downcase, [])
+                     .select(&matching)
+                     .sort_by { |sid| [sid.name.to_s, sid.kind.to_s, sid.owner.to_s] }
     end
 
     def rank(matches, needle)

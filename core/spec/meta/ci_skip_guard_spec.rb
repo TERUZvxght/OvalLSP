@@ -45,8 +45,20 @@ RSpec.describe "the CI guard against a silently skipped suite" do
   # contract between the two, not an oversight.
   it "leaves the documented NOT YET status expressible" do
     expect(workflow).to include('pending_message").to_s.include?("NOT YET")')
-    expect(File.read(File.expand_path("../../../docs/EXTENSION_CAPABILITIES.md", __dir__)))
-      .to include("NOT YET")
+  end
+
+  # The exemption is an authoring rule -- a pending row has to *say* `NOT
+  # YET` -- and a rule enforced by CI but recorded only in a YAML comment
+  # is one an author meets as a red build with no way to find out why.
+  # Both languages, because the JA document is not generated from the EN
+  # one.
+  it "is documented in the capability document that defines the status" do
+    %w[docs/EXTENSION_CAPABILITIES.md docs/EXTENSION_CAPABILITIES.ja.md].each do |doc|
+      text = File.read(File.expand_path("../../../#{doc}", __dir__))
+
+      expect(text).to include("NOT YET")
+      expect(text).to include(".github/workflows/ci.yml")
+    end
   end
 
   # The exemption must not swallow the skip the guard is about: neither
