@@ -386,4 +386,25 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     expect(helper).not_to be_nil, "the fixture registered no route helper"
     expect(helper[:sortText]).to start_with("1-")
   end
+
+  # `word_prefix_at_position` stops at word characters, and the only
+  # context test was "is there a dot behind it". So every sigil fell
+  # through to the bare-prefix path: `@user` in a controller or a view is
+  # about the most common thing anyone types in Rails, and it was
+  # answered with every constant and Kernel method starting with `use` --
+  # accepting one of which writes `@UserProfile`.
+  {
+    "an instance variable" => "@use",
+    "a global" => "$use",
+    "a symbol" => ":use",
+    "a method being defined" => "def use"
+  }.each do |description, line|
+    it "offers nothing from the workspace after #{description}" do
+      result = complete(<<~RUBY, extra_opens: did_open("file:///p.rb", "class UserProfile; end\n"))
+        #{line}HERE
+      RUBY
+
+      expect(result[:items].map { |i| i[:label] }).not_to include("UserProfile")
+    end
+  end
 end

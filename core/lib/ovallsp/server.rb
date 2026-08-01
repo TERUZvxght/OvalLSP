@@ -2022,6 +2022,13 @@ module Ovallsp
       if receiver_dot_before?(document, position)
         return { isIncomplete: false, items: member_completion_items(document, position, prefix) }
       end
+      # A bare identifier is what the workspace and Kernel sources answer
+      # about. `@user`, `$stdout`, `:symbol` and the name in a `def` are
+      # not bare identifiers, and each was answered with every constant
+      # starting with the same letters -- accepting one of which writes
+      # `@UserProfile`. `@` is the one that matters: typing it is about
+      # the most common thing anyone does in a Rails controller or view.
+      return { isIncomplete: false, items: [] } if bound_prefix_before?(document, position)
 
       route_items =
         if prefix.empty?
@@ -2180,6 +2187,26 @@ module Ovallsp
     # Help all share, which is what actually makes Task 013's "同一式に
     # ついてHoverとCompletionが同じreceiver型を利用する" true rather than
     # just documented.
+    # Whether the identifier under the cursor is spoken for -- by a sigil
+    # that makes it a variable or a symbol rather than a name to resolve,
+    # or by a `def` that makes it a name being *declared*.
+    BOUND_PREFIX_SIGILS = %w[@ $ :].freeze
+
+    def bound_prefix_before?(document, position)
+      text = document.text
+      offset = document.position_to_char_offset(position)
+
+      left = offset
+      left -= 1 while left.positive? && word_char?(text[left - 1])
+      return false unless left.positive?
+
+      # The character immediately before the word answers all of them,
+      # `@@count` included -- its nearest neighbour is still an `@`.
+      return true if BOUND_PREFIX_SIGILS.include?(text[left - 1])
+
+      text[...left].match?(/(?:\A|[^\w.])def\s+\z/)
+    end
+
     def receiver_dot_before?(document, position)
       text = document.text
       offset = document.position_to_char_offset(position)
