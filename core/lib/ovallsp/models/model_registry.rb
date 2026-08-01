@@ -95,7 +95,7 @@ module Ovallsp
       def register_from_agent_response(name, response)
         info = prepare_replace(name => response).fetch(name)
         @mutex.synchronize do
-          @models[name] = info
+          @models[lookup_key(name)] = info
           @generation += 1
         end
       end
@@ -146,7 +146,7 @@ module Ovallsp
       # of lingering with its last-known columns/associations.
       def remove(name)
         @mutex.synchronize do
-          removed = @models.delete(name)
+          removed = @models.delete(lookup_key(name))
           @generation += 1 if removed
           removed
         end
@@ -180,6 +180,12 @@ module Ovallsp
       # `::User.find(1)` -- so an exact lookup missed, the finder's type
       # was lost, and the Agent-backed model check went quiet for that
       # receiver without saying so.
+      #
+      # Both sides of the map, not just reads. Every writer today feeds a
+      # bare Rails `model.name`, so normalising the write paths changes no
+      # answer now -- but a registry that normalises one side only is a
+      # registry whose keys depend on which door you came in, and this
+      # release is about what that costs (0.1.12).
       #
       # Normalized here rather than at each of the twenty-two call sites,
       # across five subsystems, that reach these four lookup methods, and

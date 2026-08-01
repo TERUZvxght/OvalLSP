@@ -40,6 +40,21 @@ RSpec.describe "Ovallsp root-scoped model receivers (0.1.12)" do
     it "does not answer for a nested class with the same simple name" do
       expect(model_registry.model("Admin::User")).to be_nil
     end
+
+    # The write paths normalise too. Nothing feeds them a `::`-prefixed
+    # name today, so this pins the symmetry rather than a live bug: a
+    # registry that normalises reads only is one whose keys depend on
+    # which door you came in (0.1.12).
+    it "registers and removes under the same key whichever spelling is used" do
+      registry = Ovallsp::Models::ModelRegistry.new
+      registry.register_from_agent_response(
+        "::Widget", { tableName: "widgets", partial: false, columns: [], associations: [] }
+      )
+
+      expect(registry.model("Widget")).not_to be_nil
+      expect(registry.remove("Widget")).not_to be_nil
+      expect(registry.model("::Widget")).to be_nil
+    end
   end
 
   describe "inference through a root-scoped receiver" do

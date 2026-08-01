@@ -520,7 +520,7 @@ module Ovallsp
         # switched the method off, skipping the class-level finder and the
         # source declaration below (024.3). The `.new` branch had always
         # filtered it; this branch had not.
-        class_level = resolve_class_level_finder(node.receiver.full_name, node.name)
+        class_level = resolve_class_level_finder(receiver_name, node.name)
         return class_level if class_level
 
         # `Widget.some_class_method` -- an ordinary (non-Active-Record)
