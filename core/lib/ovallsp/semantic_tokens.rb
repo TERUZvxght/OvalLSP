@@ -104,6 +104,39 @@ module Ovallsp
         super
       end
 
+      # Every remaining write shape Ruby has for these two, and the three
+      # parameter forms with no node type of their own above. Without
+      # them the same identifier was classified on one line and left
+      # unclassified on the next inside one method: `sum = amount` marked,
+      # `sum += 1` not; `@memo = sum` marked, `@memo ||= sum` not; and
+      # `*rest`, `**kw`, `&blk` never.
+      #
+      # `*_target_node` is the multiple-assignment and block-parameter
+      # form (`a, @b = 1, 2`). `engine.rb`'s `IvarWriteCollector`
+      # enumerates the same five ivar shapes, for the same reason.
+      {
+        local_variable_or_write_node: :variable,
+        local_variable_and_write_node: :variable,
+        local_variable_operator_write_node: :variable,
+        local_variable_target_node: :variable,
+        instance_variable_or_write_node: :property,
+        instance_variable_and_write_node: :property,
+        instance_variable_operator_write_node: :property,
+        instance_variable_target_node: :property,
+        rest_parameter_node: :parameter,
+        keyword_rest_parameter_node: :parameter,
+        block_parameter_node: :parameter
+      }.each do |suffix, type|
+        define_method(:"visit_#{suffix}") do |node|
+          # A target node *is* its name; a write node has a `name_loc`,
+          # and an anonymous `*`/`**`/`&` has neither a name nor a
+          # `name_loc` to mark.
+          location = node.respond_to?(:name_loc) ? node.name_loc : node.location
+          record(location, type) if location
+          super(node)
+        end
+      end
+
       # The other half of the ambiguity: a bare `foo` that Prism resolved
       # to a call rather than a local read. Only the name is marked, not
       # the arguments -- those are expressions with their own tokens.

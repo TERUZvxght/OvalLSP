@@ -164,4 +164,24 @@ RSpec.describe Ovallsp::SemanticTokens do
   it "keeps the legend order it published" do
     expect(described_class::LEGEND).to eq(%w[variable parameter property method class namespace])
   end
+
+  # The same identifier was classified on one line and left unclassified
+  # on the next, inside one method: `sum = 1` marked and `sum += 1` not,
+  # `@memo = 1` marked and `@memo ||= 1` not, and `*rest`/`**kw`/`&blk`
+  # never. A user sees one variable change colour mid-method.
+  {
+    "an operator assignment" => ["sum = 1\nsum += 1\n", "variable", 2],
+    "an or-assignment to an ivar" => ["@memo = 1\n@memo ||= 2\n", "property", 2],
+    "a multiple assignment" => ["a, b = 1, 2\n", "variable", 2],
+    "a splat parameter" => ["def go(*rest)\nend\n", "parameter", 1],
+    "a double-splat parameter" => ["def go(**kw)\nend\n", "parameter", 1],
+    "a block parameter" => ["def go(&blk)\nend\n", "parameter", 1]
+  }.each do |description, (source, type, count)|
+    it "classifies #{description}" do
+      document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+      types = described_class.collect(document).map { |token| token.type.to_s }
+
+      expect(types.count(type)).to be >= count
+    end
+  end
 end
