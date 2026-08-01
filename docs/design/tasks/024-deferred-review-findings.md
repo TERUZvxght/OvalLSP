@@ -161,6 +161,58 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.18 The unassigned-`@ivar` check cannot enumerate what it needs to
+
+**Status:** open. Recorded under the rule in `CLAUDE.md` about a fix
+aimed at a symptom: three consecutive review rounds each found a *new*
+shape where this check warns on code that renders, and each round's fix
+addressed the shape rather than the class.
+
+**Area:** `core/lib/ovallsp/server.rb` (`assigned_ivars_for` and its
+guards), `core/lib/ovallsp/diagnostics/engine.rb`
+(`unassigned_ivar_findings`)
+
+The check reports an `@ivar` a view reads that the controller never
+assigns. To be safe it needs a *complete* enumeration of the assignments
+a view can receive, and it guards the cases where it knows it cannot get
+one: `instance_variable_set`, a mixed-in module, an unmodelled callback
+form, an unread superclass, a shape the walk does not fold.
+
+The shapes found round after round, each a warning on a working page:
+
+| round | shape | fix that round applied |
+|---|---|---|
+| 3 | `@user \|\|= ...`, an assignment in a block, a `case`, a `rescue`, a multiple assignment | count assignments syntactically instead of by type inference |
+| 4 | a superclass the index had not read yet | insist the immediate superclass was read |
+| 5 | a gem's class-level macro (`load_and_authorize_resource`, `expose`, Devise, ActiveAdmin) | — |
+| 5 | an ivar assigned in a partial the view renders | — |
+| 5 | a view rendered by a *different* controller's action | — |
+
+The list does not converge, and the reason is structural: **Ruby has
+unboundedly many ways to assign an instance variable that this analysis
+cannot see**, and a gem's class-level macro is the ordinary case, not the
+exotic one. The same repository already draws this line correctly
+elsewhere -- README says the unknown-method check stays silent on classes
+inheriting from a gem, "so most controllers and jobs", because reporting
+there means guessing. This check reports there.
+
+**Direction, and it is a re-scope rather than a sixth guard.** Either:
+
+1. Withdraw the capability from 0.2.0. Five capability rows, five
+   features. The code comes out with it; shipping it disabled is worse
+   than not shipping it.
+2. Or narrow it to a case where completeness is actually attainable --
+   the strongest candidate being "the controller chain's class bodies
+   contain nothing but `def`s and callback forms this analysis models,
+   the view renders no partials, and no other controller renders this
+   view". That is a much smaller feature than the changelog describes,
+   and it needs its own acceptance criteria before any code moves.
+
+Option 1 is what the project's own standard points at: "a wrong report is
+worse than a missed one" is this check's stated bar, and it has not met
+it in three attempts. Whichever is chosen, it is a decision about what
+0.2.0 ships, not a defect to patch in the current change set.
+
 ## 024.14 Workspace-wide diagnostics do not fire against the real Rails fixture
 
 **Status:** open
