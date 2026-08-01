@@ -169,8 +169,11 @@ describe('statusPresentation', () => {
 });
 
 // The extraction is only worth anything if `extension.ts` actually calls
-// it. 024.10's first attempt left the original copy in place, so this
-// asserts the source, the way `versionPairing.test.ts` does.
+// it. 024.10's first attempt exported the strings and left the *choice*
+// between them at the call site, where a reviewer swapped it with the
+// suite green -- an extraction the call site does not use is worse than
+// none, because the tests then describe code nobody runs. Asserting on
+// source is how `versionPairing.test.ts` covers the same shape.
 describe('extension.ts uses the extracted decisions', () => {
   const source = fs.readFileSync(path.join(__dirname, '../../../src/extension.ts'), 'utf8');
 

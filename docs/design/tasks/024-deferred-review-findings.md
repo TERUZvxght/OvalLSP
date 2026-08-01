@@ -704,8 +704,9 @@ for widening past its own subject.
 `documentSelectorFor` and `statusPresentation` moved into
 `vscode/src/clientPresentation.ts`, which imports no `vscode`, with
 fifteen unit tests -- thirteen behavioural, plus two that assert
-`extension.ts` actually calls them (024.10's first attempt left the
-original copy in place). `resolveStatus` was added in a second pass: the
+`extension.ts` actually calls them (024.10's first attempt exported the
+strings but left the choice between them at the call site, so the tests
+described code the extension did not reach). `resolveStatus` was added in a second pass: the
 extraction had left the "no client" / "the client did not answer"
 decision at the call site, where a mutation reporting a failure as "no
 client" passed all 167 tests.
@@ -769,9 +770,18 @@ in a workspace of 1,200 service objects each defining `call`. Filtering
 before sorting -- the two commute here -- restores 51us with the same
 order.
 
-`search`'s ranking key grew from one element to seven, which is the
-largest cost this change adds to a read: 30,000 matches sort in 72ms
-against 24ms, on a query the user asks for and waits on.
+`search`'s ranking key grew from one element to seven, which would have
+been the largest cost this change adds to a read -- 30,000 matches sort
+in 68ms against the 23.7ms the one-element key cost, on a path the picker
+walks with an empty query and the index mutex held. `min_by(limit)`
+answers identically, because the key is total, and takes 23.6ms: the key
+grew sevenfold and the query did not get slower.
+
+Neither that nor the filter-before-sort above is a *behavioural* line, so
+no example in the suite fails when either is reversed -- which is exactly
+why they need `spec/meta/workspace_index_cost_spec.rb`. Both read as
+tidying: a `select` after a `sort` looks no worse than before it, and
+`sort_by { }.first(n)` is the more familiar idiom.
 
 Every spec that could regress on re-index re-indexes, and all
 twenty-three decisions are pinned by mutation -- deletions and

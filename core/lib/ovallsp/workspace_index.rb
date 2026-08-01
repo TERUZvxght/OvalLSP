@@ -292,7 +292,7 @@ module Ovallsp
 
           entries.each { |(uri, decl)| matches << { symbol_id: symbol_id, uri: uri, location: decl.location } }
         end
-        rank(matches, needle).first(limit)
+        rank(matches, needle, limit)
       end
     end
 
@@ -441,7 +441,7 @@ module Ovallsp
                      .sort_by { |sid| [sid.name.to_s, sid.kind.to_s, sid.owner.to_s] }
     end
 
-    def rank(matches, needle)
+    def rank(matches, needle, limit)
       # The exact-match bucket was the whole key, so everything inside a
       # bucket was decided by `@by_symbol`'s insertion order -- and this
       # result is *truncated*, so that changed which symbols survived
@@ -459,11 +459,14 @@ module Ovallsp
       # name across ten models ties on all of them; which three survived
       # `limit:` depended on registration order.
       #
-      # Sorting 30,000 matches on this key measures 72ms against 24ms for
-      # the one-element key it replaced (2,000 files of 15 methods each,
-      # one query). Three times the cost of a decision a user makes and
-      # waits for, against an answer whose *membership* was otherwise
-      # decided by which file was saved last.
+      # `min_by(limit)`, not `sort_by { }.first(limit)`. The key is total,
+      # so the two answer identically -- but the picker opens with an
+      # empty query, so every declaration in the workspace matches, on a
+      # keystroke path that holds this mutex. Measured on 30,000 matches
+      # (2,000 files of 15 methods each): sorting all of them on this key
+      # is 68ms, taking the hundred asked for is 23.6ms, and the
+      # one-element key this replaced cost 23.7ms sorted. The key grew
+      # sevenfold and the query did not get slower.
       #
       # `[kind, owner]` last is what makes it total: two declarations that
       # agree on name, uri and position are the same symbol or differ in
@@ -472,7 +475,7 @@ module Ovallsp
       # construction in this tree does -- but `Server#plugin_declaration`
       # copies a plugin's own SymbolId verbatim, so a plugin that starts
       # populating it would put an index-order tie back.
-      matches.sort_by do |m|
+      matches.min_by(limit) do |m|
         [simple_name(m[:symbol_id]).downcase == needle ? 0 : 1,
          m[:symbol_id].name.to_s, m[:uri],
          m[:location][:start][:line], m[:location][:start][:character],

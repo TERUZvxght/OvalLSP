@@ -545,9 +545,11 @@ function registerObservationCommands(context: vscode.ExtensionContext, outputCha
   );
 }
 
-// Task 020's required status set. Polled (see #startStatusPolling) rather
-// than pushed, matching Server's own `ovallsp/status`'s own design ("polled
-// by the client rather than pushed as notifications").
+// Task 020's status bar. Polled rather than pushed, matching
+// `Server#status_result`'s own design ("polled by the client rather than
+// pushed as notifications"). What each state is *called* lives in
+// `clientPresentation.ts` with the rest of the presentation (024.17);
+// this function owns the polling and the `vscode` wiring only.
 function startStatusPolling(statusBarItem: vscode.StatusBarItem): vscode.Disposable {
   const interval = setInterval(() => {
     void (async () => {
