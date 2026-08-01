@@ -773,7 +773,9 @@ order.
 `search`'s ranking key grew from one element to seven, which is the
 largest cost this change adds to a read: the picker opens with an empty
 query, so every declaration in the workspace is a match, and the index
-mutex is held throughout. Ranking 32,000 matches measures 68ms sorting
+mutex is held throughout. Ranking the 32,000 matches an empty query
+returns for 2,000 files that each declare a class and fifteen methods
+measures 68ms sorting
 all of them, 17ms with `min_by(limit)` -- which answers identically
 because the key is total -- against 10ms for the one-element key it
 replaced. About 7ms more per query, for an answer whose membership no

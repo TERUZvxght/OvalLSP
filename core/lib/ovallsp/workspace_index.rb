@@ -422,10 +422,14 @@ module Ovallsp
     # a bucket is keyed on the downcased simple name and so mixes kinds: a
     # workspace where 1200 service objects each define `call` puts 1200
     # method SymbolIds in the bucket `resolve_type_name("Call")` reads.
-    # Sorting that whole bucket to then keep one element measured 3.7ms
-    # per call against 51us for the filtered sort (300 objects: 878us
-    # against 20us), on a path `Diagnostics::Engine` runs per constant
-    # candidate and `HierarchyIndex` per ancestry lookup. Filtering commutes
+    # Timing `resolve_type_name("Call")` on that workspace, sorting the
+    # whole bucket to then keep one element measured 3.7ms per call
+    # against 51us for the filtered sort (300 objects: 878us against
+    # 20us). An independent re-measurement of the bucket operation alone
+    # got 1.25ms against 40us -- same direction, same order of magnitude,
+    # a third of the absolute. What the two agree on is the ratio, and
+    # this is a path `Diagnostics::Engine` runs per constant candidate and
+    # `HierarchyIndex` per ancestry lookup. Filtering commutes
     # with sorting here -- the key reads one element -- so the order is
     # identical either way.
     #
@@ -460,12 +464,14 @@ module Ovallsp
       # `limit:` depended on registration order.
       #
       # `min_by(limit)`, not `sort_by { }.first(limit)`. The key is total,
-      # so the two answer identically -- but the picker opens with an
+      # so the two answer identically for the Integer limit its one
+      # caller passes -- but the picker opens with an
       # empty query, so every declaration in the workspace matches, on a
-      # keystroke path that holds this mutex. Ranking 32,000 matches
-      # (2,000 files of 15 methods each) measures 68ms sorting all of them
-      # on this key, 17ms taking the hundred asked for, and 10ms for the
-      # one-element key this replaced. So the key does cost about 7ms more
+      # keystroke path that holds this mutex. Ranking the 32,000 matches
+      # an empty query returns for 2,000 files that each declare a class
+      # and fifteen methods measures 68ms sorting all of them on this key,
+      # 17ms taking the hundred asked for, and 10ms for the one-element
+      # key this replaced. So the key does cost about 7ms more
       # than it used to, not nothing: `min_by` recovers four fifths of
       # what the wider key added, and the rest buys an answer whose
       # membership does not depend on which file was saved last.

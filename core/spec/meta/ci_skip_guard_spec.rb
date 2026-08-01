@@ -15,6 +15,15 @@
 RSpec.describe "the CI guard against a silently skipped suite" do
   let(:workflow) { read_utf8(File.expand_path("../../../.github/workflows/ci.yml", __dir__)) }
 
+  # The guard step's own text, prose comments elsewhere in the workflow
+  # excluded. Both spec paths are also named in the install step's
+  # comment, so asking whether the *file* mentions a path passes with the
+  # path deleted from the table the guard iterates -- which is 024.16's
+  # gap, reopened.
+  let(:guard) { workflow[/Fail if the real-Rails or capability suites were skipped.*?(?=\n  \w)/m] }
+
+  let(:suite_table) { guard[/\{\n.*?\}\.each do \|label, path\|/m] }
+
   # The Japanese capability document is not ASCII, and this suite runs
   # under whatever locale the machine has -- `File.read` alone raises
   # `invalid byte sequence in US-ASCII` on a CI runner with none set,
@@ -27,15 +36,15 @@ RSpec.describe "the CI guard against a silently skipped suite" do
   # yields zero examples, which the guard's own "contributed zero
   # examples" branch turns into a failure rather than a silent pass.
   it "checks both suites that can skip themselves for want of an environment" do
+    expect(suite_table).not_to be_nil, "the guard no longer iterates a table of suite paths"
+
     %w[spec/integration/real_rails_spec.rb spec/e2e/capabilities_spec.rb].each do |path|
       expect(File).to exist(File.expand_path("../../#{path}", __dir__))
-      expect(workflow).to include(path)
+      expect(suite_table).to include(path)
     end
   end
 
   it "fails the build on a skip rather than only reporting it" do
-    guard = workflow[/Fail if the real-Rails or capability suites were skipped.*?(?=\n  \w)/m]
-
     # The *skip* branch's own `exit 1`, sliced out: the guard has a
     # second one for the zero-examples branch, so asking whether the step
     # contains the string anywhere passes with the skip branch reduced to

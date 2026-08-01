@@ -33,7 +33,7 @@ RSpec.describe "WorkspaceIndex's two cost decisions" do
 
   # `workspace/symbol` truncates, and the picker opens with an empty
   # query, so every declaration in the workspace is a match. Sorting all
-  # of them on the seven-element key measured 68ms against 23.6ms for
+  # of them on the seven-element key measured 68ms against 17ms for
   # `min_by(limit)`, which answers identically because the key is total.
   it "takes only the matches it will return, rather than sorting them all" do
     body = body_of("rank")
