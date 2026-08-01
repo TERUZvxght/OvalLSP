@@ -66,7 +66,8 @@ suite in step: every row must have an example, every example a row.
 - **NOT YET** — specified, has an E2E row, currently failing or pending.
   The extension is not claimed to do this. If the row is *pending* rather
   than failing, its `pending`/`skip` message must contain the words
-  `NOT YET`: CI fails the build on any skipped example in this suite,
+  `NOT YET`: CI fails the build on any skipped example in this suite that
+  does not say so,
   because a suite that skips itself for want of rails/sqlite3 would
   otherwise report every capability as shipped, and that string is what
   tells a deliberate gap apart from a broken environment

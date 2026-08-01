@@ -761,7 +761,11 @@ in a workspace of 1,200 service objects each defining `call`. Filtering
 before sorting -- the two commute here -- restores 51us with the same
 order.
 
-Every spec that could regress on re-index re-indexes, and all seventeen
+`search`'s ranking key grew from one element to seven, which is the
+largest cost this change adds to a read: 30,000 matches sort in 72ms
+against 24ms, on a query the user asks for and waits on.
+
+Every spec that could regress on re-index re-indexes, and all nineteen
 decisions are pinned by mutation. Reaching that took three passes, and
 the misses are the instructive part: the `search` tail first shipped
 behind a fixture whose eight files shared a single SymbolId; the ranking
@@ -769,7 +773,10 @@ key's `uri` and `line` elements were satisfied by fixtures that ordered
 files and lines the same way; `find_by_simple_name`'s spec used one name
 in two files, which is one SymbolId, so it never walked the collection it
 was written for; and the ambiguous-name spec re-indexed the
-*first*-inserted file, which lands on the ordered answer by accident. The
+*first*-inserted file, which lands on the ordered answer by accident; and
+the `line`/`character` pair went the same way as the `uri`/`line` pair
+had, each fixture holding one of the two at zero while varying the other,
+which any order of the pair satisfies. The
 last of those was then made twice: the fixture written for the ordering
 key's `kind` element re-indexed the second-inserted file, so it could not
 fail either, and the round that added it published "all fifteen decisions

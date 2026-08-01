@@ -383,13 +383,16 @@ module Ovallsp
       candidates.find { |sid| sid.name == qualified } || candidates.first
     end
 
-    # One collection is deliberately left in insertion order:
-    # `#method_symbol_ids` returns `@by_symbol.keys`, which a re-index does
-    # move. All three callers are order-insensitive -- two `.any?` it, and
-    # `MethodResolver` feeds it to `merge_names`, which sorts on a total
-    # key -- so ordering it would buy nothing and cost a sort on the
-    # completion path. "The order lives in the storage" is a claim about
-    # the collections whose order a caller can observe.
+    # Two collections are deliberately left in insertion order, both of
+    # which a re-index does move. `#method_symbol_ids` returns
+    # `@by_symbol.keys`: all three callers are order-insensitive -- two
+    # `.any?` it, and `MethodResolver` feeds it to `merge_names`, which
+    # sorts on a total key. `#uris_by_source` reads `@summaries`, whose
+    # entry `remove_file_locked` deletes and `replace_file` re-inserts;
+    # its one caller sweeps deleted files and does not care in what order.
+    # Ordering either would buy nothing and cost a sort on the completion
+    # path. "The order lives in the storage" is a claim about the
+    # collections whose order a caller can observe.
     #
     # `[uri, line, character]`. Uri first because that is what a caller
     # taking `.first` is choosing between; source position breaks the tie
@@ -455,6 +458,12 @@ module Ovallsp
       # (`Server#apply_plugin_context`), so a plugin generating one method
       # name across ten models ties on all of them; which three survived
       # `limit:` depended on registration order.
+      #
+      # Sorting 30,000 matches on this key measures 72ms against 24ms for
+      # the one-element key it replaced (2,000 files of 15 methods each,
+      # one query). Three times the cost of a decision a user makes and
+      # waits for, against an answer whose *membership* was otherwise
+      # decided by which file was saved last.
       #
       # `[kind, owner]` last is what makes it total: two declarations that
       # agree on name, uri and position are the same symbol or differ in

@@ -10,10 +10,10 @@ RSpec.describe Ovallsp::WorkspaceIndex do
     )
   end
 
-  def declaration(kind:, owner:, name:, line: 0)
+  def declaration(kind:, owner:, name:, line: 0, character: 0)
     Ovallsp::Index::Declaration.new(
       symbol_id: Ovallsp::Index::SymbolId.new(kind: kind, owner: owner, name: name, discriminator: nil),
-      location: { start: { line: line, character: 0 }, end: { line: line, character: 1 } },
+      location: { start: { line: line, character: character }, end: { line: line, character: character + 1 } },
       visibility: nil,
       parameters: [],
       origin: :source
@@ -382,6 +382,24 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       index.replace_file(summary(uri: "file:///w.rb", declarations: decls.reverse))
 
       expect(index.search("widget", limit: 8).map { |m| m[:location][:start][:line] }).to eq((0...8).to_a)
+    end
+
+    # Line before column, and the two have to disagree to show it: every
+    # other fixture here holds one of them at 0 while varying the other,
+    # which any order of the pair satisfies. A class reopened at the top
+    # of a file and again, indented, inside a module further down is the
+    # real shape -- and which one wins is where go-to-definition lands.
+    it "orders declarations in one file by line before column, when the two disagree" do
+      index.replace_file(
+        summary(uri: "file:///w.rb",
+                declarations: [declaration(kind: :class, owner: nil, name: "::Widget", line: 9, character: 0),
+                               declaration(kind: :class, owner: nil, name: "::Widget", line: 5, character: 4)])
+      )
+
+      positions = index.class_declarations("Widget").map { |d| [d[:range][:start][:line], d[:range][:start][:character]] }
+      expect(positions).to eq([[5, 4], [9, 0]])
+      expect(index.search("widget", limit: 2).map { |m| [m[:location][:start][:line], m[:location][:start][:character]] })
+        .to eq(positions)
     end
 
     # The kind element of the ordering key. `class Thing` and `module
