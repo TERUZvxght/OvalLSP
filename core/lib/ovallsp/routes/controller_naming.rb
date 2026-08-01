@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../index/symbol_id"
+
 module Ovallsp
   module Routes
     # Converts a Rails route's `defaults[:controller]` path (e.g. "posts",
@@ -15,7 +17,7 @@ module Ovallsp
         return nil if segments.empty?
 
         segments[-1] = "#{segments[-1]}Controller"
-        "::#{segments.join('::')}"
+        Index::SymbolId.qualify_owner(segments.join("::"))
       end
 
       def camelize(segment)
@@ -27,7 +29,7 @@ module Ovallsp
       # view's conventional controller (Task 008) as well as a route
       # helper's underlying controller path.
       def view_directory(owner_name)
-        segments = owner_name.to_s.delete_prefix("::").split("::")
+        segments = Index::SymbolId.bare_name(owner_name).split("::")
         return nil if segments.empty?
 
         segments[-1] = segments[-1].sub(/Controller\z/, "")

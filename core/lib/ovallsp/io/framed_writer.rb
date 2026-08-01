@@ -13,24 +13,30 @@ module Ovallsp
         @mutex = Mutex.new
       end
 
-      # A header and its body are two writes, and more than one thread
-      # reaches this: diagnostics are published from the dispatch thread,
-      # from the Runtime Agent's bootstrap, and (0.2.0) from the
-      # workspace-wide pass. Interleaving them puts a `Content-Length`
-      # in front of somebody else's message, which is not a recoverable
-      # protocol error -- the client resynchronises by guessing.
+      # More than one thread reaches this. Diagnostics go out on the
+      # dispatch thread for didOpen/didChange, and *every*
+      # `Server#republish_open_diagnostics` call site runs on a background
+      # one: the Runtime Agent becoming ready, a restart, a routes or
+      # models refresh, a deferred ancestry answer landing. 0.2.0 adds
+      # another -- `WorkspaceDiagnostics` publishes for files nobody has
+      # open, on its own thread.
+      #
+      # The mutex is what makes a frame safe: no two writers are ever
+      # inside the sink at once, so a `Content-Length` can never land in
+      # front of another message's body -- the one framing error a client
+      # cannot recover from, since it resynchronises by guessing.
+      #
+      # Building the frame first and writing it once narrows a second
+      # window the mutex cannot close: `Thread#kill` between two writes,
+      # and the bounded join at shutdown kills exactly these threads. It
+      # narrows rather than closes it -- a write larger than `PIPE_BUF`
+      # is a retry loop underneath, so one call is not an atomicity
+      # guarantee on a real pipe.
       def write_message(message)
         body = JSON.generate(message).b
-        header = "Content-Length: #{body.bytesize}\r\n\r\n".b
-        # One write, not two. The mutex gives mutual exclusion between
-        # threads; it gives nothing against `Thread#kill`, and a
-        # background thread killed by the bounded join at shutdown was
-        # landing between the header and the body -- leaving a
-        # `Content-Length` with no message after it, which is the one
-        # framing error a client cannot recover from. Reproduced at
-        # roughly 9 runs in 12 before this.
+        frame = "Content-Length: #{body.bytesize}\r\n\r\n".b + body
         @mutex.synchronize do
-          @output.write(header + body)
+          @output.write(frame)
           @output.flush if @output.respond_to?(:flush)
         end
       end

@@ -34,11 +34,16 @@ RSpec.describe Ovallsp::IO::FramedWriter do
   end
 end
 
-# Background threads publish diagnostics too (the Runtime Agent becoming
-# ready, and from 0.2.0 the workspace-wide pass), so two writers can be
-# inside this at once. A header and its body are two separate writes: let
-# them interleave and the stream carries a length that belongs to someone
-# else's message, which is not a recoverable protocol error -- the client
+# Diagnostics go out on the dispatch thread for didOpen/didChange, and on
+# a background one from *every* `server.rb` `republish_open_diagnostics`
+# call site (the Runtime Agent becoming ready, a restart, a routes or
+# models refresh, a deferred ancestry answer landing) -- and from 0.2.0
+# on `WorkspaceDiagnostics`' own thread, which publishes for files nobody
+# has open.
+#
+# A header and its body are two writes: let them interleave
+# and the stream carries a length belonging to someone else's message,
+# which is the one framing error a client cannot recover from -- it
 # resynchronises by guessing.
 RSpec.describe "Ovallsp::IO::FramedWriter under concurrent writers" do
   # A StringIO will not reproduce this: the GVL rarely switches between
@@ -54,23 +59,6 @@ RSpec.describe "Ovallsp::IO::FramedWriter under concurrent writers" do
       @buffer << chunk
       Thread.pass
     end
-  end
-
-  # A frame that reaches the stream as two writes can be interrupted
-  # between them -- by another thread, or by `Thread#kill` at shutdown,
-  # which no mutex defends against. A `Content-Length` with no message
-  # after it is the one framing error a client cannot recover from.
-  it "puts a frame on the stream in a single write" do
-    output = YieldingOutput.new
-    writes = []
-    allow(output).to receive(:write).and_wrap_original do |original, chunk|
-      writes << chunk
-      original.call(chunk)
-    end
-
-    Ovallsp::IO::FramedWriter.new(output).write_message(jsonrpc: "2.0", method: "note", params: {})
-
-    expect(writes.size).to eq(1)
   end
 
   it "never interleaves one message's header with another's body" do
@@ -94,5 +82,49 @@ RSpec.describe "Ovallsp::IO::FramedWriter under concurrent writers" do
 
     expect(messages.size).to eq(160)
     expect(messages.map { |m| m[:params][:thread] }.uniq.sort).to eq((0..7).to_a)
+  end
+
+  # One `write` is indivisible in this process, where the sink is a
+  # String; it is not indivisible on a real pipe, where `IO#write` may
+  # release the GVL partway and two concurrent writes interleave in the
+  # kernel. Nothing in-process can observe that, so what is asserted here
+  # is the thing that prevents it: no two writers are ever inside the sink
+  # at the same time.
+  it "never has two writers inside the output at once" do
+    overlapped = false
+    inside = 0
+    sink = Class.new do
+      define_method(:initialize) { @buffer = +"" }
+      define_method(:flush) { nil }
+      define_method(:write) do |chunk|
+        inside += 1
+        overlapped = true if inside > 1
+        Thread.pass
+        @buffer << chunk
+        inside -= 1
+      end
+    end.new
+
+    writer = Ovallsp::IO::FramedWriter.new(sink)
+    8.times.map { |i| Thread.new { 20.times { writer.write_message(jsonrpc: "2.0", method: "n", params: { i: i }) } } }
+         .each(&:join)
+
+    expect(overlapped).to be(false)
+  end
+
+  # A frame that reaches the stream as two writes can also be interrupted
+  # *between* them by `Thread#kill`, which no mutex defends against -- and
+  # the bounded join at shutdown kills exactly the threads that publish.
+  it "puts a frame on the stream in a single write" do
+    output = YieldingOutput.new
+    writes = []
+    allow(output).to receive(:write).and_wrap_original do |original, chunk|
+      writes << chunk
+      original.call(chunk)
+    end
+
+    Ovallsp::IO::FramedWriter.new(output).write_message(jsonrpc: "2.0", method: "note", params: {})
+
+    expect(writes.size).to eq(1)
   end
 end

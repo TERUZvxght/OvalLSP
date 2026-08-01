@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "set"
+require_relative "index/symbol_id"
 
 module Ovallsp
   # Workspace-wide aggregation of FileSummary declarations, keyed by
@@ -89,10 +90,33 @@ module Ovallsp
 
         remove_file_locked(summary.uri)
         @summaries[summary.uri] = summary
+        touched = []
         summary.declarations.each do |decl|
           (@by_symbol[decl.symbol_id] ||= []) << [summary.uri, decl]
           @by_simple_name[simple_name(decl.symbol_id).downcase] << decl.symbol_id
+          touched << decl.symbol_id
         end
+        # The order lives here, not in the readers. `remove_file_locked`
+        # deletes this uri's entries and the loop above appends the new
+        # ones, so without this a re-index moves a file's declarations to
+        # the back of every list they are in -- and the readers take
+        # `.first` of such a list, or truncate it. Typing one character in
+        # an unrelated file then changed where go-to-definition landed and
+        # which symbols survived `workspace/symbol`'s limit.
+        #
+        # Sorted once per touched symbol per file rather than inserted in
+        # place. Cost is quadratic in a symbol's *fan-out* -- Cold Index
+        # re-sorts a list of length i on the i-th file that joins it -- and
+        # the fan-out that matters is a reopened namespace module, not a
+        # class: 78 of this project's own 79 `lib` files declare
+        # `module Ovallsp`, so that one list reaches 78. Measured on real
+        # trees, `replace_file` totals: `core/lib` 79 files 1.4 -> 3.5ms,
+        # `activerecord/lib` 397 files 9.5 -> 32.5ms. Negligible against
+        # parsing. It stops being negligible only at a fan-out no real tree
+        # has shown -- a synthetic 4,000-file single-namespace workspace
+        # measures 80ms -> 3.0s -- which is the shape to re-measure if this
+        # ever feels slow (024.15).
+        touched.uniq.each { |symbol_id| @by_symbol[symbol_id].sort_by!(&method(:entry_order)) }
         @generation += 1
         true
       end
@@ -158,10 +182,10 @@ module Ovallsp
     def find_by_simple_name(name)
       @mutex.synchronize do
         results = []
-        @by_simple_name.fetch(name.downcase, []).each do |symbol_id|
-          next unless %i[class module constant].include?(symbol_id.kind)
-          next unless simple_name(symbol_id) == name
-
+        matching = ordered_symbol_ids(name, matching: lambda { |sid|
+          %i[class module constant].include?(sid.kind) && simple_name(sid) == name
+        })
+        matching.each do |symbol_id|
           @by_symbol.fetch(symbol_id, []).each { |(uri, decl)| results << { uri: uri, range: decl.location } }
         end
         results
@@ -181,15 +205,36 @@ module Ovallsp
     # name should ask by name. `name` is always absolute-qualified, so
     # this cannot collide with a same-named class in another namespace.
     def class_declaration_uris(qualified_name)
-      @mutex.synchronize do
-        uris = []
-        @by_simple_name.fetch(simple_name_of(qualified_name).downcase, []).each do |symbol_id|
-          next unless %i[class module].include?(symbol_id.kind)
-          next unless symbol_id.name == qualified_name
+      class_declarations(qualified_name).map { |entry| entry[:uri] }
+    end
 
-          @by_symbol.fetch(symbol_id, []).each { |(uri, _decl)| uris << uri }
+    # The same lookup, with each declaration's own range — for callers
+    # that want to jump to it rather than merely name its file. One
+    # implementation of the matching rule, for the reason this release
+    # exists: the alternative is a second place that has to remember that
+    # `owner` is lexical.
+    #
+    # The `::` is normalised here rather than by the caller. Indexed names
+    # always carry it, so a bare argument silently matches nothing —
+    # and "silently" is the problem: `Server#find_controller_uri` used to
+    # prefix by hand, and a caller that forgot would have lost a whole
+    # controller's ivars with no error anywhere. The lookup is the one
+    # place that knows what shape its own keys are.
+    # No nil guard: `qualify_owner(nil)` is nil, `simple_name_of(nil)` is
+    # `""`, and nothing is indexed under `""` — so a nil name already
+    # returns []. A guard here would be a line no input can reach, which
+    # is the same defect as an untested one (0.1.12, round 7).
+    def class_declarations(name)
+      qualified_name = Index::SymbolId.qualify_owner(name)
+      @mutex.synchronize do
+        results = []
+        matching = ordered_symbol_ids(simple_name_of(qualified_name), matching: lambda { |sid|
+          %i[class module].include?(sid.kind) && sid.name == qualified_name
+        })
+        matching.each do |symbol_id|
+          @by_symbol.fetch(symbol_id, []).each { |(uri, decl)| results << { uri: uri, range: decl.location } }
         end
-        uris
+        results
       end
     end
 
@@ -201,7 +246,9 @@ module Ovallsp
     # already uses: match by unqualified simple name, then prefer whichever
     # candidate's own full name exactly matches what was written. An
     # ambiguous simple name (two same-named classes in different
-    # namespaces) resolves to whichever was indexed first.
+    # namespaces) resolves to the alphabetically first qualified name --
+    # arbitrary, but a property of the workspace rather than of which file
+    # was edited last, which is what it was until 0.1.13 (024.15).
     def resolve_type_name(name)
       @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
     end
@@ -218,8 +265,20 @@ module Ovallsp
     # instance method declared in "::User", across however many files
     # reopen it). Semantic::MethodResolver#complete uses this to enumerate
     # a type's own method names rather than checking one name at a time.
+    # `owner` arrives qualified or bare depending on where the caller got
+    # it: declarations are indexed qualified (`::Object`), while
+    # `HierarchyIndex`'s default chain names its entries bare. Comparing
+    # the two raw answered "nothing" for half the callers -- and the
+    # visible consequence was a workspace reopening `class Object` with
+    # `method_missing` still getting a false `unknown-method` on every
+    # closed receiver.
+    #
+    # `SymbolId` now stores every owner qualified, so the stored side needs
+    # no work; this only has to put the *argument* through the same rule
+    # (0.1.11).
     def method_symbol_ids(owner, kind:)
-      @mutex.synchronize { @by_symbol.keys.select { |sid| sid.owner == owner && sid.kind == kind } }
+      needle = Index::SymbolId.qualify_owner(owner)
+      @mutex.synchronize { @by_symbol.keys.select { |sid| sid.owner == needle && sid.kind == kind } }
     end
 
     # Workspace symbol search: case-insensitive substring match on the
@@ -233,7 +292,7 @@ module Ovallsp
 
           entries.each { |(uri, decl)| matches << { symbol_id: symbol_id, uri: uri, location: decl.location } }
         end
-        rank(matches, needle).first(limit)
+        rank(matches, needle, limit)
       end
     end
 
@@ -307,16 +366,133 @@ module Ovallsp
     def resolve_type_symbol_locked(name)
       raw = name.to_s
       simple = raw.split("::").last
-      candidates = @by_simple_name.fetch(simple.to_s.downcase, []).select do |sid|
+      candidates = ordered_symbol_ids(simple, matching: lambda { |sid|
         %i[class module].include?(sid.kind) && simple_name(sid) == simple
-      end
+      })
       return nil if candidates.empty?
 
-      candidates.find { |sid| sid.name == raw || sid.name == "::#{raw}" } || candidates.first
+      # Only `raw` needs normalising: it is a name as written, and may be
+      # bare. An indexed class/module name always carries the `::`, so
+      # normalising that side too was a branch no input could reach
+      # (0.1.12, round 8).
+      qualified = Index::SymbolId.qualify_owner(raw)
+      # `.first` is safe here because `candidates` came from
+      # `ordered_symbol_ids`, not from the Set directly. Until 0.1.13 it
+      # was index order, so an ambiguous bare name resolved to a different
+      # class whenever either file was re-indexed (024.15).
+      candidates.find { |sid| sid.name == qualified } || candidates.first
     end
 
-    def rank(matches, needle)
-      matches.sort_by { |m| simple_name(m[:symbol_id]).downcase == needle ? 0 : 1 }
+    # Two collections are deliberately left in insertion order, both of
+    # which a re-index does move. `#method_symbol_ids` returns
+    # `@by_symbol.keys`: all three callers are order-insensitive -- two
+    # `.any?` it, and `MethodResolver` feeds it to `merge_names`, which
+    # sorts on a total key. `#uris_by_source` reads `@summaries`, whose
+    # entry `remove_file_locked` deletes and `replace_file` re-inserts;
+    # its one caller sweeps deleted files and does not care in what order.
+    # Ordering either would buy nothing and cost a sort on the completion
+    # path. "The order lives in the storage" is a claim about the
+    # collections whose order a caller can observe.
+    #
+    # `[uri, line, character]`. Uri first because that is what a caller
+    # taking `.first` is choosing between; source position breaks the tie
+    # a class reopened twice in one file creates, which `sort_by` alone
+    # cannot -- it is not a stable sort and scrambles equal keys from
+    # eight entries up.
+    def entry_order(entry)
+      uri, decl = entry
+      [uri, decl.location[:start][:line], decl.location[:start][:character]]
+    end
+
+    # The one place a *query* reads `@by_simple_name` -- `remove_file_locked`
+    # reads it too, to drop a name whose last declarer is gone.
+    # It is a Set, so its order is
+    # insertion order -- which moves on re-index for the same reason the
+    # entry lists did. Ordered by qualified name: a bare name that matches
+    # several classes resolves to the same one whichever file was edited
+    # last, and that choice drives the ancestry chain, the unknown-method
+    # check, find-references and rename (024.15).
+    # A total key, not just the name: one class has as many SymbolIds as
+    # there are ways to spell it (`class Api::Widget` has owner nil,
+    # `module Api; class Widget` has owner "::Api"), and those share a
+    # name. Leaving them tied put the outer walk back on Set insertion
+    # order, which is the thing being fixed.
+    #
+    # The caller's filter is applied *before* the sort, not after, because
+    # a bucket is keyed on the downcased simple name and so mixes kinds: a
+    # workspace where 1200 service objects each define `call` puts 1200
+    # method SymbolIds in the bucket `resolve_type_name("Call")` reads.
+    # Timing `resolve_type_name("Call")` on that workspace, sorting the
+    # whole bucket to then keep one element measured 3.7ms per call
+    # against 51us for the filtered sort (300 objects: 878us against
+    # 20us). An independent re-measurement of the bucket operation alone
+    # got 1.25ms against 40us -- same direction, same order of magnitude,
+    # a third of the absolute. What the two agree on is the ratio, and
+    # this is a path `Diagnostics::Engine` runs per constant candidate and
+    # `HierarchyIndex` per ancestry lookup. Filtering commutes
+    # with sorting here -- the key reads one element -- so the order is
+    # identical either way.
+    #
+    # `matching:` is a required keyword rather than a block so that
+    # omitting it is an `ArgumentError` from Ruby. A block would be `nil`
+    # when absent, and `select(&nil)` returns an enumerator of everything
+    # -- silently unfiltered -- so guarding it would have meant an `if`
+    # that all three call sites make unreachable, which this file already
+    # calls the same defect as an untested line (0.1.12, round 7).
+    def ordered_symbol_ids(simple, matching:)
+      @by_simple_name.fetch(simple.to_s.downcase, [])
+                     .select(&matching)
+                     .sort_by { |sid| [sid.name.to_s, sid.kind.to_s, sid.owner.to_s] }
+    end
+
+    def rank(matches, needle, limit)
+      # The exact-match bucket was the whole key, so everything inside a
+      # bucket was decided by `@by_symbol`'s insertion order -- and this
+      # result is *truncated*, so that changed which symbols survived
+      # `limit:` after any edit.
+      #
+      # The tail has to be *total*, not merely longer. A first attempt
+      # stopped at `[name, uri, line]` and still scrambled: `sort_by` is
+      # not stable from eight tied elements up, and ties survive that key
+      # in two shapes that both occur. One class declared several times on
+      # one line of one file ties on all three -- `search` then returned
+      # the columns in a different order than `class_declarations` did,
+      # one method away. And every declaration a plugin registers shares
+      # its `plugin://` uri and a frozen line-0/char-0 location
+      # (`Server#apply_plugin_context`), so a plugin generating one method
+      # name across ten models ties on all of them; which three survived
+      # `limit:` depended on registration order.
+      #
+      # `min_by(limit)`, not `sort_by { }.first(limit)`. The key is total,
+      # so the two answer identically for the Integer limit its one
+      # caller passes -- but the picker opens with an
+      # empty query, so every declaration in the workspace matches, on a
+      # keystroke path that holds this mutex. Ranking the 32,000 matches
+      # an empty query returns for 2,000 files that each declare a class
+      # and fifteen methods measures 68ms sorting all of them on this key,
+      # 17ms taking the hundred asked for, and 10ms for the one-element
+      # key this replaced. So the key does cost about 7ms more
+      # than it used to, not nothing: `min_by` recovers four fifths of
+      # what the wider key added, and the rest buys an answer whose
+      # membership does not depend on which file was saved last.
+      #
+      # (An earlier note here claimed parity, from an end-to-end
+      # measurement of `search` -- where building the match list dominates
+      # and hid the difference. Time the ranking, not the query.)
+      #
+      # `[kind, owner]` last is what makes it total: two declarations that
+      # agree on name, uri and position are the same symbol or differ in
+      # identity, and nothing else distinguishes them (024.15). "Nothing
+      # else" assumes `SymbolId#discriminator` stays nil, which every
+      # construction in this tree does -- but `Server#plugin_declaration`
+      # copies a plugin's own SymbolId verbatim, so a plugin that starts
+      # populating it would put an index-order tie back.
+      matches.min_by(limit) do |m|
+        [simple_name(m[:symbol_id]).downcase == needle ? 0 : 1,
+         m[:symbol_id].name.to_s, m[:uri],
+         m[:location][:start][:line], m[:location][:start][:character],
+         m[:symbol_id].kind.to_s, m[:symbol_id].owner.to_s]
+      end
     end
   end
 end

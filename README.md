@@ -105,6 +105,11 @@ Pylance features deliberately *not* planned, is in
 (024.R3). [`docs/ROADMAP.md`](docs/ROADMAP.md) states the same plan
 release by release, in terms of what each one lets you do.
 
+Anyone changing this project should also read
+[`docs/DOCUMENTATION_MAP.md`](docs/DOCUMENTATION_MAP.md): it lists which
+documents — including the pages under `site/` — a given kind of change
+makes stale, and which of those pairs a test already checks.
+
 The two unknown-method rows above fire only on a receiver whose whole
 ancestry is known — a workspace class, or an Active Record model, whose
 methods the Runtime Agent reports. A class inheriting from a gem

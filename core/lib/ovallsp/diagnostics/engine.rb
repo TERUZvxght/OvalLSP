@@ -435,7 +435,7 @@ module Ovallsp
       end
 
       def rbs_known_constant?(name, signatures)
-        !signatures.ancestors("::#{name}").empty?
+        !signatures.ancestors(qualified_owner(name)).empty?
       rescue StandardError
         false
       end
@@ -592,7 +592,7 @@ module Ovallsp
         # Agent would split a leading "::" into an empty first namespace
         # segment and answer "no such constant", which is a permanent
         # answer. Normalised here, at the one boundary between them.
-        name = raw_name.delete_prefix("::")
+        name = Index::SymbolId.bare_name(raw_name)
         entry = registry.entry(name)
         if entry.nil?
           registry.request(name)
@@ -620,9 +620,9 @@ module Ovallsp
       # anywhere in the project silently defeated the evidence.
       def locally_accounted_for?(name, context)
         resolved = context.workspace_index.resolve_type_name(name)
-        return true if resolved && resolved.delete_prefix("::") == name.delete_prefix("::")
+        return true if resolved && Index::SymbolId.bare_name(resolved) == Index::SymbolId.bare_name(name)
 
-        context.signatures && !context.signatures.ancestors("::#{name}").empty?
+        context.signatures && !context.signatures.ancestors(qualified_owner(name)).empty?
       end
 
       # Every Ruby class inherits from BasicObject, so a chain that does
@@ -642,8 +642,18 @@ module Ovallsp
       # without needing to tell them apart. A class the workspace really
       # does define completely always reaches it, through the default
       # Object chain if it declares no parent at all.
+      # Both spellings, because both reach here: `HierarchyIndex`'s default
+      # chain names `BasicObject` bare, while a class written
+      # `< ::BasicObject` produces an entry carrying the `::`. Comparing
+      # one spelling judged such a class's chain not to reach the root,
+      # which switched the unknown-method check off for it silently.
+      #
+      # One more place this rule was written by hand instead of delegated
+      # (0.1.12) -- `SymbolId.qualify_owner` is the rule, and
+      # `ROOT_SUPERCLASS_NAMES` in `HierarchyIndex` already listed both
+      # forms, which is what made this an oversight rather than a choice.
       def chain_reaches_root?(entries)
-        entries.any? { |entry| entry.name == "BasicObject" }
+        entries.any? { |entry| Index::SymbolId.qualify_owner(entry.name) == "::BasicObject" }
       end
 
       # A builtin ancestor (Object/Kernel/BasicObject, or any RBS-known
@@ -654,6 +664,13 @@ module Ovallsp
       # call to a Kernel method would misfire as "unknown method". Tried
       # across the whole ancestor chain, not just the receiver's own
       # name, the same reason #closed_nominal? checks every ancestor.
+      # `HierarchyIndex` reports a class's *own* entry already qualified
+      # (`::Widget`) while its inherited ones are bare (`Object`), so the
+      # prefix has to be normalized rather than prepended. Prepending it
+      # asked for `::::Widget`, which matches nothing -- and the visible
+      # consequence was a false "has no method named" for anything a
+      # project declared in its own `sig/` without also writing it in
+      # Ruby, which is precisely the report this check exists not to make.
       def rbs_resolves?(candidate, receiver_type, context)
         return false unless context.signatures
 
@@ -661,15 +678,9 @@ module Ovallsp
       end
 
       # The signature declared for this call on the receiver or any of its
-      # ancestors, or nil.
-      #
-      # `HierarchyIndex` reports a class's *own* entry already qualified
-      # (`::Widget`) while its inherited ones are bare (`Object`), so the
-      # prefix has to be normalized rather than prepended. Prepending it
-      # produced `::::Widget`, which matches nothing -- and the visible
-      # consequence was a false "has no method named" for anything a
-      # project declared in its own `sig/` without also writing it in
-      # Ruby, which is precisely the report this check exists to avoid.
+      # ancestors, or nil. Returns the signature rather than a boolean
+      # because 0.2.0's argument check needs the parameter list, and
+      # `rbs_resolves?` above only needs to know whether there was one.
       def declared_signature_for(receiver_type, candidate, context)
         context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).filter_map do |entry|
           kind = candidate.singleton && entry.origin != :extend ? :singleton_method : :instance_method
@@ -679,8 +690,19 @@ module Ovallsp
         end.first
       end
 
+      # `Signatures::Environment` resolves a *qualified* name, and the
+      # names reaching it arrive both ways: `HierarchyIndex` returns a
+      # class's own entry already qualified (`::Widget`) and its inherited
+      # ones bare (`Object`), while a constant reference carries whatever
+      # the source wrote (`::JSON` or `JSON`). Prepending rather than
+      # normalizing asked for `::::JSON`, which matches nothing.
+      #
+      # Every caller goes through here, including the one whose input is
+      # always plain today (`locally_accounted_for?`, whose name comes
+      # from the Agent): four call sites and three of them wrong is what
+      # having the rule stated in four places bought.
       def qualified_owner(name)
-        "::#{name.to_s.delete_prefix('::')}"
+        Index::SymbolId.qualify_owner(name)
       end
 
       def ancestor_known?(entry, context)
@@ -689,7 +711,7 @@ module Ovallsp
         return false if entry.name.nil?
         return true if entry.kind
 
-        context.signatures && !context.signatures.ancestors("::#{entry.name}").empty?
+        context.signatures && !context.signatures.ancestors(qualified_owner(entry.name)).empty?
       end
 
       def declares_method_missing?(owner, context)

@@ -148,6 +148,41 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       expect(locations.size).to eq(1)
       expect(locations.first[:uri]).to eq("file:///company.rb")
     end
+
+    # This reconstructed a `SymbolId` with `owner: nil` and looked the
+    # class up by that key, which is exactly what `find_controller_uri`
+    # was moved off in this release: `SymbolId#owner` is recorded
+    # *lexically*, so `module Admin; class Company` indexes under owner
+    # `::Admin` and the reconstructed key misses it. The nesting form is
+    # the point of the pair -- the compact form happened to work, which
+    # is why nobody saw it (0.1.12, round 5).
+    it "falls back to the model's class declaration when it is written inside a `module` block" do
+      index_source("module Admin\n  class Company\n  end\nend\n", uri: "file:///admin/company.rb")
+      model_registry.register_from_agent_response(
+        "Admin::Company",
+        { tableName: "companies", partial: false, columns: [],
+          associations: [{ name: "orders", macro: "has_many", className: "Order", optional: false }] }
+      )
+
+      locations = service.definitions_of(nominal("Admin::Company"), "orders")
+
+      expect(locations.size).to eq(1)
+      expect(locations.first[:uri]).to eq("file:///admin/company.rb")
+    end
+
+    it "falls back to the same declaration when the model is written in the compact form" do
+      index_source("class Admin::Company\nend\n", uri: "file:///admin/company.rb")
+      model_registry.register_from_agent_response(
+        "Admin::Company",
+        { tableName: "companies", partial: false, columns: [],
+          associations: [{ name: "orders", macro: "has_many", className: "Order", optional: false }] }
+      )
+
+      locations = service.definitions_of(nominal("Admin::Company"), "orders")
+
+      expect(locations.size).to eq(1)
+      expect(locations.first[:uri]).to eq("file:///admin/company.rb")
+    end
   end
 
   describe "#signatures_of" do

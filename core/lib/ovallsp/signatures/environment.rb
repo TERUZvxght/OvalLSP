@@ -235,6 +235,12 @@ module Ovallsp
 
       def convert_method_type(method_type)
         fn = method_type.type
+        # `(?)` -- see TypeConverter.positional_parameter_types. Every list
+        # below is absent on an UntypedFunction, so the whole shape has to
+        # degrade to "nothing declared about the parameters", not to "no
+        # signature at all".
+        return untyped_overload(method_type, fn) unless fn.respond_to?(:required_positionals)
+
         Overload.new(
           required_positionals: fn.required_positionals.map { |p| TypeConverter.convert(p.type) },
           optional_positionals: fn.optional_positionals.map { |p| TypeConverter.convert(p.type) },
@@ -244,6 +250,31 @@ module Ovallsp
           rest_keyword: fn.rest_keywords && TypeConverter.convert(fn.rest_keywords.type),
           block_required: !method_type.block.nil? && method_type.block.required,
           block_type: method_type.block && TypeConverter.convert_function(method_type.block.type),
+          return_type: TypeConverter.convert(fn.return_type),
+          type_parameters: method_type.type_params.map(&:to_s)
+        )
+      end
+
+      # `(?)` means "takes anything", so the two *rest* slots carry that and
+      # the named lists stay empty -- `OverloadResolver` reads the rest
+      # slots for truthiness, so this is what makes such a method accept
+      # any call rather than only a zero-argument one.
+      #
+      # The block is literally absent: RBS refuses to parse a block on an
+      # untyped method type ("A method type with untyped method parameter
+      # cannot have block"), so `method_type.block` is always nil here and
+      # an expression reading it would imply a case that cannot arise.
+      #
+      # The return type and the type parameters are the two things a `(?)`
+      # declaration still states, and both are carried through:
+      # `def f: (?) -> String` really does return a String, and
+      # `[U] (?) -> U` really does declare `U`. A project `sig/` reaches
+      # here unnormalised, so both are pinned by fixtures.
+      def untyped_overload(method_type, fn)
+        Overload.new(
+          required_positionals: [], optional_positionals: [], rest_positional: Types::UNKNOWN,
+          required_keywords: {}, optional_keywords: {}, rest_keyword: Types::UNKNOWN,
+          block_required: false, block_type: nil,
           return_type: TypeConverter.convert(fn.return_type),
           type_parameters: method_type.type_params.map(&:to_s)
         )
@@ -276,7 +307,7 @@ module Ovallsp
       end
 
       def rbi_member_names(type_name_string, singleton)
-        owner = type_name_string.start_with?("::") ? type_name_string : "::#{type_name_string}"
+        owner = Index::SymbolId.qualify_owner(type_name_string)
         kind = singleton ? :singleton_method : :instance_method
         @rbi_methods.keys.filter_map { |symbol_id| symbol_id.name if symbol_id.owner == owner && symbol_id.kind == kind }
       end

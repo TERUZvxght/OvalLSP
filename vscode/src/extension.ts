@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { documentSelectorFor, resolveStatus, statusPresentation } from './clientPresentation';
 import { spawn } from 'child_process';
 import * as vscode from 'vscode';
 import {
@@ -188,14 +189,10 @@ function startClientForFolder(
   watchers.set(folder.uri.toString(), watcher);
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [
-      { scheme: 'file', language: 'ruby', pattern: `${folder.uri.fsPath}/**/*` },
-      // Matched by extension, not language id: VS Code doesn't assign a
-      // built-in language id to .erb, and requiring another extension to
-      // register one first would make Task 008's view support silently
-      // unreachable (docs/design/tasks/008-controller-view-propagation.md).
-      { scheme: 'file', pattern: `${folder.uri.fsPath}/**/*.erb` }
-    ],
+    // Built in `clientPresentation.ts`, which imports no `vscode` and so
+    // can be unit-tested -- including the "ERB by extension, not language
+    // id" decision this used to state only in a comment here (024.17).
+    documentSelector: documentSelectorFor(folder.uri.fsPath),
     workspaceFolder: folder,
     outputChannel,
     synchronize: { fileEvents: watcher },
@@ -548,35 +545,25 @@ function registerObservationCommands(context: vscode.ExtensionContext, outputCha
   );
 }
 
-// Task 020's required status set. Polled (see #startStatusPolling) rather
-// than pushed, matching Server's own `ovallsp/status`'s own design ("polled
-// by the client rather than pushed as notifications").
-const STATUS_LABELS: Record<string, string> = {
-  indexing: '$(sync~spin) OvalLSP: Indexing',
-  'ready-static': '$(check) OvalLSP: Ready (static)',
-  'ready-rails': '$(check) OvalLSP: Ready (Rails)',
-  'agent-unavailable': '$(warning) OvalLSP: Agent unavailable'
-};
-
+// Task 020's status bar. Polled rather than pushed, matching
+// `Server#status_result`'s own design ("polled by the client rather than
+// pushed as notifications"). What each state is *called* lives in
+// `clientPresentation.ts` with the rest of the presentation (024.17);
+// this function owns the polling and the `vscode` wiring only.
 function startStatusPolling(statusBarItem: vscode.StatusBarItem): vscode.Disposable {
   const interval = setInterval(() => {
     void (async () => {
       const uri = vscode.window.activeTextEditor?.document.uri;
       const folder = uri ? vscode.workspace.getWorkspaceFolder(uri) : vscode.workspace.workspaceFolders?.[0];
       const client = folder ? clients.get(folder.uri.toString()) : undefined;
-      if (!client) {
+
+      const shown = statusPresentation(await resolveStatus(client));
+      if (!shown.visible) {
         statusBarItem.hide();
         return;
       }
-
-      try {
-        const result = await client.sendRequest<{ state: string }>('ovallsp/status', {});
-        statusBarItem.text = STATUS_LABELS[result.state] ?? `OvalLSP: ${result.state}`;
-        statusBarItem.show();
-      } catch {
-        statusBarItem.text = '$(error) OvalLSP: Configuration error';
-        statusBarItem.show();
-      }
+      statusBarItem.text = shown.text as string;
+      statusBarItem.show();
     })();
   }, 2000);
 

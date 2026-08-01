@@ -73,13 +73,11 @@ module Ovallsp
       end
 
       def qualify(local_path)
-        return local_path if local_path.start_with?("::")
-
-        @owner_stack.last ? "#{@owner_stack.last}::#{local_path}" : "::#{local_path}"
+        Index::SymbolId.qualify_within(@owner_stack.last, local_path)
       end
 
       def handle_sig(sig_call, def_node)
-        overload = parse_sig_body(sig_call.block.body)
+        overload = parse_sig_body(sig_call.block.body, def_node)
         return unless overload
 
         singleton = def_node.receiver.is_a?(Prism::SelfNode)
@@ -94,7 +92,7 @@ module Ovallsp
           source_kind: :rbi, generation: 0
         )
       rescue StandardError => e
-        @diagnostics << { severity: :warning, message: "failed to convert sig for #{def_node&.name}: #{e.message}",
+        @diagnostics << { severity: :warning, message: "failed to convert sig for #{def_node.name}: #{e.message}",
                            location: Index::SourceLocation.to_range(sig_call.location, @lines) }
       end
 
@@ -103,7 +101,7 @@ module Ovallsp
       # `override.`/`.checked(...)` prefixes and anything else this doesn't
       # recognize fall through to nil (recorded as a skipped signature by
       # the caller, not a crash).
-      def parse_sig_body(block_body)
+      def parse_sig_body(block_body, def_node)
         return nil unless block_body
 
         chain = block_body.body.last
@@ -113,8 +111,7 @@ module Ovallsp
         return nil unless params_call || return_type
 
         Overload.new(
-          required_positionals: [], optional_positionals: [], rest_positional: nil,
-          **keyword_params(params_call),
+          **parameter_slots(params_call, def_node),
           block_required: false, block_type: nil,
           return_type: return_type || Types::UNKNOWN
         )
@@ -142,23 +139,105 @@ module Ovallsp
         node.name == :params ? node : find_params(node.receiver)
       end
 
-      def keyword_params(params_call)
-        return { required_keywords: {}, optional_keywords: {}, rest_keyword: nil } unless params_call&.arguments
+      def self.empty_slots
+        { required_positionals: [], optional_positionals: [], rest_positional: nil,
+          required_keywords: {}, optional_keywords: {}, rest_keyword: nil }
+      end
+
+      # Sorbet's `params(...)` is a name-to-type map and nothing more:
+      # `params(x: Integer)` describes `def f(x)` and `def f(x:)`
+      # identically, so it cannot say which slot a parameter occupies.
+      # The `def` immediately below the sig can, and `handle_sig` already
+      # has that node -- so shape is read from the def and type is looked
+      # up by name.
+      #
+      # The previous rule filed every entry as a required keyword, with a
+      # comment that this was only "for arity matching purposes". That was
+      # invisible until 0.1.12 taught the signature label to render
+      # keywords, at which point `def combine(x, y)` began telling the
+      # user to type `x:`. It was also wrong about arity in both
+      # directions: a positional call did not match, and a `sig { void }`
+      # over a two-argument def claimed the method took nothing.
+      #
+      # A parameter the sig does not mention still gets its slot, typed
+      # Unknown -- the method takes it either way. A `params` entry naming
+      # something the def does not declare is a broken RBI and is dropped:
+      # inventing an argument the method cannot accept is the one outcome
+      # worse than having no type for it.
+      def parameter_slots(params_call, def_node)
+        declared = declared_param_types(params_call)
+        parameters = def_node.parameters
+        return RbiParser.empty_slots unless parameters
+
+        forwarding = parameters.keyword_rest.is_a?(Prism::ForwardingParameterNode)
+        {
+          required_positionals: (parameters.requireds + parameters.posts).map { |n| type_of(declared, n) },
+          optional_positionals: parameters.optionals.map { |n| type_of(declared, n) },
+          rest_positional: rest_slot(declared, parameters.rest, forwarding),
+          required_keywords: keyword_slot(parameters, Prism::RequiredKeywordParameterNode, declared),
+          optional_keywords: keyword_slot(parameters, Prism::OptionalKeywordParameterNode, declared),
+          rest_keyword: keyword_rest_slot(declared, parameters.keyword_rest)
+        }
+      end
+
+      # Not every node in a parameter list answers `#name`. A destructured
+      # positional (`def f(a, (b, c))`) is a `MultiTargetNode`, and both
+      # `...` and `**nil` put a nameless node in the keyword-rest slot.
+      # Asking any of them for a name raised, `handle_sig`'s blanket
+      # rescue turned that into a warning, and the whole method's
+      # signature was dropped -- so a `.rbi` that parsed before 0.1.12
+      # stopped producing one. A slot with no name still exists; it just
+      # has no type to look up (0.1.12, round 6).
+      def type_of(declared, node)
+        return Types::UNKNOWN unless node.respond_to?(:name)
+
+        declared.fetch(node.name, Types::UNKNOWN)
+      end
+
+      # `def f(...)` forwards positionals, keywords and a block alike, and
+      # Prism records the whole of it as a single keyword-rest node -- so
+      # the positional rest slot has to be opened from there too, or a
+      # forwarding method rejects arguments it does accept.
+      def rest_slot(declared, rest_node, forwarding)
+        return Types::UNKNOWN if forwarding
+        return nil unless rest_node
+
+        type_of(declared, rest_node)
+      end
+
+      # `**nil` is the opposite of `**rest`: it declares that the method
+      # takes no keywords at all, so it must leave the slot closed rather
+      # than open it to anything.
+      #
+      # `...` needs no branch of its own: it is nameless, so `type_of`
+      # already answers Unknown, which is what an open slot is. A branch
+      # for it was written here and removed once a mutation showed nothing
+      # could tell the two paths apart -- the behaviour is pinned by the
+      # `...` specs either way, and an unreachable line is worse than none.
+      def keyword_rest_slot(declared, node)
+        return nil if node.nil? || node.is_a?(Prism::NoKeywordsParameterNode)
+
+        type_of(declared, node)
+      end
+
+      def keyword_slot(parameters, node_class, declared)
+        parameters.keywords.grep(node_class).to_h { |node| [node.name, type_of(declared, node)] }
+      end
+
+      # `def f(*)` / `def f(**)` are anonymous: the node has no name, so
+      # there is nothing to look a type up by, and `nil` must not become a
+      # hash key that a named parameter could collide with.
+      def declared_param_types(params_call)
+        return {} unless params_call&.arguments
 
         hash_node = params_call.arguments.arguments.first
-        return { required_keywords: {}, optional_keywords: {}, rest_keyword: nil } unless hash_node.is_a?(Prism::KeywordHashNode)
+        return {} unless hash_node.is_a?(Prism::KeywordHashNode)
 
-        keywords = hash_node.elements.filter_map do |assoc|
+        hash_node.elements.filter_map do |assoc|
           next unless assoc.is_a?(Prism::AssocNode) && assoc.key.is_a?(Prism::SymbolNode)
 
           [assoc.key.unescaped.to_sym, convert_type_expr(assoc.value)]
         end.to_h
-
-        # Sorbet's `params` doesn't itself distinguish required/optional --
-        # that comes from the `def`'s own parameter list, which this
-        # parser doesn't cross-reference (MVP scope) -- so every declared
-        # parameter is treated as required for arity matching purposes.
-        { required_keywords: keywords, optional_keywords: {}, rest_keyword: nil }
       end
 
       # `Integer`, `T.nilable(X)`, `T.any(X, Y)`, `T::Array[X]`,

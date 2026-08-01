@@ -12,6 +12,91 @@ module Ovallsp
     # - name: the symbol's own name — fully-qualified for :class/:module
     #   (e.g. "::Foo::Bar"), plain for everything else (e.g. "company")
     # - discriminator: reserved for future overload disambiguation; nil for now
-    SymbolId = Data.define(:kind, :owner, :name, :discriminator)
+    SymbolId = Data.define(:kind, :owner, :name, :discriminator) do
+      # The rule itself, reachable without building a SymbolId -- the
+      # index also compares a bare owner string against stored ones, and
+      # the diagnostics engine asks the signature environment with the
+      # same shape of name.
+      def self.qualify_owner(owner)
+        owner.nil? ? nil : "::#{owner.to_s.delete_prefix('::')}"
+      end
+
+      # The same rule read the other way: the name without its leading
+      # `::`. This is the form the type model, `Models::ModelRegistry`
+      # (keyed by Rails' own bare `model.name`) and RBS's own `Nominal`
+      # names use, so the two directions are one decision and belong in
+      # one place. `Semantic::ReceiverResolution.canonical_receiver_name`
+      # is the semantic layer's name for this and now delegates here
+      # (0.1.12, round 7).
+      def self.bare_name(name)
+        name.to_s.delete_prefix("::")
+      end
+
+      # Lexical qualification, which is a *different* operation from the
+      # two above: it prepends the enclosing owner rather than only
+      # normalising a prefix. An already-root-scoped path is already
+      # absolute and is left alone.
+      #
+      # Four byte-identical copies of this lived in `ParserService`,
+      # `LocalInferencer` (twice) and `Signatures::RbiParser`. Nothing was
+      # wrong with any of them, which is the point: 0.1.11 was spent on
+      # what happens to a rule written once per call site, and four is
+      # how many copies of the *previous* rule had to be found the hard
+      # way (0.1.12, round 7).
+      # The four copies each wrote this as a ternary on `owner`. It does
+      # not need one: a nil owner interpolates to "", so the single form
+      # produces "::Widget" at the top level and "::Admin::Widget" inside
+      # one. The ternary's two arms are the same string, which is why a
+      # mutation collapsing them changed nothing (0.1.12, round 7).
+      def self.qualify_within(owner, local_path)
+        return local_path if local_path.start_with?("::")
+
+        "#{owner}::#{local_path}"
+      end
+
+      # An owner is stored qualified, whichever form the caller had
+      # (0.1.11).
+      #
+      # `SymbolId` equality is exact, and `owner` arrives both ways:
+      # `ParserService` indexes a declaration's owner qualified
+      # (`::Object`), while `HierarchyIndex::DEFAULT_OBJECT_CHAIN` names
+      # its entries bare (`Object`). Every lookup built by walking an
+      # ancestor chain therefore missed for those three names -- a
+      # workspace reopening `class Object` got a false `unknown-method`
+      # on every closed receiver, and its methods were resolvable neither
+      # by go-to-definition nor for visibility.
+      #
+      # Stated here because stating it at the call sites is what went
+      # wrong: the rule was written four times in the diagnostics engine
+      # alone and three of those had it inverted. This is the one place
+      # that knows what an owner is.
+      #
+      # Only a leading `::` is normalized: `Admin::Object` remains a
+      # different class from `::Object`. A nil owner stays nil -- a
+      # class-level symbol has none, and `"::"` is not a class.
+      # A class/module's own `name` is qualified too, and until 0.1.12 that
+      # was documented (see this class's header) without being enforced.
+      # `ParserService` always produced it that way, so nothing noticed --
+      # but `Server#plugin_declaration` copies a plugin-supplied `SymbolId`
+      # into the index verbatim, and `partition_plugin_facts` validates
+      # only that it *is* a `SymbolId`. A plugin registering
+      # `kind: :class, name: "Widget"` put a bare name into the index,
+      # where `resolve_type_symbol_locked` then matched it against a
+      # qualified needle and resolved the wrong class. Enforced here
+      # rather than re-guarded at the one read site round 8 removed a
+      # guard from: the invariant is this type's, not the reader's
+      # (0.1.12, round 9).
+      # `kind:` and `name:` stay required. Round 9 declared them with nil
+      # defaults purely to read them here, and in doing so turned a missing
+      # keyword from an `ArgumentError` at the offending call site into a
+      # SymbolId with a nil name -- which indexes under "" , matches
+      # nothing, and finally raises `NoMethodError` inside
+      # `DocumentSymbolBuilder` as an internal error on an unrelated
+      # request (0.1.12, round 10).
+      def initialize(kind:, name:, owner: nil, **rest)
+        qualified_name = %i[class module].include?(kind) ? SymbolId.qualify_owner(name) : name
+        super(kind: kind, name: qualified_name, owner: SymbolId.qualify_owner(owner), **rest)
+      end
+    end
   end
 end
