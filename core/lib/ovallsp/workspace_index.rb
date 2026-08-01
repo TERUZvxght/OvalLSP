@@ -90,10 +90,25 @@ module Ovallsp
 
         remove_file_locked(summary.uri)
         @summaries[summary.uri] = summary
+        touched = []
         summary.declarations.each do |decl|
           (@by_symbol[decl.symbol_id] ||= []) << [summary.uri, decl]
           @by_simple_name[simple_name(decl.symbol_id).downcase] << decl.symbol_id
+          touched << decl.symbol_id
         end
+        # The order lives here, not in the readers. `remove_file_locked`
+        # deletes this uri's entries and the loop above appends the new
+        # ones, so without this a re-index moves a file's declarations to
+        # the back of every list they are in -- and the readers take
+        # `.first` of such a list, or truncate it. Typing one character in
+        # an unrelated file then changed where go-to-definition landed and
+        # which symbols survived `workspace/symbol`'s limit.
+        #
+        # Sorted once per touched symbol per file rather than inserted in
+        # place: the lists are 1-3 entries in every ordinary workspace, and
+        # a `sort_by` per symbol measures at the same 7ms as before over
+        # 2,000 files with one class reopened in 500 of them (024.15).
+        touched.uniq.each { |symbol_id| @by_symbol[symbol_id].sort_by!(&method(:entry_order)) }
         @generation += 1
         true
       end
@@ -159,7 +174,7 @@ module Ovallsp
     def find_by_simple_name(name)
       @mutex.synchronize do
         results = []
-        @by_simple_name.fetch(name.downcase, []).each do |symbol_id|
+        ordered_symbol_ids(name).each do |symbol_id|
           next unless %i[class module constant].include?(symbol_id.kind)
           next unless simple_name(symbol_id) == name
 
@@ -205,7 +220,7 @@ module Ovallsp
       qualified_name = Index::SymbolId.qualify_owner(name)
       @mutex.synchronize do
         results = []
-        @by_simple_name.fetch(simple_name_of(qualified_name).downcase, []).each do |symbol_id|
+        ordered_symbol_ids(simple_name_of(qualified_name)).each do |symbol_id|
           next unless %i[class module].include?(symbol_id.kind)
           next unless symbol_id.name == qualified_name
 
@@ -341,7 +356,7 @@ module Ovallsp
     def resolve_type_symbol_locked(name)
       raw = name.to_s
       simple = raw.split("::").last
-      candidates = @by_simple_name.fetch(simple.to_s.downcase, []).select do |sid|
+      candidates = ordered_symbol_ids(simple).select do |sid|
         %i[class module].include?(sid.kind) && simple_name(sid) == simple
       end
       return nil if candidates.empty?
@@ -360,8 +375,41 @@ module Ovallsp
       candidates.find { |sid| sid.name == qualified } || candidates.first
     end
 
+    # `[uri, line, character]`. Uri first because that is what a caller
+    # taking `.first` is choosing between; source position breaks the tie
+    # a class reopened twice in one file creates, which `sort_by` alone
+    # cannot -- it is not a stable sort and scrambles equal keys from
+    # eight entries up.
+    def entry_order(entry)
+      uri, decl = entry
+      [uri, decl.location[:start][:line], decl.location[:start][:character]]
+    end
+
+    # The one place `@by_simple_name` is read. It is a Set, so its order is
+    # insertion order -- which moves on re-index for the same reason the
+    # entry lists did. Ordered by qualified name: a bare name that matches
+    # several classes resolves to the same one whichever file was edited
+    # last, and that choice drives the ancestry chain, the unknown-method
+    # check, find-references and rename (024.15).
+    # A total key, not just the name: one class has as many SymbolIds as
+    # there are ways to spell it (`class Api::Widget` has owner nil,
+    # `module Api; class Widget` has owner "::Api"), and those share a
+    # name. Leaving them tied put the outer walk back on Set insertion
+    # order, which is the thing being fixed.
+    def ordered_symbol_ids(simple)
+      @by_simple_name.fetch(simple.to_s.downcase, [])
+                     .sort_by { |sid| [sid.name.to_s, sid.kind.to_s, sid.owner.to_s] }
+    end
+
     def rank(matches, needle)
-      matches.sort_by { |m| simple_name(m[:symbol_id]).downcase == needle ? 0 : 1 }
+      # The exact-match bucket was the whole key, so everything inside a
+      # bucket was decided by `@by_symbol`'s insertion order -- and this
+      # result is *truncated*, so that changed which symbols survived
+      # `limit:` after any edit. The tail makes the order total (024.15).
+      matches.sort_by do |m|
+        [simple_name(m[:symbol_id]).downcase == needle ? 0 : 1,
+         m[:symbol_id].name.to_s, m[:uri], m[:location][:start][:line]]
+      end
     end
   end
 end

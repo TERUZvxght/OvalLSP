@@ -651,9 +651,11 @@ roadmap entry rather than folded into another release's work.
 
 ---
 
-## 024.16 The capability E2E suite can skip in full while CI stays green (0.1.13)
+## 024.16 The capability E2E suite can skip in full while CI stays green
 
-**Status:** open
+**Status:** fixed in 0.1.13 -- `ci.yml`'s skip guard now checks both
+`spec/integration/real_rails_spec.rb` and `spec/e2e/capabilities_spec.rb`,
+by table rather than by a second copy of the check.
 **Area:** `.github/workflows/ci.yml`, `core/spec/e2e/capabilities_spec.rb`
 
 `docs/EXTENSION_CAPABILITIES.md` states two rules. "A capability with no
@@ -680,9 +682,16 @@ One line. Recorded rather than fixed in 0.1.12 because it is a CI gap,
 not a defect in the release, and 0.1.12 has already been rolled back once
 for widening past its own subject.
 
-## 024.17 `vscode/src/extension.ts` is covered by no test that runs anywhere (0.1.13)
+## 024.17 `vscode/src/extension.ts` is covered by no test that runs anywhere
 
-**Status:** open
+**Status:** fixed in 0.1.13 for the two decisions a user notices --
+`documentSelectorFor` and `statusPresentation` moved into
+`vscode/src/clientPresentation.ts`, which imports no `vscode`, with ten
+unit tests including two that assert `extension.ts` actually calls them
+(024.10's first attempt left the original copy in place). The remaining
+`vscode` wiring -- command registrations, the client bootstrap, the poll
+loop's timer -- is still integration-only; running that suite in CI is
+the part not done.
 **Area:** `vscode/src/extension.ts`, `.github/workflows/ci.yml`
 
 Nine of the extension's ten modules have unit tests. `extension.ts` — the
@@ -704,9 +713,18 @@ remaining decisions the way 024.10 extracted `clientTeardown.ts`.
 
 ---
 
-## 024.15 The index's answers depend on which file was edited last (0.1.13)
+## 024.15 The index's answers depend on which file was edited last
 
-**Status:** open
+**Status:** fixed in 0.1.13 by option 1 below -- the storage is ordered.
+Entry lists are sorted by `[uri, line, character]` in `replace_file`, and
+`ordered_symbol_ids` is the one place `@by_simple_name` is read, ordered
+by `[name, kind, owner]` because one class has several SymbolIds that
+share a name. `search`'s `rank` keeps exact-match-first and gains a tail,
+since a truncated result cannot have ties decided by index order.
+Measured as the entry asked: 2,000 files with one class reopened in 500
+of them goes 7ms -> 61ms in `replace_file`, negligible against Cold
+Index. Every spec added re-indexes, and all eight decisions were pinned
+by mutation.
 **Area:** `core/lib/ovallsp/workspace_index.rb`
 
 `@by_symbol` maps a SymbolId to a list of `[uri, declaration]`, and
