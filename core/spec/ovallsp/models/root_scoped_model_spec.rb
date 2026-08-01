@@ -45,15 +45,37 @@ RSpec.describe "Ovallsp root-scoped model receivers (0.1.12)" do
     # name today, so this pins the symmetry rather than a live bug: a
     # registry that normalises reads only is one whose keys depend on
     # which door you came in (0.1.12).
-    it "registers and removes under the same key whichever spelling is used" do
+    # All four doors, not the two a unit test reaches most easily: the
+    # first attempt at this normalised only `register_from_agent_response`
+    # and `remove`, which have no caller in `lib/`, while every production
+    # write goes through `commit_replace` or `commit_updates`.
+    RESPONSE = { tableName: "widgets", partial: false, columns: [], associations: [] }.freeze
+
+    it "registers under a normalised key through register_from_agent_response" do
       registry = Ovallsp::Models::ModelRegistry.new
-      registry.register_from_agent_response(
-        "::Widget", { tableName: "widgets", partial: false, columns: [], associations: [] }
-      )
+      registry.register_from_agent_response("::Widget", RESPONSE)
 
       expect(registry.model("Widget")).not_to be_nil
       expect(registry.remove("Widget")).not_to be_nil
       expect(registry.model("::Widget")).to be_nil
+    end
+
+    it "registers under a normalised key through commit_replace" do
+      registry = Ovallsp::Models::ModelRegistry.new
+      registry.commit_replace(registry.prepare_replace("::Widget" => RESPONSE))
+
+      expect(registry.known_model?("Widget")).to be(true)
+      expect(registry.known_model?("::Widget")).to be(true)
+    end
+
+    it "registers and removes under a normalised key through commit_updates" do
+      registry = Ovallsp::Models::ModelRegistry.new
+      registry.commit_updates(registry.prepare_replace("::Widget" => RESPONSE))
+      expect(registry.known_model?("Widget")).to be(true)
+
+      registry.commit_updates({}, removals: ["::Widget"])
+
+      expect(registry.known_model?("Widget")).to be(false)
     end
   end
 

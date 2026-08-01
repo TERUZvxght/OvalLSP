@@ -122,7 +122,7 @@ module Ovallsp
 
       def commit_replace(replacement)
         @mutex.synchronize do
-          @models = replacement.dup
+          @models = replacement.to_h { |name, info| [lookup_key(name), info] }
           @generation += 1
         end
       end
@@ -133,8 +133,8 @@ module Ovallsp
       def commit_updates(prepared, removals: [])
         @mutex.synchronize do
           replacement = @models.dup
-          removals.each { |name| replacement.delete(name) }
-          prepared.each { |name, info| replacement[name] = info }
+          removals.each { |name| replacement.delete(lookup_key(name)) }
+          prepared.each { |name, info| replacement[lookup_key(name)] = info }
           @models = replacement
           @generation += 1
         end
@@ -181,11 +181,20 @@ module Ovallsp
       # was lost, and the Agent-backed model check went quiet for that
       # receiver without saying so.
       #
-      # Both sides of the map, not just reads. Every writer today feeds a
-      # bare Rails `model.name`, so normalising the write paths changes no
-      # answer now -- but a registry that normalises one side only is a
-      # registry whose keys depend on which door you came in, and this
-      # release is about what that costs (0.1.12).
+      # Both sides of the map, not just reads: all four writers
+      # (`commit_replace`, `commit_updates` and its `removals:`,
+      # `register_from_agent_response`, `remove`) key through this, as do
+      # the four lookups. Every writer today feeds a bare Rails
+      # `model.name`, so this changes no answer now -- but a registry that
+      # normalises one side only is a registry whose keys depend on which
+      # door you came in, and this release is about what that costs.
+      #
+      # The first attempt normalised `register_from_agent_response` and
+      # `remove` -- the two with no caller in `lib/` -- and left the two
+      # production actually uses, which made a `::`-keyed entry written
+      # through them reachable by *neither* spelling, worse than before.
+      # The spec pins all four doors now, not the two that were easy to
+      # reach from a unit test (0.1.12).
       #
       # Normalized here rather than at each of the twenty-two call sites,
       # across five subsystems, that reach these four lookup methods, and

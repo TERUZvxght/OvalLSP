@@ -651,6 +651,59 @@ roadmap entry rather than folded into another release's work.
 
 ---
 
+## 024.16 The capability E2E suite can skip in full while CI stays green (0.1.13)
+
+**Status:** open
+**Area:** `.github/workflows/ci.yml`, `core/spec/e2e/capabilities_spec.rb`
+
+`docs/EXTENSION_CAPABILITIES.md` states two rules. "A capability with no
+E2E row is not a capability" is enforced by
+`core/spec/e2e/capability_coverage_spec.rb`. "A capability whose row is
+skipped is not shipped" is enforced by nothing.
+
+`capabilities_spec.rb` skips every example when its real-Rails fixture
+cannot be prepared (`before(:all)` → `skip` when `available?` is false).
+CI has exactly the right guard — "Fail if the real-Rails integration
+suite was skipped instead of run" — but it filters on
+`spec/integration/real_rails_spec.rb` and does not cover the e2e path.
+Measured: forcing `available?` false gives `45 examples, 0 failures, 41
+pending` and **exit status 0**, with `capability_coverage_spec.rb` still
+green, because it scans the spec file's source text for `it "C5: …"` and
+cannot tell a row that ran from a row that was skipped.
+
+Latent rather than live today: `real_rails_spec.rb`'s own guard
+incidentally forces the fixture's gems to exist. But nothing states that
+dependency, and the two suites reach the fixture by different code paths.
+
+**Direction:** widen the existing CI step's file filter to both paths.
+One line. Recorded rather than fixed in 0.1.12 because it is a CI gap,
+not a defect in the release, and 0.1.12 has already been rolled back once
+for widening past its own subject.
+
+## 024.17 `vscode/src/extension.ts` is covered by no test that runs anywhere (0.1.13)
+
+**Status:** open
+**Area:** `vscode/src/extension.ts`, `.github/workflows/ci.yml`
+
+Nine of the extension's ten modules have unit tests. `extension.ts` — the
+largest at 812 lines — has none. What covers it is
+`vscode/src/test/integration/`, and `npm run test:integration` appears in
+no workflow; `ci.yml` runs `test:unit` only.
+`vscode/scripts/verify-installed-extension.sh` is likewise manual.
+
+The uncovered surface is exactly the layer `EXTENSION_CAPABILITIES.md`
+says the E2E suite structurally cannot see: the `documentSelector`, all
+nine command registrations, the `ovallsp/status` poll loop, and the
+client bootstrap. No defect was found in it by reading — the `.erb`
+selector, the watcher glob and the version handshake are all correct —
+but "the extension's tests are meaningful" is true only of the nine
+modules that have them.
+
+**Direction:** either run the integration suite in CI, or extract the
+remaining decisions the way 024.10 extracted `clientTeardown.ts`.
+
+---
+
 ## 024.15 The index's answers depend on which file was edited last (0.1.13)
 
 **Status:** open
