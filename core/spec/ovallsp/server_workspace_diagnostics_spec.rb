@@ -345,6 +345,46 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     end
   end
 
+  # Closing a buffer analyses one file; it must not take the generation a
+  # workspace pass is identified by. The same decision at
+  # `analyze_changed_files_later` is pinned above; this one is the other
+  # caller of the same rule.
+  it "does not end the workspace pass when a buffer is closed" do
+    Dir.mktmpdir do |root|
+      write(root, "app/models/widget.rb", "class Widget\n  def build\n  end\nend\n")
+      6.times { |i| write(root, "app/services/s#{i}.rb", "Widget.new.totally_bogus_x\n") }
+      other = write(root, "app/services/open_one.rb", "class OpenOne\nend\n")
+      server = build_server(root)
+      gate = Queue.new
+      entered = Queue.new
+      first = true
+      allow(server.instance_variable_get(:@workspace_diagnostics)).to receive(:publish_for)
+        .and_wrap_original do |original, uri|
+          if first
+            first = false
+            entered << true
+            gate.pop
+          end
+          original.call(uri)
+        end
+
+      server.send(:handle_did_open, textDocument: { uri: Ovallsp::UriUtil.from_path(other), version: 1,
+                                                    languageId: "ruby", text: File.read(other) })
+      server.send(:start_cold_index)
+      entered.pop
+      server.send(:handle_did_close, textDocument: { uri: Ovallsp::UriUtil.from_path(other) })
+      gate << true
+
+      reported = wait_until do
+        6.times.all? do |i|
+          uri = Ovallsp::UriUtil.from_path(File.join(root, "app/services/s#{i}.rb"))
+          !(diagnostics_for(uri) || []).empty?
+        end
+      end
+      expect(reported).to be(true), "the workspace pass stopped when a buffer was closed"
+    end
+  end
+
   it "publishes nothing for a file that has no mistakes" do
     Dir.mktmpdir do |root|
       workspace_with_a_mistake(root)

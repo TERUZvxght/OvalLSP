@@ -465,11 +465,19 @@ module Ovallsp
       # ever matched; no input reaches that, and both removing it and
       # doubling it leave every answer unchanged.
       def ancestor_names(name, context)
-        # `name` itself is not seeded: `HierarchyIndex#ancestors` includes
-        # the class's own entry, so both this list and the signature
-        # lookups below already cover it. Seeding it was a redundant term,
-        # and a redundant term is one nothing can fail on.
-        workspace = context.hierarchy_index.ancestors(name).map(&:name).uniq
+        # Every workspace ancestor in both spellings. `HierarchyIndex`
+        # returns a workspace-resolved entry `::`-qualified and an
+        # external one bare, while the `expected` side is always bare --
+        # and the signature environment cannot be relied on to supply the
+        # bare form, because it is RBS-only: an *RBI*-declared parameter
+        # type has no ancestry there at all, so `::Animal` never matched
+        # `Animal` and a class was reported incompatible with itself.
+        #
+        # `simple_name_of`, not `bare_name`: a namespaced `::Zoo::Animal`
+        # has to reach `Animal`, which stripping the prefix does not do,
+        # and it is the form `TypeConverter` gives the RBS side.
+        found = context.hierarchy_index.ancestors(name).map(&:name)
+        workspace = ([name] + found + ([name] + found).map { |entry| simple_name_of(entry) }).uniq
 
         # `Signatures::Environment#ancestors` resolves a *qualified* name:
         # `ancestors("Integer")` is empty while `ancestors("::Integer")` is
@@ -483,6 +491,13 @@ module Ovallsp
         end
 
         (workspace + via_signatures).uniq
+      end
+
+      # The last segment, which is what `TypeConverter` gives a signature's
+      # own names -- as distinct from `simple_name`, which only strips a
+      # leading `::`.
+      def simple_name_of(name)
+        name.to_s.split("::").last.to_s
       end
 
       def simple_name(name)

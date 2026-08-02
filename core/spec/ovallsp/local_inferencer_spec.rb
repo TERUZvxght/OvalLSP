@@ -1704,6 +1704,38 @@ RSpec.describe Ovallsp::LocalInferencer do
     end
   end
 
+  # A position *inside* a block belongs to the block's body, whatever the
+  # receiver is. When the receiver is not a generic there are no bound
+  # block parameters to compute -- but the body still has to be walked,
+  # and returning the enclosing call's own type instead answered
+  # `OptionParser` for a string literal three lines in. 0.2.0 publishes
+  # that answer as an `argument-type` diagnostic.
+  it "answers about the expression under the cursor inside a plain-receiver block" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", version: 1, language_id: "ruby",
+      text: "opts.on(\"-x\") do\n  \"hello\"\nend\n"
+    )
+
+    expect(described_class.new.infer_at(document, { line: 1, character: 8 }).to_s).to eq("String")
+  end
+
+  # `scope_at` sets a flag that makes every descent step copy the whole
+  # environment, and `infer_at` never clears it -- while `Server` holds
+  # one long-lived inferencer. Without the `ensure`, one bare-prefix
+  # completion left every later `infer_at` paying that copy, on the
+  # request path, holding the index lock. The existing example uses a
+  # fresh inferencer, so it cannot see a flag a previous call left set.
+  it "clears the scope-capture flag for the next call on the same inferencer" do
+    inferencer = described_class.new
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", version: 1, language_id: "ruby",
+                                         text: "def go\n  x = 1\n  x\nend\n")
+
+    inferencer.scope_at(document, { line: 2, character: 2 })
+    inferencer.infer_at(document, { line: 2, character: 2 })
+
+    expect(inferencer.instance_variable_get(:@capturing_scope)).to be(false)
+  end
+
   # The seed value, not just the names. Ruby declares no parameter types,
   # so Unknown is the honest answer -- and `Types::NIL` would make hover
   # print `nil` as the type of every parameter in the workspace, which is

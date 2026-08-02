@@ -184,4 +184,17 @@ RSpec.describe Ovallsp::SemanticTokens do
       expect(types.count(type)).to be >= count
     end
   end
+
+  # The token is the *name*, not the statement. `node.location` for an
+  # operator write is the whole `sum += 1`, which overlaps the token for
+  # the `sum` on its right-hand side -- and overlapping tokens are a
+  # protocol violation, not a rendering preference.
+  it "marks the name in an operator assignment, not the whole statement" do
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", version: 1, language_id: "ruby",
+                                         text: "sum = 0\nsum += 1\n@memo ||= sum\n")
+
+    lengths = described_class.collect(document).map { |token| token.length }
+
+    expect(lengths).to all(be <= 5)
+  end
 end

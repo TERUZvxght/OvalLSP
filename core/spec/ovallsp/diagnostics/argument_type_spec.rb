@@ -94,6 +94,30 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
 
   # The class exists in source too, so the receiver resolves; the
   # *signature* is what declares the parameter types.
+  # The same shape as `findings`, with the signature coming from an RBI
+  # rather than an RBS -- which is the difference the two examples above
+  # turn on.
+  def rbi_findings(body)
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "sorbet/rbi"))
+      File.write(File.join(root, "sorbet/rbi/cage.rbi"), <<~RBI)
+        class Cage
+          sig { params(a: Animal).void }
+          def hold(a); end
+        end
+      RBI
+      rbi_signatures = Ovallsp::Signatures::Environment.new
+      rbi_signatures.load(workspace_root: root)
+      rbi_context = Ovallsp::Diagnostics::SemanticContext.new(
+        workspace_index: workspace_index, hierarchy_index: hierarchy_index, method_resolver: method_resolver,
+        local_inferencer: local_inferencer, model_registry: model_registry, route_registry: route_registry,
+        signatures: rbi_signatures, generation: 1
+      )
+      engine.analyze(document: index(body), semantic_context: rbi_context, mode: :standard)
+            .select { |f| f.code == "argument-type" }
+    end
+  end
+
   def findings(body)
     index("class Widget\nend\n", uri: "file:///widget.rb")
     engine.analyze(document: index(body), semantic_context: context, mode: :standard)
@@ -186,6 +210,35 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
   # narrow version does not answer.
   it "says nothing when the declared parameter type is generic" do
     expect(findings("Widget.new.pick(1, 2)")).to be_empty
+  end
+
+  # An RBI-declared parameter type has no RBS ancestry to fall back on:
+  # `Environment#ancestors` is RBS-only and answers nothing for it. The
+  # workspace chain arrives `::`-qualified, so a class was reported as
+  # incompatible with *itself* -- eleven times over the `rbs` gem's own
+  # source. Both the row and KNOWN_LIMITATIONS say "RBS/RBI".
+  it "says nothing when an RBI-declared parameter type is passed itself" do
+    index("class Animal\nend\n", uri: "file:///animal.rb")
+    index("class Cage\nend\n", uri: "file:///cage.rb")
+
+    expect(rbi_findings("Cage.new.hold(Animal.new)\n")).to be_empty
+  end
+
+  # Namespaced, so stripping the leading `::` is not enough: the RBI side
+  # names the type `Animal`, and `::Zoo::Animal` has to reach that.
+  it "says nothing when a namespaced class is passed to its own RBI declaration" do
+    index("module Zoo\n  class Animal\n  end\nend\n", uri: "file:///zoo.rb")
+    index("class Cage\nend\n", uri: "file:///cage.rb")
+
+    expect(rbi_findings("Cage.new.hold(Zoo::Animal.new)\n")).to be_empty
+  end
+
+  it "says nothing when a subclass of an RBI-declared parameter type is passed" do
+    index("class Animal\nend\n", uri: "file:///animal.rb")
+    index("class Dog < Animal\nend\n", uri: "file:///dog.rb")
+    index("class Cage\nend\n", uri: "file:///cage.rb")
+
+    expect(rbi_findings("Cage.new.hold(Dog.new)\n")).to be_empty
   end
 
   it "says nothing when the argument matches the declared type" do

@@ -456,7 +456,14 @@ module Ovallsp
     def locate_in_block(node, offset, env)
       receiver_type = node.receiver && eval_type(node.receiver, env)
       nested_env = block_nested_env(node, receiver_type, env)
-      return eval_type(node, env) unless nested_env
+      # No nested env means no *bound* block parameters -- the receiver is
+      # not a generic, so nothing is known about what it yields. The body
+      # is still the body: descending with the outer environment answers
+      # about the expression under the cursor, where returning the
+      # enclosing call's own type answered `OptionParser` for a string
+      # literal inside `opts.on(...) do`. 0.2.0 publishes that answer as
+      # an `argument-type` diagnostic.
+      return locate(node.block.body, offset, env) unless nested_env
 
       param_node = block_parameter_node_at(node.block, offset)
       return nested_env.fetch(param_node.name, Types::UNKNOWN) if param_node
