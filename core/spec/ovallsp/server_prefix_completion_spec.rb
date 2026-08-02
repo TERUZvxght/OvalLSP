@@ -493,4 +493,33 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     item = result[:items].find { |i| i[:label] == "Widget" }
     expect(item[:detail]).to eq("::Aaa::Widget")
   end
+
+  # The last two bands. `puzzle` is a local and `puts`/`public_method` are
+  # Kernel's, so this is the whole rule read end to end -- and inverting
+  # either band drops the name the user just wrote below five methods
+  # they did not.
+  it "ranks a local above the Kernel methods sharing its prefix" do
+    result = complete(<<~RUBY)
+      puzzle = 1
+      puHERE
+    RUBY
+
+    labels = result[:items].map { |i| i[:label] }
+    expect(labels.first).to eq("puzzle")
+    expect(labels).to include("puts")
+  end
+
+  # The band number itself, not the resulting order: a constant is
+  # capitalised and a Kernel method is not, so within one band ASCII puts
+  # the constant first anyway and no ordering assertion can tell band 2
+  # from band 3. What the number decides is what an editor does when it
+  # merges this list with another provider's.
+  it "puts a workspace constant in the band above Kernel" do
+    result = complete(<<~RUBY, extra_opens: did_open("file:///p.rb", "class Putter; end\n"))
+      puHERE
+    RUBY
+
+    expect(result[:items].find { |i| i[:label] == "Putter" }[:sortText]).to start_with("2-")
+    expect(result[:items].find { |i| i[:label] == "puts" }[:sortText]).to start_with("3-")
+  end
 end

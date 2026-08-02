@@ -815,11 +815,17 @@ Two things the entry did not anticipate. The ranking has to be rendered
 into `sortText`: an editor re-sorts a completion list itself, so array
 order alone pins nothing, and a spec checking array positions passes with
 `sortText` deleted. And `WorkspaceIndex#search` matches by substring
-because `workspace/symbol` wants that; a completion prefix means the start
-of the name, so the matches are filtered back down rather than the index's
-own contract being widened.
+because `workspace/symbol` wants that, while a completion prefix means the
+start of the name. Filtering `search`'s answer down was the first attempt
+and it was wrong: `search` truncates, so on a workspace with more than
+`limit` substring matches every prefix match can already be gone -- 250
+classes merely containing `art` made typing `art` return nothing at all.
+The index gained `#prefix_search`, which applies both the prefix and the
+offerable kinds *before* the truncation.
 **Area:** `core/lib/ovallsp/server.rb` (`completion_result`),
-`core/lib/ovallsp/semantic/query_service.rb`
+`core/lib/ovallsp/semantic/query_service.rb`,
+`core/lib/ovallsp/semantic/prefix_completion.rb`,
+`core/lib/ovallsp/workspace_index.rb` (`#prefix_search`)
 
 `completion_result` matches a bare prefix against the route registry and
 nothing else; every other candidate comes from

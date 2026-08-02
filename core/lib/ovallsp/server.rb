@@ -2555,10 +2555,13 @@ module Ovallsp
       document = TextDocument.new(uri: uri, text: File.read(path, encoding: Encoding::UTF_8), version: nil,
                                    language_id: "ruby")
       summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
-      applied = apply_file_summary(summary)
-      applied
+      apply_file_summary(summary)
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
+      # Explicitly, because the rescue's value would otherwise be the
+      # logger's -- truthy for a real IO -- and a file that failed to
+      # reindex would then be queued for analysis and fail there too.
+      false
     end
 
     MODEL_FILE_PATTERN = %r{app/models/(?<relative>.+)\.rb\z}

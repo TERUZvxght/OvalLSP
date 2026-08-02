@@ -141,8 +141,12 @@ missed one", so each is narrow on purpose. What that costs a user:
   high bar, and any of these silences the check for a view entirely: the
   controller's immediate superclass has not been read, something uses
   `instance_variable_set`, a module is mixed in, a callback form the
-  analysis does not model appears, **the controller's class body calls
-  anything beyond `private`/`protected`/`public` and the callback forms**
+  analysis does not model appears, **any class in the chain has a body
+  that calls anything beyond `private`/`protected`/`public`,
+  `before_action` and `skip_before_action`** — the whole chain, so
+  `ApplicationController`'s own body decides this for every view beneath
+  it, and `after_action`, `around_action` and `prepend_before_action` are
+  among the forms that silence it —
   (which covers every gem macro — `load_and_authorize_resource`,
   `expose`, Devise, ActiveAdmin — because what such a call installs is
   invisible until 024.R7 lets the index attribute it), or **the view

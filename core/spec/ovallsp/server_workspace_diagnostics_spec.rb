@@ -310,6 +310,41 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     end
   end
 
+  # A batch is a batch: every example that drives this handler passes one
+  # changed file, so nothing exercised the loop the batching exists for.
+  # A `git pull` naming three files must re-diagnose three.
+  it "re-analyses every file a batch names, not the first" do
+    Dir.mktmpdir do |root|
+      write(root, "app/models/widget.rb", "class Widget\n  def build\n  end\nend\n")
+      paths = 3.times.map { |i| write(root, "app/services/s#{i}.rb", "class S#{i}\nend\n") }
+      server = build_server(root)
+      server.send(:start_cold_index)
+      wait_until { server.instance_variable_get(:@cold_indexing) == false }
+      paths.each { |path| File.write(path, "Widget.new.totally_bogus_x\n") }
+
+      server.send(:handle_did_change_watched_files,
+                  changes: paths.map { |p| { uri: Ovallsp::UriUtil.from_path(p), type: 2 } })
+
+      reported = wait_until do
+        paths.all? { |p| !(diagnostics_for(Ovallsp::UriUtil.from_path(p)) || []).empty? }
+      end
+      expect(reported).to be(true), "only part of the batch was re-analysed"
+    end
+  end
+
+  # The rescue's value would otherwise be the logger's, which is truthy
+  # for a real IO -- so a file that failed to reindex was reported as
+  # applied and queued for an analysis that fails too.
+  it "reports a failed reindex as not applied" do
+    Dir.mktmpdir do |root|
+      path = write(root, "app/models/widget.rb", "class Widget\nend\n")
+      server = build_server(root)
+      allow(server.instance_variable_get(:@parser_service)).to receive(:summarize).and_raise("boom")
+
+      expect(server.send(:reindex_from_disk, Ovallsp::UriUtil.from_path(path))).to be(false)
+    end
+  end
+
   it "publishes nothing for a file that has no mistakes" do
     Dir.mktmpdir do |root|
       workspace_with_a_mistake(root)

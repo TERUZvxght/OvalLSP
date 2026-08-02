@@ -134,8 +134,10 @@ OvalLSPはRuby型チェッカーではなく、LSP機能のための確信度付
   次のどれか1つでも該当すればそのビューでは検査自体が黙ります。直近の
   親クラスが読めていない、`instance_variable_set` を使っている、
   モジュールをmix-inしている、モデル化していないコールバック形式がある、
-  **クラスボディが `private`/`protected`/`public` とコールバック形式
-  以外を呼んでいる**(gemのマクロ —`load_and_authorize_resource`・
+  **継承鎖のいずれかのクラスのボディが `private`/`protected`/`public`・
+  `before_action`・`skip_before_action` 以外を呼んでいる**(鎖全体が対象なので、
+  `ApplicationController` のボディがその下の全ビューについてこれを決めます。
+  `after_action`・`around_action`・`prepend_before_action` も黙らせる側です)(gemのマクロ —`load_and_authorize_resource`・
   `expose`・Devise・ActiveAdmin— はすべてここに該当します。何を仕込むかは
   024.R7で索引が帰属を持つまで見えないためです)、**ビューが何かを
   renderしている**、**継承鎖のいずれかのクラスが複数ファイルに分かれて
