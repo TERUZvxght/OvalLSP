@@ -480,4 +480,17 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     expect(labels).to include("local001")
     expect(labels).not_to include("local080")
   end
+
+  # Two namespaces sharing a simple name give one item, and `detail`
+  # carries a qualified name -- whichever the index ordered first, so the
+  # answer does not change when an unrelated file is saved.
+  it "shows the first qualified name for two constants sharing a simple name" do
+    both = "module Zzz\n  class Widget; end\nend\n\nmodule Aaa\n  class Widget; end\nend\n"
+    result = complete(<<~RUBY, extra_opens: did_open("file:///both.rb", both))
+      WidHERE
+    RUBY
+
+    item = result[:items].find { |i| i[:label] == "Widget" }
+    expect(item[:detail]).to eq("::Aaa::Widget")
+  end
 end

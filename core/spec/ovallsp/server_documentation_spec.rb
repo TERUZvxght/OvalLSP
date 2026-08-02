@@ -203,4 +203,20 @@ RSpec.describe "Ovallsp::Server documentation in hover and completion (0.2.0)" d
       expect(data&.fetch(:receiver)).to eq(expected)
     end
   end
+
+  # RDoc/YARD is not markdown: under CommonMark two comment lines become
+  # one run-on paragraph, and `*bold*`/`+code+`/`_italic_` are
+  # reinterpreted. Hover sends it as plaintext; completion sent the same
+  # text as markdown, so one source rendered two ways.
+  it "sends completion documentation as the same kind hover does" do
+    server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger)
+    server.send(:handle_did_open, textDocument: { uri: "file:///widget.rb", version: 1,
+                                                  languageId: "ruby", text: WIDGET })
+
+    result = server.send(:completion_resolve_result,
+                         label: "charge", data: { receiver: "Widget", name: "charge" })
+
+    expect(result[:documentation][:kind]).to eq("plaintext")
+    expect(result[:documentation][:value]).to include("Charges the card.")
+  end
 end

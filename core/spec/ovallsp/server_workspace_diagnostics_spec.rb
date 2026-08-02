@@ -149,7 +149,7 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
       server.send(:start_cold_index)
       wait_until { !(diagnostics_for(user_uri) || []).empty? }
       before = published.count { |m| m[:params][:uri] == user_uri }
-      server.send(:reindex_from_disk, user_uri)
+      server.send(:handle_did_change_watched_files, changes: [{ uri: user_uri, type: 2 }])
       sleep 0.2
 
       expect(published.count { |m| m[:params][:uri] == user_uri }).to eq(before)
@@ -239,6 +239,33 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     end
   end
 
+  # The unknown-method check defers rather than guesses only once there
+  # is an Agent to defer *to*. Before the bootstrap settles it falls back
+  # to the static reading, which is wrong for every class whose ancestry
+  # runs into a gem -- and until 0.2.0 that reading reached a user only
+  # if they opened the file. Publishing it for the whole project at
+  # startup, and correcting it a boot later, is a Problems panel full of
+  # findings about working code.
+  it "waits for the Runtime Agent's bootstrap to settle before the first pass" do
+    Dir.mktmpdir do |root|
+      workspace_with_a_mistake(root)
+      server = build_server(root)
+      server.instance_variable_set(:@agent_bootstrap_pending, true)
+      started = 0
+      allow(server.instance_variable_get(:@workspace_diagnostics)).to receive(:run)
+        .and_wrap_original do |original, uris, generation|
+          started += 1
+          original.call(uris, generation)
+        end
+
+      server.send(:start_cold_index)
+      wait_until { server.instance_variable_get(:@cold_indexing) == false }
+      sleep 0.2
+
+      expect(started).to eq(0)
+    end
+  end
+
   it "publishes nothing for a file that has no mistakes" do
     Dir.mktmpdir do |root|
       workspace_with_a_mistake(root)
@@ -290,7 +317,7 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
       wait_until { server.instance_variable_get(:@cold_indexing) == false }
 
       File.write(user_path, "Widget.new.totally_bogus_method\n")
-      server.send(:reindex_from_disk, user_uri)
+      server.send(:handle_did_change_watched_files, changes: [{ uri: user_uri, type: 2 }])
 
       expect(wait_until { !(diagnostics_for(user_uri) || []).empty? }).to be(true)
       expect(diagnostics_for(user_uri).first[:message]).to include("totally_bogus_method")
@@ -308,7 +335,7 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
       wait_until { !(diagnostics_for(user_uri) || []).empty? }
 
       File.write(user_path, "Widget.new.build\n")
-      server.send(:reindex_from_disk, user_uri)
+      server.send(:handle_did_change_watched_files, changes: [{ uri: user_uri, type: 2 }])
 
       expect(wait_until { (diagnostics_for(user_uri) || [:unset]).empty? }).to be(true)
     end

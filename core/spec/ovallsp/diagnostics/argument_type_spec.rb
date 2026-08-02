@@ -181,6 +181,13 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     end
   end
 
+  # A generic declared parameter is declined: `Array[T]` is not a plain
+  # class, and "an Integer cannot be an Array[T]" is a question this
+  # narrow version does not answer.
+  it "says nothing when the declared parameter type is generic" do
+    expect(findings("Widget.new.pick(1, 2)")).to be_empty
+  end
+
   it "says nothing when the argument matches the declared type" do
     expect(findings("Widget.new.resize(3)\n")).to be_empty
   end

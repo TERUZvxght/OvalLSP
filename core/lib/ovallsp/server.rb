@@ -373,7 +373,7 @@ module Ovallsp
       clear_diagnostics(uri)
 
       path = UriUtil.to_path(uri)
-      reindex_from_disk(uri) if path && File.file?(path)
+      publish_workspace_diagnostics_later(uri) if path && File.file?(path) && reindex_from_disk(uri)
     end
 
     def reindex(document)
@@ -1101,7 +1101,15 @@ module Ovallsp
                           # rest of the workspace is indexed resolves
                           # against a half-built index and reports
                           # mistakes that are only missing knowledge.
-                          start_workspace_diagnostics
+                          # Not while the Agent's bootstrap is still in
+                          # flight: the unknown-method check defers only
+                          # once there is an Agent to defer to, and
+                          # publishing its static fallback for the whole
+                          # project -- then correcting it a boot later --
+                          # is a Problems panel full of findings about
+                          # working code. The bootstrap starts the pass
+                          # itself when it settles, ready or not.
+                          start_workspace_diagnostics unless @agent_bootstrap_pending
                         }).run
       rescue StandardError => e
         logger.error("cold index failed: #{e.class}: #{e.message}")
@@ -1314,6 +1322,8 @@ module Ovallsp
         return
       end
 
+      @agent_bootstrap_pending = true
+
       bootstrap = @agent_bootstrap
       root = @workspace_root
       logger = @logger
@@ -1382,6 +1392,16 @@ module Ovallsp
         end
       rescue StandardError => e
         logger.error("Runtime Agent bootstrap failed: #{e.class}: #{e.message}")
+      ensure
+        # Settled, ready or not: a bootstrap that never reaches :ready
+        # degrades to static-only with no retry, so this is the only
+        # point at which the workspace's answers stop changing.
+        @agent_bootstrap_pending = false
+        begin
+          start_workspace_diagnostics
+        rescue StandardError => e
+          logger.error("failed to start the workspace pass: #{e.class}: #{e.message}")
+        end
       end
       background_tasks.track_thread(thread)
     end
@@ -1679,16 +1699,15 @@ module Ovallsp
         # the workspace pass, inside the lock every hover needs. Reading
         # and parsing every helper each time measured 17ms on sixty of
         # them; loading them and hashing the text, 5.8ms; this, 0.6ms.
-        # An open buffer is keyed by its *text*, not its version: a version
-        # restarts at 1 every time the editor opens the file, so it names
-        # a text only within one open session while this cache outlives
-        # it -- a helper reopened at version 1 with different content
-        # answered from the previous session. Hashing costs something and
-        # is paid only for helpers that are open, which is nearly none of
-        # them; the rest use the index's own content hash, which costs
-        # neither a read nor a hash.
+        # The index's own content hash, which costs neither a read nor a
+        # parse and tracks an open buffer as well as a file on disk --
+        # `didOpen` and `didChange` both re-index. A version cannot be the
+        # key: it restarts at 1 every time the editor opens the file, so
+        # it names a text only within one open session while this cache
+        # outlives it, and a helper reopened at version 1 with different
+        # content answered from the previous session.
         open_document = @document_store.fetch(uri: uri)
-        fingerprint = open_document&.text&.hash || @workspace_index.summary_for_uri(uri)&.content_hash
+        fingerprint = @workspace_index.summary_for_uri(uri)&.content_hash
         cached = @helper_ivars[uri]
         next cached[1] if fingerprint && cached && cached[0] == fingerprint
 
@@ -2396,6 +2415,7 @@ module Ovallsp
     end
 
     def handle_did_change_watched_files(params)
+      reanalyze = []
       changed_models = Set.new
       needs_routes_refresh = false
       needs_restart = false
@@ -2420,7 +2440,7 @@ module Ovallsp
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
           # reindex from disk for files nobody currently has open.
-          reindex_from_disk(uri)
+          reanalyze << uri if reindex_from_disk(uri)
         end
 
         case classify_rails_change(uri)
@@ -2465,6 +2485,23 @@ module Ovallsp
       elsif !changed_models.empty?
         with_ready_agent("app/models/*") { refresh_models(changed_models) }
       end
+
+      # One pass over the whole batch, after it is indexed, rather than a
+      # thread per file while it is being indexed. `WorkspaceDiagnostics`
+      # already checks its token between files, so a newer batch
+      # supersedes this one instead of queueing behind it.
+      analyze_changed_files_later(reanalyze)
+    end
+
+    def analyze_changed_files_later(uris)
+      return if uris.empty?
+
+      generation = @workspace_diagnostics.begin_pass
+      @background_tasks.track_thread(Thread.new do
+        @workspace_diagnostics.run(uris.sort, generation)
+      rescue StandardError => e
+        @logger.error("failed to analyze changed files: #{e.class}: #{e.message}")
+      end)
     end
 
     SCHEMA_FILE_PATTERNS = [%r{db/schema\.rb\z}, %r{db/structure\.sql\z}, %r{db/migrate/}].freeze
@@ -2496,6 +2533,13 @@ module Ovallsp
     # file's content, not when its #replace_file call happened to arrive
     # — see WorkspaceIndex#stale?'s comment
     # (docs/design/tasks/008.6-agent-and-index-hardening.md).
+    # Returns whether the summary was applied, so a caller handling a
+    # batch can collect the uris worth re-analysing and hand them to one
+    # pass rather than starting one per file. Analysing here would put the
+    # work on the dispatch thread; starting a thread per file put it on
+    # the index mutex, which the dispatch thread needs for the *next*
+    # file -- measured at 13.5s for a 200-file batch against 1.5s for the
+    # indexing alone, with no request served meanwhile.
     def reindex_from_disk(uri)
       path = UriUtil.to_path(uri)
       return unless path && File.file?(path)
@@ -2505,15 +2549,7 @@ module Ovallsp
                                    language_id: "ruby")
       summary = @parser_service.summarize(document).with(source: :disk, read_sequence: read_sequence)
       applied = apply_file_summary(summary)
-      # One changed file is one file's worth of work, not a workspace
-      # pass -- and it is exactly the case that used to leave a stale
-      # report standing until somebody opened the file (0.2.0).
-      #
-      # Off the dispatch thread, though: this method is reached from
-      # didChangeWatchedFiles and didClose, and a `git checkout` or a
-      # generator touching a hundred unopened files would otherwise run a
-      # hundred full analyses in front of every hover.
-      publish_workspace_diagnostics_later(uri) if applied
+      applied
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
     end
@@ -3114,7 +3150,12 @@ module Ovallsp
       documentation = documentation_at(location)
       return item unless documentation
 
-      item.merge(documentation: { kind: "markdown", value: documentation })
+      # `plaintext`, the same kind hover sends. RDoc/YARD is not markdown:
+      # under CommonMark two comment lines become one run-on paragraph
+      # and `*bold*`/`+code+`/`_italic_` are reinterpreted, so declaring
+      # it markdown rendered one source two ways depending on which
+      # request asked for it.
+      item.merge(documentation: { kind: "plaintext", value: documentation })
     rescue StandardError => e
       @logger.error("failed to resolve completion item: #{e.class}: #{e.message}")
       params

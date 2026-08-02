@@ -469,7 +469,11 @@ module Ovallsp
         # `ancestors("Integer")` is empty while `ancestors("::Integer")` is
         # the real chain.
         via_signatures = workspace.flat_map do |entry|
-          (context.signatures&.ancestors(qualified_owner(entry)) || []).map { |ancestor| simple_name(ancestor) }
+          # `Environment#ancestors` already maps every name through
+          # `TypeConverter.simple_name`, so they arrive bare -- mapping
+          # them again here was the mirror of the no-op the comment above
+          # confesses to on the workspace side.
+          context.signatures&.ancestors(qualified_owner(entry)) || []
         end
 
         (workspace + via_signatures).uniq

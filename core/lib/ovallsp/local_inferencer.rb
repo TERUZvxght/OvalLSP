@@ -1263,12 +1263,10 @@ module Ovallsp
     end
     private_constant :RenderTargetFinder
 
-
-
-    # Extracts receiver-less before_action declarations directly from the
-    # requested class body. This intentionally does not descend into
-    # method bodies or nested namespaces, where a same-named call is not a
-    # Rails controller callback declaration.
+    # Every receiverless call made directly in the requested class body.
+    # `BeforeActionFinder` below walks the same statements looking for the
+    # two names it models; this reports all of them, so a caller can ask
+    # whether anything *unmodelled* is there.
     class ClassBodyCallFinder < Prism::Visitor
       attr_reader :names
 
@@ -1299,6 +1297,10 @@ module Ovallsp
     end
     private_constant :ClassBodyCallFinder
 
+    # Extracts receiver-less before_action declarations directly from the
+    # requested class body. This intentionally does not descend into
+    # method bodies or nested namespaces, where a same-named call is not a
+    # Rails controller callback declaration.
     class BeforeActionFinder < Prism::Visitor
       attr_reader :operations
 
