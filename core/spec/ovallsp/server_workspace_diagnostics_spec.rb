@@ -215,6 +215,30 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     end
   end
 
+  # The pass stops at a cap, so *which* files it reaches is part of the
+  # answer -- and `uris_by_source` is Hash insertion order, which
+  # `replace_file` moves a file to the end of whenever its content
+  # changes. Without an order of its own, saving one file changes which
+  # files past the cap are never reported, and the documented "always the
+  # same tail" is false in both halves.
+  it "walks the workspace in a stable order, whatever the index's own is" do
+    Dir.mktmpdir do |root|
+      %w[e d c b a].each { |name| write(root, "app/models/#{name}.rb", "class #{name.upcase}\nend\n") }
+      server = build_server(root)
+      walked = []
+      allow(server.instance_variable_get(:@workspace_diagnostics)).to receive(:run)
+        .and_wrap_original do |original, uris, generation|
+          walked = uris
+          original.call(uris, generation)
+        end
+
+      server.send(:start_cold_index)
+      wait_until { walked.any? }
+
+      expect(walked).to eq(walked.sort)
+    end
+  end
+
   it "publishes nothing for a file that has no mistakes" do
     Dir.mktmpdir do |root|
       workspace_with_a_mistake(root)

@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
 require "stringio"
+require "tmpdir"
+require "fileutils"
 
 # Reading an instance variable nothing assigns (0.2.0, closes 024.R6).
 #
@@ -613,6 +615,36 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
 
       expect(server.send(:ivar_sources_fully_enumerable?, "::UsersController",
                          [["::UsersController", document]])).to be(true)
+    end
+  end
+
+  # `assigned_ivars_for` runs on the dispatch thread once per didChange --
+  # per keystroke in a view -- and once per view in the workspace pass,
+  # inside the lock every hover also needs. Reading and re-parsing every
+  # `app/helpers/**` file each time measured 17ms per call on sixty
+  # helpers. The set only changes when a helper does.
+  it "parses each helper once, not once per request" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "app/helpers"))
+      3.times do |i|
+        File.write(File.join(root, "app/helpers/h#{i}_helper.rb"),
+                   "module H#{i}Helper\n  def go#{i}\n    @seen#{i} = 1\n  end\nend\n")
+      end
+      server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger,
+                                   workspace_root: root)
+      Dir.glob(File.join(root, "app/helpers/*.rb")).sort.each do |path|
+        server.send(:reindex_from_disk, Ovallsp::UriUtil.from_path(path))
+      end
+      parsed = 0
+      allow(server.instance_variable_get(:@local_inferencer)).to receive(:assigned_ivar_names)
+        .and_wrap_original do |original, document|
+          parsed += 1
+          original.call(document)
+        end
+
+      3.times { server.send(:helper_assigned_ivar_names) }
+
+      expect(parsed).to eq(3)
     end
   end
 end

@@ -79,6 +79,7 @@ module Ovallsp
       # (docs/design/tasks/010-method-summaries-and-call-chains.md; wired
       # in as part of Task 013 after an independent review found Task 010
       # had shipped as a fully isolated, never-called engine).
+      @helper_ivars = {}
       @local_inferencer = LocalInferencer.new(
         model_registry: model_registry, method_resolver: @method_resolver, method_analyzer: @method_analyzer,
         signatures: @signatures, observation_store: @observation_store
@@ -407,7 +408,7 @@ module Ovallsp
       # deferring is only right when an answer can actually arrive.
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
       findings = with_index_snapshot do
-        context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri))
+        context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
       end
       publish_findings(document.uri, findings, version: document.version)
@@ -446,7 +447,7 @@ module Ovallsp
     def workspace_findings_for(document)
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
       with_index_snapshot do
-        context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri))
+        context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
       end
     ensure
@@ -480,7 +481,14 @@ module Ovallsp
     # asks again. Supersedes any pass still running.
     def start_workspace_diagnostics
       generation = @workspace_diagnostics.begin_pass
-      uris = @workspace_index.uris_by_source(:disk)
+      # Sorted, because the pass stops at a cap and so *which* files it
+      # reaches is part of the answer. `uris_by_source` is the index's
+      # own insertion order, and `replace_file` moves a file to the end
+      # of it whenever the content changes -- so without an order here,
+      # saving one file changes which files past the cap are never
+      # reported. The pass's own traversal, not a seventh reader of
+      # shared state (024.15).
+      uris = @workspace_index.uris_by_source(:disk).sort
       return if uris.empty?
 
       @background_tasks.track_thread(Thread.new do
@@ -1531,7 +1539,7 @@ module Ovallsp
     # type propagation. Everything else -- a controller, a model, a plain
     # Ruby file -- receives its ivars from wherever it likes, and nil is
     # the honest answer rather than the empty set.
-    def assigned_ivars_for(uri)
+    def assigned_ivars_for(uri, view_document = nil)
       return nil unless erb_view?(uri)
 
       context = view_action_context(uri)
@@ -1539,9 +1547,8 @@ module Ovallsp
       # An `instance_variable_set` anywhere in the chain assigns names
       # this cannot enumerate, so the set stops being a complete answer
       # and there is nothing safe to report against.
-      return nil if controller_sets_ivars_dynamically?(context[:owner])
-
       documents = controller_ancestor_documents(context[:owner])
+      return nil if controller_sets_ivars_dynamically?(documents)
       return nil unless whole_chain_was_read?(context[:owner], documents)
       return nil unless declared_once_each?(documents)
       return nil unless ivar_sources_fully_enumerable?(context[:owner], documents)
@@ -1551,7 +1558,7 @@ module Ovallsp
       # the partial and reading it is the precise answer and belongs with
       # the rest of 024.18; until then a render is a contributor that has
       # not been read.
-      return nil if renders_something?(uri)
+      return nil if renders_something?(uri, view_document)
 
       method_maps = controller_method_maps(documents)
       actions = contributing_actions(documents, method_maps, context[:action], context[:view_key])
@@ -1585,8 +1592,11 @@ module Ovallsp
 
     DYNAMIC_IVAR_ASSIGNMENT = /\binstance_variable_set\b/
 
-    def controller_sets_ivars_dynamically?(owner_name)
-      controller_ancestor_documents(owner_name).any? do |_ancestor_name, document|
+    # Takes the chain rather than the owner: building it re-reads and
+    # re-parses every controller in it from disk, and the caller has
+    # already done that.
+    def controller_sets_ivars_dynamically?(documents)
+      documents.any? do |_ancestor_name, document|
         document.text.match?(DYNAMIC_IVAR_ASSIGNMENT)
       end
     end
@@ -1663,8 +1673,23 @@ module Ovallsp
       uris.uniq.filter_map do |uri|
         next unless uri.match?(HELPER_PATH)
 
-        document = @document_store.fetch(uri: uri) || load_document_from_disk(uri)
-        document && @local_inferencer.assigned_ivar_names(document)
+        # The index's own content hash, so a hit costs neither a disk read
+        # nor a parse. This runs on the dispatch thread once per
+        # `didChange` -- per keystroke in a view -- and once per view in
+        # the workspace pass, inside the lock every hover needs. Reading
+        # and parsing every helper each time measured 17ms on sixty of
+        # them; loading them and hashing the text, 5.8ms; this, 0.6ms.
+        open_document = @document_store.fetch(uri: uri)
+        fingerprint = open_document&.version || @workspace_index.summary_for_uri(uri)&.content_hash
+        cached = @helper_ivars[uri]
+        next cached[1] if fingerprint && cached && cached[0] == fingerprint
+
+        document = open_document || load_document_from_disk(uri)
+        next unless document
+
+        names = @local_inferencer.assigned_ivar_names(document)
+        @helper_ivars[uri] = [fingerprint, names] if fingerprint
+        names
       end.flatten
     end
 
@@ -1702,8 +1727,8 @@ module Ovallsp
     # Any `render` in the template's own Ruby regions. Deliberately not
     # only the partial forms: `render` with a non-literal target is
     # exactly the case that cannot be resolved later either.
-    def renders_something?(view_uri)
-      document = @document_store.fetch(uri: view_uri) || load_document_from_disk(view_uri)
+    def renders_something?(view_uri, view_document = nil)
+      document = view_document || @document_store.fetch(uri: view_uri) || load_document_from_disk(view_uri)
       return false unless document
 
       Erb::RubyRegionExtractor.extract_ruby_source(document.text).match?(/(?:\A|[^\w.:])render\b/)

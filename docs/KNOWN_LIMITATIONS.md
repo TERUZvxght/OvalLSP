@@ -160,8 +160,10 @@ missed one", so each is narrow on purpose. What that costs a user:
   the first level.
 - **Diagnostics for files nobody has opened** stop after 2,000 files in
   one pass, so a workspace larger than that gets no diagnostics for the
-  tail — always the same tail, since the order is stable. The Core logs
-  when the cap bites. They also have no
+  tail. The pass walks in sorted order, so it is always the same tail
+  rather than a different one after every save, and the Core logs when
+  the cap bites. "Files" here means files it published for: an open file,
+  a missing one and one that raised do not count against the cap. They also have no
   end-to-end verification against a real Rails app: the example written
   for one produced nothing in 45 seconds. The cause is diagnosed and the
   fix is scoped to its own task (024.14). The README matrix marks this
