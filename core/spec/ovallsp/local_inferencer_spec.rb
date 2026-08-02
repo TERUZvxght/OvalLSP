@@ -1762,6 +1762,26 @@ RSpec.describe Ovallsp::LocalInferencer do
       .to eq("Integer | Unknown")
   end
 
+  # One fixture per parameter shape the seed has to cover. `posts` had one
+  # and the other three did not, and this is the "adds a whole method
+  # wholesale" hunk CLAUDE.md warns the sweep is blind to: reverting it
+  # proves only that the method exists.
+  {
+    "an optional parameter" => ["def go(alpha = 1)\n  \nend\n", "alpha"],
+    "a splat" => ["def go(*rest)\n  \nend\n", "rest"],
+    "a double splat" => ["def go(**opts)\n  \nend\n", "opts"],
+    "a block parameter" => ["def go(&blk)\n  \nend\n", "blk"]
+  }.each do |description, (source, name)|
+    it "offers #{description}" do
+      document = Ovallsp::TextDocument.new(uri: "file:///a.rb", version: 1, language_id: "ruby",
+                                           text: source)
+
+      locals = described_class.new.scope_at(document, { line: 1, character: 2 }).locals
+
+      expect(locals.keys.map(&:to_s)).to include(name)
+    end
+  end
+
   # `parameter_env` listed requireds, optionals, keywords, rest, keyword
   # rest and block -- and not `posts`, the required parameters that come
   # *after* a splat. `def go(a, *rest, z)` is legal Ruby and `z` was

@@ -40,6 +40,8 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
         def attach: (Widget other) -> void
         def pair: (String first, Integer second) -> void
         def zoom: (Float factor) -> void
+        def hold: (Object value) -> void
+        def >: (Widget other) -> bool
         def rotate: (Complex turns) -> void
         def divide: (Rational parts) -> void
         def pick: [T] (Array[T] items, Integer count) -> T
@@ -239,6 +241,32 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     index("class Cage\nend\n", uri: "file:///cage.rb")
 
     expect(rbi_findings("Cage.new.hold(Dog.new)\n")).to be_empty
+  end
+
+  # `Boolean` is what the converter calls RBS's `bool`, and no Ruby class
+  # has that name -- so its ancestor walk can never succeed. The rule was
+  # applied to the declared side and not to the argument's own, and every
+  # `true`/`false` passed to a plain-class parameter was reported. Found
+  # in the stdlib: `readline(@prompt, false)`.
+  {
+    "true" => "Widget.new.hold(true)",
+    "false" => "Widget.new.hold(false)"
+  }.each do |description, call|
+    it "says nothing about #{description} passed where a class is declared" do
+      expect(findings(call)).to be_empty
+    end
+  end
+
+  # An operator call's receiver is recorded one character inside itself,
+  # and when the receiver ends in `)` that offset belongs to its own last
+  # argument -- so `(a - b) > 0` resolved `>`'s receiver to whatever `b`
+  # was. The check declines an operator *argument* already; the receiver
+  # needs the same care, and a method whose name is not an identifier is
+  # where the two meet.
+  it "says nothing about a call whose method name is an operator" do
+    index("class Widget\nend\n", uri: "file:///widget.rb")
+
+    expect(findings("(Widget.new) > 0\n")).to be_empty
   end
 
   it "says nothing when the argument matches the declared type" do

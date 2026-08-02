@@ -161,6 +161,35 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.19 The argument-type check judges against a class the receiver is not
+
+**Status:** open. Reported by an independent review that drove the engine
+over 25 installed gems; not reproduced from a fixture here, which is why
+it is recorded rather than fixed.
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`sole_declared_overload`)
+
+A receiver whose constant path the workspace does not declare reaches
+`WorkspaceIndex`'s documented simple-name fallback -- "名前ヒューリスティック",
+the one that answers with whatever class shares the last segment. The
+unknown-method check has `closed_nominal?` to stop exactly there; the
+argument-type check has no equivalent, so it can resolve
+`::Vendor::Gadgets::Widget` to an unrelated `Widget` and type-check
+against that class's signature. The engine then reports, in one pass,
+that it cannot resolve the constant *and* that an argument to it has the
+wrong type.
+
+Reported instance: `prism-1.9.0/lib/prism/translation/parser.rb:320`,
+`::Parser::Source::Comment.new(build_range(...))` reported as "`new`
+expects Location here, but Parser::Source::Range is given" -- where
+`Location` is Prism's own type, not the `Parser` gem's.
+
+**Direction:** the check needs the receiver it was written against, not
+the one the index guessed. Either gate on the same closedness the
+unknown-method check uses, or require the resolved name to end with the
+constant path as written. A fixture has to make the simple-name fallback
+fire, which the current spec's RBS shape does not.
+
 ## 024.18 The unassigned-`@ivar` check cannot enumerate what it needs to
 
 **Status:** open, and **blocked on 024.R7** for the part that needs it.
@@ -362,7 +391,7 @@ what 1.0.0 requires"): a plain Ruby project must be guaranteed, not only
 a Rails one. Until then README's capability matrix carries ⚠️ for that
 column and this entry is why.
 
-## 024.R2 Argument *type* checking (roadmap, 0.2.0)
+## 024.R2 Argument *type* checking (done, 0.2.0)
 
 **Status:** done — shipped in 0.2.0, as the narrow version this entry
 described: the expected type comes from an RBS/RBI declaration, the
@@ -692,7 +721,7 @@ wherever there is no Runtime Agent to ask.
 
 ---
 
-## 024.R6 Reading an instance variable that is never assigned (roadmap, 0.2.0)
+## 024.R6 Reading an instance variable that is never assigned (done, 0.2.0)
 
 **Status:** done — shipped in 0.2.0, scoped to views, which is where the
 symptom the entry describes actually appears. A view is handed exactly
@@ -802,7 +831,7 @@ competing design.
 
 ---
 
-## 024.R8 Completion does nothing until you type a dot (roadmap, 0.2.0)
+## 024.R8 Completion does nothing until you type a dot (done, 0.2.0)
 
 **Status:** done — shipped in 0.2.0. The entry's own reading was right:
 the work was mostly ranking and bounding, not calling the existing pieces.

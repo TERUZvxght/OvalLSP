@@ -329,6 +329,14 @@ module Ovallsp
           next [] unless candidate.kind == :method_call
           next [] unless (shape = candidate.arguments)
           next [] if shape[:splat]
+          # A method whose name is not an identifier is an operator, and
+          # an operator call's receiver is recorded one character inside
+          # itself -- which, when the receiver ends in `)`, is an offset
+          # belonging to the receiver's own last argument. `(a - b) > 0`
+          # then resolved `>`'s receiver to whatever `b` was. The
+          # arguments already decline a composed expression; the receiver
+          # gets the same care here, where the two meet.
+          next [] unless candidate.name.to_s.match?(IDENTIFIER_METHOD_NAME)
 
           overload = sole_declared_overload(document, candidate, context)
           next [] unless overload
@@ -375,6 +383,12 @@ module Ovallsp
 
           actual = context.local_inferencer.infer_at(document, range[:end])
           next unless actual.is_a?(Types::Nominal)
+          # The same rule as the declared side above, and it was applied
+          # only there: `Boolean` is what the converter calls RBS's
+          # `bool`, no Ruby class has that name, and its ancestor walk can
+          # never succeed -- so every `true`/`false` passed to a
+          # plain-class parameter was reported.
+          next if NOT_A_RUBY_CLASS.include?(actual.name)
           next if compatible_nominal?(actual, expected, context)
 
           Finding.new(
