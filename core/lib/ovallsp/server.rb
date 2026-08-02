@@ -484,7 +484,16 @@ module Ovallsp
       return if uris.empty?
 
       @background_tasks.track_thread(Thread.new do
-        @workspace_diagnostics.run(uris, generation)
+        outcome = @workspace_diagnostics.run(uris, generation)
+        # The cap is what stops an unbounded pass on a monorepo, and the
+        # files past it get no diagnostics. Saying so in the log is the
+        # difference between a bounded answer and a quietly partial one --
+        # `WorkspaceDiagnostics` records `truncated` for a caller to
+        # report, and until now no caller read the outcome at all.
+        if outcome.truncated
+          @logger.warn("workspace diagnostics stopped after #{outcome.analyzed} files of #{uris.size}; " \
+                       "the rest are not reported")
+        end
       rescue StandardError => e
         @logger.error("workspace diagnostics pass failed: #{e.class}: #{e.message}")
       end)
@@ -1567,7 +1576,8 @@ module Ovallsp
       # one, and a name the controller never writes at all -- the typo
       # this check exists for -- is still caught.
       (ivars_for_view(uri).keys.map(&:to_s) +
-       documents.flat_map { |_, document| @local_inferencer.assigned_ivar_names(document) }).uniq
+       documents.flat_map { |_, document| @local_inferencer.assigned_ivar_names(document) } +
+       helper_assigned_ivar_names).uniq
     rescue StandardError => e
       @logger.error("failed to compute assigned ivars for #{uri}: #{e.class}: #{e.message}")
       nil
@@ -1584,11 +1594,6 @@ module Ovallsp
     # Callback registrations the chain builder understands. Anything else
     # registers a callback this cannot follow, so the ivars it assigns are
     # missing from the answer rather than absent from the code.
-    UNMODELLED_CALLBACK = /^\s*(around_action|prepend_before_action|append_before_action|before_action\s*(do\b|\{))/
-    # A module mixed into the chain carries its own methods, and
-    # `controller_ancestor_documents` walks only classes -- so a callback
-    # or an action living in a Rails concern is invisible here.
-    MIXED_IN_MODULE = /^\s*(include|extend|prepend)\s+[A-Z]/
 
     # Whether the instance variables a view receives can be *completely*
     # enumerated (0.2.0).
@@ -1639,6 +1644,28 @@ module Ovallsp
 
       read = documents.map { |name, _| Index::SymbolId.qualify_owner(name) }
       read.include?(Index::SymbolId.qualify_owner(parent.name))
+    end
+
+    # Rails mixes every module under `app/helpers` into the view context
+    # (`include_all_helpers` is on by default), so an ivar a helper
+    # assigns is one the view receives. The controller walk cannot see
+    # them, and no other guard notices: the controller's body is clean and
+    # its ancestry carries no module.
+    #
+    # Every helper rather than the ones this view calls, for the same
+    # reason the controller chain is taken whole -- a name assigned
+    # anywhere a view can reach means "do not warn", and a name no helper
+    # writes at all, which is the typo this check exists for, is still
+    # caught.
+    HELPER_PATH = %r{/app/helpers/}
+    def helper_assigned_ivar_names
+      uris = (@workspace_index.uris_by_source(:disk) + @document_store.open_documents.map(&:uri))
+      uris.uniq.filter_map do |uri|
+        next unless uri.match?(HELPER_PATH)
+
+        document = @document_store.fetch(uri: uri) || load_document_from_disk(uri)
+        document && @local_inferencer.assigned_ivar_names(document)
+      end.flatten
     end
 
     # `controller_ancestor_documents` resolves each ancestor to *one* uri,
@@ -1699,11 +1726,7 @@ module Ovallsp
       mixed_in = @hierarchy_index.ancestors(owner_name).any? do |entry|
         %i[include extend prepend].include?(entry.origin)
       end
-      return false if mixed_in
-
-      documents.none? do |_ancestor_name, document|
-        document.text.match?(UNMODELLED_CALLBACK) || document.text.match?(MIXED_IN_MODULE)
-      end
+      !mixed_in
     end
 
     # No caching here by design: recomputed fresh from the controller's
@@ -3046,7 +3069,11 @@ module Ovallsp
     def completion_resolve_result(params)
       item = params.dup
       data = item[:data]
-      return item unless data && data[:receiver] && data[:name]
+      # Only that there is a `data`. A `data` missing either key cannot
+      # produce a definition either -- `definitions_of` answers nothing
+      # for a nil name -- so testing the keys here was a condition no
+      # input could reach.
+      return item unless data
 
       location = @query_service.definitions_of(Types::Nominal.new(name: data[:receiver]), data[:name]).first
       return item unless location

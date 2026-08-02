@@ -163,4 +163,44 @@ RSpec.describe "Ovallsp::Server documentation in hover and completion (0.2.0)" d
       expect(resolved[:documentation]).to be_nil
     end
   end
+
+  # `completionItem/resolve` receives whatever the client sends back. A
+  # client that returns an item without `data` -- or with a `data` from a
+  # different provider -- must get its item back untouched rather than a
+  # lookup on nil.
+  {
+    "no data at all" => {},
+    "a data with no receiver" => { data: { name: "charge" } },
+    "a data with no name" => { data: { receiver: "Widget" } }
+  }.each do |description, extra|
+    it "returns the item unchanged for #{description}" do
+      server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger)
+
+      result = server.send(:completion_resolve_result, { label: "charge" }.merge(extra))
+
+      expect(result).not_to have_key(:documentation)
+      expect(result[:label]).to eq("charge")
+    end
+  end
+
+  # `completion_resolve_data` travels to the editor and back on every item
+  # in the list, so what it carries is a wire format. A receiver whose
+  # type is one of the engine's internal generics (`ClassOf`, `Relation`,
+  # `CollectionProxy`) has no class name a later lookup could use, and
+  # sending its wrapper name would make the round trip resolve the wrong
+  # thing.
+  {
+    "a plain class" => [Ovallsp::Types::Nominal.new(name: "Widget"), "Widget"],
+    "an Array" => [Ovallsp::Types::Generic.new(name: "Array", type_arg: Ovallsp::Types::UNKNOWN), "Array"],
+    "the class object itself" => [Ovallsp::Types::Generic.new(name: "ClassOf", type_arg: Ovallsp::Types::UNKNOWN), nil],
+    "an Active Record relation" => [Ovallsp::Types::Generic.new(name: "Relation", type_arg: Ovallsp::Types::UNKNOWN), nil]
+  }.each do |description, (type, expected)|
+    it "carries #{description} as #{expected.inspect}" do
+      server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger)
+
+      data = server.send(:completion_resolve_data, type, "charge")
+
+      expect(data&.fetch(:receiver)).to eq(expected)
+    end
+  end
 end

@@ -410,9 +410,17 @@ module Ovallsp
         reachable.include?(target)
       end
 
+      # No normalisation of the workspace side. `HierarchyIndex` returns a
+      # class's own entry qualified (`::Widget`) and its inherited ones
+      # bare, and the `expected` side arrives bare -- but the expected
+      # type is necessarily RBS-declared, so `via_signatures` below
+      # returns a bare name for it whichever way the workspace spelled it.
+      # An earlier version mapped the workspace entries through
+      # `simple_name` and claimed that without it no workspace ancestor
+      # ever matched; no input reaches that, and both removing it and
+      # doubling it leave every answer unchanged.
       def ancestor_names(name, context)
-        workspace = [name] + context.hierarchy_index.ancestors(name).map(&:name)
-        workspace = workspace.map { |entry| simple_name(entry) }.uniq
+        workspace = ([name] + context.hierarchy_index.ancestors(name).map(&:name)).uniq
 
         # `Signatures::Environment#ancestors` resolves a *qualified* name:
         # `ancestors("Integer")` is empty while `ancestors("::Integer")` is

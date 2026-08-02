@@ -158,7 +158,10 @@ missed one", so each is narrow on purpose. What that costs a user:
   its own controller's ivars, and a controller three or more classes deep
   whose topmost workspace class has not been read yet is guarded only at
   the first level.
-- **Diagnostics for files nobody has opened** work in-process but have no
+- **Diagnostics for files nobody has opened** stop after 2,000 files in
+  one pass, so a workspace larger than that gets no diagnostics for the
+  tail — always the same tail, since the order is stable. The Core logs
+  when the cap bites. They also have no
   end-to-end verification against a real Rails app: the example written
   for one produced nothing in 45 seconds. The cause is diagnosed and the
   fix is scoped to its own task (024.14). The README matrix marks this

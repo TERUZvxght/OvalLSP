@@ -28,8 +28,9 @@ module Ovallsp
     # Bounds one pass, not the workspace: a file this far into the walk is
     # already past the point where a user would have opened it themselves,
     # and an unbounded pass on a monorepo is a background thread that
-    # never ends. `truncated?` records that it bit, so a caller can say so
-    # rather than quietly under-reporting.
+    # never ends. `Outcome#truncated` records that it bit, and
+    # `Server#start_workspace_diagnostics` logs it -- the difference
+    # between a bounded answer and a quietly partial one.
     DEFAULT_MAX_FILES = 2000
 
     Outcome = Data.define(:analyzed, :truncated, :superseded)

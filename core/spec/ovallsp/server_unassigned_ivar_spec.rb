@@ -46,9 +46,10 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
 
   VIEW_URI = "file:///app/views/users/show.html.erb"
 
-  def run_server(controller:, view:, also: nil)
+  def run_server(controller:, view:, also: nil, helper: nil)
     input = open("file:///app/controllers/users_controller.rb", controller) +
             (also ? open("file:///app/controllers/users_controller_extra.rb", also) : "") +
+            (helper ? open("file:///app/helpers/users_helper.rb", helper) : "") +
             open(VIEW_URI, view, language_id: "erb") +
             frame(jsonrpc: "2.0", method: "exit", params: nil)
     Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger,
@@ -182,12 +183,14 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     expect(run_server(controller: controller, view: "<%= @usr.name %>").size).to eq(1)
   end
 
-  # The hierarchy index knows the chain; the text regex knows the file.
-  # `include(Concerns::Loader)` -- parenthesised, which is ordinary Ruby
-  # -- is invisible to `MIXED_IN_MODULE` and plain to the chain, so this
-  # is the fixture that says which of the two is load-bearing. The module
-  # carries its own methods, and `controller_ancestor_documents` walks
-  # only classes.
+  # An `include` written any way at all -- parenthesised, with a computed
+  # argument, guarded by a conditional -- is a class-body call this
+  # analysis does not model, so the module's methods are never read. The
+  # guard used to be three: a text scan for `include`, a text scan for
+  # unmodelled callbacks, and the chain. The first two are subsumed by
+  # the class-body whitelist, which sees the same statements as calls
+  # rather than as text and does not also match another class's code
+  # elsewhere in the file.
   it "says nothing when a module is mixed in by a call the text guard cannot see" do
     controller = <<~RUBY
       class UsersController
@@ -393,6 +396,30 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     RUBY
 
     expect(run_server(controller: controller, view: "<%= @user.name %>", also: extra)).to be_empty
+  end
+
+  # Rails mixes `app/helpers/**` into the view context, so an ivar a
+  # helper assigns is one the view receives -- and the walk reads the
+  # controller chain only. Nothing else notices: the controller body is
+  # clean, the controller's own ancestry carries no module, and the view
+  # renders nothing. `<% set_title %>` then `<%= @title %>` renders and
+  # was reported.
+  it "counts an @ivar assigned by a view helper" do
+    controller = <<~RUBY
+      class UsersController
+        def show
+        end
+      end
+    RUBY
+    helper = <<~RUBY
+      module UsersHelper
+        def set_title
+          @title = "hi"
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<% set_title %>\n<%= @title %>", helper: helper)).to be_empty
   end
 
   it "says nothing when the controller uses instance_variable_set" do

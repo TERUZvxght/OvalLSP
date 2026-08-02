@@ -412,7 +412,10 @@ for, so the table's promise and this entry stay in step.
 
 **Status:** open — roadmap. Its three 0.2.0 rows are done; the table
 below carries a **shipped in** column so the entry can be read as a
-record rather than only as a plan.
+record rather than only as a plan. Two of the three shipped outright;
+whole-project diagnostics shipped without a capability row, because the
+E2E example written for it did not pass (024.14) -- README marks that row
+⚠️ and both changelogs say so.
 
 Pylance is the closest well-known reference point for "what a language
 server is expected to do" in a dynamically typed language with optional
@@ -430,7 +433,7 @@ still absent.
 
 | Pylance capability | OvalLSP before it | Planned for | Shipped in | Notes |
 |---|---|---|---|---|
-| Diagnostics across the whole project | Open files only | **0.2.0** | 0.2.0 | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
+| Diagnostics across the whole project | Open files only | **0.2.0** | 0.2.0, no capability row (024.14) | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
 | Docstrings in hover and completion | Type, origin and definition location only | **0.2.0** | 0.2.0 | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
 | Semantic highlighting (semantic tokens) | None | **0.2.0** | 0.2.0 | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. Covers ERB templates' Ruby regions too, which the shared extraction path now makes free. Distinct from shipping a TextMate grammar, which is a non-goal: VS Code already associates `.erb`, and another grammar would only collide. |
 | Inlay hints (inferred types, parameter names) | None | **0.3.0** | — | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |
