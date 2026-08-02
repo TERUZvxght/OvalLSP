@@ -80,6 +80,9 @@ module Ovallsp
       # in as part of Task 013 after an independent review found Task 010
       # had shipped as a fully isolated, never-called engine).
       @helper_ivars = {}
+      @workspace_pass_mutex = Mutex.new
+      @workspace_pass_running = false
+      @workspace_pass_requested = false
       @local_inferencer = LocalInferencer.new(
         model_registry: model_registry, method_resolver: @method_resolver, method_analyzer: @method_analyzer,
         signatures: @signatures, observation_store: @observation_store
@@ -479,7 +482,51 @@ module Ovallsp
     # unknown-method check defers rather than guesses without one, and a
     # file analyzed before that point is under-reported until something
     # asks again. Supersedes any pass still running.
+    # Coalesced, not restarted. A pass drains the ancestry questions each
+    # file raises, and an installed answer republishes -- which used to
+    # start a fresh pass from file 0 while this one was mid-walk. It
+    # terminated, because an answered name is never re-asked, but the
+    # redundant work grew with the workspace: five passes over 30 files,
+    # twenty-five over 150, each re-taking the index mutex the request
+    # path needs. A request arriving while a pass runs now means "run once
+    # more when this one is done" (024.14's direction).
     def start_workspace_diagnostics
+      should_start = @workspace_pass_mutex.synchronize do
+        @workspace_pass_requested = true
+        if @workspace_pass_running
+          false
+        else
+          @workspace_pass_running = true
+        end
+      end
+      return unless should_start
+
+      @background_tasks.track_thread(Thread.new { drive_workspace_passes })
+    end
+
+    def drive_workspace_passes
+      loop do
+        keep = @workspace_pass_mutex.synchronize do
+          if @workspace_pass_requested
+            @workspace_pass_requested = false
+            true
+          else
+            # Cleared inside the same lock the requester tests, so a
+            # request arriving as this loop ends cannot be dropped.
+            @workspace_pass_running = false
+            false
+          end
+        end
+        break unless keep
+
+        run_one_workspace_pass
+      end
+    rescue StandardError => e
+      @logger.error("workspace diagnostics pass failed: #{e.class}: #{e.message}")
+      @workspace_pass_mutex.synchronize { @workspace_pass_running = false }
+    end
+
+    def run_one_workspace_pass
       generation = @workspace_diagnostics.begin_pass
       # Sorted, because the pass stops at a cap and so *which* files it
       # reaches is part of the answer. `uris_by_source` is the index's
@@ -491,20 +538,16 @@ module Ovallsp
       uris = @workspace_index.uris_by_source(:disk).sort
       return if uris.empty?
 
-      @background_tasks.track_thread(Thread.new do
-        outcome = @workspace_diagnostics.run(uris, generation)
-        # The cap is what stops an unbounded pass on a monorepo, and the
-        # files past it get no diagnostics. Saying so in the log is the
-        # difference between a bounded answer and a quietly partial one --
-        # `WorkspaceDiagnostics` records `truncated` for a caller to
-        # report, and until now no caller read the outcome at all.
-        if outcome.truncated
-          @logger.warn("workspace diagnostics stopped after #{outcome.analyzed} files of #{uris.size}; " \
-                       "the rest are not reported")
-        end
-      rescue StandardError => e
-        @logger.error("workspace diagnostics pass failed: #{e.class}: #{e.message}")
-      end)
+      outcome = @workspace_diagnostics.run(uris, generation)
+      # The cap is what stops an unbounded pass on a monorepo, and the
+      # files past it get no diagnostics. Saying so in the log is the
+      # difference between a bounded answer and a quietly partial one --
+      # `WorkspaceDiagnostics` records `truncated` for a caller to
+      # report, and until now no caller read the outcome at all.
+      if outcome.truncated
+        @logger.warn("workspace diagnostics stopped after #{outcome.analyzed} files of #{uris.size}; " \
+                     "the rest are not reported")
+      end
     end
 
     # The unknown-method check cannot judge a receiver whose ancestry only

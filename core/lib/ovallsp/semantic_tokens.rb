@@ -193,9 +193,21 @@ module Ovallsp
       # `length` is within one line -- and a multi-line call chain's
       # message never does, so anything that does is not what this
       # reports.
+      # An identifier, an ivar/gvar/cvar, a constant, or a keyword
+      # parameter's `name:` -- everything this collector marks.
+      NAME_SHAPE = /\A[@$]{0,2}[A-Za-z_][A-Za-z0-9_]*[?!=]?:?\z/
+
       def record(location, type)
         return unless location
         return unless location.start_line == location.end_line
+
+        # The slice has to look like a name. Prism falls back to a whole
+        # node when it cannot locate the name inside it -- a named capture
+        # in a regex containing an escape gives a
+        # `LocalVariableTargetNode` whose location is the entire literal,
+        # and a semantic token overrides the grammar, so the regex
+        # rendered as a variable. Four times in the stdlib.
+        return unless NAME_SHAPE.match?(location.slice)
 
         range = Index::SourceLocation.to_range(location, @lines)
         # Single-line by the check above, so the columns are on the same

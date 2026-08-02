@@ -278,6 +278,22 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     expect(findings("Widget.new.each_thing do\n  Widget.new.zoom(1.0)\nend\n")).to be_empty
   end
 
+  # A class made by `Data.define` or `Struct.new` is indexed as a
+  # *constant*, and `HierarchyIndex` appends the implicit
+  # Object/Kernel/BasicObject tail only for a name it has a class
+  # declaration for -- so its reachable set was just its own name, and it
+  # was reported incompatible with every plain-class parameter,
+  # `Object` included. This codebase uses `Data.define` for `Types`,
+  # `Finding`, `Outcome`, `Token` and `Scope`.
+  {
+    "a Data class" => "Point = Data.define(:x)\nWidget.new.hold(Point.new(1))\n",
+    "a Struct class" => "Pair = Struct.new(:a, :b)\nWidget.new.hold(Pair.new(1, 2))\n"
+  }.each do |description, body|
+    it "says nothing about #{description} passed where Object is declared" do
+      expect(findings(body)).to be_empty
+    end
+  end
+
   it "says nothing when the argument matches the declared type" do
     expect(findings("Widget.new.resize(3)\n")).to be_empty
   end

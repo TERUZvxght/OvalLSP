@@ -461,8 +461,16 @@ module Ovallsp
         true
       end
 
+      # Every Ruby object has these, whatever the index knows about it.
+      # `HierarchyIndex` appends the implicit tail only for a name it has
+      # a *class declaration* for, so a class made by `Data.define` or
+      # `Struct.new` -- indexed as a constant -- reached nothing but its
+      # own name and was reported incompatible with `Object`.
+      UNIVERSAL_ANCESTORS = %w[Object Kernel BasicObject].freeze
+
       def compatible_nominal?(actual, expected, context)
         target = simple_name(expected.name)
+        return true if UNIVERSAL_ANCESTORS.include?(target)
         return true if COERCES_TO.fetch(simple_name(actual.name), []).include?(target)
 
         reachable = ancestor_names(actual.name, context)

@@ -212,4 +212,25 @@ RSpec.describe Ovallsp::SemanticTokens do
     expect(data.each_slice(5).map { |token| token[1] }).to all(be >= 0)
     expect(data.each_slice(5).to_a.last[1]).to eq(0)
   end
+
+  # A named capture in `/.../ =~ x` gives Prism a
+  # `LocalVariableTargetNode`, and when the pattern contains an escape
+  # Prism cannot locate the name inside it and falls back to the *whole
+  # literal*. The node has no `name_loc` to prefer, so the token spanned
+  # the regex -- and a semantic token overrides the grammar, so the whole
+  # literal rendered as a variable. Four occurrences in the stdlib.
+  # Every document here says the feature does not re-colour strings.
+  it "does not colour a regular-expression literal as a variable" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", version: 1, language_id: "ruby",
+      text: "if /^universal\\.(?<arch>.*?)-/ =~ platform\nend\n"
+    )
+
+    source = document.text.lines.first
+    slices = described_class.collect(document).map do |token|
+      source[token.character, token.length]
+    end
+
+    expect(slices).to all(match(/\A[A-Za-z_@$][A-Za-z0-9_]*[?!]?:?\z/))
+  end
 end

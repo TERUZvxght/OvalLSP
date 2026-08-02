@@ -385,6 +385,65 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     end
   end
 
+  # The pass drains the ancestry questions each file raises, and an
+  # installed answer republishes -- which restarted the pass from file 0.
+  # It terminates, because an answered name is never re-asked, but the
+  # redundant work grows with the workspace: 5x on 30 files, 9x on 150,
+  # every restart re-taking the index mutex the request path needs.
+  it "does not restart itself for an answer its own pass produced" do
+    Dir.mktmpdir do |root|
+      12.times do |i|
+        write(root, "app/models/m#{i}.rb", "class Base#{i}\nend\n\nclass Thing#{i} < Base#{i}\nend\n")
+      end
+      server = build_server(root)
+      passes = 0
+      allow(server.instance_variable_get(:@workspace_diagnostics)).to receive(:run)
+        .and_wrap_original do |original, uris, generation|
+          passes += 1
+          original.call(uris, generation)
+        end
+
+      drivers = 0
+      allow(server).to receive(:drive_workspace_passes).and_wrap_original do |original|
+        drivers += 1
+        original.call
+      end
+
+      server.send(:start_cold_index)
+      wait_until { server.instance_variable_get(:@cold_indexing) == false }
+      5.times { server.send(:republish_open_diagnostics) }
+      sleep 0.3
+
+      expect(passes).to be <= 2
+      # And one driver, not one per request: the loop bounds the passes
+      # either way, but without the guard each call spawns its own thread.
+      expect(drivers).to be <= 2
+    end
+  end
+
+  # Closing a buffer clears its diagnostics -- the buffer path owned them
+  # -- and something has to give them back from disk. Without the
+  # republish the file's findings vanish from the Problems panel with
+  # nothing restoring them, which is the regression 0.2.0 exists to
+  # prevent, one didClose away.
+  it "restores a closed file's diagnostics from disk" do
+    Dir.mktmpdir do |root|
+      workspace_with_a_mistake(root)
+      path = File.join(root, "app/services/widget_user.rb")
+      uri = Ovallsp::UriUtil.from_path(path)
+      server = build_server(root)
+      server.send(:start_cold_index)
+      wait_until { server.instance_variable_get(:@cold_indexing) == false }
+      server.send(:handle_did_open, textDocument: { uri: uri, version: 1, languageId: "ruby",
+                                                    text: File.read(path) })
+
+      server.send(:handle_did_close, textDocument: { uri: uri })
+
+      expect(wait_until { !(diagnostics_for(uri) || []).empty? }).to be(true),
+             "closing the buffer left the file with no diagnostics"
+    end
+  end
+
   it "publishes nothing for a file that has no mistakes" do
     Dir.mktmpdir do |root|
       workspace_with_a_mistake(root)
