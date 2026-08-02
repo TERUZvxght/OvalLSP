@@ -248,10 +248,14 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     expect(findings("Widget.new.handle(MyError.new)\n")).to be_empty
   end
 
-  # `HierarchyIndex` returns a workspace-resolved ancestor `::`-prefixed
-  # and an external one bare, while a signature always names a type bare.
-  # Comparing them raw means no workspace-declared ancestor ever matches.
+  # Two levels, and the top one declared in Ruby as well as in the RBS --
+  # which is what makes this exercise the two-source join. `Shape`
+  # declared only in the signature arrives bare from `HierarchyIndex` and
+  # the walk succeeds on the workspace side alone; declared in Ruby too it
+  # arrives `::`-prefixed, and only the signature environment's own answer
+  # supplies the bare form the comparison needs.
   it "says nothing for a workspace class two levels below the declared one" do
+    index("class Shape\nend\n", uri: "file:///shape_class.rb")
     index("class Circle < Shape\nend\n", uri: "file:///shape.rb")
     index("class SmallCircle < Circle\nend\n", uri: "file:///small.rb")
 

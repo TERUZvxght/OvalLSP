@@ -221,10 +221,6 @@ module Ovallsp
         end
       end
 
-      # The parser records a read and a write as the same `:ivar`
-      # candidate kind -- rename and references both want them together --
-      # so the writes are recovered here instead. This is what makes
-      # `<% @total = 1 %><%= @total %>` in a view not a mistake.
       # Every ivar named inside a `defined?`, in one parse of the document.
       def ivar_names_tested_for_existence(document)
         collector = DefinedIvarCollector.new
@@ -260,6 +256,10 @@ module Ovallsp
         end
       end
 
+      # The parser records a read and a write as the same `:ivar` candidate
+      # kind -- rename and references both want them together -- so the
+      # writes are recovered here instead. This is what makes
+      # `<% @total = 1 %><%= @total %>` in a view not a mistake.
       def ivar_writes(document)
         result = Prism.parse(document.text)
         # A document that will not parse has already been reported as a
@@ -399,11 +399,13 @@ module Ovallsp
       # relation that plainly holds. The workspace chain is walked first,
       # then RBS is asked about every name it reached.
       #
-      # Every name is compared bare. `HierarchyIndex` returns a
-      # workspace-resolved entry `::`-prefixed and an external one without,
-      # while a signature always names a type bare -- so comparing raw
-      # meant no workspace-declared ancestor ever matched, including the
-      # class itself.
+      # The `expected` side is compared bare; the reachable side is not
+      # normalised at all. `HierarchyIndex` returns a workspace-resolved
+      # entry `::`-prefixed and an external one without -- but the
+      # expected type is necessarily RBS-declared, so the signature
+      # environment returns a bare name for it whichever way the workspace
+      # spelled it. `ancestor_names` below says why normalising there is
+      # a transformation no input reaches.
       # Ruby's numeric tower is not its class hierarchy. `Integer` does
       # not inherit `Float`, but `zoom(2)` where a Float is declared is
       # ordinary working code: Ruby coerces, and every arithmetic
@@ -463,7 +465,11 @@ module Ovallsp
       # ever matched; no input reaches that, and both removing it and
       # doubling it leave every answer unchanged.
       def ancestor_names(name, context)
-        workspace = ([name] + context.hierarchy_index.ancestors(name).map(&:name)).uniq
+        # `name` itself is not seeded: `HierarchyIndex#ancestors` includes
+        # the class's own entry, so both this list and the signature
+        # lookups below already cover it. Seeding it was a redundant term,
+        # and a redundant term is one nothing can fail on.
+        workspace = context.hierarchy_index.ancestors(name).map(&:name).uniq
 
         # `Signatures::Environment#ancestors` resolves a *qualified* name:
         # `ancestors("Integer")` is empty while `ancestors("::Integer")` is

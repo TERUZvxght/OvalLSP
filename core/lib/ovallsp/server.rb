@@ -1621,10 +1621,6 @@ module Ovallsp
       end
     end
 
-    # Callback registrations the chain builder understands. Anything else
-    # registers a callback this cannot follow, so the ivars it assigns are
-    # missing from the answer rather than absent from the code.
-
     # Whether the instance variables a view receives can be *completely*
     # enumerated (0.2.0).
     #
@@ -1693,19 +1689,20 @@ module Ovallsp
       uris.uniq.filter_map do |uri|
         next unless uri.match?(HELPER_PATH)
 
-        # The index's own content hash, so a hit costs neither a disk read
-        # nor a parse. This runs on the dispatch thread once per
-        # `didChange` -- per keystroke in a view -- and once per view in
-        # the workspace pass, inside the lock every hover needs. Reading
-        # and parsing every helper each time measured 17ms on sixty of
-        # them; loading them and hashing the text, 5.8ms; this, 0.6ms.
         # The index's own content hash, which costs neither a read nor a
         # parse and tracks an open buffer as well as a file on disk --
-        # `didOpen` and `didChange` both re-index. A version cannot be the
-        # key: it restarts at 1 every time the editor opens the file, so
-        # it names a text only within one open session while this cache
-        # outlives it, and a helper reopened at version 1 with different
-        # content answered from the previous session.
+        # `didOpen` and `didChange` both re-index. This runs on the
+        # dispatch thread once per `didChange`, per keystroke in a view,
+        # and once per view in the workspace pass, inside the lock every
+        # hover needs: reading and parsing every helper each time measured
+        # 17ms on sixty of them, loading and hashing the text 5.8ms, this
+        # 0.22ms.
+        #
+        # A version cannot be the key: it restarts at 1 every time the
+        # editor opens the file, so it names a text only within one open
+        # session while this cache outlives it, and a helper reopened at
+        # version 1 with different content answered from the previous
+        # session.
         open_document = @document_store.fetch(uri: uri)
         fingerprint = @workspace_index.summary_for_uri(uri)&.content_hash
         cached = @helper_ivars[uri]

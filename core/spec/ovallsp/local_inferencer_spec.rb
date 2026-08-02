@@ -1704,6 +1704,32 @@ RSpec.describe Ovallsp::LocalInferencer do
     end
   end
 
+  # The seed value, not just the names. Ruby declares no parameter types,
+  # so Unknown is the honest answer -- and `Types::NIL` would make hover
+  # print `nil` as the type of every parameter in the workspace, which is
+  # a statement rather than an absence of one.
+  it "seeds a parameter as Unknown rather than as nil" do
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", version: 1, language_id: "ruby",
+                                         text: "def go(a)\n  a\nend\n")
+
+    expect(described_class.new.infer_at(document, { line: 1, character: 2 }).to_s).to eq("Unknown")
+  end
+
+  # And it reaches `infer_at`, not only `scope_at`: a branch's merge falls
+  # back to the *entering* environment, so a parameter assigned in one
+  # arm used to merge against an absent key and answer `Integer | nil` --
+  # claiming the method can be reached with `a` already nil, which the
+  # signature does not say.
+  it "merges a conditionally assigned parameter against Unknown, not nil" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", version: 1, language_id: "ruby",
+      text: "def go(a, flag)\n  if flag\n    a = 1\n  end\n  a\nend\n"
+    )
+
+    expect(described_class.new.infer_at(document, { line: 4, character: 2 }).to_s)
+      .to eq("Integer | Unknown")
+  end
+
   # `parameter_env` listed requireds, optionals, keywords, rest, keyword
   # rest and block -- and not `posts`, the required parameters that come
   # *after* a splat. `def go(a, *rest, z)` is legal Ruby and `z` was

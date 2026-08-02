@@ -414,9 +414,12 @@ module Ovallsp
     # without a call site, so they enter as Unknown -- which is the honest
     # answer and still lets completion offer the name.
     #
-    # Only meaningful for `scope_at`; `infer_at` reaches a parameter
-    # reference as a LocalVariableReadNode either way, and Unknown is what
-    # it produced for one before this existed.
+    # It reaches `infer_at` as well, which an earlier version of this
+    # comment denied. A branch's merge falls back to the *entering*
+    # environment, so a parameter assigned in one arm used to merge
+    # against an absent key and answer `Integer | nil` -- claiming the
+    # method can be reached with the parameter already nil, which its
+    # signature does not say. It answers `Integer | Unknown` now.
     #
     # The Symbol keys are the environment's convention everywhere else,
     # because that is how Prism names a node -- but no test can currently
