@@ -328,4 +328,24 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     expect(result.size).to eq(1)
     expect(result.first.evidence[:expected]).to eq("Integer")
   end
+
+  # `declared_signature_for` stops at the first ancestor that declares the
+  # method. It was an `any?` before it had to return the signature rather
+  # than a boolean, and turning it into a value lookup lost the
+  # short-circuit -- on a diagnostics path that runs per call.
+  it "stops asking the signature environment once an ancestor answers" do
+    index("class Widget\nend\n", uri: "file:///widget.rb")
+    asked = []
+    semantic_context = context
+    allow(semantic_context.signatures).to receive(:method_signatures).and_wrap_original do |original, symbol_id|
+      asked << symbol_id.owner
+      original.call(symbol_id)
+    end
+    candidate = Struct.new(:name, :singleton).new("resize", false)
+
+    engine.send(:declared_signature_for, Ovallsp::Types::Nominal.new(name: "::Widget"),
+                candidate, semantic_context)
+
+    expect(asked).to eq(["::Widget"])
+  end
 end

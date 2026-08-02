@@ -159,10 +159,11 @@ the declaration takes no `*rest`. Everything else says nothing: a false
 "wrong number of arguments" on code that runs would be worse than no
 arity checking.
 
-Argument *type* checking is not a row here at all, deliberately. This
-document's own rule is that a capability with no E2E row is not a
-capability, so a promise with nothing verifying it does not belong in the
-table — it belongs in the non-goals below.
+Argument *type* checking became a row in 0.2.0 (G15), on the same terms:
+it says nothing unless the declared type comes from an RBS/RBI
+declaration, the signature has exactly one overload, both types are plain
+classes, and the argument is not an expression whose own type this cannot
+settle. Everything it declines is listed under the non-goals below.
 
 ## Signature help
 

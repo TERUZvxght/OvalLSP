@@ -1679,8 +1679,16 @@ module Ovallsp
         # the workspace pass, inside the lock every hover needs. Reading
         # and parsing every helper each time measured 17ms on sixty of
         # them; loading them and hashing the text, 5.8ms; this, 0.6ms.
+        # An open buffer is keyed by its *text*, not its version: a version
+        # restarts at 1 every time the editor opens the file, so it names
+        # a text only within one open session while this cache outlives
+        # it -- a helper reopened at version 1 with different content
+        # answered from the previous session. Hashing costs something and
+        # is paid only for helpers that are open, which is nearly none of
+        # them; the rest use the index's own content hash, which costs
+        # neither a read nor a hash.
         open_document = @document_store.fetch(uri: uri)
-        fingerprint = open_document&.version || @workspace_index.summary_for_uri(uri)&.content_hash
+        fingerprint = open_document&.text&.hash || @workspace_index.summary_for_uri(uri)&.content_hash
         cached = @helper_ivars[uri]
         next cached[1] if fingerprint && cached && cached[0] == fingerprint
 

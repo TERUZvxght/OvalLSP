@@ -115,4 +115,16 @@ RSpec.describe Ovallsp::Documentation do
       expect(above("#{line}\n# Charges the card.\ndef charge\nend\n", 2)).to eq("Charges the card.")
     end
   end
+
+  # A block of bare `#` markers is a separator, not documentation. The
+  # difference between nil and "" is not cosmetic: "" is truthy, so hover
+  # would append two blank lines and `completionItem/resolve` would
+  # attach an empty markdown body.
+  it "returns nil for a block that is only comment markers" do
+    expect(above("#\n#\n#\ndef charge\nend\n", 3)).to be_nil
+  end
+
+  it "returns nil for a block of markers with trailing spaces" do
+    expect(above("#  \n#\ndef charge\nend\n", 2)).to be_nil
+  end
 end

@@ -1737,6 +1737,23 @@ RSpec.describe Ovallsp::LocalInferencer do
       expect(inferencer.infer_at(second, { line: 1, character: 0 }).to_s).to eq("String")
     end
 
+    # The point of remembering it: the argument-type check asks for a type
+    # at each positional argument of each call, and each ask parsed the
+    # whole file again.
+    it "parses the document once however many times it is asked" do
+      inferencer = described_class.new
+      document = doc("file:///a.rb", "x = 1\nx\n")
+      parses = 0
+      allow(Prism).to receive(:parse).and_wrap_original do |original, *args|
+        parses += 1
+        original.call(*args)
+      end
+
+      5.times { inferencer.infer_at(document, { line: 1, character: 0 }) }
+
+      expect(parses).to eq(1)
+    end
+
     it "re-parses when the same document's text changes" do
       inferencer = described_class.new
       before = doc("file:///a.rb", "x = 1\nx\n")

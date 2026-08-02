@@ -623,6 +623,33 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
   # inside the lock every hover also needs. Reading and re-parsing every
   # `app/helpers/**` file each time measured 17ms per call on sixty
   # helpers. The set only changes when a helper does.
+  # A document's `version` restarts at 1 every time the editor opens the
+  # file, so it identifies a text only within one open session -- and the
+  # cache outlives the session. A helper reopened at the same version
+  # with different content returned the previous session's answer, which
+  # is a wrong report on a view that renders. `parse_cached` keys on the
+  # text for exactly this reason.
+  it "does not answer from a previous open session's helper text" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "app/helpers"))
+      path = File.join(root, "app/helpers/users_helper.rb")
+      File.write(path, "module UsersHelper\n  def go\n    @greeting = 1\n  end\nend\n")
+      uri = Ovallsp::UriUtil.from_path(path)
+      server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger,
+                                   workspace_root: root)
+      server.send(:reindex_from_disk, uri)
+      opened = { uri: uri, version: 1, languageId: "ruby", text: File.read(path) }
+      server.send(:handle_did_open, textDocument: opened)
+      server.send(:helper_assigned_ivar_names)
+      server.send(:handle_did_close, textDocument: { uri: uri })
+      server.send(:handle_did_open, textDocument: opened.merge(
+        text: "module UsersHelper\n  def go\n    @salutation = 1\n  end\nend\n"
+      ))
+
+      expect(server.send(:helper_assigned_ivar_names)).to include("@salutation")
+    end
+  end
+
   it "parses each helper once, not once per request" do
     Dir.mktmpdir do |root|
       FileUtils.mkdir_p(File.join(root, "app/helpers"))
