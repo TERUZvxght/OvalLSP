@@ -424,6 +424,22 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     expect(run_server(controller: controller, view: "<% set_title %>\n<%= @title %>", helper: helper)).to be_empty
   end
 
+  # `defined?(@x)` tests for existence; it does not read a value. It is
+  # the one idiom written specifically to be safe about an ivar that may
+  # not be there, and reporting it warns about the guard rather than
+  # about the mistake.
+  it "says nothing about an @ivar a view only tests with defined?" do
+    controller = <<~RUBY
+      class UsersController
+        def show
+          @user = User.find(params[:id])
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<% if defined?(@extra) %>x<% end %>")).to be_empty
+  end
+
   it "says nothing when the controller uses instance_variable_set" do
     controller = <<~RUBY
       class UsersController

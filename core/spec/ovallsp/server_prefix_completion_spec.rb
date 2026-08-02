@@ -439,4 +439,45 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
 
     expect(result[:items].map { |i| i[:label] }).to include("UserProfile")
   end
+
+  # `constant` in the kinds this group asks for. Deleting the word removes
+  # workspace constants from the answer with nothing failing, and C12's
+  # own fixture only exercises a class and a local.
+  it "offers a workspace constant, not only classes and modules" do
+    result = complete(<<~RUBY, extra_opens: did_open("file:///c.rb", "MAX_RETRIES = 3\n"))
+      MAX_HERE
+    RUBY
+
+    expect(result[:items].map { |i| i[:label] }).to include("MAX_RETRIES")
+  end
+
+  # Locals are matched case-insensitively, like every other source here.
+  it "offers a local whose name differs from the prefix only in case" do
+    result = complete(<<~RUBY)
+      def go
+        article = 1
+        ArtHERE
+      end
+    RUBY
+
+    expect(result[:items].map { |i| i[:label] }).to include("article")
+  end
+
+  # The label half of the ranking key. `sort_by` is not stable and this
+  # feeds `.first(MAX_ITEMS)`, so the label is what decides *which* fifty
+  # of a larger group reach the editor -- `sortText` re-orders what
+  # survives and cannot restore what was dropped.
+  it "keeps the alphabetically first locals when one group overflows the cap" do
+    body = (1..80).map { |i| "  local#{format('%03d', i)} = 1" }.reverse.join("\n")
+    result = complete(<<~RUBY)
+      def go
+      #{body}
+        locHERE
+      end
+    RUBY
+
+    labels = result[:items].map { |i| i[:label] }
+    expect(labels).to include("local001")
+    expect(labels).not_to include("local080")
+  end
 end

@@ -12,7 +12,7 @@ module Ovallsp
     # the interpreter and the tools read. Including them puts
     # `frozen_string_literal: true` in the hover for the first method in
     # every file.
-    DIRECTIVE = /\A#\s*(frozen_string_literal|encoding|warn_indent|shareable_constant_value|rubocop:|:nodoc:|-\*-)/
+    DIRECTIVE = /\A#\s*(frozen_string_literal|encoding\s*[:=]|warn_indent|shareable_constant_value|rubocop:|:nodoc:|-\*-)/
 
     module_function
 

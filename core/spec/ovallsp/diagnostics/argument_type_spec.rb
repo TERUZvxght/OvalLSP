@@ -172,6 +172,8 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     "a range" => "Widget.new.label(1..5)",
     "a negation" => "Widget.new.label(!1)",
     "a conjunction" => "Widget.new.label(1 && 2)",
+    "a ternary" => 'Widget.new.label(1 > 2 ? "a" : 7)',
+    "a modifier unless" => 'Widget.new.label(("a" unless 1 > 2))',
     "a shift" => "Widget.new.label([] << 1)"
   }.each do |description, call|
     it "says nothing about #{description}" do

@@ -127,4 +127,16 @@ RSpec.describe Ovallsp::Documentation do
   it "returns nil for a block of markers with trailing spaces" do
     expect(above("#  \n#\ndef charge\nend\n", 2)).to be_nil
   end
+
+  # Every other alternative in DIRECTIVE is self-delimiting or carries its
+  # colon; `encoding` did not, so a comment that merely begins with the
+  # word was deleted from the hover.
+  it "keeps prose that begins with the word encoding" do
+    expect(above("# encoding is chosen by the caller.\ndef charge\nend\n", 1))
+      .to eq("encoding is chosen by the caller.")
+  end
+
+  it "still drops an encoding directive written with an equals sign" do
+    expect(above("# encoding = utf-8\ndef charge\nend\n", 1)).to be_nil
+  end
 end

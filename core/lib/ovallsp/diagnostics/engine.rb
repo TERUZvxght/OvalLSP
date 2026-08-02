@@ -199,9 +199,17 @@ module Ovallsp
 
         return [] if local.nil?
 
+        # `defined?(@x)` tests for existence rather than reading a value,
+        # and it is the idiom written specifically to be safe about an
+        # ivar that may not be there. By name rather than by location: a
+        # file defensive about a name is defensive about it, and the typo
+        # this check exists for appears in no `defined?`.
+        tested = ivar_names_tested_for_existence(document)
+
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :ivar
           next if local.include?(candidate.name)
+          next if tested.include?(candidate.name)
           next if assigned.include?(candidate.name)
 
           Finding.new(
@@ -217,6 +225,41 @@ module Ovallsp
       # candidate kind -- rename and references both want them together --
       # so the writes are recovered here instead. This is what makes
       # `<% @total = 1 %><%= @total %>` in a view not a mistake.
+      # Every ivar named inside a `defined?`, in one parse of the document.
+      def ivar_names_tested_for_existence(document)
+        collector = DefinedIvarCollector.new
+        Prism.parse(document.text).value.accept(collector)
+        collector.names
+      rescue StandardError
+        []
+      end
+
+      class DefinedIvarCollector < Prism::Visitor
+        attr_reader :names
+
+        def initialize
+          @names = []
+          super
+        end
+
+        def visit_defined_node(node)
+          node.value&.accept(NameOfIvarRead.new(@names))
+          super
+        end
+      end
+
+      class NameOfIvarRead < Prism::Visitor
+        def initialize(sink)
+          @sink = sink
+          super()
+        end
+
+        def visit_instance_variable_read_node(node)
+          @sink << node.name.to_s
+          super
+        end
+      end
+
       def ivar_writes(document)
         result = Prism.parse(document.text)
         # A document that will not parse has already been reported as a
