@@ -1534,6 +1534,7 @@ module Ovallsp
 
       documents = controller_ancestor_documents(context[:owner])
       return nil unless whole_chain_was_read?(context[:owner], documents)
+      return nil unless declared_once_each?(documents)
       return nil unless ivar_sources_fully_enumerable?(context[:owner], documents)
       return nil unless class_body_is_accounted_for?(documents)
       # A view that renders a partial receives whatever the partial
@@ -1638,6 +1639,15 @@ module Ovallsp
 
       read = documents.map { |name, _| Index::SymbolId.qualify_owner(name) }
       read.include?(Index::SymbolId.qualify_owner(parent.name))
+    end
+
+    # `controller_ancestor_documents` resolves each ancestor to *one* uri,
+    # so a second file reopening the class is never read -- and the set
+    # the check then compares against looks complete rather than partial.
+    # `def show; load_user; end` in one file with `load_user` assigning in
+    # another produced a warning on a view that renders.
+    def declared_once_each?(documents)
+      documents.all? { |name, _| @workspace_index.class_declaration_uris(name).size <= 1 }
     end
 
     # The class-level declarations this analysis accounts for. Everything

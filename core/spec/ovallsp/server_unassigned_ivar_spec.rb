@@ -46,8 +46,9 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
 
   VIEW_URI = "file:///app/views/users/show.html.erb"
 
-  def run_server(controller:, view:)
+  def run_server(controller:, view:, also: nil)
     input = open("file:///app/controllers/users_controller.rb", controller) +
+            (also ? open("file:///app/controllers/users_controller_extra.rb", also) : "") +
             open(VIEW_URI, view, language_id: "erb") +
             frame(jsonrpc: "2.0", method: "exit", params: nil)
     Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger,
@@ -370,6 +371,30 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     end
   end
 
+  # `find_controller_uri` answers with *one* uri per ancestor, so a second
+  # file reopening the class is never read -- and the set the check then
+  # compares against looks complete rather than partial. A controller
+  # split across two files is unusual under Zeitwerk but legal, and this
+  # is a warning on a view that renders.
+  it "says nothing when a controller in the chain is declared in more than one file" do
+    controller = <<~RUBY
+      class UsersController
+        def show
+          load_user
+        end
+      end
+    RUBY
+    extra = <<~RUBY
+      class UsersController
+        def load_user
+          @user = User.find(params[:id])
+        end
+      end
+    RUBY
+
+    expect(run_server(controller: controller, view: "<%= @user.name %>", also: extra)).to be_empty
+  end
+
   it "says nothing when the controller uses instance_variable_set" do
     controller = <<~RUBY
       class UsersController
@@ -506,5 +531,61 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     expect(server).not_to receive(:view_action_context)
 
     server.send(:assigned_ivars_for, document.uri)
+  end
+
+  # The one thing `ivar_sources_fully_enumerable?` still decides on its
+  # own, and the one no source fixture can reach: a module mixed in by
+  # the *running application* rather than by any file in the workspace --
+  # a gem's concern included into `ApplicationController` by the gem's
+  # own code. The hierarchy index knows it because the Runtime Agent
+  # said so; no workspace class body mentions it, so
+  # `class_body_is_accounted_for?` sees nothing, and its methods are
+  # never walked. Asserted through the predicate directly because
+  # standing up an Agent for it is not something this suite can do.
+  describe "a mixin known only to the running application" do
+    let(:server) do
+      Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger)
+    end
+    let(:document) do
+      Ovallsp::TextDocument.new(uri: "file:///c.rb", text: "class UsersController\nend\n",
+                                version: 1, language_id: "ruby")
+    end
+
+    def entry(origin)
+      Ovallsp::Semantic::AncestorEntry.new(
+        name: "Tenantable", kind: :module, origin: origin, location: nil
+      )
+    end
+
+    it "is not enumerable when the chain carries an included module" do
+      allow(server.instance_variable_get(:@hierarchy_index)).to receive(:ancestors).and_return([entry(:include)])
+
+      expect(server.send(:ivar_sources_fully_enumerable?, "::UsersController",
+                         [["::UsersController", document]])).to be(false)
+    end
+
+    # And the call site, not only the predicate: removing the line that
+    # asks it left every example above green, because each was written
+    # for a shape another guard also rejects.
+    it "reaches the check, so a view under such a controller is left alone" do
+      server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger)
+      allow(server.instance_variable_get(:@hierarchy_index)).to receive(:ancestors).and_return([entry(:include)])
+      server.send(:handle_did_open, textDocument: {
+                    uri: "file:///app/controllers/users_controller.rb", version: 1, languageId: "ruby",
+                    text: "class UsersController\n  def show\n  end\nend\n"
+                  })
+      server.send(:handle_did_open, textDocument: {
+                    uri: VIEW_URI, version: 1, languageId: "erb", text: "<%= @user.name %>\n"
+                  })
+
+      expect(diagnostics_for(VIEW_URI).select { |d| d[:code] == "unassigned-ivar" }).to be_empty
+    end
+
+    it "is enumerable when the chain carries only a superclass" do
+      allow(server.instance_variable_get(:@hierarchy_index)).to receive(:ancestors).and_return([entry(:superclass)])
+
+      expect(server.send(:ivar_sources_fully_enumerable?, "::UsersController",
+                         [["::UsersController", document]])).to be(true)
+    end
   end
 end

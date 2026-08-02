@@ -146,7 +146,9 @@ missed one", so each is narrow on purpose. What that costs a user:
   (which covers every gem macro — `load_and_authorize_resource`,
   `expose`, Devise, ActiveAdmin — because what such a call installs is
   invisible until 024.R7 lets the index attribute it), or **the view
-  renders anything**. An ivar assigned by a sibling action also silences
+  renders anything**, or **any class in the chain is declared in more
+  than one file** (each ancestor resolves to one file, so a second one
+  reopening the class is never read). An ivar assigned by a sibling action also silences
   it, deliberately.
 
   What that leaves reported: a controller written in plain Ruby, whose

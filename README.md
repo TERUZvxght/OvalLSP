@@ -102,7 +102,8 @@ version ship together in that release, the way 0.1.6 shipped five.
 
 Three of the rows above were measured against Pylance, the closest
 well-known reference point for a language server in a dynamically typed
-language, and 0.2.0 ships all three: project-wide diagnostics (a mistake
+language. 0.2.0 ships two of them outright and the third with the
+qualification the matrix marks: project-wide diagnostics (a mistake
 in a file you are not looking at used to be invisible), documentation in
 hover (hover said what a thing is and never what it is for), and
 semantic highlighting (Ruby's `foo` is ambiguous between a local

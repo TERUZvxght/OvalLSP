@@ -1,4 +1,4 @@
-# Exists so G16 has a *declared* parameter type to check against. The
+# Exists so G15 has a *declared* parameter type to check against. The
 # argument-type check reads RBS/RBI only -- Ruby source declares no
 # parameter types -- so without a project `sig/` there is nothing for it
 # to be right or wrong about.
