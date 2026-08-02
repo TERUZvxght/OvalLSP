@@ -263,6 +263,13 @@ module Ovallsp
       @scope_capture = Scope.new(locals: locals, self_type: @self_type_stack.last)
     end
 
+    # Inclusive of `end_offset`, which is one past the node's last
+    # character -- so an offset equal to it answers about a node it is
+    # actually just past. That is wrong, and it is why a receiver ending
+    # in `)` resolves to its own last argument (024.20); making it
+    # exclusive is the right rule and breaks 39 examples, because every
+    # caller that hands it an LSP range end depends on the current one.
+    # Recorded rather than changed here.
     def contains?(location, offset)
       location.start_offset <= offset && offset <= location.end_offset
     end
@@ -456,14 +463,17 @@ module Ovallsp
     def locate_in_block(node, offset, env)
       receiver_type = node.receiver && eval_type(node.receiver, env)
       nested_env = block_nested_env(node, receiver_type, env)
-      # No nested env means no *bound* block parameters -- the receiver is
-      # not a generic, so nothing is known about what it yields. The body
-      # is still the body: descending with the outer environment answers
-      # about the expression under the cursor, where returning the
-      # enclosing call's own type answered `OptionParser` for a string
-      # literal inside `opts.on(...) do`. 0.2.0 publishes that answer as
-      # an `argument-type` diagnostic.
-      return locate(node.block.body, offset, env) unless nested_env
+      # Unknown, not the enclosing call's type and not a descent. The
+      # receiver is not a generic, so nothing is known about what the
+      # block yields -- and answering with the *call's* type said
+      # `OptionParser` for a string literal inside `opts.on(...) do`,
+      # which 0.2.0 publishes as an `argument-type` diagnostic. Descending
+      # is the right answer and cannot be given yet: the offsets a
+      # receiver is recorded at resolve to the wrong node under this
+      # file's inclusive `contains?`, so descending turned that latent
+      # mis-resolution into 230 new `unknown-method` reports across the
+      # stdlib (024.20). Unknown is what both checks decline on.
+      return Types::UNKNOWN unless nested_env
 
       param_node = block_parameter_node_at(node.block, offset)
       return nested_env.fetch(param_node.name, Types::UNKNOWN) if param_node

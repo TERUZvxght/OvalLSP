@@ -1704,19 +1704,19 @@ RSpec.describe Ovallsp::LocalInferencer do
     end
   end
 
-  # A position *inside* a block belongs to the block's body, whatever the
-  # receiver is. When the receiver is not a generic there are no bound
-  # block parameters to compute -- but the body still has to be walked,
-  # and returning the enclosing call's own type instead answered
-  # `OptionParser` for a string literal three lines in. 0.2.0 publishes
-  # that answer as an `argument-type` diagnostic.
-  it "answers about the expression under the cursor inside a plain-receiver block" do
+  # A position inside a block whose receiver is not a generic gets
+  # Unknown, not the enclosing call's type: answering `OptionParser` for
+  # a string literal three lines into `opts.on("-x") do` is what 0.2.0
+  # would publish as an `argument-type` diagnostic. Descending into the
+  # body is the right answer and is blocked on 024.20 -- Unknown is what
+  # both checks decline on meanwhile.
+  it "answers Unknown rather than the call's own type inside a plain-receiver block" do
     document = Ovallsp::TextDocument.new(
       uri: "file:///a.rb", version: 1, language_id: "ruby",
       text: "opts.on(\"-x\") do\n  \"hello\"\nend\n"
     )
 
-    expect(described_class.new.infer_at(document, { line: 1, character: 8 }).to_s).to eq("String")
+    expect(described_class.new.infer_at(document, { line: 1, character: 8 }).to_s).to eq("Unknown")
   end
 
   # `scope_at` sets a flag that makes every descent step copy the whole
@@ -1736,6 +1736,12 @@ RSpec.describe Ovallsp::LocalInferencer do
     expect(inferencer.instance_variable_get(:@capturing_scope)).to be(false)
   end
 
+  # Prism's `end_offset` is one past the node's last character, so an
+  # offset equal to it is *after* the node. Treating it as inside meant
+  # the innermost node containing a receiver's recorded position was the
+  # receiver's own last argument whenever the receiver ended in `)` --
+  # `wrap(Widget.new).go` resolved to `Widget`, and the unknown-method
+  # check then reported a call that runs.
   # The seed value, not just the names. Ruby declares no parameter types,
   # so Unknown is the honest answer -- and `Types::NIL` would make hover
   # print `nil` as the type of every parameter in the workspace, which is

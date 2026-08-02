@@ -41,6 +41,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
         def pair: (String first, Integer second) -> void
         def zoom: (Float factor) -> void
         def hold: (Object value) -> void
+        def each_thing: () { () -> void } -> Widget
         def >: (Widget other) -> bool
         def rotate: (Complex turns) -> void
         def divide: (Rational parts) -> void
@@ -267,6 +268,14 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     index("class Widget\nend\n", uri: "file:///widget.rb")
 
     expect(findings("(Widget.new) > 0\n")).to be_empty
+  end
+
+  # Inside a block whose receiver is not a generic, `infer_at` answers
+  # Unknown -- not the enclosing call's own type, which is what it
+  # answered before and what turned a correct argument three lines into
+  # `Widget.new.each_thing do` into "expects Float, but Widget is given".
+  it "says nothing about a correct argument inside a block" do
+    expect(findings("Widget.new.each_thing do\n  Widget.new.zoom(1.0)\nend\n")).to be_empty
   end
 
   it "says nothing when the argument matches the declared type" do

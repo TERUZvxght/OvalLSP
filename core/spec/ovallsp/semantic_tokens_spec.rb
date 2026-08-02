@@ -197,4 +197,19 @@ RSpec.describe Ovallsp::SemanticTokens do
 
     expect(lengths).to all(be <= 5)
   end
+
+  # A new line resets the column to absolute. Every other fixture here
+  # either keeps every token at column 0 or keeps them all on one line,
+  # and in both of those the absolute and relative numbers are the same
+  # -- so a later line starting left of the previous line's last token is
+  # what tells them apart, and produces a negative delta if it is wrong.
+  it "encodes the first token of a line as an absolute column" do
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", version: 1, language_id: "ruby",
+                                         text: "  first = second\nvalue = 1\n")
+
+    data = described_class.encode(document)
+
+    expect(data.each_slice(5).map { |token| token[1] }).to all(be >= 0)
+    expect(data.each_slice(5).to_a.last[1]).to eq(0)
+  end
 end

@@ -161,6 +161,48 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.20 `contains?` treats an exclusive end offset as inclusive
+
+**Status:** open, and it blocks a correct answer 0.2.0 had to settle for
+approximating.
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`contains?`,
+`locate_in_block`), `core/lib/ovallsp/parser_service.rb` (the receiver
+position a candidate records)
+
+Prism's `end_offset` is one past a node's last character. `contains?`
+compares `offset <= end_offset`, so an offset that sits *just past* a
+node is answered as being inside it. The consequence is not academic: a
+method-call candidate records its receiver's position as one character
+inside the receiver, which for a receiver ending in `)` is the `)` -- and
+the receiver's own last argument ends exactly there. `wrap(Widget.new).go`
+therefore resolves the receiver to `Widget`, and `unknown-method` reports
+a call that runs.
+
+Measured: making `contains?` exclusive fixes it and **fails 39 examples**,
+because every caller that hands it an LSP range end -- whose end is
+likewise exclusive -- depends on the current rule. The fix is the rule
+plus every call site, which is a change of its own size.
+
+What 0.2.0 did instead: `locate_in_block` answers `Types::UNKNOWN` for a
+position inside a block whose receiver is not a generic. Descending into
+the body is the right answer and was tried -- it produced **230
+`unknown-method` reports the shipped line never made**, across Ruby
+3.4.7's own stdlib, because descending is exactly what stops masking the
+mis-resolution above (`s[:dependencies].map { }` reported as "Symbol has
+no method named `map`"). Returning the *enclosing call's* type, which is
+what the code did before, is equally wrong in the other direction and is
+what made `argument-type` report a string literal inside
+`opts.on("-x") do` as an `OptionParser`. Unknown is the only one of the
+three that no check acts on.
+
+**Direction:** make `contains?` exclusive, then fix each caller that
+passes a range end to pass the last character instead. `mismatched_arguments`'s
+`infer_at(document, range[:end])` is the clearest of them -- its own
+comment already explains that it wants the argument's last character and
+relies on the inclusive rule to get it. With that done, `locate_in_block`
+can descend and hover becomes right inside every block.
+
 ## 024.19 The argument-type check judges against a class the receiver is not
 
 **Status:** open. Reported by an independent review that drove the engine
