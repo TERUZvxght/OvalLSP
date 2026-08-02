@@ -178,7 +178,11 @@ but it *has* been verified side by side with a widely-used one —
 install-time conflict**, but a real, confirmed overlap in results. Both
 extensions register LSP providers (hover, completion, definition) for
 the same `.rb` documents, and VS Code combines results from every active
-provider rather than picking one. Concretely, in this test: completion
+provider rather than picking one. Semantic highlighting, which OvalLSP
+added in 0.2.0, is the exception: VS Code resolves document semantic
+tokens to a single provider rather than merging them, so with both
+extensions active the colours come from one of them and not from both.
+Which one is not something either extension chooses. Concretely, in this test: completion
 and go-to-definition both returned results from *both* extensions
 together at the same position (go-to-definition went from 1 candidate
 with OvalLSP alone to 4 with both active) — meaning duplicate or

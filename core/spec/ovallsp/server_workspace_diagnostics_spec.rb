@@ -266,6 +266,50 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
     end
   end
 
+  # A batch of changed files is its own bounded piece of work, not a new
+  # workspace pass. Taking a generation for it superseded the pass that
+  # was running -- and, unlike every other caller that supersedes one,
+  # this one did not start a replacement, so the rest of the workspace
+  # was never analysed. One `git pull` during the first pass ended it.
+  it "does not end the workspace pass when a watched file changes" do
+    Dir.mktmpdir do |root|
+      write(root, "app/models/widget.rb", "class Widget\n  def build\n  end\nend\n")
+      8.times { |i| write(root, "app/services/s#{i}_user.rb", "Widget.new.totally_bogus_x\n") }
+      other = write(root, "app/services/trigger.rb", "class Trigger\nend\n")
+      server = build_server(root)
+      # Held inside the first file, so the change lands while the pass is
+      # genuinely running. Without the gate the pass finishes before the
+      # notification arrives and the fixture cannot fail.
+      gate = Queue.new
+      entered = Queue.new
+      first = true
+      allow(server.instance_variable_get(:@workspace_diagnostics)).to receive(:publish_for)
+        .and_wrap_original do |original, uri|
+          if first
+            first = false
+            entered << true
+            gate.pop
+          end
+          original.call(uri)
+        end
+
+      server.send(:start_cold_index)
+      entered.pop
+      File.write(other, "class Trigger\n  def go\n  end\nend\n")
+      server.send(:handle_did_change_watched_files,
+                  changes: [{ uri: Ovallsp::UriUtil.from_path(other), type: 2 }])
+      gate << true
+
+      reported = wait_until do
+        8.times.all? do |i|
+          uri = Ovallsp::UriUtil.from_path(File.join(root, "app/services/s#{i}_user.rb"))
+          !(diagnostics_for(uri) || []).empty?
+        end
+      end
+      expect(reported).to be(true), "the workspace pass stopped when an unrelated file changed"
+    end
+  end
+
   it "publishes nothing for a file that has no mistakes" do
     Dir.mktmpdir do |root|
       workspace_with_a_mistake(root)

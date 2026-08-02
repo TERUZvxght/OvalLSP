@@ -2493,12 +2493,22 @@ module Ovallsp
       analyze_changed_files_later(reanalyze)
     end
 
+    # A batch of changed files, on one thread. Deliberately *not* through
+    # `begin_pass`/`run`: that takes the single generation a workspace
+    # pass is identified by, which supersedes the pass in flight -- and
+    # unlike every other caller that supersedes one, this has no
+    # replacement to start, so a `git pull` landing during the first pass
+    # ended it and the rest of the workspace was never analysed.
+    #
+    # `publish_for` is what a pass does per file anyway: it skips an open
+    # buffer and a path that is gone, and reports its own failures. The
+    # list is bounded by the notification, so it needs no cap and nothing
+    # needs to supersede it.
     def analyze_changed_files_later(uris)
       return if uris.empty?
 
-      generation = @workspace_diagnostics.begin_pass
       @background_tasks.track_thread(Thread.new do
-        @workspace_diagnostics.run(uris.sort, generation)
+        uris.each { |uri| @workspace_diagnostics.publish_for(uri) }
       rescue StandardError => e
         @logger.error("failed to analyze changed files: #{e.class}: #{e.message}")
       end)
