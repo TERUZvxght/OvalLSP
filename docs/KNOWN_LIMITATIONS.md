@@ -171,33 +171,28 @@ the body can be read.
 
 The engine's standing policy is that a wrong report is worse than a
 missed one. These are the places it currently says something untrue —
-the first two as diagnostics, the third as a colour. Each is recorded,
-none is fixed in 0.2.0, and each is visible on ordinary code, so they are
-listed here rather than left for you to find.
+the first as a diagnostic, the second as a colour. Both are recorded,
+neither is fixed in 0.2.0, and both are visible on ordinary code, so they
+are listed here rather than left for you to find.
 
-- **Class-body macros are reported as unknown methods** (024.23).
-  `private`, `attr_reader`, `attr_accessor`, `private_constant`,
-  `alias_method` and `include` are `Module`'s methods, and the singleton
-  chain does not model `Module`. On a workspace class whose ancestry is
-  otherwise fully known, each one is reported. Measured over this
-  repository's own `core/lib`: **49 of the 62** unknown-method reports
-  are this shape (`private` 34, `private_constant` 10, `attr_reader` 5).
-  Over ActiveSupport 8.1.3, of 776 unknown-method reports about 211 are
-  — `private` (72), `alias_method` (56), `attr_reader` (40), `include`
-  (26). This is the largest single source of wrong reports the engine
-  produces, though not the only one: the remainder of both counts is a
-  mix of readers that `attr_reader` itself generated, receiverless calls
-  inside `def self.` bodies — the same missing modelling seen from the
-  other side — and the argument-type fallback described further down
-  (024.19).
-- **Every `*_path`/`*_url` call is reported as a missing route when no
-  routes are loaded** (024.24) — which is the case in an untrusted
-  workspace, and in any project that is not Rails. An empty route table
-  answers "no such route" rather than "I do not know". Measured: 48
-  reports across Ruby 3.4.7's standard library and 12 in prism 1.9.0,
-  every one false; `original_path` and `dsl_path` are ordinary private
-  methods in bundler. If you declined Workspace Trust on a Rails project,
-  this is why every route helper is underlined.
+The largest one this list used to carry is gone: class-body macros
+(`private`, `attr_reader` and their neighbours) reported as unknown
+methods, together with the attribute readers those DSLs define. That was
+**49 of the 62** reports over this project's own source and 12,134 across
+Ruby's standard library, and it was fixed and released as 0.1.14 rather
+than carried into this release (024.23).
+
+- **A `*_path`/`*_url` call the workspace does not declare is reported as
+  a missing route when no routes are loaded** (024.24) — which is the
+  case in an untrusted workspace, and in any project that is not Rails.
+  An empty route table answers "no such route" rather than "I do not
+  know". Measured over Ruby 3.4.7's standard library: **8 reports, every
+  one false** (`system_path` and `explicit_path` in bundler's own
+  `settings.rb` are ordinary methods). That count was 48 before 0.1.14
+  taught the index what `attr_reader` declares, and prism 1.9.0's 12 are
+  now none — but the cause is untouched, and any such name the workspace
+  does not declare still reports. If you declined Workspace Trust on a
+  Rails project, this is why route helpers are underlined.
 - **Semantic highlighting colours only the first segment of a qualified
   constant** (024.21). In `Ovallsp::Server`, `Ovallsp` gets a semantic
   colour and `Server` keeps the editor's grammar colour, so the two
