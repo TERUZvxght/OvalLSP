@@ -276,6 +276,50 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     expect(unknown_methods(source)).to be_empty
   end
 
+  # `define_method` defines a *singleton* method only when it is written
+  # directly in a `class << self` body. Called from inside a `def` -- even
+  # a `def` in that body -- self at that moment is the class object, so it
+  # defines an ordinary instance method and its block's self is an
+  # instance. `@singleton_context_stack` answers the first question and
+  # `visit_def_node` never pushes it, so reading it alone reported the
+  # block's calls against the singleton side. This shape is in Thor,
+  # minitest, `rails/engine.rb` and `action_view/base.rb`.
+  it "reads a define_method inside a def inside `class << self` as an instance" do
+    source = <<~'RUBY'
+      class Report
+        class << self
+          def define_formats(*names)
+            names.each { |name| define_method("to_#{name}") { render(name) } }
+          end
+        end
+
+        def render(name) = name.to_s
+
+        define_formats :csv, :json
+      end
+    RUBY
+
+    expect(unknown_methods(source)).to be_empty
+  end
+
+  # An explicit receiver is the same: `W.define_method(:m) { ... }` defines
+  # an instance method of W whatever body it is written in.
+  it "reads a define_method with an explicit receiver as an instance" do
+    source = <<~'RUBY'
+      class Report
+        class << self
+          def build
+            Report.define_method(:later) { render("x") }
+          end
+        end
+
+        def render(name) = name.to_s
+      end
+    RUBY
+
+    expect(unknown_methods(source)).to be_empty
+  end
+
   it "does not report `superclass` on a class" do
     expect(unknown_methods("class Widget\nend\nWidget.superclass\n")).to be_empty
   end

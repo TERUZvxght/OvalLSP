@@ -141,8 +141,8 @@ end
 
   # `private attr_reader :x` is one call taking another as its argument
   # (Ruby 3.0+, and RuboCop's `group_style: inline`). The reader is
-  # private; recording it public leaked it into completion and silenced
-  # the unknown-method check on an external call.
+  # private; recording it public offered it in completion on an outside
+  # receiver. It does not affect diagnostics -- no check reads visibility.
   it "records the inline `private attr_reader` form as private" do
     source = "class Widget\n  private attr_reader :hidden\n  attr_reader :shown\nend\n"
     visibilities = summarize(source).declarations
@@ -150,6 +150,27 @@ end
                                     .to_h { |d| [d.symbol_id.name, d.visibility] }
 
     expect(visibilities).to eq("hidden" => :private, "shown" => :public)
+  end
+
+  # `docs`-level invariant, stated in three places: a `:generated`
+  # declaration is always paired with a `GeneratedMethodFact`. 0.1.14
+  # recorded attr declarations without one, so those three statements were
+  # false. Nothing observable changes today -- both paths answer
+  # `Types::UNKNOWN` -- which is why this is asserted directly rather than
+  # through a feature: `MethodSummary`'s confidence and status read the
+  # fact, and would drift silently.
+  it "pairs each generated declaration with a fact naming the macro" do
+    summary = summarize("class Widget\n  attr_accessor :name\nend\n")
+    facts = summary.generated_method_facts.map { |fact| [fact.name, fact.origin] }
+
+    expect(facts).to eq([["name", :attr_accessor], ["name=", :attr_accessor]])
+  end
+
+  it "names the macro that declared it, not a single origin for all of them" do
+    origins = summarize("class Widget\n  attr_reader :a\n  attr_writer :b\nend\n")
+              .generated_method_facts.map(&:origin)
+
+    expect(origins).to eq(%i[attr_reader attr_writer])
   end
 
   # The reader takes nothing and the writer takes exactly one argument,

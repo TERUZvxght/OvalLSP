@@ -20,11 +20,13 @@ the released code and fixed with the same measurement discipline.
   methods are what a class-level call reaches. The same error silenced a
   real one: `def self.x` added to `Class` is not something an ordinary
   class inherits, and Ruby raises `NameError` for it.
-- Fixed: `new` and other class-level calls are no longer reported on a
-  class whose ancestors end at a module. The tail said what the last
-  ancestor was rather than what the receiver is, so such a class got the
-  module tail, without `Class`. `ActionController::TestRequest` is a real
-  instance.
+- Fixed: the ancestry tail says what the *receiver* is, not what its
+  last ancestor happens to be. A class whose ancestors end at a module got
+  the module tail, without `Class` — `ActionController::TestRequest`
+  really does, because its chain terminates at a module named `Request`.
+  Released 0.1.14 did not report `new` on it, because it carried a special
+  case skipping every `new`; deleting that special case is what made the
+  wrong tail observable, and both are fixed here.
 - Fixed: `define_method` inside `class << self` no longer reports its
   body's calls. That block defines a singleton method, so its `self` is
   still the class.
@@ -35,8 +37,7 @@ the released code and fixed with the same measurement discipline.
   instance, and reading the block as class-level reported the instance
   methods it calls.
 - Fixed: `private attr_reader :x` is private. It was recorded public, so
-  a private method appeared in completion and an external call to it
-  stopped being reported.
+  a private method appeared in completion on an outside receiver.
 - Fixed: renaming a method that a macro declared is refused with a reason
   instead of producing a `WorkspaceEdit` that rewrites every call site and
   leaves `attr_accessor :name` behind — an edit that does not run. This
@@ -90,8 +91,10 @@ that release shipped. The stdlib figures it quoted reproduce exactly.
 
 The capability suite could not have caught the rename regression: nothing
 in the real-Rails fixture used `attr_*` at all, so a green run said
-nothing about it. W2 now has a second example covering the macro-declared
-shape.
+nothing about it. The macro-declared shape is now its own row, **W4**,
+with its own example — not a second `W2`, because
+`capability_coverage_spec` compares ids as set differences and a
+duplicate would have made the row and the example cancel out.
 
 `scripts/corpus_diagnostics.rb` is in the tree as of this release. The
 0.1.14 entry cites it for numbers a reader could not reproduce, because

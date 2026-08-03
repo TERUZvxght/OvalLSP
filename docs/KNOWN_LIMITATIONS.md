@@ -124,6 +124,28 @@ in `development` and a `group :test` gem is simply not there; and a gem
 class reopened without mixing anything in, whose ancestry carries no
 evidence either way. 024.R5 lists each case.
 
+Three more shapes are worth knowing, all of them older than this release
+and none of them fixed by it:
+
+- **A declaration written inside a block belongs to the class the block is
+  written in**, whatever the block's real receiver is. `Struct.new(:x) do
+  attr_reader :label end` inside `class Outer` offers `label` on an
+  `Outer`, and go-to-definition on it lands in the block; `def setup;
+  attr_accessor :never_real; end` records `never_real`, so calling it is
+  not reported even though Ruby raises unless `setup` ran. Attributing
+  lexically is what `def` has always done, and three attempts to be
+  cleverer for `attr_*` alone each produced false reports instead
+  (024.31).
+- **`def Foo.bar` is recorded as an instance method**, so `Foo.bar` is
+  reported as unknown while `Foo.new.bar` is accepted — both answers
+  inverted. Six of these survive in Ruby's own standard library
+  (024.32).
+- **`K.instance_eval { attr_accessor :x }` is reported** where
+  `K.class_eval { attr_accessor :x }` is not, though both define the same
+  methods. The rule behind it is right for `object.instance_eval`, which
+  is what it was written for (024.33).
+
+
 ## Conflicts with other extensions
 
 See [vscode/README.md](../vscode/README.md#known-conflicts-with-other-extensions)

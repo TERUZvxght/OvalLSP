@@ -161,6 +161,73 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.33 `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` is not
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`block_self_is_module`)
+
+Both define `x` and `x=` on `K`. The first is reported as
+`... has no method named attr_accessor`, the second is not, because
+`instance_eval` takes the "explicit receiver means an instance" path and
+`class_eval` takes the inherit path.
+
+Not a regression -- 0.1.14 reported it too -- and the receiver rule it
+comes from is right for the case it was written for: `o.instance_eval do
+helper end` on an object must not resolve against the class's singleton
+side.
+
+A three-way split was written and dropped. The visitor tracks *whether*
+self is a module, never *which* module, so the "constant receiver means
+the class" branch would still resolve against the lexically enclosing
+owner rather than the receiver -- and no fixture could tell the two
+apart, which is its own reason not to ship it.
+
+**Direction:** the same one 024.31 needs. A block wants a receiver, not a
+boolean; with that, `K.instance_eval` opens `K` and this answers itself.
+Worth doing with 024.31 rather than separately.
+
+## 024.32 `def Foo.bar` is recorded as an instance method, so both answers are inverted
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`visit_def_node`)
+
+`visit_def_node` treats a `def` as singleton only when its receiver is a
+`Prism::SelfNode`. `def Foo.bar` names a constant instead, so it is
+recorded as `Foo#bar` — an instance method. Both consequences are wrong,
+in opposite directions:
+
+```ruby
+class Foo; end
+def Foo.bar; end
+
+Foo.bar        # reported: "Foo has no method named `bar`" -- Ruby runs it
+Foo.new.bar    # accepted    -- Ruby raises NoMethodError
+```
+
+Pre-existing and identical on 0.1.13, 0.1.14 and 0.1.15. 116 occurrences
+of `def Const.method` across the standard library, ActiveSupport and
+ActionPack; six of them survive as false reports in the stdlib run on all
+three revisions, including `Bundler::Deprecate.skip`
+(`bundler/shared_helpers.rb:391`), `CGI::Session.callback`
+(`cgi/session.rb:345`) and three in `fiddle/struct.rb`.
+
+**Direction:** the owner is already computed correctly a few lines below
+(`constant_full_name(owner_receiver)`); it is only the `kind` that reads
+`SelfNode` alone. Both should ask the same question. Worth checking what
+else keys on that predicate before changing it — `visit_def_node` also
+uses it for the declaration's visibility, which is `nil` for singleton
+methods.
+
 ## 024.31 A declaration written inside a block has no owner this parser can name
 
 ```yaml
@@ -264,18 +331,20 @@ after every one. The survivors, and what was done about each:
   because deleting the delegation would restore the duplication that made
   both copies wrong.
 - **`@anonymous_class_depth = 0` in the visitor's constructor**
-  (`parser_service.rb`). Defensive initialisation, not a decision:
-  `within_namespace` sets the same ivar on entering any class or module
-  body, and `record_attribute_methods` returns early without an owner, so
-  the constructor's value is never the one read. Kept, because an ivar
-  read with `.positive?` should not depend on another method having run
-  first.
+  (`parser_service.rb`). Defensive initialisation, not a decision.
 
-A fourth survivor was a real gap and is now closed: the fixture for
-"entering a namespace clears the anonymous-class flag" used `1.times do`,
-where the flag is never set, so it passed under both branches. It uses
-`Struct.new(:x) do class Later ... end end` now, and fails when the
-save/restore is removed.
+**This sweep is of a change set that no longer ships.** It ran before
+024.31 withdrew the `attr_*` block rule, and the third survivor above --
+along with a fourth that a better fixture closed -- belonged to code that
+went out with it. What stays true of the shipped diff is the first two
+survivors and their reasoning; the counts do not.
+
+Two further unpinned decisions were found afterwards, inside the
+`add_generated_method` path: whether a `GeneratedMethodFact` is emitted
+for `attr_*` at all, and whether its `origin` names the macro. Both are
+pinned now. Neither was visible to this sweep, because reverse-applying a
+hunk that adds a whole method only asks whether the method exists --
+CLAUDE.md's stated blind spot, met in practice.
 
 ## 024.29 Two features were written for 0.1.15 and cut from it
 
@@ -359,8 +428,14 @@ That is a **false positive**, not a missed report — for an unknown-method
 check a missing ancestor is the unsafe direction, and an earlier draft of
 this entry had that backwards.
 
-It is not a 0.1.15 regression. Measured on one fixture across three
-revisions: 0.1.13 reports it, 0.1.14 does not, 0.1.15 reports it again.
+The fixture has to be `class Object; def self.foo; end; end`, not
+`def Object.foo` -- the latter is recorded as an *instance* method
+(024.32), which the new tail then resolves, so it is not reported at all
+and demonstrates nothing about this entry.
+
+It is not a 0.1.15 regression. Measured on the `def self.` form across
+three revisions: 0.1.13 reports it, 0.1.14 does not, 0.1.15 reports it
+again.
 0.1.14's silence was an accident of the same mis-kinded lookup that made
 it report `class Object; def blank?; end` — idiomatic Rails — on code
 that runs. 0.1.15 trades the accident back for the fix. Nothing in the
@@ -456,9 +531,11 @@ for the "before" side, from a different tree; 0.1.15 corrected both.)
 review of the released code and fixed in 0.1.15: the tail was looked up
 for singleton methods rather than instance ones, it was keyed on the
 terminating ancestor rather than the receiver, `define_method` inside
-`class << self` was read as instance-self, `instance_eval`/`instance_exec`
-were listed with it for no stated reason, and `attr_*` was recorded from
-inside method bodies and blocks. Wrong `argument-count` fell 36 → 13 and `unknown-route-helper`
+`class << self` was read as instance-self, and `instance_eval`/
+`instance_exec` were listed with it for no stated reason. A fifth --
+`attr_*` recorded from inside method bodies and blocks -- was attempted
+three times and withdrawn; 024.31 records why the shipped parser
+attributes `attr_*` lexically, exactly as 0.1.14 did. Wrong `argument-count` fell 36 → 13 and `unknown-route-helper`
 48 → 8, the latter because a `*_path` name that resolves to a declaration
 is no longer guessed at -- which reduces 024.24 without fixing it.
 

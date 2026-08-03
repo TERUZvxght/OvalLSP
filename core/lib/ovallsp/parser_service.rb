@@ -260,7 +260,20 @@ module Ovallsp
       RECEIVER_SELF_BLOCK_CALLS = %i[instance_eval instance_exec].freeze
 
       def block_self_is_module(node)
-        return @singleton_context_stack.last if INSTANCE_SELF_BLOCK_CALLS.include?(node.name)
+        # A `define_method` block defines a *singleton* method only when
+        # the call is written directly in a `class << self` body. Called
+        # from inside a `def` -- including a `def` in that body -- self at
+        # that moment is the class object, so it defines an ordinary
+        # instance method and the block's self is an instance; an explicit
+        # receiver says the same. `@singleton_context_stack` answers only
+        # "would an unqualified `def` here be a singleton method", and
+        # `visit_def_node` never pushes it, so reading it alone reported
+        # the bodies of Thor's, minitest's and `rails/engine.rb`'s
+        # generated methods.
+        if INSTANCE_SELF_BLOCK_CALLS.include?(node.name)
+          return node.receiver.nil? && !@in_method_body && @singleton_context_stack.last
+        end
+
         return nil unless RECEIVER_SELF_BLOCK_CALLS.include?(node.name)
 
         # Receiverless, the receiver is the enclosing self, so inherit it.
@@ -268,13 +281,18 @@ module Ovallsp
         # which this visitor cannot name -- it tracks whether self is a
         # module, never which one. Reading it as an instance is the
         # direction that resolves the helper methods such a block calls;
-        # inheriting class-level self reported them instead. A constant
-        # receiver is no better served by the module answer, since the
-        # lookup would still run against the enclosing owner rather than
-        # the receiver.
+        # inheriting class-level self reported them instead.
+        #
+        # A constant receiver is the case this gets wrong:
+        # `K.instance_eval { attr_accessor :x }` is legal Ruby and is
+        # reported, while `K.class_eval { attr_accessor :x }` -- which
+        # takes the inherit path -- is not. Splitting the two was tried
+        # and dropped: this visitor cannot say *which* module self is, so
+        # the module answer resolves against the enclosing owner, and no
+        # fixture could distinguish the branch. Recorded as 024.33; it is
+        # not a regression, 0.1.14 reported it too.
         node.receiver.nil?
       end
-
 
       # `private attr_reader :x` reaches the attr recorder as a *nested*
       # call, visited while `private`'s arguments are. Its own
@@ -293,7 +311,6 @@ module Ovallsp
         end
         record_method_call_candidate(node)
 
-
         if wrapped_visibility
           previous = @inline_attribute_visibility
           @inline_attribute_visibility = wrapped_visibility
@@ -305,11 +322,8 @@ module Ovallsp
         end
         # Pushed around the children, not the candidate above: the call
         # itself is written where it is written, and only its block body
-        # gets the different self.
-        # Inside `class << self` a `define_method` block defines a
-        # *singleton* method, whose self is the class object -- still a
-        # Module. Pushing `false` unconditionally reported the body's
-        # calls against the instance side, on code that runs.
+        # gets the different self. `nil` means the block does not change
+        # it -- see #block_self_is_module for which calls do.
         block_self = node.block && block_self_is_module(node)
         return super if block_self.nil?
 
@@ -604,12 +618,6 @@ module Ovallsp
 
       def record_attribute_methods(node)
         return unless node.arguments
-        # Neither form runs at class level, so neither declares anything.
-        # Recording them did worse than nothing: an `attr_accessor` inside
-        # a `def` silenced the report on a method Ruby raises
-        # NoMethodError for, and one inside a block put the wrong owner on
-        # a real method -- offering it in completion on an object that
-        # does not have it.
         # No guard, deliberately: `attr_*` is attributed exactly as `def`
         # is, to the lexically enclosing owner, wherever it is written.
         #

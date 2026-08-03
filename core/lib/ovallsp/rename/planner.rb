@@ -83,6 +83,10 @@ module Ovallsp
                                "the call sites are never edited directly here")
         end
 
+        unless valid_identifier?(symbol_id.kind, new_name)
+          return refused_plan(symbol_id, generation, "`#{new_name}` is not a valid #{symbol_id.kind} name")
+        end
+
         if (declaration = uneditable_declaration(symbol_id))
           return refused_plan(
             symbol_id, generation,

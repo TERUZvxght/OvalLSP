@@ -155,8 +155,12 @@ module Ovallsp
       # doesn't use any special singleton syntax for this to work, so the
       # declaration kind to search for at an :extend-origin ancestor is
       # :instance_method even while the overall traversal is in singleton
-      # mode. Every other origin in singleton mode (:self, :superclass)
-      # genuinely means :singleton_method (`def self.foo`/`class << self`).
+      # mode -- and so does :class_object, the Class/Module tail, because
+      # a class object is an *instance* of those. :self and :superclass in
+      # singleton mode genuinely mean :singleton_method (`def self.foo`/
+      # `class << self`). The rule lives in AncestorEntry so that this
+      # file and Diagnostics::Engine cannot disagree about it; they did,
+      # and both copies were wrong for the tail.
       def symbol_kind_for(entry, singleton) = entry.declaration_kind(singleton: singleton)
 
       # A single level of `alias`/`alias_method` indirection: if `owner`
