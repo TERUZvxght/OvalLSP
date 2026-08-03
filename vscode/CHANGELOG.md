@@ -6,6 +6,77 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.1.14 — `private` is not an unknown method
+
+- Fixed: `private`, `protected`, `public`, `attr_reader`, `attr_writer`,
+  `attr_accessor`, `private_constant`, `alias_method`, `module_function`,
+  `define_method`, `include` and `extend` are no longer reported as
+  unknown methods when written in a class body. They are `Module`'s
+  methods, and a class body's implicit receiver is the class.
+- Fixed: methods that `attr_reader`, `attr_writer` and `attr_accessor`
+  define are no longer reported as unknown. They were never recorded as
+  declarations, so on a class whose ancestry is fully known every
+  attribute reader read as missing.
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: no
+capability is added. It removes wrong reports from a capability that
+already claimed to work.
+
+### Details
+
+Two separate things were missing, and either alone still produced the
+report.
+
+`HierarchyIndex#ancestors(singleton: true)` walked the superclass chain
+and stopped. It never appended what a class object *is* — a `Class`,
+which is a `Module`, which is an `Object` — so `Module#private` was not
+in the chain to be found. The instance side has had its
+`Object, Kernel, BasicObject` tail all along; the singleton side had
+none. A module's tail is the same list without `Class`, which is why
+`superclass` answers on a class and not on a module. An unresolvable
+parent (`class Widget < Struct.new(:a)`) still gets no tail: claiming
+the chain ends in `Class` would say it is fully accounted for when its
+middle is not.
+
+The second was in the parser. One flag answered two questions —
+"would an unqualified `def` here declare a singleton method", true only
+inside `class << self`, and "is `self` here a Class/Module object", which
+is also true directly in a class body and inside a `def self.x`. A
+receiverless call took the first answer, so `private` in a class body was
+resolved against the *instance* chain, where it does not exist. The two
+questions are now tracked separately.
+
+`attr_reader :name` declares `name` as surely as `def name` does, and the
+index recorded only the call. That was masked while class bodies were
+mis-modelled, and reading a `define_method` body correctly surfaced it on
+Thor's `attr_accessor :options` — so closing it is part of this release
+rather than a note in it: a fix must not hand anyone a report they did
+not have before. A dynamic argument (`attr_reader(*names)`) still records
+nothing; guessing there would declare a method that may not exist and
+silence a real report. Inside `class << self` these declare singleton
+methods, and the open visibility section applies to them as it does to a
+`def`.
+
+Measured with `scripts/corpus_diagnostics.rb`. Over this repository's own
+`core/lib`, `unknown-method` findings drop from **62 to 4**; over
+ActiveSupport 8.1.3, from **776 to 265**. Over Ruby 3.4.7's whole
+standard library, from **15,982 to 3,848** — and **not one report is
+introduced anywhere in it**, which is the number that matters, since the
+purpose is to stop saying something untrue. Wrong `argument-count`
+reports fall 36 → 13 and wrong `unknown-route-helper` reports 48 → 8 as a
+consequence: a name that now resolves to a declaration is no longer
+guessed at.
+
+What remains of those counts is a different gap, tracked separately: the
+argument-type fallback recorded as 024.19, and the route-helper check
+answering "no such route" from an empty route table (024.24), which this
+release reduces but does not fix.
+
+The engine had one name of this list special-cased already: `new`, whose
+comment named Class/Module as the chain nobody modelled. That special
+case is now redundant and the names are Ruby's, not a list this project
+has to keep.
+
 ## 0.1.13 — the index answers the workspace, not your editing history
 
 - Fixed: go-to-definition, find references, rename, signature help and

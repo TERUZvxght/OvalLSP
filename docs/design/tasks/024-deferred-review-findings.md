@@ -161,6 +161,49 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.23 The singleton chain did not model `Class`/`Module`
+
+**Status:** fixed in 0.1.14.
+
+**Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
+`core/lib/ovallsp/parser_service.rb`
+
+Found by driving the engine over real corpora during the 0.2.0 review and
+fixed ahead of it, because it was the largest single source of wrong
+reports the engine produced and it fired on the most ordinary Ruby there
+is: `private`, `attr_reader`, `private_constant`, `alias_method`,
+`include` and their neighbours, reported as unknown methods whenever
+written in the body of a workspace class whose ancestry was otherwise
+fully known.
+
+Two independent causes, either of which alone still produced the report:
+
+1. `HierarchyIndex#ancestors(singleton: true)` walked the superclass
+   chain and appended no tail, so `Class`, `Module`, `Object`, `Kernel`
+   and `BasicObject` were not in the chain and `Module#private` could not
+   be found. The instance side has always had `DEFAULT_OBJECT_CHAIN`.
+2. `ParserService` used one flag for two questions — "does an unqualified
+   `def` here declare a singleton method" (true only inside
+   `class << self`) and "is `self` here a Class/Module object" (also true
+   in a class body and inside `def self.x`). Receiverless calls took the
+   first, so they were resolved against the instance chain.
+
+A third cause had to be closed in the same release rather than recorded.
+Reading a `define_method` body as an instance -- which cause 2's fix
+makes correct -- surfaced that `attr_reader`/`attr_writer`/`attr_accessor`
+were never recorded as declarations at all, so Thor's
+`attr_accessor :options` became a *new* wrong report. A fix that hands a
+user a report they did not have before is not a fix, so the parser now
+records what those DSLs define (`ATTRIBUTE_DSLS`), with a dynamic
+argument recording nothing.
+
+Measured with `scripts/corpus_diagnostics.rb`: `core/lib` 62 → 4
+`unknown-method` findings, ActiveSupport 8.1.3 776 → 265, Ruby 3.4.7's
+standard library 15,982 → 3,848, **and no report introduced anywhere in
+it**. Wrong `argument-count` fell 36 → 13 and `unknown-route-helper`
+48 → 8, the latter because a `*_path` name that resolves to a declaration
+is no longer guessed at -- which reduces 024.24 without fixing it.
+
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 **Status:** open — roadmap
