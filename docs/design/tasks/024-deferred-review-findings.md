@@ -14,13 +14,27 @@ Each entry states the symptom, who it affects, how to reproduce it, and a
 proposed direction. Nothing here is a shipping blocker; every item was
 triaged as such by the reviewer that raised it.
 
-Status legend: **open** — not started. **fixed** / **done** — resolved.
+Every entry opens with a fenced `yaml` block, directly under its
+heading, and that block is the entry's status — the prose beneath it adds
+narrative and does not restate it:
 
-An open, non-roadmap entry should also be cited by number in
+```yaml
+status: open        # open | fixed | done. Anything else reads as open.
+kind: defect        # defect | roadmap. Roadmap items are plans, not faults.
+released-in: 0.1.14 # only on a resolved entry
+user-visible: yes   # on an open defect: does a user see this?
+```
+
+An open defect with `user-visible: yes` must be cited by number in
 `docs/KNOWN_LIMITATIONS.md` **and** `.ja.md`, so a finding recorded here
-reaches the people it affects. Nothing checks this today; an attempt to
-check it mechanically is recorded as 024.25, along with why the shape it
-took was wrong.
+reaches the people it affects. An entry with no user-visible half says
+`user-visible: no` and a `user-visible-note` giving the reason.
+`core/spec/meta/deferred_findings_spec.rb` checks all of that, and fails
+on an entry whose heading carries no block rather than skipping it.
+
+The block exists because the previous attempt at this check parsed the
+file's *prose* and had to be rolled back — 024.25 records why, and this
+format is the direction that entry recommended.
 
 A resolved entry is deleted once nothing in the tree cites it. It is
 **not** deleted while source or spec comments still name it by number:
@@ -50,19 +64,14 @@ roadmap file for the same reason everything else does — one place.
 
 ## 024.1 Duplicate, unused implementation of the controller callback chain
 
-**Status:** fixed in 0.1.10 — the unused copy is deleted, along with
-`#infer_ivars_for_method`, `#find_static_render_target`, `#find_method_node`
-and the `MethodLocator` visitor that existed only to serve it. Its specs
-were re-anchored rather than dropped: the ones covering pieces the Server
-still calls now go through those pieces (`method_nodes` +
-`#infer_ivars_for_method_node`, `#static_render_target_for_node`), and the
-seven chain behaviours that had no equivalent on the live path — `except:`
-on both sides of it, an action overriding a callback's assignment, an
-unresolvable `if:` condition, a conditional `skip_before_action`, a
-missing callback method, and the multi-name forms of `before_action` and
-`skip_before_action` — were ported into `server_views_spec.rb`, where each
-fixture was checked to yield a *different* answer under the opposite
-behaviour.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.10
+```
+
+the unused copy is deleted, along with `#infer_ivars_for_method`, `#find_static_render_target`, `#find_method_node` and the `MethodLocator` visitor that existed only to serve it. Its specs were re-anchored rather than dropped: the ones covering pieces the Server still calls now go through those pieces (`method_nodes` + `#infer_ivars_for_method_node`, `#static_render_target_for_node`), and the seven chain behaviours that had no equivalent on the live path — `except:` on both sides of it, an action overriding a callback's assignment, an unresolvable `if:` condition, a conditional `skip_before_action`, a missing callback method, and the multi-name forms of `before_action` and `skip_before_action` — were ported into `server_views_spec.rb`, where each fixture was checked to yield a *different* answer under the opposite behaviour.
+
 **Area:** `core/lib/ovallsp/local_inferencer.rb`, `core/lib/ovallsp/server.rb`
 
 `LocalInferencer#infer_ivars_for_action` implements the before_action
@@ -89,9 +98,14 @@ one-line change.
 
 ## 024.6 The `seen_uris` spec's comment overclaims
 
-**Status:** fixed in 0.1.10 — the buffer case is now a spec of its own,
-so `@seen_uris << uri` sitting above the open-buffer early return is
-pinned rather than merely claimed.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.10
+```
+
+the buffer case is now a spec of its own, so `@seen_uris << uri` sitting above the open-buffer early return is pinned rather than merely claimed.
+
 **Area:** `core/spec/ovallsp/cold_indexer_spec.rb`
 
 The comment says the spec covers a file already open in a buffer, but no
@@ -105,24 +119,14 @@ actually asserts.
 
 ## 024.8 Ownership retirement on `exited() && known.size === 0` is unpinned
 
-**Status:** fixed in 0.1.10 — the two assignments are deleted; the
-`ownedSessionId` one is load-bearing and pinned by a new regression test,
-and `ownedGroupId` went with it for symmetry (it is set only from a
-validated root row whose `pgid === pid`, and such a row also satisfies the
-expansion test against `ownedSessionId`, so `known` cannot be empty in the
-same pass — no fixture distinguishes that half). The first attempt at this
-entry deleted them as unable to change any answer, reasoning that the
-branch is only reached with the root absent and the expansion gate
-therefore already closed. Independent review disproved both halves:
-`rootObservedAbsent` is assigned at the *end* of the pass, and the root
-row can be present but untracked, because `known` only takes the root
-while the child has not exited. A Core dying inside the ~57ms pre-`setsid`
-window reaches the branch with ownership still meaningful — on Darwin
-especially, where `sid` is 0 on every row. Since `terminateOnce` and
-`waitForAllExit` both refresh after the interval is cleared, retiring
-ownership there permanently lost the survivor those later passes exist to
-catch. The `clearInterval` in the same branch stays, pinned by its own
-test.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.10
+```
+
+the two assignments are deleted; the `ownedSessionId` one is load-bearing and pinned by a new regression test, and `ownedGroupId` went with it for symmetry (it is set only from a validated root row whose `pgid === pid`, and such a row also satisfies the expansion test against `ownedSessionId`, so `known` cannot be empty in the same pass — no fixture distinguishes that half). The first attempt at this entry deleted them as unable to change any answer, reasoning that the branch is only reached with the root absent and the expansion gate therefore already closed. Independent review disproved both halves: `rootObservedAbsent` is assigned at the *end* of the pass, and the root row can be present but untracked, because `known` only takes the root while the child has not exited. A Core dying inside the ~57ms pre-`setsid` window reaches the branch with ownership still meaningful — on Darwin especially, where `sid` is 0 on every row. Since `terminateOnce` and `waitForAllExit` both refresh after the interval is cleared, retiring ownership there permanently lost the survivor those later passes exist to catch. The `clearInterval` in the same branch stays, pinned by its own test.
+
 **Area:** `vscode/src/coreProcess.ts`
 
 As originally recorded, and wrong in its premise — kept here because the
@@ -139,12 +143,13 @@ was actively harmful, not because the invariant was carried elsewhere.
 
 ## 024.10 Four `extension.ts` behaviours cannot be unit-tested
 
-**Status:** fixed in 0.1.10 — the four decisions moved into
-`vscode/src/clientTeardown.ts`, which imports no `vscode` and takes the
-lifecycle manager and the per-folder maps as parameters rather than
-reading module state. `extension.ts` now delegates to it and keeps only
-the `vscode` wiring. Fifteen unit tests cover them, and each decision was
-checked by mutating it and confirming the suite goes red.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.10
+```
+
+the four decisions moved into `vscode/src/clientTeardown.ts`, which imports no `vscode` and takes the lifecycle manager and the per-folder maps as parameters rather than reading module state. `extension.ts` now delegates to it and keeps only the `vscode` wiring. Fifteen unit tests cover them, and each decision was checked by mutating it and confirming the suite goes red.
 
 The fourth took two attempts, and the first one is worth recording:
 exporting the two notification strings for `extension.ts` to choose
@@ -169,8 +174,18 @@ module, or add an integration test host.
 
 ## 024.25 A Markdown-parsing spec is the wrong shape for "these two documents must agree"
 
-**Status:** open, and **rolled back** rather than fixed. This entry is the
-deliverable; there is no code change to point at.
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  A rolled-back internal guard. Nothing about the product changed, so
+  there is nothing to tell a user; what is open is a decision about how
+  this project keeps its own notes.
+```
+
+**Rolled back** rather than fixed. This entry is the deliverable; there
+is no code change to point at.
 
 **Area:** was `core/spec/meta/known_limitations_parity_spec.rb` and
 `core/spec/meta/readme_parity_spec.rb`, both deleted.
@@ -213,16 +228,20 @@ enumerate its own inputs, because Markdown prose has no schema. A guard
 whose correctness depends on a regex surviving every future edit to the
 document it reads is a guard that needs the next round to repair it.
 
-### The direction that was actually needed
+### The direction that was actually needed, and taken
 
-Two candidates, neither attempted here:
+Two candidates were named. The first was chosen, and this file's format
+is the result:
 
-1. **Give the data a schema instead of parsing prose.** If each deferred
-   finding carried machine-readable front matter (number, status,
-   user-visible yes/no), a check becomes a lookup and has no parser to
-   get wrong. The cost is a format change to a document people write by
-   hand, which is a decision about how this project keeps notes — not
-   something to slip into a documentation fix.
+1. **Give the data a schema instead of parsing prose.** ✅ Every entry
+   carries a fenced `yaml` block, and `core/spec/meta/deferred_findings_spec.rb`
+   reads that rather than hunting for `**Status:**` in running text. The
+   parser did not disappear — the grammar did the work: one delimited
+   shape instead of however many prose can take. Nine of its decisions
+   were pinned by reverse-applying each and re-running against a green
+   baseline; two survived the first sweep and gained fixtures. It fails
+   on an entry whose heading carries no block, which is precisely the
+   failure mode that let the old guard skip entries in silence.
 2. **Accept that this pair is checked by a person, and make the person's
    job small.** `DOCUMENTATION_MAP.md` already exists for exactly this,
    and its release checklist is the place to name the pairing. The map's
@@ -244,7 +263,13 @@ claims about it were rolled back.
 
 ## 024.24 Every `*_path`/`*_url` call is a missing route when no routes are loaded
 
-**Status:** open. Pre-existing — reproduced identically on `main` (0.1.13).
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+Pre-existing — reproduced identically on `main` (0.1.13).
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
 (`unknown_route_helper_findings`)
@@ -280,7 +305,11 @@ smallest form of it.
 
 ## 024.23 The singleton chain did not model `Class`/`Module`
 
-**Status:** fixed in 0.1.14.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.14
+```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
 `core/lib/ovallsp/parser_service.rb`
@@ -322,7 +351,11 @@ it**. Wrong `argument-count` fell 36 → 13 and `unknown-route-helper`
 is no longer guessed at -- which reduces 024.24 without fixing it.
 ## 024.22 The unassigned-`@ivar` check is silent in an application `rails new` produces
 
-**Status:** open.
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
 
 **Area:** `core/lib/ovallsp/server.rb` (`MODELLED_CLASS_BODY_CALLS`,
 `class_body_is_accounted_for?`)
@@ -355,8 +388,13 @@ row measures the real shape and fails honestly.
 
 ## 024.21 A qualified constant is coloured half one way, half the other
 
-**Status:** open. Pre-existing for `Foo::Bar` reads; 0.2.0 is where
-semantic tokens became a user-visible capability (T1).
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+Pre-existing for `Foo::Bar` reads; 0.2.0 is where semantic tokens became a user-visible capability (T1).
 
 **Area:** `core/lib/ovallsp/semantic_tokens.rb` (`Collector`)
 
@@ -376,8 +414,13 @@ patched one at a time.
 
 ## 024.20 `contains?` treats an exclusive end offset as inclusive
 
-**Status:** open, and it blocks a correct answer 0.2.0 had to settle for
-approximating.
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+and it blocks a correct answer 0.2.0 had to settle for approximating.
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`contains?`,
 `locate_in_block`), `core/lib/ovallsp/parser_service.rb` (the receiver
@@ -418,9 +461,13 @@ can descend and hover becomes right inside every block.
 
 ## 024.19 The argument-type check judges against a class the receiver is not
 
-**Status:** open. Reported by an independent review that drove the engine
-over 25 installed gems; not reproduced from a fixture here, which is why
-it is recorded rather than fixed.
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+Reported by an independent review that drove the engine over 25 installed gems; not reproduced from a fixture here, which is why it is recorded rather than fixed.
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`sole_declared_overload`)
 
@@ -455,13 +502,13 @@ fire, which the current spec's RBS shape does not.
 
 ## 024.18 The unassigned-`@ivar` check cannot enumerate what it needs to
 
-**Status:** open, and **blocked on 024.R7** for the part that needs it.
-Three of the five shapes are closed in 0.2.0 by staying silent rather
-than guessing: a class-body call this analysis does not model (which
-covers every gem macro), a view that renders anything, and everything
-rounds 3 and 4 fixed. What is left is *precision* -- turning those two
-silences back into answers -- and one shape that is still wrong rather
-than silent, and one that is wrong only at depth two or more:
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+and **blocked on 024.R7** for the part that needs it. Three of the five shapes are closed in 0.2.0 by staying silent rather than guessing: a class-body call this analysis does not model (which covers every gem macro), a view that renders anything, and everything rounds 3 and 4 fixed. What is left is *precision* -- turning those two silences back into answers -- and one shape that is still wrong rather than silent, and one that is wrong only at depth two or more:
 
 - a view rendered by *another* controller's action (`render "users/show"`
   from elsewhere) sees only its own controller's ivars;
@@ -540,7 +587,12 @@ release, not a defect to patch in the current change set.
 
 ## 024.14 Workspace-wide diagnostics do not fire against the real Rails fixture
 
-**Status:** open
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
 **Area:** `core/lib/ovallsp/workspace_diagnostics.rb`, `core/lib/ovallsp/server.rb`
 
 0.2.0's workspace pass is covered by Server-level specs (a mistake in an
@@ -606,7 +658,11 @@ left, and restore the row with an E2E example behind it.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
-**Status:** open — roadmap
+```yaml
+status: open
+kind: roadmap
+```
+
 **Area:** `core/lib/ovallsp/server.rb`, `core/lib/ovallsp/parser_service.rb`,
 `core/lib/ovallsp/local_inferencer.rb`
 
@@ -656,11 +712,13 @@ column and this entry is why.
 
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
-**Status:** done — shipped in 0.2.0, as the narrow version this entry
-described: the expected type comes from an RBS/RBI declaration, the
-signature must have exactly one overload and no `*rest`, and both the
-declared and the inferred type must be concrete classes with no ancestor
-relation between them. Everything else stays silent.
+```yaml
+status: done
+kind: roadmap
+released-in: 0.2.0
+```
+
+as the narrow version this entry described: the expected type comes from an RBS/RBI declaration, the signature must have exactly one overload and no `*rest`, and both the declared and the inferred type must be concrete classes with no ancestor relation between them. Everything else stays silent.
 
 Two false positives were found while building it, both by mutating the
 new code rather than by reading it:
@@ -702,12 +760,12 @@ for, so the table's promise and this entry stay in step.
 
 ## 024.R3 Feature parity roadmap, measured against Pylance
 
-**Status:** open — roadmap. Its three 0.2.0 rows are done; the table
-below carries a **shipped in** column so the entry can be read as a
-record rather than only as a plan. Two of the three shipped outright;
-whole-project diagnostics shipped without a capability row, because the
-E2E example written for it did not pass (024.14) -- README marks that row
-⚠️ and both changelogs say so.
+```yaml
+status: open
+kind: roadmap
+```
+
+roadmap. Its three 0.2.0 rows are done; the table below carries a **shipped in** column so the entry can be read as a record rather than only as a plan. Two of the three shipped outright; whole-project diagnostics shipped without a capability row, because the E2E example written for it did not pass (024.14) -- README marks that row ⚠️ and both changelogs say so.
 
 Pylance is the closest well-known reference point for "what a language
 server is expected to do" in a dynamically typed language with optional
@@ -756,7 +814,11 @@ section is the reasoning behind each. Keep the two in step.
 
 ## 024.R4 Only one platform is published or verified (roadmap, 1.0.0)
 
-**Status:** open — roadmap
+```yaml
+status: open
+kind: roadmap
+```
+
 **Area:** `vscode/package.json` (`--target darwin-arm64`),
 `.github/workflows/apple-silicon-release.yml`, `vscode/scripts/copy-core.js`
 
@@ -793,8 +855,14 @@ and what 1.0.0 requires").
 
 ## 024.R5 A reopened gem class still looks closed (done, 0.1.7)
 
-**Status:** done — shipped in 0.1.7. Measured against the same real
-application that reported it: 2 diagnostics before, 0 after.
+```yaml
+status: done
+kind: roadmap
+released-in: 0.1.7
+```
+
+Measured against the same real application that reported it: 2 diagnostics before, 0 after.
+
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
 `core/lib/ovallsp/runtime_agent/agent.rb`
 
@@ -986,11 +1054,13 @@ wherever there is no Runtime Agent to ask.
 
 ## 024.R6 Reading an instance variable that is never assigned (done, 0.2.0)
 
-**Status:** done — shipped in 0.2.0, scoped to views, which is where the
-symptom the entry describes actually appears. A view is handed exactly
-what its controller action and callback chain assign, and that set was
-already computed for type propagation; everything else receives its ivars
-from wherever it likes, so nothing is reported there.
+```yaml
+status: done
+kind: roadmap
+released-in: 0.2.0
+```
+
+scoped to views, which is where the symptom the entry describes actually appears. A view is handed exactly what its controller action and callback chain assign, and that set was already computed for type propagation; everything else receives its ivars from wherever it likes, so nothing is reported there.
 
 The safety of the check is one distinction: the set is `nil` when nobody
 worked out a context and *empty* when an action genuinely assigns
@@ -1021,7 +1091,11 @@ same standard as every other check here.
 
 ## 024.R7 Index what the gems actually define, and keep it fresh (roadmap, 0.3.0)
 
-**Status:** open — roadmap
+```yaml
+status: open
+kind: roadmap
+```
+
 **Area:** `core/lib/ovallsp/runtime_agent/agent.rb`,
 `core/lib/ovallsp/cache/`, `core/lib/ovallsp/diagnostics/engine.rb`
 
@@ -1091,17 +1165,17 @@ competing design.
   query — the same background/degrade-to-static shape the Agent already
   uses.
 
-
 ---
 
 ## 024.R8 Completion does nothing until you type a dot (done, 0.2.0)
 
-**Status:** done — shipped in 0.2.0. The entry's own reading was right:
-the work was mostly ranking and bounding, not calling the existing pieces.
-The order it proposed is the order that shipped (locals, methods on self,
-workspace constants, Kernel), with two decisions it left open settled as
-it suggested — a hard cap with `isIncomplete`, and a one-character prefix
-that returns only the two sources near the cursor.
+```yaml
+status: done
+kind: roadmap
+released-in: 0.2.0
+```
+
+The entry's own reading was right: the work was mostly ranking and bounding, not calling the existing pieces. The order it proposed is the order that shipped (locals, methods on self, workspace constants, Kernel), with two decisions it left open settled as it suggested — a hard cap with `isIncomplete`, and a one-character prefix that returns only the two sources near the cursor.
 
 Two things the entry did not anticipate. The ranking has to be rendered
 into `sortText`: an editor re-sorts a completion list itself, so array
@@ -1171,9 +1245,13 @@ roadmap entry rather than folded into another release's work.
 
 ## 024.16 The capability E2E suite can skip in full while CI stays green
 
-**Status:** fixed in 0.1.13 -- `ci.yml`'s skip guard now checks both
-`spec/integration/real_rails_spec.rb` and `spec/e2e/capabilities_spec.rb`,
-by table rather than by a second copy of the check.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.13
+```
+
+`ci.yml`'s skip guard now checks both `spec/integration/real_rails_spec.rb` and `spec/e2e/capabilities_spec.rb`, by table rather than by a second copy of the check.
 
 Two things the one-line direction below did not anticipate. First, a
 guard that failed on *any* pending example would have made this
@@ -1218,16 +1296,13 @@ for widening past its own subject.
 
 ## 024.17 `vscode/src/extension.ts` is covered by no test that runs anywhere
 
-**Status:** fixed in 0.1.13 for the two decisions a user notices --
-`documentSelectorFor` and `statusPresentation` moved into
-`vscode/src/clientPresentation.ts`, which imports no `vscode`, with
-fifteen unit tests -- thirteen behavioural, plus two that assert
-`extension.ts` actually calls them (024.10's first attempt exported the
-strings but left the choice between them at the call site, so the tests
-described code the extension did not reach). `resolveStatus` was added in a second pass: the
-extraction had left the "no client" / "the client did not answer"
-decision at the call site, where a mutation reporting a failure as "no
-client" passed all 167 tests.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.13
+```
+
+for the two decisions a user notices -- `documentSelectorFor` and `statusPresentation` moved into `vscode/src/clientPresentation.ts`, which imports no `vscode`, with fifteen unit tests -- thirteen behavioural, plus two that assert `extension.ts` actually calls them (024.10's first attempt exported the strings but left the choice between them at the call site, so the tests described code the extension did not reach). `resolveStatus` was added in a second pass: the extraction had left the "no client" / "the client did not answer" decision at the call site, where a mutation reporting a failure as "no client" passed all 167 tests.
 
 Three of the extracted decisions were then found unpinned, all the same
 shape: the specs compared the render against the very table it renders
@@ -1265,14 +1340,13 @@ remaining decisions the way 024.10 extracted `clientTeardown.ts`.
 
 ## 024.15 The index's answers depend on which file was edited last
 
-**Status:** fixed in 0.1.13 by option 1 below, in the half of it that
-carries the cost. Option 1 called for both collections to be maintained
-sorted at write time; `@by_symbol`'s entry lists are, and
-`@by_simple_name` is still an unordered Set sorted per read -- but by one
-centralised reader rather than by each of eleven, which is the property
-the option was chosen for. Sorting a Set on insert would have cost every
-`replace_file` a sort of every bucket its declarations touch, against a
-read path that filters first and so sorts a handful of elements.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.13
+```
+
+by option 1 below, in the half of it that carries the cost. Option 1 called for both collections to be maintained sorted at write time; `@by_symbol`'s entry lists are, and `@by_simple_name` is still an unordered Set sorted per read -- but by one centralised reader rather than by each of eleven, which is the property the option was chosen for. Sorting a Set on insert would have cost every `replace_file` a sort of every bucket its declarations touch, against a read path that filters first and so sorts a handful of elements.
 
 Entry lists are sorted by `[uri, line, character]` in `replace_file`, and
 `ordered_symbol_ids` is the one place a query reads `@by_simple_name`, ordered
@@ -1426,7 +1500,12 @@ exactly the state in which the bug is invisible.
 
 ## 024.13 A reopened core class looks closed, in both directions (0.3.x)
 
-**Status:** open
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
 
 `closed_nominal?` calls a receiver closed when every ancestor is
