@@ -124,6 +124,16 @@ module Ovallsp
         @generated_method_facts = []
         @owner_stack = []
         @singleton_context_stack = [false]
+        # A second, deliberately separate question. `@singleton_context_stack`
+        # answers "would an unqualified `def` here declare a singleton
+        # method", which is true only inside `class << self`. This one
+        # answers "is `self` here a Class/Module object", which is also
+        # true directly in a class or module body and inside a
+        # `def self.x`. Conflating them is what made every `private` and
+        # `attr_reader` in a class body resolve against the *instance*
+        # chain, where they do not exist, and be reported as unknown
+        # methods (024.23). Top level starts `false`: `main` is an Object.
+        @self_is_module_stack = [false]
         @visibility_stack = [:public]
         @in_method_body = false
         # Task 014: a fresh local-variable scope id per class/module body,
@@ -147,6 +157,7 @@ module Ovallsp
 
       def visit_singleton_class_node(node)
         @singleton_context_stack.push(true)
+        @self_is_module_stack.push(true)
         # A `class << self` body has its own visibility section, exactly
         # as a class/module body does (see #visit_namespace, which has
         # always pushed both). Without this, a bare `private` inside the
@@ -161,6 +172,7 @@ module Ovallsp
         super
       ensure
         @singleton_context_stack.pop
+        @self_is_module_stack.pop
         @visibility_stack.pop
         @scope_stack.pop
       end
@@ -205,6 +217,9 @@ module Ovallsp
         # call inside a def in the argument-form case.
         previous_in_method_body = @in_method_body
         @in_method_body = true
+        # Inside `def self.x` self is still the class, so a `private`
+        # written there is Module's, exactly as in the body around it.
+        @self_is_module_stack.push(singleton)
         # Same frame discipline as blocks and `class << self`: a bare
         # `private` written inside a method body must not rewrite the
         # class's open section. `@in_method_body` already stopped the
@@ -216,10 +231,23 @@ module Ovallsp
         @visibility_stack.push(@visibility_stack.last)
         super
       ensure
+        @self_is_module_stack.pop
         @visibility_stack.pop
         @in_method_body = previous_in_method_body
         @scope_stack.pop
       end
+
+      # A block whose body becomes an *instance* method: `self` inside it
+      # is an instance, whatever self is where the call is written.
+      # `def self.extension` in Ruby 3.4.7's own `rdoc/markdown.rb` is the
+      # shape -- it wraps `define_method` blocks that call the class's
+      # *instance* `extension?`. Reading those bodies with the enclosing
+      # `def self.`'s own self reported `extension?` as unknown and
+      # `extension` as taking one argument too few.
+      #
+      # `define_singleton_method` is deliberately absent: its body really
+      # does run with the class as self, so it inherits correctly.
+      INSTANCE_SELF_BLOCK_CALLS = %i[define_method instance_eval instance_exec].freeze
 
       def visit_call_node(node)
         if node.receiver.nil?
@@ -228,9 +256,20 @@ module Ovallsp
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
           record_generated_methods(node) if current_owner && GENERATED_METHOD_DSLS.include?(node.name)
+          record_attribute_methods(node) if current_owner && ATTRIBUTE_DSLS.key?(node.name)
         end
         record_method_call_candidate(node)
-        super
+        # Pushed around the children, not the candidate above: the call
+        # itself is written where it is written, and only its block body
+        # gets the different self.
+        return super unless node.block && INSTANCE_SELF_BLOCK_CALLS.include?(node.name)
+
+        @self_is_module_stack.push(false)
+        begin
+          super
+        ensure
+          @self_is_module_stack.pop
+        end
       end
 
       def visit_block_node(node)
@@ -405,12 +444,14 @@ module Ovallsp
       def within_namespace(absolute_name)
         @owner_stack.push(absolute_name)
         @singleton_context_stack.push(false)
+        @self_is_module_stack.push(true)
         @visibility_stack.push(:public)
         @scope_stack.push(next_scope_id)
         yield
       ensure
         @owner_stack.pop
         @singleton_context_stack.pop
+        @self_is_module_stack.pop
         @visibility_stack.pop
         @scope_stack.pop
       end
@@ -492,6 +533,57 @@ module Ovallsp
           singleton: @singleton_context_stack.last,
           location: Index::SourceLocation.to_range(node.location, @lines)
         )
+      end
+
+      # `attr_reader :name` declares `name` as surely as `def name` does.
+      # The index recorded the call and not the declaration, so on a class
+      # whose ancestry is fully known -- the receiver the unknown-method
+      # check acts on -- every attribute reader was reported missing.
+      # Thor's `attr_accessor :options` is the instance this release had
+      # to close: 024.23's fix reads a `define_method` body as an instance
+      # and would otherwise have handed users that report where they had
+      # none.
+      #
+      # Each suffix is what the DSL actually defines: a reader takes no
+      # arguments, a writer takes exactly one, and the argument-count
+      # check reads both.
+      ATTRIBUTE_DSLS = {
+        attr_reader: [["", 0]],
+        attr_writer: [["=", 1]],
+        attr_accessor: [["", 0], ["=", 1]]
+      }.freeze
+
+      def record_attribute_methods(node)
+        return unless node.arguments
+
+        singleton = @singleton_context_stack.last
+        node.arguments.arguments.each do |argument|
+          name = attribute_name(argument)
+          # A dynamic argument (`attr_reader(*names)`) names nothing
+          # statically. Guessing here would declare a method that may not
+          # exist and silence a real report.
+          next unless name
+
+          ATTRIBUTE_DSLS.fetch(node.name).each do |suffix, arity|
+            @declarations << Index::Declaration.new(
+              symbol_id: Index::SymbolId.new(
+                kind: singleton ? :singleton_method : :instance_method,
+                owner: current_owner, name: "#{name}#{suffix}", discriminator: nil
+              ),
+              location: Index::SourceLocation.to_range(node.location, @lines),
+              visibility: singleton ? nil : @visibility_stack.last,
+              parameters: arity.zero? ? [] : [Index::Parameter.new(name: "value", kind: :required, default_source: nil)],
+              origin: :generated
+            )
+          end
+        end
+      end
+
+      def attribute_name(argument)
+        case argument
+        when Prism::SymbolNode then argument.value
+        when Prism::StringNode then argument.unescaped
+        end
       end
 
       def record_generated_methods(node)
@@ -673,7 +765,7 @@ module Ovallsp
 
         receiver, singleton =
           if node.receiver.nil?
-            [nil, @singleton_context_stack.last]
+            [nil, @self_is_module_stack.last]
           elsif (name = raw_constant_name(node.receiver))
             [name, true] # `Foo.bar` -- always a class-level call, regardless of the lexical writing context
           else

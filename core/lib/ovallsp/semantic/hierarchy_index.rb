@@ -47,6 +47,31 @@ module Ovallsp
       ].freeze
       private_constant :DEFAULT_OBJECT_CHAIN
 
+      # What a class object *is*, which is what its singleton chain ends
+      # in: `Widget.private` finds `Module#private` because `Widget` is a
+      # `Class`, `Class < Module`, and `Module < Object`. Without this
+      # tail the chain stopped at the last workspace superclass, so every
+      # `private`, `attr_reader`, `include` and `alias_method` in a class
+      # body resolved nowhere and the unknown-method check reported it
+      # (024.23) -- 49 of the 62 findings over this repository's own
+      # `core/lib`.
+      #
+      # A module's singleton side is the same list without `Class`: a
+      # module is a `Module` but not a `Class`, which is why `superclass`
+      # answers on one and not the other.
+      DEFAULT_CLASS_SINGLETON_CHAIN = [
+        AncestorEntry.new(name: "Class", kind: :class, origin: :default, location: nil),
+        AncestorEntry.new(name: "Module", kind: :class, origin: :default, location: nil),
+        *DEFAULT_OBJECT_CHAIN
+      ].freeze
+      private_constant :DEFAULT_CLASS_SINGLETON_CHAIN
+
+      DEFAULT_MODULE_SINGLETON_CHAIN = [
+        AncestorEntry.new(name: "Module", kind: :class, origin: :default, location: nil),
+        *DEFAULT_OBJECT_CHAIN
+      ].freeze
+      private_constant :DEFAULT_MODULE_SINGLETON_CHAIN
+
       # A class explicitly writing `< Object` (redundant, but legal) is
       # recognized directly rather than recursed into, since Object is a
       # Ruby built-in essentially never declared in the workspace itself
@@ -196,14 +221,31 @@ module Ovallsp
 
         superclass_fact = @superclass_by_owner[canonical]
         if superclass_fact && superclass_fact.target.nil?
+          # Unbounded parent: no tail, for the same reason the instance
+          # side omits one. Appending Class/Module here would say the
+          # chain is fully accounted for when its middle is not.
           entries << AncestorEntry.new(name: nil, kind: nil, origin: :superclass, location: nil)
         elsif superclass_fact && !ROOT_SUPERCLASS_NAMES.include?(superclass_fact.target)
+          # The parent's own singleton chain ends in the tail, so
+          # appending one here too would duplicate it.
           entries.concat(
             compute_ancestors_locked(superclass_fact.target, singleton: true, visited: visited, origin_for_self: :superclass)
           )
+        else
+          entries.concat(default_singleton_chain_for(canonical))
         end
 
         entries
+      end
+
+      # `nil` kind means the workspace never declared this name, so
+      # whether it is a class, a module or neither is not ours to assume.
+      def default_singleton_chain_for(canonical)
+        case kind_of(canonical)
+        when :class then DEFAULT_CLASS_SINGLETON_CHAIN
+        when :module then DEFAULT_MODULE_SINGLETON_CHAIN
+        else []
+        end
       end
 
       # Shared by prepend/include (their target's own *instance* side —

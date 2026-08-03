@@ -88,13 +88,20 @@ RSpec.describe Ovallsp::Semantic::HierarchyIndex do
     index_source("module Helpers\nend\n\nclass Widget\n  extend Helpers\nend\n")
 
     expect(names(index.ancestors("Widget"))).to eq(%w[::Widget Object Kernel BasicObject])
-    expect(names(index.ancestors("Widget", singleton: true))).to eq(%w[::Widget ::Helpers])
+    # The tail after `::Helpers` is what a class object *is* -- a Class,
+    # which is a Module -- and is where `private`/`attr_reader` are found
+    # (024.23). The extended module still comes first, which is this
+    # example's point.
+    expect(names(index.ancestors("Widget", singleton: true)))
+      .to eq(%w[::Widget ::Helpers Class Module Object Kernel BasicObject])
   end
 
   it "carries a singleton chain through the superclass' own singleton class" do
     index_source("class Base\n  extend Helpers\nend\n\nclass Sub < Base\nend\n\nmodule Helpers\nend\n")
 
-    expect(names(index.ancestors("Sub", singleton: true))).to eq(%w[::Sub ::Base ::Helpers])
+    # One tail, at the end of the whole chain -- not one per class in it.
+    expect(names(index.ancestors("Sub", singleton: true)))
+      .to eq(%w[::Sub ::Base ::Helpers Class Module Object Kernel BasicObject])
   end
 
   it "degrades to a partial ancestor chain instead of crashing on an unresolved superclass" do
