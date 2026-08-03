@@ -186,6 +186,15 @@ module Ovallsp
         )
         return nil unless candidates.size == 1
         return nil if candidates.first.conditional
+        # A declaration reached through the synthesised `Class`/`Module`/
+        # `Object`/`Kernel` tail is not one the workspace stated. The tail
+        # is there so class-level calls *resolve*; using it to produce
+        # arity reports is the aggressive direction, and it is exactly
+        # where a `module_function` or a `define_method` this engine does
+        # not model can shadow the method it found. Ruby's own
+        # `::JSON.load(source, proc, opts)` was reported against a reopened
+        # `Kernel#load` for that reason.
+        return nil if candidates.first.origin == :class_object
 
         declarations = candidates.first.declarations
         return nil unless declarations.size == 1

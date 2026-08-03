@@ -127,9 +127,18 @@ end
   end
 
   # A named class inside any block is its own owner, so nothing about the
-  # block reaches it.
-  it "records an attribute in a class body written inside a block" do
+  # block reaches it. The builder case is the one that distinguishes:
+  # inside `1.times do` the skip is not armed either way, so only a class
+  # written inside `Struct.new do` can tell whether entering a namespace
+  # clears the flag.
+  it "records an attribute in a class body written inside a plain block" do
     source = "1.times do\n  class Later\n    attr_reader :zed\n  end\nend\n"
+
+    expect(declared(source)).to eq(["zed"])
+  end
+
+  it "records an attribute in a class body written inside an anonymous-class block" do
+    source = "Built = Struct.new(:x) do\n  class Later\n    attr_reader :zed\n  end\nend\n"
 
     expect(declared(source)).to eq(["zed"])
   end
@@ -160,92 +169,6 @@ end
                                                                          .to_h { |d| [d.symbol_id.name, d.parameters.size] }
 
     expect(declarations).to eq("name" => 0, "name=" => 1)
-  end
-  # `module_function` makes every `def` after it a singleton method too,
-  # exactly as `private` opens a visibility section. Nothing modelled it,
-  # so `JSON.load` -- declared that way in Ruby's own `json/common.rb` --
-  # was known only as an instance method. That was invisible until the
-  # singleton chain gained its tail: the call then resolved to
-  # `Kernel#load` (1..2 arguments) instead, and a correct three-argument
-  # call was reported.
-  describe "module_function" do
-    it "declares subsequent defs as singleton methods as well" do
-      source = "module JSONish\n  module_function\n\n  def load(source, proc = nil, options = nil); end\nend\n"
-
-      expect(declared(source, kind: :singleton_method)).to eq(["load"])
-      expect(declared(source)).to eq(["load"])
-    end
-
-    it "does not reach back to a def written above it" do
-      source = "module JSONish\n  def earlier; end\n  module_function\n  def later; end\nend\n"
-
-      expect(declared(source, kind: :singleton_method)).to eq(["later"])
-    end
-
-    it "names only the methods a `module_function :sym` form lists" do
-      source = "module JSONish\n  def one; end\n  def two; end\n  module_function :one\nend\n"
-
-      expect(declared(source, kind: :singleton_method)).to eq(["one"])
-    end
-
-    # Ruby's `module_function` sets the default visibility, and `private`
-    # replaces it. `M.two` raises NoMethodError.
-    it "is closed by a later `private`" do
-      source = "module M\n  module_function\n  def one; end\n  private\n  def two; end\nend\n"
-
-      expect(declared(source, kind: :singleton_method)).to eq(["one"])
-    end
-
-    # The instance copy is private -- `C.new.helper` raises for a class
-    # that includes the module. Recording it public put it in completion.
-    it "makes the instance copy private" do
-      source = "module M\n  module_function\n  def helper; end\nend\n"
-      instance = summarize(source).declarations.find do |d|
-        d.symbol_id.kind == :instance_method && d.symbol_id.name == "helper"
-      end
-
-      expect(instance.visibility).to eq(:private)
-    end
-
-    # Ruby raises NameError for `module_function` in a class body, so
-    # there is no singleton method to record.
-    it "records nothing in a class body" do
-      source = "class K\n  module_function\n  def one; end\nend\n"
-
-      expect(declared(source, kind: :singleton_method)).to be_empty
-    end
-
-    it "does not open the section from inside a method body" do
-      source = "module M\n  def wrapper\n    module_function\n  end\n  def later; end\nend\n"
-
-      expect(declared(source, kind: :singleton_method)).to be_empty
-    end
-
-    it "does not open the section from inside a block" do
-      source = "module M\n  concerning :X do\n    module_function\n  end\n  def later; end\nend\n"
-
-      expect(declared(source, kind: :singleton_method)).to be_empty
-    end
-
-    it "does not leak out of `class << self`" do
-      source = "module M\n  class << self\n    module_function\n  end\n  def after; end\nend\n"
-
-      expect(declared(source, kind: :singleton_method)).to be_empty
-    end
-
-    # `module_function def one; end` is the third form.
-    it "names the method a `module_function def` form defines" do
-      source = "module M\n  module_function def one; end\n  def two; end\nend\n"
-
-      expect(declared(source, kind: :singleton_method)).to eq(["one"])
-    end
-
-    # The section belongs to the body it is written in.
-    it "does not leak out of a nested module" do
-      source = "module Outer\n  module Inner\n    module_function\n    def inside; end\n  end\n\n  def outside; end\nend\n"
-
-      expect(declared(source, kind: :singleton_method)).to eq(["inside"])
-    end
   end
 
 end

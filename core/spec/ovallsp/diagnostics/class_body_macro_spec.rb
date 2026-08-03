@@ -145,6 +145,37 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     expect(unknown_methods("class Derived < Base\n  def self.create\n    new\n  end\nend\n")).to be_empty
   end
 
+  def argument_counts(body)
+    engine.analyze(document: index(body), semantic_context: context, mode: :standard)
+          .select { |finding| finding.code == "argument-count" }
+          .map { |finding| finding.message[/`(.+?)`/, 1] }
+  end
+
+  # The tail exists so that class-level calls *resolve*, which stops false
+  # "unknown method" reports. Letting it also *produce* arity reports is
+  # the aggressive direction, and it is where the model is weakest: a
+  # `module_function`, a `define_method` or a `method_missing` can shadow
+  # a Kernel/Module method without this engine knowing.
+  #
+  # Real instance: Ruby's own `json/generic_object.rb` calls
+  # `::JSON.load(source, proc, opts)`. `JSON` declares that method with
+  # `module_function`, which this engine does not model, so the call
+  # resolved to a reopened `Kernel#load` through the tail and a correct
+  # three-argument call was reported.
+  it "does not judge arity against a declaration reached through the tail" do
+    index("module Kernel\n  def load(path, wrap = false); end\nend\n", uri: "file:///kernel_ext.rb")
+    index("module JSONish\nend\n", uri: "file:///jsonish.rb")
+
+    expect(argument_counts("JSONish.load(1, 2, 3)\n")).to be_empty
+  end
+
+  # The check still does its job where the workspace states the method.
+  it "still reports arity against a declaration the workspace wrote" do
+    index("class Widget\n  def self.build(a, b); end\nend\n", uri: "file:///widget.rb")
+
+    expect(argument_counts("Widget.build(1, 2, 3)\n")).to eq(["build"])
+  end
+
   it "does not report `new` on a constant receiver" do
     expect(unknown_methods("class Widget\nend\nWidget.new\n")).to be_empty
   end

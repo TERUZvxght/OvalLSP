@@ -161,6 +161,114 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.30 0.1.15's hunk sweep: three hunks that cannot be pinned, and why
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  A record of which lines no test holds, and the reasoning for leaving
+  each. Nothing here changes what the engine answers.
+```
+
+Reverse-applying each of 0.1.15's 24 `core/lib` hunks against a green
+baseline: **21 caught, 3 survived**, the tree verified byte-identical
+after every one. The survivors, and what was done about each:
+
+- **The deleted `new` special case** (`diagnostics/engine.rb`). Restoring
+  it changes no answer, because the `Class` tail now resolves `new` for
+  every class. It only ever suppressed reports, and no receiver exists
+  for which `new` *should* be reported, so there is nothing to assert.
+  Deleted rather than tested, which is what CLAUDE.md prescribes for a
+  decision that cannot be pinned. The corpus runs are the evidence: zero
+  reports introduced over the standard library or three Rails gems.
+- **`rbs_resolves?` delegating to `AncestorEntry#declaration_kind`**
+  (`diagnostics/engine.rb`). Not a behavioural decision — it is the
+  removal of a second, hand-written copy of a rule. The rule itself *is*
+  pinned: reverting `declaration_kind` at its source fails three
+  examples. The kind only differs for a `:class_object` or `:extend`
+  ancestor, and for those the reference resolver answers before this path
+  is reached, so no fixture can distinguish the call site. Left as is,
+  because deleting the delegation would restore the duplication that made
+  both copies wrong.
+- **`@anonymous_class_depth = 0` in the visitor's constructor**
+  (`parser_service.rb`). Defensive initialisation, not a decision:
+  `within_namespace` sets the same ivar on entering any class or module
+  body, and `record_attribute_methods` returns early without an owner, so
+  the constructor's value is never the one read. Kept, because an ivar
+  read with `.positive?` should not depend on another method having run
+  first.
+
+A fourth survivor was a real gap and is now closed: the fixture for
+"entering a namespace clears the anonymous-class flag" used `1.times do`,
+where the flag is never set, so it passed under both branches. It uses
+`Struct.new(:x) do class Later ... end end` now, and fails when the
+save/restore is removed.
+
+## 024.29 Two features were written for 0.1.15 and cut from it
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing shipped either way. What is open is whether these are worth
+  building at all, which is a question about a future release rather than
+  about anything a user can see today.
+```
+
+**Area:** was `core/lib/ovallsp/parser_service.rb` (`module_function`) and
+`core/lib/ovallsp/server.rb` (`setter_suffix`, the writer completion
+snippet), both removed before 0.1.15 shipped.
+
+0.1.15 exists to correct 0.1.14. These two were written during it and are
+not corrections of anything — they are new scope that rode along, and
+each shipped a defect of its own that a review round then had to repair.
+That pattern, not a wrong fix, is what made the release unstable. An
+independent analysis of the thread recommended cutting them rather than
+invoking CLAUDE.md's two-rounds rollback, on the grounds that the
+corrections themselves had survived two review rounds untouched — the
+rounds repaired only what had been *added*, never what had been
+*corrected*, which is the opposite of 024.15's shape.
+
+**`module_function` modelling.** Measured before cutting, over the 47
+standard-library files that actually call it: this release and 0.1.14
+produce **byte-identical output, 1,564 findings**, `comm` empty in both
+directions. It changed nothing on real code. What it did do was introduce
+a report neither 0.1.13 nor 0.1.14 makes:
+
+```ruby
+module Sample
+  module_function
+  def helper(a, b); [a, b]; end
+end
+Sample.helper(1, 2, 3)   # reported only with module_function modelling
+```
+
+It also leaked out of every construct it was written in — a later
+`private` did not close the section, `class << self` pushed no frame, and
+neither a method body nor a block was guarded — and recorded the instance
+copy public where Ruby makes it private.
+
+The one real report it removed, `::JSON.load(source, proc, opts)`, was
+never `module_function`'s to fix: that report comes from the *ancestry
+tail* 0.1.15 models, and it is fixed at that end instead, by declining to
+judge arity against a declaration reached through a synthesised ancestor.
+`module_function` was covering a symptom whose cause is elsewhere — which
+is the clearest evidence it was the wrong shape.
+
+**Hover and completion for writer methods.** `w.name = "y"` hovering as
+the reader, and the writer completing as `w.name=(value)`. Small, real,
+and it shipped `setter_suffix`, whose `rstrip` crossed newlines so that a
+comment ending in a period made the next line's assignment look
+receiver-qualified: go-to-definition on `LIMIT = 10` under
+`# The maximum row count.` found nothing.
+
+**Direction:** whichever release takes either up must justify it on a
+corpus first. `module_function` in particular needs a measurement showing
+it changes an answer a user sees; the one taken here says it does not.
+
 ## 024.26 A workspace `def Object.foo` is reachable from every class in Ruby and from none here
 
 **Status:** open.
@@ -174,11 +282,18 @@ macros need. It does not model `#<Class:Object>` or `#<Class:BasicObject>`
 — the singleton classes of the root classes — because an `AncestorEntry`
 names a type and has no way to say "the singleton class of that type".
 
-The consequence is narrow and one-directional: a workspace that writes
-`def Object.foo` declares something every class can call, and the check
-does not know it, so `Widget.foo` is reported. Missing rather than wrong,
-which is the safe direction, and nothing in the stdlib or the gems
-measured for 0.1.15 hits it.
+A workspace that writes `def Object.foo` declares something every class
+can call, and the check does not know it, so `Widget.foo` is reported.
+That is a **false positive**, not a missed report — for an unknown-method
+check a missing ancestor is the unsafe direction, and an earlier draft of
+this entry had that backwards.
+
+It is not a 0.1.15 regression. Measured on one fixture across three
+revisions: 0.1.13 reports it, 0.1.14 does not, 0.1.15 reports it again.
+0.1.14's silence was an accident of the same mis-kinded lookup that made
+it report `class Object; def blank?; end` — idiomatic Rails — on code
+that runs. 0.1.15 trades the accident back for the fix. Nothing in the
+standard library or the gems measured for it hits this shape.
 
 **Direction:** the entry type needs a singleton flag before this can be
 expressed at all. Worth doing with 024.13 rather than alone, since both

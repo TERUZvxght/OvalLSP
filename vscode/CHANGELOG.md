@@ -47,15 +47,13 @@ the released code and fixed with the same measurement discipline.
   hole pre-existed for `enum`, `scope` and `delegate`; 0.1.14 extended it
   to ordinary Ruby. `prepareRename`'s own comment always said generated
   symbols were refused; now they are.
-- Fixed: `JSON.load(a, b, c)` is no longer reported as taking too many
-  arguments. `module_function` was not modelled at all, so a method
-  declared under it was known only as an instance method and the call
-  resolved to `Kernel#load` instead. Both forms are modelled now, bare and
-  `module_function :name`.
-- Fixed: hovering `name` in `w.name = "y"` describes the writer, not the
-  reader. It said "takes no arguments" for a call that takes one.
-- Fixed: accepting the completion for a writer inserts `w.name = value`
-  rather than `w.name=(value)`.
+- Fixed: an argument-count report is no longer produced against a method
+  found only through the `Class`/`Module`/`Object`/`Kernel` ancestry this
+  release models. That ancestry is there so class-level calls *resolve*;
+  using it to produce reports is the aggressive direction, and it is where
+  a `module_function` or a `define_method` this engine does not model can
+  shadow the method it found. Ruby's own `::JSON.load(source, proc, opts)`
+  was reported that way.
 - Performance: completion on a constant receiver is back to where it was.
   0.1.14 grew the singleton chain from one entry to six, and each entry
   cost a full scan of the symbol table: **12.97 ms → 0.099 ms** per
@@ -78,6 +76,17 @@ findings: 0.1.13 **15,982**, 0.1.14 **3,848**, this release **3,847** —
 and **not one report is introduced** anywhere in it, against either. Over
 ActiveSupport 8.1.3, 0.1.14 **265** → **240**. Over this repository's own
 `core/lib`, 0.1.13 **60** → **4**.
+
+Two things were written during this release and then cut from it, because
+a release that exists to remove wrong reports should not add scope that
+produces them. `module_function` modelling changed nothing measurable —
+over the 47 standard-library files that actually use it, this release and
+0.1.14 produce byte-identical output — while introducing a report neither
+0.1.13 nor 0.1.14 made. Hover and completion polish for writer methods
+shipped a regression that broke go-to-definition after any comment ending
+in a period. Both are recorded in `024-deferred-review-findings.md` with
+that measurement, so whichever release takes them up has to justify them
+on a corpus rather than on plausibility.
 
 That last pair corrects the 0.1.14 entry below, which quoted "62 → 4" and
 "776 → 265": both "before" figures came from a different tree than the one
