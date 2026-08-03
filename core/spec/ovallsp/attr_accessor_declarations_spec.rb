@@ -94,14 +94,44 @@ end
     expect(declarations).to eq(["setup"])
   end
 
-  # A block opens its own receiver. `Struct.new do attr_reader :label end`
-  # declares `label` on the anonymous Struct, not on the class the block
-  # is written inside -- recording it there offered `label` in completion
-  # on the wrong object and jumped go-to-definition into the block.
-  it "records nothing inside a block" do
-    source = "class Outer\n  Point = Struct.new(:x) do\n    attr_reader :label\n  end\nend\n"
+  # Only a block that builds an *anonymous* class or module takes the
+  # attribute somewhere else: `Struct.new do attr_reader :label end`
+  # declares `label` on the new Struct, not on the class the block is
+  # written inside. Recording it on the enclosing class offered `label` in
+  # completion on an object that does not have it.
+  %w[Struct.new(:x) Class.new Data.define(:x) Module.new].each do |builder|
+    it "records nothing inside a `#{builder}` block" do
+      source = "class Outer\n  Built = #{builder} do\n    attr_reader :label\n  end\nend\n"
 
-    expect(declared(source)).to be_empty
+      expect(declared(source)).to be_empty
+    end
+  end
+
+  # Every other block runs against the enclosing class, or against
+  # whatever includes it, and attributing to the enclosing owner is the
+  # answer that resolves. 0.1.15 skipped all of them, which turned real
+  # methods into `unknown-method` reports -- `included do attr_accessor
+  # :tracked_at end` is how every ActiveSupport::Concern is written.
+  {
+    "class_eval" => "class_eval do",
+    "instance_eval" => "instance_eval do",
+    "an ActiveSupport::Concern hook" => "included do",
+    "concerning" => "concerning :Extra do",
+    "an ordinary iterator" => "[1].each do"
+  }.each do |label, opener|
+    it "records an attribute written inside #{label}" do
+      source = "class Outer\n  #{opener}\n    attr_reader :inside\n  end\nend\n"
+
+      expect(declared(source)).to eq(["inside"])
+    end
+  end
+
+  # A named class inside any block is its own owner, so nothing about the
+  # block reaches it.
+  it "records an attribute in a class body written inside a block" do
+    source = "1.times do\n  class Later\n    attr_reader :zed\n  end\nend\n"
+
+    expect(declared(source)).to eq(["zed"])
   end
 
   it "still records one written directly in the class body" do
@@ -154,6 +184,58 @@ end
 
     it "names only the methods a `module_function :sym` form lists" do
       source = "module JSONish\n  def one; end\n  def two; end\n  module_function :one\nend\n"
+
+      expect(declared(source, kind: :singleton_method)).to eq(["one"])
+    end
+
+    # Ruby's `module_function` sets the default visibility, and `private`
+    # replaces it. `M.two` raises NoMethodError.
+    it "is closed by a later `private`" do
+      source = "module M\n  module_function\n  def one; end\n  private\n  def two; end\nend\n"
+
+      expect(declared(source, kind: :singleton_method)).to eq(["one"])
+    end
+
+    # The instance copy is private -- `C.new.helper` raises for a class
+    # that includes the module. Recording it public put it in completion.
+    it "makes the instance copy private" do
+      source = "module M\n  module_function\n  def helper; end\nend\n"
+      instance = summarize(source).declarations.find do |d|
+        d.symbol_id.kind == :instance_method && d.symbol_id.name == "helper"
+      end
+
+      expect(instance.visibility).to eq(:private)
+    end
+
+    # Ruby raises NameError for `module_function` in a class body, so
+    # there is no singleton method to record.
+    it "records nothing in a class body" do
+      source = "class K\n  module_function\n  def one; end\nend\n"
+
+      expect(declared(source, kind: :singleton_method)).to be_empty
+    end
+
+    it "does not open the section from inside a method body" do
+      source = "module M\n  def wrapper\n    module_function\n  end\n  def later; end\nend\n"
+
+      expect(declared(source, kind: :singleton_method)).to be_empty
+    end
+
+    it "does not open the section from inside a block" do
+      source = "module M\n  concerning :X do\n    module_function\n  end\n  def later; end\nend\n"
+
+      expect(declared(source, kind: :singleton_method)).to be_empty
+    end
+
+    it "does not leak out of `class << self`" do
+      source = "module M\n  class << self\n    module_function\n  end\n  def after; end\nend\n"
+
+      expect(declared(source, kind: :singleton_method)).to be_empty
+    end
+
+    # `module_function def one; end` is the third form.
+    it "names the method a `module_function def` form defines" do
+      source = "module M\n  module_function def one; end\n  def two; end\nend\n"
 
       expect(declared(source, kind: :singleton_method)).to eq(["one"])
     end

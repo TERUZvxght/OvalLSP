@@ -55,6 +55,27 @@ RSpec.describe "hover on an assignment target (0.1.15)" do
     expect(text.to_s).not_to include("name=")
   end
 
+  # `rstrip` crossed newlines, so a comment sentence ending in a period --
+  # which is every other line of this repository -- made the *next* line's
+  # assignment look receiver-qualified. `LIMIT` became `LIMIT=`, and
+  # go-to-definition on it found nothing.
+  it "does not read a period at the end of the previous line as a receiver" do
+    source = "class Config\n  # The maximum row count.\n  LIMIT = 10\nend\n"
+    server.send(:handle_did_open, {
+                  textDocument: { uri: "file:///c.rb", languageId: "ruby", version: 1, text: source }
+                })
+    document = server.instance_variable_get(:@document_store).fetch(uri: "file:///c.rb")
+
+    expect(server.send(:word_at_position, document, { line: 2, character: 4 })).to eq("LIMIT")
+  end
+
+  # `=~` is a match, not an assignment.
+  it "does not read `=~` as an assignment" do
+    text = hover(source_with("w.name =~ /y/"), line: 5, character: 3)
+
+    expect(text.to_s).not_to include("name=")
+  end
+
   # A local variable assignment has no receiver, and its token is the
   # whole name. Without this, "extend the word when `=` follows" would
   # rename every local on the left of an assignment.

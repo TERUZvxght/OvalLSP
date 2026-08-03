@@ -111,6 +111,14 @@ module Ovallsp
       # Applied after the walk: `module_function :one` names a method
       # declared above it, so the declaration to copy already exists.
       def apply_module_function_names!
+        @declarations.map!.with_index do |declaration, _index|
+          next declaration unless declaration.symbol_id.kind == :instance_method
+          next declaration unless @module_function_private.include?([declaration.symbol_id.owner,
+                                                                    declaration.symbol_id.name])
+
+          declaration.with(visibility: :private)
+        end
+
         @module_function_names.uniq.each do |owner, name|
           source = @declarations.find do |declaration|
             declaration.symbol_id.kind == :instance_method &&
@@ -152,12 +160,15 @@ module Ovallsp
         # chain, where they do not exist, and be reported as unknown
         # methods (024.23). Top level starts `false`: `main` is an Object.
         @self_is_module_stack = [false]
-        # A block opens its own receiver, and which one is not knowable
-        # from the syntax: `Struct.new do`, `included do`, `class_eval do`
-        # and `concerning do` each answer differently. `attr_*` written in
-        # one therefore declares nothing we can attribute, and 0.1.14
-        # attributed all of them to the enclosing class.
-        @block_depth = 0
+        # Only a block that *builds a class* takes an attribute somewhere
+        # this file cannot name: `Struct.new do attr_reader :label end`
+        # declares `label` on the new Struct. Every other block --
+        # `included do`, `class_eval do`, `concerning do`, an ordinary
+        # iterator -- runs against the enclosing class or against whatever
+        # includes it, so the enclosing owner is the answer that resolves.
+        # 0.1.15 skipped all of them and turned real methods into
+        # `unknown-method` reports.
+        @anonymous_class_depth = 0
         @inline_attribute_visibility = nil
         # `module_function` with no arguments opens a section, exactly as
         # `private` does: every `def` after it in that body declares a
@@ -167,6 +178,15 @@ module Ovallsp
         # The `module_function :one` form names methods already declared
         # above it, so it is applied after the walk rather than during.
         @module_function_names = []
+        # Ruby raises NameError for `module_function` in a class body, so
+        # there is no singleton method to record there.
+        @module_body_stack = [false]
+        # Ruby makes the instance copy private: `C.new.helper` raises for a
+        # class that includes the module.
+        @module_function_private = []
+        # Any block at all, for `module_function`'s sake: a block's own
+        # `module_function` does not set the enclosing body's default.
+        @block_depth = 0
         @visibility_stack = [:public]
         @in_method_body = false
         # Task 014: a fresh local-variable scope id per class/module body,
@@ -191,6 +211,8 @@ module Ovallsp
       def visit_singleton_class_node(node)
         @singleton_context_stack.push(true)
         @self_is_module_stack.push(true)
+        @module_function_stack.push(false)
+        @module_body_stack.push(false)
         # A `class << self` body has its own visibility section, exactly
         # as a class/module body does (see #visit_namespace, which has
         # always pushed both). Without this, a bare `private` inside the
@@ -206,6 +228,8 @@ module Ovallsp
       ensure
         @singleton_context_stack.pop
         @self_is_module_stack.pop
+        @module_function_stack.pop
+        @module_body_stack.pop
         @visibility_stack.pop
         @scope_stack.pop
       end
@@ -289,6 +313,17 @@ module Ovallsp
       # macro that is exactly as legal as it is one line up.
       INSTANCE_SELF_BLOCK_CALLS = %i[define_method].freeze
 
+      # A block that builds an anonymous class or module: whatever it
+      # declares belongs to the new class, which this file cannot name.
+      ANONYMOUS_CLASS_BUILDERS = { "Class" => :new, "Module" => :new, "Struct" => :new, "Data" => :define }.freeze
+
+      def anonymous_class_block?(node)
+        return false unless node.block
+
+        receiver = raw_constant_name(node.receiver)
+        !receiver.nil? && ANONYMOUS_CLASS_BUILDERS[receiver.delete_prefix("::")] == node.name
+      end
+
       # `private attr_reader :x` reaches the attr recorder as a *nested*
       # call, visited while `private`'s arguments are. Its own
       # `@visibility_stack` frame still says :public, because the section
@@ -306,6 +341,15 @@ module Ovallsp
           wrapped_visibility = inline_attribute_visibility_for(node)
         end
         record_method_call_candidate(node)
+
+        if anonymous_class_block?(node)
+          @anonymous_class_depth += 1
+          begin
+            return super
+          ensure
+            @anonymous_class_depth -= 1
+          end
+        end
 
         if wrapped_visibility
           previous = @inline_attribute_visibility
@@ -501,18 +545,27 @@ module Ovallsp
 
         record_superclass(node, absolute_name) if node.is_a?(Prism::ClassNode)
 
-        within_namespace(absolute_name) { node.each_child_node { |child| child.accept(self) } }
+        within_namespace(absolute_name, module_body: node.is_a?(Prism::ModuleNode)) do
+          node.each_child_node { |child| child.accept(self) }
+        end
       end
 
-      def within_namespace(absolute_name)
+      def within_namespace(absolute_name, module_body: false)
         @owner_stack.push(absolute_name)
         @singleton_context_stack.push(false)
         @self_is_module_stack.push(true)
         @module_function_stack.push(false)
+        @module_body_stack.push(module_body)
         @visibility_stack.push(:public)
         @scope_stack.push(next_scope_id)
+        # `class Later` written inside `Struct.new do ... end` is a named
+        # owner of its own; nothing about the enclosing block reaches it.
+        enclosing_anonymous_depth = @anonymous_class_depth
+        @anonymous_class_depth = 0
         yield
       ensure
+        @anonymous_class_depth = enclosing_anonymous_depth
+        @module_body_stack.pop
         @owner_stack.pop
         @singleton_context_stack.pop
         @self_is_module_stack.pop
@@ -623,6 +676,7 @@ module Ovallsp
       # beside it. Recording only the singleton would lose the instance
       # side that `include`rs still get.
       def record_module_function_copy(symbol_id, node)
+        @module_function_private << [symbol_id.owner, symbol_id.name]
         @declarations << Index::Declaration.new(
           symbol_id: Index::SymbolId.new(kind: :singleton_method, owner: symbol_id.owner, name: symbol_id.name,
                                          discriminator: nil),
@@ -636,6 +690,10 @@ module Ovallsp
       # which names methods already declared above it.
       def record_module_function(node)
         return unless node.name == :module_function
+        # Ruby raises NameError in a class body; and neither a method body
+        # nor a block sets the *enclosing* body's default visibility.
+        return unless @module_body_stack.last
+        return if @in_method_body || @anonymous_class_depth.positive? || @block_depth.positive?
 
         if node.arguments.nil?
           @module_function_stack[-1] = true
@@ -643,7 +701,10 @@ module Ovallsp
         end
 
         node.arguments.arguments.each do |argument|
-          name = attribute_name(argument)
+          # `module_function def one; end` -- the def is recorded by
+          # `visit_def_node` moments later, so name it the same way the
+          # `module_function :one` form does.
+          name = argument.is_a?(Prism::DefNode) ? argument.name.to_s : attribute_name(argument)
           @module_function_names << [current_owner, name] if name
         end
       end
@@ -656,7 +717,7 @@ module Ovallsp
         # NoMethodError for, and one inside a block put the wrong owner on
         # a real method -- offering it in completion on an object that
         # does not have it.
-        return if @in_method_body || @block_depth.positive?
+        return if @in_method_body || @anonymous_class_depth.positive?
 
         singleton = @singleton_context_stack.last
         # `private attr_reader :x` is one call taking another as its
@@ -945,7 +1006,12 @@ module Ovallsp
         when :public then @visibility_stack[-1] = :public
         when :private then @visibility_stack[-1] = :private
         when :protected then @visibility_stack[-1] = :protected
+        else return
         end
+        # `module_function` and `private` both set the body's default
+        # visibility, so the later one wins: after `private`, a `def` is
+        # an ordinary private instance method and `M.two` raises.
+        @module_function_stack[-1] = false
       end
 
       VISIBILITY_MODIFIERS = { public: :public, private: :private, protected: :protected }.freeze

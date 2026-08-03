@@ -1975,11 +1975,17 @@ module Ovallsp
     # variable assignment whose name really is `count`; and a single `=`,
     # because `w.name == 1` is a comparison against the reader.
     def setter_suffix(text, left, right)
-      return "" unless text[0...left].rstrip.end_with?(".")
+      # The character immediately before the word, not the last
+      # non-whitespace one anywhere above it: `rstrip` crosses newlines, so
+      # a comment ending in a period made the next line's assignment look
+      # receiver-qualified and `LIMIT = 10` was read as `LIMIT=`.
+      # `receiver_type_before_dot` has always required the same adjacency.
+      return "" unless left.positive? && text[left - 1] == "."
 
+      # A single `=`, and not the head of an operator: `==` and `=~` and
+      # `=>` are all reads of the getter.
       rest = text[right..].to_s
-      trailing = rest[/\A[^\S\n]*=(=?)/, 1]
-      trailing == "" ? "=" : ""
+      rest.match?(/\A[^\S\n]*=[^=~>]/) || rest.match?(/\A[^\S\n]*=\z/) ? "=" : ""
     end
 
     def word_prefix_at_position(document, position)
