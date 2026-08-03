@@ -71,12 +71,12 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown route helper | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: wrong number of arguments | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Diagnostics: reading an `@ivar` that is never assigned | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics: reading an `@ivar` that is never assigned | ✅ | ⚠️ | — |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
 | Find references, rename, workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: wrong argument *type* | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics across the whole project, not just open files | ⚠️ [^ws] | ⚠️ | ⚠️ 1.0.0 |
-| Documentation (RDoc/YARD) in hover and completion | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Documentation (RDoc/YARD) in hover and completion [^doc] | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Inlay hints (inferred types, parameter names) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Code actions / quick fixes for each diagnostic | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
@@ -93,6 +93,14 @@ verified per platform, is what 1.0.0 requires (024.R4).
     written for one — a never-opened probe file in the real Rails fixture
     — produced no diagnostic in 45 seconds. Recorded as 024.14, open.
 
+[^doc]: Only where a receiver was written. In hover, that means
+    `widget.charge`; hovering the `def` itself, a call on implicit self,
+    or anything inside an ERB template shows the type without the
+    documentation. In completion it means the list a `.` produces —
+    the bare-prefix list this release added carries no documentation,
+    because only the receiver path attaches what `completionItem/resolve`
+    needs to find the comment.
+
 Rows carrying a version are not built anywhere yet; the version is the
 release they are planned for, ordered by what a user notices soonest.
 Each names a **minor** release exactly, never a `0.2.x`-style range,
@@ -102,13 +110,14 @@ version ship together in that release, the way 0.1.6 shipped five.
 
 Three of the rows above were measured against Pylance, the closest
 well-known reference point for a language server in a dynamically typed
-language. 0.2.0 ships two of them outright and the third with the
-qualification the matrix marks: project-wide diagnostics (a mistake
-in a file you are not looking at used to be invisible), documentation in
-hover (hover said what a thing is and never what it is for), and
+language. 0.2.0 ships two of them outright — documentation in
+hover (hover said what a thing is and never what it is for) and
 semantic highlighting (Ruby's `foo` is ambiguous between a local
 variable and a method call — the engine already knew which, the editor
-did not). The rows that still carry a version are measured the same way.
+did not) — and the third, project-wide diagnostics (a mistake in a file
+you are not looking at used to be invisible), with the qualification the
+matrix marks. The rows that still carry a version are measured the same
+way.
 Rationale for each, and for the
 Pylance features deliberately *not* planned, is in
 [`docs/design/tasks/024-deferred-review-findings.md`](docs/design/tasks/024-deferred-review-findings.md)
@@ -144,10 +153,18 @@ variable is reported by the same check, under the same limitation. An
 unassigned `@ivar` is genuinely different — Ruby returns `nil` rather
 than raising — and has its own row.
 
-A dash means the capability is defined by Rails data that only the
-Runtime Agent can supply. In an untrusted workspace the Agent
-deliberately does not start, and outside a Rails app there is nothing for
-it to report — so these are absent by design, not broken.
+A dash means the capability cannot apply in that environment. Usually
+that is because it is defined by Rails data only the Runtime Agent can
+supply: in an untrusted workspace the Agent deliberately does not start,
+and outside a Rails app there is nothing for it to report. The two
+`@ivar` rows are dashed for a different reason — they are scoped to ERB
+views reached by Rails' controller/view convention, which a plain Ruby
+project does not have. Either way, absent by design, not broken.
+
+One dashed row is worse than absent rather than absent: with no routes
+loaded, every `*_path`/`*_url` call is reported as a missing route rather
+than left alone
+([024.24](docs/KNOWN_LIMITATIONS.md#reports-that-are-wrong-today)).
 
 The ⚠️ column for plain Ruby is not a guess that it fails. Most of it
 almost certainly works today. It carries 1.0.0 because guaranteeing it —
@@ -164,8 +181,11 @@ relied on stopped working. The full statement is in
 
 Each ✅ corresponds to a row of [`docs/EXTENSION_CAPABILITIES.md`](docs/EXTENSION_CAPABILITIES.md),
 which describes what the user does and what must happen, and is verified
-by `core/spec/e2e/capabilities_spec.rb` plus
-`vscode/scripts/verify-installed-extension.sh`.
+by `core/spec/e2e/capabilities_spec.rb`. That suite runs in CI on Linux
+against the Core's sources; the rows describe darwin-arm64 with the
+bundled Core, and no workflow runs them there.
+`vscode/scripts/verify-installed-extension.sh` checks the installed
+extension end to end but is run by hand — no workflow invokes it.
 
 ## Status
 

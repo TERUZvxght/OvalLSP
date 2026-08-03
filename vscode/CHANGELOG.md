@@ -8,16 +8,34 @@ the disproved approaches are kept below it under **Details**.
 
 ## 0.2.0 — Completion from the first keystroke, and diagnostics beyond the open file
 
-- Added: typing `A` offers candidates. Completion needed a `.` first, so
+- Added: typing `Ar` offers candidates. Completion needed a `.` first, so
   workspace classes, the locals in scope and the methods callable right
-  there offered nothing until the whole name was written.
+  there offered nothing until the whole name was written. Two characters,
+  not one: at a single character the locals and methods on self are
+  offered but workspace classes and Kernel are not, because at that
+  length they match almost everything.
 - Added: mistakes in files you have not opened are reported. (Verified
   in-process; see 024.14 for the end-to-end gap still open against a real
   Rails app.)
 - Added: passing an argument of the wrong type is reported. Only the
   *number* of arguments was checked before.
-- Added: reading an `@ivar` that is never assigned is reported.
-- Added: hover and completion show the RDoc/YARD documentation.
+- Added: reading an `@ivar` that is never assigned is reported. In an
+  application `rails new` produces this stays silent, because the
+  generated `ApplicationController` calls `allow_browser` and any
+  class-body call the analysis does not model silences the check for
+  every view beneath it (024.22).
+- Added: hover and completion show the RDoc/YARD documentation, where a
+  receiver was written — `widget.charge` and the list a `.` produces.
+  Hovering the `def` itself, a receiverless call, or anything in an ERB
+  template shows the type without the comment, and the bare-prefix
+  completion added above carries no documentation.
+- Changed: hovering inside a block whose receiver is not a container
+  (`Array`, an Active Record `Relation`, a `CollectionProxy`) now answers
+  nothing, where it used to answer with the enclosing call's type. That
+  answer was frequently wrong — a string literal inside `opts.on("-x") do`
+  read as an `OptionParser` — and 0.2.0's new checks would have published
+  it as a diagnostic. Reading the block's body is the right answer and is
+  blocked on an offset rule fixed separately (024.20).
 - Added: semantic highlighting, in `.rb` and in an ERB template's Ruby
   regions.
 

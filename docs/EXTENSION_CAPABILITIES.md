@@ -28,7 +28,8 @@ Every row below is a promise about one environment, and only that one:
   present), opened as a **trusted** workspace, on **darwin-arm64**, with
   the extension's own bundled Core.
 
-That is what the E2E suite runs against, so it is what is verified. A
+That is what the rows describe. It is not, today, where CI runs them --
+see "How these are verified" below, which states exactly what runs where. A
 plain Ruby project is explicitly *not* covered by these rows yet: much of
 the engine works there, but nothing here has been specified or verified
 for it, and half-supporting it would make both stories worse. Giving the
@@ -37,7 +38,8 @@ experience is roadmap item 024.R1, for 1.0.0.
 
 Untrusted workspaces stay as described at the end of this document: the
 Runtime Agent does not start, and every Rails-derived capability degrades
-to its static-only answer by design.
+to its static-only answer by design — with one exception, which is a
+defect rather than a degradation and is named there.
 
 ## How these are verified
 
@@ -56,6 +58,19 @@ The second layer exists because the first cannot see the failure that
 looks most like "the extension does nothing": an extension present on
 disk but not registered with VS Code, which never loads and never logs.
 This project has been in that state.
+
+**What actually runs where, as of 0.2.0.** Layer 1 runs in CI on
+`ubuntu-latest`, against `core/bin/ovallsp` — the sources — because no
+workflow sets `OVALLSP_E2E_CORE_BIN`. Layer 2 is run by hand; no workflow
+invokes it. The macOS release workflow runs `scripts/vsix_semantic_smoke.rb`
+against the built VSIX, which is a narrower check than either layer. So
+the rows below are verified continuously on Linux against the sources,
+and on darwin-arm64 against the packaged Core only by the smoke check and
+by hand. Closing it needs no new infrastructure: `apple-silicon-release.yml`
+already runs on GitHub's own `macos-14` Apple Silicon runners, so the gap
+is layer 1 against the packaged Core in that job, which is what
+`OVALLSP_E2E_CORE_BIN` above is for. Doing it per published target is
+024.R4.
 
 `core/spec/e2e/capability_coverage_spec.rb` keeps this document and the
 suite in step: every row must have an example, every example a row.
@@ -91,7 +106,7 @@ suite in step: every row must have an example, every example a row.
 | H4 | Hovers a literal (`"s"`, `1`, `[1]`) | `String`, `Integer`, `Array[Integer]` | PASS |
 | H5 | Hovers a method call | its parameter list (`documented(first, second)`) | PASS |
 | H6 | Hovers an expression nested in a keyword argument, array, hash, `case`, `while` or `return` | that expression's own type, not the enclosing structure's | PASS |
-| H7 | Hovers a method declared with an RDoc/YARD comment above it | the comment appears in the hover, below the type | PASS |
+| H7 | Hovers a *call written with a receiver* to a method declared with an RDoc/YARD comment above it | the comment appears in the hover, below the type | PASS |
 
 ## Completion: the single most-used feature
 
@@ -109,7 +124,7 @@ suite in step: every row must have an example, every example a row.
 | C10 | Accepts a completion for a method that takes arguments of unknown shape | `where($1)` — parentheses opened, cursor inside | PASS |
 | C11 | Types `post.` inside an ERB template | the model's members, resolved from the template's Ruby regions rather than its HTML | PASS |
 | C12 | Types `Art` with no receiver in front of it | workspace classes, the locals in scope, and the methods callable at that position | PASS |
-| C13 | Highlights a completion candidate declared with an RDoc/YARD comment | the comment appears as the item's documentation | PASS |
+| C13 | Highlights a completion candidate declared with an RDoc/YARD comment, *in the list a receiver produced* | the comment appears as the item's documentation | PASS |
 
 C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
 a bare constant inferred as `Unknown`, so nothing downstream ever saw a
@@ -206,5 +221,9 @@ settle. Everything it declines is listed under the non-goals below.
   use, in `.rb` files and in an ERB template's Ruby regions alike.
 - Anything about a Ruby file outside a workspace folder.
 - Anything while the workspace is untrusted: the Runtime Agent does not
-  start, so every Rails-derived capability (C3, C4, C5, D2, G3, G4)
-  degrades to its static-only answer by design.
+  start, so every Rails-derived capability (H2, C3, C4, C5, C7, C11, D2,
+  G3, G4, G12, S3) degrades to its static-only answer by design — with one
+  exception that is a defect rather than a degradation: G3's check
+  reports *every* `*_path`/`*_url` call as a missing route, because an
+  empty route table answers "no such route" rather than "I do not know"
+  (024.24).

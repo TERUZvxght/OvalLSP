@@ -16,6 +16,12 @@ triaged as such by the reviewer that raised it.
 
 Status legend: **open** — not started. **fixed** / **done** — resolved.
 
+An open, non-roadmap entry should also be cited by number in
+`docs/KNOWN_LIMITATIONS.md` **and** `.ja.md`, so a finding recorded here
+reaches the people it affects. Nothing checks this today; an attempt to
+check it mechanically is recorded as 024.25, along with why the shape it
+took was wrong.
+
 A resolved entry is deleted once nothing in the tree cites it. It is
 **not** deleted while source or spec comments still name it by number:
 those comments say "this is the way it is because of 024.N", and the
@@ -161,6 +167,208 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.25 A Markdown-parsing spec is the wrong shape for "these two documents must agree"
+
+**Status:** open, and **rolled back** rather than fixed. This entry is the
+deliverable; there is no code change to point at.
+
+**Area:** was `core/spec/meta/known_limitations_parity_spec.rb` and
+`core/spec/meta/readme_parity_spec.rb`, both deleted.
+
+### What was being solved
+
+A review found that `docs/KNOWN_LIMITATIONS.md` did not mention 024.13,
+024.19 or 024.20, while `025-0.2.0-review-loop-handover.md` claimed every
+open entry was carried there. The prose promise had gone stale, so the
+obvious move was `docs/DOCUMENTATION_MAP.md`'s own principle: where a
+fact is restated in several places, have a machine compare the copies.
+
+### Why the shape was wrong
+
+The two specs had to *parse Markdown with regexes* to find out what the
+documents said — headings, status lines, an opt-out marker, table rows,
+footnote definitions. Every review round then found another input shape
+the parser mishandled, and each fix was one more special case:
+
+- **Round 2** found eight decisions in the first guard that no example
+  pinned, because the fixtures used `**Status:** Open`, which reads as
+  open under *both* branches of the case-sensitivity decision. Rewriting
+  them onto the resolved side (`Fixed`, `DONE`) fixed that.
+- **Round 3** found ten unpinned decisions in the *second* guard, written
+  in round 2 — including `count("|") == 5`, whose mutation makes the row
+  selector return zero rows for both files and leaves every matrix
+  assertion vacuously green. It also found two soundness holes in the
+  first: a heading with no title (`## 024.25`) is not recognised, so an
+  entry can be added and silently skipped, and the documented "and why"
+  requirement for the opt-out was never enforced at all.
+
+Three documents had meanwhile been edited to *claim* the guard enforced
+things it did not. That is worse than no guard: a maintainer reading
+`DOCUMENTATION_MAP.md` would believe an unchecked rule was checked.
+
+The pattern is 024.15's, one layer up. There, each round bolted a sort
+onto one more *reader* of an unordered collection. Here, each round
+bolted a fixture onto one more *input shape* of a parser that cannot
+enumerate its own inputs, because Markdown prose has no schema. A guard
+whose correctness depends on a regex surviving every future edit to the
+document it reads is a guard that needs the next round to repair it.
+
+### The direction that was actually needed
+
+Two candidates, neither attempted here:
+
+1. **Give the data a schema instead of parsing prose.** If each deferred
+   finding carried machine-readable front matter (number, status,
+   user-visible yes/no), a check becomes a lookup and has no parser to
+   get wrong. The cost is a format change to a document people write by
+   hand, which is a decision about how this project keeps notes — not
+   something to slip into a documentation fix.
+2. **Accept that this pair is checked by a person, and make the person's
+   job small.** `DOCUMENTATION_MAP.md` already exists for exactly this,
+   and its release checklist is the place to name the pairing. The map's
+   own preamble says "a machine check *should* compare the copies" — it
+   does not say every pair can be compared by machine, and this pair is
+   evidence that some cannot be, cheaply.
+
+The EN/JA README divergence found in round 2 is real and remains
+unguarded for the same reason. Prefer 1 if this is taken up; it is the
+only one of the two that would also have caught that.
+
+### What was kept
+
+Everything the rounds established about the *product* stayed: 024.21
+through 024.24, the corrected measurements, and the user-facing text in
+both languages. Those were verified against the source and against corpus
+runs, and no round disputed them. Only the enforcement apparatus and the
+claims about it were rolled back.
+
+## 024.24 Every `*_path`/`*_url` call is a missing route when no routes are loaded
+
+**Status:** open. Pre-existing — reproduced identically on `main` (0.1.13).
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+(`unknown_route_helper_findings`)
+
+The check gates on `context.route_registry` being non-nil, and `Server`
+always constructs one (`server.rb:55`, `:90`, `:809`). Without a Runtime
+Agent the registry is *empty* rather than absent, and an empty registry
+answers "no such route" for every helper name. So any receiverless call
+matching `/_(path|url)\z/` is reported.
+
+Measured with `scripts/corpus_diagnostics.rb`: **48 reports across Ruby
+3.4.7's stdlib and 12 more in prism 1.9.0**, every one of them a false
+positive on code that has nothing to do with Rails — `original_path` and
+`dsl_path` are ordinary private methods in bundler.
+
+Who sees it: a user who opens a Rails app and declines Workspace Trust
+(`vscode/package.json` declares `untrustedWorkspaces: "limited"` and
+`extension.ts:209` starts the Core with `workspaceTrusted: false` rather
+than refusing), and anyone with a non-Rails project containing a method
+whose name ends that way.
+
+Two documents assert the opposite today and have been corrected:
+README's legend said `—` means "absent by design, not broken", and
+`EXTENSION_CAPABILITIES.md` said an untrusted workspace "degrades to its
+static-only answer by design".
+
+**Direction:** an empty registry is not evidence of a missing route. The
+check needs to distinguish "routes are loaded and this is not among them"
+from "no routes are loaded", and stay silent in the second case — the
+same shape as the unknown-method check's refusal to guess without an
+Agent. A registry that knows whether it has ever been populated is the
+smallest form of it.
+
+## 024.23 The singleton chain does not model `Class`/`Module`, so class-body macros are unknown methods
+
+**Status:** open. Pre-existing — reproduced identically on `main` (0.1.13).
+
+**Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb` (the
+`singleton: true` ancestry), `core/lib/ovallsp/diagnostics/engine.rb`
+
+`HierarchyIndex`'s singleton chain models only `Object`/`Kernel`/
+`BasicObject` on the instance side, so `Module`'s own instance methods —
+`private`, `attr_reader`, `attr_accessor`, `private_constant`,
+`alias_method`, `include` — resolve nowhere when called in a class body
+against a closed workspace class. The engine already knows this: its
+comment at `engine.rb:100-108` says so and special-cases `new` alone.
+
+Measured with `scripts/corpus_diagnostics.rb` over this repository's own
+`core/lib`: **49 of the 62 `unknown-method` findings are this** — 34
+`private`, 10 `private_constant`, 5 `attr_reader`. Over
+`activesupport-8.1.3/lib`: 776 findings in total, of which about 211 are
+this shape — `private` (72), `alias_method` (56), `attr_reader` (40),
+`include` (26).
+
+This is the largest single source of wrong reports the engine currently
+produces, and it fires on the most ordinary Ruby there is. It is not the
+only source: `core/lib`'s remaining 13 are three instances of 024.19's
+simple-name fallback (`RBS::Environment#resolve_type_names`), four calls
+to readers `attr_reader` itself generated, and a handful of receiverless
+calls inside `def self.` and `class << self` bodies — which is the same
+missing singleton modelling seen from the other side.
+
+**Direction:** give the singleton chain its real tail — `Class`,
+`Module`, `Object`, `Kernel`, `BasicObject` — so RBS's `Module#private`
+resolves like any other signature. Special-casing `new` is the same
+problem solved once by name; there are dozens more names and the list is
+not ours to keep. Note this widens what completion offers on a constant
+receiver too, which is correct but is a visible change and wants its own
+corpus comparison.
+
+## 024.22 The unassigned-`@ivar` check is silent in an application `rails new` produces
+
+**Status:** open.
+
+**Area:** `core/lib/ovallsp/server.rb` (`MODELLED_CLASS_BODY_CALLS`,
+`class_body_is_accounted_for?`)
+
+The check requires every class body in the controller chain to call
+nothing beyond `private`/`protected`/`public`/`before_action`/
+`skip_before_action`. Railties 7.2, 8.0 and 8.1 all generate an
+`ApplicationController` whose body calls `allow_browser versions:
+:modern`. That is unmodelled, the rule applies to the whole chain, and so
+the check is silenced for **every view in a default Rails application**.
+
+The G16 capability row passes because
+`core/spec/fixtures/rails_real/app/controllers/application_controller.rb`
+is a hand-written empty class — a shape `rails new` does not produce. The
+row is honest about what it exercises; what it exercises is not what a
+user has.
+
+`KNOWN_LIMITATIONS.md` stated the rule abstractly ("`ApplicationController`'s
+own body decides this for every view beneath it") without saying that the
+default application trips it. That has been corrected.
+
+**Direction:** not another name in the list — `allow_browser` today,
+something else next Railties. Two shapes are defensible: treat a
+class-body call that assigns no ivar and is not a callback as irrelevant
+rather than disqualifying (which needs 024.R7's gem index to know what a
+macro installs), or narrow the disqualification to the chain's *workspace*
+classes and treat gem superclasses as opaque-but-harmless. Until then the
+E2E fixture should carry the generated `ApplicationController`, so the
+row measures the real shape and fails honestly.
+
+## 024.21 A qualified constant is coloured half one way, half the other
+
+**Status:** open. Pre-existing for `Foo::Bar` reads; 0.2.0 is where
+semantic tokens became a user-visible capability (T1).
+
+**Area:** `core/lib/ovallsp/semantic_tokens.rb` (`Collector`)
+
+`Collector` overrides `visit_constant_read_node` but not
+`visit_constant_path_node`, so in `Ovallsp::Server` only `Ovallsp`
+receives a token and `Server` receives none. A semantic token overrides
+the editor's grammar colour, so the two halves of every namespaced
+constant render differently — the first half semantic, the second half
+whatever TextMate says.
+
+The same module is also `namespace` where it is declared and `class`
+where it is read, which is a second inconsistency in the same feature.
+
+**Direction:** visit the path node and emit a token per segment. The
+kinds want deciding together with the declaration case rather than
+patched one at a time.
+
 ## 024.20 `contains?` treats an exclusive end offset as inclusive
 
 **Status:** open, and it blocks a correct answer 0.2.0 had to settle for
@@ -217,9 +425,17 @@ the one that answers with whatever class shares the last segment. The
 unknown-method check has `closed_nominal?` to stop exactly there; the
 argument-type check has no equivalent, so it can resolve
 `::Vendor::Gadgets::Widget` to an unrelated `Widget` and type-check
-against that class's signature. The engine then reports, in one pass,
-that it cannot resolve the constant *and* that an argument to it has the
-wrong type.
+against that class's signature.
+
+There is no second report to notice it by, and an earlier version of this
+entry had that backwards. `unresolved_constant_findings` skips a
+candidate the index resolves (`engine.rb:579`) — and the resolution that
+makes the argument check misfire is the same one — so precisely when the
+fallback fires, the full constant is *not* reported unresolvable. Only
+its unresolvable prefixes are. Verified against a two-file corpus:
+`::Vendor::Gadgets::Widget.make(1)` with a workspace `class Widget`
+reports `::Vendor::Gadgets` and `::Vendor`, never
+`::Vendor::Gadgets::Widget`.
 
 Reported instance: `prism-1.9.0/lib/prism/translation/parser.rb:320`,
 `::Parser::Source::Comment.new(build_range(...))` reported as "`new`

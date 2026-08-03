@@ -124,6 +124,86 @@ in `development` and a `group :test` gem is simply not there; and a gem
 class reopened without mixing anything in, whose ancestry carries no
 evidence either way. 024.R5 lists each case.
 
+A workspace that reopens a *core* class has the same problem one level
+out, recorded as 024.13. `lib/core_ext/array.rb` is idiomatic in Rails,
+and reopening `Array` makes its whole ancestry look accounted for —
+`Array, Object, Kernel, BasicObject`, every one of them known — so the
+unknown-method check treats the receiver as closed even though gems keep
+adding to it. A connected Runtime Agent settles it by reporting the real
+ancestry; without one — an untrusted workspace, a plain Ruby project —
+there is nothing to ask.
+
+What this reaches is narrower than it sounds, and worth stating exactly,
+because the call a user would try first is the one case that does *not*
+reproduce it. A receiver the engine infers as a container — `[1, 2, 3]`,
+or a local assigned from one — is outside the unknown-method check
+entirely, so `[1, 2, 3].second` and `a = [1, 2, 3]; a.second` are not
+reported. What is reported is a call whose receiver is the plain class:
+a receiverless call inside the reopening itself.
+
+```ruby
+class Array
+  def to_sentence_ish
+    second        # reported: "Array has no method named `second`"
+  end
+end
+```
+
+**Nothing inside a block gets a type** unless the block's receiver is one
+the engine models as a container — an `Array`, an Active Record
+`Relation`, a `CollectionProxy`, and what `map`, `select`, `find`, `each`
+or `reduce` yields from one. A `Hash` is *not* among them, so nothing
+inside `hash.each do |k, v|` is typed, and neither is anything inside a
+block on a receiver of your own classes. Hover answers nothing there
+rather than guessing, and every diagnostic declines. **0.2.0 changed this
+and you may notice it**: through 0.1.13 such a position answered with the
+*enclosing call's* type, so hover said something — frequently the wrong
+thing. It now says nothing. That is a deliberate trade, because the
+alternatives were measured rather than assumed and both were worse: answering with the *enclosing call's* type reported a string
+literal inside `opts.on("-x") do` as an `OptionParser`, and reading the
+block's body turned a latent offset mis-resolution into 230
+unknown-method reports across Ruby's own standard library. Unknown is the
+only one of the three that no check acts on. The offset rule those two
+depend on is being fixed on its own (024.20, still open), after which
+the body can be read.
+
+## Reports that are wrong today
+
+The engine's standing policy is that a wrong report is worse than a
+missed one. These are the places it currently says something untrue —
+the first two as diagnostics, the third as a colour. Each is recorded,
+none is fixed in 0.2.0, and each is visible on ordinary code, so they are
+listed here rather than left for you to find.
+
+- **Class-body macros are reported as unknown methods** (024.23).
+  `private`, `attr_reader`, `attr_accessor`, `private_constant`,
+  `alias_method` and `include` are `Module`'s methods, and the singleton
+  chain does not model `Module`. On a workspace class whose ancestry is
+  otherwise fully known, each one is reported. Measured over this
+  repository's own `core/lib`: **49 of the 62** unknown-method reports
+  are this shape (`private` 34, `private_constant` 10, `attr_reader` 5).
+  Over ActiveSupport 8.1.3, of 776 unknown-method reports about 211 are
+  — `private` (72), `alias_method` (56), `attr_reader` (40), `include`
+  (26). This is the largest single source of wrong reports the engine
+  produces, though not the only one: the remainder of both counts is a
+  mix of readers that `attr_reader` itself generated, receiverless calls
+  inside `def self.` bodies — the same missing modelling seen from the
+  other side — and the argument-type fallback described further down
+  (024.19).
+- **Every `*_path`/`*_url` call is reported as a missing route when no
+  routes are loaded** (024.24) — which is the case in an untrusted
+  workspace, and in any project that is not Rails. An empty route table
+  answers "no such route" rather than "I do not know". Measured: 48
+  reports across Ruby 3.4.7's standard library and 12 in prism 1.9.0,
+  every one false; `original_path` and `dsl_path` are ordinary private
+  methods in bundler. If you declined Workspace Trust on a Rails project,
+  this is why every route helper is underlined.
+- **Semantic highlighting colours only the first segment of a qualified
+  constant** (024.21). In `Ovallsp::Server`, `Ovallsp` gets a semantic
+  colour and `Server` keeps the editor's grammar colour, so the two
+  halves of one name do not match. The same module is also coloured as a
+  namespace where it is declared and as a class where it is read.
+
 ## What 0.2.0's new checks deliberately do not cover
 
 Both diagnostics 0.2.0 adds are held to "a wrong report is worse than a
@@ -136,6 +216,17 @@ missed one", so each is narrow on purpose. What that costs a user:
   check cannot judge is left alone rather than guessed at, so a genuine
   mismatch in a union, an interface, a generic, or a method with several
   overloads is not reported.
+
+  One shape is wrong rather than merely silent, recorded as 024.19. A
+  constant the workspace does not declare — `::Vendor::Gadgets::Widget` —
+  reaches the index's last-segment fallback, which answers with whatever
+  class shares that final name. The argument check then judges against
+  *that* class's signature and can report a mismatch against a class the
+  receiver is not. There is no accompanying signal to spot it by: the
+  constant check skips a name the same fallback resolves, so precisely
+  when this misfires, the constant is *not* also reported unresolvable.
+  What gives it away is the message naming a type from somewhere the
+  receiver's own namespace has nothing to do with.
 - **Reading an `@ivar` nothing assigns** is reported in ERB views only,
   and only when the whole set of assignments can be enumerated. That is a
   high bar, and any of these silences the check for a view entirely: the
@@ -154,6 +245,15 @@ missed one", so each is narrow on purpose. What that costs a user:
   than one file** (each ancestor resolves to one file, so a second one
   reopening the class is never read). An ivar assigned by a sibling action also silences
   it, deliberately.
+
+  **In an application `rails new` produces, this check never fires**
+  (024.22). Railties 7.2, 8.0 and 8.1 all generate an
+  `ApplicationController` whose body calls `allow_browser versions:
+  :modern`, that call is not one of the five modelled forms, and the rule
+  applies to the whole chain — so every view in a default Rails
+  application is silenced. The G16 capability row passes against a
+  hand-written empty `ApplicationController`, which is a shape `rails new`
+  does not produce.
 
   What that leaves reported: a controller written in plain Ruby, whose
   view renders no partial. Two shapes are still wrong rather than merely
