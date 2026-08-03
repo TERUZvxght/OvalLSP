@@ -14,11 +14,11 @@ require "fileutils"
 # class, the receiver this check exists for -- every one of those calls
 # resolved nowhere and was reported.
 #
-# Measured before the fix, with `scripts/corpus_diagnostics.rb`: 49 of
-# the 62 `unknown-method` findings over this repository's own `core/lib`
-# were this, and 209 of 776 over ActiveSupport 8.1.3. It was the largest
-# single source of wrong reports the engine produced, on the most
-# ordinary Ruby there is (024.23).
+# Measured before the fix, with `scripts/corpus_diagnostics.rb`, against
+# 0.1.13: 49 of the 60 `unknown-method` findings over this repository's
+# own `core/lib` were this, out of 785 over ActiveSupport 8.1.3. It was
+# the largest single source of wrong reports the engine produced, on the
+# most ordinary Ruby there is (024.23).
 #
 # The engine had one name of this list special-cased -- `new`, whose
 # comment names Class/Module as the unmodelled chain. Special-casing by
@@ -314,6 +314,28 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
         end
 
         def render(name) = name.to_s
+      end
+    RUBY
+
+    expect(unknown_methods(source)).to be_empty
+  end
+
+  # Receiverless `instance_eval` takes the *enclosing* self, whatever it
+  # is -- the class in a class body, the instance inside an instance
+  # method. Answering "the class" for both reported every instance method
+  # such a block calls. `P.new.use` returns "instance-side" in Ruby.
+  it "reads a receiverless instance_eval inside a method as an instance" do
+    source = <<~'RUBY'
+      class Foo
+        def use
+          instance_eval { helper }
+        end
+
+        def use2
+          instance_exec { helper }
+        end
+
+        def helper = "instance-side"
       end
     RUBY
 

@@ -161,6 +161,54 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.34 `attr_*` inside a `def` inside `class << self` is kinded singleton
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`record_attribute_methods`)
+
+`singleton = @singleton_context_stack.last` asks "would an unqualified
+`def` here declare a singleton method". Inside a `def` nested in
+`class << self` that is still true, but the `attr_accessor` runs when the
+method is *called*, with the class object as self — so Ruby defines
+**instance** methods:
+
+```ruby
+class S
+  class << self
+    def build
+      attr_accessor :attr_x     # Ruby defines S#attr_x, not S.attr_x
+    end
+  end
+
+  def use = attr_x              # reported: "S has no method named `attr_x`"
+end
+```
+
+Confirmed against the interpreter: after `S.build`,
+`S.new.respond_to?(:attr_x)` is true and `S.respond_to?(:attr_x)` is
+false. Reported on 0.1.13, 0.1.14 and 0.1.15 alike — a false positive,
+which is the unsafe direction.
+
+This is the same reasoning 0.1.15 applied to `block_self_is_module`, and
+the sibling decision two hundred lines away did not get it. It is
+recorded rather than fixed because 0.1.15 exists to correct 0.1.14, and
+this predates both — 024.29 is the entry about what happens when a
+release takes on scope beyond its own purpose.
+
+Real code has the shape:
+`activerecord/associations/builder/has_and_belongs_to_many.rb:16-20`,
+`csv/parser.rb`, `cgi/core.rb:522`, `devise/models.rb:32`.
+
+**Direction:** the same predicate `block_self_is_module` now uses —
+`!@in_method_body && @singleton_context_stack.last`. Cheap, but it is a
+behaviour change on its own, so it wants its own corpus run in both
+directions rather than a ride on a correction release.
+
 ## 024.33 `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` is not
 
 ```yaml
@@ -214,10 +262,10 @@ Foo.bar        # reported: "Foo has no method named `bar`" -- Ruby runs it
 Foo.new.bar    # accepted    -- Ruby raises NoMethodError
 ```
 
-Pre-existing and identical on 0.1.13, 0.1.14 and 0.1.15. 116 occurrences
-of `def Const.method` across the standard library, ActiveSupport and
-ActionPack; six of them survive as false reports in the stdlib run on all
-three revisions, including `Bundler::Deprecate.skip`
+Pre-existing and identical on 0.1.13, 0.1.14 and 0.1.15. **106**
+occurrences of `def Const.method` in Ruby 3.4.7's standard library,
+counted with Prism; six of them survive as false reports in the stdlib
+run on all three revisions, including `Bundler::Deprecate.skip`
 (`bundler/shared_helpers.rb:391`), `CGI::Session.callback`
 (`cgi/session.rb:345`) and three in `fiddle/struct.rb`.
 
@@ -333,18 +381,39 @@ after every one. The survivors, and what was done about each:
 - **`@anonymous_class_depth = 0` in the visitor's constructor**
   (`parser_service.rb`). Defensive initialisation, not a decision.
 
-**This sweep is of a change set that no longer ships.** It ran before
-024.31 withdrew the `attr_*` block rule, and the third survivor above --
-along with a fourth that a better fixture closed -- belonged to code that
-went out with it. What stays true of the shipped diff is the first two
-survivors and their reasoning; the counts do not.
+That sweep was of a change set that no longer ships -- it ran before
+024.31 withdrew the `attr_*` block rule -- and two unpinned decisions
+inside `add_generated_method` were invisible to it, because reverse-
+applying a hunk that adds a whole method only asks whether the method
+exists. Both are pinned now.
 
-Two further unpinned decisions were found afterwards, inside the
-`add_generated_method` path: whether a `GeneratedMethodFact` is emitted
-for `attr_*` at all, and whether its `origin` names the macro. Both are
-pinned now. Neither was visible to this sweep, because reverse-applying a
-hunk that adds a whole method only asks whether the method exists --
-CLAUDE.md's stated blind spot, met in practice.
+**The shipped diff was swept afterwards: 25 hunks, 20 caught, 5
+survived**, baseline green before and after, every file verified
+byte-identical between hunks. The five:
+
+- Two are **comment-only** (`MethodCandidate`'s origin list, and
+  `WorkspaceIndex`'s note about which collections keep insertion order).
+  A comment hunk changes the file, so the script scores it; it holds no
+  behaviour to pin.
+- Two are the ones above and unchanged in character: the **deleted `new`
+  special case**, which is redundant-code removal, and **`rbs_resolves?`
+  delegating to `declaration_kind`**, which removes a duplicated rule
+  that is pinned at its source.
+- One is **`@inline_attribute_visibility = nil` in the constructor**.
+  Defensive: the ivar is read as `@inline_attribute_visibility ||
+  @visibility_stack.last`, so an unset ivar and an explicit `nil` answer
+  the same. Kept for the same reason as any other constructor default.
+
+So no behavioural decision in the shipped diff is unpinned.
+
+**A fourth sweep guard, learned here.** A sweep that is *killed* mid-hunk
+leaves the tree mutated. One run hit a timeout, left `engine.rb` missing
+nine lines, and the next run's baseline check refused to score -- which
+is guard 2 working, but only after the damage. The three guards detect a
+broken tree; none of them stops a run from leaving one. The script traps
+`EXIT INT TERM` and restores now. Budget for it too: 25 hunks at a
+4.5-minute suite is nearly two hours, which is worth knowing before
+starting rather than after.
 
 ## 024.29 Two features were written for 0.1.15 and cut from it
 

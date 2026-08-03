@@ -276,7 +276,13 @@ module Ovallsp
 
         return nil unless RECEIVER_SELF_BLOCK_CALLS.include?(node.name)
 
-        # Receiverless, the receiver is the enclosing self, so inherit it.
+        # Receiverless, the receiver is the enclosing self, so inherit it
+        # -- `nil`, not `true`. Answering "a module" said the class even
+        # inside an instance method, where Ruby's answer is the instance,
+        # and reported every instance method such a block calls. In a
+        # class body the inherited value is already `true`, which is why
+        # no fixture there could tell the two apart.
+        #
         # With any receiver written out, the body's self is *that object*,
         # which this visitor cannot name -- it tracks whether self is a
         # module, never which one. Reading it as an instance is the
@@ -291,7 +297,7 @@ module Ovallsp
         # the module answer resolves against the enclosing owner, and no
         # fixture could distinguish the branch. Recorded as 024.33; it is
         # not a regression, 0.1.14 reported it too.
-        node.receiver.nil?
+        node.receiver.nil? ? nil : false
       end
 
       # `private attr_reader :x` reaches the attr recorder as a *nested*

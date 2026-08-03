@@ -97,10 +97,6 @@ module Ovallsp
           )
         end
 
-        unless valid_identifier?(symbol_id.kind, new_name)
-          return refused_plan(symbol_id, generation, "`#{new_name}` is not a valid #{symbol_id.kind} name")
-        end
-
         conflicts = conflicts_for(symbol_id, new_name)
         return conflicted_plan(symbol_id, conflicts, generation) unless conflicts.empty?
 

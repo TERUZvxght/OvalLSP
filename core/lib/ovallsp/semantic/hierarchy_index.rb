@@ -77,8 +77,8 @@ module Ovallsp
       # tail the chain stopped at the last workspace superclass, so every
       # `private`, `attr_reader`, `include` and `alias_method` in a class
       # body resolved nowhere and the unknown-method check reported it
-      # (024.23) -- 49 of the 62 findings over this repository's own
-      # `core/lib`.
+      # (024.23) -- 49 of the 60 findings over this repository's own
+      # `core/lib` on 0.1.13.
       #
       # A module's singleton side is the same list without `Class`: a
       # module is a `Module` but not a `Class`, which is why `superclass`
