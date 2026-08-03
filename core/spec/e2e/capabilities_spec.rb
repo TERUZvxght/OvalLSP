@@ -701,6 +701,27 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # Same W2 row, second shape. `attr_accessor` declares a method with no
+    # identifier token to rewrite, so a rename that edited only the call
+    # sites would leave the declaration behind and the file would not run.
+    # The suite could not see this before: nothing in this fixture used
+    # `attr_*` at all, and 0.1.14 shipped that regression through a green
+    # capability run.
+    it "W2: refuses rather than half-renaming a method a macro declared" do
+      with_file("app/models/attr_rename_probe.rb", <<~RUBY) do |uri|
+        class AttrRenameProbe
+          attr_accessor :title
+
+          def run
+            value = AttrRenameProbe.new
+            value.title
+          end
+        end
+      RUBY
+        expect(@client.rename_edits(uri, 5, 12, "headline")).to be_empty
+      end
+    end
+
     it "W3: finds a workspace class by symbol search" do
       with_file("app/models/symbol_probe.rb", "class SymbolProbe\nend\n") do |_uri|
         expect(@client.workspace_symbols("SymbolProbe")).to include("SymbolProbe")

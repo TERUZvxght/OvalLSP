@@ -21,7 +21,28 @@ module Ovallsp
     # - location: the LSP range of the statement that introduced this
     #   ancestor (the `include Foo` call, the `< Foo` superclass clause),
     #   or nil for the implicit default root.
-    AncestorEntry = Data.define(:name, :kind, :origin, :location)
+    AncestorEntry = Data.define(:name, :kind, :origin, :location) do
+      # Which declaration kind a lookup should ask this ancestor for, and
+      # the one place that knows the rule -- it was written out at two
+      # call sites and both had it wrong for the `:class_object` tail.
+      #
+      # In singleton mode most ancestors contribute `def self.foo`, but
+      # two kinds contribute *instance* methods: a module reached by
+      # `extend` (its instance methods become the receiver's class-level
+      # ones), and the tail below, which is in the chain because the
+      # class object is an instance of `Class`/`Module`/`Object`.
+      INSTANCE_SIDE_ORIGINS = %i[extend class_object].freeze
+
+      def declaration_kind(singleton:)
+        return :instance_method unless singleton
+
+        INSTANCE_SIDE_ORIGINS.include?(origin) ? :instance_method : :singleton_method
+      end
+
+      # Not a link the workspace wrote, so it cannot be one the workspace
+      # reopened.
+      def synthesised? = %i[default class_object].include?(origin)
+    end
 
     # Aggregates AncestorFact/AliasFact (Task 009, extracted by
     # ParserService's Visitor) across every indexed file and answers
@@ -60,15 +81,15 @@ module Ovallsp
       # module is a `Module` but not a `Class`, which is why `superclass`
       # answers on one and not the other.
       DEFAULT_CLASS_SINGLETON_CHAIN = [
-        AncestorEntry.new(name: "Class", kind: :class, origin: :default, location: nil),
-        AncestorEntry.new(name: "Module", kind: :class, origin: :default, location: nil),
-        *DEFAULT_OBJECT_CHAIN
+        AncestorEntry.new(name: "Class", kind: :class, origin: :class_object, location: nil),
+        AncestorEntry.new(name: "Module", kind: :class, origin: :class_object, location: nil),
+        *DEFAULT_OBJECT_CHAIN.map { |entry| entry.with(origin: :class_object) }
       ].freeze
       private_constant :DEFAULT_CLASS_SINGLETON_CHAIN
 
       DEFAULT_MODULE_SINGLETON_CHAIN = [
-        AncestorEntry.new(name: "Module", kind: :class, origin: :default, location: nil),
-        *DEFAULT_OBJECT_CHAIN
+        AncestorEntry.new(name: "Module", kind: :class, origin: :class_object, location: nil),
+        *DEFAULT_OBJECT_CHAIN.map { |entry| entry.with(origin: :class_object) }
       ].freeze
       private_constant :DEFAULT_MODULE_SINGLETON_CHAIN
 
@@ -133,7 +154,10 @@ module Ovallsp
       # singleton "self" entry, extended modules (most recently extended
       # first), then the superclass's singleton chain.
       def ancestors(type_name, singleton: false)
-        @mutex.synchronize { compute_ancestors_locked(type_name, singleton: singleton, visited: Set.new) }
+        @mutex.synchronize do
+          entries = compute_ancestors_locked(type_name, singleton: singleton, visited: Set.new)
+          singleton ? entries + singleton_tail_for(type_name, entries) : entries
+        end
       end
 
       # Every `alias`/`alias_method` fact recorded directly inside
@@ -231,16 +255,27 @@ module Ovallsp
           entries.concat(
             compute_ancestors_locked(superclass_fact.target, singleton: true, visited: visited, origin_for_self: :superclass)
           )
-        else
-          entries.concat(default_singleton_chain_for(canonical))
         end
 
         entries
       end
 
-      # `nil` kind means the workspace never declared this name, so
-      # whether it is a class, a module or neither is not ours to assume.
-      def default_singleton_chain_for(canonical)
+      # What the *receiver* is, which is what its singleton chain ends in:
+      # `W.singleton_class.ancestors` ends `Class, Module, Object, Kernel,
+      # BasicObject` for every class W, whatever its superclasses are.
+      # 0.1.14 decided this inside the recursion, from the name the walk
+      # terminated at -- so a class whose ancestors end at a module got
+      # the module tail, and `new` was reported on it
+      # (`ActionController::TestRequest`).
+      #
+      # A `nil` kind means the workspace never declared this name, so
+      # whether it is a class, a module or neither is not ours to assume;
+      # and a chain with an unbounded link is not one we can say ends
+      # anywhere at all.
+      def singleton_tail_for(type_name, entries)
+        return [] if entries.any? { |entry| entry.name.nil? }
+
+        canonical = @workspace_index.resolve_type_name(type_name) || type_name.to_s
         case kind_of(canonical)
         when :class then DEFAULT_CLASS_SINGLETON_CHAIN
         when :module then DEFAULT_MODULE_SINGLETON_CHAIN

@@ -26,6 +26,13 @@ module Ovallsp
       # go through `@by_symbol.fetch(id, [])`; only the write path
       # (#replace_file) actually inserts a key.
       @by_symbol = {}
+      # Keyed on [owner, kind], because `#method_symbol_ids` is asked once
+      # per ancestor and used to scan every key in `@by_symbol` to answer.
+      # 0.1.14 grew the singleton chain from one entry to six, so a single
+      # `Widget.` completion went from one full scan of the symbol table
+      # to six: 31ms -> 200ms on a 126k-symbol workspace, on the path a
+      # keystroke runs.
+      @by_owner_kind = Hash.new { |h, k| h[k] = [] }
       # Secondary index: downcased simple (unqualified) name -> Set of
       # SymbolIds sharing it, so #find_by_simple_name doesn't have to scan
       # every distinct symbol in the workspace to answer one name lookup
@@ -92,8 +99,10 @@ module Ovallsp
         @summaries[summary.uri] = summary
         touched = []
         summary.declarations.each do |decl|
+          fresh = !@by_symbol.key?(decl.symbol_id)
           (@by_symbol[decl.symbol_id] ||= []) << [summary.uri, decl]
           @by_simple_name[simple_name(decl.symbol_id).downcase] << decl.symbol_id
+          @by_owner_kind[owner_kind_key(decl.symbol_id)] << decl.symbol_id if fresh
           touched << decl.symbol_id
         end
         # The order lives here, not in the readers. `remove_file_locked`
@@ -276,9 +285,12 @@ module Ovallsp
     # `SymbolId` now stores every owner qualified, so the stored side needs
     # no work; this only has to put the *argument* through the same rule
     # (0.1.11).
+    # Sorted on read, not stored sorted: the bucket is small (one class's
+    # methods) and an unordered collection read by `.first`/a truncation
+    # is what 024.15 was spent on.
     def method_symbol_ids(owner, kind:)
       needle = Index::SymbolId.qualify_owner(owner)
-      @mutex.synchronize { @by_symbol.keys.select { |sid| sid.owner == needle && sid.kind == kind } }
+      @mutex.synchronize { @by_owner_kind.fetch([needle, kind], []).sort_by(&:name) }
     end
 
     # Workspace symbol search: case-insensitive substring match on the
@@ -335,6 +347,8 @@ module Ovallsp
       end
     end
 
+    def owner_kind_key(symbol_id) = [symbol_id.owner, symbol_id.kind]
+
     def remove_file_locked(uri)
       summary = @summaries.delete(uri)
       return false unless summary
@@ -351,6 +365,10 @@ module Ovallsp
         by_name = @by_simple_name[name_key]
         by_name.delete(decl.symbol_id)
         @by_simple_name.delete(name_key) if by_name.empty?
+        owner_key = owner_kind_key(decl.symbol_id)
+        by_owner = @by_owner_kind[owner_key]
+        by_owner.delete(decl.symbol_id)
+        @by_owner_kind.delete(owner_key) if by_owner.empty?
       end
       true
     end

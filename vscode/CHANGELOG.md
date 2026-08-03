@@ -6,6 +6,92 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.1.15 — the class-body fix, corrected
+
+0.1.14 removed about twelve thousand wrong reports and introduced a
+handful of its own. This is those, found by two independent reviews of
+the released code and fixed with the same measurement discipline.
+
+- Fixed: a method the workspace adds to `Object` or `Module` — a
+  `core_ext` file, which is idiomatic in Rails — is no longer reported as
+  unknown when called in a class body. 0.1.14 added `Class`/`Module`/
+  `Object` to a class's ancestry and then looked them up for *singleton*
+  methods; a class object is an **instance** of them, so their instance
+  methods are what a class-level call reaches. The same error silenced a
+  real one: `def self.x` added to `Class` is not something an ordinary
+  class inherits, and Ruby raises `NameError` for it.
+- Fixed: `new` and other class-level calls are no longer reported on a
+  class whose ancestors end at a module. The tail said what the last
+  ancestor was rather than what the receiver is, so such a class got the
+  module tail, without `Class`. `ActionController::TestRequest` is a real
+  instance.
+- Fixed: `define_method` inside `class << self` no longer reports its
+  body's calls. That block defines a singleton method, so its `self` is
+  still the class.
+- Fixed: `instance_eval do … end` in a class body no longer reports
+  `attr_accessor` and friends. `instance_eval` sets `self` to the
+  receiver, which there is the class. 0.1.14 listed `instance_eval` and
+  `instance_exec` next to `define_method` with neither a reason nor a
+  test; they are gone.
+- Fixed: `attr_accessor` written inside a method body or inside a block
+  no longer declares anything. It declared methods that do not exist,
+  which silenced real reports (`w.never_real` was accepted) and put the
+  wrong owner on real ones (`Struct.new do attr_reader :label end`
+  offered `label` on the enclosing class).
+- Fixed: `private attr_reader :x` is private. It was recorded public, so
+  a private method appeared in completion and an external call to it
+  stopped being reported.
+- Fixed: renaming a method that a macro declared is refused with a reason
+  instead of producing a `WorkspaceEdit` that rewrites every call site and
+  leaves `attr_accessor :name` behind — an edit that does not run. This
+  hole pre-existed for `enum`, `scope` and `delegate`; 0.1.14 extended it
+  to ordinary Ruby. `prepareRename`'s own comment always said generated
+  symbols were refused; now they are.
+- Fixed: `JSON.load(a, b, c)` is no longer reported as taking too many
+  arguments. `module_function` was not modelled at all, so a method
+  declared under it was known only as an instance method and the call
+  resolved to `Kernel#load` instead. Both forms are modelled now, bare and
+  `module_function :name`.
+- Fixed: hovering `name` in `w.name = "y"` describes the writer, not the
+  reader. It said "takes no arguments" for a call that takes one.
+- Fixed: accepting the completion for a writer inserts `w.name = value`
+  rather than `w.name=(value)`.
+- Performance: completion on a constant receiver is back to where it was.
+  0.1.14 grew the singleton chain from one entry to six, and each entry
+  cost a full scan of the symbol table: **12.97 ms → 0.099 ms** per
+  request on a 21.7k-symbol workspace, measured on both revisions.
+
+A patch release under the versioning rule in `docs/PUBLISHING.md`: no
+capability is added.
+
+### Details
+
+Two rules were written out at more than one call site and wrong in every
+copy. Which declaration kind an ancestor contributes now lives in
+`AncestorEntry#declaration_kind`, and the tail is appended once, at the
+entry point, from the receiver's own kind — not inside the recursion,
+where whatever the walk happened to end at decided it.
+
+Measured with `scripts/corpus_diagnostics.rb`, each revision pointed at
+the same corpus. Over Ruby 3.4.7's standard library, `unknown-method`
+findings: 0.1.13 **15,982**, 0.1.14 **3,848**, this release **3,847** —
+and **not one report is introduced** anywhere in it, against either. Over
+ActiveSupport 8.1.3, 0.1.14 **265** → **240**. Over this repository's own
+`core/lib`, 0.1.13 **60** → **4**.
+
+That last pair corrects the 0.1.14 entry below, which quoted "62 → 4" and
+"776 → 265": both "before" figures came from a different tree than the one
+that release shipped. The stdlib figures it quoted reproduce exactly.
+
+The capability suite could not have caught the rename regression: nothing
+in the real-Rails fixture used `attr_*` at all, so a green run said
+nothing about it. W2 now has a second example covering the macro-declared
+shape.
+
+`scripts/corpus_diagnostics.rb` is in the tree as of this release. The
+0.1.14 entry cites it for numbers a reader could not reproduce, because
+it was only added on the unreleased 0.2.0 branch.
+
 ## 0.1.14 — `private` is not an unknown method
 
 - Fixed: `private`, `protected`, `public`, `attr_reader`, `attr_writer`,
@@ -58,8 +144,10 @@ methods, and the open visibility section applies to them as it does to a
 `def`.
 
 Measured with `scripts/corpus_diagnostics.rb`. Over this repository's own
-`core/lib`, `unknown-method` findings drop from **62 to 4**; over
-ActiveSupport 8.1.3, from **776 to 265**. Over Ruby 3.4.7's whole
+`core/lib`, `unknown-method` findings drop from **60 to 4**; over
+ActiveSupport 8.1.3, from **785 to 265**. (Both "before" figures were
+wrong when this entry shipped — they came from a different tree; corrected
+in 0.1.15, which re-measured each revision against one fixed corpus.) Over Ruby 3.4.7's whole
 standard library, from **15,982 to 3,848** — and **not one report is
 introduced anywhere in it**, which is the number that matters, since the
 purpose is to stop saying something untrue. Wrong `argument-count`

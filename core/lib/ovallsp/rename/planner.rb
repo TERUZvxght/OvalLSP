@@ -45,9 +45,24 @@ module Ovallsp
       def prepare(symbol_id)
         return nil unless symbol_id
         return nil if REFUSED_KINDS.include?(symbol_id.kind)
+        return nil if uneditable_declaration(symbol_id)
         return nil if locations_for(symbol_id).empty?
 
         { placeholder: simple_name(symbol_id) }
+      end
+
+      # A declaration a DSL generated has no identifier token to rewrite:
+      # `attr_accessor :name` declares `name` at a symbol argument, and
+      # `delegate :title, to: :author` at another call's argument list.
+      # `locations_for` drops such a declaration because it has no
+      # `name_location` -- and dropping it silently is what turned a
+      # rename into a WorkspaceEdit that rewrote every call site and left
+      # the declaration behind, producing a file that does not run.
+      # Refusing is what `#prepare`'s comment always claimed happened.
+      def uneditable_declaration(symbol_id)
+        @workspace_index.declarations_with_uri(symbol_id)
+                        .map { |(_uri, declaration)| declaration }
+                        .find { |declaration| declaration.name_location.nil? }
       end
 
       def plan(symbol_id, new_name:, generation:)
@@ -58,6 +73,16 @@ module Ovallsp
                                "`#{simple_name(symbol_id)}` is a generated Rails method (#{symbol_id.kind}) -- " \
                                "rename its source declaration (the association/column, or the route) instead; " \
                                "the call sites are never edited directly here")
+        end
+
+        if (declaration = uneditable_declaration(symbol_id))
+          return refused_plan(
+            symbol_id, generation,
+            "`#{simple_name(symbol_id)}` is declared by a macro rather than a `def` " \
+            "(#{declaration.location[:start][:line] + 1}:#{declaration.location[:start][:character] + 1}) and " \
+            "cannot be renamed in place -- editing only its call sites would leave the declaration behind, " \
+            "and the file would no longer run. Rewrite that line by hand, then rename from there"
+          )
         end
 
         unless valid_identifier?(symbol_id.kind, new_name)

@@ -96,16 +96,6 @@ module Ovallsp
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :method_call
           next if resolved_locations[candidate.location]
-          # `Class.new` (and friends: `allocate`, `name`, `superclass`, ...)
-          # come from Class/Module's own ancestry, which HierarchyIndex's
-          # singleton chain doesn't model (only Object/Kernel/BasicObject
-          # on the instance side) -- LocalInferencer already special-cases
-          # `.new` the same way (`resolve_call`'s `node.name == :new &&
-          # constant_receiver?` check) rather than resolving it through
-          # ordinary method lookup, so this must not flag what that path
-          # already treats as always-available.
-          next if candidate.singleton && candidate.name == "new"
-
           # Deliberately *not* `Types.base_nominal` here, unlike everywhere
           # else that reads a container receiver. A workspace that reopens
           # a core class makes its chain look closed while gems keep adding
@@ -342,7 +332,7 @@ module Ovallsp
         # workspace wrote, so they cannot be ones it reopened, and asking
         # would spend a round trip to be told what RBS already says.
         entries.none? do |entry|
-          entry.origin != :default && reopened_elsewhere?(entry.name, context)
+          !entry.synthesised? && reopened_elsewhere?(entry.name, context)
         end
       end
 
@@ -458,7 +448,7 @@ module Ovallsp
         return false unless context.signatures
 
         context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).any? do |entry|
-          kind = candidate.singleton && entry.origin != :extend ? :singleton_method : :instance_method
+          kind = entry.declaration_kind(singleton: candidate.singleton)
           symbol_id = Index::SymbolId.new(kind: kind, owner: entry.name, name: candidate.name,
                                           discriminator: nil)
           !context.signatures.method_signatures(symbol_id).nil?

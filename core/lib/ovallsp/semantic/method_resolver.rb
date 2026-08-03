@@ -154,11 +154,7 @@ module Ovallsp
       # :instance_method even while the overall traversal is in singleton
       # mode. Every other origin in singleton mode (:self, :superclass)
       # genuinely means :singleton_method (`def self.foo`/`class << self`).
-      def symbol_kind_for(entry, singleton)
-        return :instance_method unless singleton
-
-        entry.origin == :extend ? :instance_method : :singleton_method
-      end
+      def symbol_kind_for(entry, singleton) = entry.declaration_kind(singleton: singleton)
 
       # A single level of `alias`/`alias_method` indirection: if `owner`
       # doesn't declare `method_name` directly but *does* record an alias

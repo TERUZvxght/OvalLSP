@@ -1831,12 +1831,19 @@ module Ovallsp
     #   inserts plain text.
     def completion_snippet(member)
       parameters = member.parameters
+      # A writer is called by assigning to it. `w.name=(value)` runs and
+      # is not Ruby anyone writes; no setter was ever a candidate before
+      # 0.1.14 taught the index what `attr_writer` declares.
+      return "#{member.name.delete_suffix('=')} = ${1:value}" if setter_name?(member.name)
       return "#{member.name}($1)" if parameters == :unknown_arity
       return nil if parameters.nil? || parameters.empty?
 
       stops = parameters.each_with_index.map { |name, index| "${#{index + 1}:#{name}}" }
       "#{member.name}(#{stops.join(', ')})"
     end
+
+    # `==`, `<=`, `!=` and friends end in `=` without being writers.
+    def setter_name?(name) = name.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_]*=\z/)
 
     # Finds the call whose argument list the cursor is inside by scanning
     # backward for an unmatched `(`, then reads the identifier immediately
@@ -1955,7 +1962,24 @@ module Ovallsp
 
       return nil if left == right
 
-      text[left...right]
+      "#{text[left...right]}#{setter_suffix(text, left, right)}"
+    end
+
+    # `w.name = "y"` calls `name=`, and the token under the cursor is only
+    # its first half. Hover answered about the reader -- "takes no
+    # arguments" for a call that takes one -- which was invisible until
+    # 0.1.14 made `attr_accessor` declare both halves and hover started
+    # answering at all.
+    #
+    # Requires an explicit receiver, because `count = 1` is a local
+    # variable assignment whose name really is `count`; and a single `=`,
+    # because `w.name == 1` is a comparison against the reader.
+    def setter_suffix(text, left, right)
+      return "" unless text[0...left].rstrip.end_with?(".")
+
+      rest = text[right..].to_s
+      trailing = rest[/\A[^\S\n]*=(=?)/, 1]
+      trailing == "" ? "=" : ""
     end
 
     def word_prefix_at_position(document, position)

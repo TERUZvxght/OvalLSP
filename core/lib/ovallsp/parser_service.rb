@@ -54,7 +54,7 @@ module Ovallsp
         # changed.
         content_hash: Digest::SHA256.hexdigest(raw_source),
         document_version: document.version,
-        declarations: visitor.declarations,
+        declarations: visitor.tap(&:apply_module_function_names!).declarations,
         diagnostics: parse_diagnostics(result, lines, erb: erb_document?(document.uri)),
         ancestor_facts: visitor.ancestor_facts,
         alias_facts: visitor.alias_facts,
@@ -108,6 +108,24 @@ module Ovallsp
 
       attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates, :generated_method_facts
 
+      # Applied after the walk: `module_function :one` names a method
+      # declared above it, so the declaration to copy already exists.
+      def apply_module_function_names!
+        @module_function_names.uniq.each do |owner, name|
+          source = @declarations.find do |declaration|
+            declaration.symbol_id.kind == :instance_method &&
+              declaration.symbol_id.owner == owner && declaration.symbol_id.name == name
+          end
+          next unless source
+
+          @declarations << Index::Declaration.new(
+            symbol_id: Index::SymbolId.new(kind: :singleton_method, owner: owner, name: name, discriminator: nil),
+            location: source.location, visibility: nil, parameters: source.parameters, origin: source.origin,
+            body_source: source.body_source, name_location: source.name_location
+          )
+        end
+      end
+
       # Task 017's priority-ordered DSL list, scoped to the three this
       # task actually implements (enum/scope/delegate) -- attribute/
       # store_accessor/has_one/polymorphic/Concern/helper_method/mailer-
@@ -134,6 +152,21 @@ module Ovallsp
         # chain, where they do not exist, and be reported as unknown
         # methods (024.23). Top level starts `false`: `main` is an Object.
         @self_is_module_stack = [false]
+        # A block opens its own receiver, and which one is not knowable
+        # from the syntax: `Struct.new do`, `included do`, `class_eval do`
+        # and `concerning do` each answer differently. `attr_*` written in
+        # one therefore declares nothing we can attribute, and 0.1.14
+        # attributed all of them to the enclosing class.
+        @block_depth = 0
+        @inline_attribute_visibility = nil
+        # `module_function` with no arguments opens a section, exactly as
+        # `private` does: every `def` after it in that body declares a
+        # singleton method as well as an instance one. Ruby's own
+        # `json/common.rb` declares `JSON.load` this way.
+        @module_function_stack = [false]
+        # The `module_function :one` form names methods already declared
+        # above it, so it is applied after the walk rather than during.
+        @module_function_names = []
         @visibility_stack = [:public]
         @in_method_body = false
         # Task 014: a fresh local-variable scope id per class/module body,
@@ -209,6 +242,8 @@ module Ovallsp
           name_location: Index::SourceLocation.to_range(node.name_loc, @lines)
         )
 
+        record_module_function_copy(symbol_id, node) if @module_function_stack.last && !singleton
+
         @scope_stack.push(next_scope_id)
         # Tracks "we are inside a method body", so a `private :target`
         # written there -- which never runs at class level in Ruby -- does
@@ -246,25 +281,51 @@ module Ovallsp
       # `extension` as taking one argument too few.
       #
       # `define_singleton_method` is deliberately absent: its body really
-      # does run with the class as self, so it inherits correctly.
-      INSTANCE_SELF_BLOCK_CALLS = %i[define_method instance_eval instance_exec].freeze
+      # does run with the class as self, so it inherits correctly. So are
+      # `instance_eval`/`instance_exec`, which 0.1.14 listed here with
+      # neither a reason nor a test: they set self to the *receiver*, and
+      # a receiverless one in a class body has the class as its receiver,
+      # so `instance_eval { attr_accessor :x }` was reported for calling a
+      # macro that is exactly as legal as it is one line up.
+      INSTANCE_SELF_BLOCK_CALLS = %i[define_method].freeze
 
+      # `private attr_reader :x` reaches the attr recorder as a *nested*
+      # call, visited while `private`'s arguments are. Its own
+      # `@visibility_stack` frame still says :public, because the section
+      # was never opened -- so the visibility has to travel with the
+      # nesting, the way `@pending_visibility_names` carries `private def`.
       def visit_call_node(node)
         if node.receiver.nil?
           update_visibility(node) if node.arguments.nil?
+          record_module_function(node) if current_owner
           apply_visibility_arguments(node) unless node.arguments.nil?
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
           record_generated_methods(node) if current_owner && GENERATED_METHOD_DSLS.include?(node.name)
           record_attribute_methods(node) if current_owner && ATTRIBUTE_DSLS.key?(node.name)
+          wrapped_visibility = inline_attribute_visibility_for(node)
         end
         record_method_call_candidate(node)
+
+        if wrapped_visibility
+          previous = @inline_attribute_visibility
+          @inline_attribute_visibility = wrapped_visibility
+          begin
+            return super
+          ensure
+            @inline_attribute_visibility = previous
+          end
+        end
         # Pushed around the children, not the candidate above: the call
         # itself is written where it is written, and only its block body
         # gets the different self.
         return super unless node.block && INSTANCE_SELF_BLOCK_CALLS.include?(node.name)
 
-        @self_is_module_stack.push(false)
+        # Inside `class << self` a `define_method` block defines a
+        # *singleton* method, whose self is the class object -- still a
+        # Module. Pushing `false` unconditionally reported the body's
+        # calls against the instance side, on code that runs.
+        @self_is_module_stack.push(@singleton_context_stack.last)
         begin
           super
         ensure
@@ -273,6 +334,7 @@ module Ovallsp
       end
 
       def visit_block_node(node)
+        @block_depth += 1
         @scope_stack.push(next_scope_id)
         # A visibility section opened inside a block belongs to that
         # block. `concerning :Auth do private; def authenticate; end end`
@@ -292,6 +354,7 @@ module Ovallsp
         @visibility_stack.push(@visibility_stack.last)
         super
       ensure
+        @block_depth -= 1
         @visibility_stack.pop
         @scope_stack.pop
       end
@@ -445,6 +508,7 @@ module Ovallsp
         @owner_stack.push(absolute_name)
         @singleton_context_stack.push(false)
         @self_is_module_stack.push(true)
+        @module_function_stack.push(false)
         @visibility_stack.push(:public)
         @scope_stack.push(next_scope_id)
         yield
@@ -452,6 +516,7 @@ module Ovallsp
         @owner_stack.pop
         @singleton_context_stack.pop
         @self_is_module_stack.pop
+        @module_function_stack.pop
         @visibility_stack.pop
         @scope_stack.pop
       end
@@ -553,10 +618,51 @@ module Ovallsp
         attr_accessor: [["", 0], ["=", 1]]
       }.freeze
 
+      # `module_function` declares a *copy*: the instance method stays (as
+      # a private one) and a singleton method of the same name appears
+      # beside it. Recording only the singleton would lose the instance
+      # side that `include`rs still get.
+      def record_module_function_copy(symbol_id, node)
+        @declarations << Index::Declaration.new(
+          symbol_id: Index::SymbolId.new(kind: :singleton_method, owner: symbol_id.owner, name: symbol_id.name,
+                                         discriminator: nil),
+          location: Index::SourceLocation.to_range(node.location, @lines),
+          visibility: nil, parameters: extract_parameters(node.parameters), origin: :source,
+          body_source: node.body&.slice, name_location: Index::SourceLocation.to_range(node.name_loc, @lines)
+        )
+      end
+
+      # Two forms: bare, which opens a section, and `module_function :one`,
+      # which names methods already declared above it.
+      def record_module_function(node)
+        return unless node.name == :module_function
+
+        if node.arguments.nil?
+          @module_function_stack[-1] = true
+          return
+        end
+
+        node.arguments.arguments.each do |argument|
+          name = attribute_name(argument)
+          @module_function_names << [current_owner, name] if name
+        end
+      end
+
       def record_attribute_methods(node)
         return unless node.arguments
+        # Neither form runs at class level, so neither declares anything.
+        # Recording them did worse than nothing: an `attr_accessor` inside
+        # a `def` silenced the report on a method Ruby raises
+        # NoMethodError for, and one inside a block put the wrong owner on
+        # a real method -- offering it in completion on an object that
+        # does not have it.
+        return if @in_method_body || @block_depth.positive?
 
         singleton = @singleton_context_stack.last
+        # `private attr_reader :x` is one call taking another as its
+        # argument (Ruby 3.0+). The open section still applies when it is
+        # written on its own line.
+        visibility = @inline_attribute_visibility || @visibility_stack.last
         node.arguments.arguments.each do |argument|
           name = attribute_name(argument)
           # A dynamic argument (`attr_reader(*names)`) names nothing
@@ -565,15 +671,17 @@ module Ovallsp
           next unless name
 
           ATTRIBUTE_DSLS.fetch(node.name).each do |suffix, arity|
-            @declarations << Index::Declaration.new(
-              symbol_id: Index::SymbolId.new(
-                kind: singleton ? :singleton_method : :instance_method,
-                owner: current_owner, name: "#{name}#{suffix}", discriminator: nil
-              ),
-              location: Index::SourceLocation.to_range(node.location, @lines),
-              visibility: singleton ? nil : @visibility_stack.last,
-              parameters: arity.zero? ? [] : [Index::Parameter.new(name: "value", kind: :required, default_source: nil)],
-              origin: :generated
+            # Through `add_generated_method`, so the declaration is paired
+            # with a fact -- three documents state that a `:generated`
+            # declaration always is, and 0.1.14 recorded these without one.
+            add_generated_method(
+              node: node, name: "#{name}#{suffix}",
+              kind: singleton ? :singleton_method : :instance_method,
+              # Honest rather than absent: an attribute's type is whatever
+              # was last assigned to the ivar, which this does not track.
+              return_type: Types::UNKNOWN, origin: node.name,
+              visibility: singleton ? nil : visibility,
+              parameters: arity.zero? ? [] : [Index::Parameter.new(name: "value", kind: :required, default_source: nil)]
             )
           end
         end
@@ -584,6 +692,19 @@ module Ovallsp
         when Prism::SymbolNode then argument.value
         when Prism::StringNode then argument.unescaped
         end
+      end
+
+      # `private attr_reader :x` and friends: the argument is a call, not a
+      # name, so `apply_visibility_arguments` -- which reads symbols,
+      # strings and `def`s -- cannot see what it declares.
+      def inline_attribute_visibility_for(node)
+        visibility = VISIBILITY_MODIFIERS[node.name]
+        return nil unless visibility && node.arguments
+
+        wrapped = node.arguments.arguments.first
+        return nil unless wrapped.is_a?(Prism::CallNode) && ATTRIBUTE_DSLS.key?(wrapped.name)
+
+        visibility
       end
 
       def record_generated_methods(node)
@@ -683,12 +804,14 @@ module Ovallsp
         assoc&.value.is_a?(Prism::TrueNode)
       end
 
-      def add_generated_method(node:, name:, kind:, return_type:, origin:, metadata: {})
+      def add_generated_method(node:, name:, kind:, return_type:, origin:, metadata: {}, parameters: [],
+                               visibility: :public)
         symbol_id = Index::SymbolId.new(kind: kind, owner: current_owner, name: name, discriminator: nil)
         location = Index::SourceLocation.to_range(node.location, @lines)
 
         @declarations << Index::Declaration.new(
-          symbol_id: symbol_id, location: location, visibility: :public, parameters: [], origin: :generated
+          symbol_id: symbol_id, location: location, visibility: visibility, parameters: parameters,
+          origin: :generated
         )
         @generated_method_facts << Index::GeneratedMethodFact.new(
           owner: current_owner, name: name, kind: kind, return_type: return_type, source_location: location,

@@ -114,6 +114,41 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     expect(unknown_methods("class Widget\nend\nWidget.instance_methods\nWidget.name\n")).to be_empty
   end
 
+  # `Class#new` is an instance method of `Class`, so it resolves through
+  # the tail like any other. The engine carried a special case for this
+  # one name, whose comment said Class/Module were not modelled; they are
+  # now, and the name is Ruby's rather than a list this project keeps.
+  # Closedness has to be judged on the chain the lookup will actually
+  # search. Before 0.1.14 a singleton chain stopped at the class, so the
+  # check asked the *instance* chain instead -- and 0.1.14 gave the
+  # singleton chain a real tail without revisiting that. The two then
+  # disagreed: `ActionController::TestRequest`'s instance chain reaches
+  # BasicObject, so the receiver read as closed, while its singleton chain
+  # is truncated by an unresolvable ancestor, so `new` was looked up in a
+  # chain that does not contain `Class` and was reported.
+  # The tail says what the *receiver* is, not what the last ancestor
+  # happens to be. 0.1.14 keyed it on the name the walk terminated at, so
+  # a class whose superclass chain ends at a module got the module tail --
+  # no `Class` -- and `new` was reported on it. Real instance, real gem:
+  # `ActionController::TestRequest`, whose chain ends at a module named
+  # `Request`.
+  it "ends a class's chain in Class even when its ancestors end at a module" do
+    index("module Mixinish\nend\nclass Base < Mixinish\nend\nclass Derived < Base\nend\n")
+
+    expect(hierarchy_index.ancestors("Derived", singleton: true).map(&:name).last(5))
+      .to eq(["Class", "Module", "Object", "Kernel", "BasicObject"])
+  end
+
+  it "does not report `new` on a class whose ancestors end at a module" do
+    index("module Mixinish\nend\nclass Base < Mixinish\nend\n", uri: "file:///base.rb")
+
+    expect(unknown_methods("class Derived < Base\n  def self.create\n    new\n  end\nend\n")).to be_empty
+  end
+
+  it "does not report `new` on a constant receiver" do
+    expect(unknown_methods("class Widget\nend\nWidget.new\n")).to be_empty
+  end
+
   # The point of the check is to still catch what is genuinely absent.
   # Without this, "report nothing on a singleton receiver" would pass
   # every example above.
@@ -167,6 +202,34 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     expect(unknown_methods(source)).to eq(["definitely_not_a_macro"])
   end
 
+  # A `define_method` block written inside `class << self` defines a
+  # *singleton* method, so its body's self is the class object -- still a
+  # Module. Pushing instance-self unconditionally reported this, on code
+  # Ruby runs (`SDM.built` answers 42).
+  it "reads a define_method block inside `class << self` as the class" do
+    source = <<~RUBY
+      class SDM
+        class << self
+          define_method(:built) { helper_on_class }
+          def helper_on_class = 42
+        end
+      end
+    RUBY
+
+    expect(unknown_methods(source)).to be_empty
+  end
+
+  # `instance_eval` sets self to the *receiver*, and a receiverless one in
+  # a class body has the class as its receiver -- so `attr_accessor` there
+  # is exactly as legal as it is one line up. 0.1.14 listed `instance_eval`
+  # and `instance_exec` alongside `define_method` with neither a reason
+  # nor a test, and reported this.
+  it "reads an instance_eval block in a class body as the class" do
+    source = "class InstEvalCase\n  instance_eval do\n    attr_accessor :x\n  end\nend\n"
+
+    expect(unknown_methods(source)).to be_empty
+  end
+
   it "does not report `superclass` on a class" do
     expect(unknown_methods("class Widget\nend\nWidget.superclass\n")).to be_empty
   end
@@ -196,6 +259,16 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
 
     expect(hierarchy_index.ancestors("Widget", singleton: true).map(&:name))
       .to eq(["::Widget", "::Base", "Class", "Module", "Object", "Kernel", "BasicObject"])
+  end
+
+  # A name the workspace never declared is neither a class nor a module,
+  # so there is no tail that would be true of it. Answering with the class
+  # one would say `Class`'s methods are available on something we cannot
+  # even confirm is a class.
+  it "appends no tail to a name the workspace does not declare" do
+    index("class Widget\nend\n")
+
+    expect(hierarchy_index.ancestors("NeverDeclared", singleton: true).map(&:name)).to eq(["NeverDeclared"])
   end
 
   # An unresolvable parent leaves the method set unbounded, so claiming

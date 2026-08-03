@@ -161,6 +161,69 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.26 A workspace `def Object.foo` is reachable from every class in Ruby and from none here
+
+**Status:** open.
+
+**Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`
+
+Ruby's real singleton chain for a class `W` is
+`[#<Class:W>, #<Class:Object>, #<Class:BasicObject>, Class, Module, Object, Kernel, BasicObject]`.
+0.1.15 models the tail from `Class` onward, which is what class-body
+macros need. It does not model `#<Class:Object>` or `#<Class:BasicObject>`
+— the singleton classes of the root classes — because an `AncestorEntry`
+names a type and has no way to say "the singleton class of that type".
+
+The consequence is narrow and one-directional: a workspace that writes
+`def Object.foo` declares something every class can call, and the check
+does not know it, so `Widget.foo` is reported. Missing rather than wrong,
+which is the safe direction, and nothing in the stdlib or the gems
+measured for 0.1.15 hits it.
+
+**Direction:** the entry type needs a singleton flag before this can be
+expressed at all. Worth doing with 024.13 rather than alone, since both
+are about what a chain says when the workspace has reopened a core class.
+
+## 024.27 `documentSymbol` lists one outline entry per name a macro declares
+
+**Status:** open.
+
+**Area:** `core/lib/ovallsp/server.rb` (`document_symbol_result`)
+
+`attr_accessor :a, :b, :c` declares six methods, all at the same source
+range, so the outline shows six children with byte-identical `range` and
+`selectionRange` on one line. The names are right and each is genuinely a
+method, so this is noise rather than a wrong answer — but an outline is
+read by eye and six identical ranges read as a bug.
+
+**Direction:** either group the methods a single macro call declares under
+one outline node, or narrow each declaration's `selectionRange` to its own
+symbol argument. The second would also give 024.28's rename something to
+edit.
+
+## 024.28 Rename refuses on a macro-declared method rather than editing it
+
+**Status:** open, and **deliberately so** as of 0.1.15.
+
+**Area:** `core/lib/ovallsp/rename/planner.rb`
+
+`attr_accessor :name` declares `name` and `name=` at a symbol argument,
+not at an identifier token, so there is nothing for an in-place edit to
+rewrite. 0.1.14 emitted a `WorkspaceEdit` that renamed every call site and
+left the declaration behind, producing a file that does not run; 0.1.15
+refuses with a reason instead, which is what `#prepare`'s own comment had
+always claimed happened.
+
+Refusing is correct and is not the end state. The same applies to `enum`,
+`scope` and `delegate`, and has since those shipped.
+
+**Direction:** give a macro-declared declaration a `name_location`
+covering its symbol argument, so `attr_reader :name` can be rewritten to
+`attr_reader :title`. The writer is the hard half: `name=` and `name` are
+one token in the source, so renaming `name=` to `title=` has to write
+`:title`, not `:title=`. That asymmetry is why this is its own entry
+rather than a line in 0.1.15.
+
 ## 024.23 The singleton chain did not model `Class`/`Module`
 
 **Status:** fixed in 0.1.14.
@@ -197,10 +260,19 @@ user a report they did not have before is not a fix, so the parser now
 records what those DSLs define (`ATTRIBUTE_DSLS`), with a dynamic
 argument recording nothing.
 
-Measured with `scripts/corpus_diagnostics.rb`: `core/lib` 62 → 4
-`unknown-method` findings, ActiveSupport 8.1.3 776 → 265, Ruby 3.4.7's
-standard library 15,982 → 3,848, **and no report introduced anywhere in
-it**. Wrong `argument-count` fell 36 → 13 and `unknown-route-helper`
+Measured with `scripts/corpus_diagnostics.rb`, each revision against one
+fixed corpus: `core/lib` 60 → 4 `unknown-method` findings, ActiveSupport
+8.1.3 785 → 265, Ruby 3.4.7's standard library 15,982 → 3,848, **and no
+report introduced anywhere in it**. (0.1.14's own entry quoted 62 and 776
+for the "before" side, from a different tree; 0.1.15 corrected both.)
+
+0.1.14's fix was itself wrong in five ways, each found by independent
+review of the released code and fixed in 0.1.15: the tail was looked up
+for singleton methods rather than instance ones, it was keyed on the
+terminating ancestor rather than the receiver, `define_method` inside
+`class << self` was read as instance-self, `instance_eval`/`instance_exec`
+were listed with it for no stated reason, and `attr_*` was recorded from
+inside method bodies and blocks. Wrong `argument-count` fell 36 → 13 and `unknown-route-helper`
 48 → 8, the latter because a `*_path` name that resolves to a declaration
 is no longer guessed at -- which reduces 024.24 without fixing it.
 
