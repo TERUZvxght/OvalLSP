@@ -85,39 +85,21 @@ end
     expect(declaration.visibility).to eq(:private)
   end
 
-  # `attr_accessor` inside a method body does not run at class level, so
-  # it declares nothing. Recording it did worse than nothing: it silenced
-  # the report on `w.never_real`, which Ruby raises NoMethodError for.
-  it "records nothing inside a method body" do
-    declarations = declared("class Widget\n  def setup\n    attr_accessor :never_real\n  end\nend\n")
-
-    expect(declarations).to eq(["setup"])
-  end
-
-  # Only a block that builds an *anonymous* class or module takes the
-  # attribute somewhere else: `Struct.new do attr_reader :label end`
-  # declares `label` on the new Struct, not on the class the block is
-  # written inside. Recording it on the enclosing class offered `label` in
-  # completion on an object that does not have it.
-  %w[Struct.new(:x) Class.new Data.define(:x) Module.new].each do |builder|
-    it "records nothing inside a `#{builder}` block" do
-      source = "class Outer\n  Built = #{builder} do\n    attr_reader :label\n  end\nend\n"
-
-      expect(declared(source)).to be_empty
-    end
-  end
-
-  # Every other block runs against the enclosing class, or against
-  # whatever includes it, and attributing to the enclosing owner is the
-  # answer that resolves. 0.1.15 skipped all of them, which turned real
-  # methods into `unknown-method` reports -- `included do attr_accessor
-  # :tracked_at end` is how every ActiveSupport::Concern is written.
+  # `attr_*` is attributed to the lexically enclosing owner wherever it
+  # is written, exactly as `def` is. Three narrower rules were tried and
+  # each disowned it somewhere `def` is still owned -- and a block holds
+  # both, so half-disowning one turns the other into a false report
+  # (024.31). `included do attr_accessor :tracked_at end` is how every
+  # ActiveSupport::Concern is written, and every one of them broke under
+  # the first attempt.
   {
     "class_eval" => "class_eval do",
     "instance_eval" => "instance_eval do",
     "an ActiveSupport::Concern hook" => "included do",
     "concerning" => "concerning :Extra do",
-    "an ordinary iterator" => "[1].each do"
+    "an ordinary iterator" => "[1].each do",
+    "a Struct builder" => "Struct.new(:x) do",
+    "a Class builder" => "Class.new do"
   }.each do |label, opener|
     it "records an attribute written inside #{label}" do
       source = "class Outer\n  #{opener}\n    attr_reader :inside\n  end\nend\n"
@@ -126,21 +108,31 @@ end
     end
   end
 
-  # A named class inside any block is its own owner, so nothing about the
-  # block reaches it. The builder case is the one that distinguishes:
-  # inside `1.times do` the skip is not armed either way, so only a class
-  # written inside `Struct.new do` can tell whether entering a namespace
-  # clears the flag.
-  it "records an attribute in a class body written inside a plain block" do
-    source = "1.times do\n  class Later\n    attr_reader :zed\n  end\nend\n"
+  # The same shape ActiveRecord builds its habtm association class with:
+  # a `def self.` and an `attr_accessor` in one block, inside a method.
+  # Whatever owner the block really has, both halves must get the same
+  # one, or the `def`'s body reports the `attr_accessor`'s method missing.
+  it "gives a def and an attr_accessor in one block the same owner" do
+    source = <<~'RUBY'
+      class Builder
+        def build
+          Class.new(Object) do
+            class << self
+              attr_accessor :left_model
+            end
 
-    expect(declared(source)).to eq(["zed"])
-  end
+            def self.compute
+              left_model.to_s
+            end
+          end
+        end
+      end
+    RUBY
+    owners = summarize(source).declarations
+                              .select { |d| d.symbol_id.kind == :singleton_method }
+                              .map { |d| d.symbol_id.owner }.uniq
 
-  it "records an attribute in a class body written inside an anonymous-class block" do
-    source = "Built = Struct.new(:x) do\n  class Later\n    attr_reader :zed\n  end\nend\n"
-
-    expect(declared(source)).to eq(["zed"])
+    expect(owners).to eq(["::Builder"])
   end
 
   it "still records one written directly in the class body" do

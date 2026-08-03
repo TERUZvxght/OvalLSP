@@ -134,15 +134,6 @@ module Ovallsp
         # chain, where they do not exist, and be reported as unknown
         # methods (024.23). Top level starts `false`: `main` is an Object.
         @self_is_module_stack = [false]
-        # Only a block that *builds a class* takes an attribute somewhere
-        # this file cannot name: `Struct.new do attr_reader :label end`
-        # declares `label` on the new Struct. Every other block --
-        # `included do`, `class_eval do`, `concerning do`, an ordinary
-        # iterator -- runs against the enclosing class or against whatever
-        # includes it, so the enclosing owner is the answer that resolves.
-        # 0.1.15 skipped all of them and turned real methods into
-        # `unknown-method` reports.
-        @anonymous_class_depth = 0
         @inline_attribute_visibility = nil
         @visibility_stack = [:public]
         @in_method_body = false
@@ -256,24 +247,34 @@ module Ovallsp
       # `extension` as taking one argument too few.
       #
       # `define_singleton_method` is deliberately absent: its body really
-      # does run with the class as self, so it inherits correctly. So are
-      # `instance_eval`/`instance_exec`, which 0.1.14 listed here with
-      # neither a reason nor a test: they set self to the *receiver*, and
-      # a receiverless one in a class body has the class as its receiver,
-      # so `instance_eval { attr_accessor :x }` was reported for calling a
-      # macro that is exactly as legal as it is one line up.
+      # does run with the class as self, so it inherits correctly.
       INSTANCE_SELF_BLOCK_CALLS = %i[define_method].freeze
 
-      # A block that builds an anonymous class or module: whatever it
-      # declares belongs to the new class, which this file cannot name.
-      ANONYMOUS_CLASS_BUILDERS = { "Class" => :new, "Module" => :new, "Struct" => :new, "Data" => :define }.freeze
+      # `instance_eval`/`instance_exec` set self to their *receiver*, so
+      # neither "always instance" nor "always inherit" is Ruby's rule.
+      # Receiverless -- or on a constant -- the receiver is the class, and
+      # 0.1.14's blanket entry reported `instance_eval { attr_accessor :x }`
+      # for a macro as legal as the line above it. On an expression the
+      # receiver is an object, and inheriting the enclosing class-level
+      # self reports the instance methods its body calls.
+      RECEIVER_SELF_BLOCK_CALLS = %i[instance_eval instance_exec].freeze
 
-      def anonymous_class_block?(node)
-        return false unless node.block
+      def block_self_is_module(node)
+        return @singleton_context_stack.last if INSTANCE_SELF_BLOCK_CALLS.include?(node.name)
+        return nil unless RECEIVER_SELF_BLOCK_CALLS.include?(node.name)
 
-        receiver = raw_constant_name(node.receiver)
-        !receiver.nil? && ANONYMOUS_CLASS_BUILDERS[receiver.delete_prefix("::")] == node.name
+        # Receiverless, the receiver is the enclosing self, so inherit it.
+        # With any receiver written out, the body's self is *that object*,
+        # which this visitor cannot name -- it tracks whether self is a
+        # module, never which one. Reading it as an instance is the
+        # direction that resolves the helper methods such a block calls;
+        # inheriting class-level self reported them instead. A constant
+        # receiver is no better served by the module answer, since the
+        # lookup would still run against the enclosing owner rather than
+        # the receiver.
+        node.receiver.nil?
       end
+
 
       # `private attr_reader :x` reaches the attr recorder as a *nested*
       # call, visited while `private`'s arguments are. Its own
@@ -292,14 +293,6 @@ module Ovallsp
         end
         record_method_call_candidate(node)
 
-        if anonymous_class_block?(node)
-          @anonymous_class_depth += 1
-          begin
-            return super
-          ensure
-            @anonymous_class_depth -= 1
-          end
-        end
 
         if wrapped_visibility
           previous = @inline_attribute_visibility
@@ -313,13 +306,14 @@ module Ovallsp
         # Pushed around the children, not the candidate above: the call
         # itself is written where it is written, and only its block body
         # gets the different self.
-        return super unless node.block && INSTANCE_SELF_BLOCK_CALLS.include?(node.name)
-
         # Inside `class << self` a `define_method` block defines a
         # *singleton* method, whose self is the class object -- still a
         # Module. Pushing `false` unconditionally reported the body's
         # calls against the instance side, on code that runs.
-        @self_is_module_stack.push(@singleton_context_stack.last)
+        block_self = node.block && block_self_is_module(node)
+        return super if block_self.nil?
+
+        @self_is_module_stack.push(block_self)
         begin
           super
         ensure
@@ -502,13 +496,8 @@ module Ovallsp
         @self_is_module_stack.push(true)
         @visibility_stack.push(:public)
         @scope_stack.push(next_scope_id)
-        # `class Later` written inside `Struct.new do ... end` is a named
-        # owner of its own; nothing about the enclosing block reaches it.
-        enclosing_anonymous_depth = @anonymous_class_depth
-        @anonymous_class_depth = 0
         yield
       ensure
-        @anonymous_class_depth = enclosing_anonymous_depth
         @owner_stack.pop
         @singleton_context_stack.pop
         @self_is_module_stack.pop
@@ -621,7 +610,23 @@ module Ovallsp
         # NoMethodError for, and one inside a block put the wrong owner on
         # a real method -- offering it in completion on an object that
         # does not have it.
-        return if @in_method_body || @anonymous_class_depth.positive?
+        # No guard, deliberately: `attr_*` is attributed exactly as `def`
+        # is, to the lexically enclosing owner, wherever it is written.
+        #
+        # Three narrower rules were tried and each was wrong, because each
+        # disowned `attr_*` somewhere `def` is still owned, and a block
+        # holds both. Skipping every block turned every
+        # ActiveSupport::Concern's `included do attr_accessor :x end` into
+        # a false report; skipping only anonymous-class builders left
+        # ActiveRecord's `Class.new(Base) { class << self; attr_accessor
+        # :left_model; end; def self.compute_type; left_model; end }`
+        # reporting; skipping method bodies leaves the same shape
+        # reporting when the builder is written inside a `def`.
+        #
+        # What is left is the cost `def` already carries: a declaration
+        # recorded from somewhere it may not run, which silences a report
+        # rather than inventing one. That is the direction this engine
+        # chooses everywhere else. 024.31 records the shared defect.
 
         singleton = @singleton_context_stack.last
         # `private attr_reader :x` is one call taking another as its

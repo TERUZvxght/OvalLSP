@@ -15,9 +15,12 @@ module Ovallsp
     # - origin: how this ancestor entered the chain *at this exact
     #   position* — :self (the type actually queried, or one reached via
     #   inheritance/include/prepend/extend that is itself being listed),
-    #   :prepend, :include, :extend, :superclass, or :default (the
-    #   implicit Object/Kernel/BasicObject root every class ultimately
-    #   has).
+    #   :prepend, :include, :extend, :superclass, :default (the implicit
+    #   Object/Kernel/BasicObject root every class ultimately has), or
+    #   :class_object (the Class/Module/Object/Kernel/BasicObject tail a
+    #   *singleton* chain ends in, because the class object is an instance
+    #   of them -- see #declaration_kind, which is why it is distinct from
+    #   :default).
     # - location: the LSP range of the statement that introduced this
     #   ancestor (the `include Foo` call, the `< Foo` superclass clause),
     #   or nil for the implicit default root.
@@ -250,8 +253,8 @@ module Ovallsp
           # chain is fully accounted for when its middle is not.
           entries << AncestorEntry.new(name: nil, kind: nil, origin: :superclass, location: nil)
         elsif superclass_fact && !ROOT_SUPERCLASS_NAMES.include?(superclass_fact.target)
-          # The parent's own singleton chain ends in the tail, so
-          # appending one here too would duplicate it.
+          # The tail is not appended here at all: `#ancestors` adds it
+          # once, from the receiver's own kind.
           entries.concat(
             compute_ancestors_locked(superclass_fact.target, singleton: true, visited: visited, origin_for_self: :superclass)
           )

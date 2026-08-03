@@ -173,7 +173,7 @@ table — it belongs in the non-goals below.
 |---|---|---|---|
 | W1 | Find All References on a workspace method | every call site, across files | PASS |
 | W2 | Rename a workspace method declared with `def` | every call site is rewritten | PASS |
-| W2 | Rename one a macro declared (`attr_accessor`, `delegate`, …) | it is refused with a reason, not half-applied — there is no identifier token to rewrite, and editing only the call sites would leave the declaration behind (024.28) | PASS |
+| W4 | Rename one a macro declared (`attr_accessor`, `delegate`, …) | it is refused with a reason, not half-applied — there is no identifier token to rewrite, and editing only the call sites would leave the declaration behind (024.28) | PASS |
 | W3 | Workspace symbol search | matching classes and methods | PASS |
 
 ## What this document deliberately does not promise

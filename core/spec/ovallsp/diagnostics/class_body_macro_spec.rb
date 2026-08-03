@@ -74,12 +74,6 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
           .map { |finding| finding.message[/named `(.+)`/, 1] }
   end
 
-  def argument_counts(body)
-    engine.analyze(document: index(body), semantic_context: context, mode: :standard)
-          .select { |finding| finding.code == "argument-count" }
-          .map(&:message)
-  end
-
   # One example per name rather than one example listing them, so a fix
   # that reaches `private` and not `attr_reader` fails on the one it
   # missed instead of on a list.
@@ -257,6 +251,27 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   # nor a test, and reported this.
   it "reads an instance_eval block in a class body as the class" do
     source = "class InstEvalCase\n  instance_eval do\n    attr_accessor :x\n  end\nend\n"
+
+    expect(unknown_methods(source)).to be_empty
+  end
+
+  # `instance_eval` sets self to its *receiver*. Receiverless in a class
+  # body or in `def self.`, that receiver is the class -- which is why
+  # `instance_eval { attr_accessor :x }` is as legal as the line above it.
+  # With an explicit receiver it is an instance, and treating the block as
+  # class-level then reports the instance methods it calls.
+  it "reads an instance_eval block on an explicit receiver as an instance" do
+    source = <<~'RUBY'
+      class W
+        def helper; end
+
+        def self.setup(other)
+          other.instance_eval do
+            helper
+          end
+        end
+      end
+    RUBY
 
     expect(unknown_methods(source)).to be_empty
   end

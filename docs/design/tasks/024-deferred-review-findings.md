@@ -161,6 +161,73 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.31 A declaration written inside a block has no owner this parser can name
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`record_attribute_methods`,
+`visit_def_node`)
+
+A block can change the receiver its body runs against — `Class.new do`,
+`Struct.new do`, `included do`, `class_eval do`, `concerning do`,
+`instance_eval do` all answer differently, and `builder.call do` answers
+something this file cannot see at all. The visitor attributes everything
+it finds to the lexically enclosing owner, which is right for some of
+those and wrong for others.
+
+**This entry exists because three attempts to be cleverer than that each
+made things worse, and each was found by the review round after it.** All
+three were confined to `attr_*` while `def` kept the lexical answer, and
+a block holds both:
+
+1. **Skip every block.** Turned every ActiveSupport::Concern's
+   `included do attr_accessor :tracked_at end` into
+   `Order has no method named tracked_at` — a false report on the most
+   ordinary Rails code there is.
+2. **Skip only anonymous-class builders** (`Class.new`, `Struct.new`,
+   `Data.define`, `Module.new`). ActiveRecord builds its
+   habtm association class as
+   `Class.new(Base) { class << self; attr_accessor :left_model; end; def self.compute_type; left_model; end }`.
+   Dropping the `attr_accessor` while `def self.compute_type` kept the
+   enclosing owner produced three reports on `activerecord-8.1.3`.
+3. **Skip method bodies.** The same shape, written inside a `def`, has
+   the same asymmetry for the same reason.
+
+The rule now is the one `def` has always had: **attribute to the
+lexically enclosing owner, everywhere, with no exceptions.** Consistency
+is what avoids the false reports; the residual cost is a declaration
+recorded against an owner that may not be its real one, which offers a
+member in completion that is not there and silences a report rather than
+inventing one. That is the direction this engine chooses everywhere else,
+and it is what shipped in 0.1.14 and every release before it.
+
+Two consequences a user can see, both pre-existing and both now
+deliberate:
+
+- `Struct.new(:x) do attr_reader :label end` inside `class Outer` offers
+  `label` on an `Outer`, and go-to-definition on it lands in the block.
+- `def setup; attr_accessor :never_real; end` records `never_real`, so a
+  call to it is not reported even though Ruby raises `NoMethodError`
+  unless `setup` ran. A nested `def` in the same position has always been
+  recorded the same way.
+
+**Direction:** the fix is not a longer allowlist — that is what these
+three attempts were, and the fourth would be too. It needs the visitor to
+carry a *receiver* for a block rather than a boolean, so that
+`Class.new do` opens an anonymous owner, `included do` opens the
+includer, and an unrecognised builder opens an unknown owner whose
+declarations are recorded against nothing. That is a change to what an
+owner *is*, which is why it belongs to its own task rather than to a
+patch release correcting something else.
+
+Until then, do not add a name to any block allowlist without a corpus run
+in both directions across ActiveRecord and ActiveSupport, and without
+asking what `def` in the same position does.
+
 ## 024.30 0.1.15's hunk sweep: three hunks that cannot be pinned, and why
 
 ```yaml
@@ -182,7 +249,11 @@ after every one. The survivors, and what was done about each:
   for which `new` *should* be reported, so there is nothing to assert.
   Deleted rather than tested, which is what CLAUDE.md prescribes for a
   decision that cannot be pinned. The corpus runs are the evidence: zero
-  reports introduced over the standard library or three Rails gems.
+  reports introduced over the standard library, ActiveSupport and this
+  repository's own `core/lib`. A later round measured a wider Rails set
+  and found three reports from a different cause (024.31), so "three
+  Rails gems" as this entry first put it was not a claim those runs
+  supported.
 - **`rbs_resolves?` delegating to `AncestorEntry#declaration_kind`**
   (`diagnostics/engine.rb`). Not a behavioural decision — it is the
   removal of a second, hand-written copy of a rule. The rule itself *is*

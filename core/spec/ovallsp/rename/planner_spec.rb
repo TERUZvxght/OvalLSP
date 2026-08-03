@@ -239,6 +239,31 @@ RSpec.describe Ovallsp::Rename::Planner do
       expect(plan.warnings.join).to include("declared by a macro rather than a `def`", "cannot be renamed in place")
     end
 
+    # A plugin's declaration also carries no `name_location` -- it records
+    # the synthetic `PLUGIN_LOCATION` -- so keying the refusal on that
+    # would disable rename for a method the workspace writes with a real
+    # `def` merely because a plugin also registered the name. The refusal
+    # is about a *macro* declaration, which is what `origin: :generated`
+    # says.
+    it "still renames a `def` a plugin also registered" do
+      workspace_index.replace_file(
+        Ovallsp::Index::FileSummary.new(
+          uri: "file:///plugin.rb", content_hash: "p", document_version: 1,
+          declarations: [
+            Ovallsp::Index::Declaration.new(
+              symbol_id: sym(kind: :instance_method, owner: "::Widget", name: "describe"),
+              location: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              visibility: :public, parameters: [], origin: :plugin
+            )
+          ],
+          diagnostics: [], ancestor_facts: [], alias_facts: [], reference_candidates: [],
+          generated_method_facts: []
+        )
+      )
+
+      expect(planner.prepare(sym(kind: :instance_method, owner: "::Widget", name: "describe"))).not_to be_nil
+    end
+
     it "still renames a method the same class declares with `def`" do
       plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "describe"),
                           new_name: "explain", generation: 1)

@@ -28,16 +28,12 @@ the released code and fixed with the same measurement discipline.
 - Fixed: `define_method` inside `class << self` no longer reports its
   body's calls. That block defines a singleton method, so its `self` is
   still the class.
-- Fixed: `instance_eval do … end` in a class body no longer reports
-  `attr_accessor` and friends. `instance_eval` sets `self` to the
-  receiver, which there is the class. 0.1.14 listed `instance_eval` and
-  `instance_exec` next to `define_method` with neither a reason nor a
-  test; they are gone.
-- Fixed: `attr_accessor` written inside a method body or inside a block
-  no longer declares anything. It declared methods that do not exist,
-  which silenced real reports (`w.never_real` was accepted) and put the
-  wrong owner on real ones (`Struct.new do attr_reader :label end`
-  offered `label` on the enclosing class).
+- Fixed: `instance_eval do … end` no longer reports on either side of
+  its own rule. `instance_eval` sets `self` to its receiver: written
+  without one in a class body, that is the class, and 0.1.14 reported the
+  `attr_accessor` such a block contains; written on an object, that is an
+  instance, and reading the block as class-level reported the instance
+  methods it calls.
 - Fixed: `private attr_reader :x` is private. It was recorded public, so
   a private method appeared in completion and an external call to it
   stopped being reported.

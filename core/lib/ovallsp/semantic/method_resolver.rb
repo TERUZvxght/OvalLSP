@@ -27,7 +27,10 @@ module Ovallsp
     #   member of a Union receiver (only meaningful when the query was
     #   made against a Union; always false for a single Nominal receiver).
     # - origin: how the declaring ancestor entered the chain — :self,
-    #   :prepend, :include, :extend, :superclass, or :default.
+    #   :prepend, :include, :extend, :superclass, :default, or
+    #   :class_object (the Class/Module tail of a singleton chain --
+    #   `Diagnostics::Engine` declines to judge argument counts against
+    #   one of those, since the workspace did not state it).
     MethodCandidate = Data.define(:symbol_id, :declarations, :owner, :visibility, :lookup_rank, :conditional, :origin)
 
     # Resolves method-call candidates and completion lists from a receiver

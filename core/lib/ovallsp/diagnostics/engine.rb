@@ -336,8 +336,9 @@ module Ovallsp
         # model and every module -- receivers the static tests were about
         # to rule out anyway -- queued a question whose answer could not
         # change the outcome.
-        # Skipping `origin: :default` -- the Object/Kernel/BasicObject tail
-        # HierarchyIndex appends to every class. Those are not links the
+        # Skipping every synthesised entry -- the Object/Kernel/BasicObject
+        # tail HierarchyIndex appends to every class, and the Class/Module
+        # tail it appends to every singleton chain. Those are not links the
         # workspace wrote, so they cannot be ones it reopened, and asking
         # would spend a round trip to be told what RBS already says.
         entries.none? do |entry|

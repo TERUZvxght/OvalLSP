@@ -701,13 +701,16 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
-    # Same W2 row, second shape. `attr_accessor` declares a method with no
+    # Its own row, not a second `W2`: `capability_coverage_spec` compares
+    # ids as set differences, so a duplicate id makes the new row and its
+    # example cancel out and the guard cannot see either.
+    # `attr_accessor` declares a method with no
     # identifier token to rewrite, so a rename that edited only the call
     # sites would leave the declaration behind and the file would not run.
     # The suite could not see this before: nothing in this fixture used
     # `attr_*` at all, and 0.1.14 shipped that regression through a green
     # capability run.
-    it "W2: refuses rather than half-renaming a method a macro declared" do
+    it "W4: refuses rather than half-renaming a method a macro declared" do
       with_file("app/models/attr_rename_probe.rb", <<~RUBY) do |uri|
         class AttrRenameProbe
           attr_accessor :title

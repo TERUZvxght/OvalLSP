@@ -59,10 +59,18 @@ module Ovallsp
       # rename into a WorkspaceEdit that rewrote every call site and left
       # the declaration behind, producing a file that does not run.
       # Refusing is what `#prepare`'s comment always claimed happened.
+      #
+      # Keyed on `origin: :generated`, not on a missing `name_location`.
+      # A plugin's declaration also has none (`Server#plugin_declaration`
+      # records the synthetic `PLUGIN_LOCATION`), and a plugin registering
+      # a symbol the workspace also writes with a real `def` would then
+      # have disabled rename for a method that has an identifier to edit --
+      # refusing with a message naming a macro and a 1:1 position that is
+      # not in any file.
       def uneditable_declaration(symbol_id)
         @workspace_index.declarations_with_uri(symbol_id)
                         .map { |(_uri, declaration)| declaration }
-                        .find { |declaration| declaration.name_location.nil? }
+                        .find { |declaration| declaration.origin == :generated }
       end
 
       def plan(symbol_id, new_name:, generation:)

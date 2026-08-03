@@ -401,16 +401,15 @@ module Ovallsp
       candidates.find { |sid| sid.name == qualified } || candidates.first
     end
 
-    # Two collections are deliberately left in insertion order, both of
-    # which a re-index does move. `#method_symbol_ids` returns
-    # `@by_symbol.keys`: all three callers are order-insensitive -- two
-    # `.any?` it, and `MethodResolver` feeds it to `merge_names`, which
-    # sorts on a total key. `#uris_by_source` reads `@summaries`, whose
+    # One collection is deliberately left in insertion order, and a
+    # re-index does move it: `#uris_by_source` reads `@summaries`, whose
     # entry `remove_file_locked` deletes and `replace_file` re-inserts;
     # its one caller sweeps deleted files and does not care in what order.
-    # Ordering either would buy nothing and cost a sort on the completion
-    # path. "The order lives in the storage" is a claim about the
-    # collections whose order a caller can observe.
+    # "The order lives in the storage" is a claim about the collections
+    # whose order a caller can observe.
+    #
+    # `#method_symbol_ids` was the second one and is no longer: it reads a
+    # `[owner, kind]` bucket and sorts it on the way out (see there).
     #
     # `[uri, line, character]`. Uri first because that is what a caller
     # taking `.first` is choosing between; source position breaks the tie
