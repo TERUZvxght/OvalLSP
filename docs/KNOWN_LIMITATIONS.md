@@ -265,6 +265,16 @@ Six more are older than this release and untouched by it:
 Both diagnostics 0.2.0 adds are held to "a wrong report is worse than a
 missed one", so each is narrow on purpose. What that costs a user:
 
+- **The number of arguments** is checked, and every report it produces
+  over the code measured so far is wrong: **15** over Ruby's standard
+  library, five Rails gems and minitest, each one working Ruby. Ten are
+  `def Const.method` being recorded as an instance method (024.32); the
+  rest are a block's `self` read as the enclosing class and a receiver
+  resolved by name collision. A corpus of gems is close to the worst
+  case for this — their dependencies are absent, so names resolve by
+  substitution — and the check's precision on a real application is
+  unmeasured. What 0.2.0 changes is where you see them: diagnostics now
+  publish for files nobody opened (024.40).
 - **Argument types** are checked so narrowly that on the code measured
   so far they are not reported at all. Over Ruby's standard library, five
   Rails gems and minitest — 2,042 files — this check produces

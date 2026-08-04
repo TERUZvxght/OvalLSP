@@ -172,6 +172,53 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.40 Every `argument-count` report on the measurement corpus is false
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`argument_count_findings`,
+`sole_source_declaration`)
+
+G5 has been a ✅ row since 0.1.6. A reviewer read all 17 reports it
+produced at `6f5e86a`; after round 22's fixes there are 15, and all 15
+were read again. Every one is working Ruby:
+
+| shape | count | cause |
+|---|---|---|
+| `def HTTP.get_response` calling `start(...)`, judged against the instance `def start` | 8 | 024.32 |
+| `def CStructEntity.malloc(types, func = nil, size = size(types))` | 1 | 024.32 |
+| `def Runnable.run_suite` | 1 | 024.32 |
+| `create(name, nil, arg)` where `create` is `alias_method :create, :new` in `class << self` | 2 | the alias is resolved, the singleton `new` is not |
+| `run Rails.application` inside `Rack::Builder.new do` | 1 | block self is the enclosing class (024.31) |
+| `readline(@prompt, false)`, `Configuration.instance(:must_exist).load do` | 2 | receiver resolved by substitution |
+
+**What this is not.** It is not "the check is wrong". Every one of these
+is a case where the *declaration* the check found is not the one the call
+reaches, and each has its own recorded cause. Nor is it a 0.2.0
+regression: `main` produces 22 on the same corpus.
+
+**What it is.** A corpus of gems is close to the worst case for this
+check — dependencies absent, so names resolve by substitution; heavy use
+of `def Const.method`, which the parser mis-files. A user's own workspace
+is the opposite: their classes are declared, their names are theirs. The
+honest statement is that the check's precision is unmeasured on the code
+it is actually for, and measured at zero on the code we have.
+
+**What 0.2.0 changes** is the blast radius, exactly as 024.24 argued for
+the route check: diagnostics now publish for files nobody opened, so
+these reach the Problems panel rather than waiting to be found.
+
+**Direction:** the three causes are already recorded — 024.32 (`def
+Const.method`'s kind and owner), 024.31 (a block's self), and the
+index's substitution, which round 22 refused for the *receiver* and for
+a *superclass* but not for an aliased singleton. Fixing 024.32 alone
+removes 10 of the 15. Then re-measure, on a real application rather than
+on gems.
+
 ## 024.38 `scope_at` copies the whole environment once per descent step
 
 ```yaml

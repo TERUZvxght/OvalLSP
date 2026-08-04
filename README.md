@@ -69,7 +69,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown method on a workspace class | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: unknown method on a model | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: unknown route helper | ✅ | — (no Runtime Agent) | — |
-| Diagnostics: wrong number of arguments | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics: wrong number of arguments | ⚠️ [^argcount] | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Diagnostics: reading an `@ivar` that is never assigned | ⚠️ [^ivar] | ⚠️ | — |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
@@ -86,6 +86,16 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+
+[^argcount]: Verified by tests that fail if it breaks, and it does fire —
+    but every one of the 15 reports it produces over Ruby's standard
+    library, five Rails gems and minitest is wrong. Each has a recorded
+    cause: `def Const.method` recorded as an instance method (10 of the
+    15), a block's `self` read as the enclosing class, and a receiver
+    resolved by name collision. A corpus of gems is close to the worst
+    case — their dependencies are absent, so names resolve by
+    substitution — and the check's precision on a real application is
+    unmeasured (024.40).
 
 [^argtype]: The check is verified by a test that fails if it breaks, but
     it has never fired on real Ruby: **zero** findings over Ruby's
