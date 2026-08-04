@@ -262,29 +262,48 @@ module Ovallsp
       @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
     end
 
-    # Whether that answer was a *pick* rather than a resolution: the name
-    # as written matches no declared type, and several share its last
-    # segment. `resolve_type_name` still answers, and should -- for
-    # completion and go-to-definition a plausible class beats none.
+    # Whether `resolve_type_name` answered about a *different name* than
+    # the one it was asked about. It always answers when the last segment
+    # matches something, and should -- for completion and go-to-definition
+    # a plausible class beats none.
     #
     # A diagnostic is the other case. Reporting "X has no method named y"
-    # about a class the engine chose by name collision is an assertion
-    # about a receiver it has not identified, and same-named classes in
-    # different namespaces are ordinary Ruby: this repository grew a
-    # second `Collector` in 0.2.0 and the check began reporting a method
-    # the parser records. 024.19 is the same cause reaching the
-    # argument-type check.
+    # about a class the engine substituted is an assertion about a
+    # receiver it has not identified.
+    #
+    # Two ways the substitution happens, and the first version of this
+    # guard only caught the second:
+    #
+    # - **the name carries a namespace and no declared type has it.**
+    #   `Ripper::Lexer` in prism's `lex_compat.rb` resolved to
+    #   `Prism::Translation::Parser::Lexer` and `ripper.lex` was reported
+    #   unknown. Counting candidates does not see this: there is only one
+    #   `Lexer`, and it is the wrong one. What gives it away is that the
+    #   caller wrote a namespace and got a class from a different one.
+    # - **the name is bare and several types share it.** Then the pick is
+    #   between them, and there is nothing to prefer. This repository grew
+    #   a second `Collector` in 0.2.0 and a method the parser records was
+    #   reported unknown.
+    #
+    # A bare name matching exactly one type is *not* a guess: that is the
+    # lookup working, and it is how every reference from inside a
+    # namespace resolves -- `LocalInferencer` hands over the constant as
+    # written, without the lexical qualification `ReceiverResolution`
+    # applies to an explicit receiver.
+    #
+    # 024.19 is this, reaching the argument-type check.
     def guessed_type_name?(name)
       @mutex.synchronize do
         raw = name.to_s
         simple = raw.split("::").last
+        qualified = Index::SymbolId.qualify_owner(raw)
         candidates = ordered_symbol_ids(simple, matching: lambda { |sid|
           %i[class module].include?(sid.kind) && simple_name(sid) == simple
         })
-        next false if candidates.size <= 1
+        next false if candidates.any? { |sid| sid.name == qualified }
+        next true if Index::SymbolId.bare_name(raw).include?("::")
 
-        qualified = Index::SymbolId.qualify_owner(raw)
-        candidates.none? { |sid| sid.name == qualified }
+        candidates.size > 1
       end
     end
 

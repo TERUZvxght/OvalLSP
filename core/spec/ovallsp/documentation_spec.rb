@@ -65,6 +65,42 @@ RSpec.describe Ovallsp::Documentation do
     expect(above(text, 5)).to eq("Charges the card.")
   end
 
+  # Every alternative in the pattern, one example each. Ten of them were
+  # added together and pinned by nothing: reverting all but `-*-`,
+  # `vim:`, `:markup:` and the shebang left the suite green, while
+  # changing what hover shows on Ruby's own standard library --
+  # `net/http.rb`'s `get_response` opened with a raw `:call-seq:` line.
+  {
+    "#!/usr/bin/env ruby" => "shebang",
+    "# -*- coding: utf-8 -*-" => "an Emacs coding cookie",
+    "# vim: set ts=2 sw=2:" => "a vim modeline",
+    "# vi: set ts=2:" => "a vi modeline",
+    "# ex: set ts=2:" => "an ex modeline",
+    "# Local Variables:" => "an Emacs local-variables block",
+    "# :nodoc:" => "RDoc's :nodoc:",
+    "# :doc:" => "RDoc's :doc:",
+    "# :markup: markdown" => "RDoc's :markup:",
+    "# :stopdoc:" => "RDoc's :stopdoc:",
+    "# :startdoc:" => "RDoc's :startdoc:",
+    "# :enddoc:" => "RDoc's :enddoc:",
+    "# :include: other.rdoc" => "RDoc's :include:",
+    "# :title: Something" => "RDoc's :title:",
+    "# :main: README" => "RDoc's :main:",
+    "# :category: Utilities" => "RDoc's :category:",
+    "# :call-seq:" => "RDoc's :call-seq:",
+    "# frozen_string_literal: true" => "the frozen-string magic comment",
+    "# encoding: utf-8" => "the encoding magic comment",
+    "# warn_indent: true" => "the warn_indent magic comment",
+    "# shareable_constant_value: literal" => "the shareable-constant magic comment",
+    "# rubocop:disable Metrics/MethodLength" => "a rubocop directive"
+  }.each do |line, description|
+    it "drops #{description}" do
+      text = "#{line}\n# Charges the card.\ndef charge\nend\n"
+
+      expect(above(text, 2)).to eq("Charges the card.")
+    end
+  end
+
   # And a comment that merely begins with one of those words is prose.
   it "keeps a sentence that starts like a directive" do
     text = <<~RUBY

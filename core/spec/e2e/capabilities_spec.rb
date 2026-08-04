@@ -712,7 +712,18 @@ RSpec.describe "Extension capabilities", :e2e do
         uri = client.open(path)
         client.wait_until_ready
 
-        expect(client.diagnostic_messages(uri, timeout: 20).join(" ")).not_to match(/no route named/i)
+        # Two halves, because `not_to match` alone is satisfied by a
+        # world in which the check never ran: 0.2.0 made a route table
+        # that has never loaded answer nothing at all (024.24), so this
+        # example passed whether or not anything ever cleared. The
+        # positive assertion is what makes the negative one mean
+        # something -- routes arrived, the file was not touched, and
+        # `posts_path` resolves.
+        messages = client.diagnostic_messages(uri, timeout: 20)
+        expect(messages.join(" ")).not_to match(/no route named/i)
+        expect(Array(client.raw_request("textDocument/definition",
+                                        { textDocument: { uri: uri },
+                                          position: { line: 2, character: 18 } }))).not_to be_empty
       ensure
         client.stop
       end

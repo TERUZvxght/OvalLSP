@@ -569,6 +569,33 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     expect(result.first.evidence).to include(expected: "Integer", actual: "String")
   end
 
+  # Too few arguments. They still bind to the required parameters in
+  # order -- Ruby fills those first -- so the ones that were passed are
+  # checkable, and `1` is not the `String` that `first` declares. The
+  # first version of this method dropped the whole call instead, on the
+  # stated grounds that a bad arity is the arity check's report to make.
+  # That is false for a method declared only in a signature:
+  # `argument_count_findings` reads *source* declarations, so nobody
+  # reports it and nobody checks the arguments either.
+  it "checks the arguments that were passed when the call passes too few" do
+    result = findings(%(Widget.new.pair(1)\n))
+
+    expect(result.size).to eq(1)
+    expect(result.first.evidence).to include(expected: "String", actual: "Integer", position: 0)
+  end
+
+  # Too many is the other direction and genuinely unmappable: nothing
+  # says which parameter the extra argument was meant for. Silence rather
+  # than a guess -- and silence that does not raise, which is what the
+  # refusal is really for: `optional_positionals.first(-1)` is an
+  # `ArgumentError` out of `Engine#analyze`, and `Server` rescues and
+  # logs, so the file would get no diagnostics at all.
+  it "says nothing about a call that passes more arguments than the signature accepts" do
+    result = findings(%(Widget.new.pair("a", 2, 3, 4)\n))
+
+    expect(result).to be_empty
+  end
+
   # The other half of the same argument, and the reason the rule is a
   # parameter rather than the method's only behaviour. `rbs_resolves?`'s
   # question is "does anything declare this at all", asked immediately

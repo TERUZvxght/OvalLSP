@@ -403,8 +403,7 @@ module Ovallsp
       end
 
       # Which declared type each of `count` arguments lands on, or nil
-      # when the call's arity does not fit the signature at all -- that is
-      # the arity check's report to make, not this one's.
+      # when nothing can be said.
       #
       # It depends on the count because Ruby fills the required
       # parameters first, the trailing ones last, and the optional ones
@@ -413,14 +412,26 @@ module Ovallsp
       # `a`, `b` and `c`. A fixed `required + optional` list is right only
       # when there are no trailing parameters, and was reading `c`'s type
       # at index 1.
+      #
+      # The two arity failures are not symmetric, and an earlier version
+      # of this treated them as though they were -- returning nil for
+      # both, on the stated grounds that arity is the arity check's
+      # report to make. That is false for a method declared only in a
+      # signature: `argument_count_findings` reads *source* declarations,
+      # so for those nobody reports the arity and nobody checks the
+      # arguments either.
+      #
+      # Too few, and the arguments still bind to the required parameters
+      # in order, so those are checkable and the trailing ones simply
+      # have no argument. Too many, and nothing says which parameter the
+      # extra one was meant for.
       def expected_positional_types(overload, count)
-        fixed = overload.required_positionals.size + overload.trailing_positionals.size
-        optional_taken = count - fixed
-        return nil if optional_taken.negative? || optional_taken > overload.optional_positionals.size
+        required = overload.required_positionals
+        optional_taken = count - required.size - overload.trailing_positionals.size
+        return required.first(count) if optional_taken.negative?
+        return nil if optional_taken > overload.optional_positionals.size
 
-        overload.required_positionals +
-          overload.optional_positionals.first(optional_taken) +
-          overload.trailing_positionals
+        required + overload.optional_positionals.first(optional_taken) + overload.trailing_positionals
       end
 
       # A subclass is a perfectly good instance of its parent, and
