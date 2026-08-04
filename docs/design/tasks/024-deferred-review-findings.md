@@ -264,8 +264,13 @@ Foo.new.bar    # accepted    -- Ruby raises NoMethodError
 
 Pre-existing and identical on 0.1.13, 0.1.14 and 0.1.15. **106**
 occurrences of `def Const.method` in Ruby 3.4.7's standard library,
-counted with Prism; six of them survive as false reports in the stdlib
-run on all three revisions, including `Bundler::Deprecate.skip`
+counted with Prism. Matching every stdlib `unknown-method` report's
+receiver and method name against those declarations, **56** of them are
+this -- on 0.1.15 and 0.1.14 alike, 59 on 0.1.13. An earlier draft of
+this entry said six, which was a hand count of one file rather than a
+measurement, and it understated the case for fixing this by roughly nine
+times. Among them `PP.mcall`, `Ripper.lex`, `IRB::Frame.top`,
+`IO.console_size`, `Net::HTTP::Proxy`, and `Bundler::Deprecate.skip`
 (`bundler/shared_helpers.rb:391`), `CGI::Session.callback`
 (`cgi/session.rb:345`) and three in `fiddle/struct.rb`.
 
@@ -391,7 +396,7 @@ inside `add_generated_method` were invisible to it, because reverse-
 applying a hunk that adds a whole method only asks whether the method
 exists. Both are pinned now.
 
-**The shipped diff was swept afterwards: 25 hunks, 20 caught, 5
+**The shipped diff was swept at `3dc0011`: 25 hunks, 20 caught, 5
 survived**, baseline green before and after, every file verified
 byte-identical between hunks. The five:
 
@@ -408,7 +413,15 @@ byte-identical between hunks. The five:
   @visibility_stack.last`, so an unset ivar and an explicit `nil` answer
   the same. Kept for the same reason as any other constructor default.
 
-One was, and is not any more. `block_self_is_module`'s
+The diff has grown since: rounds six and seven each added a hunk to
+`argument_count_findings` and `extract_parameters`, neither covered by
+that run. Those were swept at the decision level instead -- each entry of
+`declares_keywords`, the forwarding-parameter branch, and the
+double-splat branch -- and each is pinned by an example that fails when
+it is reverted. A hunk count is only true of the commit it was measured
+at; this one is `3dc0011`'s.
+
+One decision was unpinned, and is not any more. `block_self_is_module`'s
 `node.receiver.nil?` term survived an 18-mutation sweep a later round
 ran, because the example written for it put the explicit receiver inside
 a `def` -- where `!@in_method_body` already answers, so the receiver term
@@ -554,8 +567,14 @@ edit.
 not at an identifier token, so there is nothing for an in-place edit to
 rewrite. 0.1.14 emitted a `WorkspaceEdit` that renamed every call site and
 left the declaration behind, producing a file that does not run; 0.1.15
-refuses with a reason instead, which is what `#prepare`'s own comment had
-always claimed happened.
+refuses instead, which is what `#prepare`'s own comment had always
+claimed happened.
+
+The reason reaches the Core log only. `prepare` answers `null`, so the
+editor shows its own "cannot be renamed" message and never asks for the
+edit; nothing in this codebase sends `window/showMessage`. The W4 row's
+E2E example calls `textDocument/rename` directly and asserts an empty
+edit set, so the refusal is verified and the *explanation* is not.
 
 Refusing is correct and is not the end state. The same applies to `enum`,
 `scope` and `delegate`, and has since those shipped.

@@ -58,7 +58,10 @@ module Ovallsp
       # `name_location` -- and dropping it silently is what turned a
       # rename into a WorkspaceEdit that rewrote every call site and left
       # the declaration behind, producing a file that does not run.
-      # Refusing is what `#prepare`'s comment always claimed happened.
+      # Refusing is what `#prepare`'s comment always claimed happened. The
+      # reason below reaches the log, not the user: `prepare` answers nil,
+      # so the editor shows its own message and never asks for the edit
+      # (024.28).
       #
       # Keyed on `origin: :generated`, not on a missing `name_location`.
       # A plugin's declaration also has none (`Server#plugin_declaration`

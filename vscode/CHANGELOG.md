@@ -38,9 +38,11 @@ the released code and fixed with the same measurement discipline.
   methods it calls.
 - Fixed: `private attr_reader :x` is private. It was recorded public, so
   a private method appeared in completion on an outside receiver.
-- Fixed: renaming a method that a macro declared is refused with a reason
-  instead of producing a `WorkspaceEdit` that rewrites every call site and
-  leaves `attr_accessor :name` behind — an edit that does not run. This
+- Fixed: renaming a method that a macro declared is refused instead of
+  producing a `WorkspaceEdit` that rewrites every call site and leaves
+  `attr_accessor :name` behind — an edit that does not run. The editor
+  shows its own "cannot be renamed" message; the reason goes to the Core
+  log, not to a notification. This
   hole pre-existed for `enum`, `scope` and `delegate`; 0.1.14 extended it
   to ordinary Ruby. `prepareRename`'s own comment always said generated
   symbols were refused; now they are.

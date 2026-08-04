@@ -156,8 +156,9 @@ module Ovallsp
           # A brace-less trailing hash is *keywords* only if the method
           # declares some. `add("a", "K" => 1)` against `def add(name,
           # hash)` passes two positionals, and counting the hash as
-          # keywords reported it as one: 400 such reports in one corpus,
-          # 399 of them in `sexp_processor`'s `pt_testcase.rb`. The
+          # keywords reported it as one: 526 such reports over brakeman
+          # and its vendored gems, 399 of them in `sexp_processor`'s
+          # `pt_testcase.rb` and the rest mostly `warn options`. The
           # miscount predates 0.1.14; what 0.1.14 changed is that a
           # receiverless call in a class body resolves, so it reached this
           # check for the first time.

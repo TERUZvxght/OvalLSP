@@ -191,20 +191,72 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     expect(argument_counts(source)).to be_empty
   end
 
-  # Not when the method really does take keywords -- there the hash is
-  # the keywords, and the positional count stands.
-  it "still counts keywords as keywords when the method declares them" do
+  # `def m(...)` forwards everything, so no call to it can be judged.
+  # `extract_parameters` read `...` as no parameters at all, which made
+  # every positional call to such a method a report -- pre-existing -- and
+  # the trailing-hash fix above widened it to keyword-only calls. 109 such
+  # declarations in Rails 8.1.3; net-imap's `body_section_attr` is one.
+  it "judges no call to a method that forwards with `...`" do
     source = <<~'RUBY'
-      class T
-        def self.build(name, size:)
-          [name, size]
-        end
+      class Fwd
+        def self.wrap(...); end
 
-        build size: 1
+        def self.go
+          wrap(offset: 1)
+          wrap(1, 2)
+        end
       end
     RUBY
 
-    expect(argument_counts(source)).to eq(["build"])
+    expect(argument_counts(source)).to be_empty
+  end
+
+  it "judges no call to a method that forwards after a positional" do
+    source = <<~'RUBY'
+      class Fwd
+        def self.wrap(first, ...); end
+
+        def self.go
+          wrap(1, 2, 3)
+        end
+      end
+    RUBY
+
+    expect(argument_counts(source)).to be_empty
+  end
+
+  # `**opts` passes whatever the hash holds -- nothing at all when it is
+  # empty. Counting the double splat as one positional reported
+  # `ping(**opts)`, `ping(**{})` and `ping(**nil)`, all of which run.
+  it "judges no call that passes a double splat" do
+    source = <<~'RUBY'
+      class Sp
+        def self.ping; end
+
+        def self.go(opts)
+          ping(**opts)
+          ping(**{})
+        end
+      end
+    RUBY
+
+    expect(argument_counts(source)).to be_empty
+  end
+
+  # Not when the method really does take keywords -- there the hash is
+  # the keywords, and the positional count stands. One example per kind:
+  # a required keyword, an optional one, and `**rest` each mean the hash
+  # is keywords, and a fixture with only the first pins only the first.
+  {
+    "a required keyword" => "def self.build(name, size:); end",
+    "an optional keyword" => "def self.build(name, size: 1); end",
+    "a keyword rest" => "def self.build(name, **rest); end"
+  }.each do |label, declaration|
+    it "still counts keywords as keywords when the method declares #{label}" do
+      source = "class T\n  #{declaration}\n\n  build \"x\" => 1\nend\n"
+
+      expect(argument_counts(source)).to eq(["build"])
+    end
   end
 
   it "does not report `new` on a constant receiver" do

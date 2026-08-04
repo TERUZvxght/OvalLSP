@@ -904,7 +904,16 @@ module Ovallsp
         splat = arguments.any? do |argument|
           argument.is_a?(Prism::SplatNode) || argument.is_a?(Prism::ForwardingArgumentsNode)
         end
-        keywords = arguments.count { |argument| argument.is_a?(Prism::KeywordHashNode) }
+        keyword_hashes = arguments.select { |argument| argument.is_a?(Prism::KeywordHashNode) }
+        # `**opts` is a KeywordHashNode too, and it passes whatever the
+        # hash holds -- nothing at all when it is empty. Its count is not
+        # knowable here, so it makes the call as unjudgeable as a splat
+        # does. Only literal `k: v` pairs are countable keywords.
+        double_splat = keyword_hashes.any? do |hash|
+          hash.elements.any? { |element| element.is_a?(Prism::AssocSplatNode) }
+        end
+        splat ||= double_splat
+        keywords = keyword_hashes.count - (double_splat ? keyword_hashes.count : 0)
         {
           positional: arguments.count do |argument|
             !argument.is_a?(Prism::KeywordHashNode) && !argument.is_a?(Prism::SplatNode) &&
@@ -1064,8 +1073,17 @@ module Ovallsp
           kind = p.is_a?(Prism::OptionalKeywordParameterNode) ? :keyword_optional : :keyword
           params << param(parameter_name(p), kind, p.respond_to?(:value) ? p.value : nil)
         end
-        if parameters_node.keyword_rest.is_a?(Prism::KeywordRestParameterNode)
+        case parameters_node.keyword_rest
+        when Prism::KeywordRestParameterNode
           params << param(parameter_name(parameters_node.keyword_rest), :keyrest)
+        when Prism::ForwardingParameterNode
+          # `def m(...)` forwards every argument, so the parameter list is
+          # not a mapping at all. Prism puts `...` in `keyword_rest`, and
+          # reading only `KeywordRestParameterNode` recorded such a method
+          # as taking *nothing* -- so the arity check judged every call to
+          # it. Recorded as a rest parameter, which is what the check
+          # already bails out on.
+          params << param("...", :rest)
         end
         params << param(parameter_name(parameters_node.block), :block) if parameters_node.block
 
