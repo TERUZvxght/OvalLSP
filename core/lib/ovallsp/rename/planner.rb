@@ -45,9 +45,35 @@ module Ovallsp
       def prepare(symbol_id)
         return nil unless symbol_id
         return nil if REFUSED_KINDS.include?(symbol_id.kind)
+        return nil if uneditable_declaration(symbol_id)
         return nil if locations_for(symbol_id).empty?
 
         { placeholder: simple_name(symbol_id) }
+      end
+
+      # A declaration a DSL generated has no identifier token to rewrite:
+      # `attr_accessor :name` declares `name` at a symbol argument, and
+      # `delegate :title, to: :author` at another call's argument list.
+      # `locations_for` drops such a declaration because it has no
+      # `name_location` -- and dropping it silently is what turned a
+      # rename into a WorkspaceEdit that rewrote every call site and left
+      # the declaration behind, producing a file that does not run.
+      # Refusing is what `#prepare`'s comment always claimed happened. The
+      # reason below reaches the log, not the user: `prepare` answers nil,
+      # so the editor shows its own message and never asks for the edit
+      # (024.28).
+      #
+      # Keyed on `origin: :generated`, not on a missing `name_location`.
+      # A plugin's declaration also has none (`Server#plugin_declaration`
+      # records the synthetic `PLUGIN_LOCATION`), and a plugin registering
+      # a symbol the workspace also writes with a real `def` would then
+      # have disabled rename for a method that has an identifier to edit --
+      # refusing with a message naming a macro and a 1:1 position that is
+      # not in any file.
+      def uneditable_declaration(symbol_id)
+        @workspace_index.declarations_with_uri(symbol_id)
+                        .map { |(_uri, declaration)| declaration }
+                        .find { |declaration| declaration.origin == :generated }
       end
 
       def plan(symbol_id, new_name:, generation:)
@@ -62,6 +88,16 @@ module Ovallsp
 
         unless valid_identifier?(symbol_id.kind, new_name)
           return refused_plan(symbol_id, generation, "`#{new_name}` is not a valid #{symbol_id.kind} name")
+        end
+
+        if (declaration = uneditable_declaration(symbol_id))
+          return refused_plan(
+            symbol_id, generation,
+            "`#{simple_name(symbol_id)}` is declared by a macro rather than a `def` " \
+            "(#{declaration.location[:start][:line] + 1}:#{declaration.location[:start][:character] + 1}) and " \
+            "cannot be renamed in place -- editing only its call sites would leave the declaration behind, " \
+            "and the file would no longer run. Rewrite that line by hand, then rename from there"
+          )
         end
 
         conflicts = conflicts_for(symbol_id, new_name)

@@ -73,7 +73,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Diagnostics: reading an `@ivar` that is never assigned | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
-| Find references, rename, workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Find references, rename [^rename], workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: wrong argument *type* | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
 | Diagnostics across the whole project, not just open files | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
 | Documentation (RDoc/YARD) in hover and completion | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
@@ -86,6 +86,12 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+
+[^rename]: A method a macro declared — `attr_accessor :name`,
+    `delegate :title, to: :author` — is refused rather than renamed. There
+    is no identifier token to rewrite, and editing only the call sites
+    would leave the declaration behind and the file would not run
+    (024.28).
 
 Rows carrying a version are not built anywhere yet; the version is the
 release they are planned for, ordered by what a user notices soonest.

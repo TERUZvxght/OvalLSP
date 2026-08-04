@@ -27,7 +27,10 @@ module Ovallsp
     #   member of a Union receiver (only meaningful when the query was
     #   made against a Union; always false for a single Nominal receiver).
     # - origin: how the declaring ancestor entered the chain — :self,
-    #   :prepend, :include, :extend, :superclass, or :default.
+    #   :prepend, :include, :extend, :superclass, :default, or
+    #   :class_object (the Class/Module tail of a singleton chain --
+    #   `Diagnostics::Engine` declines to judge argument counts against
+    #   one of those, since the workspace did not state it).
     MethodCandidate = Data.define(:symbol_id, :declarations, :owner, :visibility, :lookup_rank, :conditional, :origin)
 
     # Resolves method-call candidates and completion lists from a receiver
@@ -152,13 +155,13 @@ module Ovallsp
       # doesn't use any special singleton syntax for this to work, so the
       # declaration kind to search for at an :extend-origin ancestor is
       # :instance_method even while the overall traversal is in singleton
-      # mode. Every other origin in singleton mode (:self, :superclass)
-      # genuinely means :singleton_method (`def self.foo`/`class << self`).
-      def symbol_kind_for(entry, singleton)
-        return :instance_method unless singleton
-
-        entry.origin == :extend ? :instance_method : :singleton_method
-      end
+      # mode -- and so does :class_object, the Class/Module tail, because
+      # a class object is an *instance* of those. :self and :superclass in
+      # singleton mode genuinely mean :singleton_method (`def self.foo`/
+      # `class << self`). The rule lives in AncestorEntry so that this
+      # file and Diagnostics::Engine cannot disagree about it; they did,
+      # and both copies were wrong for the tail.
+      def symbol_kind_for(entry, singleton) = entry.declaration_kind(singleton: singleton)
 
       # A single level of `alias`/`alias_method` indirection: if `owner`
       # doesn't declare `method_name` directly but *does* record an alias

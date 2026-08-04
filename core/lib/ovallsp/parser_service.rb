@@ -134,6 +134,7 @@ module Ovallsp
         # chain, where they do not exist, and be reported as unknown
         # methods (024.23). Top level starts `false`: `main` is an Object.
         @self_is_module_stack = [false]
+        @inline_attribute_visibility = nil
         @visibility_stack = [:public]
         @in_method_body = false
         # Task 014: a fresh local-variable scope id per class/module body,
@@ -247,24 +248,98 @@ module Ovallsp
       #
       # `define_singleton_method` is deliberately absent: its body really
       # does run with the class as self, so it inherits correctly.
-      INSTANCE_SELF_BLOCK_CALLS = %i[define_method instance_eval instance_exec].freeze
+      INSTANCE_SELF_BLOCK_CALLS = %i[define_method].freeze
 
+      # `instance_eval`/`instance_exec` set self to their *receiver*, so
+      # neither "always instance" nor "always inherit" is Ruby's rule.
+      # Receiverless -- or on a constant -- the receiver is the class, and
+      # 0.1.14's blanket entry reported `instance_eval { attr_accessor :x }`
+      # for a macro as legal as the line above it. On an expression the
+      # receiver is an object, and inheriting the enclosing class-level
+      # self reports the instance methods its body calls.
+      RECEIVER_SELF_BLOCK_CALLS = %i[instance_eval instance_exec].freeze
+
+      def block_self_is_module(node)
+        # A `define_method` block defines a *singleton* method only when
+        # the call is written directly in a `class << self` body. Called
+        # from inside a `def` -- including a `def` in that body -- self at
+        # that moment is the class object, so it defines an ordinary
+        # instance method and the block's self is an instance; an explicit
+        # receiver says the same. `@singleton_context_stack` answers only
+        # "would an unqualified `def` here be a singleton method", and
+        # `visit_def_node` never pushes it, so reading it alone reported
+        # the bodies of Thor's, minitest's and `rails/engine.rb`'s
+        # generated methods.
+        if INSTANCE_SELF_BLOCK_CALLS.include?(node.name)
+          return node.receiver.nil? && !@in_method_body && @singleton_context_stack.last
+        end
+
+        return nil unless RECEIVER_SELF_BLOCK_CALLS.include?(node.name)
+
+        # Receiverless, the receiver is the enclosing self, so inherit it
+        # -- `nil`, not `true`. Answering "a module" said the class even
+        # inside an instance method, where Ruby's answer is the instance,
+        # and reported every instance method such a block calls. In a
+        # class body the inherited value is already `true`, which is why
+        # no fixture there could tell the two apart.
+        #
+        # With any receiver written out, the body's self is *that object*,
+        # which this visitor cannot name -- it tracks whether self is a
+        # module, never which one. Reading it as an instance is the
+        # direction that resolves the helper methods such a block calls;
+        # inheriting class-level self reported them instead.
+        #
+        # A constant receiver is the case this gets wrong:
+        # `K.instance_eval { attr_accessor :x }` is legal Ruby and is
+        # reported, while `K.class_eval { attr_accessor :x }` -- which
+        # takes the inherit path -- is not. Splitting the two was tried
+        # and dropped: this visitor cannot say *which* module self is, so
+        # the module answer resolves against the enclosing owner, and no
+        # fixture could distinguish the branch. Recorded as 024.33; it is
+        # not a regression, 0.1.14 reported it too.
+        node.receiver.nil? ? nil : false
+      end
+
+      # `private attr_reader :x` reaches the attr recorder as a *nested*
+      # call, visited while `private`'s arguments are. Its own
+      # `@visibility_stack` frame still says :public, because the section
+      # was never opened -- so the visibility has to travel with the
+      # nesting, the way `@pending_visibility_names` carries `private def`.
       def visit_call_node(node)
         if node.receiver.nil?
           update_visibility(node) if node.arguments.nil?
-          apply_visibility_arguments(node) unless node.arguments.nil?
+            apply_visibility_arguments(node) unless node.arguments.nil?
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
           record_generated_methods(node) if current_owner && GENERATED_METHOD_DSLS.include?(node.name)
           record_attribute_methods(node) if current_owner && ATTRIBUTE_DSLS.key?(node.name)
+          wrapped_visibility = inline_attribute_visibility_for(node)
         end
         record_method_call_candidate(node)
-        # Pushed around the children, not the candidate above: the call
-        # itself is written where it is written, and only its block body
-        # gets the different self.
-        return super unless node.block && INSTANCE_SELF_BLOCK_CALLS.include?(node.name)
 
-        @self_is_module_stack.push(false)
+        if wrapped_visibility
+          previous = @inline_attribute_visibility
+          @inline_attribute_visibility = wrapped_visibility
+          begin
+            return super
+          ensure
+            @inline_attribute_visibility = previous
+          end
+        end
+        # Pushed around the children, not the candidate above: the call
+        # itself is written where it is written. `nil` means the block
+        # does not change self -- see #block_self_is_module for which
+        # calls do.
+        #
+        # "Children" is the whole call, arguments included, not just the
+        # block body: `define_method(:x, &maker)` and
+        # `Other.instance_exec(helper) { }` resolve their arguments under
+        # the pushed frame too, and report them. Identical on 0.1.14, and
+        # narrowing it to the block node is its own change.
+        block_self = node.block && block_self_is_module(node)
+        return super if block_self.nil?
+
+        @self_is_module_stack.push(block_self)
         begin
           super
         ensure
@@ -555,8 +630,29 @@ module Ovallsp
 
       def record_attribute_methods(node)
         return unless node.arguments
+        # No guard, deliberately: `attr_*` is attributed exactly as `def`
+        # is, to the lexically enclosing owner, wherever it is written.
+        #
+        # Three narrower rules were tried and each was wrong, because each
+        # disowned `attr_*` somewhere `def` is still owned, and a block
+        # holds both. Skipping every block turned every
+        # ActiveSupport::Concern's `included do attr_accessor :x end` into
+        # a false report; skipping only anonymous-class builders left
+        # ActiveRecord's `Class.new(Base) { class << self; attr_accessor
+        # :left_model; end; def self.compute_type; left_model; end }`
+        # reporting; skipping method bodies leaves the same shape
+        # reporting when the builder is written inside a `def`.
+        #
+        # What is left is the cost `def` already carries: a declaration
+        # recorded from somewhere it may not run, which silences a report
+        # rather than inventing one. That is the direction this engine
+        # chooses everywhere else. 024.31 records the shared defect.
 
         singleton = @singleton_context_stack.last
+        # `private attr_reader :x` is one call taking another as its
+        # argument (Ruby 3.0+). The open section still applies when it is
+        # written on its own line.
+        visibility = @inline_attribute_visibility || @visibility_stack.last
         node.arguments.arguments.each do |argument|
           name = attribute_name(argument)
           # A dynamic argument (`attr_reader(*names)`) names nothing
@@ -565,15 +661,17 @@ module Ovallsp
           next unless name
 
           ATTRIBUTE_DSLS.fetch(node.name).each do |suffix, arity|
-            @declarations << Index::Declaration.new(
-              symbol_id: Index::SymbolId.new(
-                kind: singleton ? :singleton_method : :instance_method,
-                owner: current_owner, name: "#{name}#{suffix}", discriminator: nil
-              ),
-              location: Index::SourceLocation.to_range(node.location, @lines),
-              visibility: singleton ? nil : @visibility_stack.last,
-              parameters: arity.zero? ? [] : [Index::Parameter.new(name: "value", kind: :required, default_source: nil)],
-              origin: :generated
+            # Through `add_generated_method`, so the declaration is paired
+            # with a fact -- three documents state that a `:generated`
+            # declaration always is, and 0.1.14 recorded these without one.
+            add_generated_method(
+              node: node, name: "#{name}#{suffix}",
+              kind: singleton ? :singleton_method : :instance_method,
+              # Honest rather than absent: an attribute's type is whatever
+              # was last assigned to the ivar, which this does not track.
+              return_type: Types::UNKNOWN, origin: node.name,
+              visibility: singleton ? nil : visibility,
+              parameters: arity.zero? ? [] : [Index::Parameter.new(name: "value", kind: :required, default_source: nil)]
             )
           end
         end
@@ -584,6 +682,19 @@ module Ovallsp
         when Prism::SymbolNode then argument.value
         when Prism::StringNode then argument.unescaped
         end
+      end
+
+      # `private attr_reader :x` and friends: the argument is a call, not a
+      # name, so `apply_visibility_arguments` -- which reads symbols,
+      # strings and `def`s -- cannot see what it declares.
+      def inline_attribute_visibility_for(node)
+        visibility = VISIBILITY_MODIFIERS[node.name]
+        return nil unless visibility && node.arguments
+
+        wrapped = node.arguments.arguments.first
+        return nil unless wrapped.is_a?(Prism::CallNode) && ATTRIBUTE_DSLS.key?(wrapped.name)
+
+        visibility
       end
 
       def record_generated_methods(node)
@@ -633,6 +744,14 @@ module Ovallsp
       # itself is never analyzed ("dynamic body内部型の断定はしない"); only
       # its name and the fact that it returns `Relation[Model]` are
       # statically knowable.
+      # What a macro-generated method takes when the macro forwards rather
+      # than declares: `delegate` passes everything through, and a
+      # `scope`'s arguments are its lambda's. Recorded as a rest
+      # parameter, which the argument-count check bails out on -- the same
+      # answer `def m(...)` gets. Recording *nothing*, as these did, made
+      # the check judge every call to them.
+      FORWARDED_PARAMETERS = [Index::Parameter.new(name: "args", kind: :rest, default_source: nil)].freeze
+
       def record_scope(node)
         return unless node.arguments
 
@@ -640,7 +759,8 @@ module Ovallsp
         return unless name
 
         return_type = Types::Generic.new(name: "Relation", type_arg: Types::Nominal.new(name: simple_owner_name))
-        add_generated_method(node: node, name: name, kind: :singleton_method, return_type: return_type, origin: :scope)
+        add_generated_method(node: node, name: name, kind: :singleton_method, return_type: return_type,
+                             origin: :scope, parameters: FORWARDED_PARAMETERS)
       end
 
       # `delegate :name, :age, to: :company, prefix: true, allow_nil: true`.
@@ -668,6 +788,7 @@ module Ovallsp
           generated_name = prefix ? "#{target}_#{delegated_name}" : delegated_name
           add_generated_method(
             node: node, name: generated_name, kind: :instance_method, return_type: Types::UNKNOWN, origin: :delegate,
+            parameters: FORWARDED_PARAMETERS,
             metadata: { to: target, delegated_name: delegated_name, allow_nil: allow_nil }
           )
         end
@@ -683,12 +804,14 @@ module Ovallsp
         assoc&.value.is_a?(Prism::TrueNode)
       end
 
-      def add_generated_method(node:, name:, kind:, return_type:, origin:, metadata: {})
+      def add_generated_method(node:, name:, kind:, return_type:, origin:, metadata: {}, parameters: [],
+                               visibility: :public)
         symbol_id = Index::SymbolId.new(kind: kind, owner: current_owner, name: name, discriminator: nil)
         location = Index::SourceLocation.to_range(node.location, @lines)
 
         @declarations << Index::Declaration.new(
-          symbol_id: symbol_id, location: location, visibility: :public, parameters: [], origin: :generated
+          symbol_id: symbol_id, location: location, visibility: visibility, parameters: parameters,
+          origin: :generated
         )
         @generated_method_facts << Index::GeneratedMethodFact.new(
           owner: current_owner, name: name, kind: kind, return_type: return_type, source_location: location,
@@ -797,7 +920,20 @@ module Ovallsp
         splat = arguments.any? do |argument|
           argument.is_a?(Prism::SplatNode) || argument.is_a?(Prism::ForwardingArgumentsNode)
         end
-        keywords = arguments.count { |argument| argument.is_a?(Prism::KeywordHashNode) }
+        keyword_hashes = arguments.select { |argument| argument.is_a?(Prism::KeywordHashNode) }
+        # `**opts` is a KeywordHashNode too, and it passes whatever the
+        # hash holds -- nothing at all when it is empty. Its count is not
+        # knowable here, so it makes the call as unjudgeable as a splat
+        # does. Only literal `k: v` pairs are countable keywords.
+        double_splat = keyword_hashes.any? do |hash|
+          hash.elements.any? { |element| element.is_a?(Prism::AssocSplatNode) }
+        end
+        # A double splat makes the whole call unjudgeable, which is what
+        # `splat` already means to the one reader of this shape. Zeroing
+        # `keywords` as well was dead: that reader is past a `next if
+        # shape[:splat]` by the time it looks.
+        splat ||= double_splat
+        keywords = keyword_hashes.count
         {
           positional: arguments.count do |argument|
             !argument.is_a?(Prism::KeywordHashNode) && !argument.is_a?(Prism::SplatNode) &&
@@ -957,8 +1093,17 @@ module Ovallsp
           kind = p.is_a?(Prism::OptionalKeywordParameterNode) ? :keyword_optional : :keyword
           params << param(parameter_name(p), kind, p.respond_to?(:value) ? p.value : nil)
         end
-        if parameters_node.keyword_rest.is_a?(Prism::KeywordRestParameterNode)
+        case parameters_node.keyword_rest
+        when Prism::KeywordRestParameterNode
           params << param(parameter_name(parameters_node.keyword_rest), :keyrest)
+        when Prism::ForwardingParameterNode
+          # `def m(...)` forwards every argument, so the parameter list is
+          # not a mapping at all. Prism puts `...` in `keyword_rest`, and
+          # reading only `KeywordRestParameterNode` recorded such a method
+          # as taking *nothing* -- so the arity check judged every call to
+          # it. Recorded as a rest parameter, which is what the check
+          # already bails out on.
+          params << param("...", :rest)
         end
         params << param(parameter_name(parameters_node.block), :block) if parameters_node.block
 

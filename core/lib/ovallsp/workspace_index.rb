@@ -26,6 +26,13 @@ module Ovallsp
       # go through `@by_symbol.fetch(id, [])`; only the write path
       # (#replace_file) actually inserts a key.
       @by_symbol = {}
+      # Keyed on [owner, kind], because `#method_symbol_ids` is asked once
+      # per ancestor and used to scan every key in `@by_symbol` to answer.
+      # 0.1.14 grew the singleton chain from one entry to six, so a single
+      # `Widget.` completion went from one full scan of the symbol table
+      # to six: 31ms -> 200ms on a 126k-symbol workspace, on the path a
+      # keystroke runs.
+      @by_owner_kind = Hash.new { |h, k| h[k] = [] }
       # Secondary index: downcased simple (unqualified) name -> Set of
       # SymbolIds sharing it, so #find_by_simple_name doesn't have to scan
       # every distinct symbol in the workspace to answer one name lookup
@@ -92,8 +99,10 @@ module Ovallsp
         @summaries[summary.uri] = summary
         touched = []
         summary.declarations.each do |decl|
+          fresh = !@by_symbol.key?(decl.symbol_id)
           (@by_symbol[decl.symbol_id] ||= []) << [summary.uri, decl]
           @by_simple_name[simple_name(decl.symbol_id).downcase] << decl.symbol_id
+          @by_owner_kind[owner_kind_key(decl.symbol_id)] << decl.symbol_id if fresh
           touched << decl.symbol_id
         end
         # The order lives here, not in the readers. `remove_file_locked`
@@ -276,9 +285,12 @@ module Ovallsp
     # `SymbolId` now stores every owner qualified, so the stored side needs
     # no work; this only has to put the *argument* through the same rule
     # (0.1.11).
+    # Sorted on read, not stored sorted: the bucket is small (one class's
+    # methods) and an unordered collection read by `.first`/a truncation
+    # is what 024.15 was spent on.
     def method_symbol_ids(owner, kind:)
       needle = Index::SymbolId.qualify_owner(owner)
-      @mutex.synchronize { @by_symbol.keys.select { |sid| sid.owner == needle && sid.kind == kind } }
+      @mutex.synchronize { @by_owner_kind.fetch([needle, kind], []).sort_by(&:name) }
     end
 
     # Workspace symbol search: case-insensitive substring match on the
@@ -335,6 +347,8 @@ module Ovallsp
       end
     end
 
+    def owner_kind_key(symbol_id) = [symbol_id.owner, symbol_id.kind]
+
     def remove_file_locked(uri)
       summary = @summaries.delete(uri)
       return false unless summary
@@ -351,6 +365,10 @@ module Ovallsp
         by_name = @by_simple_name[name_key]
         by_name.delete(decl.symbol_id)
         @by_simple_name.delete(name_key) if by_name.empty?
+        owner_key = owner_kind_key(decl.symbol_id)
+        by_owner = @by_owner_kind[owner_key]
+        by_owner.delete(decl.symbol_id)
+        @by_owner_kind.delete(owner_key) if by_owner.empty?
       end
       true
     end
@@ -383,16 +401,15 @@ module Ovallsp
       candidates.find { |sid| sid.name == qualified } || candidates.first
     end
 
-    # Two collections are deliberately left in insertion order, both of
-    # which a re-index does move. `#method_symbol_ids` returns
-    # `@by_symbol.keys`: all three callers are order-insensitive -- two
-    # `.any?` it, and `MethodResolver` feeds it to `merge_names`, which
-    # sorts on a total key. `#uris_by_source` reads `@summaries`, whose
+    # One collection is deliberately left in insertion order, and a
+    # re-index does move it: `#uris_by_source` reads `@summaries`, whose
     # entry `remove_file_locked` deletes and `replace_file` re-inserts;
     # its one caller sweeps deleted files and does not care in what order.
-    # Ordering either would buy nothing and cost a sort on the completion
-    # path. "The order lives in the storage" is a claim about the
-    # collections whose order a caller can observe.
+    # "The order lives in the storage" is a claim about the collections
+    # whose order a caller can observe.
+    #
+    # `#method_symbol_ids` was the second one and is no longer: it reads a
+    # `[owner, kind]` bucket and sorts it on the way out (see there).
     #
     # `[uri, line, character]`. Uri first because that is what a caller
     # taking `.first` is choosing between; source position breaks the tie

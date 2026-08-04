@@ -124,6 +124,41 @@ in `development` and a `group :test` gem is simply not there; and a gem
 class reopened without mixing anything in, whose ancestry carries no
 evidence either way. 024.R5 lists each case.
 
+Three more shapes are worth knowing, all of them older than this release
+and none of them fixed by it:
+
+- **A declaration written inside a block belongs to the class the block is
+  written in**, whatever the block's real receiver is. `Struct.new(:x) do
+  attr_reader :label end` inside `class Outer` offers `label` on an
+  `Outer`, and go-to-definition on it lands in the block; `def setup;
+  attr_accessor :never_real; end` records `never_real`, so calling it is
+  not reported — and here Ruby cannot define it by any path, since
+  `attr_accessor` is `Module`'s and `self` inside an instance method is
+  not a module. Attributing
+  lexically is what `def` has always done, and three attempts to be
+  cleverer for `attr_*` alone each produced false reports instead
+  (024.31).
+- **`def Foo.bar` is recorded as an instance method**, so `Foo.bar` is
+  reported as unknown while `Foo.new.bar` is accepted — both answers
+  inverted. **56** of Ruby's own standard-library reports are this
+  (024.32).
+- **A `def self.` the workspace adds to `Object` is not reachable**, so
+  `Widget.foo` is reported for a method every class really has. 0.1.14
+  did not report this, by an accident of the same mis-kinded lookup that
+  made it report `class Object; def blank?; end` — a far more common
+  shape — on code that runs. 0.1.15 trades the accident back for the fix,
+  which is why this is the one shape it makes *worse* than 0.1.14
+  (024.26).
+- **A class that includes a module the workspace has not read still has
+  its class-level macros reported.** `include SomeGem::Model` followed by
+  `validate :ensure_ok` is reported, though the Concern installs
+  `validate`. Introduced by 0.1.14 and not fixed here (024.35).
+- **`K.instance_eval { attr_accessor :x }` is reported** where
+  `K.class_eval { attr_accessor :x }` is not, though both define the same
+  methods. The rule behind it is right for `object.instance_eval`, which
+  is what it was written for (024.33).
+
+
 ## Conflicts with other extensions
 
 See [vscode/README.md](../vscode/README.md#known-conflicts-with-other-extensions)

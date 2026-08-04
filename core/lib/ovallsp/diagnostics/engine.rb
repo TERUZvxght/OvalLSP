@@ -96,16 +96,6 @@ module Ovallsp
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :method_call
           next if resolved_locations[candidate.location]
-          # `Class.new` (and friends: `allocate`, `name`, `superclass`, ...)
-          # come from Class/Module's own ancestry, which HierarchyIndex's
-          # singleton chain doesn't model (only Object/Kernel/BasicObject
-          # on the instance side) -- LocalInferencer already special-cases
-          # `.new` the same way (`resolve_call`'s `node.name == :new &&
-          # constant_receiver?` check) rather than resolving it through
-          # ordinary method lookup, so this must not flag what that path
-          # already treats as always-available.
-          next if candidate.singleton && candidate.name == "new"
-
           # Deliberately *not* `Types.base_nominal` here, unlike everywhere
           # else that reads a container receiver. A workspace that reopens
           # a core class makes its chain look closed while gems keep adding
@@ -163,7 +153,17 @@ module Ovallsp
 
           required = parameters.count { |parameter| parameter.kind == :required }
           maximum = required + parameters.count { |parameter| parameter.kind == :optional }
-          passed = shape[:positional]
+          # A brace-less trailing hash is *keywords* only if the method
+          # declares some. `add("a", "K" => 1)` against `def add(name,
+          # hash)` passes two positionals, and counting the hash as
+          # keywords reported it as one: 526 such reports over brakeman
+          # and its vendored gems, 399 of them in `sexp_processor`'s
+          # `pt_testcase.rb` and the rest mostly `warn options`. The
+          # miscount predates 0.1.14; what 0.1.14 changed is that a
+          # receiverless call in a class body resolves, so it reached this
+          # check for the first time.
+          declares_keywords = parameters.any? { |parameter| %i[keyword keyword_optional keyrest].include?(parameter.kind) }
+          passed = shape[:positional] + (shape[:keywords] && !declares_keywords ? 1 : 0)
           next if passed >= required && passed <= maximum
 
           Finding.new(
@@ -196,6 +196,15 @@ module Ovallsp
         )
         return nil unless candidates.size == 1
         return nil if candidates.first.conditional
+        # A declaration reached through the synthesised `Class`/`Module`/
+        # `Object`/`Kernel` tail is not one the workspace stated. The tail
+        # is there so class-level calls *resolve*; using it to produce
+        # arity reports is the aggressive direction, and it is exactly
+        # where a `module_function` or a `define_method` this engine does
+        # not model can shadow the method it found. Ruby's own
+        # `::JSON.load(source, proc, opts)` was reported against a reopened
+        # `Kernel#load` for that reason.
+        return nil if candidates.first.origin == :class_object
 
         declarations = candidates.first.declarations
         return nil unless declarations.size == 1
@@ -337,12 +346,13 @@ module Ovallsp
         # model and every module -- receivers the static tests were about
         # to rule out anyway -- queued a question whose answer could not
         # change the outcome.
-        # Skipping `origin: :default` -- the Object/Kernel/BasicObject tail
-        # HierarchyIndex appends to every class. Those are not links the
+        # Skipping every synthesised entry -- the Object/Kernel/BasicObject
+        # tail HierarchyIndex appends to every class, and the Class/Module
+        # tail it appends to every singleton chain. Those are not links the
         # workspace wrote, so they cannot be ones it reopened, and asking
         # would spend a round trip to be told what RBS already says.
         entries.none? do |entry|
-          entry.origin != :default && reopened_elsewhere?(entry.name, context)
+          !entry.synthesised? && reopened_elsewhere?(entry.name, context)
         end
       end
 
@@ -458,7 +468,7 @@ module Ovallsp
         return false unless context.signatures
 
         context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).any? do |entry|
-          kind = candidate.singleton && entry.origin != :extend ? :singleton_method : :instance_method
+          kind = entry.declaration_kind(singleton: candidate.singleton)
           symbol_id = Index::SymbolId.new(kind: kind, owner: entry.name, name: candidate.name,
                                           discriminator: nil)
           !context.signatures.method_signatures(symbol_id).nil?

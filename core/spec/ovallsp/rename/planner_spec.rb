@@ -208,4 +208,68 @@ RSpec.describe Ovallsp::Rename::Planner do
       expect(planner.prepare(nil)).to be_nil
     end
   end
+
+  # 0.1.14 made `attr_reader`/`attr_accessor` declare methods, and those
+  # declarations carry no `name_location` -- there is no identifier token
+  # to rewrite, only a symbol argument. `locations_for` silently drops
+  # such a declaration, so rename produced a plan that rewrote every
+  # *call site* and left `attr_accessor :name` alone: a WorkspaceEdit that
+  # breaks the file, with no warning. Before 0.1.14 no declaration existed
+  # and `prepareRename` refused outright, which was the safe answer.
+  #
+  # The same hole pre-existed for `enum`/`scope`/`delegate`; it was
+  # confined to Rails DSLs until `attr_*` put it in ordinary Ruby.
+  # `#prepare`'s own comment already said nil means "a generated/DSL-origin
+  # symbol" -- this makes that true.
+  describe "a method declared by a DSL rather than a `def`" do
+    before do
+      index_source("class Widget\n  attr_accessor :name\n\n  def describe = name\nend\n")
+    end
+
+    let(:target) { sym(kind: :instance_method, owner: "::Widget", name: "name") }
+
+    it "refuses to start the rename" do
+      expect(planner.prepare(target)).to be_nil
+    end
+
+    it "refuses with a reason rather than emitting a partial edit" do
+      plan = planner.plan(target, new_name: "title", generation: 1)
+
+      expect(plan.confirmed_edits).to eq([])
+      expect(plan.warnings.join).to include("declared by a macro rather than a `def`", "cannot be renamed in place")
+    end
+
+    # A plugin's declaration also carries no `name_location` -- it records
+    # the synthetic `PLUGIN_LOCATION` -- so keying the refusal on that
+    # would disable rename for a method the workspace writes with a real
+    # `def` merely because a plugin also registered the name. The refusal
+    # is about a *macro* declaration, which is what `origin: :generated`
+    # says.
+    it "still renames a `def` a plugin also registered" do
+      workspace_index.replace_file(
+        Ovallsp::Index::FileSummary.new(
+          uri: "file:///plugin.rb", content_hash: "p", document_version: 1,
+          declarations: [
+            Ovallsp::Index::Declaration.new(
+              symbol_id: sym(kind: :instance_method, owner: "::Widget", name: "describe"),
+              location: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+              visibility: :public, parameters: [], origin: :plugin
+            )
+          ],
+          diagnostics: [], ancestor_facts: [], alias_facts: [], reference_candidates: [],
+          generated_method_facts: []
+        )
+      )
+
+      expect(planner.prepare(sym(kind: :instance_method, owner: "::Widget", name: "describe"))).not_to be_nil
+    end
+
+    it "still renames a method the same class declares with `def`" do
+      plan = planner.plan(sym(kind: :instance_method, owner: "::Widget", name: "describe"),
+                          new_name: "explain", generation: 1)
+
+      expect(plan.confirmed_edits).not_to be_empty
+      expect(plan.warnings).to eq([])
+    end
+  end
 end
