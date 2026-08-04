@@ -172,6 +172,86 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.38 `scope_at` copies the whole environment once per descent step
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  A cost, not an answer. It is quadratic in the number of locals in one
+  scope, which real code keeps small -- 1.2ms at 100 locals, where the
+  measurable curve starts. Recorded rather than fixed because the fix is
+  in the inference core and the round that found it was already
+  repairing the round before it.
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`locate`, `capture_scope`)
+
+`locate` calls `capture_scope(env)` at the top of *every* step, and
+`capture_scope` builds a new Hash of the whole environment. Only the last
+one survives. 0.2.0 is what makes it matter: `PrefixCompletion#items`
+calls `scope_at` for every bare-prefix completion, so this runs on the
+request path per keystroke.
+
+Measured by a reviewer, same document, 10 iterations, parse cache warm,
+against `infer_at` on the same document and position as an in-process
+reference:
+
+| locals in scope | `scope_at` | `infer_at` |
+|---|---|---|
+| 50 | 0.24 ms | 0.03 ms |
+| 100 | 1.17 ms | 0.04 ms |
+| 200 | 3.93 ms | 0.10 ms |
+| 400 | 14.78 ms | 0.19 ms |
+| 800 | 56.10 ms | 0.36 ms |
+
+Four times per doubling, bounded only by `max_steps: 5000`.
+
+**Direction:** capture on *write*, not on step. Keep the `env` reference
+and the self type, and materialise the snapshot at the moment the
+environment is about to be mutated -- there are nine such sites and most
+are on fresh child environments. Taking the snapshot at the end instead
+is wrong: `x = <cursor>` would then see `x`, because
+`LocalVariableWriteNode` assigns after descending into its value.
+
+It wants `spec/meta/workspace_index_cost_spec.rb`'s treatment -- a
+source assertion -- since reversing it changes no answer.
+
+## 024.39 `LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  No wrong answer has been produced. A reviewer ran 2,000 concurrent
+  `infer_at` pairs and 400 `scope_at`/`infer_at` pairs in both size
+  directions and got zero wrong answers, zero leaked locals and zero
+  exceptions. What is recorded is that the reason it holds is not an
+  invariant.
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb`, `core/lib/ovallsp/server.rb`
+
+`@steps`, `@step_budget`, `@self_type_stack`, `@scope_capture`,
+`@capturing_scope` and `@parse_cache` are instance state reset at the top
+of each entry point. `publish_diagnostics` and `workspace_findings_for`
+both hold `@index_mutation_mutex`, so those two are serialised — but
+`hover_result` and `completion_result` do not take it, and 0.2.0 is the
+release that put `analyze` on a background thread.
+
+`@capturing_scope` is the sharpest edge: a background `infer_at` running
+inside a foreground `scope_at` would call `capture_scope` and overwrite
+the completion's answer with another document's locals.
+
+What makes it safe today is that the GVL rarely preempts inside one walk.
+That is a probability, not an invariant, and nothing states it.
+
+**Direction:** the state belongs in a per-call object rather than on the
+inferencer, which is also what would let `@parse_cache` be shared safely
+instead of being the one piece of it that wants to be.
+
 ## 024.37 The argument-type check reports nothing on measured real Ruby
 
 ```yaml
@@ -456,12 +536,44 @@ times. Among them `PP.mcall`, `Ripper.lex`, `IRB::Frame.top`,
 (`bundler/shared_helpers.rb:391`), `CGI::Session.callback`
 (`cgi/session.rb:345`) and three in `fiddle/struct.rb`.
 
-**Direction:** the owner is already computed correctly a few lines below
-(`constant_full_name(owner_receiver)`); it is only the `kind` that reads
-`SelfNode` alone. Both should ask the same question. Worth checking what
-else keys on that predicate before changing it — `visit_def_node` also
-uses it for the declaration's visibility, which is `nil` for singleton
-methods.
+**The owner is wrong too, and this entry said it was not.** An earlier
+Direction here read: "the owner is already computed correctly a few
+lines below (`constant_full_name(owner_receiver)`); it is only the
+`kind`". Round 22 of the 0.2.0 loop disproved it.
+`constant_full_name` ends in `qualify`, which nests the name under the
+current owner unconditionally — so `def Fetcher.start` written *inside*
+`class Fetcher` is recorded on `::Fetcher::Fetcher`, a class that does
+not exist. Ruby resolves the constant `Fetcher` there to the class
+itself. Anyone following the old Direction would have produced correctly
+kinded singleton methods on a namespace nothing resolves to.
+
+**And the consequence is not only `unknown-method`.** The arity check
+reads the same declarations, so a call to a `def Const.method` is judged
+against whatever *instance* method shares its name. On the 0.2.0
+measurement corpus, **9 of the 17 remaining `argument-count` reports**
+are this shape: `net/http.rb`'s `def HTTP.get_response` four times, its
+vendored copy under `rubygems/vendor/net-http` four times, and
+`minitest.rb:472`'s `def Runnable.run_suite`. Neither this entry nor
+`KNOWN_LIMITATIONS.md` said so before round 22 measured it.
+
+**Direction:** both the `kind` and the `owner` have to change, and
+neither is a one-line edit.
+
+- `kind`: any explicit constant receiver means a singleton method, not
+  only `self`. Check what else keys on that predicate first —
+  `visit_def_node` also uses it for the declaration's visibility, which
+  is `nil` for singleton methods.
+- `owner`: the parser cannot know at parse time whether `Foo::Bar`
+  exists, so it cannot resolve the constant properly. What it *can* do
+  is stop nesting a name that names an enclosing frame: if the written
+  name matches the last segment of an enclosing owner, that frame is the
+  owner. That covers `def Foo.bar` inside `class Foo`, which is the
+  whole measured population.
+
+Still its own task rather than a ride on another release, for the reason
+this entry gave before and round 22 agreed with: it changes declaration
+kinds, which is what 0.1.14 and 0.1.15 were both spent on, and it wants
+a corpus run in both directions.
 
 ## 024.31 A declaration written inside a block has no owner this parser can name
 

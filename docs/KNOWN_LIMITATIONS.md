@@ -71,13 +71,17 @@ evidence-based supported/unsupported table this summarizes.
 
 ## Ruby version scope
 
-Only Ruby 3.4.x is supported, specifically the patch versions actually
-exercised in this project's own test runs (3.4.5, 3.4.7) — not the full
-range `core/ovallsp.gemspec`'s `required_ruby_version >= 3.3` would
-technically allow to install. That gemspec constraint means "not
-rejected," not "verified" — Ruby 3.3.x and 3.5.x are treated as
-unsupported until they're actually exercised by this project's test
-suite.
+Ruby **3.3 and 3.4** are supported, which is the whole range
+`core/ovallsp.gemspec`'s `required_ruby_version >= 3.3` allows to
+install. CI runs the full Core suite on both, and development and the
+release build run 3.4 (3.4.5, 3.4.7). Ruby 3.5.x is treated as
+unsupported until it is actually exercised by this project's test suite.
+
+That criterion is the one this section has always stated, and until
+0.2.0's round 22 it was applied backwards: the suite ran on 3.3 alone —
+the version this document called unsupported — while the two it called
+supported ran nowhere in CI. The matrix was widened rather than the claim
+narrowed.
 
 ## Distribution and update model
 
@@ -100,9 +104,11 @@ restating for a Preview)
 OvalLSP is a confidence-aware heuristic engine for LSP features, not a
 Ruby type checker. By design, it does not track:
 
-- `method_missing`/`define_method`-based dynamic method definition,
-  outside the specific Rails DSLs it already recognizes (`enum`,
-  `scope`, `delegate`).
+- `method_missing`/`define_method`/`alias_method`-based dynamic method
+  definition, outside the specific Rails DSLs it already recognizes
+  (`enum`, `scope`, `delegate`). This one is not only a gap — see
+  "Reports that are wrong today" below, where it produces its own false
+  reports.
 - `class_eval`/`instance_eval` with string-argument code generation.
 - Constant resolution that only resolves at runtime (e.g. `const_get`
   with a dynamic argument).
@@ -212,7 +218,12 @@ Six more are older than this release and untouched by it:
   (024.31).
 - **`def Foo.bar` is recorded as an instance method**, so `Foo.bar` is
   reported as unknown while `Foo.new.bar` is accepted — both answers
-  inverted. **56** of Ruby's own standard-library reports are this
+  inverted. **56** of Ruby's own standard-library reports are this. The
+  same declaration is also filed under a namespace that does not exist
+  (`def Fetcher.start` inside `class Fetcher` lands on
+  `Fetcher::Fetcher`), which the argument-count check then reads: **9 of
+  the 17** remaining wrong-argument-count reports over the measured
+  corpus are this shape, among them `net/http.rb`'s `HTTP.get_response`
   (024.32).
 - **A `def self.` the workspace adds to `Object` is not reachable**, so
   `Widget.foo` is reported for a method every class really has. 0.1.14
@@ -229,6 +240,18 @@ Six more are older than this release and untouched by it:
   `K.class_eval { attr_accessor :x }` is not, though both define the same
   methods. The rule behind it is right for `object.instance_eval`, which
   is what it was written for (024.33).
+- **A method a loop defines is reported as unknown.** `EVENTS.each { |id,
+  _| alias_method "on_#{id}", :_dispatch_1 }` is idiomatic in generated
+  code, and the name is not a literal, so the index records nothing and
+  every call to it is reported. This is the single largest concentration
+  the engine produces on any measured corpus: **525 reports in one file**,
+  prism's `translation/ripper.rb`. `define_method` with a computed name
+  is the same shape. It is listed here rather than only under "static
+  analysis limitations" because the engine's own policy is that a wrong
+  report is worse than a missed one, and this is a wrong report, not a
+  missed one. What 0.2.0 changes is the blast radius: diagnostics now
+  publish for files nobody opened, so it reaches the Problems panel
+  rather than waiting to be found.
 - **`attr_accessor` written inside a `def` inside `class << self` is
   recorded as declaring class-level methods**, where Ruby defines
   instance ones — the macro runs when that method is *called*, with the

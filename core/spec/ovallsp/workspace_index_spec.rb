@@ -903,4 +903,44 @@ RSpec.describe Ovallsp::WorkspaceIndex do
     end
   end
 
+  describe "#guessed_type_name?" do
+    def index(text, uri: "file:///a.rb")
+      document = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
+      index_instance.replace_file(Ovallsp::ParserService.new.summarize(document))
+    end
+
+    let(:index_instance) { described_class.new }
+
+    # A name nothing matches was not substituted -- `resolve_type_name`
+    # answers nil and every caller keeps the name as written. Calling
+    # that a guess is what made this silence 2,517 `unknown-method`
+    # reports over the standard library and five Rails gems: every class
+    # whose superclass lives outside the corpus stopped being closed, so
+    # the check went off for the whole class.
+    it "is false for a name nothing in the workspace matches" do
+      index("class Widget\nend\n")
+
+      expect(index_instance.guessed_type_name?("Vendor::Gadgets::Nothing")).to be(false)
+    end
+
+    it "is true for a qualified name answered by a class from another namespace" do
+      index("class Widget\nend\n")
+
+      expect(index_instance.guessed_type_name?("Vendor::Gadgets::Widget")).to be(true)
+    end
+
+    it "is false for a name that resolved as written" do
+      index("module Vendor\n  class Widget\n  end\nend\n")
+
+      expect(index_instance.guessed_type_name?("Vendor::Widget")).to be(false)
+    end
+
+    it "is false for a bare name matching exactly one type, and true for two" do
+      index("module A\n  class Collector\n  end\nend\n", uri: "file:///a.rb")
+      expect(index_instance.guessed_type_name?("Collector")).to be(false)
+
+      index("module B\n  class Collector\n  end\nend\n", uri: "file:///b.rb")
+      expect(index_instance.guessed_type_name?("Collector")).to be(true)
+    end
+  end
 end

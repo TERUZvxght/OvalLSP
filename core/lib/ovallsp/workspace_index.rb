@@ -300,6 +300,14 @@ module Ovallsp
         candidates = ordered_symbol_ids(simple, matching: lambda { |sid|
           %i[class module].include?(sid.kind) && simple_name(sid) == simple
         })
+        # Nothing matched, so nothing was substituted: `resolve_type_name`
+        # answers nil and every caller keeps the name as written. Calling
+        # that a guess silenced 2,517 `unknown-method` reports over the
+        # standard library and five Rails gems -- every class whose
+        # superclass lives outside the corpus stopped being closed, and
+        # the check went off for the whole class. Measured, not reasoned:
+        # the corpus run is what caught it.
+        next false if candidates.empty?
         next false if candidates.any? { |sid| sid.name == qualified }
         next true if Index::SymbolId.bare_name(raw).include?("::")
 

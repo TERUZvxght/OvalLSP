@@ -74,7 +74,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: reading an `@ivar` that is never assigned | ⚠️ [^ivar] | ⚠️ | — |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
 | Find references, rename [^rename], workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Diagnostics: wrong argument *type* | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics: wrong argument *type* | ⚠️ [^argtype] | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics across the whole project, not just open files | ⚠️ [^ws] | ⚠️ | ⚠️ 1.0.0 |
 | Documentation (RDoc/YARD) in hover and completion [^doc] | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | ✅ | ⚠️ | ⚠️ 1.0.0 |
@@ -86,6 +86,15 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+
+[^argtype]: The check is verified by a test that fails if it breaks, but
+    it has never fired on real Ruby: **zero** findings over Ruby's
+    standard library, five Rails gems and minitest — about 4,500 files —
+    and zero over prism with its own RBS loaded. Every finding it
+    produced before 0.2.0's last review round was wrong, and fixing those
+    left none. It reports only where an RBS/RBI declaration states the
+    parameter type, has exactly one overload and no `*rest`, and both the
+    declared and the argument's own type are plain classes (024.37).
 
 [^ivar]: ✅ would mean a test fails if it breaks in that environment,
     and the E2E example passes against a hand-written empty
