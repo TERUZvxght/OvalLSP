@@ -448,6 +448,61 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     expect(result.first.evidence[:expected]).to eq("Integer")
   end
 
+  # The synthesised `Class`/`Module`/`Object`/`Kernel` tail exists so that
+  # a class-level call *resolves*. A signature read from it is not one the
+  # workspace stated, and judging parameters against it reports correct
+  # code: `Invariants.initialize(cb, ocb)` in Ruby's own
+  # `ruby_vm/rjit/compiler.rb` was the single `argument-type` finding the
+  # whole standard library produced, against RBS's
+  # `Class#initialize: (?Class superclass)`. The arity check states this
+  # rule at `sole_source_declaration`; the type check did not carry it.
+  it "does not judge a class-level call against a signature on the synthesised tail" do
+    index(<<~RUBY, uri: "file:///shape_class.rb")
+      class Shape
+      end
+    RUBY
+    index(<<~RUBY, uri: "file:///invariants.rb")
+      class Invariants
+        class << self
+          def initialize(first, second)
+            @first = first
+          end
+        end
+      end
+    RUBY
+
+    document = index("Invariants.initialize(Shape.new, Shape.new)\n")
+
+    result = engine.analyze(document: document, semantic_context: context, mode: :standard)
+
+    expect(result.select { |finding| finding.code == "argument-type" }).to be_empty
+  end
+
+  # The same rule, reached through an ancestor the tail's `:class_object`
+  # origin does not mark. `Kernel` arrives on an instance chain with
+  # `:default`, so a guard keyed on the origin would let this through --
+  # which is why the rule is "the workspace already answered nearer"
+  # rather than "the signature came from the tail".
+  it "does not judge a workspace `def self.load` against `Kernel#load`" do
+    index(<<~RUBY, uri: "file:///shape_class.rb")
+      class Shape
+      end
+    RUBY
+    index(<<~RUBY, uri: "file:///settings.rb")
+      class Settings
+        def self.load(config)
+          config
+        end
+      end
+    RUBY
+
+    document = index("Settings.load(Shape.new)\n")
+
+    result = engine.analyze(document: document, semantic_context: context, mode: :standard)
+
+    expect(result.select { |finding| finding.code == "argument-type" }).to be_empty
+  end
+
   # `declared_signature_for` stops at the first ancestor that declares the
   # method. It was an `any?` before it had to return the signature rather
   # than a boolean, and turning it into a value lookup lost the

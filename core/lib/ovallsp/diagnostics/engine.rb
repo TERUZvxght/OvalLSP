@@ -534,7 +534,7 @@ module Ovallsp
         receiver_type = receiver_type_for(document, candidate, context)
         return nil unless receiver_type.is_a?(Types::Nominal)
 
-        signature = declared_signature_for(receiver_type, candidate, context)
+        signature = declared_signature_for(receiver_type, candidate, context, stop_at_source_declaration: true)
         return nil unless signature
         return nil unless signature.overloads.size == 1
 
@@ -844,20 +844,45 @@ module Ovallsp
       # ancestors, or nil. Returns the signature rather than a boolean
       # because 0.2.0's argument check needs the parameter list, and
       # `rbs_resolves?` above only needs to know whether there was one.
-      def declared_signature_for(receiver_type, candidate, context)
-        # `lazy`, because this stops at the first ancestor that declares
-        # the method and the chain can be long -- the shape it replaced
-        # (`any?`) short-circuited, and turning it into a value lookup
-        # lost that.
-        context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).lazy.filter_map do |entry|
+      #
+      # The two questions differ in what a *source* declaration means, and
+      # `stop_at_source_declaration:` is that difference:
+      #
+      # - "does anything declare this at all" must walk past a source
+      #   declaration, because a source declaration is itself an answer
+      #   and the caller already has it;
+      # - "what are this call's parameters" must stop there. Ruby method
+      #   lookup stops at the first ancestor that defines the method, so a
+      #   signature further along the chain describes a method the call
+      #   never reaches. `Registry.initialize(a, b)`, where the workspace
+      #   writes `class << self; def initialize(first, second)`, was
+      #   judged against RBS's `Class#initialize: (?Class superclass)` --
+      #   the single `argument-type` report Ruby's whole standard library
+      #   produced, on `ruby_vm/rjit/compiler.rb:54`, was this.
+      #
+      # Keying on the tail's `:class_object` origin instead would not
+      # reach it: `Settings.load(config)` against a workspace
+      # `def self.load` finds RBS's `Kernel#load`, and `Kernel` arrives
+      # with `:default` on an instance chain. What the two have in common
+      # is not where the signature came from but that the workspace
+      # already answered nearer.
+      def declared_signature_for(receiver_type, candidate, context, stop_at_source_declaration: false)
+        # Returns from inside the walk rather than collecting: this stops
+        # at the first ancestor that answers and the chain can be long --
+        # the shape it replaced (`any?`) short-circuited, and turning it
+        # into a value lookup lost that.
+        context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).each do |entry|
           kind = entry.declaration_kind(singleton: candidate.singleton)
           # `owner:` is not qualified here: `SymbolId#initialize` does it
           # (0.1.12). This call site needed it before that existed, and
           # keeping it made a line no input could reach.
           symbol_id = Index::SymbolId.new(kind: kind, owner: entry.name, name: candidate.name,
                                           discriminator: nil)
-          context.signatures.method_signatures(symbol_id)
-        end.first
+          signature = context.signatures.method_signatures(symbol_id)
+          return signature if signature
+          return nil if stop_at_source_declaration && !context.workspace_index.declarations(symbol_id).empty?
+        end
+        nil
       end
 
       # `Signatures::Environment` resolves a *qualified* name, and the
