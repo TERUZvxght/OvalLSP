@@ -294,12 +294,7 @@ module Ovallsp
     # 024.19 is this, reaching the argument-type check.
     def guessed_type_name?(name)
       @mutex.synchronize do
-        raw = name.to_s
-        simple = raw.split("::").last
-        qualified = Index::SymbolId.qualify_owner(raw)
-        candidates = ordered_symbol_ids(simple, matching: lambda { |sid|
-          %i[class module].include?(sid.kind) && simple_name(sid) == simple
-        })
+        candidates, qualified = type_candidates_locked(name)
         # Nothing matched, so nothing was substituted: `resolve_type_name`
         # answers nil and every caller keeps the name as written. Calling
         # that a guess silenced 2,517 `unknown-method` reports over the
@@ -309,7 +304,7 @@ module Ovallsp
         # the corpus run is what caught it.
         next false if candidates.empty?
         next false if candidates.any? { |sid| sid.name == qualified }
-        next true if Index::SymbolId.bare_name(raw).include?("::")
+        next true if Index::SymbolId.bare_name(name.to_s).include?("::")
 
         candidates.size > 1
       end
@@ -473,19 +468,32 @@ module Ovallsp
       name.to_s.split("::").last.to_s
     end
 
-    def resolve_type_symbol_locked(name)
+    # Every declared class or module whose last segment is this name's
+    # last segment, in a stable order, paired with the name as written
+    # normalised for comparison against them.
+    #
+    # One place, because `#resolve_type_symbol_locked` picks from this
+    # list and `#guessed_type_name?` reports whether the pick was a
+    # substitution. Computed twice, the two could disagree about which
+    # candidates exist, and the flag would then describe a different pick
+    # than the one returned.
+    #
+    # Only the written name needs normalising: an indexed class/module
+    # name always carries the `::`, so normalising that side too was a
+    # branch no input could reach (0.1.12, round 8).
+    def type_candidates_locked(name)
       raw = name.to_s
       simple = raw.split("::").last
       candidates = ordered_symbol_ids(simple, matching: lambda { |sid|
         %i[class module].include?(sid.kind) && simple_name(sid) == simple
       })
+      [candidates, Index::SymbolId.qualify_owner(raw)]
+    end
+
+    def resolve_type_symbol_locked(name)
+      candidates, qualified = type_candidates_locked(name)
       return nil if candidates.empty?
 
-      # Only `raw` needs normalising: it is a name as written, and may be
-      # bare. An indexed class/module name always carries the `::`, so
-      # normalising that side too was a branch no input could reach
-      # (0.1.12, round 8).
-      qualified = Index::SymbolId.qualify_owner(raw)
       # `.first` is safe here because `candidates` came from
       # `ordered_symbol_ids`, not from the Set directly. Until 0.1.13 it
       # was index order, so an ambiguous bare name resolved to a different
