@@ -346,8 +346,9 @@ module Ovallsp
       end
 
       def mismatched_arguments(document, shape, overload, candidate, context)
-        expected_types = overload.required_positionals + overload.optional_positionals
         locations = shape[:positional_locations] || []
+        expected_types = expected_positional_types(overload, locations.size)
+        return [] unless expected_types
 
         locations.each_with_index.filter_map do |range, index|
           expected = expected_types[index]
@@ -399,6 +400,27 @@ module Ovallsp
             generation: context.generation
           )
         end
+      end
+
+      # Which declared type each of `count` arguments lands on, or nil
+      # when the call's arity does not fit the signature at all -- that is
+      # the arity check's report to make, not this one's.
+      #
+      # It depends on the count because Ruby fills the required
+      # parameters first, the trailing ones last, and the optional ones
+      # with whatever is left over. `def hold(a, b = 1, c)` called with
+      # two arguments binds them to `a` and `c`; called with three, to
+      # `a`, `b` and `c`. A fixed `required + optional` list is right only
+      # when there are no trailing parameters, and was reading `c`'s type
+      # at index 1.
+      def expected_positional_types(overload, count)
+        fixed = overload.required_positionals.size + overload.trailing_positionals.size
+        optional_taken = count - fixed
+        return nil if optional_taken.negative? || optional_taken > overload.optional_positionals.size
+
+        overload.required_positionals +
+          overload.optional_positionals.first(optional_taken) +
+          overload.trailing_positionals
       end
 
       # A subclass is a perfectly good instance of its parent, and

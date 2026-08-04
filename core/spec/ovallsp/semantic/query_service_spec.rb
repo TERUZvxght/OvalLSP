@@ -201,6 +201,24 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       expect(signatures_result.first[:label]).to start_with("upcase(")
     end
 
+    # A parameter written after an optional one is required, and the
+    # label has to say where it sits. It was dropped from the model
+    # entirely, so `(String, ?Integer, Symbol)` rendered as two
+    # parameters and signature help told the user the method takes at
+    # most two arguments.
+    it "shows a trailing positional, in its own position" do
+      Dir.mktmpdir do |root|
+        FileUtils.mkdir_p(File.join(root, "sig"))
+        File.write(File.join(root, "sig", "gadget.rbs"),
+                   "class Gadget\n  def span: (String first, ?Integer middle, Symbol last) -> void\nend\n")
+        signatures.load(workspace_root: root)
+
+        signatures_result = service.signatures_of(nominal("Gadget"), "span")
+
+        expect(signatures_result.first[:label]).to eq("span(String, ?Integer, Symbol) -> Unknown")
+      end
+    end
+
     it "prefers an explicit RBS signature over a conflicting source declaration" do
       Dir.mktmpdir do |root|
         FileUtils.mkdir_p(File.join(root, "sig"))

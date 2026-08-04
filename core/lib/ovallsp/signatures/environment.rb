@@ -244,6 +244,11 @@ module Ovallsp
         Overload.new(
           required_positionals: fn.required_positionals.map { |p| TypeConverter.convert(p.type) },
           optional_positionals: fn.optional_positionals.map { |p| TypeConverter.convert(p.type) },
+          # A parameter written *after* an optional one -- `(String, ?Integer, Symbol)`.
+          # Dropped entirely until 0.2.0's type check needed the positional
+          # order, which made the omission visible as a wrong report rather
+          # than a missing one.
+          trailing_positionals: fn.trailing_positionals.map { |p| TypeConverter.convert(p.type) },
           rest_positional: fn.rest_positionals && TypeConverter.convert(fn.rest_positionals.type),
           required_keywords: fn.required_keywords.transform_values { |p| TypeConverter.convert(p.type) },
           optional_keywords: fn.optional_keywords.transform_values { |p| TypeConverter.convert(p.type) },

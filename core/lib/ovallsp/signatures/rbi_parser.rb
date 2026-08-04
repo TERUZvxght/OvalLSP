@@ -140,7 +140,7 @@ module Ovallsp
       end
 
       def self.empty_slots
-        { required_positionals: [], optional_positionals: [], rest_positional: nil,
+        { required_positionals: [], optional_positionals: [], trailing_positionals: [], rest_positional: nil,
           required_keywords: {}, optional_keywords: {}, rest_keyword: nil }
       end
 
@@ -171,8 +171,13 @@ module Ovallsp
 
         forwarding = parameters.keyword_rest.is_a?(Prism::ForwardingParameterNode)
         {
-          required_positionals: (parameters.requireds + parameters.posts).map { |n| type_of(declared, n) },
+          required_positionals: parameters.requireds.map { |n| type_of(declared, n) },
           optional_positionals: parameters.optionals.map { |n| type_of(declared, n) },
+          # `posts` are required too, and were filed as such -- which was
+          # right about the arity and wrong about the order. `def hold(a,
+          # b = 1, c)` fills `a` first and `c` last, so `c` cannot sit
+          # next to `a` in a list the type check reads positionally.
+          trailing_positionals: parameters.posts.map { |n| type_of(declared, n) },
           rest_positional: rest_slot(declared, parameters.rest, forwarding),
           required_keywords: keyword_slot(parameters, Prism::RequiredKeywordParameterNode, declared),
           optional_keywords: keyword_slot(parameters, Prism::OptionalKeywordParameterNode, declared),

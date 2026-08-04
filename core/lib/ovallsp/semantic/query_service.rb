@@ -386,7 +386,9 @@ module Ovallsp
       # nothing was shown; making them build has to not make them lie, and
       # the keyword case was already lying.
       def rbs_signature_label(method_name, overload)
-        parts = overload.required_positionals.map(&:to_s) + overload.optional_positionals.map { |t| "?#{t}" }
+        parts = overload.required_positionals.map(&:to_s) +
+                overload.optional_positionals.map { |t| "?#{t}" } +
+                overload.trailing_positionals.map(&:to_s)
         parts.concat(overload.required_keywords.keys.map { |name| "#{name}:" })
         parts.concat(overload.optional_keywords.keys.map { |name| "?#{name}:" })
         # One marker for either rest slot: the label says the call accepts

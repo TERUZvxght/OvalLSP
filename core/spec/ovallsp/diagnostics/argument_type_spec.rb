@@ -52,6 +52,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
         def outline: (Shape item) -> void
         def slice: (Integer at) -> void
                  | (String at) -> void
+        def span: (String first, ?Integer middle, Symbol last) -> void
       end
 
       class Shape
@@ -100,15 +101,15 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
   # The same shape as `findings`, with the signature coming from an RBI
   # rather than an RBS -- which is the difference the two examples above
   # turn on.
-  def rbi_findings(body)
+  def rbi_findings(body, rbi: <<~RBI)
+    class Cage
+      sig { params(a: Animal).void }
+      def hold(a); end
+    end
+  RBI
     Dir.mktmpdir do |root|
       FileUtils.mkdir_p(File.join(root, "sorbet/rbi"))
-      File.write(File.join(root, "sorbet/rbi/cage.rbi"), <<~RBI)
-        class Cage
-          sig { params(a: Animal).void }
-          def hold(a); end
-        end
-      RBI
+      File.write(File.join(root, "sorbet/rbi/cage.rbi"), rbi)
       rbi_signatures = Ovallsp::Signatures::Environment.new
       rbi_signatures.load(workspace_root: root)
       rbi_context = Ovallsp::Diagnostics::SemanticContext.new(
@@ -501,6 +502,43 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     result = engine.analyze(document: document, semantic_context: context, mode: :standard)
 
     expect(result.select { |finding| finding.code == "argument-type" }).to be_empty
+  end
+
+  # `def hold(a, b = 1, c)` -- a required parameter *after* an optional
+  # one. Ruby fills `a` first, `c` last and `b` with whatever is left, so
+  # the third argument is `c`'s. The RBI parser filed `posts` in with
+  # `requireds`, and the check read `required + optional` as the
+  # positional order, which put `c`'s type at index 1 and `b`'s at index
+  # 2 -- reporting both of a correct call's last two arguments.
+  it "orders a required parameter written after an optional one last" do
+    result = rbi_findings(%(Cage.new.hold("x", 2, "y")\n), rbi: <<~RBI)
+      class Cage
+        sig { params(a: String, b: Integer, c: String).void }
+        def hold(a, b = 1, c); end
+      end
+    RBI
+
+    expect(result).to be_empty
+  end
+
+  # The same shape from RBS, where the trailing parameter was dropped
+  # from the model entirely rather than mis-filed. With `middle` left
+  # out, `:sym` is `last`'s argument -- and a list that stops at
+  # `?Integer middle` judged it against `Integer`.
+  it "maps an omitted optional parameter to the argument the caller left out" do
+    result = findings(%(Widget.new.span("a", :sym)\n))
+
+    expect(result).to be_empty
+  end
+
+  # And still reports when the same call really is wrong: `1` is not the
+  # `Symbol` that `last` declares. Without this the example above passes
+  # for a check that has simply stopped looking at trailing parameters.
+  it "still reports an argument that lands on a trailing parameter" do
+    result = findings(%(Widget.new.span("a", 1)\n))
+
+    expect(result.size).to eq(1)
+    expect(result.first.evidence).to include(expected: "Symbol", actual: "Integer", position: 1)
   end
 
   # `declared_signature_for` stops at the first ancestor that declares the
