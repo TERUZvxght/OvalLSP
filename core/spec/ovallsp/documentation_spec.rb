@@ -74,8 +74,6 @@ RSpec.describe Ovallsp::Documentation do
     "#!/usr/bin/env ruby" => "shebang",
     "# -*- coding: utf-8 -*-" => "an Emacs coding cookie",
     "# vim: set ts=2 sw=2:" => "a vim modeline",
-    "# vi: set ts=2:" => "a vi modeline",
-    "# ex: set ts=2:" => "an ex modeline",
     "# Local Variables:" => "an Emacs local-variables block",
     "# :nodoc:" => "RDoc's :nodoc:",
     "# :doc:" => "RDoc's :doc:",
@@ -99,6 +97,26 @@ RSpec.describe Ovallsp::Documentation do
 
       expect(above(text, 2)).to eq("Charges the card.")
     end
+  end
+
+  # `vi:` and `ex:` were in that list for one round and are not any more.
+  # A modeline in either form is essentially unknown in Ruby, and `ex:`
+  # opens an ordinary sentence: ActiveRecord 8.1.3's
+  # `associations/errors.rb` documents `DeleteRestrictionError` with
+  # three lines, and the third begins "ex: if @project.tasks.size > 0".
+  # Filtering it deleted the example from the hover.
+  it "keeps a sentence that opens with an abbreviation for `example`" do
+    text = <<~RUBY
+      # This error is raised when trying to destroy a parent instance.
+      # ex: if @project.tasks.size > 0, DeleteRestrictionError is raised
+      class DeleteRestrictionError
+      end
+    RUBY
+
+    expect(above(text, 2)).to eq(
+      "This error is raised when trying to destroy a parent instance.\n" \
+      "ex: if @project.tasks.size > 0, DeleteRestrictionError is raised"
+    )
   end
 
   # And a comment that merely begins with one of those words is prose.

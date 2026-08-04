@@ -269,8 +269,8 @@ Measured at `ca66774`, after this round's fixes, with
 
 | corpus | files | `argument-type` |
 |---|---|---|
-| Ruby 3.4.7 stdlib + activerecord/activesupport/actionpack/actionview/activemodel 8.1.3 + minitest 6.0.6 | ~4,500 | **0** |
-| prism 1.6.0, with its own `sig/` loaded | 68 | **0** |
+| Ruby 3.4.7 stdlib + activerecord/activesupport/actionpack/actionview/activemodel 8.1.3 + minitest 6.0.6 | 2,042 | **0** |
+| prism 1.6.0, with its own `sig/` loaded | 41 | **0** |
 
 Before those fixes the same two corpora produced **795** and **151**, and
 every one of them was wrong: a call judged against a signature it does
@@ -285,8 +285,10 @@ construction. `OVALLSP_SIGNATURE_ROOT` (added with this entry) lifts that:
 pointed at a gem that ships extensive RBS, the check found 151 things to
 say and all 151 were wrong, and with those fixed it says nothing.
 
-It is not inert — `argument_type_spec.rb` has 25 examples that fire, and
-the E2E row passes. What it is, is narrow to the point where real code
+It is not inert — making `argument_type_findings` return `[]`
+unconditionally fails 9 of `argument_type_spec.rb`'s examples, and the
+E2E row passes. (An earlier version of this entry said 25, which was a
+guess dressed as a count; a reviewer measured it.) What it is, is narrow to the point where real code
 does not meet it: an RBS/RBI declaration with exactly one overload and no
 `*rest`, both the declared and the inferred type a plain class with no
 ancestor relation, and no operator expression in the argument. Each of

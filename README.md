@@ -89,7 +89,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 
 [^argtype]: The check is verified by a test that fails if it breaks, but
     it has never fired on real Ruby: **zero** findings over Ruby's
-    standard library, five Rails gems and minitest — about 4,500 files —
+    standard library, five Rails gems and minitest — 2,042 files —
     and zero over prism with its own RBS loaded. Every finding it
     produced before 0.2.0's last review round was wrong, and fixing those
     left none. It reports only where an RBS/RBI declaration states the

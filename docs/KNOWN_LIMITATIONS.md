@@ -267,7 +267,7 @@ missed one", so each is narrow on purpose. What that costs a user:
 
 - **Argument types** are checked so narrowly that on the code measured
   so far they are not reported at all. Over Ruby's standard library, five
-  Rails gems and minitest — about 4,500 files — this check produces
+  Rails gems and minitest — 2,042 files — this check produces
   **zero** findings, and over prism with its own RBS loaded it produces
   zero as well (024.37). Before 0.2.0's last round of fixes those two
   corpora produced 795 and 151, and every one was wrong. Treat it as

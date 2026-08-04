@@ -225,6 +225,35 @@ RSpec.describe "Ovallsp::Server ancestry questions for the Runtime Agent" do
       .not_to include("unknown-method")
   end
 
+  # `install_agent_snapshot` republishes too, and that call was pinned by
+  # nothing: commenting it out left the whole suite green, the G12
+  # capability example included. G12 could not see it because 024.24's
+  # fix means a route diagnostic is no longer published before the Agent
+  # arrives, so "it clears" is satisfied by a world where nothing was
+  # ever published.
+  #
+  # An end-to-end example was tried first and was flaky: it needs a
+  # second Core and a second Rails boot against the one fixture app, and
+  # failed under some orderings. The property is about the Server, so it
+  # is pinned at the Server.
+  it "answers an already-open document when a snapshot is installed" do
+    server = Ovallsp::Server.new(
+      input: StringIO.new(""), output: output, logger: logger,
+      workspace_root: "/workspace", ancestry_registry: ancestry_registry
+    )
+    uri = "file:///workspace/test/test_helper.rb"
+    document = server.instance_variable_get(:@document_store)
+                     .open(uri: uri, text: reopened_gem_class, version: 1, language_id: "ruby")
+    server.send(:reindex, document)
+    server.send(:publish_diagnostics, document)
+    before = published_diagnostics(uri).size
+    expect(before).to be_positive
+
+    server.send(:install_agent_snapshot, routes: [], models: [])
+
+    expect(wait_until { published_diagnostics(uri).size > before }).to be(true)
+  end
+
   # The same ordering on the *first* boot rather than a restart, which is
   # the path an ordinary session actually takes: `initialized` starts the
   # bootstrap, the editor opens its restored files while it runs, and the

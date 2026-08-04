@@ -21,13 +21,20 @@ module Ovallsp
     # family keep it company.
     #
     # `\s` after the word, or `:`/`=`, so that a sentence merely
-    # beginning with one of them stays prose.
+    # beginning with one of them stays prose. That is not enough on its
+    # own, and `vi:`/`ex:` were dropped after one round for it: a
+    # modeline in either form is essentially unknown in Ruby, while `ex:`
+    # opens an ordinary sentence. ActiveRecord 8.1.3 documents
+    # `DeleteRestrictionError` in three lines whose third begins "ex: if
+    # @project.tasks.size > 0", and filtering it deleted the example from
+    # the hover. A directive pattern earns its place by being a thing
+    # people write in Ruby, not by being a thing that exists.
     DIRECTIVE = /
       \A\#!                                                   # a shebang
       | \A\#\s*(
           frozen_string_literal | encoding\s*[:=] | warn_indent
           | shareable_constant_value | rubocop: | -\*-
-          | vim:\s | vi:\s | ex:\s | Local\ Variables:
+          | vim:\s | Local\ Variables:
           | :(nodoc|doc|markup|stopdoc|startdoc|enddoc|include|title|main|category|call-seq):
         )
     /x
