@@ -541,6 +541,57 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
     expect(result.first.evidence).to include(expected: "Symbol", actual: "Integer", position: 1)
   end
 
+  # RBS answers an inherited method at the *subclass's* own name, so a
+  # signature found there is not necessarily declared there. `Gizmo <
+  # Widget` in RBS, and the workspace overriding `resize` in Ruby, was
+  # judged against `Widget`'s `(Integer size)` -- reporting a String the
+  # override declares nothing about.
+  it "does not judge an override against the parent signature it replaced" do
+    index(<<~RUBY, uri: "file:///gizmo.rb")
+      class Gizmo < Widget
+        def resize(label)
+        end
+      end
+    RUBY
+
+    document = index(%(Gizmo.new.resize("wide")\n))
+    result = engine.analyze(document: document, semantic_context: context, mode: :standard)
+
+    expect(result.select { |finding| finding.code == "argument-type" }).to be_empty
+  end
+
+  # And the parent's own call is still judged, so the example above is
+  # not passing because the check stopped looking at inherited RBS.
+  it "still judges a call on the class that declares the signature" do
+    result = findings(%(Widget.new.resize("wide")\n))
+
+    expect(result.size).to eq(1)
+    expect(result.first.evidence).to include(expected: "Integer", actual: "String")
+  end
+
+  # The other half of the same argument, and the reason the rule is a
+  # parameter rather than the method's only behaviour. `rbs_resolves?`'s
+  # question is "does anything declare this at all", asked immediately
+  # before reporting `unknown-method`; a source declaration nearer than
+  # the RBS one means the method exists, so stopping there and answering
+  # "no" would report a method the workspace itself wrote.
+  #
+  # No end-to-end input distinguishes the two today -- the unknown-method
+  # check skips a call the resolver already resolved, and a source
+  # declaration is what the resolver resolves. Measured over Ruby's
+  # standard library plus activerecord and activesupport, 12,859 reports,
+  # the two settings produce byte-identical output. It is pinned here, at
+  # the level where the difference exists, rather than left to a corpus
+  # that cannot see it.
+  it "keeps walking past a source declaration when the question is whether anything declares the method" do
+    index("class Gadget\n  def inspect\n  end\nend\n", uri: "file:///gadget.rb")
+    candidate = Struct.new(:name, :singleton).new("inspect", false)
+
+    resolves = engine.send(:rbs_resolves?, candidate, Ovallsp::Types::Nominal.new(name: "::Gadget"), context)
+
+    expect(resolves).to be(true)
+  end
+
   # `declared_signature_for` stops at the first ancestor that declares the
   # method. It was an `any?` before it had to return the signature rather
   # than a boolean, and turning it into a value lookup lost the

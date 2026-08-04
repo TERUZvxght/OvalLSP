@@ -556,7 +556,7 @@ module Ovallsp
         receiver_type = receiver_type_for(document, candidate, context)
         return nil unless receiver_type.is_a?(Types::Nominal)
 
-        signature = declared_signature_for(receiver_type, candidate, context, stop_at_source_declaration: true)
+        signature = declared_signature_for(receiver_type, candidate, context, binding_only: true)
         return nil unless signature
         return nil unless signature.overloads.size == 1
 
@@ -867,28 +867,41 @@ module Ovallsp
       # because 0.2.0's argument check needs the parameter list, and
       # `rbs_resolves?` above only needs to know whether there was one.
       #
-      # The two questions differ in what a *source* declaration means, and
-      # `stop_at_source_declaration:` is that difference:
+      # `binding_only:` is the difference between two questions that share
+      # this walk:
       #
-      # - "does anything declare this at all" must walk past a source
-      #   declaration, because a source declaration is itself an answer
-      #   and the caller already has it;
-      # - "what are this call's parameters" must stop there. Ruby method
-      #   lookup stops at the first ancestor that defines the method, so a
-      #   signature further along the chain describes a method the call
-      #   never reaches. `Registry.initialize(a, b)`, where the workspace
-      #   writes `class << self; def initialize(first, second)`, was
-      #   judged against RBS's `Class#initialize: (?Class superclass)` --
-      #   the single `argument-type` report Ruby's whole standard library
-      #   produced, on `ruby_vm/rjit/compiler.rb:54`, was this.
+      # - "does *anything* declare this" -- `rbs_resolves?`'s question,
+      #   asked immediately before reporting `unknown-method`. Any
+      #   declaration answers it, wherever it came from.
+      # - "what are *this call's* parameters" -- the argument-type
+      #   check's. Ruby method lookup stops at the first ancestor that
+      #   defines the method, so a declaration further along the chain
+      #   describes a method the call never reaches, and judging against
+      #   it reports correct code.
       #
-      # Keying on the tail's `:class_object` origin instead would not
-      # reach it: `Settings.load(config)` against a workspace
-      # `def self.load` finds RBS's `Kernel#load`, and `Kernel` arrives
-      # with `:default` on an instance chain. What the two have in common
-      # is not where the signature came from but that the workspace
-      # already answered nearer.
-      def declared_signature_for(receiver_type, candidate, context, stop_at_source_declaration: false)
+      # The second stops at a *source* declaration. `Registry.initialize(a,
+      # b)`, where the workspace writes `class << self; def
+      # initialize(first, second)`, was judged against RBS's
+      # `Class#initialize: (?Class superclass)` -- the single
+      # `argument-type` report Ruby's whole standard library produced, on
+      # `ruby_vm/rjit/compiler.rb:54`.
+      #
+      # That one refusal is enough, and a second was tried and removed:
+      # requiring the signature to be `direct` (declared on that class
+      # rather than inherited by it) changed no answer any input reaches,
+      # because a workspace override is a source declaration and this
+      # already stops there, while a subclass that does *not* override
+      # wants the parent's signature and gets it one entry later either
+      # way.
+      #
+      # Keying on the tail's `:class_object` origin instead -- which is
+      # how the arity check states the first of these -- would not reach
+      # it: `Settings.load(config)` against a workspace `def self.load`
+      # finds RBS's `Kernel#load`, and `Kernel` arrives on an instance
+      # chain with `:default`. What the cases have in common is not where
+      # the signature came from but that something nearer already
+      # answered.
+      def declared_signature_for(receiver_type, candidate, context, binding_only: false)
         # Returns from inside the walk rather than collecting: this stops
         # at the first ancestor that answers and the chain can be long --
         # the shape it replaced (`any?`) short-circuited, and turning it
@@ -902,7 +915,7 @@ module Ovallsp
                                           discriminator: nil)
           signature = context.signatures.method_signatures(symbol_id)
           return signature if signature
-          return nil if stop_at_source_declaration && !context.workspace_index.declarations(symbol_id).empty?
+          return nil if binding_only && !context.workspace_index.declarations(symbol_id).empty?
         end
         nil
       end
