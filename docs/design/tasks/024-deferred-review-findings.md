@@ -161,6 +161,43 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.35 A class that includes a module the workspace cannot resolve still reads as closed
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`closed_nominal?`)
+
+`closed_nominal?` asks `chain_reaches_root?` of the *instance* chain --
+deliberately, and correctly -- but asks `ancestor_known?` only of the
+chain it is about to search. For a class-level call that is the singleton
+chain, which `include` never touches. So a class that includes an
+`ActiveSupport::Concern` living in a gem the workspace has not read is
+judged closed, though its real class-level method set is whatever that
+Concern's `class_methods do` block installs.
+
+```ruby
+class Configish
+  include SomeGem::Model
+  validate :ensure_ok      # reported; `include ActiveModel::Model` makes it run
+end
+```
+
+Reported on 0.1.14 and 0.1.15, silent on 0.1.13 -- 0.1.14 introduced it
+by giving the singleton chain a tail that reaches the root, which is what
+`chain_reaches_root?` was the only guard against. Four instances in
+`solid_queue-1.5.0/lib/solid_queue/configuration.rb` alone.
+
+**Direction:** ask `ancestor_known?` of both chains when the lookup is a
+singleton one. The instance chain is where `include` records itself, and
+an unknown module there means the class-level set is unbounded too. Worth
+measuring in both directions first: it will silence genuine class-level
+reports on every class that includes anything unread, which is most of a
+Rails app before the Agent is ready.
+
 ## 024.34 `attr_*` inside a `def` inside `class << self` is kinded singleton
 
 ```yaml

@@ -142,6 +142,17 @@ and none of them fixed by it:
   reported as unknown while `Foo.new.bar` is accepted — both answers
   inverted. **56** of Ruby's own standard-library reports are this
   (024.32).
+- **A `def self.` the workspace adds to `Object` is not reachable**, so
+  `Widget.foo` is reported for a method every class really has. 0.1.14
+  did not report this, by an accident of the same mis-kinded lookup that
+  made it report `class Object; def blank?; end` — a far more common
+  shape — on code that runs. 0.1.15 trades the accident back for the fix,
+  which is why this is the one shape it makes *worse* than 0.1.14
+  (024.26).
+- **A class that includes a module the workspace has not read still has
+  its class-level macros reported.** `include SomeGem::Model` followed by
+  `validate :ensure_ok` is reported, though the Concern installs
+  `validate`. Introduced by 0.1.14 and not fixed here (024.35).
 - **`K.instance_eval { attr_accessor :x }` is reported** where
   `K.class_eval { attr_accessor :x }` is not, though both define the same
   methods. The rule behind it is right for `object.instance_eval`, which

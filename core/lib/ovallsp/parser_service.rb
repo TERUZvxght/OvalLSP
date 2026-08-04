@@ -327,9 +327,15 @@ module Ovallsp
           end
         end
         # Pushed around the children, not the candidate above: the call
-        # itself is written where it is written, and only its block body
-        # gets the different self. `nil` means the block does not change
-        # it -- see #block_self_is_module for which calls do.
+        # itself is written where it is written. `nil` means the block
+        # does not change self -- see #block_self_is_module for which
+        # calls do.
+        #
+        # "Children" is the whole call, arguments included, not just the
+        # block body: `define_method(:x, &maker)` and
+        # `Other.instance_exec(helper) { }` resolve their arguments under
+        # the pushed frame too, and report them. Identical on 0.1.14, and
+        # narrowing it to the block node is its own change.
         block_self = node.block && block_self_is_module(node)
         return super if block_self.nil?
 
@@ -738,6 +744,14 @@ module Ovallsp
       # itself is never analyzed ("dynamic body内部型の断定はしない"); only
       # its name and the fact that it returns `Relation[Model]` are
       # statically knowable.
+      # What a macro-generated method takes when the macro forwards rather
+      # than declares: `delegate` passes everything through, and a
+      # `scope`'s arguments are its lambda's. Recorded as a rest
+      # parameter, which the argument-count check bails out on -- the same
+      # answer `def m(...)` gets. Recording *nothing*, as these did, made
+      # the check judge every call to them.
+      FORWARDED_PARAMETERS = [Index::Parameter.new(name: "args", kind: :rest, default_source: nil)].freeze
+
       def record_scope(node)
         return unless node.arguments
 
@@ -745,7 +759,8 @@ module Ovallsp
         return unless name
 
         return_type = Types::Generic.new(name: "Relation", type_arg: Types::Nominal.new(name: simple_owner_name))
-        add_generated_method(node: node, name: name, kind: :singleton_method, return_type: return_type, origin: :scope)
+        add_generated_method(node: node, name: name, kind: :singleton_method, return_type: return_type,
+                             origin: :scope, parameters: FORWARDED_PARAMETERS)
       end
 
       # `delegate :name, :age, to: :company, prefix: true, allow_nil: true`.
@@ -773,6 +788,7 @@ module Ovallsp
           generated_name = prefix ? "#{target}_#{delegated_name}" : delegated_name
           add_generated_method(
             node: node, name: generated_name, kind: :instance_method, return_type: Types::UNKNOWN, origin: :delegate,
+            parameters: FORWARDED_PARAMETERS,
             metadata: { to: target, delegated_name: delegated_name, allow_nil: allow_nil }
           )
         end

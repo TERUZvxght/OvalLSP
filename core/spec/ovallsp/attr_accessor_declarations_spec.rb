@@ -152,6 +152,29 @@ end
     expect(visibilities).to eq("hidden" => :private, "shown" => :public)
   end
 
+  # `delegate` forwards every argument it is given, and a `scope`'s
+  # arguments are the lambda's. Both were recorded as taking *nothing*,
+  # so the argument-count check judged every call to them -- silent until
+  # 0.1.15 taught that check to count a brace-less hash, which pushed
+  # `within_new_transaction(isolation: x)` over the threshold. Real
+  # instances: ActiveRecord's `database_statements.rb`, devise's
+  # `lockable.rb`, solid_queue's `queue.rb`.
+  #
+  # Recorded as a rest parameter, which the check already bails out on --
+  # the same answer `def m(...)` gets, and for the same reason.
+  {
+    "delegate" => ["delegate :within_new_transaction, to: :manager", "within_new_transaction"],
+    "scope" => ["scope :queued_as, ->(name) { where(name: name) }", "queued_as"]
+  }.each do |macro, (declaration, name)|
+    it "gives a #{macro}-generated method a rest parameter" do
+      parameters = summarize("class Widget\n  #{declaration}\nend\n").declarations
+                                                                     .find { |d| d.symbol_id.name == name }
+                                                                     .parameters
+
+      expect(parameters.map(&:kind)).to eq([:rest])
+    end
+  end
+
   # `docs`-level invariant, stated in three places: a `:generated`
   # declaration is always paired with a `GeneratedMethodFact`. 0.1.14
   # recorded attr declarations without one, so those three statements were

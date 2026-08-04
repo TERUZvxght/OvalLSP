@@ -46,6 +46,14 @@ the released code and fixed with the same measurement discipline.
   hole pre-existed for `enum`, `scope` and `delegate`; 0.1.14 extended it
   to ordinary Ruby. `prepareRename`'s own comment always said generated
   symbols were refused; now they are.
+- Fixed: a method `delegate` or `scope` generated takes what it
+  forwards, not nothing. Both recorded no parameters at all, so the
+  argument-count check judged every call to them —
+  `within_new_transaction(isolation: x)` in ActiveRecord's own
+  `database_statements.rb`, and calls to `delegate`d predicates in devise
+  and solid_queue. Over ActiveRecord, ActiveSupport, ActionPack,
+  ActionView and ActiveModel together this takes `argument-count` from
+  **134 to 11** with nothing introduced.
 - Fixed: a brace-less trailing hash is counted as the positional
   argument Ruby binds it to, when the method declares no keywords.
   `add_tests "a", "K" => 1` against `def add_tests(name, hash)` was
@@ -60,10 +68,14 @@ the released code and fixed with the same measurement discipline.
   a `module_function` or a `define_method` this engine does not model can
   shadow the method it found. Ruby's own `::JSON.load(source, proc, opts)`
   was reported that way.
-- Performance: completion on a constant receiver is back to where it was.
-  0.1.14 grew the singleton chain from one entry to six, and each entry
-  cost a full scan of the symbol table: **12.97 ms → 0.099 ms** per
-  request on a 21.7k-symbol workspace, measured on both revisions.
+- Performance: completion is faster than it has ever been, not merely
+  recovered. 0.1.14 grew the singleton chain from one entry to six, and
+  each entry cost a full scan of the symbol table. On a 21.7k-symbol
+  workspace, a constant receiver went **12.97 ms → 0.099 ms**; on a
+  22k-symbol one an independent measurement put it at 3.18 ms (0.1.13) →
+  21.3 ms (0.1.14) → 0.013 ms here, with instance-receiver completion
+  13.1 → 13.9 → 0.103 ms. Absolutes differ with the workspace; the
+  direction and the order of magnitude do not.
 
 A patch release under the versioning rule in `docs/PUBLISHING.md`: no
 capability is added.
