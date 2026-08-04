@@ -12,7 +12,25 @@ module Ovallsp
     # the interpreter and the tools read. Including them puts
     # `frozen_string_literal: true` in the hover for the first method in
     # every file.
-    DIRECTIVE = /\A#\s*(frozen_string_literal|encoding\s*[:=]|warn_indent|shareable_constant_value|rubocop:|:nodoc:|-\*-)/
+    #
+    # A directive does not stop the walk -- a comment above one is still
+    # documentation -- so this list has to name everything that can sit
+    # in that position, not just the first thing found there. A shebang
+    # is above the magic comment in every executable Ruby file, and
+    # `vim:`/`Emacs`-style modelines and RDoc's own `:markup:`/`:stopdoc:`
+    # family keep it company.
+    #
+    # `\s` after the word, or `:`/`=`, so that a sentence merely
+    # beginning with one of them stays prose.
+    DIRECTIVE = /
+      \A\#!                                                   # a shebang
+      | \A\#\s*(
+          frozen_string_literal | encoding\s*[:=] | warn_indent
+          | shareable_constant_value | rubocop: | -\*-
+          | vim:\s | vi:\s | ex:\s | Local\ Variables:
+          | :(nodoc|doc|markup|stopdoc|startdoc|enddoc|include|title|main|category|call-seq):
+        )
+    /x
 
     module_function
 

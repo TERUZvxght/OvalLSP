@@ -47,6 +47,35 @@ RSpec.describe Ovallsp::Documentation do
   # These sit above the first declaration in a great many files, and they
   # are addressed to the interpreter and the tools rather than to a
   # reader.
+  # A directive does not stop the walk, so anything above one is still
+  # collected -- and a shebang sits above the magic comment in every
+  # executable Ruby file. `#!/usr/bin/env ruby` was shown as the first
+  # declaration's documentation.
+  it "drops a shebang, and the editor and RDoc directives that sit with it" do
+    text = <<~RUBY
+      #!/usr/bin/env ruby
+      # -*- coding: utf-8 -*-
+      # vim: set ts=2 sw=2:
+      # :markup: markdown
+      # Charges the card.
+      def charge
+      end
+    RUBY
+
+    expect(above(text, 5)).to eq("Charges the card.")
+  end
+
+  # And a comment that merely begins with one of those words is prose.
+  it "keeps a sentence that starts like a directive" do
+    text = <<~RUBY
+      # vimscript is not involved here.
+      def charge
+      end
+    RUBY
+
+    expect(above(text, 1)).to eq("vimscript is not involved here.")
+  end
+
   it "drops magic comments and tool directives" do
     text = <<~RUBY
       # frozen_string_literal: true

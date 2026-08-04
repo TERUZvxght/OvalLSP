@@ -270,14 +270,14 @@ missed one", so each is narrow on purpose. What that costs a user:
   `before_action` and `skip_before_action`** — the whole chain, so
   `ApplicationController`'s own body decides this for every view beneath
   it, and `after_action`, `around_action` and `prepend_before_action` are
-  among the forms that silence it —
-  (which covers every gem macro — `load_and_authorize_resource`,
-  `expose`, Devise, ActiveAdmin — because what such a call installs is
-  invisible until 024.R7 lets the index attribute it), or **the view
-  renders anything**, or **any class in the chain is declared in more
-  than one file** (each ancestor resolves to one file, so a second one
-  reopening the class is never read). An ivar assigned by a sibling action also silences
-  it, deliberately.
+  among the forms that silence it. That covers every gem macro too —
+  `load_and_authorize_resource`, `expose`, Devise, ActiveAdmin — because
+  what such a call installs is invisible until 024.R7 lets the index
+  attribute it. The check is also silenced when **the view renders
+  anything**, and when **any class in the chain is declared in more than
+  one file** (each ancestor resolves to one file, so a second one
+  reopening the class is never read). An ivar assigned by a sibling
+  action silences it too, deliberately.
 
   **In an application `rails new` produces, this check never fires**
   (024.22). Railties 7.2, 8.0 and 8.1 all generate an
@@ -300,9 +300,10 @@ missed one", so each is narrow on purpose. What that costs a user:
   tail. The pass walks in sorted order, so it is always the same tail
   rather than a different one after every save, and the Core logs when
   the cap bites. "Files" here means files it published for: an open file,
-  a missing one and one that raised do not count against the cap. They also have no
-  end-to-end verification against a real Rails app: the example written
-  for one produced nothing in 45 seconds. The cause is diagnosed and the
+  a missing one and one that raised do not count against the cap.
+  Workspace-wide diagnostics also have no end-to-end verification against
+  a real Rails app: the example written for one produced nothing in 45
+  seconds. The cause is diagnosed and the
   fix is scoped to its own task (024.14). The README matrix marks this
   row ⚠️ rather than ✅ for that reason.
 

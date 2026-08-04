@@ -41,6 +41,14 @@ updated in the same change, not "later".
 is *not* generated from the Markdown docs, so nothing propagates on its
 own. Treat every page as another row above.
 
+**It is not in this tree.** `site/` lives on
+`claude/github-pages-official-site-fef0f5` and has not been merged, so
+the site rows in the trigger table cannot be followed from here — they
+have to be *carried*, and the list two sections down is where they are
+carried to. Anything a change makes stale on the site goes in that list
+until the branch lands. A trigger you cannot follow is a trigger nobody
+follows.
+
 | Page | Mirrors |
 |---|---|
 | `site/index.html`, `site/ja/index.html` | README's pitch and capability summary |
@@ -77,6 +85,14 @@ workspace class names, which 0.1.x does not have and 0.2.0 does — fixing
 that against 0.1.x and then re-fixing it after 0.2.0 would be two edits
 saying opposite things a week apart. The rest of the list is order-independent:
 
+- **`site/capabilities.html` and `site/ja/capabilities.html` mark all six
+  of 0.2.0's capabilities `planned`** — bare-prefix completion, the
+  unassigned-`@ivar` check, argument types, project-wide diagnostics,
+  documentation in hover, and semantic highlighting — and
+  `site/roadmap.html` still carries the 0.2.0 section that
+  `docs/ROADMAP.md` no longer has. On publication the project's own site
+  would say six shipped features are still to come. This is the reason
+  the front-page item below is order-dependent, and it is the same edit;
 - `site/capabilities.html` **and `site/ja/capabilities.html`** still say
   "Find references, rename, workspace symbols" unqualified; 0.1.15
   narrowed that — a method a macro declared is refused rather than

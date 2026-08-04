@@ -502,11 +502,15 @@ RSpec.describe "Extension capabilities", :e2e do
           end
         end
       RUBY
-        data = @client.raw_request("textDocument/semanticTokens/full",
-                               { textDocument: { uri: uri } })[:data]
-        types = data.each_slice(5).map { |token| Ovallsp::SemanticTokens::LEGEND[token[3]] }
-        expect(types).to include("variable")
-        expect(types).to include("method")
+        by_line = semantic_token_types_by_line(uri)
+
+        # The row promises the two are coloured *differently*, so the
+        # assertion has to be per position. Asserting only that both
+        # kinds appear somewhere passed with the classification fully
+        # inverted -- a reviewer swapped `:variable` and `:method` in the
+        # collector and both T1 examples stayed green.
+        expect(by_line[6]).to eq(["variable"])
+        expect(by_line[7]).to eq(["method"])
       end
     end
 
@@ -520,11 +524,23 @@ RSpec.describe "Extension capabilities", :e2e do
         <%= value %>
         <%= helper %>
       ERB
-        data = @client.raw_request("textDocument/semanticTokens/full",
-                               { textDocument: { uri: uri } })[:data]
-        types = data.each_slice(5).map { |token| Ovallsp::SemanticTokens::LEGEND[token[3]] }
-        expect(types).to include("variable")
-        expect(types).to include("method")
+        by_line = semantic_token_types_by_line(uri)
+
+        expect(by_line[1]).to eq(["variable"])
+        expect(by_line[2]).to eq(["method"])
+      end
+    end
+
+    # LSP semantic tokens are delta-encoded against the previous token,
+    # so a type is only meaningful once the deltas are accumulated back
+    # into absolute positions.
+    def semantic_token_types_by_line(uri)
+      data = @client.raw_request("textDocument/semanticTokens/full",
+                                 { textDocument: { uri: uri } })[:data]
+      line = 0
+      data.each_slice(5).each_with_object(Hash.new { |h, k| h[k] = [] }) do |token, by_line|
+        line += token[0]
+        by_line[line] << Ovallsp::SemanticTokens::LEGEND[token[3]]
       end
     end
   end

@@ -71,7 +71,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown route helper | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: wrong number of arguments | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Diagnostics: reading an `@ivar` that is never assigned | ✅ | ⚠️ | — |
+| Diagnostics: reading an `@ivar` that is never assigned | ⚠️ [^ivar] | ⚠️ | — |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
 | Find references, rename [^rename], workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: wrong argument *type* | ✅ | ⚠️ | ⚠️ 1.0.0 |
@@ -86,6 +86,14 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+
+[^ivar]: ✅ would mean a test fails if it breaks in that environment,
+    and the E2E example passes against a hand-written empty
+    `ApplicationController` — a shape `rails new` does not produce.
+    Railties 7.2, 8.0 and 8.1 all generate one that calls `allow_browser
+    versions: :modern`, and a class-body call the analysis does not model
+    silences the check for every view beneath it. So in a default Rails
+    application this check never fires (024.22).
 
 [^rename]: A method a macro declared — `attr_accessor :name`,
     `delegate :title, to: :author` — is refused rather than renamed. There

@@ -307,8 +307,11 @@ module Ovallsp
       # nesting, the way `@pending_visibility_names` carries `private def`.
       def visit_call_node(node)
         if node.receiver.nil?
-          update_visibility(node) if node.arguments.nil?
-            apply_visibility_arguments(node) unless node.arguments.nil?
+          if node.arguments.nil?
+            update_visibility(node)
+          else
+            apply_visibility_arguments(node)
+          end
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
           record_generated_methods(node) if current_owner && GENERATED_METHOD_DSLS.include?(node.name)
