@@ -912,8 +912,12 @@ module Ovallsp
         double_splat = keyword_hashes.any? do |hash|
           hash.elements.any? { |element| element.is_a?(Prism::AssocSplatNode) }
         end
+        # A double splat makes the whole call unjudgeable, which is what
+        # `splat` already means to the one reader of this shape. Zeroing
+        # `keywords` as well was dead: that reader is past a `next if
+        # shape[:splat]` by the time it looks.
         splat ||= double_splat
-        keywords = keyword_hashes.count - (double_splat ? keyword_hashes.count : 0)
+        keywords = keyword_hashes.count
         {
           positional: arguments.count do |argument|
             !argument.is_a?(Prism::KeywordHashNode) && !argument.is_a?(Prism::SplatNode) &&

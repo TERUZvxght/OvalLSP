@@ -166,6 +166,18 @@ end
     expect(facts).to eq([["name", :attr_accessor], ["name=", :attr_accessor]])
   end
 
+  # `Unknown`, not `nil` and not a guess: an attribute's type is whatever
+  # was last assigned to the ivar, which this parser does not track. The
+  # value coincides with what 0.1.14 answered through the no-fact
+  # fallback, so nothing downstream changed when the fact appeared -- and
+  # nothing failed when the value was wrong, either, which is why it is
+  # asserted here.
+  it "gives the generated fact an honest return type" do
+    fact = summarize("class Widget\n  attr_reader :name\nend\n").generated_method_facts.first
+
+    expect(fact.return_type).to eq(Ovallsp::Types::UNKNOWN)
+  end
+
   it "names the macro that declared it, not a single origin for all of them" do
     origins = summarize("class Widget\n  attr_reader :a\n  attr_writer :b\nend\n")
               .generated_method_facts.map(&:origin)

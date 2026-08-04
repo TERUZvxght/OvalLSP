@@ -140,7 +140,7 @@ and none of them fixed by it:
   (024.31).
 - **`def Foo.bar` is recorded as an instance method**, so `Foo.bar` is
   reported as unknown while `Foo.new.bar` is accepted — both answers
-  inverted. Six of these survive in Ruby's own standard library
+  inverted. **56** of Ruby's own standard-library reports are this
   (024.32).
 - **`K.instance_eval { attr_accessor :x }` is reported** where
   `K.class_eval { attr_accessor :x }` is not, though both define the same

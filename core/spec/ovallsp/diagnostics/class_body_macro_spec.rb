@@ -172,8 +172,9 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
 
   # A brace-less trailing hash is bound to a *positional* parameter when
   # the method declares no keywords: `add("a", "K" => 1)` passes two
-  # arguments, not one. Counting it as keywords reported 400 calls in one
-  # corpus -- 399 of them in `sexp_processor`'s `pt_testcase.rb` alone.
+  # arguments, not one. Counting it as keywords reported 526 calls over
+  # brakeman and its vendored gems -- 399 of them in `sexp_processor`'s
+  # `pt_testcase.rb` alone.
   # The miscount predates 0.1.14; what 0.1.14 changed is that a
   # receiverless call in a class body resolves now, so it reached this
   # check for the first time.
@@ -228,19 +229,21 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   # `**opts` passes whatever the hash holds -- nothing at all when it is
   # empty. Counting the double splat as one positional reported
   # `ping(**opts)`, `ping(**{})` and `ping(**nil)`, all of which run.
-  it "judges no call that passes a double splat" do
-    source = <<~'RUBY'
-      class Sp
-        def self.ping; end
+  # Two callees, because which one distinguishes the branches depends on
+  # the arity: against a zero-parameter callee, not bailing out counts the
+  # hash as one positional and reports "takes 0 arguments, but 1 given";
+  # against a one-parameter callee it lands inside the range instead, and
+  # the fixture would pass either way. `ping(**{x: 1})` binds the hash to
+  # `a` in Ruby, and `ping(**{})` passes nothing at all.
+  {
+    "no parameters" => "def self.ping; end",
+    "one required parameter" => "def self.ping(a); end"
+  }.each do |label, declaration|
+    it "judges no call that passes a double splat, against a callee with #{label}" do
+      source = "class Sp\n  #{declaration}\n\n  def self.go(opts)\n    ping(**opts)\n    ping(**{})\n  end\nend\n"
 
-        def self.go(opts)
-          ping(**opts)
-          ping(**{})
-        end
-      end
-    RUBY
-
-    expect(argument_counts(source)).to be_empty
+      expect(argument_counts(source)).to be_empty
+    end
   end
 
   # Not when the method really does take keywords -- there the hash is
