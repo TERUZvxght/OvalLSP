@@ -137,6 +137,18 @@ module Ovallsp
       end
 
       def build_candidate(entry, method_name, singleton, rank)
+        # A nameless entry is what `HierarchyIndex` records for a parent it
+        # cannot identify -- `class Foo < <expression>`, or a name that
+        # only resolves by substituting a different class. It names no
+        # owner, so it can declare nothing, and asking anyway is not
+        # merely useless: `SymbolId`'s owner would be nil, which is the
+        # key a *top-level* `def` is recorded under. Every class with an
+        # unknown parent inherited every top-level method in the
+        # workspace. Ruby's own `un.rb` defines a top-level `mv`, and
+        # `rubygems/package_task.rb`'s `mv gem_file, ".."` was reported as
+        # passing two arguments to a method that takes none.
+        return nil if entry.name.nil?
+
         kind = symbol_kind_for(entry, singleton)
         resolved_name = resolve_alias(entry.name, method_name, kind)
         symbol_id = Index::SymbolId.new(kind: kind, owner: entry.name, name: resolved_name, discriminator: nil)

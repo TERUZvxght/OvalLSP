@@ -316,4 +316,25 @@ RSpec.describe Ovallsp::Semantic::MethodResolver do
     expect { resolver.resolve(receiver_type: Ovallsp::Types::UNKNOWN, name: "anything") }.not_to raise_error
     expect(resolver.resolve(receiver_type: Ovallsp::Types::UNKNOWN, name: "anything")).to eq([])
   end
+  # An ancestor with no name is what `HierarchyIndex` records for a parent
+  # it cannot identify -- `class Foo < <expression>`, or a name that only
+  # resolves by substituting a different class. It names no owner, so it
+  # can declare nothing.
+  #
+  # It was being used as a lookup key regardless, and a nil owner is the
+  # key a *top-level* `def` is recorded under -- so every class with an
+  # unknown parent inherited every top-level method in the workspace.
+  # Ruby's own `un.rb` defines a top-level `mv`, and
+  # `rubygems/package_task.rb`'s `mv gem_file, ".."` was reported as
+  # passing two arguments to a method that takes none.
+  describe "an ancestor whose name is unknown" do
+    it "declares nothing, rather than everything written at the top level" do
+      index_source("def mv\n  :top_level\nend\n", uri: "file:///un.rb")
+      index_source("class Task < Object.const_get(:Whatever)\nend\n", uri: "file:///task.rb")
+
+      candidates = resolver.resolve(receiver_type: nominal("::Task"), name: "mv")
+
+      expect(candidates).to be_empty
+    end
+  end
 end
