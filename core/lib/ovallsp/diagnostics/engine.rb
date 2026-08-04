@@ -626,6 +626,10 @@ module Ovallsp
 
       def unknown_route_helper_findings(summary, resolved_locations, context)
         return [] unless context.route_registry
+        # `Server` always constructs a registry, so its presence says
+        # nothing; whether a snapshot ever reached it is the question
+        # (024.24).
+        return [] unless context.route_registry.loaded?
 
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :method_call && candidate.receiver.nil?
@@ -651,8 +655,18 @@ module Ovallsp
       # invites. Engine only needs the receiver's *type*, not a full
       # resolved Reference, to decide whether an unresolved candidate is
       # even eligible for the closed-receiver check below.
+      # Every check below names a receiver type in what it reports, so
+      # none of them may act on a name the index resolved by picking
+      # among same-named classes -- see
+      # `WorkspaceIndex#guessed_type_name?`. Refused here, once, rather
+      # than at each of the three call sites: this file has twice had a
+      # rule stated in several places and wrong in one of them.
       def receiver_type_for(document, candidate, context)
-        Semantic::ReceiverResolution.receiver_type_for(context.workspace_index, document, candidate, context.local_inferencer)
+        resolved = Semantic::ReceiverResolution.receiver_type_for(context.workspace_index, document, candidate,
+                                                                  context.local_inferencer)
+        return Types::UNKNOWN if resolved.is_a?(Types::Nominal) && context.workspace_index.guessed_type_name?(resolved.name)
+
+        resolved
       end
 
       # "closed" means every ancestor is either a workspace-declared type

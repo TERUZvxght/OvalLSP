@@ -223,8 +223,8 @@ settle. Everything it declines is listed under the non-goals below.
 - Anything about a Ruby file outside a workspace folder.
 - Anything while the workspace is untrusted: the Runtime Agent does not
   start, so every Rails-derived capability (H2, C3, C4, C5, C7, C11, D2,
-  G3, G4, G12, S3) degrades to its static-only answer by design — with one
-  exception that is a defect rather than a degradation: G3's check
-  reports *every* `*_path`/`*_url` call as a missing route, because an
-  empty route table answers "no such route" rather than "I do not know"
-  (024.24).
+  G3, G4, G12, S3) degrades to its static-only answer by design. That
+  included one defect rather than a degradation until 0.2.0: G3's check
+  reported *every* `*_path`/`*_url` call as a missing route, because an
+  empty route table answered "no such route" rather than "I do not know".
+  It now says nothing until a route table has been loaded (024.24).

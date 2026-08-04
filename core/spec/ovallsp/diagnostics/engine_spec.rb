@@ -614,8 +614,77 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
     end
   end
 
+  # `resolve_type_name` answers a bare name by picking among every
+  # declared class that ends with it. That is the right trade for
+  # completion and for go-to-definition, where a plausible answer beats
+  # none -- and the wrong one for a diagnostic, which is asserting
+  # something about a class it has not identified. This release put two
+  # `Collector`s in this repository's own source and the check reported
+  # `SemanticTokens::Collector#tokens`, a method the parser records,
+  # because the name resolved to `Observation::Collector`. Recorded as
+  # the same cause as 024.19, which reached the argument-type check.
+  describe "a bare constant that matches more than one declared class" do
+    def two_collectors
+      index(<<~RUBY, uri: "file:///observation.rb")
+        module Observation
+          class Collector
+            def start; end
+          end
+        end
+      RUBY
+      index(<<~RUBY, uri: "file:///tokens.rb")
+        module Tokens
+          class Collector
+            attr_reader :tokens
+            def initialize
+              @tokens = []
+            end
+          end
+        end
+      RUBY
+    end
+
+    it "says nothing about a method on a receiver it had to guess" do
+      two_collectors
+      document = index("module Tokens\n  def self.collect\n    Collector.new.tokens\n  end\nend\n",
+                       uri: "file:///call.rb")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).not_to include("unknown-method")
+    end
+
+    # The control: one `Collector` in the workspace is not a guess, and
+    # the check is still on. Without this the example above passes for a
+    # check that has stopped reporting anything.
+    it "still reports when the name matches exactly one declared class" do
+      index(<<~RUBY, uri: "file:///tokens.rb")
+        module Tokens
+          class Collector
+            attr_reader :tokens
+          end
+        end
+      RUBY
+      document = index("module Tokens\n  def self.collect\n    Collector.new.nope\n  end\nend\n",
+                       uri: "file:///call.rb")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).to include("unknown-method")
+    end
+  end
+
   describe "unknown-route-helper" do
+    def load_routes
+      route_registry.replace([
+                               { name: "widget", verb: "GET", pathTemplate: "/widgets/:id", requiredParts: ["id"],
+                                 optionalParts: [], defaults: { controller: "widgets", action: "show" },
+                                 sourceLocation: nil, routeSet: "main_app" }
+                             ])
+    end
+
     it "flags a bare _path/_url call that matches no known route" do
+      load_routes
       document = index("class WidgetsController\n  def show\n    nope_this_route_path(1)\n  end\nend\n")
 
       findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
@@ -623,6 +692,33 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
 
       expect(finding).not_to be_nil
       expect(finding.confidence).to eq(:high)
+    end
+
+    # An empty table is not the same claim as a loaded one that lacks the
+    # name. Without an Agent -- an untrusted workspace, or any project
+    # that is not Rails -- no snapshot ever arrives, and every method
+    # whose name ends `_path`/`_url` was answered "no such route":
+    # 8 reports across Ruby's own standard library, every one of them an
+    # ordinary method (024.24). 0.2.0 made it worse by publishing for
+    # files nobody opened, so a project-wide pass broadcast it.
+    it "says nothing when no routes have ever been loaded" do
+      document = index("class WidgetsController\n  def show\n    nope_this_route_path(1)\n  end\nend\n")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).not_to include("unknown-route-helper")
+    end
+
+    # A Rails application with no named routes at all has a table that is
+    # empty *and* loaded, and the check is on there: the distinction is
+    # whether a snapshot arrived, not whether it carried anything.
+    it "flags an unknown helper against a route table that loaded empty" do
+      route_registry.replace([])
+      document = index("class WidgetsController\n  def show\n    nope_this_route_path(1)\n  end\nend\n")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).to include("unknown-route-helper")
     end
 
     it "does not flag a call resolving to a real route helper" do

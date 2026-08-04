@@ -262,6 +262,32 @@ module Ovallsp
       @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
     end
 
+    # Whether that answer was a *pick* rather than a resolution: the name
+    # as written matches no declared type, and several share its last
+    # segment. `resolve_type_name` still answers, and should -- for
+    # completion and go-to-definition a plausible class beats none.
+    #
+    # A diagnostic is the other case. Reporting "X has no method named y"
+    # about a class the engine chose by name collision is an assertion
+    # about a receiver it has not identified, and same-named classes in
+    # different namespaces are ordinary Ruby: this repository grew a
+    # second `Collector` in 0.2.0 and the check began reporting a method
+    # the parser records. 024.19 is the same cause reaching the
+    # argument-type check.
+    def guessed_type_name?(name)
+      @mutex.synchronize do
+        raw = name.to_s
+        simple = raw.split("::").last
+        candidates = ordered_symbol_ids(simple, matching: lambda { |sid|
+          %i[class module].include?(sid.kind) && simple_name(sid) == simple
+        })
+        next false if candidates.size <= 1
+
+        qualified = Index::SymbolId.qualify_owner(raw)
+        candidates.none? { |sid| sid.name == qualified }
+      end
+    end
+
     # Same resolution as #resolve_type_name, but returns the declared
     # kind (:class or :module) instead of the name — Semantic::HierarchyIndex
     # uses this to decide whether a type implicitly inherits from Object

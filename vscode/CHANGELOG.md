@@ -38,6 +38,20 @@ the disproved approaches are kept below it under **Details**.
   blocked on an offset rule fixed separately (024.20).
 - Added: semantic highlighting, in `.rb` and in an ERB template's Ruby
   regions.
+- Fixed: a `*_path`/`*_url` call is no longer reported as a missing route
+  when no routes have been loaded — an untrusted workspace, or any
+  project that is not Rails. An empty route table used to answer "no such
+  route" rather than "I do not know": 8 reports across Ruby's own
+  standard library, every one of them an ordinary method. Project-wide
+  diagnostics would otherwise have published each of them for every file
+  rather than only for open ones (024.24).
+- Fixed: an argument is no longer judged against a signature the call
+  does not reach. `Invariants.initialize(cb, ocb)`, whose singleton
+  `initialize` the workspace declares, was checked against RBS's
+  `Class#initialize` — the single argument-type report Ruby's whole
+  standard library produced, and it was wrong. A parameter written after
+  an optional one (`def hold(a, b = 1, c)`) is also placed correctly now;
+  it was read as the second argument's rather than the third's.
 
 A minor release under the versioning rule in `docs/PUBLISHING.md`: six
 capability rows are added (H7, C12, C13, G15, G16, T1 — documentation is

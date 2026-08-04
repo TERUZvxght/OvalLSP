@@ -171,28 +171,26 @@ the body can be read.
 
 The engine's standing policy is that a wrong report is worse than a
 missed one. These are the places it currently says something untrue —
-all but one of them as a diagnostic, the remaining one as a colour. Every
-one is recorded, none is fixed in 0.2.0, and all are visible on ordinary
-code, so they are listed here rather than left for you to find.
+one of them as a colour, the rest as diagnostics. Every one is recorded
+and all are visible on ordinary code, so they are listed here rather
+than left for you to find.
 
-The largest one this list used to carry is gone: class-body macros
+Two are gone since the last release. **A `*_path`/`*_url` call is no
+longer reported as a missing route when no routes have been loaded**
+(024.24) — the case in an untrusted workspace and in any project that is
+not Rails, where an empty route table used to answer "no such route"
+rather than "I do not know". That was 8 reports across Ruby's own
+standard library, every one false; it is now none, and 0.2.0's
+project-wide pass would otherwise have published each of them for every
+file rather than only for open ones.
+
+The largest one this list used to carry is gone too: class-body macros
 (`private`, `attr_reader` and their neighbours) reported as unknown
 methods, together with the attribute readers those DSLs define. That was
 **49 of the 62** reports over this project's own source and 12,134 across
 Ruby's standard library, and it was fixed and released as 0.1.14 rather
 than carried into this release (024.23).
 
-- **A `*_path`/`*_url` call the workspace does not declare is reported as
-  a missing route when no routes are loaded** (024.24) — which is the
-  case in an untrusted workspace, and in any project that is not Rails.
-  An empty route table answers "no such route" rather than "I do not
-  know". Measured over Ruby 3.4.7's standard library: **8 reports, every
-  one false** (`system_path` and `explicit_path` in bundler's own
-  `settings.rb` are ordinary methods). That count was 48 before 0.1.14
-  taught the index what `attr_reader` declares, and prism 1.9.0's 12 are
-  now none — but the cause is untouched, and any such name the workspace
-  does not declare still reports. If you declined Workspace Trust on a
-  Rails project, this is why route helpers are underlined.
 - **Semantic highlighting colours only the first segment of a qualified
   constant** (024.21). In `Ovallsp::Server`, `Ovallsp` gets a semantic
   colour and `Server` keeps the editor's grammar colour, so the two

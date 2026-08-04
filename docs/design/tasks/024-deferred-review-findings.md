@@ -819,8 +819,9 @@ claims about it were rolled back.
 ## 024.24 Every `*_path`/`*_url` call is a missing route when no routes are loaded
 
 ```yaml
-status: open
+status: fixed
 kind: defect
+released-in: 0.2.0
 user-visible: yes
 ```
 
@@ -851,12 +852,21 @@ README's legend said `—` means "absent by design, not broken", and
 `EXTENSION_CAPABILITIES.md` said an untrusted workspace "degrades to its
 static-only answer by design".
 
-**Direction:** an empty registry is not evidence of a missing route. The
-check needs to distinguish "routes are loaded and this is not among them"
-from "no routes are loaded", and stay silent in the second case — the
-same shape as the unknown-method check's refusal to guess without an
-Agent. A registry that knows whether it has ever been populated is the
-smallest form of it.
+**Fixed in 0.2.0**, as the direction recorded here said: `RouteRegistry`
+answers `#loaded?`, meaning a snapshot has been applied, and the check
+returns nothing until one has. `@generation` already counted
+applications rather than routes, so a Rails application whose `routes.rb`
+declares nothing still loads and the check is still on there — which is
+the distinction the old gate could not make.
+
+What made it worth doing now rather than deferring again: 0.2.0 publishes
+diagnostics for files nobody opened, so the same false report went from
+the open buffer to every file in the project. A reviewer reproduced that
+against a two-file plain-Ruby workspace with trust declined.
+
+Three examples: a loaded table that lacks the name still reports, a table
+that loaded empty still reports, and a registry no snapshot ever reached
+says nothing.
 
 ## 024.23 The singleton chain did not model `Class`/`Module`
 

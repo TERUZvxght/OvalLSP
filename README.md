@@ -167,9 +167,10 @@ and outside a Rails app there is nothing for it to report. The two
 views reached by Rails' controller/view convention, which a plain Ruby
 project does not have. Either way, absent by design, not broken.
 
-One dashed row is worse than absent rather than absent: with no routes
-loaded, every `*_path`/`*_url` call is reported as a missing route rather
-than left alone
+One dashed row used to be worse than absent: with no routes loaded,
+every `*_path`/`*_url` call was reported as a missing route rather than
+left alone. 0.2.0 fixed it — the check now waits for a route table to
+actually arrive, rather than reading an empty one as an answer
 ([024.24](docs/KNOWN_LIMITATIONS.md#reports-that-are-wrong-today)).
 
 The ⚠️ column for plain Ruby is not a guess that it fails. Most of it
