@@ -67,6 +67,22 @@ RSpec.describe "WorkspaceIndex's cost decisions" do
     expect(body).not_to include("@by_symbol.keys")
   end
 
+  # The same two rules, in the method 0.2.0 added. Completion from a bare
+  # prefix runs this per keystroke on the request path, and it was
+  # written scanning `@by_symbol.keys` -- deriving a simple name per
+  # symbol from a structure whose keys already *are* the simple names --
+  # and sorting every match to keep `limit` of them. Measured on a
+  # 21.7k-symbol workspace, byte-identical answers: 4.8ms per keystroke
+  # against 3.0ms.
+  it "reads the simple-name index and takes only the matches it returns" do
+    body = body_of("prefix_search")
+
+    expect(body).to include("@by_simple_name")
+    expect(body).not_to include("@by_symbol.keys")
+    expect(body).to include("matches.min_by(limit)")
+    expect(body).not_to include(".sort_by")
+  end
+
 end
 
 # `SourceLocation.byte_offset_to_utf16` walks a line character by

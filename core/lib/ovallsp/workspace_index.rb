@@ -305,13 +305,30 @@ module Ovallsp
     # Distinct SymbolIds rather than declarations, because `limit:` should
     # count names a user could pick, and one class reopened in forty files
     # is one name.
+    #
+    # Reads `@by_simple_name`, whose keys are already the downcased simple
+    # names this asks about, rather than scanning `@by_symbol` and
+    # deriving one per symbol -- and takes `min_by(limit)` rather than
+    # sorting everything to keep the first `limit`. Both are the rules
+    # `spec/meta/workspace_index_cost_spec.rb` already states for
+    # `#method_symbol_ids` and `#rank`; this method was written after
+    # them and carried neither. Measured on a 21.7k-symbol workspace,
+    # same prefixes, byte-identical answers: 4.8ms per keystroke against
+    # 3.0ms for `wi`/`wid`/`widg`, 2.6ms against 1.4ms for a prefix that
+    # narrows. This runs on the request path, per keystroke, holding the
+    # lock every hover and every diagnostic needs.
     def prefix_search(prefix, limit:, kinds:)
       needle = prefix.to_s.downcase
       @mutex.synchronize do
-        @by_symbol.keys.select { |sid| kinds.include?(sid.kind) && simple_name(sid).downcase.start_with?(needle) }
-                  .sort_by { |sid| [simple_name(sid).downcase == needle ? 0 : 1, sid.name.to_s, sid.kind.to_s,
-                                    sid.owner.to_s] }
-                  .first(limit)
+        matches = []
+        @by_simple_name.each do |name, symbol_ids|
+          next unless name.start_with?(needle)
+
+          symbol_ids.each { |sid| matches << sid if kinds.include?(sid.kind) }
+        end
+        matches.min_by(limit) do |sid|
+          [simple_name(sid).downcase == needle ? 0 : 1, sid.name.to_s, sid.kind.to_s, sid.owner.to_s]
+        end
       end
     end
 
