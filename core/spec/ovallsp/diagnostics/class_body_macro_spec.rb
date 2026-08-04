@@ -170,6 +170,43 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     expect(argument_counts("Widget.build(1, 2, 3)\n")).to eq(["build"])
   end
 
+  # A brace-less trailing hash is bound to a *positional* parameter when
+  # the method declares no keywords: `add("a", "K" => 1)` passes two
+  # arguments, not one. Counting it as keywords reported 400 calls in one
+  # corpus -- 399 of them in `sexp_processor`'s `pt_testcase.rb` alone.
+  # The miscount predates 0.1.14; what 0.1.14 changed is that a
+  # receiverless call in a class body resolves now, so it reached this
+  # check for the first time.
+  it "counts a brace-less trailing hash as the positional it binds to" do
+    source = <<~'RUBY'
+      class T
+        def self.add_tests(name, hash)
+          [name, hash]
+        end
+
+        add_tests "a", "K" => 1
+      end
+    RUBY
+
+    expect(argument_counts(source)).to be_empty
+  end
+
+  # Not when the method really does take keywords -- there the hash is
+  # the keywords, and the positional count stands.
+  it "still counts keywords as keywords when the method declares them" do
+    source = <<~'RUBY'
+      class T
+        def self.build(name, size:)
+          [name, size]
+        end
+
+        build size: 1
+      end
+    RUBY
+
+    expect(argument_counts(source)).to eq(["build"])
+  end
+
   it "does not report `new` on a constant receiver" do
     expect(unknown_methods("class Widget\nend\nWidget.new\n")).to be_empty
   end
@@ -304,13 +341,17 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
 
   # An explicit receiver is the same: `W.define_method(:m) { ... }` defines
   # an instance method of W whatever body it is written in.
+  #
+  # Written *directly* in `class << self`, not inside a `def` there: with
+  # a `def` around it `!@in_method_body` already answers, and the receiver
+  # term is dead for the fixture -- a spec that cannot distinguish the two
+  # branches pins neither. Ruby confirms the answer: for this source,
+  # `Report.new.later` works and `Report.respond_to?(:later)` is false.
   it "reads a define_method with an explicit receiver as an instance" do
     source = <<~'RUBY'
       class Report
         class << self
-          def build
-            Report.define_method(:later) { render("x") }
-          end
+          Report.define_method(:later) { render("x") }
         end
 
         def render(name) = name.to_s

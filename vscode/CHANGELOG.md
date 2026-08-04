@@ -44,6 +44,13 @@ the released code and fixed with the same measurement discipline.
   hole pre-existed for `enum`, `scope` and `delegate`; 0.1.14 extended it
   to ordinary Ruby. `prepareRename`'s own comment always said generated
   symbols were refused; now they are.
+- Fixed: a brace-less trailing hash is counted as the positional
+  argument Ruby binds it to, when the method declares no keywords.
+  `add_tests "a", "K" => 1` against `def add_tests(name, hash)` was
+  reported as passing one argument. The miscount predates 0.1.14; what
+  0.1.14 changed is that a receiverless call in a class body resolves, so
+  it reached this check for the first time — **526 such reports in
+  brakeman and its vendored gems alone**, 528 → 2.
 - Fixed: an argument-count report is no longer produced against a method
   found only through the `Class`/`Module`/`Object`/`Kernel` ancestry this
   release models. That ancestry is there so class-level calls *resolve*;
@@ -67,10 +74,19 @@ copy. Which declaration kind an ancestor contributes now lives in
 entry point, from the receiver's own kind — not inside the recursion,
 where whatever the walk happened to end at decided it.
 
+0.1.14 introduced six things, not five: the sixth is the arity miscount
+above, which no corpus this release measured had exposed until a later
+round chose brakeman's vendored gems. The lesson is recorded with the
+rest — a corpus nobody has run is worth more than re-running one that has.
+
 Measured with `scripts/corpus_diagnostics.rb`, each revision pointed at
 the same corpus. Over Ruby 3.4.7's standard library, `unknown-method`
 findings: 0.1.13 **15,982**, 0.1.14 **3,848**, this release **3,847** —
-and **not one report is introduced** anywhere in it, against either. Over
+and **not one report is introduced** anywhere in it, against either.
+`argument-count` falls 13 → 11 there, and eight surviving reports change
+their wording (`but 2 given` → `but 3 given`) because the hash is counted
+now; those eight are a different, recorded defect (024.32) and are wrong
+for that reason, not this one. Over
 ActiveSupport 8.1.3, 0.1.14 **265** → **240**. Over this repository's own
 `core/lib`, 0.1.13 **60** → **4**.
 

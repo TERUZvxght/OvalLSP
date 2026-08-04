@@ -132,7 +132,9 @@ and none of them fixed by it:
   attr_reader :label end` inside `class Outer` offers `label` on an
   `Outer`, and go-to-definition on it lands in the block; `def setup;
   attr_accessor :never_real; end` records `never_real`, so calling it is
-  not reported even though Ruby raises unless `setup` ran. Attributing
+  not reported — and here Ruby cannot define it by any path, since
+  `attr_accessor` is `Module`'s and `self` inside an instance method is
+  not a module. Attributing
   lexically is what `def` has always done, and three attempts to be
   cleverer for `attr_*` alone each produced false reports instead
   (024.31).

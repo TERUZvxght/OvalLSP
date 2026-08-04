@@ -125,8 +125,10 @@ OvalLSPはRuby型チェッカーではなく、LSP機能のための確信度付
   ブロックの本当のレシーバが何であってもです。`class Outer` の中の
   `Struct.new(:x) do attr_reader :label end` は `Outer` に対して `label` を
   補完に出し、定義ジャンプはブロックの中に着地します。`def setup;
-  attr_accessor :never_real; end` は `never_real` を記録するので、`setup` を
-  呼んでいなければRubyが例外にする呼び出しでも報告されません。字句的に帰属
+  attr_accessor :never_real; end` は `never_real` を記録するので、その呼び出しは
+  報告されません。しかもRubyはこれをどの経路でも定義できません。`attr_accessor`
+  は `Module` のメソッドで、インスタンスメソッドの中の `self` はモジュールでは
+  ないためです。字句的に帰属
   させるのは `def` が以前からしていることで、`attr_*` だけを賢くしようとした
   3度の試みは、いずれも誤報告を生みました(024.31)。
 - **`def Foo.bar` はインスタンスメソッドとして記録されます。** そのため

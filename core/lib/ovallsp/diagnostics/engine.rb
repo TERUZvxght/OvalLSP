@@ -153,7 +153,16 @@ module Ovallsp
 
           required = parameters.count { |parameter| parameter.kind == :required }
           maximum = required + parameters.count { |parameter| parameter.kind == :optional }
-          passed = shape[:positional]
+          # A brace-less trailing hash is *keywords* only if the method
+          # declares some. `add("a", "K" => 1)` against `def add(name,
+          # hash)` passes two positionals, and counting the hash as
+          # keywords reported it as one: 400 such reports in one corpus,
+          # 399 of them in `sexp_processor`'s `pt_testcase.rb`. The
+          # miscount predates 0.1.14; what 0.1.14 changed is that a
+          # receiverless call in a class body resolves, so it reached this
+          # check for the first time.
+          declares_keywords = parameters.any? { |parameter| %i[keyword keyword_optional keyrest].include?(parameter.kind) }
+          passed = shape[:positional] + (shape[:keywords] && !declares_keywords ? 1 : 0)
           next if passed >= required && passed <= maximum
 
           Finding.new(

@@ -326,9 +326,13 @@ deliberate:
 - `Struct.new(:x) do attr_reader :label end` inside `class Outer` offers
   `label` on an `Outer`, and go-to-definition on it lands in the block.
 - `def setup; attr_accessor :never_real; end` records `never_real`, so a
-  call to it is not reported even though Ruby raises `NoMethodError`
-  unless `setup` ran. A nested `def` in the same position has always been
-  recorded the same way.
+  call to it is not reported. Ruby cannot define it by any path here --
+  `attr_accessor` is `Module`'s and `self` inside an instance method is
+  not a module, so `setup` raises `NoMethodError` when called. This is
+  the one example where the parallel with `def` does *not* hold: a nested
+  `def` in the same position really does define the method once `setup`
+  runs. The parallel the decision rests on is the block case above, not
+  this one.
 
 **Direction:** the fix is not a longer allowlist — that is what these
 three attempts were, and the fourth would be too. It needs the visitor to
@@ -404,7 +408,16 @@ byte-identical between hunks. The five:
   @visibility_stack.last`, so an unset ivar and an explicit `nil` answer
   the same. Kept for the same reason as any other constructor default.
 
-So no behavioural decision in the shipped diff is unpinned.
+One was, and is not any more. `block_self_is_module`'s
+`node.receiver.nil?` term survived an 18-mutation sweep a later round
+ran, because the example written for it put the explicit receiver inside
+a `def` -- where `!@in_method_body` already answers, so the receiver term
+never ran. The fixture writes it directly in `class << self` now, and
+fails when the term is removed. Two sweeps missed it: the hunk-level one
+because the term lives inside a method the diff adds wholesale, and the
+decision-level one because its own fixture could not distinguish the
+branches. Both blind spots are named in CLAUDE.md; meeting them together
+is what let this line through twice.
 
 **A fourth sweep guard, learned here.** A sweep that is *killed* mid-hunk
 leaves the tree mutated. One run hit a timeout, left `engine.rb` missing
