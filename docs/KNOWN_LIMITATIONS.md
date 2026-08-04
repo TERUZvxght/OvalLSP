@@ -242,7 +242,16 @@ Six more are older than this release and untouched by it:
 Both diagnostics 0.2.0 adds are held to "a wrong report is worse than a
 missed one", so each is narrow on purpose. What that costs a user:
 
-- **Argument types** are checked only where every input is *stated*: the
+- **Argument types** are checked so narrowly that on the code measured
+  so far they are not reported at all. Over Ruby's standard library, five
+  Rails gems and minitest — about 4,500 files — this check produces
+  **zero** findings, and over prism with its own RBS loaded it produces
+  zero as well (024.37). Before 0.2.0's last round of fixes those two
+  corpora produced 795 and 151, and every one was wrong. Treat it as
+  something that will not contradict your code rather than something that
+  will catch a mistake in it; the shapes below say why.
+
+  Checked only where every input is *stated*: the
   expected type comes from an RBS/RBI declaration (Ruby source declares
   no parameter types), the signature has exactly one overload, and both
   the declared and the argument's own type are plain classes. A call the

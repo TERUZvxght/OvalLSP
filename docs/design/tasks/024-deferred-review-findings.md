@@ -172,6 +172,62 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.37 The argument-type check reports nothing on measured real Ruby
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`argument_type_findings`,
+`sole_declared_overload`)
+
+G15 is one of the six capability rows 0.2.0's minor bump is justified by.
+Measured at `ca66774`, after this round's fixes, with
+`scripts/corpus_diagnostics.rb`:
+
+| corpus | files | `argument-type` |
+|---|---|---|
+| Ruby 3.4.7 stdlib + activerecord/activesupport/actionpack/actionview/activemodel 8.1.3 + minitest 6.0.6 | ~4,500 | **0** |
+| prism 1.6.0, with its own `sig/` loaded | 68 | **0** |
+
+Before those fixes the same two corpora produced **795** and **151**, and
+every one of them was wrong: a call judged against a signature it does
+not bind to. So the check's entire measured output, over every corpus
+this project has pointed it at, was false positives — and removing them
+left zero. Both diffs are by position and introduce nothing.
+
+The second row is the one that matters, because it answers the objection.
+The harness loads signatures from `Dir.pwd`, so a corpus of gems is
+measured with none of its own types stated, which is the check's floor by
+construction. `OVALLSP_SIGNATURE_ROOT` (added with this entry) lifts that:
+pointed at a gem that ships extensive RBS, the check found 151 things to
+say and all 151 were wrong, and with those fixed it says nothing.
+
+It is not inert — `argument_type_spec.rb` has 25 examples that fire, and
+the E2E row passes. What it is, is narrow to the point where real code
+does not meet it: an RBS/RBI declaration with exactly one overload and no
+`*rest`, both the declared and the inferred type a plain class with no
+ancestor relation, and no operator expression in the argument. Each of
+those refusals was added to remove a false positive, and each was right
+on its own.
+
+**What is open:** whether a capability whose measured yield on real code
+is zero should carry a README ✅ and a capability row. Both are defensible
+today — the row is verified by an example that fails if the check breaks,
+which is what ✅ is defined to mean — but a user reading the matrix
+expects a check that fires. The alternatives are to widen it (which the
+whole entry above argues is how it produced 795 wrong reports), to mark
+the row the way the `@ivar` row is now marked, or to say plainly in
+`KNOWN_LIMITATIONS` what it will and will not catch.
+
+**Direction:** measure once more with the harness pointed at a workspace
+that states types in the shapes the check accepts — a project with a
+hand-written `sig/`, not a gem's generated one — before deciding. A check
+that fires on the code its users write and not on gems is a different
+answer from one that fires nowhere.
+
 ## 024.36 Instructing a reviewer narrowed what it could find, and a control run proved it
 
 ```yaml

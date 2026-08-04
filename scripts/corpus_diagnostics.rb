@@ -35,12 +35,29 @@
 # '^unresolved-constant'`) when the question is what a user would be
 # shown; keep it when the question is what the engine can resolve.
 #
-# Signatures are loaded from `Dir.pwd`, not from the corpus, so a gem's
-# own `sig/` is not read when you point this at one. That keeps an A/B
-# comparison honest -- both sides see the same signatures -- but it means
-# an absolute count over a foreign corpus is not what a user opening that
-# project would be shown.
+# Signatures are loaded from `Dir.pwd` by default, not from the corpus, so
+# a gem's own `sig/` is not read when you point this at one. That keeps an
+# A/B comparison honest -- both sides see the same signatures -- but it
+# means an absolute count over a foreign corpus is not what a user opening
+# that project would be shown.
+#
+# `OVALLSP_SIGNATURE_ROOT` overrides it, which is how to ask the second
+# question. Set it to the corpus's own root and a gem that ships `sig/`
+# is measured the way its author intended:
+#
+#   OVALLSP_SIGNATURE_ROOT=<gem-root> bundle exec ruby \
+#     ../scripts/corpus_diagnostics.rb <gem-root>/lib
+#
+# It exists because the checks that read signatures cannot be measured
+# without it. `argument-type` reports only where a parameter's type is
+# *stated*, so pointing this at a corpus whose signatures are not loaded
+# measures the check at its floor and says nothing about its ceiling.
+# Keep it unset for an A/B run between two revisions; set it when the
+# question is how a check behaves on code that has signatures.
 
+# From `Dir.pwd`, so this has to be run from `core/`. The engine and the
+# signature root were the same directory until the variable above
+# separated them.
 $LOAD_PATH.unshift(File.expand_path("lib", Dir.pwd))
 require "ovallsp"
 
@@ -56,7 +73,8 @@ hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspa
 method_resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
                                                         hierarchy_index: hierarchy_index)
 model_registry = Ovallsp::Models::ModelRegistry.new
-signatures = Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace_root: Dir.pwd) }
+signature_root = ENV.fetch("OVALLSP_SIGNATURE_ROOT", Dir.pwd)
+signatures = Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace_root: signature_root) }
 local_inferencer = Ovallsp::LocalInferencer.new(
   model_registry: model_registry, method_resolver: method_resolver, signatures: signatures,
   method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(
