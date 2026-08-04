@@ -172,6 +172,561 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.36 Instructing a reviewer narrowed what it could find, and a control run proved it
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.15
+```
+
+**Area:** how this project asks for an independent review. The finding is
+about the process, not the engine; `CLAUDE.md`'s "How to ask for an
+independent review" section is what came out of it.
+
+### What happened
+
+0.1.15 ran eight review rounds. The count of defects fell steadily, and
+that decline was read as convergence:
+
+| round | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| code defects | 6 | 3 | 3 | 2 | 1 | 1 | 2 | 0 |
+
+It was not only convergence. Over those eight rounds the instructions
+given to the reviewer had been quietly narrowed, every one of the changes
+reducing what could be reported:
+
+| | rounds 1–4 | 5 | 6–7 | 8 |
+|---|---|---|---|---|
+| "re-finding a recorded defect is not a finding" | — | — | 3 entries excluded | **9 entries excluded** |
+| "a clean report is a useful result" | — | yes | emphasised | emphasised twice |
+| list of already-measured corpora to avoid | — | partial | 14 sets | **16 sets** |
+| "concentrate on X" | — | — | — | **yes** |
+
+Each is defensible on its own. Together they mean the same underlying
+defect density produces a smaller number every round, and the number was
+being used as the stopping signal.
+
+### The control
+
+The last round was run twice on the same tree: once with the narrowed
+instructions (round 8), and once with **round one's instructions
+verbatim** — no exclusion list, no corpus list, no "concentrate", no
+"clean is fine", plus one addition: *report anything you consider a
+defect, whether or not it looks already known or deliberate; if a
+decision recorded as deliberate is the wrong decision, say so.*
+
+Round 8 found five things, none of which changed what the engine answers.
+
+The neutral run found a **user-visible regression 0.1.15 itself
+introduced**: `delegate` and `scope` recorded their generated methods as
+taking no parameters, so once this release taught the argument-count
+check to count a brace-less trailing hash, every call to a delegated
+method was reported — including in ActiveRecord's own
+`database_statements.rb`.
+
+The mechanism of the miss is specific and worth naming: round 8 had been
+told to avoid the sixteen already-measured corpora, and the Rails gems
+were on that list. **The instruction that sounded like efficiency is what
+kept anyone from looking where the regression was.** A corpus is only
+"already measured" against the revision it was measured at; the release
+had moved seven times since.
+
+### What this changes
+
+`CLAUDE.md` now carries the rules this produced. In short: do not tell a
+reviewer what not to count, where to concentrate, or that finding nothing
+is fine; keep a list of measured corpora as a record of coverage rather
+than as an exclusion; and when a review loop's findings are used to decide
+that a change set is ready, run one round with neutral instructions before
+believing the count.
+
+### What it does not change
+
+The decline was not *only* instruction drift. Rounds 2–5 each found
+defects in code the previous round had written, and less new code was
+written each round, so some of the fall is real. The point is that the
+number could not distinguish the two, and nothing had been done to make
+it able to.
+
+## 024.35 A class that includes a module the workspace cannot resolve still reads as closed
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`closed_nominal?`)
+
+`closed_nominal?` asks `chain_reaches_root?` of the *instance* chain --
+deliberately, and correctly -- but asks `ancestor_known?` only of the
+chain it is about to search. For a class-level call that is the singleton
+chain, which `include` never touches. So a class that includes an
+`ActiveSupport::Concern` living in a gem the workspace has not read is
+judged closed, though its real class-level method set is whatever that
+Concern's `class_methods do` block installs.
+
+```ruby
+class Configish
+  include SomeGem::Model
+  validate :ensure_ok      # reported; `include ActiveModel::Model` makes it run
+end
+```
+
+Reported on 0.1.14 and 0.1.15, silent on 0.1.13 -- 0.1.14 introduced it
+by giving the singleton chain a tail that reaches the root, which is what
+`chain_reaches_root?` was the only guard against. Four instances in
+`solid_queue-1.5.0/lib/solid_queue/configuration.rb` alone.
+
+**Direction:** ask `ancestor_known?` of both chains when the lookup is a
+singleton one. The instance chain is where `include` records itself, and
+an unknown module there means the class-level set is unbounded too. Worth
+measuring in both directions first: it will silence genuine class-level
+reports on every class that includes anything unread, which is most of a
+Rails app before the Agent is ready.
+
+## 024.34 `attr_*` inside a `def` inside `class << self` is kinded singleton
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`record_attribute_methods`)
+
+`singleton = @singleton_context_stack.last` asks "would an unqualified
+`def` here declare a singleton method". Inside a `def` nested in
+`class << self` that is still true, but the `attr_accessor` runs when the
+method is *called*, with the class object as self — so Ruby defines
+**instance** methods:
+
+```ruby
+class S
+  class << self
+    def build
+      attr_accessor :attr_x     # Ruby defines S#attr_x, not S.attr_x
+    end
+  end
+
+  def use = attr_x              # reported: "S has no method named `attr_x`"
+end
+```
+
+Confirmed against the interpreter: after `S.build`,
+`S.new.respond_to?(:attr_x)` is true and `S.respond_to?(:attr_x)` is
+false. Reported on 0.1.13, 0.1.14 and 0.1.15 alike — a false positive,
+which is the unsafe direction.
+
+This is the same reasoning 0.1.15 applied to `block_self_is_module`, and
+the sibling decision two hundred lines away did not get it. It is
+recorded rather than fixed because 0.1.15 exists to correct 0.1.14, and
+this predates both — 024.29 is the entry about what happens when a
+release takes on scope beyond its own purpose.
+
+Real code has the shape:
+`activerecord/associations/builder/has_and_belongs_to_many.rb:16-20`,
+`csv/parser.rb`, `cgi/core.rb:522`, `devise/models.rb:32`.
+
+**Direction:** the same predicate `block_self_is_module` now uses —
+`!@in_method_body && @singleton_context_stack.last`. Cheap, but it is a
+behaviour change on its own, so it wants its own corpus run in both
+directions rather than a ride on a correction release.
+
+## 024.33 `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` is not
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`block_self_is_module`)
+
+Both define `x` and `x=` on `K`. The first is reported as
+`... has no method named attr_accessor`, the second is not, because
+`instance_eval` takes the "explicit receiver means an instance" path and
+`class_eval` takes the inherit path.
+
+Not a regression -- 0.1.14 reported it too -- and the receiver rule it
+comes from is right for the case it was written for: `o.instance_eval do
+helper end` on an object must not resolve against the class's singleton
+side.
+
+A three-way split was written and dropped. The visitor tracks *whether*
+self is a module, never *which* module, so the "constant receiver means
+the class" branch would still resolve against the lexically enclosing
+owner rather than the receiver -- and no fixture could tell the two
+apart, which is its own reason not to ship it.
+
+**Direction:** the same one 024.31 needs. A block wants a receiver, not a
+boolean; with that, `K.instance_eval` opens `K` and this answers itself.
+Worth doing with 024.31 rather than separately.
+
+## 024.32 `def Foo.bar` is recorded as an instance method, so both answers are inverted
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`visit_def_node`)
+
+`visit_def_node` treats a `def` as singleton only when its receiver is a
+`Prism::SelfNode`. `def Foo.bar` names a constant instead, so it is
+recorded as `Foo#bar` — an instance method. Both consequences are wrong,
+in opposite directions:
+
+```ruby
+class Foo; end
+def Foo.bar; end
+
+Foo.bar        # reported: "Foo has no method named `bar`" -- Ruby runs it
+Foo.new.bar    # accepted    -- Ruby raises NoMethodError
+```
+
+Pre-existing and identical on 0.1.13, 0.1.14 and 0.1.15. **106**
+occurrences of `def Const.method` in Ruby 3.4.7's standard library,
+counted with Prism. Matching every stdlib `unknown-method` report's
+receiver and method name against those declarations, **56** of them are
+this -- on 0.1.15 and 0.1.14 alike, 59 on 0.1.13. An earlier draft of
+this entry said six, which was a hand count of one file rather than a
+measurement, and it understated the case for fixing this by roughly nine
+times. Among them `PP.mcall`, `Ripper.lex`, `IRB::Frame.top`,
+`IO.console_size`, `Net::HTTP::Proxy`, and `Bundler::Deprecate.skip`
+(`bundler/shared_helpers.rb:391`), `CGI::Session.callback`
+(`cgi/session.rb:345`) and three in `fiddle/struct.rb`.
+
+**Direction:** the owner is already computed correctly a few lines below
+(`constant_full_name(owner_receiver)`); it is only the `kind` that reads
+`SelfNode` alone. Both should ask the same question. Worth checking what
+else keys on that predicate before changing it — `visit_def_node` also
+uses it for the declaration's visibility, which is `nil` for singleton
+methods.
+
+## 024.31 A declaration written inside a block has no owner this parser can name
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`record_attribute_methods`,
+`visit_def_node`)
+
+A block can change the receiver its body runs against — `Class.new do`,
+`Struct.new do`, `included do`, `class_eval do`, `concerning do`,
+`instance_eval do` all answer differently, and `builder.call do` answers
+something this file cannot see at all. The visitor attributes everything
+it finds to the lexically enclosing owner, which is right for some of
+those and wrong for others.
+
+**This entry exists because three attempts to be cleverer than that each
+made things worse, and each was found by the review round after it.** All
+three were confined to `attr_*` while `def` kept the lexical answer, and
+a block holds both:
+
+1. **Skip every block.** Turned every ActiveSupport::Concern's
+   `included do attr_accessor :tracked_at end` into
+   `Order has no method named tracked_at` — a false report on the most
+   ordinary Rails code there is.
+2. **Skip only anonymous-class builders** (`Class.new`, `Struct.new`,
+   `Data.define`, `Module.new`). ActiveRecord builds its
+   habtm association class as
+   `Class.new(Base) { class << self; attr_accessor :left_model; end; def self.compute_type; left_model; end }`.
+   Dropping the `attr_accessor` while `def self.compute_type` kept the
+   enclosing owner produced three reports on `activerecord-8.1.3`.
+3. **Skip method bodies.** The same shape, written inside a `def`, has
+   the same asymmetry for the same reason.
+
+The rule now is the one `def` has always had: **attribute to the
+lexically enclosing owner, everywhere, with no exceptions.** Consistency
+is what avoids the false reports; the residual cost is a declaration
+recorded against an owner that may not be its real one, which offers a
+member in completion that is not there and silences a report rather than
+inventing one. That is the direction this engine chooses everywhere else,
+and it is what shipped in 0.1.14 and every release before it.
+
+Two consequences a user can see, both pre-existing and both now
+deliberate:
+
+- `Struct.new(:x) do attr_reader :label end` inside `class Outer` offers
+  `label` on an `Outer`, and go-to-definition on it lands in the block.
+- `def setup; attr_accessor :never_real; end` records `never_real`, so a
+  call to it is not reported. Ruby cannot define it by any path here --
+  `attr_accessor` is `Module`'s and `self` inside an instance method is
+  not a module, so `setup` raises `NoMethodError` when called. This is
+  the one example where the parallel with `def` does *not* hold: a nested
+  `def` in the same position really does define the method once `setup`
+  runs. The parallel the decision rests on is the block case above, not
+  this one.
+
+**Direction:** the fix is not a longer allowlist — that is what these
+three attempts were, and the fourth would be too. It needs the visitor to
+carry a *receiver* for a block rather than a boolean, so that
+`Class.new do` opens an anonymous owner, `included do` opens the
+includer, and an unrecognised builder opens an unknown owner whose
+declarations are recorded against nothing. That is a change to what an
+owner *is*, which is why it belongs to its own task rather than to a
+patch release correcting something else.
+
+Until then, do not add a name to any block allowlist without a corpus run
+in both directions across ActiveRecord and ActiveSupport, and without
+asking what `def` in the same position does.
+
+## 024.30 0.1.15's hunk sweep: three hunks that cannot be pinned, and why
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  A record of which lines no test holds, and the reasoning for leaving
+  each. Nothing here changes what the engine answers.
+```
+
+Reverse-applying each of 0.1.15's 24 `core/lib` hunks against a green
+baseline: **21 caught, 3 survived**, the tree verified byte-identical
+after every one. The survivors, and what was done about each:
+
+- **The deleted `new` special case** (`diagnostics/engine.rb`). Restoring
+  it changes no answer, because the `Class` tail now resolves `new` for
+  every class. It only ever suppressed reports, and no receiver exists
+  for which `new` *should* be reported, so there is nothing to assert.
+  Deleted rather than tested, which is what CLAUDE.md prescribes for a
+  decision that cannot be pinned. The corpus runs are the evidence: zero
+  reports introduced over the standard library, ActiveSupport and this
+  repository's own `core/lib`. A later round measured a wider Rails set
+  and found three reports from a different cause (024.31), so "three
+  Rails gems" as this entry first put it was not a claim those runs
+  supported.
+- **`rbs_resolves?` delegating to `AncestorEntry#declaration_kind`**
+  (`diagnostics/engine.rb`). Not a behavioural decision — it is the
+  removal of a second, hand-written copy of a rule. The rule itself *is*
+  pinned: reverting `declaration_kind` at its source fails three
+  examples. The kind only differs for a `:class_object` or `:extend`
+  ancestor, and for those the reference resolver answers before this path
+  is reached, so no fixture can distinguish the call site. Left as is,
+  because deleting the delegation would restore the duplication that made
+  both copies wrong.
+- **`@anonymous_class_depth = 0` in the visitor's constructor**
+  (`parser_service.rb`). Defensive initialisation, not a decision.
+
+That sweep was of a change set that no longer ships -- it ran before
+024.31 withdrew the `attr_*` block rule -- and two unpinned decisions
+inside `add_generated_method` were invisible to it, because reverse-
+applying a hunk that adds a whole method only asks whether the method
+exists. Both are pinned now.
+
+**The shipped diff was swept at `3dc0011`: 25 hunks, 20 caught, 5
+survived**, baseline green before and after, every file verified
+byte-identical between hunks. The five:
+
+- Two are **comment-only** (`MethodCandidate`'s origin list, and
+  `WorkspaceIndex`'s note about which collections keep insertion order).
+  A comment hunk changes the file, so the script scores it; it holds no
+  behaviour to pin.
+- Two are the ones above and unchanged in character: the **deleted `new`
+  special case**, which is redundant-code removal, and **`rbs_resolves?`
+  delegating to `declaration_kind`**, which removes a duplicated rule
+  that is pinned at its source.
+- One is **`@inline_attribute_visibility = nil` in the constructor**.
+  Defensive: the ivar is read as `@inline_attribute_visibility ||
+  @visibility_stack.last`, so an unset ivar and an explicit `nil` answer
+  the same. Kept for the same reason as any other constructor default.
+
+The diff has grown since: rounds six and seven each added a hunk to
+`argument_count_findings` and `extract_parameters`, neither covered by
+that run. Those were swept at the decision level instead -- each entry of
+`declares_keywords`, the forwarding-parameter branch, and the
+double-splat branch -- and each is pinned by an example that fails when
+it is reverted. A hunk count is only true of the commit it was measured
+at; this one is `3dc0011`'s.
+
+One decision was unpinned, and is not any more. `block_self_is_module`'s
+`node.receiver.nil?` term survived an 18-mutation sweep a later round
+ran, because the example written for it put the explicit receiver inside
+a `def` -- where `!@in_method_body` already answers, so the receiver term
+never ran. The fixture writes it directly in `class << self` now, and
+fails when the term is removed. Two sweeps missed it: the hunk-level one
+because the term lives inside a method the diff adds wholesale, and the
+decision-level one because its own fixture could not distinguish the
+branches. Both blind spots are named in CLAUDE.md; meeting them together
+is what let this line through twice.
+
+**A fourth sweep guard, learned here.** A sweep that is *killed* mid-hunk
+leaves the tree mutated. One run hit a timeout, left `engine.rb` missing
+nine lines, and the next run's baseline check refused to score -- which
+is guard 2 working, but only after the damage. The three guards detect a
+broken tree; none of them stops a run from leaving one. The script traps
+`EXIT INT TERM` and restores now. Budget for it too: 25 hunks at a
+4.5-minute suite is nearly two hours, which is worth knowing before
+starting rather than after.
+
+## 024.29 Two features were written for 0.1.15 and cut from it
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing shipped either way. What is open is whether these are worth
+  building at all, which is a question about a future release rather than
+  about anything a user can see today.
+```
+
+**Area:** was `core/lib/ovallsp/parser_service.rb` (`module_function`) and
+`core/lib/ovallsp/server.rb` (`setter_suffix`, the writer completion
+snippet), both removed before 0.1.15 shipped.
+
+0.1.15 exists to correct 0.1.14. These two were written during it and are
+not corrections of anything — they are new scope that rode along, and
+each shipped a defect of its own that a review round then had to repair.
+That pattern, not a wrong fix, is what made the release unstable. An
+independent analysis of the thread recommended cutting them rather than
+invoking CLAUDE.md's two-rounds rollback, on the grounds that the
+corrections themselves had survived two review rounds untouched — the
+rounds repaired only what had been *added*, never what had been
+*corrected*, which is the opposite of 024.15's shape.
+
+**`module_function` modelling.** Measured before cutting, over the 47
+standard-library files that actually call it: this release and 0.1.14
+produce **byte-identical output, 1,564 findings**, `comm` empty in both
+directions. It changed nothing on real code. What it did do was introduce
+a report neither 0.1.13 nor 0.1.14 makes:
+
+```ruby
+module Sample
+  module_function
+  def helper(a, b); [a, b]; end
+end
+Sample.helper(1, 2, 3)   # reported only with module_function modelling
+```
+
+It also leaked out of every construct it was written in — a later
+`private` did not close the section, `class << self` pushed no frame, and
+neither a method body nor a block was guarded — and recorded the instance
+copy public where Ruby makes it private.
+
+The one real report it removed, `::JSON.load(source, proc, opts)`, was
+never `module_function`'s to fix: that report comes from the *ancestry
+tail* 0.1.15 models, and it is fixed at that end instead, by declining to
+judge arity against a declaration reached through a synthesised ancestor.
+`module_function` was covering a symptom whose cause is elsewhere — which
+is the clearest evidence it was the wrong shape.
+
+**Hover and completion for writer methods.** `w.name = "y"` hovering as
+the reader, and the writer completing as `w.name=(value)`. Small, real,
+and it shipped `setter_suffix`, whose `rstrip` crossed newlines so that a
+comment ending in a period made the next line's assignment look
+receiver-qualified: go-to-definition on `LIMIT = 10` under
+`# The maximum row count.` found nothing.
+
+**Direction:** whichever release takes either up must justify it on a
+corpus first. `module_function` in particular needs a measurement showing
+it changes an answer a user sees; the one taken here says it does not.
+
+## 024.28 Rename refuses on a macro-declared method rather than editing it
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+Refusing is the deliberate behaviour as of 0.1.15; what is open is that
+refusing is not the end state.
+
+**Area:** `core/lib/ovallsp/rename/planner.rb`
+
+`attr_accessor :name` declares `name` and `name=` at a symbol argument,
+not at an identifier token, so there is nothing for an in-place edit to
+rewrite. 0.1.14 emitted a `WorkspaceEdit` that renamed every call site and
+left the declaration behind, producing a file that does not run; 0.1.15
+refuses instead, which is what `#prepare`'s own comment had always
+claimed happened.
+
+The reason reaches the Core log only. `prepare` answers `null`, so the
+editor shows its own "cannot be renamed" message and never asks for the
+edit; nothing in this codebase sends `window/showMessage`. The W4 row's
+E2E example calls `textDocument/rename` directly and asserts an empty
+edit set, so the refusal is verified and the *explanation* is not.
+
+Refusing is correct and is not the end state. The same applies to `enum`,
+`scope` and `delegate`, and has since those shipped.
+
+**Direction:** give a macro-declared declaration a `name_location`
+covering its symbol argument, so `attr_reader :name` can be rewritten to
+`attr_reader :title`. The writer is the hard half: `name=` and `name` are
+one token in the source, so renaming `name=` to `title=` has to write
+`:title`, not `:title=`. That asymmetry is why this is its own entry
+rather than a line in 0.1.15.
+
+## 024.27 `documentSymbol` lists one outline entry per name a macro declares
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`document_symbol_result`)
+
+`attr_accessor :a, :b, :c` declares six methods, all at the same source
+range, so the outline shows six children with byte-identical `range` and
+`selectionRange` on one line. The names are right and each is genuinely a
+method, so this is noise rather than a wrong answer — but an outline is
+read by eye and six identical ranges read as a bug.
+
+**Direction:** either group the methods a single macro call declares under
+one outline node, or narrow each declaration's `selectionRange` to its own
+symbol argument. The second would also give 024.28's rename something to
+edit.
+
+## 024.26 A workspace `def Object.foo` is reachable from every class in Ruby and from none here
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`
+
+Ruby's real singleton chain for a class `W` is
+`[#<Class:W>, #<Class:Object>, #<Class:BasicObject>, Class, Module, Object, Kernel, BasicObject]`.
+0.1.15 models the tail from `Class` onward, which is what class-body
+macros need. It does not model `#<Class:Object>` or `#<Class:BasicObject>`
+— the singleton classes of the root classes — because an `AncestorEntry`
+names a type and has no way to say "the singleton class of that type".
+
+A workspace that writes `def Object.foo` declares something every class
+can call, and the check does not know it, so `Widget.foo` is reported.
+That is a **false positive**, not a missed report — for an unknown-method
+check a missing ancestor is the unsafe direction, and an earlier draft of
+this entry had that backwards.
+
+The fixture has to be `class Object; def self.foo; end; end`, not
+`def Object.foo` -- the latter is recorded as an *instance* method
+(024.32), which the new tail then resolves, so it is not reported at all
+and demonstrates nothing about this entry.
+
+It is not a 0.1.15 regression. Measured on the `def self.` form across
+three revisions: 0.1.13 reports it, 0.1.14 does not, 0.1.15 reports it
+again.
+0.1.14's silence was an accident of the same mis-kinded lookup that made
+it report `class Object; def blank?; end` — idiomatic Rails — on code
+that runs. 0.1.15 trades the accident back for the fix. Nothing in the
+standard library or the gems measured for it hits this shape.
+
+**Direction:** the entry type needs a singleton flag before this can be
+expressed at all. Worth doing with 024.13 rather than alone, since both
+are about what a chain says when the workspace has reopened a core class.
+
 ## 024.25 A Markdown-parsing spec is the wrong shape for "these two documents must agree"
 
 ```yaml
@@ -343,12 +898,24 @@ user a report they did not have before is not a fix, so the parser now
 records what those DSLs define (`ATTRIBUTE_DSLS`), with a dynamic
 argument recording nothing.
 
-Measured with `scripts/corpus_diagnostics.rb`: `core/lib` 62 → 4
-`unknown-method` findings, ActiveSupport 8.1.3 776 → 265, Ruby 3.4.7's
-standard library 15,982 → 3,848, **and no report introduced anywhere in
-it**. Wrong `argument-count` fell 36 → 13 and `unknown-route-helper`
+Measured with `scripts/corpus_diagnostics.rb`, each revision against one
+fixed corpus: `core/lib` 60 → 4 `unknown-method` findings, ActiveSupport
+8.1.3 785 → 265, Ruby 3.4.7's standard library 15,982 → 3,848, **and no
+report introduced anywhere in it**. (0.1.14's own entry quoted 62 and 776
+for the "before" side, from a different tree; 0.1.15 corrected both.)
+
+0.1.14's fix was itself wrong in five ways, each found by independent
+review of the released code and fixed in 0.1.15: the tail was looked up
+for singleton methods rather than instance ones, it was keyed on the
+terminating ancestor rather than the receiver, `define_method` inside
+`class << self` was read as instance-self, and `instance_eval`/
+`instance_exec` were listed with it for no stated reason. A fifth --
+`attr_*` recorded from inside method bodies and blocks -- was attempted
+three times and withdrawn; 024.31 records why the shipped parser
+attributes `attr_*` lexically, exactly as 0.1.14 did. Wrong `argument-count` fell 36 → 13 and `unknown-route-helper`
 48 → 8, the latter because a `*_path` name that resolves to a declaration
 is no longer guessed at -- which reduces 024.24 without fixing it.
+
 ## 024.22 The unassigned-`@ivar` check is silent in an application `rails new` produces
 
 ```yaml

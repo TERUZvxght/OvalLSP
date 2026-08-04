@@ -70,6 +70,11 @@ itself.
 - New features and fixes are expected to include their own tests; PRs
   without test coverage for the behavior they change are unlikely to be
   merged as-is.
+- A claim about behaviour is checked, not accepted — against the Ruby
+  interpreter for a semantics question, and against real code for a
+  question of how often something happens. A review finding is verified
+  before it is acted on, and so is the reasoning for calling something
+  deliberate.
 - Design decisions with real trade-offs (not obvious implementation
   details) are recorded as ADRs under `docs/design/adrs/`.
 

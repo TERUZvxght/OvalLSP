@@ -77,6 +77,11 @@ workspace class names, which 0.1.x does not have and 0.2.0 does — fixing
 that against 0.1.x and then re-fixing it after 0.2.0 would be two edits
 saying opposite things a week apart. The rest of the list is order-independent:
 
+- `site/capabilities.html` **and `site/ja/capabilities.html`** still say
+  "Find references, rename, workspace symbols" unqualified; 0.1.15
+  narrowed that — a method a macro declared is refused rather than
+  renamed — in README's `[^rename]` footnote and in
+  `docs/EXTENSION_CAPABILITIES.md`'s W2/W4 rows;
 - the plain-Ruby column drops README's `⚠️`, so its own legend reads those
   cells as "not built" where README means "probably works, unverified";
 - the roadmap page says "the first three of these" and then names items

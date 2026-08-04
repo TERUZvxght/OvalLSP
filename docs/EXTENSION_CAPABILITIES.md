@@ -199,8 +199,9 @@ settle. Everything it declines is listed under the non-goals below.
 | # | What the user does | What must happen | Status |
 |---|---|---|---|
 | W1 | Find All References on a workspace method | every call site, across files | PASS |
-| W2 | Rename a workspace method | every call site is rewritten | PASS |
+| W2 | Rename a workspace method declared with `def` | every call site is rewritten | PASS |
 | W3 | Workspace symbol search | matching classes and methods | PASS |
+| W4 | Renames a method a macro declared (`attr_accessor`, `delegate`, …) | nothing is edited — there is no identifier token to rewrite, and editing only the call sites would leave the declaration behind. The editor shows its own refusal; the reason is logged, not surfaced (024.28) | PASS |
 
 ## What this document deliberately does not promise
 

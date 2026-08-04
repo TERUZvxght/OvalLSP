@@ -171,9 +171,9 @@ the body can be read.
 
 The engine's standing policy is that a wrong report is worse than a
 missed one. These are the places it currently says something untrue —
-the first as a diagnostic, the second as a colour. Both are recorded,
-neither is fixed in 0.2.0, and both are visible on ordinary code, so they
-are listed here rather than left for you to find.
+all but one of them as a diagnostic, the remaining one as a colour. Every
+one is recorded, none is fixed in 0.2.0, and all are visible on ordinary
+code, so they are listed here rather than left for you to find.
 
 The largest one this list used to carry is gone: class-body macros
 (`private`, `attr_reader` and their neighbours) reported as unknown
@@ -198,6 +198,46 @@ than carried into this release (024.23).
   colour and `Server` keeps the editor's grammar colour, so the two
   halves of one name do not match. The same module is also coloured as a
   namespace where it is declared and as a class where it is read.
+
+Six more are older than this release and untouched by it:
+
+- **A declaration written inside a block belongs to the class the block is
+  written in**, whatever the block's real receiver is. `Struct.new(:x) do
+  attr_reader :label end` inside `class Outer` offers `label` on an
+  `Outer`, and go-to-definition on it lands in the block; `def setup;
+  attr_accessor :never_real; end` records `never_real`, so calling it is
+  not reported — and here Ruby cannot define it by any path, since
+  `attr_accessor` is `Module`'s and `self` inside an instance method is
+  not a module. Attributing
+  lexically is what `def` has always done, and three attempts to be
+  cleverer for `attr_*` alone each produced false reports instead
+  (024.31).
+- **`def Foo.bar` is recorded as an instance method**, so `Foo.bar` is
+  reported as unknown while `Foo.new.bar` is accepted — both answers
+  inverted. **56** of Ruby's own standard-library reports are this
+  (024.32).
+- **A `def self.` the workspace adds to `Object` is not reachable**, so
+  `Widget.foo` is reported for a method every class really has. 0.1.14
+  did not report this, by an accident of the same mis-kinded lookup that
+  made it report `class Object; def blank?; end` — a far more common
+  shape — on code that runs. 0.1.15 trades the accident back for the fix,
+  which is why this is the one shape it makes *worse* than 0.1.14
+  (024.26).
+- **A class that includes a module the workspace has not read still has
+  its class-level macros reported.** `include SomeGem::Model` followed by
+  `validate :ensure_ok` is reported, though the Concern installs
+  `validate`. Introduced by 0.1.14 and not fixed here (024.35).
+- **`K.instance_eval { attr_accessor :x }` is reported** where
+  `K.class_eval { attr_accessor :x }` is not, though both define the same
+  methods. The rule behind it is right for `object.instance_eval`, which
+  is what it was written for (024.33).
+- **`attr_accessor` written inside a `def` inside `class << self` is
+  recorded as declaring class-level methods**, where Ruby defines
+  instance ones — the macro runs when that method is *called*, with the
+  class as `self`. Reading the attribute from an instance method is then
+  reported as unknown. Real code has the shape: ActiveRecord's
+  `has_and_belongs_to_many` builder, `csv/parser.rb`, `cgi/core.rb` and
+  Devise (024.34).
 
 ## What 0.2.0's new checks deliberately do not cover
 
@@ -267,6 +307,23 @@ missed one", so each is narrow on purpose. What that costs a user:
   for one produced nothing in 45 seconds. The cause is diagnosed and the
   fix is scoped to its own task (024.14). The README matrix marks this
   row ⚠️ rather than ✅ for that reason.
+
+## What an editor feature does with a macro-declared method
+
+`attr_accessor :name`, `delegate :title, to: :author`, `enum` and `scope`
+declare their methods at a *symbol argument* rather than at an identifier
+token. There is no name in the source to point an editor at, and two
+features show it:
+
+- **Rename refuses** rather than editing (024.28). Renaming through such
+  a declaration would have to rewrite every call site and could not
+  rewrite the declaration, leaving a file that does not run — 0.1.14 did
+  exactly that, and 0.1.15 refuses instead. VS Code shows its own
+  "cannot be renamed" message; the reason reaches the Core log only.
+- **The outline lists one entry per declared name** (024.27).
+  `attr_accessor :a, :b, :c` declares six methods on one line, so the
+  outline shows six children with identical ranges. Every name is right
+  and each is genuinely a method, but six identical ranges read as a bug.
 
 ## Conflicts with other extensions
 

@@ -838,4 +838,69 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       expect(index.class_declarations("Solo")).to eq([])
     end
   end
+  # `#method_symbol_ids` answers from a secondary index keyed on
+  # [owner, kind] rather than by scanning every symbol. A secondary index
+  # is only as good as its removal path, and this one is written in two
+  # places (`replace_file`'s loop and `remove_file_locked`), so the cases
+  # below are about it staying in step with `@by_symbol` -- a stale entry
+  # here is a method offered in completion that no longer exists.
+  describe "the [owner, kind] index" do
+    def summary_for(text, uri)
+      document = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
+      Ovallsp::ParserService.new.summarize(document)
+    end
+
+    it "answers with the owner's methods of that kind, and no others" do
+      index.replace_file(summary_for("class W\n  def a; end\n  def self.b; end\nend\nclass X\n  def c; end\nend\n",
+                                     "file:///a.rb"))
+
+      expect(index.method_symbol_ids("::W", kind: :instance_method).map(&:name)).to eq(["a"])
+      expect(index.method_symbol_ids("::W", kind: :singleton_method).map(&:name)).to eq(["b"])
+      expect(index.method_symbol_ids("::X", kind: :instance_method).map(&:name)).to eq(["c"])
+    end
+
+    it "forgets a method when its file goes away" do
+      index.replace_file(summary_for("class W\n  def a; end\nend\n", "file:///a.rb"))
+      index.remove_file("file:///a.rb")
+
+      expect(index.method_symbol_ids("::W", kind: :instance_method)).to be_empty
+    end
+
+    it "keeps a method two files declare until both are gone" do
+      index.replace_file(summary_for("class W\n  def a; end\nend\n", "file:///a.rb"))
+      index.replace_file(summary_for("class W\n  def a; end\nend\n", "file:///b.rb"))
+      index.remove_file("file:///a.rb")
+
+      expect(index.method_symbol_ids("::W", kind: :instance_method).map(&:name)).to eq(["a"])
+
+      index.remove_file("file:///b.rb")
+
+      expect(index.method_symbol_ids("::W", kind: :instance_method)).to be_empty
+    end
+
+    it "does not list a method twice when two files declare it" do
+      index.replace_file(summary_for("class W\n  def a; end\nend\n", "file:///a.rb"))
+      index.replace_file(summary_for("class W\n  def a; end\nend\n", "file:///b.rb"))
+
+      expect(index.method_symbol_ids("::W", kind: :instance_method).map(&:name)).to eq(["a"])
+    end
+
+    it "drops a method a re-index removed from the file that declared it" do
+      index.replace_file(summary_for("class W\n  def a; end\n  def b; end\nend\n", "file:///a.rb"))
+      index.replace_file(summary_for("class W\n  def a; end\nend\n", "file:///a.rb"))
+
+      expect(index.method_symbol_ids("::W", kind: :instance_method).map(&:name)).to eq(["a"])
+    end
+
+    # An unordered collection read by `.first` or truncated is what
+    # 024.15 was spent on; this one is sorted where it is read.
+    it "answers in a stable order regardless of which file was indexed last" do
+      index.replace_file(summary_for("class W\n  def zeta; end\nend\n", "file:///z.rb"))
+      index.replace_file(summary_for("class W\n  def alpha; end\nend\n", "file:///a.rb"))
+      index.replace_file(summary_for("class W\n  def zeta; end\nend\n", "file:///z.rb"))
+
+      expect(index.method_symbol_ids("::W", kind: :instance_method).map(&:name)).to eq(%w[alpha zeta])
+    end
+  end
+
 end

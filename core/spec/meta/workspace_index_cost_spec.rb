@@ -12,7 +12,7 @@
 # cannot execute a test against (`spec/meta/ci_skip_guard_spec.rb`,
 # `vscode/src/test/unit/versionPairing.test.ts`). The assertions below are
 # deliberately about *which method is called*, not about formatting.
-RSpec.describe "WorkspaceIndex's two cost decisions" do
+RSpec.describe "WorkspaceIndex's cost decisions" do
   let(:source) { File.read(File.expand_path("../../lib/ovallsp/workspace_index.rb", __dir__), encoding: "UTF-8") }
 
   def body_of(method)
@@ -53,6 +53,20 @@ RSpec.describe "WorkspaceIndex's two cost decisions" do
   # The limit reaching `rank` needs no assertion of its own: taking it
   # back out of the signature leaves `min_by(limit)` referring to nothing,
   # which is a NameError on the first query rather than a silent revert.
+  # `#method_symbol_ids` is asked once per ancestor entry. 0.1.14 grew a
+  # class's singleton chain from one entry to six, so a `Widget.`
+  # completion went from one scan of every indexed symbol to six.
+  # Measured on a 21.7k-symbol workspace, same request, same corpus:
+  # 12.97ms per completion scanning, 0.099ms reading a bucket keyed on
+  # [owner, kind]. Nothing behavioural can hold this -- the scan returns
+  # exactly the same symbols, which is why it survived a release.
+  it "reads a bucket keyed on owner and kind rather than scanning every symbol" do
+    body = body_of("method_symbol_ids")
+
+    expect(body).to include("@by_owner_kind")
+    expect(body).not_to include("@by_symbol.keys")
+  end
+
 end
 
 # `SourceLocation.byte_offset_to_utf16` walks a line character by

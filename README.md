@@ -73,7 +73,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Diagnostics: reading an `@ivar` that is never assigned | ✅ | ⚠️ | — |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
-| Find references, rename, workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Find references, rename [^rename], workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: wrong argument *type* | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics across the whole project, not just open files | ⚠️ [^ws] | ⚠️ | ⚠️ 1.0.0 |
 | Documentation (RDoc/YARD) in hover and completion [^doc] | ✅ | ⚠️ | ⚠️ 1.0.0 |
@@ -86,6 +86,12 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+
+[^rename]: A method a macro declared — `attr_accessor :name`,
+    `delegate :title, to: :author` — is refused rather than renamed. There
+    is no identifier token to rewrite, and editing only the call sites
+    would leave the declaration behind and the file would not run
+    (024.28).
 
 [^ws]: More than ⚠️ promises and less than ✅ requires. The workspace-wide
     pass is covered by Server-level and unit specs, but it has no
