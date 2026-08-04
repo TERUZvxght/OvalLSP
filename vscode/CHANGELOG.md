@@ -96,6 +96,7 @@ indexes comments. Completion goes through `completionItem/resolve` rather
 than putting documentation on the list, since reading the source for every
 candidate is a file read per item for documentation the user sees for one
 of them at most.
+
 ## 0.1.15 — the class-body fix, corrected
 
 0.1.14 removed about twelve thousand wrong reports and introduced a
