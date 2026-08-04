@@ -89,6 +89,46 @@ Two supporting rules follow from the same episode:
   required keywords optional). A module function that callers invoke is
   usually the cheaper form of "one place that knows the rule".
 
+## How to ask for an independent review (mandatory)
+
+The review loop above is only worth what the reviewer is allowed to find.
+0.1.15 ran eight rounds whose defect counts fell 6, 3, 3, 2, 1, 1, 2, 0 —
+and a control run of the last round, given round one's instructions
+instead, found a user-visible regression the narrowed round had missed.
+024.36 records the experiment.
+
+**Do not narrow what counts as a finding.** Each of these was added to
+0.1.15's prompts for a good local reason, and together they made the
+count stop measuring anything:
+
+- *"Re-finding a defect already recorded in `024.*` is not a finding."*
+  The exclusion list grew from three entries to nine while the count was
+  being read as convergence.
+- *"Concentrate on X."* X is where the last round looked, not where the
+  next defect is.
+- *"A clean report is the expected outcome."* Say what a defect is; do
+  not say what the answer should look like.
+
+**Keep the corpus list, and never use it to exclude.** Tell a reviewer
+what has been measured and at which revision — that is coverage. Telling
+them to *avoid* those corpora is what let `delegate`'s missing parameters
+through: the Rails gems were on the already-measured list, and the
+release had moved seven commits since they were measured. A corpus is
+measured against a revision, not for ever.
+
+**Before believing a falling count, run one round neutral.** Same tree,
+round-one instructions, plus: *report anything you consider a defect,
+whether or not it looks already known or deliberate; if a decision
+recorded as deliberate is the wrong decision, say so.* If the neutral run
+finds more than the narrowed one, the decline was the instructions.
+
+**A falling count is not evidence on its own.** It cannot distinguish
+"fewer defects remain" from "fewer defects can be reported", and in
+0.1.15 both were true at once. What it *can* be read against is user
+impact: rounds 1–7 each found something that changed what the engine
+answers; round 8 found five things and none of them did. That is the
+signal worth acting on, and it is a different question from the count.
+
 ## Documentation is part of the change (mandatory)
 
 Before finishing any change a user could notice, open

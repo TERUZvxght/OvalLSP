@@ -161,6 +161,84 @@ a workspace folder is added, and the restart notification wording.
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
 
+## 024.36 Instructing a reviewer narrowed what it could find, and a control run proved it
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.15
+```
+
+**Area:** how this project asks for an independent review. The finding is
+about the process, not the engine; `CLAUDE.md`'s "How to ask for an
+independent review" section is what came out of it.
+
+### What happened
+
+0.1.15 ran eight review rounds. The count of defects fell steadily, and
+that decline was read as convergence:
+
+| round | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| code defects | 6 | 3 | 3 | 2 | 1 | 1 | 2 | 0 |
+
+It was not only convergence. Over those eight rounds the instructions
+given to the reviewer had been quietly narrowed, every one of the changes
+reducing what could be reported:
+
+| | rounds 1–4 | 5 | 6–7 | 8 |
+|---|---|---|---|---|
+| "re-finding a recorded defect is not a finding" | — | — | 3 entries excluded | **9 entries excluded** |
+| "a clean report is a useful result" | — | yes | emphasised | emphasised twice |
+| list of already-measured corpora to avoid | — | partial | 14 sets | **16 sets** |
+| "concentrate on X" | — | — | — | **yes** |
+
+Each is defensible on its own. Together they mean the same underlying
+defect density produces a smaller number every round, and the number was
+being used as the stopping signal.
+
+### The control
+
+The last round was run twice on the same tree: once with the narrowed
+instructions (round 8), and once with **round one's instructions
+verbatim** — no exclusion list, no corpus list, no "concentrate", no
+"clean is fine", plus one addition: *report anything you consider a
+defect, whether or not it looks already known or deliberate; if a
+decision recorded as deliberate is the wrong decision, say so.*
+
+Round 8 found five things, none of which changed what the engine answers.
+
+The neutral run found a **user-visible regression 0.1.15 itself
+introduced**: `delegate` and `scope` recorded their generated methods as
+taking no parameters, so once this release taught the argument-count
+check to count a brace-less trailing hash, every call to a delegated
+method was reported — including in ActiveRecord's own
+`database_statements.rb`.
+
+The mechanism of the miss is specific and worth naming: round 8 had been
+told to avoid the sixteen already-measured corpora, and the Rails gems
+were on that list. **The instruction that sounded like efficiency is what
+kept anyone from looking where the regression was.** A corpus is only
+"already measured" against the revision it was measured at; the release
+had moved seven times since.
+
+### What this changes
+
+`CLAUDE.md` now carries the rules this produced. In short: do not tell a
+reviewer what not to count, where to concentrate, or that finding nothing
+is fine; keep a list of measured corpora as a record of coverage rather
+than as an exclusion; and when a review loop's findings are used to decide
+that a change set is ready, run one round with neutral instructions before
+believing the count.
+
+### What it does not change
+
+The decline was not *only* instruction drift. Rounds 2–5 each found
+defects in code the previous round had written, and less new code was
+written each round, so some of the fall is real. The point is that the
+number could not distinguish the two, and nothing had been done to make
+it able to.
+
 ## 024.35 A class that includes a module the workspace cannot resolve still reads as closed
 
 ```yaml
