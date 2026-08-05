@@ -279,8 +279,9 @@ Six more are older than this release and untouched by it:
   rather than waiting to be found. (This bullet claimed "525 reports in
   one file, prism's `translation/ripper.rb`" and called it the largest
   concentration the engine produces. That was measured before the same
-  release removed those reports; the file now produces 7, none of them
-  this shape. A number recorded and not re-measured after the fix that
+  release removed those reports; the file now produces 10, none of them
+  this shape -- and the 7 written here until 0.2.1's last day was itself
+  a number taken once and not re-measured. A number recorded and not re-measured after the fix that
   invalidated it.)
 - **`attr_accessor` written inside a `def` inside `class << self` is
   recorded as declaring class-level methods**, where Ruby defines

@@ -172,6 +172,22 @@ Before reading any diff: confirm both sides finished, confirm both sides
 were given the identical corpus, and confirm each side ran the code you
 think it ran. Print the thing you are asserting rather than assuming it.
 
+**Run one measurement at a time, in the foreground.** 0.2.1's last day
+added two more to the list, and both came from backgrounding: a second
+run started while the first was still alive, so two processes wrote the
+same output files; and a rewritten script left both sides `cd`-ed into
+the baseline tree, which is the third entry above happening again. Each
+was caught before its numbers were read — the first because the totals
+were implausibly low, the second because the two sides came out
+*identical*, which contradicts a spec already watched failing. Neither
+would have been caught by re-reading the numbers.
+
+The cheap form of all of this: before starting, check no process of the
+same kind is running; have each side print its own working directory and
+version *before* it runs; and put a control in the diff — a category the
+change cannot affect, which must come out equal. 0.2.1's control was
+`unresolved-constant`, identical at 9,550 on both sides.
+
 **And when a measurement disagrees with a spec you have already watched
 fail, the measurement is wrong until proven otherwise.** That is what
 caught the third one; nothing about re-reading the numbers would have.

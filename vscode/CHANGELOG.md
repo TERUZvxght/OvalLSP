@@ -16,10 +16,13 @@ and the capability tables promised something the build did not do.
   `handlers[:on_save]&.call` — was reported as an unknown method. The
   receiver was looked up one character inside itself, so the lookup
   answered with the receiver's own last element. Over Ruby 3.4.7's
-  standard library, five Rails 8.1.3 gems and minitest, **1,556 of 3,362
-  unknown-method reports are gone**; four are new, and all four belong to
-  a separately recorded case (024.13). On a real Rails application the
-  two builds report identically.
+  standard library, five Rails 8.1.3 gems and minitest 6.0.6, **1,656 of
+  3,747 unknown-method reports are gone**; four are new, and all four
+  belong to a separately recorded case (024.13). On a real Rails
+  application the two builds report identically. (This bullet said "1,556
+  of 3,362" until the release's last day: that was measured four commits
+  earlier and against a different minitest, and the figures moved when it
+  was re-run. The removed set and the four introduced did not.)
 - Fixed: `delegate`, `class_attribute`, `mattr_accessor`,
   `thread_mattr_accessor`, `concerning` and `deprecate` were reported as
   unknown methods in a model or controller body. The Runtime Agent read a

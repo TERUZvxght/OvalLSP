@@ -1226,7 +1226,7 @@ the walk answers with the receiver.
 
 Measured over Ruby 3.4.7's standard library, five Rails 8.1.3 gems and
 minitest, both revisions over one corpus, diffed by position:
-**`unknown-method` 3,362 -> 1,810 — 1,556 removed, 4 introduced.**
+**`unknown-method` 3,747 -> 2,095 — 1,656 removed, 4 introduced.** (Re-measured at 0.2.1's last commit, both sides printing their own tree and version first, with `unresolved-constant` identical at 9,550 on both as the control. The first reading of this — 3,362 -> 1,810, 1,556 removed — was taken four commits earlier and against minitest 5.26.0 rather than 6.0.6.)
 `[w].each` reported that a workspace class has no `each`;
 `listeners[:on_x]&.each` that a Symbol has none, 604 times in prism's
 `dispatcher.rb` alone.
