@@ -224,18 +224,27 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     expect(labels(result).count("Article")).to eq(1)
   end
 
-  # A one-character prefix matches essentially everything, so the honest
-  # answer is the two sources that are actually near the cursor.
-  it "offers only locals and methods on self for a one-character prefix" do
+  # Every source answers from the first character. This used to skip the
+  # two workspace-wide ones below two characters, on the reasoning that
+  # one character matches essentially everything -- which cost the
+  # published site's own example, "Typing `A` offers candidates", the one
+  # length at which it did not work.
+  #
+  # What keeps that honest is the ranking, not a floor: the sources near
+  # the cursor come first and the workspace ones after, so a class is in
+  # the list without displacing a local.
+  it "offers a workspace class for a one-character prefix, after the sources nearer the cursor" do
     result = complete(<<~RUBY, extra_opens: did_open("file:///article.rb", "class Article\nend\n"))
       class ArticlesController
         def show
+          alpha = 1
           aHERE
         end
       end
     RUBY
 
-    expect(labels(result)).not_to include("Article")
+    expect(labels(result)).to include("Article")
+    expect(labels(result).index("alpha")).to be < labels(result).index("Article")
   end
 
   it "still offers a local for a one-character prefix" do
@@ -300,13 +309,18 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
   # told the answer is complete caches it and filters locally, so a user
   # typing straight through from the first letter never sees a workspace
   # constant at all.
-  it "reports a one-character answer as incomplete, because the next keystroke adds sources" do
+  # The premise this used to carry -- that a one-character answer is
+  # incomplete because the next keystroke *adds a source* -- is gone with
+  # the floor that made it true. Every source answers from the first
+  # character now, so a short answer that fits under the cap is complete
+  # and the editor may filter it locally.
+  it "reports a short answer as complete, now that no source appears later" do
     result = complete(<<~RUBY)
       alpha = Article.new
       aHERE
     RUBY
 
-    expect(result[:isIncomplete]).to be(true)
+    expect(result[:isIncomplete]).to be(false)
   end
 
   it "does not add bare-prefix candidates after a receiver dot" do

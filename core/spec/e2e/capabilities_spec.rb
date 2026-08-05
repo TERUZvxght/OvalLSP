@@ -174,6 +174,26 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # The same row, for the call shape Ruby uses most. H5 carries no
+    # receiver qualifier in either language and its example writes one --
+    # the fourth capability row found this way. Go to definition and
+    # signature help were both given the receiverless path in 0.2.0;
+    # hover was not, and answered an empty popup.
+    it "H5: shows a method's parameters when hovering a call with no receiver" do
+      with_file("app/models/receiverless_hover_probe.rb", <<~RUBY) do |uri|
+        class ReceiverlessHoverProbe
+          def documented(first, second = 1)
+          end
+
+          def run
+            documented(1)
+          end
+        end
+      RUBY
+        expect(@client.hover_text(uri, 5, 6)).to include("documented(first, second)")
+      end
+    end
+
     it "H3: reports an ivar's type in a view from the action that assigned it" do
       with_file("app/controllers/hover_view_controller.rb", <<~RUBY) do |_uri|
         class HoverViewController < ApplicationController
@@ -434,6 +454,22 @@ RSpec.describe "Extension capabilities", :e2e do
         labels = @client.completion_labels(uri, 3, 7)
         expect(labels).to include("prefix_local")
         expect(labels).to include("PrefixProbe")
+      end
+    end
+
+    # The public site promises "Typing `A` offers candidates" -- one
+    # character, a capital, i.e. a class. It offered locals and methods on
+    # self at that length and skipped workspace classes entirely, so the
+    # example the site chose was the one that did not work.
+    it "C12: offers a workspace class at a single character" do
+      with_file("app/models/single_char_probe.rb", <<~RUBY) do |uri|
+        class SingleCharProbe
+          def run
+            S
+          end
+        end
+      RUBY
+        expect(@client.completion_labels(uri, 2, 5)).to include("SingleCharProbe")
       end
     end
 

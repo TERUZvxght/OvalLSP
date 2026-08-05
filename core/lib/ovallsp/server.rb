@@ -3200,6 +3200,17 @@ module Ovallsp
     # doesn't chase a source method's own body to infer its return type),
     # so this only omits the "-> Type" line for Unknown, rather than
     # discarding a hover that otherwise has real content to show.
+    # The type of `self` where the cursor is, for a word that is not
+    # receiver-qualified. Nil when the position has a receiver in front of
+    # it: a receiver whose own type is Unknown must stay unanswered rather
+    # than fall back to the enclosing class, or `thing.article_params`
+    # would be answered from the file it is written in.
+    def enclosing_self_type(document, position)
+      return nil if receiver_dot_before?(document, position)
+
+      @query_service.scope_at(document, position)&.self_type
+    end
+
     def hover_lines(document, position, type)
       lines = type == Types::UNKNOWN ? [] : [type.to_s]
       documentation = nil
@@ -3209,7 +3220,14 @@ module Ovallsp
       # directly against `document`, which only works for a plain Ruby
       # buffer -- an .erb view needs the synthetic-source/ivar-seeded path
       # #explain_type_in_view already used just above for `type` itself.
-      receiver_type = word && !erb_view?(document.uri) && receiver_type_before_dot(document, position)
+      # With no receiver the call is on the enclosing `self`, which is how
+      # most Ruby calls a method of its own class -- `article_params` in a
+      # controller. Go to definition and signature help were given this
+      # reading in 0.2.0 and hover was not, so hovering such a call
+      # answered an empty popup while H5 promises its parameter list with
+      # no qualifier about receivers.
+      receiver_type = word && !erb_view?(document.uri) &&
+                      (receiver_type_before_dot(document, position) || enclosing_self_type(document, position))
       if receiver_type
         # The call's own shape, first: hovering `value.documented(1)` is
         # most often a question about what to pass, and the answer was

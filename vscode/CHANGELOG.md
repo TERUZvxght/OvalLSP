@@ -15,12 +15,11 @@ wrong reports and introduced a handful of its own; 0.1.15 is those
 corrections. Arriving together, the intermediate state never existed for
 anyone.
 
-- Added: typing `Ar` offers candidates. Completion needed a `.` first, so
+- Added: typing `A` offers candidates. Completion needed a `.` first, so
   workspace classes, the locals in scope and the methods callable right
-  there offered nothing until the whole name was written. Two characters,
-  not one: at a single character the locals and methods on self are
-  offered but workspace classes and Kernel are not, because at that
-  length they match almost everything.
+  there offered nothing until the whole name was written. From the first
+  character: the sources nearer the cursor rank ahead of the workspace-wide
+  ones, so a class is in the list without displacing a local.
 - Added: mistakes in files you have not opened are reported. (Verified
   in-process; see 024.14 for the end-to-end gap still open against a real
   Rails app.)

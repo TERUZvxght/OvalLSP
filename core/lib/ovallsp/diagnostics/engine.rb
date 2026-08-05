@@ -48,8 +48,18 @@ module Ovallsp
                                                                              generation: semantic_context.generation)
         resolved_locations = resolved.each_with_object({}) { |r, h| h[r.location] = true }
 
-        findings = []
-        findings.concat(syntax_findings(summary, semantic_context.generation))
+        findings = syntax_findings(summary, semantic_context.generation)
+        # A file that does not parse gets its syntax errors and nothing
+        # else. Prism is error-tolerant, so there is still a tree -- one
+        # error recovery invented parts of, and every semantic answer
+        # below is computed from it. Typing a `.` at the end of a method
+        # made `a.end` a call, and the engine reported that the class has
+        # no method named `end`, on the commonest editing action there is.
+        #
+        # Gated here rather than in each check, so a check added later
+        # cannot assert about a node nobody wrote.
+        return budget ? findings.first(budget) : findings unless findings.empty?
+
         findings.concat(unknown_method_findings(document, summary, resolved_locations, semantic_context))
         if MODE_RANK.fetch(mode) >= MODE_RANK.fetch(:standard)
           findings.concat(unresolved_constant_findings(summary, semantic_context))

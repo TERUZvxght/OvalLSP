@@ -827,6 +827,49 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
     end
   end
 
+  # Prism is error-tolerant, so a file that does not parse still produces
+  # a tree -- one error recovery invented parts of. Running the semantic
+  # checks over it reports things nobody wrote: typing a `.` at the end
+  # of a method gives `a.end`, and the engine said the class has no
+  # method named `end`.
+  #
+  # A file with a syntax error gets its syntax errors and nothing else.
+  # The first thing to fix is the syntax error, and a report derived from
+  # a guessed tree is not evidence about anything.
+  describe "a document that does not parse" do
+    it "reports the syntax error and nothing derived from the recovered tree" do
+      document = index(<<~RUBY, uri: "file:///typing.rb")
+        class Typing
+          def go
+            a = Typing.new
+            a.
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code).uniq).to eq(["syntax-error"])
+    end
+
+    # The control: the same file once it parses. Without this the example
+    # above passes for an engine that has stopped checking anything.
+    it "still reports on a document that parses" do
+      document = index(<<~RUBY, uri: "file:///parses.rb")
+        class Parses
+          def go
+            a = Parses.new
+            a.definitely_not_here
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).to include("unknown-method")
+    end
+  end
+
   describe "unknown-route-helper" do
     def load_routes
       route_registry.replace([
