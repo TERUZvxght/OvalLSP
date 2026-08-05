@@ -231,6 +231,13 @@ module Ovallsp
         when Prism::RationalNode then literal(Types::Nominal.new(name: "Rational"))
         when Prism::StringNode, Prism::InterpolatedStringNode then literal(Types::Nominal.new(name: "String"))
         when Prism::SymbolNode then literal(Types::Nominal.new(name: "Symbol"))
+        # The same two literals `LocalInferencer` types. This walk infers
+        # a method's *return* type, so without them a method whose last
+        # expression is a range or a regex returns Unknown to every
+        # caller.
+        when Prism::RangeNode then literal(Types::Nominal.new(name: "Range"))
+        when Prism::RegularExpressionNode, Prism::InterpolatedRegularExpressionNode
+          literal(Types::Nominal.new(name: "Regexp"))
         when Prism::TrueNode, Prism::FalseNode then literal(Types::Nominal.new(name: "Boolean"))
         when Prism::NilNode then flow(Types::NIL, false)
         # Generic with an unknown element type: otherwise hovering `{}`

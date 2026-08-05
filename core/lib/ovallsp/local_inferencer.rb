@@ -579,6 +579,15 @@ module Ovallsp
       when Prism::RationalNode then Types::Nominal.new(name: "Rational")
       when Prism::StringNode, Prism::InterpolatedStringNode then Types::Nominal.new(name: "String")
       when Prism::SymbolNode then Types::Nominal.new(name: "Symbol")
+      # A range and a regex are literals with exactly one possible class,
+      # and having no case here meant `(1..10).` completed to nothing and
+      # hovering `/abc/` answered an empty popup -- against an H4 row that
+      # promises a literal's type and a README that markets "Hover:
+      # literals". The element type of a range is deliberately not
+      # modelled: `Range` is what every method on it is declared on.
+      when Prism::RangeNode then Types::Nominal.new(name: "Range")
+      when Prism::RegularExpressionNode, Prism::InterpolatedRegularExpressionNode
+        Types::Nominal.new(name: "Regexp")
       when Prism::TrueNode, Prism::FalseNode then Types::Nominal.new(name: "Boolean")
       when Prism::NilNode then Types::NIL
       when Prism::ArrayNode then eval_array(node, env)

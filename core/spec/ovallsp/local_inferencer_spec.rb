@@ -1849,4 +1849,26 @@ RSpec.describe Ovallsp::LocalInferencer do
       expect(inferencer.infer_at(after, { line: 1, character: 0 }).to_s).to eq("String")
     end
   end
+  # `EXTENSION_CAPABILITIES.md`'s H4 row promises the type of a literal,
+  # and `README`'s matrix markets "Hover: literals". A range and a regex
+  # are literals with exactly one possible class, and neither had a case
+  # here -- so `(1..10).` completed to nothing and hovering `/abc/`
+  # answered an empty popup, with nothing in `KNOWN_LIMITATIONS`
+  # excluding them.
+  describe "literals with one possible class" do
+    {
+      "1..5" => "Range",
+      "1...5" => "Range",
+      '("a".."z")' => "Range",
+      "/abc/" => "Regexp",
+      "/a#{1}b/" => "Regexp"
+    }.each do |source, expected|
+      it "types #{source} as #{expected}" do
+        document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: "value = #{source}\nvalue\n",
+                                             version: 1, language_id: "ruby")
+
+        expect(inferencer.infer_at(document, { line: 1, character: 2 }).to_s).to eq(expected)
+      end
+    end
+  end
 end

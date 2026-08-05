@@ -200,10 +200,43 @@ end
 # All three environment columns, not just the first. Restricting it to
 # column one is how `⚠️ 1.0.0` went unnoticed in thirty rows: the column a
 # reader acts on was right and the two beside it were not.
+#
+# Matched on the *cells*, not on `<tr data-status>`. Keying on that
+# attribute meant this only ever saw `capabilities.html`, because it is
+# the only page that carries it -- so the excerpt table on both index
+# pages went unchecked and marked two of 0.2.0's shipped capabilities
+# `0.2.0`, which the page's own legend defines as "not built yet", under
+# a header badge reading "Preview 0.2.0". Verified by mutation: flipping
+# a status on `index.html` left this green.
 def site_matrix(html)
-  html.scan(%r{<tr data-status="[^"]*"><td>(.*?)</td>((?:<td class="col-status">.*?</td>){3})</tr>}m).filter_map do |feature, cells|
+  html.scan(%r{<tr[^>]*>\s*<td>(.*?)</td>\s*((?:<td class="col-status">.*?</td>\s*){3})</tr>}m).filter_map do |feature, cells|
     statuses = cells.scan(%r{<td class="col-status">(.*?)</td>}m).flatten.map { |cell| normalise_status(cell) }
     statuses.compact.empty? ? nil : [normalise_feature(feature), statuses]
+  end
+end
+
+# The index pages carry an *excerpt* of the matrix -- a subset, in the
+# same order -- so every row they do have must agree, and rows they omit
+# are not an error.
+[["index.html", "README.md"], [File.join("ja", "index.html"), "README.ja.md"]].each do |page_rel, readme_rel|
+  page = File.join(SITE, page_rel)
+  next unless File.exist?(page)
+
+  excerpt = site_matrix(read_page(page)).to_h
+  next if excerpt.empty?
+
+  expected = readme_matrix(File.join(REPO, readme_rel)).to_h
+  excerpt.each do |feature, statuses|
+    reference = expected[feature]
+    if reference.nil?
+      # Japanese wording is translated independently of README.ja.md, so
+      # a name that does not match there is not evidence of anything --
+      # `ja/capabilities.html` is compared positionally for the same
+      # reason. English names must match.
+      problems << "#{page_rel}: has a row for #{feature.inspect} that #{readme_rel} does not" unless page_rel.start_with?("ja/")
+    elsif statuses != reference
+      problems << "#{page_rel}: #{feature.inspect} is #{statuses.inspect} and #{readme_rel} says #{reference.inspect}"
+    end
   end
 end
 

@@ -35,7 +35,7 @@ multiple builds, option 2: bundling the Ruby runtime itself).
 
 | Version | Tier | Basis |
 |---|---|---|
-| 3.4 (run under 3.4.5 and 3.4.7) | supported | `core/`'s test suite (895 examples) actually run and green on this machine under both 3.4.7 (primary) and 3.4.5 (via rbenv) |
+| 3.4 (run under 3.4.5 and 3.4.7) | supported | `core/`'s test suite (1,776 examples as of 0.2.1; the figure was 895 when this row was written and was not re-measured for six releases) actually run and green on this machine under both 3.4.7 (primary) and 3.4.5 (via rbenv) |
 | 3.3 | unsupported (unverified) | `core/ovallsp.gemspec`'s `required_ruby_version >= 3.3` is only a declaration that Ruby 3.3 is **not rejected** — not evidence it was actually run under 3.3 (per Task 023.1's own finding, `>= 3.3` alone is never treated as evidence of support). Since this Apple Silicon Marketplace Preview targets darwin-arm64 + Ruby 3.4.x only, 3.3 stays in this tier for now |
 | 3.5 | unsupported (unverified) | Same reasoning — no run under a stable 3.5.x at release time |
 | 3.2 and below | unsupported | Explicitly rejected by `required_ruby_version` |
