@@ -287,19 +287,56 @@ module Ovallsp
       def add_signature_members(candidates, receiver_type, prefix, context)
         return unless @signatures
 
-        singleton = context[:singleton] == true
-        nominals = each_nominal(receiver_type).to_a
+        # `ClassOf[X]` is the class object, and a member of it lives on
+        # X's *singleton* chain -- the same normalisation
+        # `#add_active_record_api_members` makes and
+        # `MethodResolver#normalize_class_receiver` makes. This source made
+        # neither, so `each_nominal` yielded a nominal named "ClassOf" and
+        # RBS was asked about a class of that name, which does not exist.
+        class_object = receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
+        singleton = class_object || context[:singleton] == true
+        subject = class_object ? receiver_type.type_arg : receiver_type
+        nominals = each_nominal(subject).to_a
         occurrences = Hash.new(0)
         nominals.each do |nominal|
-          @signatures.member_names(qualify(nominal.name), prefix: prefix, singleton: singleton).each do |name|
-            occurrences[name] += 1
+          # Once per *nominal*, not once per ancestor: the count decides
+          # whether a member is conditional on which branch of a Union the
+          # receiver took, and a name declared by three ancestors of one
+          # nominal is not three receivers agreeing.
+          names = signature_owners(nominal, singleton).flat_map do |owner, owner_singleton|
+            @signatures.member_names(qualify(owner), prefix: prefix, singleton: owner_singleton)
           end
+          names.uniq.each { |name| occurrences[name] += 1 }
         end
         occurrences.each do |name, count|
           candidates[name] ||= Member.new(
             name: name, origin: :signature, conditional: count < nominals.length, visibility: nil, detail: nil
           )
         end
+      end
+
+      # Which RBS/RBI owners a receiver's members can come from, paired
+      # with the side to ask each for.
+      #
+      # It was the receiver's own name and nothing else, so a signature
+      # inherited from an ancestor was never offered. The visible one is
+      # `new`: `Article.` is a class object, `new` is `Class`'s *instance*
+      # method, and `EXTENSION_CAPABILITIES.md`'s C5 row names it in the
+      # list it promises. Its example asked for `find`, `where` and `all`
+      # -- all of which the Runtime Agent supplies -- so the row read PASS
+      # with the one member RBS had to answer for missing.
+      #
+      # The side comes from `AncestorEntry#declaration_kind`, which is
+      # where this project keeps that rule: a class object is an
+      # *instance* of `Class`, so the tail is asked for instance members
+      # even though the walk is a singleton one. `MethodResolver` and
+      # `Diagnostics::Engine` were taught this in 0.1.15; completion is
+      # the third reader and was not.
+      def signature_owners(nominal, singleton)
+        return [[nominal.name, singleton]] unless @method_resolver
+
+        owners = @method_resolver.lookup_owners(nominal, singleton: singleton)
+        owners.empty? ? [[nominal.name, singleton]] : owners
       end
 
       def signature_definition_locations(receiver_type, method_name, context)

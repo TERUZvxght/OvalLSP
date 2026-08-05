@@ -2350,7 +2350,15 @@ module Ovallsp
 
     def method_signature_help(document, position, method_name)
       call_start = call_name_position(document, position)
-      receiver_type = call_start && receiver_type_before_dot(document, call_start)
+      return { signatures: [] } unless call_start
+
+      # With no receiver the call is on the enclosing `self`, the same
+      # reading go-to-definition and bare-prefix completion take. Without
+      # this, `takes(` inside the class that declares `takes` answered
+      # nothing -- the third row whose example covered only the
+      # receiver-qualified half of what it promises.
+      receiver_type = receiver_type_before_dot(document, call_start) ||
+                      @query_service.scope_at(document, call_start)&.self_type
       return { signatures: [] } unless receiver_type
 
       signatures = @query_service.signatures_of(receiver_type, method_name)

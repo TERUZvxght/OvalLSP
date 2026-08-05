@@ -305,7 +305,11 @@ RSpec.describe "Extension capabilities", :e2e do
           end
         end
       RUBY
-        expect(@client.completion_labels(uri, 2, 9)).to include("find", "where", "all")
+        # The row names `new` alongside the rest, and it was the one the
+        # list did not have: `new` is `Class`'s, one step up the singleton
+        # chain, and the signature source answered about the receiver's
+        # own name only.
+        expect(@client.completion_labels(uri, 2, 9)).to include("find", "where", "all", "create", "new")
       end
     end
 
@@ -833,6 +837,23 @@ RSpec.describe "Extension capabilities", :e2e do
         end
       RUBY
         expect(@client.signature_labels(uri, 5, 16).join(" ")).to include("first")
+      end
+    end
+
+    # The same row, without a receiver -- the third capability whose
+    # example only covered the receiver-qualified half. `documented(` in
+    # the class that declares `documented` answered nothing.
+    it "S1: reports a workspace method's parameters with no receiver in front" do
+      with_file("app/models/receiverless_signature_probe.rb", <<~RUBY) do |uri|
+        class ReceiverlessSignatureProbe
+          def takes(first, second); end
+
+          def run
+            takes(
+          end
+        end
+      RUBY
+        expect(@client.signature_labels(uri, 4, 10).join(" ")).to include("first")
       end
     end
   end

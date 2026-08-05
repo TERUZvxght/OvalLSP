@@ -39,6 +39,11 @@ module Ovallsp
       KIND_VARIABLE = 6
       KIND_CLASS = 7
 
+      # The kinds that mean "something you can call here". Two sources
+      # answer with them and label the same method differently, so the
+      # de-duplication above has to see past that.
+      CALLABLE_KINDS = [KIND_METHOD, KIND_FUNCTION].freeze
+
       # Lower sorts first. `sortText` is what the editor actually orders by
       # -- it will re-sort the array otherwise -- so the group index is
       # rendered into it rather than left implicit in the array order.
@@ -72,7 +77,23 @@ module Ovallsp
         candidates = locals(scope, prefix) + self_methods(scope, prefix)
         candidates += constants(prefix) + kernel_methods(prefix) if prefix.length >= MIN_PREFIX_FOR_WORKSPACE
 
+        # One line per name *per kind*. A name can be in more than one
+        # source -- `local_variables` is Kernel's and is also callable on
+        # self, and the self-methods source began offering it once
+        # `members_of` learned to walk the ancestor chain for signatures.
+        # Those two are the same method and printing it twice is a bug.
+        #
+        # Not keyed on the raw kind, because the two callable sources
+        # spell it differently -- self's members are `Method` and Kernel's
+        # are `Function` -- and `local_variables` reached the wire twice,
+        # once with each icon. Keyed on *callable or not*: a local and a
+        # method that share a name are genuinely two offers (`target =
+        # Article.new` beside a `def target`), and deduplicating on the
+        # label alone silently dropped the second.
+        #
+        # Sorted first, so the copy that survives is the nearest group's.
         ranked = candidates.sort_by { |item| [item[:__group], item[:label]] }
+                           .uniq { |item| [item[:label], CALLABLE_KINDS.include?(item[:kind])] }
         # Incomplete for two different reasons. The cap is the obvious
         # one. The other is that below MIN_PREFIX_FOR_WORKSPACE the answer
         # *grows a new source* at the next keystroke, which no amount of

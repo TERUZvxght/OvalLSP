@@ -59,4 +59,25 @@ RSpec.describe Ovallsp::Semantic::PrefixCompletion do
       expect(items.flat_map(&:keys)).not_to include(:__group)
     end
   end
+  # Four sources answer one list, and a name can be in more than one of
+  # them: `local_variables` is Kernel's, and it is also a method callable
+  # on self -- which the self-methods source began offering once
+  # `members_of` learned to walk the ancestor chain for signatures. The
+  # editor shows exactly what it is sent, so a name in two groups is a
+  # line printed twice.
+  context "when two sources both have a name" do
+    let(:self_type) { Ovallsp::Types::Nominal.new(name: "Probe") }
+
+    it "offers it once" do
+      allow(query_service).to receive(:members_of).and_return(
+        [Ovallsp::Semantic::Member.new(name: "local_variables", origin: :signature, conditional: false,
+                                       visibility: nil, detail: nil)]
+      )
+
+      labels = complete("loc").items.map { |item| item[:label] }
+
+      expect(labels).to include("local_variables")
+      expect(labels.tally.values).to all(eq(1))
+    end
+  end
 end

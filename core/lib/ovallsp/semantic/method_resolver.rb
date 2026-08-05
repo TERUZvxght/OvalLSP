@@ -55,6 +55,29 @@ module Ovallsp
         @hierarchy_index = hierarchy_index
       end
 
+      # The ancestor chain a lookup on this receiver walks, as
+      # `[owner_name, singleton?]` pairs -- the second element being which
+      # *side* of that owner to ask, which is not the same question as the
+      # side of the walk (`AncestorEntry#declaration_kind`: a class object
+      # is an instance of `Class`, so the tail of a singleton chain is
+      # asked for instance methods).
+      #
+      # Exposed because `QueryService#members_of` needs the same chain for
+      # its signature source and had none: it asked RBS about the
+      # receiver's own name only, so an inherited signature was never
+      # offered. Rather than hand that service a second reference to the
+      # hierarchy index, the object that already owns it answers.
+      def lookup_owners(receiver_type, singleton: false)
+        nominal = base_nominal(receiver_type)
+        return [] unless nominal
+
+        @hierarchy_index.ancestors(nominal.name, singleton: singleton).filter_map do |entry|
+          next if entry.name.nil?
+
+          [entry.name, entry.declaration_kind(singleton: singleton) == :singleton_method]
+        end
+      end
+
       # All candidates named `name` reachable from `receiver_type`, in
       # ancestor order, deduplicated by declaring symbol. For a Union
       # receiver, a candidate not present on every member is marked

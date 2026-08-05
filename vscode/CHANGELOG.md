@@ -38,6 +38,13 @@ the disproved approaches are kept below it under **Details**.
   blocked on an offset rule fixed separately (024.20).
 - Added: semantic highlighting, in `.rb` and in an ERB template's Ruby
   regions.
+- Fixed: `Widget.new` is offered. Completion asked RBS about the
+  receiver's own name and nothing else, so a member declared by an
+  ancestor was never in the list — and `new` is `Class`'s. A workspace
+  class instance now also offers what every Ruby object has (`tap`,
+  `frozen?`, `then`), after its own methods rather than before them.
+- Fixed: signature help works on a call written without a receiver, the
+  same shape as go to definition below.
 - Fixed: go to definition works on a call written without a receiver —
   `article_params` inside the controller that defines it. That is how
   most Ruby calls a method of its own class, and it resolved to nothing:
