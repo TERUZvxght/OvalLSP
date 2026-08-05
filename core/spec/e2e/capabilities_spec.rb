@@ -393,6 +393,31 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # C11's own row, for the way a Rails view actually refers to a model.
+    # Its example types `post.`, a local -- and a local in a template is
+    # what a partial receives. An action's `@ivar` is the common case,
+    # and it answered nothing: hover resolves an ivar in a view through
+    # the controller action that assigned it (H3), and
+    # `receiver_type_before_dot` -- which completion and go-to-definition
+    # both use -- did not, though Task 013 records "hover and completion
+    # use the same receiver type" as the rule.
+    it "C11: offers a model's members after an `@ivar` in an ERB template" do
+      with_file("app/controllers/ivar_completion_controller.rb", <<~RUBY) do |_uri|
+        class IvarCompletionController < ApplicationController
+          def show
+            @record = Post.find(1)
+          end
+        end
+      RUBY
+        with_file("app/views/ivar_completion/show.html.erb", "<%= @record. %>\n") do |view_uri|
+          labels = @client.completion_labels(view_uri, 0, 12)
+
+          expect(labels).to include("title")
+          expect(labels).to include("save")
+        end
+      end
+    end
+
     it "C12: offers workspace classes and locals with no receiver in front" do
       with_file("app/models/prefix_probe.rb", <<~RUBY) do |uri|
         class PrefixProbe
@@ -454,6 +479,29 @@ RSpec.describe "Extension capabilities", :e2e do
       RUBY
         locations = @client.definitions(uri, 5, 12)
         expect(locations.map { |l| l[:uri] }).to include(uri)
+      end
+    end
+
+    # The same row, for the call shape Ruby actually uses most. The
+    # example above writes a receiver; without one, `definition_result`
+    # fell through to a *name* lookup that only matches classes, modules
+    # and constants -- so a call to a method of the class you are writing
+    # in resolved to nothing. Measured on a real Rails application:
+    # `article_params` in a scaffolded controller, 0 locations, while
+    # find-references on the same pair answered 2.
+    it "D1: jumps to a workspace method's declaration with no receiver in front" do
+      with_file("app/models/receiverless_definition_probe.rb", <<~RUBY) do |uri|
+        class ReceiverlessDefinitionProbe
+          def target_method; end
+
+          def run
+            target_method
+          end
+        end
+      RUBY
+        locations = @client.definitions(uri, 4, 8)
+        expect(locations.map { |l| l[:uri] }).to include(uri)
+        expect(locations.map { |l| l[:range][:start][:line] }).to include(1)
       end
     end
   end

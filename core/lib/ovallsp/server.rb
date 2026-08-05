@@ -2018,8 +2018,35 @@ module Ovallsp
       typed = receiver_type ? @query_service.definitions_of(receiver_type, word) : []
       return typed unless typed.empty?
 
+      on_self = receiverless_definitions(document, position, word)
+      return on_self unless on_self.empty?
+
       lexical = @workspace_index.find_by_simple_name(word).map { |match| { uri: match[:uri], range: match[:range] } }
       (lexical + route_helper_definitions(word)).uniq
+    end
+
+    # A call with no receiver is a call on the enclosing `self`, and that
+    # is the *only* way most Ruby calls a method of its own class.
+    #
+    # Without this the fallback below is the whole answer, and it is a
+    # name lookup restricted to classes, modules and constants -- so
+    # `article_params` in a scaffolded Rails controller resolved to
+    # nothing, while find-references on the same pair answered two.
+    # `EXTENSION_CAPABILITIES.md`'s D1 row promises the jump for "a call
+    # to a workspace method"; its example wrote a receiver, which is why
+    # the row read PASS.
+    #
+    # The same question `PrefixCompletion` answers for "methods callable
+    # here", asked the same way -- through the type engine rather than by
+    # name, so this cannot jump to an unrelated method that happens to
+    # share the word.
+    def receiverless_definitions(document, position, word)
+      return [] if receiver_dot_before?(document, position)
+
+      self_type = @query_service.scope_at(document, position)&.self_type
+      return [] unless self_type
+
+      @query_service.definitions_of(self_type, word)
     end
 
     # A route helper's primary definition is its routes.rb source line (the
@@ -2412,7 +2439,20 @@ module Ovallsp
       return nil if left.zero? || text[left - 1] != "."
 
       dot_position = document.char_offset_to_position(left - 1)
-      type = @query_service.type_at(document, dot_position)
+      # An `@ivar` in a template gets its type from the controller action
+      # that assigned it, and that arrives as the initial environment --
+      # nothing in the template itself assigns it. Hover has always passed
+      # it (H3); completion and go-to-definition, which share this helper,
+      # did not, so `@article.` in a view completed to nothing while
+      # hovering the same `@article` answered `Article`. Task 013 records
+      # "hover and completion use the same receiver type" as the rule.
+      #
+      # Only the environment: `document` here has already been through
+      # `#analyzable_document`, so the ERB is extracted. Extracting again
+      # -- which is what borrowing `#explain_type_in_view` wholesale does
+      # -- breaks the local case this row was written for.
+      initial_env = erb_view?(document.uri) ? ivars_for_view(document.uri) : {}
+      type = @query_service.type_at(document, dot_position, initial_env: initial_env)
       type == Types::UNKNOWN ? nil : type
     end
 

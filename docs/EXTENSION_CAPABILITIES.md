@@ -122,7 +122,7 @@ suite in step: every row must have an example, every example a row.
 | C8 | Accepts a completion for a method whose parameters are known | the call is written out with each parameter as a tab stop (`takes_two(first, second)`) | PASS |
 | C9 | Accepts a completion for a method that takes nothing | the bare name, no parentheses | PASS |
 | C10 | Accepts a completion for a method that takes arguments of unknown shape | `where($1)` — parentheses opened, cursor inside | PASS |
-| C11 | Types `post.` inside an ERB template | the model's members, resolved from the template's Ruby regions rather than its HTML | PASS |
+| C11 | Types `post.` or `@post.` inside an ERB template | the model's members, resolved from the template's Ruby regions rather than its HTML — the `@ivar` from the controller action that assigned it, as hover already did | PASS |
 | C12 | Types `Art` with no receiver in front of it | workspace classes, the locals in scope, and the methods callable at that position | PASS |
 | C13 | Highlights a completion candidate declared with an RDoc/YARD comment, *in the list a receiver produced* | the comment appears as the item's documentation | PASS |
 
@@ -138,7 +138,7 @@ which is what it is for.
 
 | # | What the user does | What must happen | Status |
 |---|---|---|---|
-| D1 | Go to definition on a call to a workspace method | jumps to its `def` | PASS |
+| D1 | Go to definition on a call to a workspace method, with or without a receiver in front | jumps to its `def` | PASS |
 | D2 | Go to definition on an Active Record column/association | jumps to the owning model class | PASS |
 | D3 | Go to definition on a stdlib method | jumps into the RBS declaration | PASS |
 

@@ -38,6 +38,16 @@ the disproved approaches are kept below it under **Details**.
   blocked on an offset rule fixed separately (024.20).
 - Added: semantic highlighting, in `.rb` and in an ERB template's Ruby
   regions.
+- Fixed: go to definition works on a call written without a receiver —
+  `article_params` inside the controller that defines it. That is how
+  most Ruby calls a method of its own class, and it resolved to nothing:
+  without a receiver the request fell through to a name lookup that only
+  matches classes, modules and constants. Find references on the same
+  pair always worked, which is what made it visible.
+- Fixed: `@article.` completes in an ERB template. Hover on the same
+  `@article` already answered `Article` — an ivar in a view gets its type
+  from the controller action that assigned it, and only hover was passing
+  that along, so completion and go-to-definition saw nothing.
 - Fixed: a `*_path`/`*_url` call is no longer reported as a missing route
   when no routes have been loaded — an untrusted workspace, or any
   project that is not Rails. An empty route table used to answer "no such
