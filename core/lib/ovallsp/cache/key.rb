@@ -64,6 +64,17 @@ module Ovallsp
         Digest::SHA256.hexdigest(components)
       end
 
+      # The workspace alone, which names the *directory* every generation
+      # for this project lives under. Deliberately not the full digest:
+      # that one changes with Ruby, Prism, `Gemfile.lock`, RBS and the
+      # OvalLSP version, and a project's cache directory must not move
+      # when any of those do -- otherwise pruning cannot tell one
+      # project's abandoned generations from another project's live cache,
+      # which is what it could not do until 0.2.1.
+      def workspace_scope(workspace_root:)
+        Digest::SHA256.hexdigest("workspace=#{canonical_root(workspace_root)}")
+      end
+
       def canonical_root(workspace_root)
         File.realpath(workspace_root)
       rescue Errno::ENOENT

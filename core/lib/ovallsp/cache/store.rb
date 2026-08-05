@@ -53,7 +53,7 @@ module Ovallsp
       # hundreds of thousands, so this default has real headroom.
       DEFAULT_MAX_ENTRIES = 20_000
 
-      # How many generation directories to keep under the cache root.
+      # How many generation directories to keep for *this workspace*.
       # A generation is abandoned, never migrated, whenever anything in
       # `Cache::Key` changes -- a Ruby upgrade, a `bundle install`, an RBS
       # change, an OvalLSP release -- and until 0.2.1 nothing ever removed
@@ -62,36 +62,82 @@ module Ovallsp
       # for as long as the extension was installed: 28,643 directories and
       # 2.8 GB on one developer machine.
       #
-      # Eight is generous for the shapes that actually recur -- switching
-      # between a few projects, or between two Ruby versions -- and small
-      # enough that the abandoned ones do not outlive their usefulness by
-      # months.
+      # Eight is generous for the shapes that actually recur -- two Ruby
+      # versions, a `bundle install` or two -- and small enough that the
+      # abandoned ones do not outlive their usefulness by months.
       DEFAULT_MAX_GENERATIONS = 8
 
-      # Removes the least recently used generation directories under
-      # `cache_root`, keeping `keep` of them and always the current one.
-      # By directory mtime, like `#prune_if_over_bound`: precise LRU is
-      # not worth its bookkeeping for a warm-start optimisation, and a
-      # generation still in use is touched every time an entry is written
-      # into it.
+      # Names the file that says which workspace a scope directory is for.
+      # Its presence is also what tells a scope directory apart from a
+      # pre-0.2.1 *generation* directory, which sat at the same level.
+      WORKSPACE_MARKER = ".workspace"
+
+      def self.mark_workspace(scope_dir, workspace_path)
+        File.write(File.join(scope_dir, WORKSPACE_MARKER), "#{workspace_path}\n")
+      rescue StandardError
+        nil
+      end
+
+      # Removes what this machine will never read again, and nothing else.
+      #
+      # The layout is `<root>/<workspace>/<generation>` for exactly this
+      # method's sake. It was flat until 0.2.1, and `Cache::Key` folds the
+      # workspace into the same digest as Ruby, Prism, `Gemfile.lock` and
+      # the OvalLSP version -- so every *project* was a sibling of every
+      # abandoned generation, indistinguishable from one. Keeping the
+      # eight most recently written siblings therefore evicted the ninth
+      # project's warm cache, possibly a project open in another window,
+      # since a directory's mtime advances when an entry is written and
+      # not when one is read.
+      #
+      # Three things are removed, and each is a fact rather than a guess:
+      #
+      # - generations of *this* workspace beyond `keep`, oldest first;
+      # - a workspace whose own directory no longer exists on disk;
+      # - a pre-0.2.1 flat generation, which has no marker and which this
+      #   build could not read even if it tried, because the version is in
+      #   the key.
       #
       # Every failure is swallowed, for the same reason every other
       # failure in this class is: a cache that cannot be tidied is still a
       # correct cache, and a Core that will not start because of one is
       # not.
       def self.prune_generations(cache_root:, current:, keep: DEFAULT_MAX_GENERATIONS)
-        entries = Dir.children(cache_root)
-                     .map { |name| File.join(cache_root, name) }
-                     .select { |path| File.directory?(path) }
-        return if entries.length <= keep
-
-        current = File.expand_path(current)
-        by_age = entries.sort_by { |path| -File.mtime(path).to_f }
-        by_age.reject { |path| File.expand_path(path) == current }
-              .drop(keep - 1)
-              .each { |path| FileUtils.remove_entry(path) }
+        prune_workspaces(cache_root, File.expand_path(current))
+        prune_generations_of(File.dirname(File.expand_path(current)), File.expand_path(current), keep)
       rescue StandardError
         nil
+      end
+
+      def self.prune_generations_of(scope_dir, current, keep)
+        generations = children_of(scope_dir).select { |path| File.directory?(path) }
+        return if generations.length <= keep
+
+        generations.sort_by { |path| -File.mtime(path).to_f }
+                   .reject { |path| File.expand_path(path) == current }
+                   .drop(keep - 1)
+                   .each { |path| FileUtils.remove_entry(path) }
+      end
+
+      def self.prune_workspaces(cache_root, current)
+        current_scope = File.dirname(current)
+        children_of(cache_root).each do |path|
+          next unless File.directory?(path)
+          next if File.expand_path(path) == current_scope
+
+          marker = File.join(path, WORKSPACE_MARKER)
+          # No marker: a pre-0.2.1 generation, unreadable by this build.
+          next FileUtils.remove_entry(path) unless File.file?(marker)
+
+          workspace = File.read(marker).strip
+          FileUtils.remove_entry(path) unless workspace.empty? || File.directory?(workspace)
+        end
+      end
+
+      def self.children_of(dir)
+        Dir.children(dir).map { |name| File.join(dir, name) }
+      rescue StandardError
+        []
       end
 
       # `cache_dir: nil` explicitly disables the cache (never even tries

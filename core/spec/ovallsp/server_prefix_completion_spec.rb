@@ -487,6 +487,34 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
       expect(item[:detail]).to eq("Article")
     end
 
+    # `ivar_prefix_at_position` is a raw text scan, and the same file's
+    # call scan was given a code mask this release for exactly this
+    # reason. A YARD `@param` tag or an `@` inside a string is not
+    # somebody typing an instance variable.
+    it "offers nothing for an `@` inside a comment" do
+      source = IVAR_SOURCE.sub("    @aHERE", "    # @aHERE")
+
+      expect(complete(source)[:items]).to be_empty
+    end
+
+    it "offers nothing for an `@` inside a string" do
+      source = IVAR_SOURCE.sub("    @aHERE", '    note = "@aHERE"')
+
+      expect(complete(source)[:items]).to be_empty
+    end
+
+    # The comment above `ivar_prefix_at_position` claimed `@@` took the
+    # same path because "the environment keys it the same way". It does
+    # not: `LocalInferencer` has no `ClassVariableWriteNode` case at all,
+    # so the environment has no `@@` keys and this answered nothing while
+    # saying it answered. The claim is gone; the behaviour it described is
+    # what is pinned here.
+    it "offers nothing for a class variable, which nothing tracks" do
+      source = IVAR_SOURCE.sub("    @article = Article.new", "    @@shared = Article.new").sub("@aHERE", "@@sHERE")
+
+      expect(complete(source)[:items]).to be_empty
+    end
+
     it "leaves the other sigils silent" do
       expect(complete(IVAR_SOURCE.sub("@aHERE", "$aHERE"))[:items]).to be_empty
     end

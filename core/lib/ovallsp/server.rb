@@ -1291,8 +1291,15 @@ module Ovallsp
         settings_digest: nil
       )
       cache_root = File.join(root, "ovallsp")
-      cache_dir = File.join(cache_root, digest)
+      # `<root>/<workspace>/<generation>`: pruning has to be able to tell
+      # this project's abandoned generations from *another project's live
+      # cache*, and a flat root cannot -- every workspace was a sibling of
+      # every generation, so opening a ninth project evicted one of the
+      # other eight.
+      scope_dir = File.join(cache_root, Cache::Key.workspace_scope(workspace_root: @workspace_root))
+      cache_dir = File.join(scope_dir, digest)
       store = Cache::Store.new(cache_dir: cache_dir)
+      Cache::Store.mark_workspace(scope_dir, Cache::Key.canonical_root(@workspace_root))
       # After the directory exists, so the current generation is never the
       # one swept. Once per start: a generation is only minted when the
       # key changes, which is a Ruby upgrade, a `bundle install` or a
@@ -2242,10 +2249,31 @@ module Ovallsp
         return [resolved.symbol_id, candidate.location] if resolved
       end
 
-      declaration = summary.declarations.select { |d| position_within?(d.location, position) }.min_by { |d| range_span(d.location) }
+      declaration = declaration_named_at(summary, position)
       return [nil, nil] unless declaration
 
       [declaration.symbol_id, declaration.name_location || declaration.location]
+    end
+
+    # The declaration whose *name* the cursor is on, not the innermost one
+    # whose range contains it.
+    #
+    # A `def`'s recorded range spans its whole body, so "contains the
+    # position" was true of every position inside the method -- a word in
+    # a comment, the contents of a string, a bare number, the `def` and
+    # the `end`. Find References and Rename both read it, and both are
+    # asked for deliberately, so a wrong answer was rare enough to
+    # survive. Occurrence highlighting is asked on every cursor move, and
+    # made it continuous: a box on the enclosing method's name almost
+    # anywhere the caret went.
+    #
+    # `name_location` is the name; a declaration without one (a class
+    # reopened by a dynamic form) falls back to its whole range, which for
+    # those shapes is the name.
+    def declaration_named_at(summary, position)
+      summary.declarations
+             .select { |d| position_within?(d.name_location || d.location, position) }
+             .min_by { |d| range_span(d.name_location || d.location) }
     end
 
     def position_within?(range, position)
@@ -2550,32 +2578,54 @@ module Ovallsp
       @code_offsets_value = compute_code_offsets(document.text)
     end
 
+    # Prism's own lexer, not a hand-written scan of quotes and `#`.
+    #
+    # The scan this replaces knew about `"`, `'` and `#` and nothing else,
+    # which is not enough to be right about Ruby: everything between
+    # quotes was "not code", so a call written inside `#{...}` was
+    # invisible and signature help went dark there; and a `#` that opens
+    # no comment (`/a#b/`, `"%d#%d"`) blanked the rest of the line, so the
+    # comma after it was not counted and the popup bolded the wrong
+    # parameter. Round 24 wrote it and round 25 found both, which is the
+    # point at which this project stops writing a third approximation.
+    #
+    # A token is not code if it is a string's, a regexp's, a heredoc's or
+    # a comment's own text or delimiters -- `%w(` is a delimiter, and its
+    # `(` opens no call. `#{` and `}` are ordinary tokens and stay code:
+    # they nest and balance like any other brace, and what is written
+    # between them is real Ruby.
+    NON_CODE_TOKEN_PREFIXES = %w[STRING_ REGEXP_ HEREDOC_ EMBDOC_].freeze
+    NON_CODE_TOKEN_TYPES = %i[COMMENT CHARACTER_LITERAL].freeze
+
     def compute_code_offsets(text)
-      offsets = []
-      offset = 0
-      text.each_line do |line|
-        quote = nil
-        index = 0
-        while index < line.length
-          char = line[index]
-          if quote
-            if char == "\\"
-              index += 1
-            elsif char == quote
-              quote = nil
-            end
-          elsif char == '"' || char == "'"
-            quote = char
-          elsif char == "#"
-            break
-          else
-            offsets << (offset + index)
-          end
-          index += 1
-        end
-        offset += line.length
+      non_code = []
+      Prism.lex(text).value.each do |token, _state|
+        next unless non_code_token?(token.type)
+
+        non_code << (token.location.start_offset...token.location.end_offset)
       end
-      offsets.to_set
+      byte_offsets = non_code.flat_map(&:to_a).to_set
+      # `Prism` locations are byte offsets and the callers count
+      # characters, which are the same thing only until the file contains
+      # one multibyte character.
+      return (0...text.length).to_set.subtract(byte_offsets) if text.bytesize == text.length
+
+      character_code_offsets(text, byte_offsets)
+    end
+
+    def non_code_token?(type)
+      name = type.to_s
+      NON_CODE_TOKEN_TYPES.include?(type) || NON_CODE_TOKEN_PREFIXES.any? { |prefix| name.start_with?(prefix) }
+    end
+
+    def character_code_offsets(text, non_code_byte_offsets)
+      offsets = Set.new
+      byte = 0
+      text.each_char.with_index do |char, index|
+        offsets << index unless non_code_byte_offsets.include?(byte)
+        byte += char.bytesize
+      end
+      offsets
     end
 
     # If `position` sits on an identifier immediately preceded by `.`
@@ -2661,8 +2711,17 @@ module Ovallsp
     end
 
     # The instance-variable prefix under the cursor, sigil included, or nil
-    # if the cursor is not writing one. `@@` is a class variable and takes
-    # the same path -- the environment keys it the same way.
+    # if the cursor is not writing one.
+    #
+    # Only where the `@` is *code*. A raw text scan offered the list for a
+    # YARD `@param` tag and for an `@` inside a string, which is nobody
+    # typing an instance variable -- the same mistake the call scan in
+    # this file made until it was given the same mask.
+    #
+    # A class variable is matched and answered with nothing, deliberately.
+    # `LocalInferencer` has no `ClassVariableWriteNode` case, so the
+    # environment holds no `@@` keys; this used to carry a comment saying
+    # they took the same path, which was false.
     def ivar_prefix_at_position(document, position)
       text = document.text
       offset = document.position_to_char_offset(position)
@@ -2673,6 +2732,8 @@ module Ovallsp
 
       left -= 1
       left -= 1 if left.positive? && text[left - 1] == "@"
+      return nil unless code_offsets(document).include?(left)
+
       text[left...offset]
     end
 

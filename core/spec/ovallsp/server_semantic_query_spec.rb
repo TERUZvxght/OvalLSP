@@ -176,6 +176,42 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
       expect(signature_labels_for("1, # (not a call\n    2")).to include("build(name, count)")
     end
 
+    # The hand-written scanner these replaced knew about `"` and `#` and
+    # nothing else, which is not a lexer -- it was wrong about string
+    # interpolation (everything between quotes was "not code", so a call
+    # written inside `#{}` was invisible) and about a `#` that opens no
+    # comment (`/a#b/`, `"%d#%d"`). Round 24 introduced it and round 25
+    # found two defects in it, so it is Prism's own lexer now rather than
+    # a third approximation.
+    # Written out rather than through the helper above, because the cursor
+    # has to sit *inside* the interpolation rather than at the end of the
+    # line, and because the string is closed -- which is how anyone
+    # actually writes one, `"#{}"` first and the call after.
+    it "finds a call written inside a string interpolation, and counts its commas" do
+      source = "class Widget\n  def build(name, count)\n  end\nend\n\nx = \"v \#{Widget.new.build(1, 2)}\"\n"
+      input =
+        did_open("file:///widget.rb", source) +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
+          params: { textDocument: { uri: "file:///widget.rb" }, position: { line: 5, character: 29 } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+
+      result = sent_messages.first[:result]
+      expect(result[:signatures].map { |signature| signature[:label] }).to include("build(name, count)")
+      expect(result[:activeParameter]).to eq(1)
+    end
+
+    it "does not treat a `#` inside a regular expression as opening a comment" do
+      expect(active_parameter_for("/a#b/, 2")).to eq(1)
+    end
+
+    it "does not treat a `(` inside a `%w` literal as opening a call" do
+      expect(signature_labels_for("%w[a (b], 2")).to include("build(name, count)")
+    end
+
     it "counts no comma written inside a comment" do
       expect(active_parameter_for("1, # a, comment\n    2")).to eq(1)
     end
