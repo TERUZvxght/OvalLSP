@@ -177,8 +177,40 @@ RSpec.describe Ovallsp::LocalInferencer do
     # `3r` is not an Integer with a suffix: Prism gives it its own node,
     # and with no case for it a rational literal answered Unknown.
     expect(infer("x = 3r\n", line: 0, character: 1).to_s).to eq("Rational")
+    # A lambda is a literal too, and `->(x) { x }` answered Unknown --
+    # against a README that markets "Hover: literals" and a capability row
+    # promising a literal's type. `lambda {}`, `proc {}` and `Proc.new {}`
+    # are method calls rather than literals, and are RBS's question.
+    expect(infer("x = ->(n) { n }\n", line: 0, character: 1).to_s).to eq("Proc")
     expect(infer("x = true\n", line: 0, character: 1).to_s).to eq("Boolean")
     expect(infer("x = nil\n", line: 0, character: 1).to_s).to eq("nil")
+  end
+
+  # `&&`, `||` and `!` had no case at all, so an ordinary guard or default
+  # answered Unknown -- and each has an answer Ruby settles exactly:
+  # `!` is always a boolean, and `a || b` is one or the other.
+  describe "boolean operators" do
+    it "answers Boolean for a negation, whatever it negates" do
+      expect(infer("x = !User.new\n", line: 0, character: 1).to_s).to eq("Boolean")
+    end
+
+    it "unions both sides of an `||`, which is what it can return" do
+      expect(infer("x = User.new || Company.new\n", line: 0, character: 1).to_s)
+        .to eq(Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "User"),
+                                               Ovallsp::Types::Nominal.new(name: "Company")]).to_s)
+    end
+
+    it "unions both sides of an `&&`" do
+      expect(infer("x = User.new && Company.new\n", line: 0, character: 1).to_s)
+        .to eq(Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "User"),
+                                               Ovallsp::Types::Nominal.new(name: "Company")]).to_s)
+    end
+
+    # The everyday shape, and the reason this is worth having: a default
+    # keeps the type rather than losing it.
+    it "keeps the type through a default written with `||`" do
+      expect(infer("name = nil\nx = name || \"anonymous\"\n", line: 1, character: 1).to_s).to eq("String")
+    end
   end
 
   it "unions ternary branches" do

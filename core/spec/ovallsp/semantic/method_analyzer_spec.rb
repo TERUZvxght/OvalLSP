@@ -33,6 +33,25 @@ RSpec.describe Ovallsp::Semantic::MethodAnalyzer do
     expect(summary.status).to eq(:complete)
   end
 
+  # A method's *return* type is a second reader of the same literal rules
+  # `LocalInferencer` has, and it had no case for these -- so a method
+  # ending in a range returned Unknown to every caller, and hovering the
+  # local it was assigned to answered an empty popup. Nothing failed when
+  # the cases were added, which is the other half of this example's job.
+  {
+    "a range" => ["1..5", "Range"],
+    "a regular expression" => ["/abc/", "Regexp"],
+    "a lambda" => ["->(n) { n }", "Proc"]
+  }.each do |description, (source, expected)|
+    it "infers the return type of a method ending in #{description}" do
+      index_source("class Shapes\n  def build\n    #{source}\n  end\nend\n")
+
+      summary = analyzer.summarize(symbol_id: method_symbol("::Shapes", "build"))
+
+      expect(summary.return_type.to_s).to eq(expected)
+    end
+  end
+
   it "infers an explicit return" do
     index_source("class UserFactory\n  def build_user\n    return User.new\n  end\nend\n")
 

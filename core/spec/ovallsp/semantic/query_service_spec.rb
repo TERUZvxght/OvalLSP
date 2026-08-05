@@ -2,7 +2,7 @@
 
 RSpec.describe Ovallsp::Semantic::QueryService do
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
+  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index, signatures: signatures) }
   let(:method_resolver) { Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index) }
   let(:model_registry) { Ovallsp::Models::ModelRegistry.new }
   let(:local_inferencer) { Ovallsp::LocalInferencer.new(model_registry: model_registry) }
@@ -118,6 +118,32 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       member = service.members_of(union, prefix: "map").find { |candidate| candidate.name == "map" }
 
       expect(member.conditional).to be(true)
+    end
+
+    # 0.2.1 taught the *diagnostics engine* that a bare name RBS declares
+    # is not answered by a workspace class that merely shares its last
+    # segment, and stopped there. Resolution kept substituting, so the
+    # three readers went on disagreeing -- the diagnostic fell silent
+    # while completion on a string literal offered the workspace class's
+    # members and omitted every String method, and hover said `String`
+    # the whole time. The rule belongs where the name is resolved.
+    it "completes a core class's own members, not those of a workspace class sharing its last segment" do
+      index_source("module Serializer\n  module Elements\n    class String\n      def emit\n      end\n    end\n  end\nend\n")
+
+      names = service.members_of(nominal("String"), prefix: "").map(&:name)
+
+      expect(names).to include("upcase")
+      expect(names).not_to include("emit")
+    end
+
+    # The boundary: a workspace that genuinely reopens `String` at the top
+    # level is the same name, not a substitution, and must keep answering.
+    it "still answers with a workspace class that reopens the core one under its own name" do
+      index_source("class String\n  def shout\n  end\nend\n")
+
+      names = service.members_of(nominal("String"), prefix: "").map(&:name)
+
+      expect(names).to include("shout", "upcase")
     end
 
     it "treats a same-named member from different origins as available across the Union" do

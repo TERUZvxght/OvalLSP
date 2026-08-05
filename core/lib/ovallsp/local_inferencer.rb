@@ -264,6 +264,18 @@ module Ovallsp
     # *separately* because no caller wants both at once: a bare prefix can
     # never be completed by an ivar, and a prefix that opens with `@` can
     # never be completed by a local.
+    # `a || b` yields `a` only when `a` is truthy, so a left-hand `nil` is
+    # exactly the case the right-hand side exists to cover. A left that is
+    # *only* nil contributes nothing at all -- `Types.remove_nil` widens
+    # that to Unknown, which is right for its own callers and would make
+    # `name || "anonymous"` a `String | Unknown` here.
+    def eval_or(node, env)
+      left = eval_type(node.left, env)
+      return eval_type(node.right, env) if left == Types::NIL
+
+      Types.normalize_union([Types.remove_nil(left), eval_type(node.right, env)])
+    end
+
     def capture_scope(env)
       locals = {}
       ivars = {}
@@ -597,6 +609,22 @@ module Ovallsp
       # literals". The element type of a range is deliberately not
       # modelled: `Range` is what every method on it is declared on.
       when Prism::RangeNode then Types::Nominal.new(name: "Range")
+      # A lambda is a literal with exactly one possible class, written two
+      # ways. `proc {}` and `Proc.new {}` are calls and are RBS's
+      # question; `->() {}` and `lambda {}` are this one.
+      when Prism::LambdaNode then Types::Nominal.new(name: "Proc")
+      # `a && b` returns one of its two operands and `a || b` does too, so
+      # the union of both is the honest answer -- not Boolean, which is
+      # what neither returns. Without a case at all, an ordinary default
+      # (`name || "anonymous"`) lost the type it was defaulting.
+      when Prism::AndNode
+        Types.normalize_union([eval_type(node.left, env), eval_type(node.right, env)])
+      # `a || b` yields `a` only when `a` is truthy, so a `nil` on the left
+      # is exactly the case the right-hand side exists to cover -- which
+      # is what makes `name || "anonymous"` a String rather than a
+      # `String | nil`. That idiom is the reason to have this case at all.
+      when Prism::OrNode
+        eval_or(node, env)
       when Prism::RegularExpressionNode, Prism::InterpolatedRegularExpressionNode
         Types::Nominal.new(name: "Regexp")
       when Prism::TrueNode, Prism::FalseNode then Types::Nominal.new(name: "Boolean")
@@ -608,7 +636,11 @@ module Ovallsp
       # value does not render two ways depending on how it was written.
       when Prism::HashNode then Types::Generic.new(name: "Hash", type_arg: Types::UNKNOWN)
       when Prism::ParenthesesNode then eval_type(node.body, env)
-      when Prism::CallNode then eval_call(node, env)
+      # `!x` is a CallNode whose message is `!`, and Ruby guarantees its
+      # class whatever `x` is -- one of the few calls whose return type
+      # needs no lookup at all.
+      when Prism::CallNode
+        node.name == :! ? Types::Nominal.new(name: "Boolean") : eval_call(node, env)
       when Prism::IfNode, Prism::UnlessNode then eval_conditional(node, env)
       when Prism::ConstantReadNode, Prism::ConstantPathNode then eval_constant(node)
       else Types::UNKNOWN

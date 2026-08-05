@@ -238,6 +238,7 @@ module Ovallsp
         when Prism::RangeNode then literal(Types::Nominal.new(name: "Range"))
         when Prism::RegularExpressionNode, Prism::InterpolatedRegularExpressionNode
           literal(Types::Nominal.new(name: "Regexp"))
+        when Prism::LambdaNode then literal(Types::Nominal.new(name: "Proc"))
         when Prism::TrueNode, Prism::FalseNode then literal(Types::Nominal.new(name: "Boolean"))
         when Prism::NilNode then flow(Types::NIL, false)
         # Generic with an unknown element type: otherwise hovering `{}`

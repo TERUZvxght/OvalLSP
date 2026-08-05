@@ -7,6 +7,7 @@ require_relative "../semantic/reference_resolver"
 require_relative "../semantic/receiver_resolution"
 require_relative "../types"
 require_relative "../index/symbol_id"
+require_relative "../index/type_name_resolution"
 
 module Ovallsp
   module Diagnostics
@@ -691,35 +692,18 @@ module Ovallsp
         resolved
       end
 
-      # Whether the index answered a *bare* name that signatures already
-      # declare, with a workspace class that merely shares its last
-      # segment.
-      #
-      # `guessed_type_name?` calls one candidate for a bare name "the
-      # lookup working", which it is -- unless the name is one RBS has a
-      # type for. A workspace `Serializer::Elements::String` then answers
-      # for the `String` a literal produced, and `"hello".upcase` was
-      # reported as unknown while hover at the same position still said
-      # `upcase() -> String`.
-      #
-      # Only for a bare name. A receiver written or inferred as
-      # `Foo::Logger` carries its namespace and is nobody else's answer;
-      # what has no namespace to check is a type that came from a literal
-      # or from inference, which is exactly the population this protects.
-      #
-      # A workspace that genuinely reopens `String` at the top level
-      # resolves to `::String`, which is the same name, so it is not a
-      # substitution -- that shape is 024.13 and is a different question.
+      # Whether the index would answer a *bare* name that signatures
+      # already declare with a workspace class that merely shares its last
+      # segment. `Index::TypeNameResolution` owns the rule; resolution
+      # itself now refuses the substitution, so what this guards is the
+      # one reader that must decline even to *ask* -- a diagnostic about a
+      # receiver the engine has not identified is an assertion, not a
+      # missing answer.
       def shadowed_declared_type?(name, context)
-        return false unless context.signatures
-
         bare = Index::SymbolId.bare_name(name)
-        return false if bare.include?("::")
-
-        resolved = context.workspace_index.resolve_type_name(bare)
-        return false if resolved.nil? || Index::SymbolId.bare_name(resolved) == bare
-
-        rbs_known_constant?(bare, context.signatures)
+        Index::TypeNameResolution.substitution?(
+          bare, context.workspace_index.resolve_type_name(bare), context.signatures
+        )
       end
 
       # "closed" means every ancestor is either a workspace-declared type
