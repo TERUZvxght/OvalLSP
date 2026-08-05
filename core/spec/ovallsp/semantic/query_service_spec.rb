@@ -348,6 +348,27 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       expect(second[:label][0]).to be > first[:label][1]
     end
 
+    # 0.2.1 populated `parameters` for RBS signatures, which made these
+    # labels the thing `activeParameter` points into rather than only
+    # something to read. Two of the four things wrong with them are fixed
+    # here: the block a caller is actually writing was dropped entirely,
+    # so `each` read as taking nothing, and two overloads spelling the
+    # same part list printed twice. The other two -- `-> self`/`-> void`
+    # rendering as `Unknown`, and a method type variable leaking as
+    # `Array[U]` -- are the *type model* rather than the label, and are
+    # recorded as 024.42 rather than changed days before a release.
+    it "names the block a method takes, which is what the caller is writing" do
+      labels = service.signatures_of(nominal("Array"), "each").map { |signature| signature[:label] }
+
+      expect(labels.any? { |label| label.include?("{ |Elem| ... }") }).to be(true), labels.inspect
+    end
+
+    it "does not print the same overload twice" do
+      labels = service.signatures_of(nominal("String"), "upcase").map { |signature| signature[:label] }
+
+      expect(labels).to eq(labels.uniq)
+    end
+
   describe "#explain" do
     it "reports high confidence for a resolved type" do
       document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: "user = User.new\n", version: 1, language_id: "ruby")

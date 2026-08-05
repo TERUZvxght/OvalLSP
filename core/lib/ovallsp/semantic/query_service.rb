@@ -397,7 +397,10 @@ module Ovallsp
           next unless sm
           next unless direct.nil? || sm.direct == direct
 
-          sm.overloads.map { |overload| rbs_signature(method_name, overload) }
+          # Two RBS overloads can spell the same part list -- `upcase` has
+          # two that both read `(Symbol, Symbol) -> String` -- and an
+          # editor showing the same line twice is showing noise.
+          sm.overloads.map { |overload| rbs_signature(method_name, overload) }.uniq { |signature| signature[:label] }
         end.flatten.tap { |result| return nil if result.empty? }
       end
 
@@ -445,7 +448,7 @@ module Ovallsp
           { label: offsets }
         end
         label.delete_suffix!(", ") unless parts.empty?
-        { label: "#{label}) -> #{overload.return_type}", parameters: parameters }
+        { label: "#{label})#{rbs_block_suffix(overload)} -> #{overload.return_type}", parameters: parameters }
       end
 
       def rbs_signature_parts(overload)
@@ -459,6 +462,18 @@ module Ovallsp
         # something a reader of the label can act on.
         parts << "..." if overload.rest_positional || overload.rest_keyword
         parts
+      end
+
+      # The block, written where a caller writes it: after the closing
+      # parenthesis, not as an argument. Dropped entirely until 0.2.1, so
+      # `each` and `map` -- whose whole point is the block -- read as
+      # taking nothing at all.
+      def rbs_block_suffix(overload)
+        return "" unless overload.block_type || overload.block_required
+
+        parameters = overload.block_type.to_s[/\A\((.*?)\)/, 1].to_s
+        body = parameters.empty? ? "..." : "|#{parameters}| ..."
+        overload.block_required ? " { #{body} }" : " [{ #{body} }]"
       end
 
       def each_nominal(type)

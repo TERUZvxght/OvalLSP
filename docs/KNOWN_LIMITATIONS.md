@@ -381,6 +381,21 @@ missed one", so each is narrow on purpose. What that costs a user:
   The G17 row and its example exist now, and 024.14 records what the
   original measurement most likely hit.)
 
+## What the signature popup shows for a stdlib or gem method
+
+Two things, both about the *label* rather than about which method was
+found:
+
+- **A return type RBS writes as `self`, `void` or `untyped` reads
+  `Unknown`**, and a method's own type variable leaks (`map() ->
+  Array[U]`). The engine has one word for "nothing can be concluded from
+  this" and uses it in a place meant to be read by a person, where the
+  word RBS actually wrote would be better (024.42). <!-- documents: 024.42 -->
+- **A call written the way Ruby writes Kernel — `puts(`, `raise(`, with
+  no receiver — gets no popup at all**, while completion offers those
+  same methods. The receiverless path asks what the enclosing class's
+  ancestors declare, and Kernel is not among them (024.43). <!-- documents: 024.43 -->
+
 ## What an editor feature does with a macro-declared method
 
 `attr_accessor :name`, `delegate :title, to: :author`, `enum` and `scope`

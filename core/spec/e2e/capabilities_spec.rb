@@ -247,16 +247,30 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # The row promises `"s"`, `1` and `[1]`, and this hovered a *local*
+    # assigned from one of them -- not a literal at all, and only the
+    # first of the three. Every literal the engine settles outright is
+    # asserted now, on the literal itself.
     it "H4: reports literal types" do
       with_file("app/models/literal_probe.rb", <<~RUBY) do |uri|
         class LiteralProbe
           def run
-            text = "s"
-            text
+            ["s", 1, [1], 1.5, :sym, (1..5), /re/, ->(n) { n }, true]
           end
         end
       RUBY
-        expect(@client.hover_text(uri, 3, 6)).to eq("String")
+        # Columns computed from the source rather than counted by hand:
+        # an off-by-one probe tests nothing and says so in neither
+        # direction, which this project has been caught by three times.
+        line_text = '    ["s", 1, [1], 1.5, :sym, (1..5), /re/, ->(n) { n }, true]'
+        {
+          '"s"' => "String", " 1," => "Integer", "[1]" => "Array[Integer]", "1.5" => "Float",
+          ":sym" => "Symbol", "(1..5)" => "Range", "/re/" => "Regexp", "->(n)" => "Proc", "true" => "Boolean"
+        }.each do |snippet, expected|
+          character = line_text.index(snippet) + (snippet.start_with?(" ") ? 1 : 0)
+          actual = @client.hover_text(uri, 2, character)
+          expect(actual).to eq(expected), "#{snippet.inspect} at #{character} answered #{actual.inspect}"
+        end
       end
     end
   end
@@ -1038,6 +1052,23 @@ RSpec.describe "Extension capabilities", :e2e do
         end
       RUBY
         expect(@client.signature_active_parameter(uri, 4, 16)).to eq(1)
+      end
+    end
+
+    # The row's other half, added when RBS signatures gained the parameter
+    # list an editor needs to highlight one. Only workspace methods
+    # carried it before, so `"abc".sub(` was told which argument the
+    # cursor was on and had nothing to apply it to.
+    it "S4: says which parameter the cursor is on for a method RBS declares" do
+      with_file("app/models/rbs_active_parameter_probe.rb", <<~RUBY) do |uri|
+        class RbsActiveParameterProbe
+          def run
+            "abc".sub("a", "b"
+          end
+        end
+      RUBY
+        expect(@client.signature_active_parameter(uri, 2, 22)).to eq(1)
+        expect(@client.signature_labels(uri, 2, 22).join(" ")).to include("sub(")
       end
     end
   end

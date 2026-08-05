@@ -2467,3 +2467,61 @@ only in `026-0.2.1-review-loop.md` until now -- which is why it is an
 entry: a finding parked in a round's handover is invisible to
 `deferred_findings_spec.rb`, and `DOCUMENTATION_MAP`'s "A known
 limitation" row was therefore unenforced for it.
+
+## 024.42 An RBS signature label says `Unknown` where RBS says `self`, and leaks method type variables
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/signatures/type_converter.rb` (`convert`),
+`core/lib/ovallsp/semantic/query_service.rb` (`rbs_signature`)
+
+Signature help shows `push(...) -> Unknown` for `Array#push`, which RBS
+declares as `-> self`, and `map() -> Array[U]`, where `U` is the method's
+own type variable and means nothing to a reader.
+
+`TypeConverter` maps `self`, `void`, `untyped`, `top` and `bottom` all to
+`Types::UNKNOWN`, which is right for the *type model* — nothing
+downstream can act on any of them — but a signature *label* is prose for
+a human, and "Unknown" is a worse answer than the word RBS actually
+wrote. The label is built from the converted type, so it inherits a
+decision made for a different purpose.
+
+It became visible in 0.2.1 rather than new: populating `parameters` for
+RBS signatures made these labels the thing `activeParameter` points into,
+so people read them.
+
+**Direction:** keep the raw declared return alongside the converted one
+on `Signatures::Overload`, and render the label from the raw. Not the
+converter — every other reader of it is right to get Unknown. Deferred
+rather than done because it touches the shape a signature is stored in,
+and 0.2.1 was days from release; the two label defects that needed no
+model change (a dropped block, duplicate overloads) are fixed.
+
+## 024.43 Signature help answers nothing for a receiverless stdlib call
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`method_signature_help`),
+`core/lib/ovallsp/semantic/query_service.rb` (`signature_owners`)
+
+`puts(` answers `{signatures: []}` while bare-prefix completion offers
+`puts` from its own Kernel source. The receiverless path resolves the
+enclosing `self` and asks its ancestor chain; `lookup_owners` walks what
+the workspace declares, and Kernel is not in it — so every Kernel method
+called the way Ruby actually calls them has no signature help.
+
+Round 22 found S1's receiverless half, round 23 fixed it, and this is
+S2's: the same row shape, one release later, for the stdlib source
+instead of the workspace one.
+
+**Direction:** the receiverless chain should end in `Kernel` the way
+`PrefixCompletion#kernel_methods` already does — one source of "what a
+receiverless call can reach", read by both, rather than each deciding.
