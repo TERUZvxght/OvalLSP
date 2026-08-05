@@ -109,13 +109,17 @@
           </p>
         </div>
         <div class="card">
-          <h3>Ruby 3.3 or 3.4, already installed</h3>
+          <h3>Ruby 3.4.x, already installed</h3>
           <p>
             Discoverable via an explicit <code>ovallsp.rubyExecutablePath</code>, or via
             <a href="https://mise.jdx.dev/">mise</a>, <a href="https://asdf-vm.com/">asdf</a>,
             <a href="https://github.com/rbenv/rbenv">rbenv</a> or
-            <a href="https://brew.sh/">Homebrew</a> (<code>/opt/homebrew</code>). CI runs the
-            full Core suite on both; development and the release build use 3.4 (3.4.5, 3.4.7).
+            <a href="https://brew.sh/">Homebrew</a> (<code>/opt/homebrew</code>). Tested against
+            3.4.5 and 3.4.7. <strong>3.4 exactly</strong>: the VSIX bundles native extensions
+            compiled for the version it was built under and refuses any other, so a 3.3
+            installation gets a mismatch message rather than a degraded experience. The Core's
+            own source does support 3.3 — CI runs its suite on both — which matters only if you
+            run the Core from a checkout.
           </p>
         </div>
         <div class="card">

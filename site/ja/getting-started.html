@@ -103,12 +103,12 @@
           </p>
         </div>
         <div class="card">
-          <h3>インストール済みの Ruby 3.3 または 3.4</h3>
+          <h3>インストール済みの Ruby 3.4.x</h3>
           <p>
             明示的な <code>ovallsp.rubyExecutablePath</code>、あるいは
             <a href="https://mise.jdx.dev/">mise</a>、<a href="https://asdf-vm.com/">asdf</a>、
             <a href="https://github.com/rbenv/rbenv">rbenv</a>、
-            <a href="https://brew.sh/">Homebrew</a>（<code>/opt/homebrew</code>）のいずれかで検出できる必要があります。CI は Core のスイート全体を両方で実行し、開発とリリースビルドは 3.4（3.4.5・3.4.7）です。
+            <a href="https://brew.sh/">Homebrew</a>（<code>/opt/homebrew</code>）のいずれかで検出できる必要があります。検証しているのは 3.4.5 と 3.4.7 です。<strong>3.4 ちょうど</strong>である必要があります。VSIX はビルド時のバージョン向けにコンパイルされたネイティブ拡張を同梱し、それ以外を拒否するため、3.3 の環境では機能が縮退するのではなく不一致のメッセージが出ます。Core のソース自体は 3.3 にも対応していて CI も両方で走らせていますが、それが意味を持つのはチェックアウトから Core を動かす場合だけです。
           </p>
         </div>
         <div class="card">
