@@ -141,4 +141,63 @@ RSpec.describe Ovallsp::Cache::Store do
       end
     end
   end
+  # Every component of the workspace digest -- a Ruby upgrade, a `bundle
+  # install`, an RBS change, and now an OvalLSP release -- mints a *new*
+  # generation directory and abandons the old one. Nothing ever removed
+  # the abandoned ones: `DEFAULT_MAX_ENTRIES` prunes entries within one
+  # directory and knows nothing about its siblings. Measured on a
+  # developer machine before this: 28,643 directories, 2.8 GB.
+  #
+  # Adding the version to the key makes that unbounded growth a *release
+  # cadence*, which is why the sweep lands with it rather than after it.
+  describe ".prune_generations" do
+    def generation(root, name, age_days)
+      dir = File.join(root, name)
+      FileUtils.mkdir_p(dir)
+      File.write(File.join(dir, "e.cache"), "x")
+      time = Time.now - (age_days * 24 * 60 * 60)
+      File.utime(time, time, dir)
+      dir
+    end
+
+    it "keeps the current generation however old it looks" do
+      Dir.mktmpdir do |root|
+        current = generation(root, "current", 400)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 1)
+
+        expect(Dir.exist?(current)).to be(true)
+      end
+    end
+
+    it "removes the least recently used generations beyond the bound" do
+      Dir.mktmpdir do |root|
+        current = generation(root, "current", 0)
+        recent = generation(root, "recent", 1)
+        old = generation(root, "old", 30)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 2)
+
+        expect(Dir.exist?(current)).to be(true)
+        expect(Dir.exist?(recent)).to be(true)
+        expect(Dir.exist?(old)).to be(false)
+      end
+    end
+
+    it "leaves a root it cannot read alone rather than raising" do
+      expect { described_class.prune_generations(cache_root: "/nonexistent-cache-root", current: "/x", keep: 2) }
+        .not_to raise_error
+    end
+
+    it "removes nothing when the bound is not reached" do
+      Dir.mktmpdir do |root|
+        current = generation(root, "current", 0)
+        other = generation(root, "other", 5)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(other)).to be(true)
+      end
+    end
+  end
 end

@@ -2,6 +2,7 @@
 
 require "digest"
 require "prism"
+require_relative "../version"
 
 module Ovallsp
   module Cache
@@ -25,14 +26,34 @@ module Ovallsp
       # renamed/removed Data field, a changed Declaration/SymbolId
       # shape, ...) -- every entry under the previous schema version's
       # directory is simply abandoned, never migrated.
+      #
+      # It is not the version that protects the *contents*: see
+      # `ovallsp=` below.
       SCHEMA_VERSION = 1
 
       module_function
 
+      # `ovallsp_version` is in the key because a cache entry is not data,
+      # it is the *output of this build's parser*, and the file's own
+      # content hash cannot notice that the rules changed. 0.2.1 moved the
+      # position a call site records its receiver at -- the release's
+      # largest fix -- and for every file already in an upgrading user's
+      # cache the old position was served back unchanged: same bytes, same
+      # Ruby, same Prism, same `Gemfile.lock`. On a real Rails application
+      # that left one wrong diagnostic that survived restarts and
+      # `Re-index Workspace` alike, and the only cure was deleting
+      # `~/.cache/ovallsp` by hand.
+      #
+      # `SCHEMA_VERSION` did not cover it and should not: it is about
+      # whether an entry can be *loaded*, this is about whether it is
+      # still *true*. Keyed on the constant rather than on a remembered
+      # bump, so a release cannot forget.
       def workspace_digest(workspace_root:, gemfile_lock_digest: nil, rbs_digest: nil, settings_digest: nil,
-                            ruby_version: RUBY_VERSION, prism_version: Prism::VERSION)
+                            ruby_version: RUBY_VERSION, prism_version: Prism::VERSION,
+                            ovallsp_version: Ovallsp::VERSION)
         components = [
           "schema=#{SCHEMA_VERSION}",
+          "ovallsp=#{ovallsp_version}",
           "ruby=#{ruby_version}",
           "prism=#{prism_version}",
           "workspace=#{canonical_root(workspace_root)}",

@@ -9,9 +9,17 @@ module Ovallsp
     # `<cache_root>/<workspace_digest>/<sha256(path)>.cache` -- never a
     # source of truth on its own ("cacheをsource of truthにすること" is
     # explicitly out of scope): every read is paired with the live file's
-    # own current content hash by the caller (ColdIndexer), so a stale or
-    # entirely-wrong cached entry can only ever cost a wasted re-parse,
-    # never produce an incorrect result.
+    # own current content hash by the caller (ColdIndexer).
+    #
+    # That pairing used to be described here as making a stale entry cost
+    # "a wasted re-parse, never an incorrect result", and that was wrong.
+    # A content hash answers whether the *file* changed; it cannot answer
+    # whether the code that produced the summary did. 0.2.1 moved the
+    # position a call site records its receiver at, and every file already
+    # in an upgrading user's cache kept answering with the old one --
+    # unchanged bytes, unchanged Ruby, unchanged Prism. What makes the
+    # claim true is the *key*: `Cache::Key` carries `Ovallsp::VERSION`, so
+    # a build never reads another build's summaries at all.
     #
     # Every failure mode here -- an unwritable cache directory, a
     # corrupted/truncated cache file, a `Marshal.load` of data from an
@@ -44,6 +52,47 @@ module Ovallsp
       # comfortably tens of thousands of files, not entries in the
       # hundreds of thousands, so this default has real headroom.
       DEFAULT_MAX_ENTRIES = 20_000
+
+      # How many generation directories to keep under the cache root.
+      # A generation is abandoned, never migrated, whenever anything in
+      # `Cache::Key` changes -- a Ruby upgrade, a `bundle install`, an RBS
+      # change, an OvalLSP release -- and until 0.2.1 nothing ever removed
+      # one. `DEFAULT_MAX_ENTRIES` bounds the entries *inside* a
+      # directory and knows nothing about its siblings, so the root grew
+      # for as long as the extension was installed: 28,643 directories and
+      # 2.8 GB on one developer machine.
+      #
+      # Eight is generous for the shapes that actually recur -- switching
+      # between a few projects, or between two Ruby versions -- and small
+      # enough that the abandoned ones do not outlive their usefulness by
+      # months.
+      DEFAULT_MAX_GENERATIONS = 8
+
+      # Removes the least recently used generation directories under
+      # `cache_root`, keeping `keep` of them and always the current one.
+      # By directory mtime, like `#prune_if_over_bound`: precise LRU is
+      # not worth its bookkeeping for a warm-start optimisation, and a
+      # generation still in use is touched every time an entry is written
+      # into it.
+      #
+      # Every failure is swallowed, for the same reason every other
+      # failure in this class is: a cache that cannot be tidied is still a
+      # correct cache, and a Core that will not start because of one is
+      # not.
+      def self.prune_generations(cache_root:, current:, keep: DEFAULT_MAX_GENERATIONS)
+        entries = Dir.children(cache_root)
+                     .map { |name| File.join(cache_root, name) }
+                     .select { |path| File.directory?(path) }
+        return if entries.length <= keep
+
+        current = File.expand_path(current)
+        by_age = entries.sort_by { |path| -File.mtime(path).to_f }
+        by_age.reject { |path| File.expand_path(path) == current }
+              .drop(keep - 1)
+              .each { |path| FileUtils.remove_entry(path) }
+      rescue StandardError
+        nil
+      end
 
       # `cache_dir: nil` explicitly disables the cache (never even tries
       # to create anything) -- used when a caller couldn't determine a

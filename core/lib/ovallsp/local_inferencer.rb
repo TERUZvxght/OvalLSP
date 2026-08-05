@@ -88,7 +88,11 @@ module Ovallsp
     # there (name String => Types value) and the type of `self`, or nil
     # for `self` at the top level of a file, where there is no useful
     # enclosing type to offer members from.
-    Scope = Data.define(:locals, :self_type)
+    Scope = Data.define(:locals, :ivars, :self_type) do
+      def initialize(ivars: {}, **rest)
+        super(ivars: ivars, **rest)
+      end
+    end
 
     # The environment `locate` builds on its way to `offset`, rather than
     # the type it arrives at. Completion from a bare prefix needs the
@@ -108,9 +112,9 @@ module Ovallsp
       @capturing_scope = true
 
       locate(result.value.statements, offset, {})
-      @scope_capture || Scope.new(locals: {}, self_type: nil)
+      @scope_capture || Scope.new(locals: {}, ivars: {}, self_type: nil)
     rescue BudgetExceeded, StandardError
-      @scope_capture || Scope.new(locals: {}, self_type: nil)
+      @scope_capture || Scope.new(locals: {}, ivars: {}, self_type: nil)
     ensure
       @capturing_scope = false
       @scope_capture = nil
@@ -255,12 +259,19 @@ module Ovallsp
     # so that "an ordinary #infer_at builds no snapshots" is a fact a test
     # can state directly. The saving is real: this copies the whole
     # environment, and `locate` runs once per step of the descent.
+    # Locals and instance variables live in the same environment and are
+    # told apart by the `@` their key carries. They are handed back
+    # *separately* because no caller wants both at once: a bare prefix can
+    # never be completed by an ivar, and a prefix that opens with `@` can
+    # never be completed by a local.
     def capture_scope(env)
-      locals = env.each_with_object({}) do |(key, value), acc|
+      locals = {}
+      ivars = {}
+      env.each do |key, value|
         name = key.to_s
-        acc[name] = value unless name.start_with?("@")
+        (name.start_with?("@") ? ivars : locals)[name] = value
       end
-      @scope_capture = Scope.new(locals: locals, self_type: @self_type_stack.last)
+      @scope_capture = Scope.new(locals: locals, ivars: ivars, self_type: @self_type_stack.last)
     end
 
     # Inclusive of `end_offset`, which is one past the node's last

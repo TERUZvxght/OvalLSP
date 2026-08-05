@@ -443,6 +443,66 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
     end
   end
 
+  # Silence after `@` was only ever half the answer. Offering the
+  # workspace there is wrong -- `@UserProfile` is not a thing anyone
+  # writes -- but the instance variables of the class you are in are
+  # exactly what belongs, and this offered nothing at all, so the editor
+  # fell back to matching words in the buffer and proposed `article`
+  # without its sigil. Reported from a real editing session.
+  describe "after an `@`" do
+    IVAR_SOURCE = <<~RUBY
+      class ArticlesController
+        def show
+          @article = Article.new
+          @articles = Article.all
+          local_one = 1
+          @aHERE
+        end
+      end
+    RUBY
+
+    it "offers the instance variables assigned in this method, with their sigils" do
+      labels = complete(IVAR_SOURCE)[:items].map { |item| item[:label] }
+
+      expect(labels).to include("@article", "@articles")
+    end
+
+    it "offers nothing that cannot be written after an `@`" do
+      labels = complete(IVAR_SOURCE, extra_opens: did_open("file:///p.rb", "class ArticleProfile; end\n"))[:items]
+               .map { |item| item[:label] }
+
+      expect(labels).to all(start_with("@"))
+      expect(labels).not_to include("ArticleProfile", "local_one")
+    end
+
+    it "offers every instance variable when only the sigil has been typed" do
+      source = IVAR_SOURCE.sub("@aHERE", "@HERE")
+
+      expect(complete(source)[:items].map { |i| i[:label] }).to include("@article", "@articles")
+    end
+
+    it "carries the inferred type as the detail, the way a local does" do
+      item = complete(IVAR_SOURCE)[:items].find { |i| i[:label] == "@article" }
+
+      expect(item[:detail]).to eq("Article")
+    end
+
+    it "leaves the other sigils silent" do
+      expect(complete(IVAR_SOURCE.sub("@aHERE", "$aHERE"))[:items]).to be_empty
+    end
+
+    it "is a trigger character, so the popup opens on the `@` itself" do
+      input =
+        frame(jsonrpc: "2.0", id: 1, method: "initialize", params: { rootUri: nil, capabilities: {} }) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+
+      triggers = sent_messages.first[:result][:capabilities][:completionProvider][:triggerCharacters]
+      expect(triggers).to include("@")
+    end
+  end
+
   # `def` the keyword, not the three letters: `predef` is an ordinary
   # method call, and suppressing the workspace source for every
   # identifier ending in "def" would be a silent hole.

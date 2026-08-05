@@ -102,19 +102,30 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
   # hash literal, or inside a string are not argument separators of this
   # call.
   describe "which parameter the cursor is on" do
-    def active_parameter_for(argument_text)
+    # The cursor is at the end of the written text, wherever that lands --
+    # `argument_text` may span lines, and a call left open across a line
+    # break is the ordinary case for signature help.
+    def signature_help_for(argument_text)
       source = "class Widget\n  def build(name, count)\n  end\nend\n\nWidget.new.build(#{argument_text}\n"
+      lines = source.lines
+      line = lines.length - 1
       input =
         did_open("file:///widget.rb", source) +
         frame(
           jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
           params: { textDocument: { uri: "file:///widget.rb" },
-                    position: { line: 5, character: 17 + argument_text.length } }
+                    position: { line: line, character: lines[line].chomp.length } }
         ) +
         frame(jsonrpc: "2.0", method: "exit", params: nil)
 
       build_server(input).run
-      sent_messages.first[:result][:activeParameter]
+      sent_messages.first[:result]
+    end
+
+    def active_parameter_for(argument_text) = signature_help_for(argument_text)[:activeParameter]
+
+    def signature_labels_for(argument_text)
+      signature_help_for(argument_text).fetch(:signatures).map { |signature| signature[:label] }
     end
 
     it "is the first before any comma" do
@@ -139,6 +150,34 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
 
     it "ignores a comma inside a string" do
       expect(active_parameter_for('"a, b"')).to eq(0)
+    end
+
+    # The scan that *finds* the call and the scan that counts commas
+    # inside it are two questions about the same text, and 0.2.1 shipped
+    # them as two scanners that disagreed about what a paren is: the
+    # comma count skipped string literals, the call scan did not. So an
+    # unpaired paren in a string -- `"smile :("`, `sprintf("%d)", x)`, a
+    # half-typed one -- made the popup vanish, and an unpaired `(` inside
+    # a nested call's argument made it answer with the *inner* call, which
+    # is the wrong answer where 0.2.0 had silence.
+    it "finds the call when an earlier argument holds an unpaired paren in a string" do
+      expect(signature_labels_for('"Destroy (permanently", 2')).to include("build(name, count)")
+    end
+
+    it "finds the call when an earlier argument holds an unpaired close paren in a string" do
+      expect(signature_labels_for('"a)b", 2')).to include("build(name, count)")
+    end
+
+    it "does not answer with an inner call because of a paren inside its string argument" do
+      expect(signature_labels_for('label("x(") , 2')).to include("build(name, count)")
+    end
+
+    it "ignores a paren in a trailing comment" do
+      expect(signature_labels_for("1, # (not a call\n    2")).to include("build(name, count)")
+    end
+
+    it "counts no comma written inside a comment" do
+      expect(active_parameter_for("1, # a, comment\n    2")).to eq(1)
     end
   end
 

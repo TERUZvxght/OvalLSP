@@ -285,6 +285,8 @@ module Ovallsp
         respond(id, with_index_snapshot { signature_help_result(message[:params]) })
       when "textDocument/references"
         respond(id, with_index_snapshot { references_result(message[:params]) })
+      when "textDocument/documentHighlight"
+        respond(id, with_index_snapshot { document_highlight_result(message[:params]) })
       when "textDocument/prepareRename"
         respond(id, with_index_snapshot { prepare_rename_result(message[:params]) })
       when "textDocument/rename"
@@ -1285,7 +1287,15 @@ module Ovallsp
         workspace_root: @workspace_root, gemfile_lock_digest: gemfile_lock_digest, rbs_digest: rbs_digest,
         settings_digest: nil
       )
-      Cache::Store.new(cache_dir: File.join(root, "ovallsp", digest))
+      cache_root = File.join(root, "ovallsp")
+      cache_dir = File.join(cache_root, digest)
+      store = Cache::Store.new(cache_dir: cache_dir)
+      # After the directory exists, so the current generation is never the
+      # one swept. Once per start: a generation is only minted when the
+      # key changes, which is a Ruby upgrade, a `bundle install` or a
+      # release, not something that happens mid-session.
+      Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir)
+      store
     rescue StandardError => e
       @logger.error("failed to initialize persistent cache; continuing without one: #{e.class}: #{e.message}")
       Cache::Store.new(cache_dir: nil)
@@ -2041,7 +2051,7 @@ module Ovallsp
     # name, so this cannot jump to an unrelated method that happens to
     # share the word.
     def receiverless_definitions(document, position, word)
-      return [] if receiver_dot_before?(document, position)
+      return [] unless receiverless_call_at?(document, position)
 
       self_type = @query_service.scope_at(document, position)&.self_type
       return [] unless self_type
@@ -2105,6 +2115,47 @@ module Ovallsp
       ensure_reference_index_current
       @reference_index.references(symbol_id, minimum_confidence: :high).map { |r| { uri: r.uri, range: r.location } }
     end
+
+    # The other uses of whatever is under the cursor, within this one file
+    # — the boxes an editor draws while you rest on an identifier.
+    #
+    # Answering matters more than it looks. A client with no provider does
+    # not leave the identifier unmarked: VS Code falls back to matching the
+    # word as *text*, and `@` is not a word character, so on a scaffolded
+    # controller resting in `@articles` boxed the word `articles` inside
+    # every `# GET /articles` comment, and resting in a local named
+    # `article` boxed every `@article` in the file. Both were reported from
+    # a real session, and both are cases where a word pattern cannot help:
+    # only resolution can say that `article` and `@article` are different
+    # symbols.
+    #
+    # The same question Find References asks — deliberately, so the two can
+    # never disagree about what the cursor is on — narrowed to this
+    # document and with the declaration site included, which a *usage*
+    # index does not carry.
+    def document_highlight_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return [] unless document && summary
+
+      symbol_id, = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
+      return [] unless symbol_id
+
+      ensure_reference_index_current
+      ranges = @reference_index.references(symbol_id, minimum_confidence: :high)
+                               .select { |reference| reference.uri == uri }
+                               .map(&:location)
+      declaration = summary.declarations.find { |d| d.symbol_id == symbol_id }
+      ranges = ranges + [declaration.name_location || declaration.location] if declaration
+
+      ranges.uniq.map { |range| { range: range, kind: HIGHLIGHT_TEXT } }
+    end
+
+    # LSP DocumentHighlightKind.Text. Read/Write (2/3) would be a second
+    # claim — which of these occurrences assigns — and nothing here
+    # distinguishes them; a wrong one would colour an assignment as a read.
+    HIGHLIGHT_TEXT = 1
 
     def reference_symbol_id_at(document, summary, uri, position)
       candidate = summary.reference_candidates.find { |c| position_within?(c.location, position) }
@@ -2232,12 +2283,22 @@ module Ovallsp
       if receiver_dot_before?(document, position)
         return { isIncomplete: false, items: member_completion_items(document, position, prefix) }
       end
+      # `@` is the one sigil with an answer of its own: the instance
+      # variables in scope, which is about the most common thing anyone
+      # types in a Rails controller or view. Silence here was only half
+      # right -- offering the workspace wrote `@UserProfile`, but offering
+      # nothing let the editor fall back to matching words in the buffer
+      # and propose `article` for `@a`, without its sigil.
+      ivar_prefix = ivar_prefix_at_position(document, position)
+      if ivar_prefix
+        result = @prefix_completion.ivar_items(document: document, position: position, prefix: ivar_prefix)
+        return { isIncomplete: result.incomplete, items: result.items }
+      end
+
       # A bare identifier is what the workspace and Kernel sources answer
-      # about. `@user`, `$stdout`, `:symbol` and the name in a `def` are
-      # not bare identifiers, and each was answered with every constant
-      # starting with the same letters -- accepting one of which writes
-      # `@UserProfile`. `@` is the one that matters: typing it is about
-      # the most common thing anyone does in a Rails controller or view.
+      # about. `$stdout`, `:symbol` and the name in a `def` are not bare
+      # identifiers, and each was answered with every constant starting
+      # with the same letters.
       return { isIncomplete: false, items: [] } if bound_prefix_before?(document, position)
 
       route_items =
@@ -2341,36 +2402,24 @@ module Ovallsp
       return 0 unless range
 
       text = document.text
+      code = code_offsets(document)
       cursor = document.position_to_char_offset(position)
       index = 0
       depth = 0
       offset = range.end + 1
       while offset < cursor
-        case text[offset]
-        when "(", "[", "{" then depth += 1
-        when ")", "]", "}" then depth -= 1
-        when "," then index += 1 if depth.zero?
-        when '"', "'" then offset = string_literal_end(text, offset, cursor)
+        if code.include?(offset)
+          case text[offset]
+          when "(", "[", "{" then depth += 1
+          when ")", "]", "}" then depth -= 1
+          when "," then index += 1 if depth.zero?
+          end
         end
         offset += 1
       end
       index
     end
 
-    # The offset of the quote that closes the literal opening at `start`,
-    # or `limit` if the cursor is still inside it — an unterminated string
-    # is the normal state of a half-written argument, and scanning on past
-    # the cursor would let a later quote in the file close it.
-    def string_literal_end(text, start, limit)
-      quote = text[start]
-      offset = start + 1
-      while offset < limit
-        return offset if text[offset] == quote
-        offset += 1 if text[offset] == "\\"
-        offset += 1
-      end
-      limit
-    end
 
     def route_signature_help(method_name)
       helper = @route_registry.find_by_method_name(method_name)
@@ -2438,11 +2487,19 @@ module Ovallsp
       # answered nothing. 0.2.0 gave that path a receiver (the enclosing
       # `self`) and turned silence into a wrong answer, which is the trade
       # this project takes the other way round.
+      #
+      # Over *code* only. Counting raw characters made `takes("smile :(",`
+      # walk past the real call and answer nothing, and
+      # `takes(label("x("), ` answer with `label` -- silence turned into a
+      # wrong answer by the same depth count that was added to remove one.
+      code = code_offsets(document)
       depth = 0
       while idx >= 0
-        case text[idx]
-        when ")" then depth += 1
-        when "(" then (depth.zero? ? break : depth -= 1)
+        if code.include?(idx)
+          case text[idx]
+          when ")" then depth += 1
+          when "(" then (depth.zero? ? break : depth -= 1)
+          end
         end
         idx -= 1
       end
@@ -2459,6 +2516,61 @@ module Ovallsp
     def call_name_position(document, position)
       range = enclosing_call_name_range(document, position)
       range && document.char_offset_to_position(range.begin)
+    end
+
+    # The character offsets of this document that are *code* — outside any
+    # string or character literal and outside any `#` comment.
+    #
+    # One answer, shared by the two scans signature help runs, because
+    # they are two questions about the same text and 0.2.1 shipped them
+    # disagreeing: the comma count skipped strings, the scan that finds
+    # the call did not, so `takes("a, b(", ` counted right and looked in
+    # the wrong place. A single `#` in a string, or a single quote in a
+    # comment, is enough to make two scanners diverge, so there is one.
+    #
+    # Line by line, and each line read forwards, because a quote cannot be
+    # classified backwards: whether `"` opens or closes depends on how
+    # many came before it. A string that spans lines (a heredoc, a `%w[]`
+    # across lines) is therefore read as ending at its line — wrong, but
+    # wrong in the direction the old code was already wrong in, and
+    # signature help does not reach across one.
+    #
+    # Cached per document version: signature help runs on every keystroke
+    # inside an argument list, and this is O(file).
+    def code_offsets(document)
+      key = [document.uri, document.version, document.text.length]
+      return @code_offsets_value if @code_offsets_key == key
+
+      @code_offsets_key = key
+      @code_offsets_value = compute_code_offsets(document.text)
+    end
+
+    def compute_code_offsets(text)
+      offsets = []
+      offset = 0
+      text.each_line do |line|
+        quote = nil
+        index = 0
+        while index < line.length
+          char = line[index]
+          if quote
+            if char == "\\"
+              index += 1
+            elsif char == quote
+              quote = nil
+            end
+          elsif char == '"' || char == "'"
+            quote = char
+          elsif char == "#"
+            break
+          else
+            offsets << (offset + index)
+          end
+          index += 1
+        end
+        offset += line.length
+      end
+      offsets.to_set
     end
 
     # If `position` sits on an identifier immediately preceded by `.`
@@ -2541,6 +2653,22 @@ module Ovallsp
       return nil if left == right
 
       text[left...right]
+    end
+
+    # The instance-variable prefix under the cursor, sigil included, or nil
+    # if the cursor is not writing one. `@@` is a class variable and takes
+    # the same path -- the environment keys it the same way.
+    def ivar_prefix_at_position(document, position)
+      text = document.text
+      offset = document.position_to_char_offset(position)
+
+      left = offset
+      left -= 1 while left.positive? && word_char?(text[left - 1])
+      return nil unless left.positive? && text[left - 1] == "@"
+
+      left -= 1
+      left -= 1 if left.positive? && text[left - 1] == "@"
+      text[left...offset]
     end
 
     def word_prefix_at_position(document, position)
@@ -3152,9 +3280,10 @@ module Ovallsp
           documentSymbolProvider: true,
           definitionProvider: true,
           referencesProvider: true,
+          documentHighlightProvider: true,
           renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
-          completionProvider: { triggerCharacters: ["."], resolveProvider: true },
+          completionProvider: { triggerCharacters: [".", "@"], resolveProvider: true },
           semanticTokensProvider: {
             legend: { tokenTypes: SemanticTokens::LEGEND, tokenModifiers: SemanticTokens::MODIFIERS },
             full: true
@@ -3252,9 +3381,38 @@ module Ovallsp
     # than fall back to the enclosing class, or `thing.article_params`
     # would be answered from the file it is written in.
     def enclosing_self_type(document, position)
-      return nil if receiver_dot_before?(document, position)
+      return nil unless receiverless_call_at?(document, position)
 
       @query_service.scope_at(document, position)&.self_type
+    end
+
+    # Whether the cursor is on the *message* of a call that was written
+    # with no receiver -- `article_params`, not `thing.article_params` and
+    # not the word `article_params` occurring in a comment.
+    #
+    # The question used to be "is there a `.` immediately before this
+    # word", which every word in the file answers no to. Hover, go to
+    # definition and signature help each took that as licence to look the
+    # word up as a method on the enclosing `self`, so resting on prose
+    # inside a comment, on the contents of a string, on a parameter name
+    # in a `def`, or on a local variable sharing a name with a method
+    # opened a popup asserting a call that is not there. Ruby's own rule
+    # settles the last of those outright: a local in scope always wins
+    # over a same-named method.
+    #
+    # `ParserService` already records every call site with its message
+    # range and whether it had a receiver -- the same records Find
+    # References resolves -- so this reads the answer instead of guessing
+    # at it. A local read is a `LocalVariableReadNode` and produces no
+    # call candidate at all; so do a comment, a string's contents and a
+    # parameter name.
+    def receiverless_call_at?(document, position)
+      summary = @file_summaries[document.uri] || @parser_service.summarize(document)
+      summary.reference_candidates.any? do |candidate|
+        candidate.kind == :method_call && candidate.receiver.nil? && position_within?(candidate.location, position)
+      end
+    rescue StandardError
+      false
     end
 
     def hover_lines(document, position, type)
