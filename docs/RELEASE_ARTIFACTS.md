@@ -68,6 +68,14 @@ its own, and 0.1.15 is those corrections. Because neither shipped, no
 user was ever on the intermediate state — a 0.1.13 install upgrades
 straight to 0.2.0 and receives all three at once.
 
+## No GitHub Release until 1.0.0
+
+Every version above is a git tag with no GitHub Release behind it, and
+that is deliberate through 0.x — the changelog is the release note, and a
+Release would be a third copy of it. `docs/PUBLISHING.md` records the
+decision and what changes at 1.0.0, where every tag gets one and its body
+carries the SHA-256 from this table.
+
 ## After the next publish
 
 `release.sh` prints the row to add here as its last line. Add it in the

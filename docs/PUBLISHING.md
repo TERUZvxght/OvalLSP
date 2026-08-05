@@ -104,6 +104,10 @@ Both are about the *environment* axis rather than the feature axis. New
 features arrive in minor releases and do not bring 1.0.0 closer; removing
 the asterisks from the environments does.
 
+One process change rides along with 1.0.0 rather than gating it: from
+that release every tag gets a GitHub Release. See "GitHub Releases: none
+until 1.0.0" below for why not before.
+
 A Core the extension did *not* build is deliberately exempt:
 
 | Core | Version rule | Judged on |
@@ -194,6 +198,33 @@ Initial publish, and any later republishing under a new major scope
 (e.g. adding another platform target), follow this same approval
 sequence — a green checklist is a precondition for asking, not a
 substitute for asking.
+
+## GitHub Releases: none until 1.0.0
+
+There is no GitHub Release for any tag, and through 0.x there will not
+be. That is a decision, not an oversight — it was noticed while 0.2.0 was
+being published and left as it is deliberately.
+
+Both changelogs are the release note. They live in the repository, they
+ship *inside* the VSIX, and the Marketplace renders `CHANGELOG.md` on the
+extension's own page. A GitHub Release would be a third copy of the same
+text, and this project's own rule — the one `docs/DOCUMENTATION_MAP.md`
+opens with — is that a fact restated in several places will be wrong in
+one of them. Through 0.x nobody is served well enough by the third copy
+to pay that.
+
+**From 1.0.0 onward, every tag gets a GitHub Release.** What changes at
+1.0.0 is not the amount of text but who arrives and from where. 1.0.0 is
+where the platform matrix is verified and a plain Ruby project is
+guaranteed (024.R1, 024.R4), so people will reach a tag from outside the
+Marketplace — a link, a dependency scanner, a security question about a
+specific version — and expect to see what that version contains and what
+its artifact hashes to without installing anything first. That is what a
+Release is for, and it is worth the third copy then.
+
+When that starts, the body should point at the changelog entry rather
+than restate it, and carry the SHA-256 from
+[`docs/RELEASE_ARTIFACTS.md`](RELEASE_ARTIFACTS.md).
 
 ## Credentials
 
