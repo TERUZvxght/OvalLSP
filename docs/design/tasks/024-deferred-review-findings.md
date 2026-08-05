@@ -1241,6 +1241,9 @@ reopen `OpenSSL::Cipher`.
 `contains?` itself is still inclusive, and the entry stays open for it.
 What is fixed is one caller that had been compensating for it wrongly.
 
+`docs/design/tasks/026-0.2.1-review-loop.md` carries what round 23 found
+and has not fixed, including several entries that overlap this one.
+
 Two things about how this survived twenty-two rounds are worth keeping:
 
 - **The document's own user-facing half described a different

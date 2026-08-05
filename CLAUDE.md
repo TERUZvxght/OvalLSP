@@ -129,6 +129,27 @@ impact: rounds 1–7 each found something that changed what the engine
 answers; round 8 found five things and none of them did. That is the
 signal worth acting on, and it is a different question from the count.
 
+## A measurement is a claim, and it needs the same care as a test
+
+Three corpus comparisons during the 0.2.x work produced confident false
+results. None was subtle, each would have changed a decision, and the
+count of findings each invented is recorded in
+`docs/design/tasks/026-0.2.1-review-loop.md`:
+
+- a diff computed from a file **still being written** — 79 invented;
+- a diff between two runs over **different corpora**, one of which
+  included this repository's own `core/lib` — 10 invented;
+- a `cd` in a compound command that **persisted**, so both "before" and
+  "after" ran from the same worktree — reported the fix as doing nothing.
+
+Before reading any diff: confirm both sides finished, confirm both sides
+were given the identical corpus, and confirm each side ran the code you
+think it ran. Print the thing you are asserting rather than assuming it.
+
+**And when a measurement disagrees with a spec you have already watched
+fail, the measurement is wrong until proven otherwise.** That is what
+caught the third one; nothing about re-reading the numbers would have.
+
 ## Documentation is part of the change (mandatory)
 
 Before finishing any change a user could notice, open
