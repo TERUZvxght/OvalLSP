@@ -150,7 +150,11 @@ Before treating this as a release candidate:
 
 1. Run `vsce ls --tree` and review the full file list — check for
    absolute paths, local usernames, or anything not meant to ship.
-2. Compute and record the VSIX's SHA-256.
+2. Compute the VSIX's SHA-256 and record it in
+   [`docs/RELEASE_ARTIFACTS.md`](RELEASE_ARTIFACTS.md). `release.sh` prints
+   the row to paste. This step existed without a destination from the
+   first Preview until 0.2.0, which is why sixteen releases have a hash
+   nobody kept.
 3. Run `ruby scripts/vsix_semantic_smoke.rb <path-to-unpacked-vsix>/extension`
    against the packaged output.
 4. Confirm `docs/RELEASE_CHECKLIST.md`'s gate items all pass.

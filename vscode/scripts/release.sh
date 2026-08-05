@@ -137,3 +137,15 @@ echo "-- vsce publish --packagePath \"$VSIX_PATH\" --pre-release --"
 VSCE_PAT="$VSCE_PAT" npx @vscode/vsce publish --packagePath "$VSIX_PATH" --pre-release
 
 echo "== release.sh: published $PUBLISHER.$NAME v$VERSION =="
+
+# The hash is worth nothing unmatched against anything later, and
+# `docs/PUBLISHING.md` has asked for it to be "recorded" since the first
+# Preview without ever saying where -- so for sixteen tags it was printed
+# and lost. Printed here in the exact shape the table takes, as the last
+# thing on screen, so recording it is a paste rather than a task.
+echo
+echo "Add this row to the Published table in docs/RELEASE_ARTIFACTS.md, then commit:"
+echo
+echo "| $VERSION | \`$SHA256\` | Pre-Release |"
+echo
+echo "core/spec/meta/release_artifacts_spec.rb fails until every tag is accounted for."

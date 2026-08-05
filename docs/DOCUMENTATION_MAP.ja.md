@@ -26,7 +26,7 @@
 | 変更したもの | 更新するもの | 照合するテスト |
 |---|---|---|
 | **ケイパビリティ**(ユーザーにできることが増えた・減った) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md`(行**と**そのE2E例の両方)、`README.md` + `README.ja.md` のマトリクス、`site/capabilities.html` + `site/ja/capabilities.html`、両CHANGELOG | `core/spec/e2e/capability_coverage_spec.rb`(行⇔E2E例)、`core/spec/meta/*_parity_spec.rb`(EN⇔JA)。READMEの日英対はこの中に**ありません**(理由は024.25) |
-| **バージョン番号** | `core/lib/ovallsp/version.rb`、`core/Gemfile.lock`、`vscode/package.json`、`vscode/package-lock.json`(2箇所)、両CHANGELOG | `core/spec/meta/changelog_parity_spec.rb`、`vscode/src/test/unit/versionPairing.test.ts` |
+| **バージョン番号** | `core/lib/ovallsp/version.rb`、`core/Gemfile.lock`、`vscode/package.json`、`vscode/package-lock.json`(2箇所)、両CHANGELOG。公開した後は `docs/RELEASE_ARTIFACTS.md` も | `core/spec/meta/changelog_parity_spec.rb`、`vscode/src/test/unit/versionPairing.test.ts`、`core/spec/meta/release_artifacts_spec.rb`(`v*` タグがすべて記載されていること) |
 | **ロードマップ項目**(提供開始・取り下げ・移動) | `docs/ROADMAP.md` + `.ja.md`、READMEのマトリクス、`site/roadmap.html` + `site/ja/roadmap.html`、`docs/design/tasks/024-deferred-review-findings.md` の対応する `024.R*` | `core/spec/meta/roadmap_parity_spec.rb`(README⇔ロードマップ) |
 | **リリース途中で巻き戻した変更**(CLAUDE.md の2ラウンド規則を参照) | 根本原因と本来必要な方向を明記した `024.*` エントリ、既に箇条書きを書いていた場合は両CHANGELOG、その経験が示す `CLAUDE.md` の該当節 | — |
 | **先送り項目**(`024.*`) | `docs/design/tasks/024-deferred-review-findings.md` の `yaml` メタデータブロック(`status`、解決したら `released-in`)。エントリの削除は、その番号を引用している箇所がツリーに1つも無くなってから——暦ではなく grep で判断する(同ファイルの凡例を参照) | — |

@@ -143,7 +143,12 @@ packaging前に`tsc`自身のcompileステップをローカルで明示的に�
 
 1. `vsce ls --tree`を実行し、ファイル一覧全体を確認する — 絶対パス・
    ローカルのユーザー名・同梱すべきでないものが含まれていないか確認。
-2. VSIXのSHA-256を計算し記録する。
+2. VSIXのSHA-256を計算し、[`docs/RELEASE_ARTIFACTS.md`](RELEASE_ARTIFACTS.md)
+   へ記録する(英語のみ。ハッシュの表は運用データであり、翻訳した写しは
+   桁が食い違いうる場所が増えるだけです)。貼り付ける行は`release.sh`が
+   最後に出力します。この手順は最初のPreviewから0.2.0まで記録先が
+   書かれておらず、そのため16個のタグについてハッシュは計算されては
+   捨てられていました。
 3. packageされた成果物に対して
    `ruby scripts/vsix_semantic_smoke.rb <unpack済みVSIXへのパス>/extension`
    を実行する。
