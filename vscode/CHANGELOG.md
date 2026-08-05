@@ -8,6 +8,13 @@ the disproved approaches are kept below it under **Details**.
 
 ## 0.2.0 — Completion from the first keystroke, and diagnostics beyond the open file
 
+**If you are on 0.1.13, this brings 0.1.14 and 0.1.15 with it.** Both were
+tagged and never published, so their entries below describe changes that
+reach you here for the first time. 0.1.14 removed about twelve thousand
+wrong reports and introduced a handful of its own; 0.1.15 is those
+corrections. Arriving together, the intermediate state never existed for
+anyone.
+
 - Added: typing `Ar` offers candidates. Completion needed a `.` first, so
   workspace classes, the locals in scope and the methods callable right
   there offered nothing until the whole name was written. Two characters,
