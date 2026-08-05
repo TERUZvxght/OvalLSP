@@ -104,6 +104,22 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       expect(name.conditional).to be(true)
     end
 
+    # `conditional` asks how many *branches* of the Union have the name,
+    # which is not the same question as how many owners declare it: `Bag`
+    # reaches RBS twice and both `Array` and `Enumerable` declare `map`
+    # themselves, while nothing in `Symbol`'s chain does. Anything that
+    # counts declarations rather than branches calls this member
+    # unconditional on the strength of one branch's ancestors alone.
+    it "marks a signature member only one Union branch has conditional, however many of that branch's ancestors declare it" do
+      index_source("class Bag < Array\n  include Enumerable\nend\n")
+
+      union = Ovallsp::Types.normalize_union([nominal("Bag"), nominal("Symbol")])
+
+      member = service.members_of(union, prefix: "map").find { |candidate| candidate.name == "map" }
+
+      expect(member.conditional).to be(true)
+    end
+
     it "treats a same-named member from different origins as available across the Union" do
       model_registry.register_from_agent_response(
         "User",

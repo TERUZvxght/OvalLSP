@@ -336,5 +336,21 @@ RSpec.describe Ovallsp::Semantic::MethodResolver do
 
       expect(candidates).to be_empty
     end
+
+    # `#lookup_owners` documents its result as `[owner_name, singleton?]`
+    # pairs, and a caller has nothing to ask about a pair whose first
+    # element is nil. Today the signature environment answers nothing for
+    # that key rather than answering wrongly, which is why the omission is
+    # invisible from `#members_of` -- the contract is asserted here, at
+    # the method that owns it, so it does not depend on a second
+    # subsystem continuing to be forgiving.
+    it "is omitted from the chain #lookup_owners hands its caller" do
+      index_source("class Task < Object.const_get(:Whatever)\nend\n", uri: "file:///task.rb")
+
+      owners = resolver.lookup_owners(nominal("::Task"))
+
+      expect(owners).not_to be_empty
+      expect(owners.map(&:first)).to all(be_a(String))
+    end
   end
 end

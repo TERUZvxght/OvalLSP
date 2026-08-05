@@ -151,10 +151,19 @@ module Ovallsp
 
       private
 
-      # A name can be supplied by different origins on different Union
-      # members (for example, a model column on one member and RBS on
-      # another). Per-origin occurrence counts incorrectly label that
-      # common name conditional, so recompute availability by receiver.
+      # The one place that decides `conditional`, and the reason the
+      # sources above can all report `false`: a receiver that is not a
+      # Union has exactly one branch, so nothing it offers is conditional
+      # on which branch was taken, and `ClassOf` is only ever built over a
+      # single Nominal.
+      #
+      # Each source used to count for itself how many branches had a name,
+      # which was both dead (its answer was overwritten here for the only
+      # receiver shape where it could be anything but `false`) and wrong
+      # where it was read: a name can be supplied by different origins on
+      # different Union members -- a model column on one and RBS on the
+      # other -- and a per-origin count labels that common name
+      # conditional. Availability is recomputed here per receiver instead.
       def normalize_union_conditionals(candidates, receiver_type, context)
         return unless receiver_type.is_a?(Types::Union)
 
@@ -253,10 +262,8 @@ module Ovallsp
       def add_model_members(candidates, receiver_type, prefix)
         return unless @model_registry
 
-        nominals = each_nominal(receiver_type).to_a
-        occurrences = Hash.new(0)
         details = {}
-        nominals.each do |nominal|
+        each_nominal(receiver_type).each do |nominal|
           next unless @model_registry.known_model?(nominal.name)
 
           model = @model_registry.model(nominal.name)
@@ -265,21 +272,18 @@ module Ovallsp
           model.columns.each do |column|
             next unless column.name.start_with?(prefix)
 
-            occurrences[[:model_column, column.name]] += 1
             details[[:model_column, column.name]] = column.ruby_type
           end
           model.associations.each do |association|
             next unless association.name.start_with?(prefix)
 
-            occurrences[[:model_association, association.name]] += 1
             details[[:model_association, association.name]] = association.class_name
           end
         end
 
-        occurrences.each do |(origin, name), count|
+        details.each do |(origin, name), detail|
           candidates[name] ||= Member.new(
-            name: name, origin: origin, conditional: count < nominals.length, visibility: :public,
-            detail: details[[origin, name]]
+            name: name, origin: origin, conditional: false, visibility: :public, detail: detail
           )
         end
       end
@@ -296,21 +300,14 @@ module Ovallsp
         class_object = receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
         singleton = class_object || context[:singleton] == true
         subject = class_object ? receiver_type.type_arg : receiver_type
-        nominals = each_nominal(subject).to_a
-        occurrences = Hash.new(0)
-        nominals.each do |nominal|
-          # Once per *nominal*, not once per ancestor: the count decides
-          # whether a member is conditional on which branch of a Union the
-          # receiver took, and a name declared by three ancestors of one
-          # nominal is not three receivers agreeing.
-          names = signature_owners(nominal, singleton).flat_map do |owner, owner_singleton|
+        names = each_nominal(subject).flat_map do |nominal|
+          signature_owners(nominal, singleton).flat_map do |owner, owner_singleton|
             @signatures.member_names(qualify(owner), prefix: prefix, singleton: owner_singleton)
           end
-          names.uniq.each { |name| occurrences[name] += 1 }
         end
-        occurrences.each do |name, count|
+        names.each do |name|
           candidates[name] ||= Member.new(
-            name: name, origin: :signature, conditional: count < nominals.length, visibility: nil, detail: nil
+            name: name, origin: :signature, conditional: false, visibility: nil, detail: nil
           )
         end
       end
@@ -332,11 +329,15 @@ module Ovallsp
       # even though the walk is a singleton one. `MethodResolver` and
       # `Diagnostics::Engine` were taught this in 0.1.15; completion is
       # the third reader and was not.
+      # Only the no-resolver case needs a fallback. `#lookup_owners` opens
+      # every chain with the receiver's own name -- including for a name
+      # the workspace has never heard of, which is the case a fallback
+      # would have been for -- so an empty result here means the argument
+      # was not a Nominal, and `#each_nominal` only ever yields Nominals.
       def signature_owners(nominal, singleton)
         return [[nominal.name, singleton]] unless @method_resolver
 
-        owners = @method_resolver.lookup_owners(nominal, singleton: singleton)
-        owners.empty? ? [[nominal.name, singleton]] : owners
+        @method_resolver.lookup_owners(nominal, singleton: singleton)
       end
 
       def signature_definition_locations(receiver_type, method_name, context)

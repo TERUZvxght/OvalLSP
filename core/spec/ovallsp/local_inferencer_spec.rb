@@ -174,6 +174,9 @@ RSpec.describe Ovallsp::LocalInferencer do
     expect(infer("x = 1.5\n", line: 0, character: 1).to_s).to eq("Float")
     expect(infer("x = \"s\"\n", line: 0, character: 1).to_s).to eq("String")
     expect(infer("x = :sym\n", line: 0, character: 1).to_s).to eq("Symbol")
+    # `3r` is not an Integer with a suffix: Prism gives it its own node,
+    # and with no case for it a rational literal answered Unknown.
+    expect(infer("x = 3r\n", line: 0, character: 1).to_s).to eq("Rational")
     expect(infer("x = true\n", line: 0, character: 1).to_s).to eq("Boolean")
     expect(infer("x = nil\n", line: 0, character: 1).to_s).to eq("nil")
   end
