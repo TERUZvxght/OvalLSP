@@ -2434,13 +2434,15 @@ module Ovallsp
       # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
       required_labels = helper.required_parts
       optional_labels = helper.optional_parts.map { |part| "#{part} = nil" }
-      params_label = (required_labels + optional_labels + ["options = {}"]).join(", ")
+      # `options = {}` is a parameter like the others: it was in the label
+      # and not in `parameters`, so a cursor on the last argument indexed
+      # past the end and highlighted nothing.
+      all_labels = required_labels + optional_labels + ["options = {}"]
       {
         signatures: [
           {
-            label: "#{method_name}(#{params_label})",
-            parameters: required_labels.map { |part| { label: part } } +
-              optional_labels.map { |label| { label: label } }
+            label: "#{method_name}(#{all_labels.join(', ')})",
+            parameters: all_labels.map { |label| { label: label } }
           }
         ]
       }

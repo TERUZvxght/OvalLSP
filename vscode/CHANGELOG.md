@@ -51,6 +51,43 @@ and the capability tables promised something the build did not do.
   listed the parameters and said nothing about which one you were
   writing, so the editor bolded the first for the whole call — pointing
   at the wrong parameter rather than at none, from the first comma on.
+- Fixed: **upgrading now actually delivers the fixes above.** The parse
+  cache was keyed on your workspace, Ruby, Prism, `Gemfile.lock` and RBS
+  — but not on OvalLSP's own version, and a cached entry is the output of
+  a particular build's parser. Every file whose bytes had not changed
+  kept answering with the previous release's results, including one
+  wrong diagnostic that survived restarts and `Re-index Workspace` alike.
+  Cache directories for keys no longer in use are also swept now, eight
+  kept; nothing had ever removed one.
+- Fixed: hover, go to definition and signature help no longer answer
+  about a method for something that is not a call. Resting on a word
+  inside a comment or a string, on a parameter name in a `def`, or on a
+  local variable that shares a name with a method opened a popup with
+  that method's signature, origin, a "Defined:" link and its doc comment.
+  A local variable in scope is what Ruby resolves there, and that is what
+  you now get.
+- Fixed: signature help no longer disappears when an earlier argument
+  contains an unpaired parenthesis inside a string or a comment —
+  `raise ArgumentError, "bad )"` — and no longer answers with an inner
+  call because of one.
+- Fixed: `activeParameter` now works for stdlib and gem methods too.
+  Only methods you wrote carried the parameter list an editor needs to
+  highlight one, so `"abc".sub(` marked nothing however the cursor moved.
+  A route helper's trailing `options = {}` is a parameter now as well.
+- Fixed: a workspace class sharing a core class's last segment
+  (`Serializer::Elements::String`) no longer answers for the core one in
+  **completion**. 0.2.1 fixed the diagnostic and left this half, so
+  `"hello".` still offered that class's methods and no String methods.
+- Added: occurrence highlighting. Resting on an identifier marks its
+  other uses in the file. Without it the editor matched the word as text,
+  so `@articles` lit up the word `articles` inside `# GET /articles`
+  comments, and a local named `article` lit up every `@article`.
+- Added: completion after `@`. Typing it offered nothing, so the editor
+  proposed words from the buffer instead — the instance variable's name
+  without its sigil. The instance variables in scope are offered now,
+  with their inferred types.
+- Fixed: `->() {}`, `!x`, `a && b` and `a || b` have a type. A default
+  written `name || "anonymous"` is a String rather than nothing.
 
 ### Details
 

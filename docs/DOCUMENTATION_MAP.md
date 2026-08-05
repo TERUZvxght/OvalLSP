@@ -79,18 +79,30 @@ eleven discrepancies found by an independent read of the branch -- is
 gone because every item on it is fixed, and the two that were about the
 capability matrix are now *machine*-checked rather than remembered:
 `scripts/check_site_links.rb` compares the site's matrix against
-README's, all three columns, and the version the index pages advertise
-against `vscode/package.json`. The deploy gates on it.
+README's, all three columns, on `capabilities.html` and on both index
+pages, and the version the index pages advertise against
+`vscode/package.json`. The deploy gates on it.
 
-English is compared by feature name; Japanese positionally, row for row.
-The site's Japanese was translated independently of `README.ja.md` and
-the two disagree about wording that means the same thing (`Coreが起動し`
-against `Core が起動し`), so demanding identical prose would buy a
-stricter check by making the prose worse. What both copies really share
-is the order of the table.
+English is compared by feature name, against the README. Japanese is
+compared *positionally* — `ja/capabilities.html` against `README.ja.md`,
+and `ja/index.html` against `index.html`, which is itself checked by
+name. The site's Japanese was translated independently of `README.ja.md`
+and the two disagree about wording that means the same thing
+(`Coreが起動し` against `Core が起動し`), so demanding identical prose
+would buy a stricter check by making the prose worse. What both copies
+really share is the order of the table.
+
+That `ja/index.html` clause is 0.2.1's correction and worth the sentence
+it costs: comparing it by name meant comparing it to nothing at all,
+because no row name matches (`ホバー: リテラル…` against
+`Hover: リテラル…`), and every row fell into a branch that was skipped
+for Japanese pages. Eight rows, none checked, on the Japanese landing
+page — while this document said the matrix was machine-checked. The
+mutation test that caught the English half was never run against the
+Japanese one; it is now, in both directions.
 
 What that check does *not* cover, and what therefore still has to be
-read: every page that is not `capabilities.html`. The security page's
+read: every page that is not `capabilities.html` or an index page. The security page's
 two retracted claims, the roadmap's mis-numbered sentence, the version
 badge, the requirements list, the patch definition and the 404 page's
 issue-tracker line were each found by a person reading, and nothing

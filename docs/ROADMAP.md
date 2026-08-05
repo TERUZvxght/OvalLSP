@@ -5,9 +5,10 @@
 What each planned release lets you do, in the order a user notices it.
 
 A version number here is a promise about *what arrives together*, not a
-date. Patch releases are absent by design: they add nothing, so there is
-nothing to list — see [`PUBLISHING.md`](PUBLISHING.md) for what each
-position means.
+date. Patch releases are absent by design: they announce nothing new,
+so there is nothing to list here — but they are where a promise already
+made gets kept, and a capability row can appear or turn ✅ in one. See
+[`PUBLISHING.md`](PUBLISHING.md) for what each position means.
 
 Every item below corresponds to a row in README's capability matrix. The
 reasoning behind each, and the Pylance features deliberately *not*
@@ -34,8 +35,6 @@ planned, are in
   the route helper name, fix the argument count.
 - **Go to type definition** — jump to the class an expression evaluates
   to, rather than to the method being called.
-- **Highlight the other occurrences** of the symbol under the cursor,
-  within the file.
 - **Call hierarchy** — callers and callees, navigable, instead of a flat
   list of references.
 

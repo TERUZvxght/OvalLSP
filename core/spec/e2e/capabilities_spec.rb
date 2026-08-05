@@ -539,6 +539,25 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # `@` was silent, and silence is not neutral: the editor fell back to
+    # matching words in the buffer and proposed `article` -- the ivar's
+    # name without its sigil, which is not what anyone is typing.
+    it "C14: offers the instance variables in scope after an `@`" do
+      with_file("app/models/ivar_completion_probe.rb", <<~RUBY) do |uri|
+        class IvarCompletionProbe
+          def run
+            @article = Article.new
+            @a
+          end
+        end
+      RUBY
+        items = @client.completion_items(uri, 3, 6)
+
+        expect(items.map { |item| item[:label] }).to include("@article")
+        expect(items.map { |item| item[:label] }).to all(start_with("@"))
+      end
+    end
+
     # The same row, for the call shape Ruby actually uses most. The
     # example above writes a receiver; without one, `definition_result`
     # fell through to a *name* lookup that only matches classes, modules
@@ -941,7 +960,37 @@ RSpec.describe "Extension capabilities", :e2e do
     end
   end
 
+  describe "occurrence highlighting" do
+    # Not answering is not neutral. With no provider the client falls back
+    # to matching the word under the cursor as *text*, and `@` is not a
+    # word character -- so on a scaffolded controller, resting in
+    # `@articles` marked the word `articles` inside every `# GET /articles`
+    # comment, and resting in a local named `article` marked every
+    # `@article` in the file. Both reported from a real editing session.
+    it "W5: marks an instance variable's other uses, sigil included, and nothing in a comment" do
+      with_file("app/models/highlight_probe.rb", <<~RUBY) do |uri|
+        class HighlightProbe
+          # article is mentioned here and is not a variable
+          def run
+            @article = Article.new
+            article = "not the ivar"
+            [@article, article]
+          end
+        end
+      RUBY
+        ivar = @client.document_highlights(uri, 3, 6)
+        local = @client.document_highlights(uri, 4, 6)
+
+        expect(ivar.map { |h| h[:range][:start][:line] }).to contain_exactly(3, 5)
+        expect(ivar.first[:range][:end][:character] - ivar.first[:range][:start][:character]).to eq(8)
+        expect(local.map { |h| h[:range][:start][:line] }).to contain_exactly(4, 5)
+      end
+    end
+
+  end
+
   describe "signature help" do
+
     it "S1: reports a workspace method's parameters" do
       with_file("app/models/signature_probe.rb", <<~RUBY) do |uri|
         class SignatureProbe

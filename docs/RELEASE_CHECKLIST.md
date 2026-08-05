@@ -10,7 +10,7 @@ Task 022の受け入れ基準(「1.0 release checklistが全項目判定可能�
 
 | # | 項目 | 状態 | 根拠/備考 |
 |---|---|---|---|
-| 1 | all unit/component/integration tests green | ✅ 判定可能・green | `core/`: 890 examples, 0 failures(`bundle exec rspec --order random`)。`vscode/`: `test:unit` 27 examples / `test:integration` 5 examples(source Core) / `test:integration:packaged` 5 examples(packaged Core)、いずれも0 failures |
+| 1 | all unit/component/integration tests green | ✅ 判定可能・green | `core/`: 1,833 examples, 0 failures(`bundle exec rspec --order random`)。`vscode/`: `test:unit` 172 examples / `test:integration`(source Core)/ `test:integration:packaged`(packaged Core)、いずれも0 failures。**この数はリリースごとに測り直すこと** — 890/895/27/65 と書かれたまま六リリース放置され、0.2.1 のレビューで見つかった |
 | 2 | compatibility matrix green or documented | ✅ 判定可能・文書化済み | `docs/SUPPORT_MATRIX.md`。実際に検証済みなのはmacOS(darwin-arm64) + Ruby 3.4(3.4.5/3.4.7) + Rails 8.1のみ — Ruby 3.3は`required_ruby_version >= 3.3`が拒否しないというだけで実際の動作確認実績ではないため、Task 023.1/023.4でsupported表から外した。VSIXのnative payloadはdarwin-arm64 + Ruby 3.4.x専用で、それ以外は起動前に検証・診断される(ADR-0005)。以前の版がRails 7.1を"supported"としていた誤りと、GitHub Actions未実行にもかかわらず"CIで実行"としていた誤りは修正済み |
 | 3 | benchmark regression within threshold | ✅ 判定可能・report-only | `docs/design/tasks/021-persistent-cache-notes.md`。1k/5kファイル規模での実測は未実施(既知のギャップとして記録済み) |
 | 4 | no known P0/P1 | ✅ 判定可能・green | Task 022.2(Bundler境界分離)は round 1-31 の独立レビューで収束、`docs/design/tasks/022.2-collector-tracepoint-state-machine.md`の最終release gateセクションに全不具合の重大度分類を記録。Packaging/Support Matrix整備(本ドキュメント更新の対象作業)自体の独立レビューは次アクション参照 |
@@ -36,9 +36,9 @@ Marketplace Preview公開)固有の22項目のゲートを設ける。`make-fina
 | # | 項目 | 状態 | 根拠 |
 |---|---|---|---|
 | 1 | git tracked tree clean | ✅ `make-final-review-bundle.sh`が`git diff --quiet`/`git diff --cached --quiet`で強制 |
-| 2 | Core full RSpec failure/pending 0 | ✅ `make-final-review-bundle.sh`の"Core full RSpec"ステップ。895 examples / 0 failures(Task 023.2のBuildManifest/ProtocolVersion specを含む) |
+| 2 | Core full RSpec failure/pending 0 | ✅ `make-final-review-bundle.sh`の"Core full RSpec"ステップ。0.2.1 時点で1,833 examples / 0 failures |
 | 3 | Real Rails integration failure/pending 0 | ✅ 同スクリプトの"Mandatory real Rails integration"ステップ |
-| 4 | VS Code unit/integration failure 0 | ✅ `test:unit`(65 examples、Task 023.2-023.5のversionInfo/clientLifecycle/platformCompatibility分含む)・`test:integration` |
+| 4 | VS Code unit/integration failure 0 | ✅ `test:unit`(0.2.1 時点で172 examples)・`test:integration` |
 | 5 | packaged integration failure 0 | ✅ `test:integration:packaged`(既存)+本タスクで追加した`vsix_semantic_smoke.rb`のdocumentSymbol/definition検証 |
 | 6 | Apple Silicon semantic smoke PASS | ✅ `scripts/vsix_semantic_smoke.rb`(hover/documentSymbol/definition/stderr allowlist、Task 023.4で拡張) |
 | 7 | Extension/Core version handshake PASS | ✅ `vscode/src/versionInfo.ts#compareVersionInfo`のテスト(Task 023.2、8種の不一致モード全て) |

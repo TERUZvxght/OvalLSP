@@ -62,6 +62,8 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Completion: route helpers | ✅ | — (no Runtime Agent) | — |
 | Completion at the start of an identifier — workspace classes, locals in scope, methods callable here | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion inserts a call template with tab stops | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Completion of `@ivar` names after typing `@` | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Document highlight (occurrences within a file) | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Hover on a method shows its parameters | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Go to definition: workspace methods | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Go to definition: model columns/associations | ✅ | — (no Runtime Agent) | — |
@@ -85,16 +87,15 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Inlay hints (inferred types, parameter names) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Code actions / quick fixes for each diagnostic | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Go to type definition | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Document highlight (occurrences within a file) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Call hierarchy (callers and callees) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 
 [^argcount]: Verified by tests that fail if it breaks, and it does fire —
-    but every one of the 15 reports it produces over Ruby's standard
+    but every one of the 14 reports it produces over Ruby's standard
     library, five Rails gems and minitest is wrong. Each has a recorded
     cause: `def Const.method` recorded as an instance method (10 of the
-    15), a block's `self` read as the enclosing class, and a receiver
+    14), a block's `self` read as the enclosing class, and a receiver
     resolved by name collision. A corpus of gems is close to the worst
     case — their dependencies are absent, so names resolve by
     substitution — and the check's precision on a real application is
@@ -123,10 +124,10 @@ verified per platform, is what 1.0.0 requires (024.R4).
     would leave the declaration behind and the file would not run
     (024.28).
 
-[^doc]: Only where a receiver was written. In hover, that means
-    `widget.charge`; hovering the `def` itself, a call on implicit self,
-    or anything inside an ERB template shows the type without the
-    documentation. In completion it means the list a `.` produces —
+[^doc]: In hover, everywhere the popup names a method: `widget.charge`,
+    a call written with no receiver, and the `def` itself. Inside an ERB
+    template the type is shown without the documentation. In completion it
+    is only the list a `.` produces —
     the bare-prefix list this release added carries no documentation,
     because only the receiver path attaches what `completionItem/resolve`
     needs to find the comment.

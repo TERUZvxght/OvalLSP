@@ -4,7 +4,7 @@ The SHA-256 of every VSIX this project has published, and an explicit row
 for every tag that was never published.
 
 `docs/PUBLISHING.md` has asked for the hash to be "computed and recorded"
-since the first Preview. Nowhere said *where*, so for sixteen tags it was
+since the first Preview. Nowhere said *where*, so for fourteen tags it was
 computed and then discarded — a hash nobody wrote down cannot be compared
 against anything later, which is the only thing a hash is for.
 

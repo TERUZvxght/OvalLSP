@@ -397,7 +397,7 @@ module Ovallsp
           next unless sm
           next unless direct.nil? || sm.direct == direct
 
-          sm.overloads.map { |overload| { label: rbs_signature_label(method_name, overload), parameters: [] } }
+          sm.overloads.map { |overload| rbs_signature(method_name, overload) }
         end.flatten.tap { |result| return nil if result.empty? }
       end
 
@@ -423,7 +423,32 @@ module Ovallsp
       # Before 0.1.12 the `(?)` ones failed to build at all so
       # nothing was shown; making them build has to not make them lie, and
       # the keyword case was already lying.
-      def rbs_signature_label(method_name, overload)
+      # Label and parameters together, because they are the same list read
+      # twice and an editor needs both: `activeParameter` is an index into
+      # `parameters`, so a signature carrying none can never highlight
+      # anything however well the index is computed. Only source
+      # declarations carried them, so the promise held for a method you
+      # wrote and quietly did not for `"abc".sub(` or `where(`.
+      #
+      # Each parameter is an [start, end) offset pair into the label
+      # rather than the substring: two positionals of the same type spell
+      # the same string, and a client matching by substring highlights the
+      # first of them for both.
+      def rbs_signature(method_name, overload)
+        parts = rbs_signature_parts(overload)
+        label = +"#{method_name}("
+        parameters = parts.map do |part|
+          start = label.length
+          label << part
+          offsets = [start, label.length]
+          label << ", "
+          { label: offsets }
+        end
+        label.delete_suffix!(", ") unless parts.empty?
+        { label: "#{label}) -> #{overload.return_type}", parameters: parameters }
+      end
+
+      def rbs_signature_parts(overload)
         parts = overload.required_positionals.map(&:to_s) +
                 overload.optional_positionals.map { |t| "?#{t}" } +
                 overload.trailing_positionals.map(&:to_s)
@@ -433,7 +458,7 @@ module Ovallsp
         # more than it names, and which slot that came from is not
         # something a reader of the label can act on.
         parts << "..." if overload.rest_positional || overload.rest_keyword
-        "#{method_name}(#{parts.join(', ')}) -> #{overload.return_type}"
+        parts
       end
 
       def each_nominal(type)

@@ -35,8 +35,8 @@ multiple builds, option 2: bundling the Ruby runtime itself).
 
 | Version | Tier | Basis |
 |---|---|---|
-| 3.4 (run under 3.4.5 and 3.4.7) | supported | `core/`'s test suite (1,776 examples as of 0.2.1; the figure was 895 when this row was written and was not re-measured for six releases) actually run and green on this machine under both 3.4.7 (primary) and 3.4.5 (via rbenv) |
-| 3.3 | unsupported (unverified) | `core/ovallsp.gemspec`'s `required_ruby_version >= 3.3` is only a declaration that Ruby 3.3 is **not rejected** — not evidence it was actually run under 3.3 (per Task 023.1's own finding, `>= 3.3` alone is never treated as evidence of support). Since this Apple Silicon Marketplace Preview targets darwin-arm64 + Ruby 3.4.x only, 3.3 stays in this tier for now |
+| 3.4 (run under 3.4.5 and 3.4.7) | supported | `core/`'s test suite (1,833 examples, measured at 0.2.1's last commit; the figure was 895 when this row was written and was not re-measured for six releases, then 1,776 for three days of 0.2.1 because it was taken mid-branch) actually run and green on this machine under both 3.4.7 (primary) and 3.4.5 (via rbenv) |
+| 3.3 | unsupported (the *extension* refuses it) | The Core's own suite does run under 3.3 — `.github/workflows/ci.yml` runs the matrix `["3.3", "3.4"]` — so this row is not about the library. What a user installs is a VSIX whose bundled native extensions are built for one Ruby version, and `platformCompatibility.ts` requires an exact match, so the extension declines to start on 3.3. The tier describes the shipped artifact, not the gemspec's `required_ruby_version >= 3.3`, which was this row's stated basis until 0.2.1 and had stopped being true |
 | 3.5 | unsupported (unverified) | Same reasoning — no run under a stable 3.5.x at release time |
 | 3.2 and below | unsupported | Explicitly rejected by `required_ruby_version` |
 

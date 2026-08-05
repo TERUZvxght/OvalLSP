@@ -184,8 +184,11 @@ user-visible: yes
 `sole_source_declaration`)
 
 G5 has been a ✅ row since 0.1.6. A reviewer read all 17 reports it
-produced at `6f5e86a`; after round 22's fixes there are 15, and all 15
-were read again. Every one is working Ruby:
+produced at `6f5e86a`; after round 22's fixes there were 15, and all 15
+were read again. At 0.2.1 the count is **14**, re-measured over Ruby
+3.4.7's standard library, five Rails 8.1.3 gems and minitest 6.0.6, and
+**10** of them are the `def Const.method` shape. The table below is the
+0.1.6 reading and is kept for the shapes rather than the counts:
 
 | shape | count | cause |
 |---|---|---|
@@ -1254,7 +1257,8 @@ Two things about how this survived twenty-two rounds are worth keeping:
   number that moves for many reasons; "1,545 of them have a receiver
   ending in `]` or `)`" is one grep, and it names the cause.
 
-and it blocks a correct answer 0.2.0 had to settle for approximating.
+`contains?` itself is still inclusive, and that is what keeps this entry
+open: it blocks a correct answer 0.2.0 had to settle for approximating.
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`contains?`,
 `locate_in_block`), `core/lib/ovallsp/parser_service.rb` (the receiver
@@ -2417,3 +2421,49 @@ but the true positives are lost with the false ones.
 distinct from "the workspace owns this class", which is what the Agent
 already answers for 024.R5. Scheduled with 024.R7, since a gem index is
 what makes the answer available without an Agent too.
+
+## 024.41 Typing a `.` reports a method on the *next* line
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`analyze`'s parse
+gate), `core/lib/ovallsp/server.rb` (`did_change`, which publishes with
+no debounce)
+
+Half of this is fixed and half is not, and the half that is not is the
+commonest editing action there is: `.` is the completion trigger.
+
+```ruby
+a = Article.new
+a.
+b = "str"
+```
+
+→ ``Article has no method named `b=` ``. Also reported for a next line
+of `value`, `if true` and `return 1`; not for `puts 1` or
+`other_thing(1)`.
+
+The `end` half -- `a.` at the end of a method, where recovery invents
+`a.end` -- was fixed in 0.2.1 by gating semantic checks on a clean parse.
+This shape defeats that gate because **there is no syntax error at all**:
+`a.\nb = "str"` is valid Ruby that means `a.b = "str"`, and it is
+reported correctly. Nothing in the text says the user is mid-edit.
+
+**Direction:** not another check. The engine cannot tell this apart from
+the same code written deliberately, so the answer is to stop publishing
+*while the user is still typing* -- a debounce on `didChange`, and
+ideally the edit position, which the notification already carries and the
+Server discards. Recorded rather than patched, because a heuristic that
+suppresses "a call whose message is on a different line from its
+receiver" would also suppress the leading-dot chain style, which is
+ordinary Ruby.
+
+Round 23 found it, round 24 found it again and widened it, and it existed
+only in `026-0.2.1-review-loop.md` until now -- which is why it is an
+entry: a finding parked in a round's handover is invisible to
+`deferred_findings_spec.rb`, and `DOCUMENTATION_MAP`'s "A known
+limitation" row was therefore unenforced for it.

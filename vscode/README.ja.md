@@ -198,10 +198,13 @@ workspaceで他のRuby言語サーバー拡張機能を無効化してくださ�
    workspaceが信頼されているか確認。
 5. ステータスバーで現在の状態(Indexing / Ready (static) /
    Ready (Rails) / Agent unavailable)を確認できる。
-6. 永続キャッシュが壊れていると疑われる場合、`$XDG_CACHE_HOME/ovallsp/`
-   (未設定または空なら `~/.cache/ovallsp/`)配下に
-   workspace/Ruby/Prism/Gemfile.lock/RBSの組合せごとに分離されているため、
-   該当ディレクトリを削除すれば強制的に再インデックスされる。
+6. 永続キャッシュは `$XDG_CACHE_HOME/ovallsp/`(未設定または空なら
+   `~/.cache/ovallsp/`)配下にあり、workspace/Ruby/Prism/Gemfile.lock/RBS/
+   **OvalLSPのバージョン**の組合せごとに分離されている。該当ディレクトリを
+   削除すれば強制的に再インデックスされる。バージョンがキーに入ったのは
+   0.2.1 からで、それ以前はアップグレードしても、バイトが変わっていない
+   ファイルには前のリリースのparse結果が返り続けていた。使われなくなった
+   組合せのディレクトリは起動時に掃除され、直近8つを残す。
 
 ## プライバシー・テレメトリ
 

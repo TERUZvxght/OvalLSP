@@ -32,8 +32,8 @@ alternatives"に記載の拡張方針(選択肢1: 複数ビルド、2: Ruby runt
 
 | バージョン | 区分 | 根拠 |
 |---|---|---|
-| 3.4(3.4.5、3.4.7で実行確認) | supported | 実際に`core/`のテストスイート(0.2.1 時点で1,776 examples)をこのマシンで3.4.7(主要)および3.4.5(rbenv経由)で実行しgreenを確認 |
-| 3.3 | unsupported(未検証) | `core/ovallsp.gemspec`の`required_ruby_version >= 3.3`はRuby 3.3を**拒否しない**という宣言に過ぎず、実際に3.3で動作確認した実績ではない(Task 023.1の指摘どおり、`>= 3.3`単体をsupportedの根拠にしない)。Apple Silicon Marketplace Previewの対象はdarwin-arm64 + Ruby 3.4.xに限定するため、3.3は当面この区分のまま |
+| 3.4(3.4.5、3.4.7で実行確認) | supported | 実際に`core/`のテストスイート(0.2.1 の最終コミットで計測して1,833 examples)をこのマシンで3.4.7(主要)および3.4.5(rbenv経由)で実行しgreenを確認 |
+| 3.3 | unsupported(*拡張機能*が拒否する) | Core自体のテストスイートは3.3でも走っている(`.github/workflows/ci.yml` が `["3.3", "3.4"]` のマトリクスで実行)。この行はライブラリの話ではない。利用者が入れるのはVSIXで、同梱するnative extensionは1つのRubyバージョン向けにビルドされており、`platformCompatibility.ts` が完全一致を要求するため、3.3では拡張機能が起動を断る。この区分が表すのは出荷物であって、0.2.1 までこの行が根拠として挙げていた `required_ruby_version >= 3.3` ではない(そちらは事実でなくなっていた) |
 | 3.5 | unsupported(未検証) | 同上。リリース時点でstableな3.5系での実行実績がない |
 | 3.2以下 | unsupported | `required_ruby_version`で明示的に拒否 |
 

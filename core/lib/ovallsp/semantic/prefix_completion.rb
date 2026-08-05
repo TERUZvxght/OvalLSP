@@ -133,8 +133,11 @@ module Ovallsp
         # cannot produce -- is gone with the floor itself: every source
         # now answers from the first character, so a complete list stays
         # complete as the editor filters it.
-        Result.new(items: ranked.first(MAX_ITEMS).map { |item| finalize(item) },
-                   incomplete: ranked.size > MAX_ITEMS || prefix.length < MIN_PREFIX_FOR_WORKSPACE)
+        # `prefix.length < MIN_PREFIX_FOR_WORKSPACE` was the second clause
+        # here and is unreachable with the floor at one: an empty prefix
+        # already returned above. Removed rather than left as a condition
+        # nothing can satisfy.
+        Result.new(items: ranked.first(MAX_ITEMS).map { |item| finalize(item) }, incomplete: ranked.size > MAX_ITEMS)
       end
 
       private

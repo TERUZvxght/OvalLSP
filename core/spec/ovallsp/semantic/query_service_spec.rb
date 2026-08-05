@@ -329,6 +329,25 @@ RSpec.describe Ovallsp::Semantic::QueryService do
     end
   end
 
+    # `activeParameter` indexes into a signature's `parameters`, so a
+    # signature that carries none can never highlight anything -- the
+    # editor is told which parameter the cursor is on and has nothing to
+    # apply it to. Only workspace declarations carried them, so the
+    # capability row's promise held for a method you wrote and silently
+    # did not for `"abc".sub(`, `where(`, or anything else RBS answers.
+    #
+    # By offset rather than by name: two positionals of the same type
+    # spell the same string, and a client matching the label as a
+    # substring would highlight the first for both.
+    it "carries a parameter per argument for an RBS signature, so a client can highlight one" do
+      signature = service.signatures_of(nominal("String"), "sub").first
+
+      expect(signature[:parameters].length).to be >= 2
+      first, second = signature[:parameters]
+      expect(signature[:label][first[:label][0]...first[:label][1]]).to eq(signature[:label][/\((.*?),/, 1])
+      expect(second[:label][0]).to be > first[:label][1]
+    end
+
   describe "#explain" do
     it "reports high confidence for a resolved type" do
       document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: "user = User.new\n", version: 1, language_id: "ruby")

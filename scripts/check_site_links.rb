@@ -218,25 +218,41 @@ end
 # The index pages carry an *excerpt* of the matrix -- a subset, in the
 # same order -- so every row they do have must agree, and rows they omit
 # are not an error.
-[["index.html", "README.md"], [File.join("ja", "index.html"), "README.ja.md"]].each do |page_rel, readme_rel|
-  page = File.join(SITE, page_rel)
-  next unless File.exist?(page)
+english_excerpt = site_matrix(read_page(File.join(SITE, "index.html")))
+expected = readme_matrix(File.join(REPO, "README.md")).to_h
+problems << "index.html: no capability rows found -- the excerpt markup changed shape" if english_excerpt.empty?
+english_excerpt.each do |feature, statuses|
+  reference = expected[feature]
+  if reference.nil?
+    problems << "index.html: has a row for #{feature.inspect} that README.md does not"
+  elsif statuses != reference
+    problems << "index.html: #{feature.inspect} is #{statuses.inspect} and README.md says #{reference.inspect}"
+  end
+end
 
-  excerpt = site_matrix(read_page(page)).to_h
-  next if excerpt.empty?
+# The Japanese excerpt is compared against the *English excerpt*,
+# positionally, rather than against `README.ja.md` by name.
+#
+# By name it was compared to nothing at all: the site's Japanese was
+# translated independently of `README.ja.md` and no row name matches
+# ("ホバー: リテラル…" against "Hover: リテラル…"), so every row fell into
+# the "not in the README" branch, which was skipped for `ja/`. Eight rows,
+# none checked, on the Japanese landing page -- the second of the two
+# pages this check was added to cover, and the mutation test that caught
+# it the first time was only ever run against the English one.
+#
+# Positionally against English works because both are excerpts of the same
+# matrix in the same order, and the English one is checked by name above.
+# `ja/capabilities.html` is compared the same way and for the same reason.
+japanese_excerpt = site_matrix(read_page(File.join(SITE, "ja", "index.html")))
+if japanese_excerpt.length != english_excerpt.length
+  problems << "ja/index.html: has #{japanese_excerpt.length} matrix rows and index.html has #{english_excerpt.length}"
+else
+  japanese_excerpt.zip(english_excerpt).each_with_index do |((ja_feature, ja_statuses), (_, en_statuses)), row|
+    next if ja_statuses == en_statuses
 
-  expected = readme_matrix(File.join(REPO, readme_rel)).to_h
-  excerpt.each do |feature, statuses|
-    reference = expected[feature]
-    if reference.nil?
-      # Japanese wording is translated independently of README.ja.md, so
-      # a name that does not match there is not evidence of anything --
-      # `ja/capabilities.html` is compared positionally for the same
-      # reason. English names must match.
-      problems << "#{page_rel}: has a row for #{feature.inspect} that #{readme_rel} does not" unless page_rel.start_with?("ja/")
-    elsif statuses != reference
-      problems << "#{page_rel}: #{feature.inspect} is #{statuses.inspect} and #{readme_rel} says #{reference.inspect}"
-    end
+    problems << "ja/index.html: row #{row + 1} (#{ja_feature.inspect}) is #{ja_statuses.inspect} " \
+                "and index.html's row #{row + 1} is #{en_statuses.inspect}"
   end
 end
 
