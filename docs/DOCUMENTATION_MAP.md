@@ -85,6 +85,10 @@ workspace class names, which 0.1.x does not have and 0.2.0 does — fixing
 that against 0.1.x and then re-fixing it after 0.2.0 would be two edits
 saying opposite things a week apart. The rest of the list is order-independent:
 
+- **`site/roadmap.html` and `site/ja/roadmap.html` do not carry 0.3.0's
+  two new items** — completion after `self.` and completion on an Active
+  Record `Relation`, both added to `docs/ROADMAP.md` and to README's
+  matrix while measuring 0.2.0 against a real application.
 - **`site/capabilities.html` and `site/ja/capabilities.html` mark all six
   of 0.2.0's capabilities `planned`** — bare-prefix completion, the
   unassigned-`@ivar` check, argument types, project-wide diagnostics,

@@ -84,6 +84,9 @@
 直してから 0.2.0 のあとに直し直すと、1週間の間に正反対のことを言う2つの
 編集になります。残りは順序に依存しません。
 
+- **`site/roadmap.html` と `site/ja/roadmap.html` に 0.3.0 の新しい2項目が
+  無い。** `self.` の後の補完と、Active Record の `Relation` に対する補完です。
+  0.2.0 を実アプリで計測する過程で `docs/ROADMAP.md` とREADMEの表に追加しました。
 - **`site/capabilities.html` と `site/ja/capabilities.html` が 0.2.0 の
   ケイパビリティ6つすべてを `planned` としている。** 前置きなしの補完、
   未代入 `@ivar` の検査、引数の型、プロジェクト全体の診断、hoverでの

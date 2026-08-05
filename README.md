@@ -78,6 +78,8 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics across the whole project, not just open files | ⚠️ [^ws] | ⚠️ | ⚠️ 1.0.0 |
 | Documentation (RDoc/YARD) in hover and completion [^doc] | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Completion: Active Record `Relation` API (`where`, `order`, `limit`) | 0.3.0 | — (no Runtime Agent) | — |
+| Completion after `self.` | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Inlay hints (inferred types, parameter names) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Code actions / quick fixes for each diagnostic | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Go to type definition | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
