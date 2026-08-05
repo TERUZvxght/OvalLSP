@@ -300,7 +300,12 @@ RSpec.describe "Extension capabilities", :e2e do
           end
         end
       RUBY
-        expect(@client.completion_labels(uri, 3, 9)).to include("posts")
+        labels = @client.completion_labels(uri, 3, 9)
+
+        # The row says columns *and* associations; only the association
+        # was asserted.
+        expect(labels).to include("posts")
+        expect(labels).to include("email")
       end
     end
 
@@ -442,18 +447,24 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
-    it "C12: offers workspace classes and locals with no receiver in front" do
+    it "C12: offers workspace classes, locals and methods on self with no receiver in front" do
       with_file("app/models/prefix_probe.rb", <<~RUBY) do |uri|
         class PrefixProbe
+          def prefixed_method; end
+
           def run
             prefix_local = 1
             pre
           end
         end
       RUBY
-        labels = @client.completion_labels(uri, 3, 7)
+        labels = @client.completion_labels(uri, 5, 7)
+
+        # All three sources the row names. The method on self was the one
+        # nothing asserted, so nothing failed if that source broke.
         expect(labels).to include("prefix_local")
         expect(labels).to include("PrefixProbe")
+        expect(labels).to include("prefixed_method")
       end
     end
 
@@ -496,11 +507,17 @@ RSpec.describe "Extension capabilities", :e2e do
       with_file("app/controllers/route_probe_controller.rb", <<~RUBY) do |uri|
         class RouteProbeController < ApplicationController
           def index
-            posts_p
+            posts_
           end
         end
       RUBY
-        expect(@client.completion_labels(uri, 2, 11)).to include("posts_path")
+        labels = @client.completion_labels(uri, 2, 10)
+
+        # The row names both forms and its own example prefix (`article_p`)
+        # could only ever match one of them. Both the row and this fixture
+        # use a prefix that matches both.
+        expect(labels).to include("posts_path")
+        expect(labels).to include("posts_url")
       end
     end
   end
@@ -553,6 +570,22 @@ RSpec.describe "Extension capabilities", :e2e do
           def run
             user = User.find(1)
             user.email
+          end
+        end
+      RUBY
+        targets = @client.definitions(uri, 3, 12).map { |location| location[:uri] }
+        expect(targets).to include(a_string_ending_with("app/models/user.rb"))
+      end
+    end
+
+    # The same row, for its other half. `posts` is an association rather
+    # than a column, and only the column was asserted.
+    it "D2: jumps to the owning model for an Active Record association" do
+      with_file("app/models/association_definition_probe.rb", <<~RUBY) do |uri|
+        class AssociationDefinitionProbe
+          def run
+            user = User.find(1)
+            user.posts
           end
         end
       RUBY
@@ -1009,7 +1042,20 @@ RSpec.describe "Extension capabilities", :e2e do
           end
         end
       RUBY
-        expect(@client.references(uri, 1, 8)).not_to be_empty
+        with_file("app/models/reference_caller_probe.rb", <<~RUBY) do |caller_uri|
+          class ReferenceCallerProbe
+            def run
+              ReferenceProbe.new.referenced_method
+            end
+          end
+        RUBY
+          targets = @client.references(uri, 1, 8).map { |location| location[:uri] }
+
+          # The row says "across files", and `not_to be_empty` was true of
+          # an answer carrying the declaration and nothing else.
+          expect(targets).to include(uri)
+          expect(targets).to include(caller_uri)
+        end
       end
     end
 
@@ -1053,9 +1099,11 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
-    it "W3: finds a workspace class by symbol search" do
-      with_file("app/models/symbol_probe.rb", "class SymbolProbe\nend\n") do |_uri|
+    it "W3: finds a workspace class and a workspace method by symbol search" do
+      with_file("app/models/symbol_probe.rb", "class SymbolProbe\n  def symbol_probe_method; end\nend\n") do |_uri|
         expect(@client.workspace_symbols("SymbolProbe")).to include("SymbolProbe")
+        # The row says "classes and methods"; only the class was asserted.
+        expect(@client.workspace_symbols("symbol_probe_method")).to include("symbol_probe_method")
       end
     end
   end

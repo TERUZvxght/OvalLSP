@@ -119,7 +119,7 @@ suite in step: every row must have an example, every example a row.
 | C4 | Types `article.` where `article` is an Active Record instance | Active Record's own instance API (`save`, `update`, `destroy`, `valid?`, …) | PASS |
 | C5 | Types `Article.` (a constant) | Active Record's class API (`all`, `find`, `where`, `create`, `new`, …) | PASS |
 | C6 | Types `Widget.` where Widget is a workspace class | that class's own singleton methods (`def self.build`) | PASS |
-| C7 | Types `article_p` in a view | route helpers (`article_path`, `article_url`) | PASS |
+| C7 | Types `article_` in a view | both route-helper forms that match it (`article_path`, `article_url`) | PASS |
 | C8 | Accepts a completion for a method whose parameters are known | the call is written out with each parameter as a tab stop (`takes_two(first, second)`) | PASS |
 | C9 | Accepts a completion for a method that takes nothing | the bare name, no parentheses | PASS |
 | C10 | Accepts a completion for a method that takes arguments of unknown shape | `where($1)` — parentheses opened, cursor inside | PASS |

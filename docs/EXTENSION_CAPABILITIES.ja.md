@@ -118,7 +118,7 @@ darwin-arm64のパッケージ済みCoreに対しては、スモークチェッ�
 | C4 | 同上 | Active Record自身のインスタンスAPI(`save`、`update`、`destroy`、`valid?` など) | PASS |
 | C5 | `Article.`(定数)と打つ | Active RecordのクラスAPI(`all`、`find`、`where`、`create`、`new` など) | PASS |
 | C6 | Widgetがワークスペースのクラスのとき `Widget.` と打つ | そのクラス自身のシングルトンメソッド(`def self.build`) | PASS |
-| C7 | ビューで `article_p` と打つ | ルートヘルパー(`article_path`、`article_url`) | PASS |
+| C7 | ビューで `article_` と打つ | それに一致する両方のルートヘルパー形式(`article_path`・`article_url`) | PASS |
 | C8 | 引数が既知のメソッドの補完を確定する | 呼び出しが書き出され、各引数がタブストップになる(`takes_two(first, second)`) | PASS |
 | C9 | 引数を取らないメソッドの補完を確定する | 名前のみ。括弧は付かない | PASS |
 | C10 | 引数の形が不明なメソッドの補完を確定する | `where($1)` — 括弧が開き、カーソルが中に入る | PASS |
