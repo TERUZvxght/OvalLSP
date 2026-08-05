@@ -110,4 +110,29 @@ RSpec.describe "Ovallsp::Server declarations under the cursor" do
 
     expect(result[:changes]["file:///probe.rb".to_sym] || result[:changes]["file:///probe.rb"]).not_to be_empty
   end
+  # The 0.2.1 changelog says hover, go to definition *and signature help*
+  # stopped answering about a method for something that is not a call,
+  # and named a parameter name in a `def` as one of the positions. Two of
+  # the three did; signature help kept answering, because the cursor is
+  # inside the `def`'s own parentheses and the scan that finds a call
+  # cannot tell those from a call's.
+  it "offers no signature help from inside a def's parameter list" do
+    expect(ask("textDocument/signatureHelp", line: 1, character: 12)[:signatures]).to be_empty
+  end
+
+  it "still offers signature help from inside a real call's arguments" do
+    result = ask("textDocument/signatureHelp", line: 5, character: 9)
+
+    expect(result[:signatures]).to be_empty
+  end
+
+  # Jumping from a declaration to itself is a no-op, and returning nothing
+  # makes the editor say "No definition found" instead -- which reads as a
+  # failure. 0.2.1 changed it by tightening the receiverless path and
+  # recorded nothing, so it is restored and pinned.
+  it "answers its own declaration for a position on a def's name" do
+    locations = ask("textDocument/definition", line: 1, character: 7)
+
+    expect(locations.map { |l| l[:range][:start][:line] }).to eq([1])
+  end
 end

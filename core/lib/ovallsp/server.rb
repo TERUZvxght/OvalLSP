@@ -2041,6 +2041,15 @@ module Ovallsp
       on_self = receiverless_definitions(document, position, word)
       return on_self unless on_self.empty?
 
+      # The cursor on a declaration's own name answers with that
+      # declaration. Jumping there is a no-op, which is the point:
+      # answering nothing makes the editor say "No definition found",
+      # which reads as a failure rather than as "you are already there".
+      # 0.2.1 lost this by tightening the receiverless path, and recorded
+      # nothing about it.
+      here = declaration_at_cursor(document, position)
+      return here unless here.empty?
+
       lexical = @workspace_index.find_by_simple_name(word).map { |match| { uri: match[:uri], range: match[:range] } }
       (lexical + route_helper_definitions(word)).uniq
     end
@@ -2060,6 +2069,16 @@ module Ovallsp
     # here", asked the same way -- through the type engine rather than by
     # name, so this cannot jump to an unrelated method that happens to
     # share the word.
+    def declaration_at_cursor(document, position)
+      summary = @file_summaries[document.uri] || @parser_service.summarize(document)
+      declaration = declaration_named_at(summary, position)
+      return [] unless declaration
+
+      [{ uri: document.uri, range: declaration.location }]
+    rescue StandardError
+      []
+    end
+
     def receiverless_definitions(document, position, word)
       return [] unless receiverless_call_at?(document, position)
 
@@ -2477,8 +2496,16 @@ module Ovallsp
     end
 
     def method_signature_help(document, position, method_name)
-      call_start = call_name_position(document, position)
-      return { signatures: [] } unless call_start
+      name_range = enclosing_call_name_range(document, position)
+      return { signatures: [] } unless name_range
+
+      call_start = document.char_offset_to_position(name_range.begin)
+      # A `def`'s own parentheses look exactly like a call's to a scan
+      # that counts them, so the cursor between them answered with the
+      # method being *declared*. Hover and go to definition were taught
+      # this in 0.2.1 and signature help was not, while the changelog
+      # named all three.
+      return { signatures: [] } if bound_prefix_before?(document, document.char_offset_to_position(name_range.end))
 
       # With no receiver the call is on the enclosing `self`, the same
       # reading go-to-definition and bare-prefix completion take. Without
@@ -2568,19 +2595,40 @@ module Ovallsp
     # wrong in the direction the old code was already wrong in, and
     # signature help does not reach across one.
     #
-    # Cached per document version: signature help runs on every keystroke
-    # inside an argument list, and this is O(file).
+    # Recomputed per request, so it is built as *spans* rather than as a
+    # set of every offset: a 570 KB file made 222,893 Set entries and cost
+    # 100 ms, and both scans that read it ask a handful of questions. The
+    # spans are the non-code ones, sorted and disjoint by construction
+    # (they come from the lexer in order), so a lookup is a binary search.
     def code_offsets(document)
       key = [document.uri, document.version, document.text.length]
       return @code_offsets_value if @code_offsets_key == key
 
       @code_offsets_key = key
-      @code_offsets_value = compute_code_offsets(document.text)
+      @code_offsets_value = CodeMask.new(compute_non_code_spans(document.text))
+    end
+
+    # "Is this character offset code" over a sorted list of non-code
+    # spans. `include?` so the two scans read it exactly as they read the
+    # Set it replaces.
+    class CodeMask
+      def initialize(spans)
+        @starts = spans.map(&:first)
+        @spans = spans
+      end
+
+      def include?(offset)
+        index = (@starts.bsearch_index { |start| start > offset } || @starts.length) - 1
+        return true if index.negative?
+
+        span = @spans[index]
+        offset >= span[1]
+      end
     end
 
     # Prism's own lexer, not a hand-written scan of quotes and `#`.
     #
-    # The scan this replaces knew about `"`, `'` and `#` and nothing else,
+    # The scan this replaces knew about `"`, `\'` and `#` and nothing else,
     # which is not enough to be right about Ruby: everything between
     # quotes was "not code", so a call written inside `#{...}` was
     # invisible and signature help went dark there; and a `#` that opens
@@ -2589,43 +2637,29 @@ module Ovallsp
     # parameter. Round 24 wrote it and round 25 found both, which is the
     # point at which this project stops writing a third approximation.
     #
-    # A token is not code if it is a string's, a regexp's, a heredoc's or
-    # a comment's own text or delimiters -- `%w(` is a delimiter, and its
+    # A token is not code if it is a string\'s, a regexp\'s, a heredoc\'s or
+    # a comment\'s own text or delimiters -- `%w(` is a delimiter, and its
     # `(` opens no call. `#{` and `}` are ordinary tokens and stay code:
     # they nest and balance like any other brace, and what is written
     # between them is real Ruby.
     NON_CODE_TOKEN_PREFIXES = %w[STRING_ REGEXP_ HEREDOC_ EMBDOC_].freeze
     NON_CODE_TOKEN_TYPES = %i[COMMENT CHARACTER_LITERAL].freeze
 
-    def compute_code_offsets(text)
-      non_code = []
-      Prism.lex(text).value.each do |token, _state|
+    def compute_non_code_spans(text)
+      spans = Prism.lex(text).value.filter_map do |token, _state|
         next unless non_code_token?(token.type)
 
-        non_code << (token.location.start_offset...token.location.end_offset)
+        [token.location.start_offset, token.location.end_offset]
       end
-      byte_offsets = non_code.flat_map(&:to_a).to_set
       # `Prism` locations are byte offsets and the callers count
       # characters, which are the same thing only until the file contains
       # one multibyte character.
-      return (0...text.length).to_set.subtract(byte_offsets) if text.bytesize == text.length
-
-      character_code_offsets(text, byte_offsets)
+      text.bytesize == text.length ? spans : spans.map { |span| span.map { |b| text.byteslice(0, b).length } }
     end
 
     def non_code_token?(type)
       name = type.to_s
       NON_CODE_TOKEN_TYPES.include?(type) || NON_CODE_TOKEN_PREFIXES.any? { |prefix| name.start_with?(prefix) }
-    end
-
-    def character_code_offsets(text, non_code_byte_offsets)
-      offsets = Set.new
-      byte = 0
-      text.each_char.with_index do |char, index|
-        offsets << index unless non_code_byte_offsets.include?(byte)
-        byte += char.bytesize
-      end
-      offsets
     end
 
     # If `position` sits on an identifier immediately preceded by `.`

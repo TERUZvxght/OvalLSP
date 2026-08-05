@@ -57,16 +57,35 @@ module Ovallsp
 
       NEGATION_TYPE = Nominal.new(name: "Boolean")
 
-      # `a && b` and `a || b` return one of their two operands, so the
-      # answer is the union of both — not Boolean, which is what neither
-      # returns. `||` yields its left side only when that side is truthy,
-      # which is what makes `name || "anonymous"` a String rather than a
-      # `String | nil`, and is the idiom worth having the case for.
+      # `a && b` and `a || b` each return one of their two operands, and
+      # *which* one depends on whether the left is truthy — so neither is
+      # a plain union of the two.
+      #
+      # `a || b` yields the left only when it is truthy, which is what
+      # makes `name || "anonymous"` a String rather than a `String | nil`
+      # and is the idiom worth having the case for at all.
+      #
+      # `a && b` is the mirror and was written as a plain union first,
+      # which claims a type the expression can never have: `"str" && 5`
+      # is never a String. It yields the left only when the left is
+      # *falsy*, so an instance of a class — always truthy — drops out
+      # entirely, a `nil` left is the whole answer, and anything else
+      # contributes the nil it might have been.
       def boolean_operator(node, left, right)
-        return Types.normalize_union([left, right]) unless node.is_a?(Prism::OrNode)
+        node.is_a?(Prism::OrNode) ? or_type(left, right) : and_type(left, right)
+      end
+
+      def or_type(left, right)
         return right if left == Types::NIL
 
         Types.normalize_union([Types.remove_nil(left), right])
+      end
+
+      def and_type(left, right)
+        return left if left == Types::NIL
+        return right if left.is_a?(Nominal) && left.name != "Boolean"
+
+        Types.normalize_union([right, Types::NIL])
       end
     end
   end

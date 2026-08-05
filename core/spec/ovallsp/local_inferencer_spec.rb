@@ -200,16 +200,42 @@ RSpec.describe Ovallsp::LocalInferencer do
                                                Ovallsp::Types::Nominal.new(name: "Company")]).to_s)
     end
 
-    it "unions both sides of an `&&`" do
-      expect(infer("x = User.new && Company.new\n", line: 0, character: 1).to_s)
-        .to eq(Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "User"),
-                                               Ovallsp::Types::Nominal.new(name: "Company")]).to_s)
+    # `a && b` yields `a` only when `a` is *falsy*, so an instance of a
+    # class -- always truthy -- drops out entirely. Written as a plain
+    # union first, which claimed `"str" && 5` could be a String.
+    it "answers the right-hand side of an `&&` whose left is always truthy" do
+      expect(infer("x = User.new && Company.new\n", line: 0, character: 1).to_s).to eq("Company")
+    end
+
+    it "keeps the nil an `&&` can yield when the left might be one" do
+      expect(infer("x = nil\ny = x && \"s\"\n", line: 1, character: 1).to_s).to eq("nil")
     end
 
     # The everyday shape, and the reason this is worth having: a default
     # keeps the type rather than losing it.
     it "keeps the type through a default written with `||`" do
       expect(infer("name = nil\nx = name || \"anonymous\"\n", line: 1, character: 1).to_s).to eq("String")
+    end
+  end
+
+  # `Struct.new(:a, :b)` returns a *class*, and the ordinary `X.new -> X`
+  # rule answered `Struct` -- so the `.new` that follows was reported as
+  # an unknown method on it, on three sites in Ruby's own standard library
+  # and on the plainest value-object idiom there is. The class is
+  # anonymous and this engine has nothing true to say about it.
+  describe "a factory that builds an anonymous class" do
+    {
+      "Struct.new" => "Struct.new(:a, :b)",
+      "Class.new" => "Class.new",
+      "Data.define" => "Data.define(:a)"
+    }.each do |description, source|
+      it "answers Unknown for #{description}, rather than the constant it was called on" do
+        expect(infer("x = #{source}\n", line: 0, character: 1)).to eq(Ovallsp::Types::UNKNOWN)
+      end
+    end
+
+    it "still answers the constant for an ordinary constructor" do
+      expect(infer("x = User.new\n", line: 0, character: 1).to_s).to eq("User")
     end
   end
 
@@ -652,23 +678,28 @@ RSpec.describe Ovallsp::LocalInferencer do
     end
   end
 
-  # Regression: consulting RBS before the nominal-constructor fallback is
-  # right, but an `untyped` RBS `.new` converts to an Unknown -- which is
-  # truthy, so it won the race and `Struct.new(:x)`/`Data.new` degraded
-  # from `Struct`/`Data` to `Unknown`. Unknown is "no answer", not an
-  # answer. (Compared by type rather than against the constant:
-  # Types::Unknown defines no value equality, so any Unknown that is not
-  # the frozen constant would compare unequal to it. Every producer
-  # returns the constant today, so that is a guard, not a live fix.)
+  # Consulting RBS before the nominal-constructor fallback is right, but
+  # an `untyped` RBS `.new` converts to an Unknown -- which is truthy, so
+  # it won the race and every `X.new` it covered degraded to Unknown.
+  # Unknown is "no answer", not an answer.
+  #
+  # This used to assert `Struct.new(:x)` is a `Struct`, which reversed in
+  # 0.2.1 and is worth saying why: `Struct.new` returns a *class*, so
+  # `Struct` was never the right answer, and once diagnostics started
+  # acting on it the wrong answer became three false reports in Ruby's own
+  # standard library (`Struct.new(:a, :b).new(...)` -- "Struct has no
+  # method named `new`"). The guard below is still the guard; the
+  # constants it is asked about are ones where the nominal fallback is
+  # the true answer.
   it "falls back to the nominal constructor when RBS types .new as untyped" do
     Dir.mktmpdir do |root|
       signatures = Ovallsp::Signatures::Environment.new
       signatures.load(workspace_root: root)
       inferencer = described_class.new(signatures: signatures)
 
-      %w[Struct Data].each do |constant|
+      %w[Mutex Random].each do |constant|
         document = Ovallsp::TextDocument.new(
-          uri: "file:///a.rb", text: "value = #{constant}.new(:x)\nvalue\n", version: 1, language_id: "ruby"
+          uri: "file:///a.rb", text: "value = #{constant}.new\nvalue\n", version: 1, language_id: "ruby"
         )
 
         expect(inferencer.infer_at(document, { line: 1, character: 2 }).to_s).to eq(constant)
