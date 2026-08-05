@@ -112,38 +112,41 @@
         <article class="tl-item" id="v020">
           <div class="tl-version">
             <span class="v">0.2.0</span>
-            <span class="mark mark--plan">next minor</span>
+            <span class="mark mark--yes">shipped</span>
           </div>
           <h3>Completion from the first keystroke, and diagnostics beyond the open file</h3>
           <ul class="feature-list">
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Typing <code>A</code> offers candidates.</strong> Today completion needs a <code>.</code> first: a bare prefix matches route helpers and nothing else, so the workspace classes, the locals in scope and the methods callable right there — which is most of what you type — offer nothing until you have typed the whole name. This is the single most-used completion in any editor.</span>
             </li>
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Mistakes in files you have not opened are reported.</strong> Today a diagnostic only exists for a file currently open in an editor, so an error three directories away is invisible until you happen to look at it.</span>
             </li>
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Passing an argument of the wrong type is reported.</strong> Today only the <em>number</em> of arguments is checked.</span>
             </li>
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Reading an <code>@ivar</code> that is never assigned is reported.</strong> Ruby returns <code>nil</code> rather than raising, so today nothing tells you — the view simply renders empty.</span>
             </li>
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Hover and completion show the documentation.</strong> Today hover says what a thing <em>is</em> and never what it is <em>for</em>, though the RDoc/YARD comment is right above the <code>def</code>.</span>
             </li>
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Semantic highlighting.</strong> Ruby's <code>foo</code> is ambiguous between a local variable and a method call on self; the engine already knows which and the editor does not. Covers ERB templates' Ruby regions too.</span>
             </li>
           </ul>
           <div class="callout callout--info mt-2 small">
-            The first three of these are measured against Pylance — the closest well-known
-            reference point for a language server in a dynamically typed language.
+            Three of these are measured against Pylance — the closest well-known reference
+            point for a language server in a dynamically typed language: project-wide
+            diagnostics, documentation in hover, and semantic highlighting. Naming them
+            rather than counting them, because they are not the first three in this list
+            and an earlier version of this page said they were.
           </div>
         </article>
 
@@ -151,6 +154,14 @@
           <div class="tl-version"><span class="v">0.3.0</span></div>
           <h3>Knowing what the gems define</h3>
           <ul class="feature-list">
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>Article.all.</code> completes.</strong> A <code>Relation</code> answers what it holds — <code>where</code>, <code>order</code>, <code>limit</code>, and the chain they build. Hover already names the type; nothing yet tells the engine what a Relation's own API is, and the gem index above is what supplies it.</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>self.</code> completes.</strong> The methods callable on the object you are writing in — the same list a bare prefix already offers, after a dot.</span>
+            </li>
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Unknown methods are reported on classes that inherit from a gem</strong> — <code>ApplicationController</code>, and so most controllers and jobs. Today the check is deliberately silent there, because reporting would mean guessing.</span>

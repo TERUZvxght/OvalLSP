@@ -111,37 +111,37 @@
         <article class="tl-item" id="v020">
           <div class="tl-version">
             <span class="v">0.2.0</span>
-            <span class="mark mark--plan">次のマイナー</span>
+            <span class="mark mark--yes">公開済み</span>
           </div>
           <h3>最初の 1 文字からの補完と、開いていないファイルの診断</h3>
           <ul class="feature-list">
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong><code>A</code> と打つだけで候補が出る。</strong> 現在の補完は先に <code>.</code> が必要です。裸のプレフィックスに一致するのはルートヘルパだけで、ワークスペースのクラス、スコープ内のローカル変数、その場で呼べるメソッド — つまり実際に打鍵する内容のほとんど — は名前を最後まで打つまで何も出ません。あらゆるエディタで最もよく使われる補完です。</span>
             </li>
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>開いていないファイルの誤りも報告される。</strong> 現在、診断はエディタで開いているファイルにしか存在しないため、3 階層離れたディレクトリのエラーは、たまたま開くまで見えません。</span>
             </li>
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>型の違う引数を渡すと報告される。</strong> 現在チェックしているのは引数の<em>個数</em>だけです。</span>
             </li>
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>一度も代入されない <code>@ivar</code> の読み出しが報告される。</strong> Ruby は例外を投げず <code>nil</code> を返すため、現在は何も教えてくれず、ビューがただ空で描画されます。</span>
             </li>
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>ホバーと補完にドキュメントが表示される。</strong> 現在のホバーはそれが<em>何であるか</em>を言うだけで、<em>何のためのものか</em>は決して言いません。RDoc/YARD のコメントは <code>def</code> のすぐ上にあるにもかかわらず。</span>
             </li>
             <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>セマンティックハイライト。</strong> Ruby の <code>foo</code> はローカル変数か self へのメソッド呼び出しか曖昧です。エンジンはすでにどちらか知っていて、エディタは知りません。ERB テンプレートの Ruby 領域も対象です。</span>
             </li>
           </ul>
           <div class="callout callout--info mt-2 small">
-            このうち最初の 3 つは Pylance を基準にしています。動的型付け言語の言語サーバーとして、最もよく知られた参照点だからです。
+            このうち 3 つは Pylance を基準にしています。動的型付け言語の言語サーバーとして、最もよく知られた参照点だからです。プロジェクト全体の診断、hover でのドキュメント表示、セマンティックハイライトの 3 つです。順番で数えず名前を挙げているのは、この一覧の先頭 3 つではないためです。以前のこのページはそう書いていました。
           </div>
         </article>
 
@@ -149,6 +149,14 @@
           <div class="tl-version"><span class="v">0.3.0</span></div>
           <h3>gem が定義しているものを知る</h3>
           <ul class="feature-list">
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>Article.all.</code> で補完が出ます。</strong><code>Relation</code> が自分の持つもの——<code>where</code>・<code>order</code>・<code>limit</code>、およびそれらが作るチェーン——を答えます。hover は既に型名を答えますが、Relation 自身の API が何であるかを教えるものが無く、それを供給するのが上の gem 索引です。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>self.</code> で補完が出ます。</strong>いま書いているオブジェクトに対して呼べるメソッドです。前置きのみの補完が既に出している一覧を、ドットの後で。</span>
+            </li>
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>gem を継承したクラスでも未知メソッドが報告される</strong> — <code>ApplicationController</code>、つまり大半のコントローラやジョブです。現在は、報告すれば推測になってしまうため、意図的に黙っています。</span>

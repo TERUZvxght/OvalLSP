@@ -71,74 +71,29 @@ than not having the page.
 5. Grep the previous version number across the repo; anything still
    naming it that is not history is stale.
 
-## The site is not yet merged, and the order matters
+## The site, and what still is not checked
 
-`site/` lives on `claude/github-pages-official-site-fef0f5`, not on
-`main`. An independent check found it faithful — the capability matrix is
-a row-for-row copy of README's, every internal link resolves, no
-trackers, no external assets, no personal data — with a short list of
-discrepancies to fix before adopting it.
+`site/` is on `main` as of 0.2.0. The list this section used to carry --
+eleven discrepancies found by an independent read of the branch -- is
+gone because every item on it is fixed, and the two that were about the
+capability matrix are now *machine*-checked rather than remembered:
+`scripts/check_site_links.rb` compares the site's matrix against
+README's, all three columns, and the version the index pages advertise
+against `vscode/package.json`. The deploy gates on it.
 
-**The agreed order is: publish 0.2.0 first, then fix the site, then merge
-it.** One of the discrepancies is the front page claiming completion of
-workspace class names, which 0.1.x does not have and 0.2.0 does — fixing
-that against 0.1.x and then re-fixing it after 0.2.0 would be two edits
-saying opposite things a week apart. The rest of the list is order-independent:
+English is compared by feature name; Japanese positionally, row for row.
+The site's Japanese was translated independently of `README.ja.md` and
+the two disagree about wording that means the same thing (`Coreが起動し`
+against `Core が起動し`), so demanding identical prose would buy a
+stricter check by making the prose worse. What both copies really share
+is the order of the table.
 
-- **`site/roadmap.html` and `site/ja/roadmap.html` do not carry 0.3.0's
-  two new items** — completion after `self.` and completion on an Active
-  Record `Relation`, both added to `docs/ROADMAP.md` and to README's
-  matrix while measuring 0.2.0 against a real application.
-- **`site/capabilities.html` and `site/ja/capabilities.html` mark all six
-  of 0.2.0's capabilities `planned`** — bare-prefix completion, the
-  unassigned-`@ivar` check, argument types, project-wide diagnostics,
-  documentation in hover, and semantic highlighting — and
-  `site/roadmap.html` still carries the 0.2.0 section that
-  `docs/ROADMAP.md` no longer has. On publication the project's own site
-  would say six shipped features are still to come. This is the reason
-  the front-page item below is order-dependent, and it is the same edit;
-- `site/capabilities.html` **and `site/ja/capabilities.html`** still say
-  "Find references, rename, workspace symbols" unqualified; 0.1.15
-  narrowed that — a method a macro declared is refused rather than
-  renamed — in README's `[^rename]` footnote and in
-  `docs/EXTENSION_CAPABILITIES.md`'s W2/W4 rows;
-- the plain-Ruby column drops README's `⚠️`, so its own legend reads those
-  cells as "not built" where README means "probably works, unverified";
-- the roadmap page says "the first three of these" and then names items
-  2, 5 and 6;
-- `Preview 0.1.10` is hard-coded in both index pages;
-- hover is said to show "method returns", which no capability row backs;
-- "a patch means nothing a user sees changed" appears six times, and
-  `docs/PUBLISHING.md` explicitly rejects that phrasing;
-- the requirements list omits the VS Code 1.85 floor;
-- `404.html` alone advertises an issue tracker;
-- **`site/security.html` and `site/ja/security.html` carry both claims
-  0.1.12 retracted**: that the parse cache holds "not your source code's
-  contents" (it holds method bodies and default expressions verbatim),
-  and a description of what observation records that omits the file
-  digest, the line number, the run identifier and the run-finish time.
-  These are not cosmetic like the rest of this list — they are the
-  release's own corrections, unmade on the public page. Fix them with
-  the others before merging, and do not ship the site carrying them.
-  The parse-cache paragraph on the same page also hard-codes
-  `~/.cache/ovallsp/`, which 0.1.12
-  corrected to `$XDG_CACHE_HOME/ovallsp/` (falling back to `~/.cache`
-  when that is unset or empty) in six other documents.
-
-Note also that `vscode/package.json`'s `homepage` on that branch already
-points at the Pages URL, which 404s until Pages is switched on and the
-site is on `main` — so that branch must land before a VSIX carrying the
-link ships.
-
-**Do the mechanical part while adopting it.** The branch already ships
-`scripts/check_site_links.rb`, and the deploy already gates on it.
-Teaching it two more comparisons — the site's matrix against README's,
-and the version badge against `vscode/package.json` — turns roughly
-two-thirds of the stale-point list below into CI failures instead of
-things somebody has to remember. That is the same move
-`core/spec/e2e/capability_coverage_spec.rb` already makes for
-`EXTENSION_CAPABILITIES.md`, and it is what would close the hole named
-in the next section.
+What that check does *not* cover, and what therefore still has to be
+read: every page that is not `capabilities.html`. The security page's
+two retracted claims, the roadmap's mis-numbered sentence, the version
+badge, the requirements list, the patch definition and the 404 page's
+issue-tracker line were each found by a person reading, and nothing
+would have caught them.
 
 ## Where a check is missing
 

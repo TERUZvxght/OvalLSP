@@ -115,6 +115,145 @@ pages.each do |page|
   problems << "#{rel_page}: does not load the script" unless html.include?("assets/js/site.js")
 end
 
+# --- The capability matrix, against README's ---------------------------
+#
+# `site/capabilities.html` restates README's matrix row for row, and
+# nothing compared the two. That is how the site came to mark all six of
+# 0.2.0's capabilities `planned` on the day they shipped: the matrix was
+# copied once, at 0.1.10, and six releases moved underneath it.
+#
+# Compared by *status*, not by exact HTML: the site renders "Verified"
+# where README writes ✅ and a version where README writes a version, and
+# the question is whether the two agree about what a reader is promised.
+#
+# English is compared by feature name. Japanese is compared *positionally*
+# -- same number of rows, same statuses in the same order -- because the
+# site's Japanese was translated independently of `README.ja.md` and the
+# two disagree about wording that means the same thing (`Coreが起動し` vs
+# `Core が起動し`, `あと` vs `後`). Rewriting one to match the other would
+# buy a stricter check by making the prose worse; the order of the table
+# is the thing both copies really do share.
+REPO = File.expand_path(File.join(__dir__, ".."))
+
+# README writes ✅ / ⚠️ / a version / —; the site writes Verified /
+# Unverified / a version / n/a. Reduced to the states both spell, and nil
+# for anything that is not a status at all -- which is what filters out
+# the header row and the legend table without naming either.
+def normalise_status(text)
+  # The site's own CSS classes carry the state, and they are the one part
+  # of the cell that is not translated: `mark--yes` reads "Verified" in
+  # English and 検証済み in Japanese. Keying on the word instead is how a
+  # first version of this check silently compared 15 of 39 Japanese rows
+  # and called the rest "not a status".
+  #
+  # A cell can hold two of them. README writes `⚠️ 1.0.0` for thirty rows
+  # -- "unverified there, and planned for that release" -- and the site
+  # rendered only the version, so its own legend read those cells as "not
+  # built" where README means "probably works, unverified". Both marks are
+  # part of the state, so both are read.
+  marks = text.scan(/mark--(yes|warn|plan|none)/).flatten
+  unless marks.empty?
+    version = text[/(\d+\.\d+\.\d+)/, 1]
+    states = []
+    states << "verified" if marks.include?("yes")
+    states << "unverified" if marks.include?("warn")
+    states << "planned:#{version}" if marks.include?("plan") && version
+    states << "none" if marks.include?("none")
+    return states.empty? ? nil : states.join("+")
+  end
+
+  stripped = text.gsub(/<[^>]+>/, " ").gsub(/\[\^[a-z]+\]/, "").gsub(/\s+/, " ").strip
+  version = stripped[/(\d+\.\d+\.\d+)/, 1]
+  states = []
+  states << "verified" if stripped.include?("✅")
+  states << "unverified" if stripped.include?("⚠️")
+  states << "planned:#{version}" if version
+  states << "none" if states.empty? && stripped.match?(/\A(—|―)/)
+  states.empty? ? nil : states.join("+")
+end
+
+# Footnote markers, emphasis and code ticks are presentation. What has to
+# match is which capability the row is about.
+def normalise_feature(text)
+  # A `<small>` note on the site and a `[^footnote]` in README are the
+  # same thing -- a qualification hanging off the row -- and neither is
+  # the row's identity. Both come out.
+  text.gsub(%r{<small.*?</small>}m, "").gsub(/\[\^[a-z]+\]/, "")
+      .gsub(/[`*_]/, "").gsub(/<[^>]+>/, "")
+      .gsub(/\s*([\/,])\s*/, '\1').gsub(/\s+/, " ").strip.downcase
+end
+
+def readme_matrix(path)
+  return [] unless File.exist?(path)
+
+  File.read(path, encoding: "UTF-8").lines.filter_map do |line|
+    next unless line.start_with?("| ") && line.count("|") >= 5
+
+    cells = line.split("|").map(&:strip)
+    statuses = cells[2, 3].to_a.map { |cell| normalise_status(cell.to_s) }
+    next if statuses.compact.empty?
+
+    [normalise_feature(cells[1].to_s), statuses]
+  end
+end
+
+# All three environment columns, not just the first. Restricting it to
+# column one is how `⚠️ 1.0.0` went unnoticed in thirty rows: the column a
+# reader acts on was right and the two beside it were not.
+def site_matrix(html)
+  html.scan(%r{<tr data-status="[^"]*"><td>(.*?)</td>((?:<td class="col-status">.*?</td>){3})</tr>}m).filter_map do |feature, cells|
+    statuses = cells.scan(%r{<td class="col-status">(.*?)</td>}m).flatten.map { |cell| normalise_status(cell) }
+    statuses.compact.empty? ? nil : [normalise_feature(feature), statuses]
+  end
+end
+
+english = site_matrix(read_page(File.join(SITE, "capabilities.html")))
+english_expected = readme_matrix(File.join(REPO, "README.md"))
+problems << "capabilities.html: no capability rows found -- the matrix markup changed shape" if english.empty?
+
+english_expected.to_h.each do |feature, status|
+  actual = english.to_h[feature]
+  if actual.nil?
+    problems << "capabilities.html: README.md has a row for #{feature.inspect} and the site does not"
+  elsif actual != status
+    problems << "capabilities.html: #{feature.inspect} is #{actual.inspect} on the site and #{status.inspect} in README.md"
+  end
+end
+(english.to_h.keys - english_expected.to_h.keys).each do |feature|
+  problems << "capabilities.html: has a row for #{feature.inspect} that README.md does not"
+end
+
+japanese = site_matrix(read_page(File.join(SITE, "ja", "capabilities.html")))
+japanese_expected = readme_matrix(File.join(REPO, "README.ja.md"))
+if japanese.length != japanese_expected.length
+  problems << "ja/capabilities.html: has #{japanese.length} rows, README.ja.md has #{japanese_expected.length}"
+else
+  japanese.each_with_index do |(feature, status), index|
+    expected_status = japanese_expected[index].last
+    next if status == expected_status
+
+    problems << "ja/capabilities.html: row #{index + 1} (#{feature.inspect}) is #{status.inspect} " \
+                "and README.ja.md's row #{index + 1} is #{expected_status.inspect}"
+  end
+end
+
+# --- The version the site advertises, against package.json -------------
+#
+# `Preview 0.1.10` was hard-coded into both index pages and stayed there
+# through six releases.
+package_json = File.join(REPO, "vscode", "package.json")
+if File.exist?(package_json)
+  version = File.read(package_json, encoding: "UTF-8")[/"version":\s*"([^"]+)"/, 1]
+  pages.each do |page|
+    rel_page = page.delete_prefix("#{SITE}/")
+    read_page(page).scan(/(?:Preview|preview)\s+v?(\d+\.\d+\.\d+)/) do |(shown)|
+      next if shown == version
+
+      problems << "#{rel_page}: advertises version #{shown}, but vscode/package.json says #{version}"
+    end
+  end
+end
+
 puts "Checked #{checked} internal reference(s) across #{pages.length} page(s); " \
      "#{external.length} distinct external URL(s) left unfetched."
 

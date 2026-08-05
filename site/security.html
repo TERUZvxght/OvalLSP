@@ -247,9 +247,19 @@
           </p>
           <p>
             The only thing OvalLSP itself writes to disk is its persistent parse cache under
-            <code>~/.cache/ovallsp/</code>: parsed declarations and types, keyed by workspace
-            and toolchain version. Not your source code's contents, and not transmitted
-            anywhere.
+            <code>$XDG_CACHE_HOME/ovallsp/</code> — or <code>~/.cache/ovallsp/</code> when that
+            variable is unset or empty — keyed by workspace and toolchain version.
+            <strong>It contains parts of your source code.</strong> Alongside the parsed
+            declarations and types it stores each method's body text and each parameter's
+            default expression verbatim, and each file's absolute path. Nothing in it is
+            transmitted anywhere, and deleting the directory is safe at any time.
+          </p>
+          <p class="text-mute">
+            An earlier version of this page said &ldquo;not your source code's contents&rdquo;.
+            That was retracted in 0.1.12 and corrected in
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/PRIVACY.md">PRIVACY.md</a>,
+            which is the single source of truth for what is written where; this page carried the
+            withdrawn wording until 0.2.0.
           </p>
         </div>
       </div>
@@ -274,10 +284,19 @@
         <strong>OvalLSP: Clear Observed Types</strong> discards it;
         <strong>OvalLSP: Show Type Evidence</strong> shows what a given inference was based on.
       </p>
+      <p>
+        Four things it records are worth naming here, because &ldquo;shapes, not values&rdquo;
+        does not imply them: an identifier for the run, made from its start time, Core's
+        process id and a random number; a digest of the file the observed method is in;
+        that method's line number; and the time the run finished. The digest and the line
+        number exist only to notice when a method may have been edited since it was observed.
+      </p>
       <div class="callout callout--info mt-2">
         The full statement is in
         <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/PRIVACY.md">PRIVACY.md</a>,
-        which also spells out what observation does <em>not</em> record.
+        which also spells out what observation does <em>not</em> record. Until 0.2.0 this
+        page's summary omitted the four items above; PRIVACY.md is the source of truth and
+        this page had drifted from it.
       </div>
     </div>
   </section>
