@@ -323,6 +323,13 @@ function startClientForFolder(
           `OvalLSP: the Ruby interpreter selected for ${folder.name} is incompatible with this VSIX's bundled ` +
             'native dependencies. See the OvalLSP output channel for details.'
         );
+      } else if (compatibility.note) {
+        // Working, but not the way the VSIX packaged it: the bundled
+        // payload does not apply and this Ruby's own prism/rbs are being
+        // used. That is a fact for the Output channel, not an error --
+        // the previous arrangement showed a red toast on every window for
+        // a combination the Core runs green on.
+        outputChannel.appendLine(`OvalLSP: ${compatibility.note}`);
       }
 
       if (configPaths) {

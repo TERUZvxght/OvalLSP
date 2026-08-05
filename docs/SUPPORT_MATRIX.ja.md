@@ -34,7 +34,7 @@ alternatives"に記載の拡張方針(選択肢1: 複数ビルド、2: Ruby runt
 |---|---|---|
 | 3.4(3.4.5、3.4.7で実行確認) | supported | 実際に`core/`のテストスイート(0.2.1 の最終コミットで計測して1,833 examples)をこのマシンで3.4.7(主要)および3.4.5(rbenv経由)で実行しgreenを確認 |
 | 3.3 | unsupported(*拡張機能*が拒否する) | Core自体のテストスイートは3.3でも走っている(`.github/workflows/ci.yml` が `["3.3", "3.4"]` のマトリクスで実行)。この行はライブラリの話ではない。利用者が入れるのはVSIXで、同梱するnative extensionは1つのRubyバージョン向けにビルドされており、`platformCompatibility.ts` が完全一致を要求するため、3.3では拡張機能が起動を断る。この区分が表すのは出荷物であって、0.2.1 までこの行が根拠として挙げていた `required_ruby_version >= 3.3` ではない(そちらは事実でなくなっていた) |
-| 4.0(4.0.6で実行確認) | best effort | `core/`のスイートは4.0.6でgreen — 1,875 examples, 0 failures。ただし実Railsの統合例76件は、このマシンの4.0.6にRailsとsqlite3が入っていないためpendingです。**best effortが指すのはライブラリであって出荷物ではありません**。VSIXは単一Rubyバージョン向けにビルドしたnative extensionを同梱し、`platformCompatibility.ts` が完全一致を要求するため、Rubyが4.0系の利用者には3.3と同じ拒否が出ます。継続的な検証もありません — `.github/workflows/ci.yml` が回しているのは `["3.3", "3.4"]` です |
+| 4.0(4.0.6で実行確認) | best effort | `core/`のスイートは4.0.6でgreen — 1,875 examples, 0 failures。ただし実Railsの統合例76件は、このマシンの4.0.6にRailsとsqlite3が入っていないためpendingです。**VSIXがこの上で何をするか**: 同梱のnative extensionは単一Rubyバージョン向けなのでここでは使われません。拡張機能は*利用者自身の*Rubyが `prism` と `rbs` を持っているかを確認し、持っていればそちらで動きます。持っていればOutputチャンネルへの1行、持っていなければ `gem install prism rbs` を示すエラーです。0.2.1 まではどちらでもエラーで、それは同梱物の事情を利用者の状況として伝えていました。4.0 に対する継続的な検証はありません — `.github/workflows/ci.yml` が回しているのは `["3.3", "3.4"]` です |
 | 3.5 | unsupported(未検証) | 同上。リリース時点でstableな3.5系での実行実績がない |
 | 3.2以下 | unsupported | `required_ruby_version`で明示的に拒否 |
 

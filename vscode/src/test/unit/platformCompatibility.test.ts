@@ -44,10 +44,64 @@ describe('checkBundledCoreCompatibility', () => {
     assert.strictEqual(receivedCwd, '/workspace/project-a');
   });
 
+  // A Ruby the bundled payload was not built for is not automatically a
+  // Ruby OvalLSP cannot run under. The payload is a convenience -- the
+  // Core needs `prism` and `rbs`, and a developer whose own Ruby has them
+  // is exactly the "may still work if the user's own Ruby environment has
+  // prism/rbs installed separately" case `SUPPORT_MATRIX` already
+  // describes for every non-build combination.
+  //
+  // It became worth distinguishing when 0.2.1 declared Ruby 4.0 best
+  // effort: the suite is green there, so telling that user their
+  // interpreter is "incompatible" -- in a red toast -- describes the
+  // payload rather than their situation.
+  it('is compatible on a Ruby the payload was not built for, when that Ruby has prism and rbs itself', async () => {
+    writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
+
+    const result = await checkBundledCoreCompatibility(
+      extensionRoot, 'ruby',
+      stubIdentity({ engine: 'ruby', version: '4.0.6', platform: 'arm64-darwin27' }),
+      undefined,
+      async () => true
+    );
+
+    assert.strictEqual(result.compatible, true);
+    assert.ok(result.note && result.note.includes('4.0'), `expected a note naming the Ruby, got ${result.note}`);
+  });
+
+  it('is incompatible on a Ruby that has neither the payload nor its own prism and rbs', async () => {
+    writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
+
+    const result = await checkBundledCoreCompatibility(
+      extensionRoot, 'ruby',
+      stubIdentity({ engine: 'ruby', version: '4.0.6', platform: 'arm64-darwin27' }),
+      undefined,
+      async () => false
+    );
+
+    assert.strictEqual(result.compatible, false);
+    assert.ok(result.reason && result.reason.includes('gem install prism rbs'));
+  });
+
+  it('does not spend a process asking about the runtime when the payload already matches', async () => {
+    writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
+    let asked = false;
+
+    const result = await checkBundledCoreCompatibility(
+      extensionRoot, 'ruby',
+      stubIdentity({ engine: 'ruby', version: '3.4.7', platform: 'arm64-darwin25' }),
+      undefined,
+      async () => { asked = true; return true; }
+    );
+
+    assert.strictEqual(result.compatible, true);
+    assert.strictEqual(asked, false);
+  });
+
   it('is compatible when there is no bundled manifest at all (a dev checkout)', async () => {
     const result = await checkBundledCoreCompatibility(extensionRoot, 'ruby', stubIdentity({
       engine: 'ruby', version: '3.4.7', platform: 'arm64-darwin25'
-    }));
+    }), undefined, async () => false);
 
     assert.strictEqual(result.compatible, true);
   });
@@ -57,7 +111,7 @@ describe('checkBundledCoreCompatibility', () => {
 
     const result = await checkBundledCoreCompatibility(extensionRoot, 'ruby', stubIdentity({
       engine: 'ruby', version: '3.4.7', platform: 'arm64-darwin25'
-    }));
+    }), undefined, async () => false);
 
     assert.strictEqual(result.compatible, true);
   });
@@ -67,17 +121,22 @@ describe('checkBundledCoreCompatibility', () => {
 
     const result = await checkBundledCoreCompatibility(extensionRoot, 'ruby', stubIdentity({
       engine: 'ruby', version: '3.4.0', platform: 'arm64-darwin25'
-    }));
+    }), undefined, async () => false);
 
     assert.strictEqual(result.compatible, true);
   });
 
+  // Each of these passes a probe that says the interpreter has no prism
+  // or rbs of its own -- otherwise they would be asserting about
+  // whatever gems happen to be installed on the machine running the
+  // suite, and on a developer's own machine that is usually "yes",
+  // which is the *other* branch.
   it('is incompatible when the platform differs, with an actionable reason', async () => {
     writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
 
     const result = await checkBundledCoreCompatibility(extensionRoot, 'ruby', stubIdentity({
       engine: 'ruby', version: '3.3.8', platform: 'x86_64-linux'
-    }));
+    }), undefined, async () => false);
 
     assert.strictEqual(result.compatible, false);
     assert.ok(result.reason?.includes('ruby 3.4 (arm64-darwin25)'));
