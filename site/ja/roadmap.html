@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ロードマップ — OvalLSP</title>
+<meta name="description" content="OvalLSP の各リリースで何ができるようになるかを、ユーザーが気づく順に。バージョン番号は日付ではなく「何が同時に届くか」の約束です。">
+<link rel="canonical" href="https://teruzvxght.github.io/OvalLSP/ja/roadmap.html">
+<link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/roadmap.html">
+<link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/roadmap.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="OvalLSP">
+<meta property="og:title" content="ロードマップ — OvalLSP">
+<meta property="og:description" content="各リリースで何ができるようになるかを、ユーザーが気づく順に。">
+<meta property="og:image" content="https://teruzvxght.github.io/OvalLSP/assets/img/icon.png">
+<meta name="theme-color" content="#0a090c">
+<link rel="icon" href="../assets/img/icon.png">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script>
+  document.documentElement.classList.add("js");
+  (function () {
+    try {
+      var stored = localStorage.getItem("ovallsp-theme");
+      var light = stored ? stored === "light"
+        : window.matchMedia("(prefers-color-scheme: light)").matches;
+      if (light) document.documentElement.setAttribute("data-theme", "light");
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">本文へスキップ</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img class="brand-mark" src="../assets/img/icon.png" width="28" height="28" alt="" decoding="async">
+      <span>OvalLSP</span>
+      <span class="brand-sub">Ruby Semantic LSP</span>
+    </a>
+
+    <nav class="nav" id="site-nav" aria-label="メイン">
+      <a href="index.html">概要</a>
+      <a href="capabilities.html">機能マトリクス</a>
+      <a href="roadmap.html" aria-current="page">ロードマップ</a>
+      <a href="getting-started.html">導入</a>
+      <a href="security.html">セキュリティとプライバシー</a>
+    </nav>
+
+    <div class="header-tools">
+      <a class="lang-switch" href="../roadmap.html" hreflang="en" lang="en" data-lang-switch="en">EN</a>
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="配色テーマを切り替える">
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>
+        </svg>
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 14.5A8.2 8.2 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/>
+        </svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/TERUZvxght/OvalLSP" aria-label="GitHub の OvalLSP">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.8 18.3 5 18.3 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/>
+        </svg>
+      </a>
+      <button class="icon-btn nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="ナビゲーションを開閉">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="page-hero">
+    <div class="wrap">
+      <p class="breadcrumb"><a href="index.html">ホーム</a><span>/</span>ロードマップ</p>
+      <h1>各リリースで何ができるようになるか</h1>
+      <p class="lede">
+        ユーザーが気づく順に並べています。ここでのバージョン番号は
+        <em>何が同時に届くか</em> の約束であって、日付ではありません。パッチリリースは設計上ここに現れません — 何も追加しないので、列挙するものがないからです。
+      </p>
+    </div>
+  </section>
+
+  <section class="section section--tight">
+    <div class="wrap">
+      <div class="grid grid--3">
+        <div class="card card--flat">
+          <h3 class="mono" style="font-size:1rem">patch — 0.1.<em>x</em></h3>
+          <p>ユーザーから見える変更なし。修正、堅牢化、テスト。機能の行が増えることはありません。</p>
+        </div>
+        <div class="card card--flat">
+          <h3 class="mono" style="font-size:1rem">minor — 0.<em>x</em>.0</h3>
+          <p>機能が追加されたリリース。どの機能かは、このページにリリースごとに列挙されています。</p>
+        </div>
+        <div class="card card--flat">
+          <h3 class="mono" style="font-size:1rem">major — <em>x</em>.0.0</h3>
+          <p>ユーザーが依存していたものが動かなくなったリリース。完全な定義は <code>docs/PUBLISHING.ja.md</code> にあります。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap wrap--narrow">
+      <div class="timeline">
+
+        <article class="tl-item" id="v020">
+          <div class="tl-version">
+            <span class="v">0.2.0</span>
+            <span class="mark mark--plan">次のマイナー</span>
+          </div>
+          <h3>最初の 1 文字からの補完と、開いていないファイルの診断</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>A</code> と打つだけで候補が出る。</strong> 現在の補完は先に <code>.</code> が必要です。裸のプレフィックスに一致するのはルートヘルパだけで、ワークスペースのクラス、スコープ内のローカル変数、その場で呼べるメソッド — つまり実際に打鍵する内容のほとんど — は名前を最後まで打つまで何も出ません。あらゆるエディタで最もよく使われる補完です。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>開いていないファイルの誤りも報告される。</strong> 現在、診断はエディタで開いているファイルにしか存在しないため、3 階層離れたディレクトリのエラーは、たまたま開くまで見えません。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>型の違う引数を渡すと報告される。</strong> 現在チェックしているのは引数の<em>個数</em>だけです。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>一度も代入されない <code>@ivar</code> の読み出しが報告される。</strong> Ruby は例外を投げず <code>nil</code> を返すため、現在は何も教えてくれず、ビューがただ空で描画されます。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>ホバーと補完にドキュメントが表示される。</strong> 現在のホバーはそれが<em>何であるか</em>を言うだけで、<em>何のためのものか</em>は決して言いません。RDoc/YARD のコメントは <code>def</code> のすぐ上にあるにもかかわらず。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>セマンティックハイライト。</strong> Ruby の <code>foo</code> はローカル変数か self へのメソッド呼び出しか曖昧です。エンジンはすでにどちらか知っていて、エディタは知りません。ERB テンプレートの Ruby 領域も対象です。</span>
+            </li>
+          </ul>
+          <div class="callout callout--info mt-2 small">
+            このうち最初の 3 つは Pylance を基準にしています。動的型付け言語の言語サーバーとして、最もよく知られた参照点だからです。
+          </div>
+        </article>
+
+        <article class="tl-item tl-item--future" id="v030">
+          <div class="tl-version"><span class="v">0.3.0</span></div>
+          <h3>gem が定義しているものを知る</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>gem を継承したクラスでも未知メソッドが報告される</strong> — <code>ApplicationController</code>、つまり大半のコントローラやジョブです。現在は、報告すれば推測になってしまうため、意図的に黙っています。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>インレイヒント。</strong> 推論された型と引数名が、ホバーしたときだけでなくコード中に表示されます。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>各診断に対するクイックフィックス。</strong> 足りないメソッドを定義する、ルートヘルパ名を直す、引数の個数を合わせる。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>型定義へのジャンプ</strong> — 呼び出しているメソッドではなく、式が評価されるクラスへ飛びます。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>同じシンボルの他の出現箇所をハイライト</strong>（ファイル内）。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>コール階層</strong> — 参照の平坦なリストではなく、呼び出し元と呼び出し先をたどれる形で。</span>
+            </li>
+          </ul>
+        </article>
+
+        <article class="tl-item tl-item--future" id="v040">
+          <div class="tl-version"><span class="v">0.4.0</span></div>
+          <h3>細部の調整</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>チェックごとの重大度設定。</strong> 納得できないチェックを警告ではなくヒントにしたり、無効にしたりできます。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>require</code> の自動挿入。</strong></span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>シグネチャヘルプが、カーソルのある引数をハイライトする。</strong></span>
+            </li>
+          </ul>
+        </article>
+
+        <article class="tl-item tl-item--far" id="v100">
+          <div class="tl-version"><span class="v">1.0.0</span></div>
+          <h3>機能ではなく、保証</h3>
+          <p>
+            このページで唯一、機能を追加しないリリースです。代わりに、機能マトリクスから
+            2 つの但し書きを取り除きます。
+          </p>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
+              <span><strong>公開するすべてのプラットフォームを検証する。</strong> Apple Silicon だけでなく <code>darwin-x64</code>、<code>win32-x64</code>、<code>linux-x64</code> も。</span>
+            </li>
+            <li>
+              <span class="tick is-warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
+              <span><strong>素の Ruby プロジェクトを保証する。</strong> Rails だけでなく。エンジンの大半はおそらく今日でも動きますが、それを仕様化も検証もしていません。</span>
+            </li>
+          </ul>
+          <div class="callout mt-2 small">
+            それまでは、<a href="capabilities.html">機能マトリクス</a>の「検証済み」はすべて「macOS Apple Silicon で、Rails プロジェクトで、同梱の Core で検証済み」という意味であり、それ以外は何も保証していません。
+          </div>
+        </article>
+
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt">
+    <div class="wrap wrap--narrow prose">
+      <span class="eyebrow">選定の方法</span>
+      <h2>この一覧はどう決めたか</h2>
+      <p>
+        各項目は<a href="capabilities.html">機能マトリクス</a>の行に対応しています。マトリクスの行を持たないロードマップ項目はなく、届くリリースが明示されていないマトリクスの行もありません。
+        0.2.0 の最初の 3 項目は Pylance を基準にしています。動的型付け言語の言語サーバーとして、最もよく知られた参照点だからです。プロジェクト全体の診断（今は、見ていないファイルの間違いは見えません）、ホバーでのドキュメント表示（ホバーはそれが何であるかは言うが、何のためかは言いません）、セマンティックハイライト（Ruby の <code>foo</code> はローカル変数かメソッド呼び出しか曖昧で、エンジンはすでに知っていて、エディタは知りません）の 3 つです。
+      </p>
+      <p>
+        あえて<em>予定しない</em>ことにした Pylance 相当の機能も、その理由とともに
+        <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/design/tasks/024-deferred-review-findings.md">024-deferred-review-findings.md</a>
+        に記録されています。上記の各項目の根拠も同じ場所にあります。
+      </p>
+
+      <h2>リリース済みのバージョンはどこに記録されているか</h2>
+      <p>
+        このページが扱うのは、まだ出荷されていないものです。出荷済みの内容は
+        — なぜその変更を行ったか、何を測ったか、どの案が否定されたかも含めて —
+        リリースごとに<a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a>にあります。
+      </p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="cta">
+        <h2>上のすべては未実装です。では、実装済みは？</h2>
+        <p>機能マトリクスは、出荷済みの各機能について、そのテストが実際に動いている環境を示しています。</p>
+        <div class="btn-row">
+          <a class="btn btn--primary" href="capabilities.html">今動くものを見る</a>
+          <a class="btn btn--ghost" href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">Preview をインストール</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-about">
+        <a class="brand" href="index.html">
+          <img class="brand-mark" src="../assets/img/icon.png" width="28" height="28" alt="" decoding="async">
+          <span>OvalLSP</span>
+        </a>
+        <p>
+          Ruby / Rails のためのセマンティック言語サーバーと、それと会話する VS Code 拡張機能。
+          MIT ライセンス、オープンに開発されています。
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h4>プロダクト</h4>
+        <ul>
+          <li><a href="capabilities.html">機能マトリクス</a></li>
+          <li><a href="roadmap.html">ロードマップ</a></li>
+          <li><a href="getting-started.html">導入</a></li>
+          <li><a href="security.html">セキュリティとプライバシー</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>ドキュメント</h4>
+        <ul>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/README.ja.md">README</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SUPPORT_MATRIX.ja.md">サポートマトリクス</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md">既知の制限</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>プロジェクト</h4>
+        <ul>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP">GitHub</a></li>
+          <li><a href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">Marketplace</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md">サポート</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/CODE_OF_CONDUCT.ja.md">行動規範</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>© <span data-year>2026</span> OvalLSP contributors · MIT License</p>
+      <p>Microsoft、GitHub、Shopify、Ruby および Rails プロジェクトとは無関係です。</p>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/js/site.js" defer></script>
+</body>
+</html>

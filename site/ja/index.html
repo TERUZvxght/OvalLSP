@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OvalLSP — Ruby / Rails のためのセマンティック言語サーバー</title>
+<meta name="description" content="OvalLSP は VS Code 向けの Ruby / Rails セマンティック言語サーバーです。Prism による本物の構文解析、ワークスペース全体のインデックス、そして信頼されたワークスペースでは Rails アプリ自身にルートとモデルを問い合わせる Runtime Agent。テレメトリなし、実行時のネットワークアクセスなし。">
+<link rel="canonical" href="https://teruzvxght.github.io/OvalLSP/ja/">
+<link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/">
+<link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/">
+<link rel="alternate" hreflang="x-default" href="https://teruzvxght.github.io/OvalLSP/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="OvalLSP">
+<meta property="og:title" content="OvalLSP — Ruby / Rails のためのセマンティック言語サーバー">
+<meta property="og:description" content="Prism による本物の構文解析、ワークスペース全体のインデックス、そして Rails アプリ自身にルートとモデルを問い合わせる Runtime Agent。">
+<meta property="og:url" content="https://teruzvxght.github.io/OvalLSP/ja/">
+<meta property="og:image" content="https://teruzvxght.github.io/OvalLSP/assets/img/icon.png">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0a090c">
+<link rel="icon" href="../assets/img/icon.png">
+<link rel="apple-touch-icon" href="../assets/img/icon.png">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script>
+  document.documentElement.classList.add("js");
+  (function () {
+    try {
+      var stored = localStorage.getItem("ovallsp-theme");
+      var light = stored ? stored === "light"
+        : window.matchMedia("(prefers-color-scheme: light)").matches;
+      if (light) document.documentElement.setAttribute("data-theme", "light");
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">本文へスキップ</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img class="brand-mark" src="../assets/img/icon.png" width="28" height="28" alt="" decoding="async">
+      <span>OvalLSP</span>
+      <span class="brand-sub">Ruby Semantic LSP</span>
+    </a>
+
+    <nav class="nav" id="site-nav" aria-label="メイン">
+      <a href="index.html" aria-current="page">概要</a>
+      <a href="capabilities.html">機能マトリクス</a>
+      <a href="roadmap.html">ロードマップ</a>
+      <a href="getting-started.html">導入</a>
+      <a href="security.html">セキュリティとプライバシー</a>
+    </nav>
+
+    <div class="header-tools">
+      <a class="lang-switch" href="../index.html" hreflang="en" lang="en" data-lang-switch="en">EN</a>
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="配色テーマを切り替える">
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>
+        </svg>
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 14.5A8.2 8.2 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/>
+        </svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/TERUZvxght/OvalLSP" aria-label="GitHub の OvalLSP">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.8 18.3 5 18.3 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/>
+        </svg>
+      </a>
+      <button class="icon-btn nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="ナビゲーションを開閉">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="hero-copy">
+        <div class="badge-row">
+          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.1.10</span>
+          <span class="badge">VS Code 拡張機能</span>
+          <span class="badge">MIT</span>
+        </div>
+
+        <h1>エディタが、<br><span class="accent">本当に理解する Ruby。</span></h1>
+
+        <p class="hero-lede">
+          OvalLSP は Ruby と Rails のためのセマンティック言語サーバーです。
+          <a href="https://github.com/ruby/prism">Prism</a> でコードを構文解析し、ワークスペース全体をインデックス化し、信頼された Rails ワークスペースではアプリケーション自身に「実際のルートとモデル」を問い合わせます。正規表現による推測はなく、テレメトリもなく、実行時のネットワークアクセスもありません。
+        </p>
+
+        <div class="btn-row mt-2">
+          <a class="btn btn--primary" href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 12.9 8.1 17l1.6-1.3-3.4-2.8 3.4-2.8L8.1 8.8 3 12.9zm18 0L15.9 8.8l-1.6 1.3 3.4 2.8-3.4 2.8 1.6 1.3L21 12.9zM13.7 5l-1.9-.5-2.6 14.9 1.9.5L13.7 5z"/></svg>
+            Marketplace からインストール
+          </a>
+          <a class="btn btn--ghost" href="capabilities.html">
+            検証済みの機能を見る
+          </a>
+        </div>
+
+        <p class="hero-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M12 8.5v5M12 16.8v.2"/><circle cx="12" cy="12" r="9.2"/></svg>
+          <span>
+            これは Pre-Release の Preview 版です。公開ビルドが対象とするのは
+            <strong>Apple Silicon の macOS</strong> と <strong>Ruby 3.4.x</strong> のみです。インストール前に<a href="getting-started.html#requirements">動作要件</a>をご確認ください。
+          </span>
+        </p>
+      </div>
+
+      <div class="hero-visual">
+        <div class="editor" role="img" aria-label="エディタのモックアップ: コントローラ内の comments 呼び出しにホバーすると、Runtime Agent が報告した has_many 関連から解決された CollectionProxy[Comment] が表示される。">
+          <div class="editor-bar">
+            <span class="editor-dots"><i></i><i></i><i></i></span>
+            <span class="editor-file">app/controllers/articles_controller.rb</span>
+          </div>
+          <div class="editor-body">
+            <ol class="code-lines">
+              <li><span class="t-key">class</span> <span class="t-cls">ArticlesController</span> &lt; <span class="t-cls">ApplicationController</span></li>
+              <li>  <span class="t-key">before_action</span> <span class="t-sym">:set_article</span>, only: [<span class="t-sym">:show</span>, <span class="t-sym">:edit</span>]</li>
+              <li></li>
+              <li>  <span class="t-key">def</span> <span class="t-mth">show</span></li>
+              <li class="hl">    <span class="t-var">@comments</span> = <span class="t-var">@article</span>.<span class="t-mth">comments</span>.<span class="t-mth">published</span></li>
+              <li class="annot">
+                <div class="hover-card">
+                  <div class="hover-sig"><span class="t-mth">comments</span> → <span class="t-cls">ActiveRecord::Associations::CollectionProxy</span>[<span class="t-cls">Comment</span>]</div>
+                  <div class="hover-sig" style="margin-top:5px"><span class="t-com">has_many :comments, dependent: :destroy</span></div>
+                  <div class="hover-meta">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="9"/></svg>
+                    <span><b>Runtime Agent</b> が報告した関連 · app/models/article.rb:14</span>
+                  </div>
+                </div>
+              </li>
+              <li>  <span class="t-key">end</span></li>
+              <li></li>
+              <li>  <span class="t-key">private</span></li>
+              <li></li>
+              <li>  <span class="t-key">def</span> <span class="t-mth">set_article</span></li>
+              <li>    <span class="t-var">@article</span> = <span class="t-cls">Article</span>.<span class="t-mth">find</span>(<span class="t-var">params</span>[<span class="t-sym">:id</span>])</li>
+              <li>  <span class="t-key">end</span></li>
+              <li><span class="t-key">end</span></li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STAT STRIP ============ -->
+  <section class="section section--tight section--alt">
+    <div class="wrap">
+      <div class="grid grid--4">
+        <div class="stat reveal">
+          <span class="stat-value">LSP 3.17</span>
+          <span class="stat-label">stdio · Content-Length フレーミング</span>
+        </div>
+        <div class="stat reveal">
+          <span class="stat-value">0 バイト</span>
+          <span class="stat-label">テレメトリは一切なし。コードに対して検証済み</span>
+        </div>
+        <div class="stat reveal">
+          <span class="stat-value">Prism</span>
+          <span class="stat-label">ヒューリスティックではなく本物の Ruby パーサ</span>
+        </div>
+        <div class="stat reveal">
+          <span class="stat-value">E2E</span>
+          <span class="stat-label">「検証済み」には壊れたら落ちるテストがある</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FEATURES ============ -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">できること</span>
+        <h2>コードを理解した上で答える言語機能</h2>
+        <p>
+          以下の答えはすべて、実際の構文木、宣言のワークスペース全体インデックス、そして
+          Rails が関わる場面ではアプリケーション自身のランタイム内省から導かれています。
+          OvalLSP は、知り得ないことについては推測せず、黙ります。
+        </p>
+      </div>
+
+      <div class="grid grid--3">
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H10l-4 4v-4H4z"/></svg>
+          </div>
+          <h3>型を推論するホバー</h3>
+          <p>
+            リテラル、コンストラクタ、ローカル変数、メソッドの戻り値、Active Record のファインダ、そしてコントローラから ERB ビューへ引き継がれるインスタンス変数。
+            RBS/RBI シグネチャと統合されたローカル型推論エンジンが支えています。
+          </p>
+        </article>
+
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h9M4 12h13M4 18h7"/><path d="M17 15l3 3-3 3"/></svg>
+          </div>
+          <h3>アプリを知っている補完</h3>
+          <p>
+            モデルのカラムと関連、Active Record のインスタンス／クラス API、
+            <code>*_path</code>/<code>*_url</code> のルートヘルパ、RBS 由来の標準ライブラリ、そしてワークスペース内のクラス。タブストップ付きの呼び出しテンプレートとして挿入されます。
+          </p>
+        </article>
+
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 21 21"/></svg>
+          </div>
+          <h3>ワークスペース全体のナビゲーション</h3>
+          <p>
+            ワークスペースのメソッド、モデルのカラムと関連、標準ライブラリ（RBS の中）への定義ジャンプ。同じインデックスの上で、参照検索、ガード付きリネーム、ドキュメントシンボル、ワークスペースシンボルが動きます。
+          </p>
+        </article>
+
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 4.3 2.5 18a1.7 1.7 0 0 0 1.5 2.6h16a1.7 1.7 0 0 0 1.5-2.6L13.7 4.3a1.7 1.7 0 0 0-3 0z"/><path d="M12 9.5v4M12 17.2v.2"/></svg>
+          </div>
+          <h3>推測を拒む診断</h3>
+          <p>
+            構文エラー、継承関係がすべて判明しているクラスに対する未知メソッド、存在しないルートヘルパ、引数の個数の誤り。gem を継承したクラスに対しては、報告すること自体が推測になるため、あえて黙ります。
+          </p>
+        </article>
+
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7.5h.01M7 17h.01"/></svg>
+          </div>
+          <h3>あなたの許可の下で動く Runtime Agent</h3>
+          <p>
+            <code>bin/rails</code> を含む信頼されたワークスペースでは、バックグラウンドのエージェントが実際のルートとモデルを内省します。信頼されていないワークスペースでは起動せず、Rails 由来の機能は設計通り静的解析の答えに縮退します。
+          </p>
+        </article>
+
+        <article class="card card--hover reveal">
+          <div class="card-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 4.3v8.6L12 20.2 4.5 15.9V7.3z"/><path d="M12 12v8.2M12 12 4.5 7.7M12 12l7.5-4.3"/></svg>
+          </div>
+          <h3>拡張可能で、隔離されている</h3>
+          <p>
+            静的プラグインとランタイムプラグインのための Plugin API は、OS プロセスとして隔離されたサンドボックスで実行されます。さらに、あなた自身のテストスイートが実際に通した呼び出しの「形」だけを記録するオプトインのランタイム型観測を備えています。値は記録しません。
+          </p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RAILS ============ -->
+  <section class="section section--alt" id="rails">
+    <div class="wrap">
+      <div class="grid grid--2" style="align-items:center; gap:clamp(28px,4vw,56px)">
+        <div>
+          <span class="eyebrow">Rails</span>
+          <h2>スキーマを推測しません。訊きます。</h2>
+          <p class="lede">
+            Rails アプリケーションの本当の姿は、実行して初めて確定するコードの中にあります。起動時に描かれるルート、データベースから読まれるカラム、DSL で宣言される関連。静的解析だけでは、そのすべてを近似するほかありません。
+          </p>
+          <p>
+            ワークスペースのルートに <code>bin/rails</code> があり、かつワークスペースが信頼されている場合、
+            OvalLSP はバックグラウンドスレッドで Runtime Agent を起動し、アプリケーションが実際に定義しているルートとモデルのスナップショットを取得して、補完・定義ジャンプ・型推論に流し込みます。エージェントを待ってブロックすることはありません。内省に失敗しても、エージェントがクラッシュしても、そもそも Rails でなくても、OvalLSP は静的解析だけで動き続けます。
+          </p>
+          <ul class="feature-list mt-2">
+            <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span><strong>カラムと関連</strong>を、実際のスキーマから、実際の型で。</span></li>
+            <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span><strong>ルートヘルパ</strong> — 補完、シグネチャヘルプ、そして <code>config/routes.rb</code> への定義ジャンプ。</span></li>
+            <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span><strong>Rails の DSL</strong> — <code>enum</code>、<code>scope</code>、<code>delegate</code> が定義するメソッドまで解決します。</span></li>
+            <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span><strong>コントローラ → ビュー</strong> — ERB テンプレート中の <code>@ivar</code> に、アクションが代入した型が付きます。</span></li>
+            <li><span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span><span><strong>gem クラスの再オープン</strong> — テストヘルパの <code>class ActiveSupport::TestCase</code> は「定義」ではなく「再オープン」として認識され、誤検知を出しません。</span></li>
+          </ul>
+        </div>
+
+        <div>
+          <div class="editor" role="img" aria-label="エディタのモックアップ: ERB テンプレートでインスタンス変数のあとにドットを打つと、モデルの実際のカラム・関連・enum 述語が補完候補に並ぶ。">
+            <div class="editor-bar">
+              <span class="editor-dots"><i></i><i></i><i></i></span>
+              <span class="editor-file">app/views/articles/show.html.erb</span>
+            </div>
+            <div class="editor-body">
+              <ol class="code-lines">
+                <li>&lt;<span class="t-key">h1</span>&gt;&lt;%= <span class="t-var">@article</span>.<span class="t-mth">title</span> %&gt;&lt;/<span class="t-key">h1</span>&gt;</li>
+                <li></li>
+                <li class="hl">&lt;%= <span class="t-var">@article</span>.<span class="t-var">|</span></li>
+                <li class="annot">
+                  <div class="completion">
+                    <div class="completion-item is-active"><span class="ci-kind k-col">C</span> published_at <span class="ci-detail">ActiveSupport::TimeWithZone?</span></div>
+                    <div class="completion-item"><span class="ci-kind k-col">C</span> title <span class="ci-detail">String</span></div>
+                    <div class="completion-item"><span class="ci-kind k-assoc">A</span> author <span class="ci-detail">belongs_to → Author</span></div>
+                    <div class="completion-item"><span class="ci-kind k-assoc">A</span> comments <span class="ci-detail">has_many → Comment</span></div>
+                    <div class="completion-item"><span class="ci-kind">M</span> published? <span class="ci-detail">enum :status</span></div>
+                  </div>
+                </li>
+                <li></li>
+                <li>&lt;%= <span class="t-mth">link_to</span> <span class="t-str">"Edit"</span>, <span class="t-mth">edit_article_path</span>(<span class="t-var">@article</span>) %&gt;</li>
+              </ol>
+            </div>
+          </div>
+
+          <div class="callout callout--info mt-2">
+            <strong>境界は「信頼」です。</strong> Runtime Agent はワークスペース自身の Rails / Bundler のコードを実行するため、VS Code でワークスペースを信頼済みにしたときにのみ起動します。静的解析の機能は、どちらの場合でも動き続けます。
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EVIDENCE ============ -->
+  <section class="section" id="evidence">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">正直な部分</span>
+        <h2>「検証済み」とは、テストが証明しているという意味です</h2>
+        <p>
+          このプロジェクトは、きれいにインストールでき、きれいに起動し、健全なステータスを報告しながら、ユーザーが気づくようなことはほとんど何もしないバージョンを何度も出してしまいました。どのチェックも、ユーザーが訊かない質問に答えていたのです。そこで機能一覧は「ユーザーが何をして、何が見えなければならないか」として書き直され、その一つひとつが実際の Rails アプリケーションに対してエンドツーエンドで検証されています。
+        </p>
+      </div>
+
+      <div class="table-scroll reveal">
+        <table class="data">
+          <caption class="visually-hidden">主要な機能と、環境ごとの検証状況</caption>
+          <thead>
+            <tr>
+              <th scope="col">機能</th>
+              <th scope="col" class="col-status">Rails・信頼済み</th>
+              <th scope="col" class="col-status">Rails・未信頼</th>
+              <th scope="col" class="col-status">素の Ruby</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ホバー: リテラル・コンストラクタ・ローカル変数</td>
+              <td class="col-status"><span class="mark mark--yes">検証済み</span></td>
+              <td class="col-status"><span class="mark mark--warn">未検証</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+            <tr>
+              <td>補完: モデルのカラムと関連</td>
+              <td class="col-status"><span class="mark mark--yes">検証済み</span></td>
+              <td class="col-status"><span class="mark mark--none">該当なし</span></td>
+              <td class="col-status"><span class="mark mark--none">該当なし</span></td>
+            </tr>
+            <tr>
+              <td>定義ジャンプ: ワークスペースのメソッド</td>
+              <td class="col-status"><span class="mark mark--yes">検証済み</span></td>
+              <td class="col-status"><span class="mark mark--warn">未検証</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+            <tr>
+              <td>診断: 存在しないルートヘルパ</td>
+              <td class="col-status"><span class="mark mark--yes">検証済み</span></td>
+              <td class="col-status"><span class="mark mark--none">該当なし</span></td>
+              <td class="col-status"><span class="mark mark--none">該当なし</span></td>
+            </tr>
+            <tr>
+              <td>参照検索・リネーム・ワークスペースシンボル</td>
+              <td class="col-status"><span class="mark mark--yes">検証済み</span></td>
+              <td class="col-status"><span class="mark mark--warn">未検証</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+            <tr>
+              <td>識別子の先頭からの補完</td>
+              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+            <tr>
+              <td>開いていないファイルも含めたプロジェクト全体の診断</td>
+              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+            <tr>
+              <td>インレイヒント（推論された型・引数名）</td>
+              <td class="col-status"><span class="mark mark--plan">0.3.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">0.3.0</span></td>
+              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="legend">
+        <div><span class="mark mark--yes">検証済み</span> 壊れたら落ちるテストがある</div>
+        <div><span class="mark mark--warn">未検証</span> 動く可能性は高いが、何も保証しない</div>
+        <div><span class="mark mark--plan">0.2.0</span> 未実装 — 予定されているリリース</div>
+        <div><span class="mark mark--none">該当なし</span> ここでは供給できない Rails 由来のデータが必要</div>
+      </div>
+
+      <div class="btn-row mt-3">
+        <a class="btn btn--ghost btn--sm" href="capabilities.html">機能マトリクス全 39 項目</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ARCHITECTURE ============ -->
+  <section class="section section--alt" id="architecture">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">アーキテクチャ</span>
+        <h2>4 つのプロセス。うち 1 つはあなたのアプリ</h2>
+        <p>
+          拡張機能は薄い LSP クライアントにすぎません。解析はすべて独立した Ruby 製 Core Server にあり、それは拡張機能の中に同梱され、拡張機能と一緒にアトミックに更新されます。
+        </p>
+      </div>
+
+      <div class="arch reveal">
+        <svg viewBox="0 0 925 360" role="img" aria-labelledby="archTitle archDesc">
+          <title id="archTitle">OvalLSP のアーキテクチャ</title>
+          <desc id="archDesc">VS Code は OvalLSP 拡張機能と通信し、拡張機能は stdio 上の LSP 3.17 で Ruby 製 Core Server と通信します。Core Server は静的エンジンを駆動し、信頼されたワークスペースでのみ、Rails アプリケーションを内省する Runtime Agent を起動します。どのデータも端末の外には出ません。</desc>
+          <defs>
+            <marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" class="arch-arrow"/>
+            </marker>
+            <marker id="arwA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0 0 L10 5 L0 10 z" class="arch-arrow-accent"/>
+            </marker>
+          </defs>
+
+          <rect x="10" y="44" width="140" height="84" rx="12" class="arch-fill arch-stroke"/>
+          <text x="80" y="80" text-anchor="middle" class="arch-text">VS Code</text>
+          <text x="80" y="100" text-anchor="middle" class="arch-sub">エディタ本体</text>
+
+          <rect x="215" y="44" width="190" height="84" rx="12" class="arch-fill arch-stroke"/>
+          <text x="310" y="80" text-anchor="middle" class="arch-text">OvalLSP 拡張機能</text>
+          <text x="310" y="100" text-anchor="middle" class="arch-sub">TypeScript · LSP クライアント</text>
+
+          <rect x="500" y="44" width="200" height="84" rx="12" class="arch-fill-2 arch-stroke arch-stroke-accent"/>
+          <text x="600" y="80" text-anchor="middle" class="arch-text">Core Server</text>
+          <text x="600" y="100" text-anchor="middle" class="arch-sub">Ruby · ovallsp --stdio</text>
+
+          <rect x="775" y="44" width="140" height="84" rx="12" class="arch-fill arch-stroke"/>
+          <text x="845" y="74" text-anchor="middle" class="arch-text">Runtime Agent</text>
+          <text x="845" y="94" text-anchor="middle" class="arch-sub">アプリ自身の</text>
+          <text x="845" y="109" text-anchor="middle" class="arch-sub">Ruby プロセス</text>
+
+          <line x1="152" y1="86" x2="211" y2="86" class="arch-line" marker-end="url(#arw)"/>
+          <line x1="407" y1="86" x2="496" y2="86" class="arch-line" marker-end="url(#arw)" marker-start="url(#arw)"/>
+          <text x="452" y="72" text-anchor="middle" class="arch-label">LSP 3.17</text>
+          <text x="452" y="106" text-anchor="middle" class="arch-label">stdio</text>
+
+          <line x1="702" y1="86" x2="771" y2="86" class="arch-line-accent" marker-end="url(#arwA)" marker-start="url(#arwA)"/>
+          <text x="737" y="70" text-anchor="middle" class="arch-label">JSON-RPC</text>
+          <text x="737" y="108" text-anchor="middle" class="arch-label">信頼時のみ</text>
+
+          <line x1="600" y1="130" x2="600" y2="196" class="arch-line" marker-end="url(#arw)"/>
+          <rect x="440" y="200" width="320" height="68" rx="12" class="arch-fill arch-stroke"/>
+          <text x="600" y="228" text-anchor="middle" class="arch-text">静的エンジン</text>
+          <text x="600" y="248" text-anchor="middle" class="arch-sub">Prism 宣言抽出 · ワークスペースインデックス · RBS/RBI · 型推論</text>
+
+          <line x1="845" y1="130" x2="845" y2="196" class="arch-line-accent" marker-end="url(#arwA)"/>
+          <rect x="775" y="200" width="140" height="68" rx="12" class="arch-fill arch-stroke"/>
+          <text x="845" y="228" text-anchor="middle" class="arch-text">あなたの Rails</text>
+          <text x="845" y="248" text-anchor="middle" class="arch-sub">ルート · モデル</text>
+
+          <line x1="440" y1="234" x2="330" y2="234" class="arch-line" marker-end="url(#arw)" marker-start="url(#arw)"/>
+          <rect x="170" y="200" width="160" height="68" rx="12" class="arch-fill arch-stroke" stroke-dasharray="5 4"/>
+          <text x="250" y="228" text-anchor="middle" class="arch-text">永続キャッシュ</text>
+          <text x="250" y="248" text-anchor="middle" class="arch-sub">~/.cache/ovallsp</text>
+
+          <rect x="10" y="300" width="905" height="40" rx="10" fill="none" class="arch-stroke" stroke-dasharray="4 5"/>
+          <text x="462" y="325" text-anchor="middle" class="arch-sub">上のすべてはあなたの端末で動きます。OvalLSP は実行時にネットワークリクエストを一切行いません。</text>
+        </svg>
+      </div>
+
+      <div class="grid grid--3 mt-3">
+        <div class="card card--flat reveal">
+          <h3>2 度目のダウンロードは不要</h3>
+          <p>
+            Core Server とその実行時依存（Prism、RBS）は VSIX に同梱されています。
+            <code>bundle install</code> もリポジトリのチェックアウトもバックグラウンド更新機構も不要です。拡張機能を更新すれば、Core もアトミックに追随します。
+          </p>
+        </div>
+        <div class="card card--flat reveal">
+          <h3>作業の前にハンドシェイク</h3>
+          <p>
+            起動時に拡張機能と Core がバージョン・プロトコル・ビルド・Ruby/プラットフォーム情報を交換します。不一致なら、壊れかけたセッションを提供するのではなく、停止して理由を説明します。
+          </p>
+        </div>
+        <div class="card card--flat reveal">
+          <h3>ウィンドウを閉じれば何も残らない</h3>
+          <p>
+            Core Server と Runtime Agent の寿命は、それを起動したワークスペースに束ねられています。クラッシュループ防止と指数バックオフ再起動を備え、ウィンドウを閉じたあとにプロセスが残らないことが検証されています。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LIMITS ============ -->
+  <section class="section" id="limits">
+    <div class="wrap wrap--narrow">
+      <div class="section-head">
+        <span class="eyebrow">意図的な制限</span>
+        <h2>OvalLSP でないもの</h2>
+        <p>
+          これはエディタ機能のための「確信度を意識したヒューリスティックエンジン」であって、
+          Ruby の型チェッカーではありません。以下は未修正のバグではなく、設計上の境界です。
+        </p>
+      </div>
+
+      <div class="grid" style="gap:14px">
+        <div class="callout reveal">
+          <h4>動的な定義は対象外</h4>
+          <p>
+            既知の Rails DSL 以外の <code>method_missing</code> や <code>define_method</code>、文字列引数を取る <code>class_eval</code>/<code>instance_eval</code>、実行時にしか存在しない定数解決はモデル化していません。推測すれば、自信たっぷりに間違った答えを返すことになるからです。
+          </p>
+        </div>
+        <div class="callout callout--warn reveal">
+          <h4>当面は 1 プラットフォームのみ</h4>
+          <p>
+            公開されている VSIX は <code>darwin-arm64</code> 向けにビルドされ、そのためにコンパイルされたネイティブ拡張を同梱しています。それ以外の環境ではペイロードを読み込まず、縮退したセッションの代わりに明確な診断を出します。Rosetta 2 経由を含む Intel Mac、
+            WSL、Dev Container、Remote SSH はこの Preview では非対応です。
+          </p>
+        </div>
+        <div class="callout callout--warn reveal">
+          <h4>gem 由来のメソッドはまだインデックスしていない</h4>
+          <p>
+            未知メソッドのチェックは、レシーバの継承関係がすべて判明している場合にのみ発火します。
+            gem を継承するクラス — <code>ApplicationController</code>、つまり大半のコントローラやジョブ — では黙ります。これを解消するのが gem の定義のインデックス化であり、
+            <a href="roadmap.html#v030">0.3.0</a> に予定されています。
+          </p>
+        </div>
+        <div class="callout callout--info reveal">
+          <h4>他の Ruby 言語サーバーとは結果が重なります</h4>
+          <p>
+            VS Code はアクティブなプロバイダの結果を「選ぶ」のではなく「まとめて」表示します。そのため他の Ruby 言語サーバーと併用すると、両方の結果が同時に出ます。クラッシュはしませんが、候補が二重になります。OvalLSP の答えだけを見たい場合は、そのワークスペースで他を無効化してください。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ QUICK START ============ -->
+  <section class="section section--alt" id="quickstart">
+    <div class="wrap">
+      <div class="grid grid--2" style="gap:clamp(28px,4vw,56px); align-items:start">
+        <div>
+          <span class="eyebrow">クイックスタート</span>
+          <h2>Ruby 3.4 があるなら、3 ステップ</h2>
+          <ol class="steps mt-2">
+            <li>
+              <h3>拡張機能をインストール</h3>
+              <p>VS Code Marketplace の Pre-Release チャンネルから。</p>
+            </li>
+            <li>
+              <h3>Ruby / Rails プロジェクトを開く</h3>
+              <p><code>.rb</code> ファイルを開けば Core Server が自動で起動します。プロンプトが出たらワークスペースを信頼して、Rails 対応機能を有効にしてください。</p>
+            </li>
+            <li>
+              <h3>何が動いているか確認する</h3>
+              <p><strong>OvalLSP: Show Version Information</strong> を実行すると、拡張機能と Core のバージョン、プロトコル互換性、選択された Ruby がわかります。</p>
+            </li>
+          </ol>
+          <div class="btn-row mt-3">
+            <a class="btn btn--ghost btn--sm" href="getting-started.html">導入ガイド全文</a>
+          </div>
+        </div>
+
+        <div>
+          <div class="codeblock" data-copy-label="コピー" data-copied-label="コピーしました">
+<pre><span class="c-com"># コマンドラインからインストール</span>
+<span class="c-cmd">code</span> --install-extension teruz.ovallsp --pre-release
+
+<span class="c-com"># 対応する Ruby が見えているか確認</span>
+<span class="c-cmd">ruby</span> -v
+<span class="c-com"># ruby 3.4.7 (…) [arm64-darwin24]</span>
+
+<span class="c-com"># VS Code から見つからない場合は settings.json で指定</span>
+<span class="c-cmd">"ovallsp.rubyExecutablePath"</span>: "/opt/homebrew/bin/ruby"</pre>
+          </div>
+          <p class="small text-mute mt-2">
+            OvalLSP は Ruby 自体をインストールしませんし、できません。mise / asdf / rbenv / Homebrew、
+            <code>PATH</code>、あるいは明示設定のいずれかで、Ruby 3.4.x がすでに見えている必要があります。それ以外に必要なものはすべて VSIX の中にあります。
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ROADMAP TEASER ============ -->
+  <section class="section" id="roadmap-teaser">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">ロードマップ</span>
+        <h2>バージョン番号は「何が同時に届くか」の約束です</h2>
+        <p>
+          日付の約束ではありません。パッチリリースはユーザーから見える変更を含まないため、ここには現れません。機能が増えるのはマイナーリリースだけです。
+        </p>
+      </div>
+
+      <div class="grid grid--4">
+        <a class="card card--hover reveal" href="roadmap.html#v020" style="text-decoration:none">
+          <h3 class="mono" style="color:var(--ruby-bright)">0.2.0</h3>
+          <p><strong>最初の 1 文字からの補完</strong>、プロジェクト全体の診断、ホバーのドキュメント表示、セマンティックハイライト、引数の型、未代入 <code>@ivar</code>。</p>
+        </a>
+        <a class="card card--hover reveal" href="roadmap.html#v030" style="text-decoration:none">
+          <h3 class="mono">0.3.0</h3>
+          <p><strong>gem が定義しているものを知る</strong>。加えてインレイヒント、クイックフィックス、型定義へのジャンプ、出現箇所のハイライト、コール階層。</p>
+        </a>
+        <a class="card card--hover reveal" href="roadmap.html#v040" style="text-decoration:none">
+          <h3 class="mono">0.4.0</h3>
+          <p><strong>細部の調整</strong>。チェックごとの重大度設定、<code>require</code> の自動挿入、シグネチャヘルプでの引数ハイライト。</p>
+        </a>
+        <a class="card card--hover reveal" href="roadmap.html#v100" style="text-decoration:none">
+          <h3 class="mono">1.0.0</h3>
+          <p><strong>機能ではなく保証</strong>。公開する全プラットフォームの検証と、素の Ruby プロジェクトの保証。</p>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section class="section section--alt" id="faq">
+    <div class="wrap wrap--narrow">
+      <div class="section-head">
+        <span class="eyebrow">FAQ</span>
+        <h2>先に訊いておきたいこと</h2>
+      </div>
+
+      <div class="faq">
+        <details class="qa">
+          <summary>インストール直後、追加設定なしで動きますか？</summary>
+          <div class="qa-body">
+            <p>
+              対応する Ruby がすでにシステムから見えていれば、動きます。OvalLSP には
+              <em>何らかの</em> Ruby 3.4.x が必要で、mise / asdf / rbenv / Homebrew、あるいは明示的な <code>ovallsp.rubyExecutablePath</code> のいずれかで解決されます。それさえあれば、実行に必要な残りはすべて VSIX に入っています。追加のダウンロードも <code>bundle install</code> もチェックアウトも不要です。
+            </p>
+            <p>
+              対応する Ruby が見つからない場合、OvalLSP は中途半端に起動せず、何が問題でどうすればよいかを示す診断を表示します。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>コードがどこかに送信されることはありますか？</summary>
+          <div class="qa-body">
+            <p>
+              ありません。テレメトリの仕組みは一切なく、Core Server にも拡張機能にも送信系の
+              HTTP クライアントは存在しません。プロジェクト全体で唯一ネットワークを使うのは、リリースを<em>ビルドする</em>マシンが VSIX に同梱する gem を RubyGems.org から取得するときだけです。詳細は<a href="security.html">セキュリティとプライバシー</a>をご覧ください。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>Runtime Agent は実際に何を実行するのですか？</summary>
+          <div class="qa-body">
+            <p>
+              あなたのアプリケーション自身の Rails / Bundler のコードを別プロセスで実行し、定義されているルートとモデルを読み取ります。ワークスペース由来の任意のコードを動かす以上、
+              VS Code でワークスペースを信頼済みにしたときにのみ起動します。信頼されていないワークスペースでは起動せず、Rails 由来の機能はすべて静的解析の答えに縮退します。これは障害ではなく設計です。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>Rails を使わない素の Ruby プロジェクトでも使えますか？</summary>
+          <div class="qa-body">
+            <p>
+              ほぼ確実に動きます。エンジンの大部分は環境に依存せず、Runtime Agent は単に起動しないだけです。ただし、それを検証しているテストがまだないため、何も保証はしていません。素の Ruby での体験を仕様化し保証することは、
+              <a href="roadmap.html#v100">1.0.0</a> が担う 2 つの課題のうちの 1 つです。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>なぜ Apple Silicon のみなのですか？</summary>
+          <div class="qa-body">
+            <p>
+              VSIX は特定の Ruby ABI・OS・CPU の組み合わせ向けにコンパイルされたネイティブ拡張（Prism、RBS）を同梱しています。読み込めるかもしれないビルドを配るのではなく、実際に検証できた組み合わせに対してのみ公開し、それ以外では理由を説明してペイロードの読み込みを拒否します。残るプラットフォームを公開して検証することが、
+              <a href="roadmap.html#v100">1.0.0</a> のもう半分です。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>コントリビュートできますか？</summary>
+          <div class="qa-body">
+            <p>
+              現時点では受け付けていません。単独開発で活発に開発中であり、外部からの Issue や Pull Request をレビューすると進行中の作業より後回しになり、変更が衝突するおそれがあるためです。理由は
+              <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/CONTRIBUTING.ja.md">CONTRIBUTING.ja.md</a>
+              に記載しています。セキュリティ報告は例外です —
+              <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SECURITY.ja.md">SECURITY.ja.md</a>
+              をご覧ください。
+            </p>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="section">
+    <div class="wrap">
+      <div class="cta reveal">
+        <h2>実際の Rails アプリで試してみてください</h2>
+        <p>
+          インストールはコマンド 1 つ。そのあと最初にすべきは、OvalLSP 自身に「いま何が動いていると思っているか」を訊くことです。
+        </p>
+        <div class="btn-row">
+          <a class="btn btn--primary" href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">Marketplace からインストール</a>
+          <a class="btn btn--ghost" href="https://github.com/TERUZvxght/OvalLSP">ソースを読む</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-about">
+        <a class="brand" href="index.html">
+          <img class="brand-mark" src="../assets/img/icon.png" width="28" height="28" alt="" decoding="async">
+          <span>OvalLSP</span>
+        </a>
+        <p>
+          Ruby / Rails のためのセマンティック言語サーバーと、それと会話する VS Code 拡張機能。
+          MIT ライセンス、オープンに開発されています。
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h4>プロダクト</h4>
+        <ul>
+          <li><a href="capabilities.html">機能マトリクス</a></li>
+          <li><a href="roadmap.html">ロードマップ</a></li>
+          <li><a href="getting-started.html">導入</a></li>
+          <li><a href="security.html">セキュリティとプライバシー</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>ドキュメント</h4>
+        <ul>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/README.ja.md">README</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SUPPORT_MATRIX.ja.md">サポートマトリクス</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md">既知の制限</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>プロジェクト</h4>
+        <ul>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP">GitHub</a></li>
+          <li><a href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">Marketplace</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md">サポート</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/CODE_OF_CONDUCT.ja.md">行動規範</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>© <span data-year>2026</span> OvalLSP contributors · MIT License</p>
+      <p>Microsoft、GitHub、Shopify、Ruby および Rails プロジェクトとは無関係です。</p>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/js/site.js" defer></script>
+</body>
+</html>

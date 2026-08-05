@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://teruzvxght.github.io/OvalLSP/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/"/>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://teruzvxght.github.io/OvalLSP/capabilities.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/capabilities.html"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/capabilities.html"/>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://teruzvxght.github.io/OvalLSP/getting-started.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/getting-started.html"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/getting-started.html"/>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://teruzvxght.github.io/OvalLSP/roadmap.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/roadmap.html"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/roadmap.html"/>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://teruzvxght.github.io/OvalLSP/security.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/security.html"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/security.html"/>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://teruzvxght.github.io/OvalLSP/ja/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/"/>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://teruzvxght.github.io/OvalLSP/ja/capabilities.html</loc>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://teruzvxght.github.io/OvalLSP/ja/getting-started.html</loc>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://teruzvxght.github.io/OvalLSP/ja/roadmap.html</loc>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://teruzvxght.github.io/OvalLSP/ja/security.html</loc>
+    <priority>0.7</priority>
+  </url>
+</urlset>

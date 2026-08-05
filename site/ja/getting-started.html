@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>導入ガイド — OvalLSP</title>
+<meta name="description" content="OvalLSP のインストール、動作要件、そして何かおかしいときに実行すべきこと。コマンド、設定、Ruby の解決順序、トラブルシューティング。">
+<link rel="canonical" href="https://teruzvxght.github.io/OvalLSP/ja/getting-started.html">
+<link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/getting-started.html">
+<link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/getting-started.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="OvalLSP">
+<meta property="og:title" content="導入ガイド — OvalLSP">
+<meta property="og:description" content="動作要件、インストール、コマンド、設定、トラブルシューティング。">
+<meta property="og:image" content="https://teruzvxght.github.io/OvalLSP/assets/img/icon.png">
+<meta name="theme-color" content="#0a090c">
+<link rel="icon" href="../assets/img/icon.png">
+<link rel="stylesheet" href="../assets/css/site.css">
+<script>
+  document.documentElement.classList.add("js");
+  (function () {
+    try {
+      var stored = localStorage.getItem("ovallsp-theme");
+      var light = stored ? stored === "light"
+        : window.matchMedia("(prefers-color-scheme: light)").matches;
+      if (light) document.documentElement.setAttribute("data-theme", "light");
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip-link" href="#main">本文へスキップ</a>
+
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img class="brand-mark" src="../assets/img/icon.png" width="28" height="28" alt="" decoding="async">
+      <span>OvalLSP</span>
+      <span class="brand-sub">Ruby Semantic LSP</span>
+    </a>
+
+    <nav class="nav" id="site-nav" aria-label="メイン">
+      <a href="index.html">概要</a>
+      <a href="capabilities.html">機能マトリクス</a>
+      <a href="roadmap.html">ロードマップ</a>
+      <a href="getting-started.html" aria-current="page">導入</a>
+      <a href="security.html">セキュリティとプライバシー</a>
+    </nav>
+
+    <div class="header-tools">
+      <a class="lang-switch" href="../getting-started.html" hreflang="en" lang="en" data-lang-switch="en">EN</a>
+      <button class="icon-btn" type="button" data-theme-toggle aria-label="配色テーマを切り替える">
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.2 5.2l1.4 1.4M17.4 17.4l1.4 1.4M18.8 5.2l-1.4 1.4M6.6 17.4l-1.4 1.4"/>
+        </svg>
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20 14.5A8.2 8.2 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/>
+        </svg>
+      </button>
+      <a class="icon-btn" href="https://github.com/TERUZvxght/OvalLSP" aria-label="GitHub の OvalLSP">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.8 18.3 5 18.3 5c.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5z"/>
+        </svg>
+      </a>
+      <button class="icon-btn nav-toggle" type="button" data-nav-toggle aria-expanded="false" aria-controls="site-nav" aria-label="ナビゲーションを開閉">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+          <path d="M4 7h16M4 12h16M4 17h16"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="page-hero">
+    <div class="wrap">
+      <p class="breadcrumb"><a href="index.html">ホーム</a><span>/</span>導入</p>
+      <h1>インストールし、何が動いているかを知る</h1>
+      <p class="lede">
+        用意していただく前提はひとつ、Ruby 3.4.x だけ。それ以外は拡張機能の中に入っています。何かが噛み合わないとき、OvalLSP は中途半端に動き出さず、何がどうおかしいのかを伝えます。
+      </p>
+    </div>
+  </section>
+
+  <section class="section section--tight" id="requirements">
+    <div class="wrap">
+      <div class="callout callout--warn mb-2">
+        <h4>インストールの前に</h4>
+        <p>
+          これは初期の Pre-Release ビルドで、対象は <strong>Apple Silicon の macOS</strong>
+          （<code>darwin-arm64</code>）のみです。それ以外の OS / CPU では同梱のネイティブ依存を読み込まず、推測された構成で動く代わりに診断を表示します。Rosetta 2 経由を含む Intel Mac、そして WSL・Dev Container・Remote SSH はこの Preview では非対応です。
+        </p>
+      </div>
+
+      <h2>動作要件</h2>
+      <div class="grid grid--2 mt-2">
+        <div class="card">
+          <h3>Apple Silicon の macOS</h3>
+          <p>
+            公開されている VSIX は <code>vsce package --target darwin-arm64</code> でビルドされ、そのプラットフォーム向けにコンパイルされた Prism と RBS のネイティブ拡張を同梱しています。
+          </p>
+        </div>
+        <div class="card">
+          <h3>インストール済みの Ruby 3.4.x</h3>
+          <p>
+            明示的な <code>ovallsp.rubyExecutablePath</code>、あるいは
+            <a href="https://mise.jdx.dev/">mise</a>、<a href="https://asdf-vm.com/">asdf</a>、
+            <a href="https://github.com/rbenv/rbenv">rbenv</a>、
+            <a href="https://brew.sh/">Homebrew</a>（<code>/opt/homebrew</code>）のいずれかで検出できる必要があります。3.4.5 と 3.4.7 でテスト済みです。
+          </p>
+        </div>
+      </div>
+
+      <div class="callout callout--ok mt-2">
+        <strong><code>bundle install</code> も、チェックアウトも、2 度目のダウンロードも不要です。</strong>
+        Core Server とその実行時依存は VSIX に同梱されています。OvalLSP は Ruby 自体をインストールしませんし、できません — <em>何らかの</em> Ruby 3.4.x がすでに存在している必要があります。その前提さえ満たせば、必要なものは他にすべて揃っています。
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="install">
+    <div class="wrap">
+      <div class="grid grid--2" style="gap:clamp(28px,4vw,52px); align-items:start">
+        <div>
+          <span class="eyebrow">インストール</span>
+          <h2>5 分。その大半は VS Code の作業です</h2>
+          <ol class="steps mt-2">
+            <li>
+              <h3>拡張機能をインストール</h3>
+              <p>Marketplace の UI から、あるいは右のコマンドで。<strong>Pre-Release</strong> チャンネルで公開されています。</p>
+            </li>
+            <li>
+              <h3>Ruby / Rails プロジェクトを開く</h3>
+              <p><code>.rb</code> ファイルを開くと、ワークスペースフォルダごとに Core Server が自動的に起動します。</p>
+            </li>
+            <li>
+              <h3>ワークスペースを信頼する</h3>
+              <p>プロンプトが出たら信頼して、Rails 対応機能を有効にしてください。Runtime Agent は未信頼のワークスペースでは決して動きません。</p>
+            </li>
+            <li>
+              <h3>何が動いているか確認する</h3>
+              <p><strong>OvalLSP: Show Version Information</strong> で、拡張機能と Core Server のバージョンが互換であること、そしてどの Ruby が選ばれたかを確認できます。</p>
+            </li>
+          </ol>
+        </div>
+
+        <div>
+          <div class="codeblock" data-copy-label="コピー" data-copied-label="コピーしました">
+<pre><span class="c-com"># Pre-Release ビルドをインストール</span>
+<span class="c-cmd">code</span> --install-extension teruz.ovallsp --pre-release</pre>
+          </div>
+
+          <p class="small text-mute mt-2">起動の進行状況はステータスバーに表示されます。</p>
+
+          <div class="table-scroll mt-2">
+            <table class="data" style="min-width:0">
+              <tbody>
+                <tr><td class="mono">Indexing</td><td>ワークスペースのインデックスを構築中。</td></tr>
+                <tr><td class="mono">Ready (static)</td><td>構文解析とインデックスだけで応答している状態。</td></tr>
+                <tr><td class="mono">Ready (Rails)</td><td>Runtime Agent のルート／モデルのスナップショットが効いている状態。</td></tr>
+                <tr><td class="mono">Agent unavailable</td><td>静的解析は継続。Rails 由来の機能は利用できません。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="commands">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">リファレンス</span>
+        <h2>コマンド</h2>
+        <p>すべてコマンドパレット（<kbd>⇧</kbd><kbd>⌘</kbd><kbd>P</kbd>）から実行できます。</p>
+      </div>
+
+      <div class="table-scroll">
+        <table class="data">
+          <thead><tr><th scope="col">コマンド</th><th scope="col">用途</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">OvalLSP: Show Version Information</td><td>拡張機能と Core のバージョン、プロトコル互換性、実際に使われている Ruby 環境。</td></tr>
+            <tr><td class="mono">OvalLSP: Restart Server</td><td>開いているすべてのワークスペースフォルダで Core Server を再起動。</td></tr>
+            <tr><td class="mono">OvalLSP: Restart Rails Agent</td><td>Runtime Agent（ルート／モデルの内省）だけを再起動。</td></tr>
+            <tr><td class="mono">OvalLSP: Show Logs</td><td>OvalLSP の出力チャンネルを開く。</td></tr>
+            <tr><td class="mono">OvalLSP: Show Environment Diagnostics</td><td>どの Ruby がなぜ選ばれたか（mise / asdf / rbenv / Homebrew / <code>PATH</code>）。</td></tr>
+            <tr><td class="mono">OvalLSP: Re-index Workspace</td><td>フルの再インデックスを強制。</td></tr>
+            <tr><td class="mono">OvalLSP: Run Tests with Type Observation</td><td>オプトインのランタイム型観測 — <a href="security.html#observation">何を記録するか</a>。</td></tr>
+            <tr><td class="mono">OvalLSP: Clear Observed Types</td><td>観測が記録した内容をすべて破棄。</td></tr>
+            <tr><td class="mono">OvalLSP: Show Type Evidence</td><td>推論された型の根拠を確認。</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 class="mt-3" id="settings">設定</h2>
+      <div class="table-scroll">
+        <table class="data">
+          <thead><tr><th scope="col">設定</th><th scope="col">用途</th></tr></thead>
+          <tbody>
+            <tr><td class="mono">ovallsp.enabled</td><td>拡張機能全体の有効／無効。</td></tr>
+            <tr><td class="mono">ovallsp.rubyExecutablePath</td><td>自動検出を飛ばして Ruby インタプリタを明示指定。</td></tr>
+            <tr><td class="mono">ovallsp.server.path</td><td>Core Server のエントリポイントを明示指定（上級者向け。後述）。</td></tr>
+            <tr><td class="mono">ovallsp.observation.testCommand</td><td>ランタイム型観測が実行するコマンド。既定値は <code>bundle exec rspec</code>。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--alt" id="ruby-resolution">
+    <div class="wrap">
+      <div class="grid grid--2" style="gap:clamp(28px,4vw,52px); align-items:start">
+        <div>
+          <span class="eyebrow">Ruby の解決</span>
+          <h2>OvalLSP はどうやって Ruby を見つけるか</h2>
+          <p>
+            以下の順に探し、最初に見つかったものを使います。VS Code を Dock や Spotlight から起動した場合、その <code>PATH</code> にはシェルの追加設定が含まれないことがあります。ターミナルでは動く Ruby が拡張機能から見えない、という現象のほとんどはこれが原因です。
+          </p>
+          <p>
+            その場合は <code>ovallsp.rubyExecutablePath</code> を明示的に設定するか、下記のバージョンマネージャ経由で Ruby を入れてください。いずれも <code>PATH</code> に依存せず検出されます。
+            <strong>OvalLSP: Show Environment Diagnostics</strong> を実行すると、何を試し、各候補をなぜ採用／却下したかがそのまま確認できます。
+          </p>
+        </div>
+        <div>
+          <ol class="steps">
+            <li><h3>明示的な設定</h3><p><code>ovallsp.rubyExecutablePath</code> が他のすべてに優先します。</p></li>
+            <li><h3>mise</h3><p>ワークスペースフォルダ自身がピン留めしたバージョンとして解決されます。</p></li>
+            <li><h3>asdf</h3><p>同様に、<code>.tool-versions</code> はエディタの環境ではなくワークスペースから読まれます。</p></li>
+            <li><h3>rbenv</h3><p>同様に、<code>.ruby-version</code> 経由で。</p></li>
+            <li><h3>Homebrew</h3><p>Apple Silicon のプレフィックス <code>/opt/homebrew</code>。</p></li>
+            <li><h3>シェルの <code>PATH</code></h3><p>最後の手段であり、Dock からの起動で最も欠けやすい経路です。</p></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="troubleshooting">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">うまくいかないとき</span>
+        <h2>トラブルシューティング</h2>
+        <p>
+          役に立つ順に並べています。OvalLSP は静かに縮退するのではなく、はっきり失敗するように作られているので、たいていは最初の 3 つのどれかに答えがあります。
+        </p>
+      </div>
+
+      <div class="faq">
+        <details class="qa" open>
+          <summary>Ruby ファイルを開いても何も起きない</summary>
+          <div class="qa-body">
+            <p>
+              まず <strong>OvalLSP: Show Logs</strong> で生の出力チャンネルを確認し、続いて
+              <strong>OvalLSP: Show Environment Diagnostics</strong> で Ruby の解決結果を確認してください。最も多い原因は、ターミナルからは見えているのに拡張機能ホストからは見えない Ruby です。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>バージョンが一致しないと表示される</summary>
+          <div class="qa-body">
+            <p>
+              起動時に拡張機能と Core Server はバージョン・プロトコル・ビルド・Ruby/プラットフォーム情報を交換します。不一致の場合、OvalLSP は機能リクエストを送る<em>前に</em>停止し、縮退したセッションの代わりに診断を表示します。よくある原因は、以前のバージョンが残したプロセス、正しくインストールされなかったペイロード、互換性のないカスタム <code>ovallsp.server.path</code> です。
+              <strong>OvalLSP: Show Version Information</strong> で検出内容を確認してください。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>Rails 固有の機能が動かない</summary>
+          <div class="qa-body">
+            <p>
+              <strong>OvalLSP: Restart Rails Agent</strong> を試し、次にワークスペースが信頼済みかを確認してください。
+              Runtime Agent は未信頼のワークスペースでは決して起動しません。ステータスバーが
+              <code>Ready (static)</code> なら、エージェントは寄与していません。また、エージェントが起動を試みるには、ワークスペースのルート直下に
+              <code>bin/rails</code> が必要です。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>結果が古い／インデックスがおかしい</summary>
+          <div class="qa-body">
+            <p>
+              <strong>OvalLSP: Re-index Workspace</strong> でフルの再インデックスを強制できます。永続キャッシュが壊れているように見える場合、キャッシュは <code>~/.cache/ovallsp/</code> にあり、ワークスペース・Ruby・Prism・<code>Gemfile.lock</code>・RBS の組み合わせでキー付けされています。該当ディレクトリを削除すれば、新規にインデックスし直します。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>候補がすべて二重に出る</summary>
+          <div class="qa-body">
+            <p>
+              ほぼ確実に、同じウィンドウで別の Ruby 言語サーバー拡張が有効になっています。
+              VS Code は登録されたプロバイダの結果を「選ぶ」のではなく「まとめて」返すため、ホバー・補完・定義ジャンプで両方の結果が同時に出ます。
+              Shopify の Ruby LSP と並べて検証した結果、クラッシュもインストール時の競合もありませんでしたが、定義ジャンプの候補は 1 件から 4 件に増えました。これは特定の拡張ではなく
+              VS Code のプロバイダモデルの性質です。OvalLSP の答えだけを見たい場合は、そのワークスペースで他を無効化してください。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary><code>ovallsp.server.path</code> は何のためのものですか</summary>
+          <div class="qa-body">
+            <p>
+              同梱のものとは別の Core Server を指すための設定です（このリポジトリに対する開発など）。カスタムパスも同梱の Core とまったく同じようにプロトコル互換性を検査されますが、バージョン・ビルド・ペイロードの比較において「標準の同梱 Core」として扱われることはなく、自動更新もされません。
+            </p>
+          </div>
+        </details>
+
+        <details class="qa">
+          <summary>Core Server はどのように更新されますか</summary>
+          <div class="qa-body">
+            <p>
+              拡張機能と一緒に、アトミックに更新されます。Core は VSIX の中に同梱されているため、別途のダウンロード手順も独立したバックグラウンド更新機構もありません。
+              VS Code が拡張機能を更新すれば、次にワークスペースをアクティブ化したときにはそのバージョンに同梱された Core が動きます。
+            </p>
+          </div>
+        </details>
+      </div>
+
+      <div class="callout mt-3">
+        それでも解決しない場合は
+        <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md">SUPPORT.ja.md</a>
+        に、どのようなサポートがあり、どう依頼すればよいかを記載しています。なお、単独開発で活発に開発中のため、外部からの Issue および Pull Request は現在受け付けていません（<a href="https://github.com/TERUZvxght/OvalLSP/blob/main/CONTRIBUTING.ja.md">CONTRIBUTING.ja.md</a>）。セキュリティ報告は例外です —
+        <a href="security.html#reporting">脆弱性の報告</a>をご覧ください。
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="cta">
+        <h2>ソースからビルドしたい場合</h2>
+        <p>
+          モノレポには Ruby 製 Core Server、TypeScript 製の拡張機能、そしてそれぞれがなぜ今の形をしているのかを記録した設計文書が入っています。
+        </p>
+        <div class="btn-row">
+          <a class="btn btn--primary" href="https://github.com/TERUZvxght/OvalLSP">リポジトリを開く</a>
+          <a class="btn btn--ghost" href="capabilities.html">まず機能マトリクスを見る</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="footer-grid">
+      <div class="footer-about">
+        <a class="brand" href="index.html">
+          <img class="brand-mark" src="../assets/img/icon.png" width="28" height="28" alt="" decoding="async">
+          <span>OvalLSP</span>
+        </a>
+        <p>
+          Ruby / Rails のためのセマンティック言語サーバーと、それと会話する VS Code 拡張機能。
+          MIT ライセンス、オープンに開発されています。
+        </p>
+      </div>
+
+      <div class="footer-col">
+        <h4>プロダクト</h4>
+        <ul>
+          <li><a href="capabilities.html">機能マトリクス</a></li>
+          <li><a href="roadmap.html">ロードマップ</a></li>
+          <li><a href="getting-started.html">導入</a></li>
+          <li><a href="security.html">セキュリティとプライバシー</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>ドキュメント</h4>
+        <ul>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/README.ja.md">README</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SUPPORT_MATRIX.ja.md">サポートマトリクス</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md">既知の制限</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h4>プロジェクト</h4>
+        <ul>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP">GitHub</a></li>
+          <li><a href="https://marketplace.visualstudio.com/items?itemName=teruz.ovallsp">Marketplace</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/SUPPORT.ja.md">サポート</a></li>
+          <li><a href="https://github.com/TERUZvxght/OvalLSP/blob/main/CODE_OF_CONDUCT.ja.md">行動規範</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>© <span data-year>2026</span> OvalLSP contributors · MIT License</p>
+      <p>Microsoft、GitHub、Shopify、Ruby および Rails プロジェクトとは無関係です。</p>
+    </div>
+  </div>
+</footer>
+
+<script src="../assets/js/site.js" defer></script>
+</body>
+</html>

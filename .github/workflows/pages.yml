@@ -1,0 +1,81 @@
+name: Site
+
+# Publishes the official site (`site/`) to GitHub Pages.
+#
+# The site is hand-written static HTML with no build step and no
+# dependencies -- nothing is compiled, downloaded or generated here. That
+# is deliberate: a documentation site whose publish step can fail for
+# reasons unrelated to its own content is a site that goes stale.
+#
+# `scripts/check_site_links.rb` runs first and gates the deploy. Every
+# internal link, asset path and #anchor across both language trees is
+# resolved against the files actually being uploaded, so a renamed page
+# fails here rather than 404ing for a reader. External URLs are counted,
+# never fetched -- this job must not go red because someone else's host
+# is down.
+#
+# One-time setup outside this file: Settings -> Pages -> Build and
+# deployment -> Source must be set to "GitHub Actions". Without it the
+# deploy step fails with a "Pages site not configured" error.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "scripts/check_site_links.rb"
+      - ".github/workflows/pages.yml"
+  pull_request:
+    paths:
+      - "site/**"
+      - "scripts/check_site_links.rb"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check internal links and page metadata
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Verify every internal link, asset and anchor resolves
+        run: ruby scripts/check_site_links.rb
+
+  deploy:
+    name: Deploy to GitHub Pages
+    # A pull request gets the check above but never publishes: the live
+    # site only ever reflects `main`.
+    if: github.event_name != 'pull_request'
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - name: Upload site/ as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,6 +1,7 @@
 # OvalLSP — Ruby Semantic LSP
 
-[日本語版 README](README.ja.md)
+[日本語版 README](README.ja.md) ·
+[Official site](https://teruzvxght.github.io/OvalLSP/)
 
 > **This project is under active development.** The developer is
 > currently investigating and fixing things in this codebase, so
