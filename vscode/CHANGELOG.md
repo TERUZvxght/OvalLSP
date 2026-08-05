@@ -20,9 +20,10 @@ anyone.
   there offered nothing until the whole name was written. From the first
   character: the sources nearer the cursor rank ahead of the workspace-wide
   ones, so a class is in the list without displacing a local.
-- Added: mistakes in files you have not opened are reported. (Verified
-  in-process; see 024.14 for the end-to-end gap still open against a real
-  Rails app.)
+- Added: mistakes in files you have not opened are reported. (0.2.0
+  shipped this without a capability row, on a measurement that said an
+  end-to-end example produced nothing; 0.2.1 found it working, added the
+  row and the example, and marked the README row ✅.)
 - Added: passing an argument of the wrong type is reported. Only the
   *number* of arguments was checked before.
 - Added: reading an `@ivar` that is never assigned is reported. In an

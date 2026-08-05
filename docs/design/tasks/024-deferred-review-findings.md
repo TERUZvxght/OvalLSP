@@ -1422,10 +1422,37 @@ release, not a defect to patch in the current change set.
 ## 024.14 Workspace-wide diagnostics do not fire against the real Rails fixture
 
 ```yaml
-status: open
+status: fixed
 kind: defect
+released-in: 0.2.1
 user-visible: yes
 ```
+
+**It does not reproduce, and did not need fixing.** A reviewer ran the
+procedure this entry describes and got the diagnostic; so did I, on a
+real Rails 8.1.3 application: a never-opened file is answered **1.35 s
+from process start**, with 42 URIs published. `EXTENSION_CAPABILITIES`'s
+**G17** row and its example exist now, and the example fails when the
+workspace pass is removed.
+
+What the original measurement most likely hit is a path, not a defect.
+`Dir.tmpdir` is `/var/folders/…` on macOS and the server publishes
+`/private/var/folders/…`; a test that builds the expected uri from the
+un-resolved path waits forever for a notification that has already
+arrived under another name. The G17 example calls `File.realpath` and
+gives the property its own Core, because the file has to be on disk
+*before* the server starts -- which the shared client, started in
+`before(:all)`, cannot be given. A first draft of the example wrote the
+file afterwards and failed, which is a different property.
+
+Five documents carried consequences of the non-reproducing claim and are
+corrected: the missing capability row, README's ⚠️ and its `[^ws]`
+footnote, `KNOWN_LIMITATIONS` in both languages, and both changelogs.
+
+**The lesson is not "close entries faster".** It is that an entry
+recording a *measurement* should record how the measurement was taken
+precisely enough to re-run, and this one did not -- so for two releases
+nobody could tell the defect from the harness.
 
 **Area:** `core/lib/ovallsp/workspace_diagnostics.rb`, `core/lib/ovallsp/server.rb`
 

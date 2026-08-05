@@ -860,6 +860,54 @@ RSpec.describe "Extension capabilities", :e2e do
     end
   end
 
+  # G17. The row 0.2.0 shipped without, on 024.14's strength -- which
+  # said a never-opened probe produced no diagnostic in 45 seconds.
+  #
+  # It reproduces as *working*: on a real Rails application the file is
+  # answered 1.4s from process start. What the original measurement most
+  # likely hit is the line below: `Dir.tmpdir` is `/var/folders/…` on
+  # macOS and the server publishes `/private/var/folders/…`, so a test
+  # that builds the expected uri from the un-resolved path waits for a
+  # notification that has already arrived under another name.
+  describe "workspace-wide diagnostics" do
+    # Its own Core, because the property is about a file that is on disk
+    # *before* the server starts -- which is what 024.14 described and
+    # what the shared client, started in `before(:all)`, cannot be given.
+    it "G17: reports a mistake in a file nobody opened" do
+      path = File.join(self.class.workspace, "app/models/unopened_capability_probe.rb")
+      File.write(path, <<~RUBY)
+        class UnopenedCapabilityProbe
+          def run
+            UnopenedCapabilityProbe.new.definitely_not_here
+          end
+        end
+      RUBY
+      uri = "file://#{File.realpath(path)}"
+
+      client = E2E::LspClient.new(self.class.workspace)
+      begin
+        client.initialize!
+        client.wait_until_ready
+        # One unrelated file opened, the way an editor restores a session.
+        client.open(File.join(self.class.workspace, "app/controllers/posts_controller.rb"))
+
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60
+        found = nil
+        while Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+          found = client.diagnostics_by_uri[uri]
+          break if found && !found.empty?
+
+          sleep 0.5
+        end
+
+        expect(Array(found).map { |d| d[:message] }.join(" ")).to match(/no method named/i)
+      ensure
+        client.stop
+        File.delete(path) if File.exist?(path)
+      end
+    end
+  end
+
   describe "signature help" do
     it "S1: reports a workspace method's parameters" do
       with_file("app/models/signature_probe.rb", <<~RUBY) do |uri|

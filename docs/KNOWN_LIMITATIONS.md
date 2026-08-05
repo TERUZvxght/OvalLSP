@@ -355,11 +355,12 @@ missed one", so each is narrow on purpose. What that costs a user:
   rather than a different one after every save, and the Core logs when
   the cap bites. "Files" here means files it published for: an open file,
   a missing one and one that raised do not count against the cap.
-  Workspace-wide diagnostics also have no end-to-end verification against
-  a real Rails app: the example written for one produced nothing in 45
-  seconds. The cause is diagnosed and the
-  fix is scoped to its own task (024.14). The README matrix marks this
-  row ⚠️ rather than ✅ for that reason.
+  (Until 0.2.1 this bullet also said workspace-wide diagnostics had no
+  end-to-end verification, because an example written for one produced
+  nothing in 45 seconds. It reproduces as *working*: on a real Rails
+  application a never-opened file is answered 1.4 s from process start.
+  The G17 row and its example exist now, and 024.14 records what the
+  original measurement most likely hit.)
 
 ## What an editor feature does with a macro-declared method
 

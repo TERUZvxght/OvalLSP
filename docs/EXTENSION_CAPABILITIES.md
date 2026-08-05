@@ -162,6 +162,7 @@ which is what it is for.
 | G14 | Writes a test that inherits from a reopened gem class (`class FooTest < ActiveSupport::TestCase`) | nothing — the reopen is in the chain, not just at the receiver | PASS |
 | G15 | Passes an argument whose type cannot be the one an RBS/RBI signature declares | it is reported, on the argument rather than on the whole call | PASS |
 | G16 | Reads an `@ivar` in a view that no controller action or callback assigns | it is reported | PASS |
+| G17 | Has a mistake in a file present before the server started and never opened | it is reported anyway | PASS |
 
 G4 used to follow from the same missing-ancestor problem as C4 and is now
 closed: the Runtime Agent reports what each model actually responds to,
