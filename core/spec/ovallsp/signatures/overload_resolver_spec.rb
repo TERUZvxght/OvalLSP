@@ -38,6 +38,23 @@ RSpec.describe Ovallsp::Signatures::OverloadResolver do
       expect(described_class.resolve([overload], positional_count: 0)).to eq(string_type) # no match -> fallback
     end
 
+    # `(String, ?Integer, Symbol)` takes two arguments or three, never
+    # one: the trailing parameter is required. Counting only
+    # `required_positionals` put the floor at 1 and let a one-argument
+    # call select this overload's return type.
+    it "counts a trailing positional towards the required arity" do
+      symbol_type = Ovallsp::Types::Nominal.new(name: "Symbol")
+      overload = Ovallsp::Signatures::Overload.new(
+        required_positionals: [string_type], optional_positionals: [integer_type],
+        trailing_positionals: [symbol_type], return_type: string_type
+      )
+      other = Ovallsp::Signatures::Overload.new(required_positionals: [string_type], return_type: integer_type)
+
+      expect(described_class.resolve([overload, other], positional_count: 1)).to eq(integer_type)
+      expect(described_class.resolve([overload, other], positional_count: 2)).to eq(string_type)
+      expect(described_class.resolve([overload, other], positional_count: 3)).to eq(string_type)
+    end
+
     it "matches any positional count when a rest positional is present" do
       overload = Ovallsp::Signatures::Overload.new(rest_positional: string_type, return_type: integer_type)
 

@@ -205,7 +205,11 @@ RSpec.describe Ovallsp::Signatures::RbiParser do
       expect(overload.required_positionals).to be_empty
     end
 
-    it "keeps a trailing required positional required" do
+    # Required, and *last*. Filing it with the requireds said the first
+    # of those and denied the second: a reader taking `required +
+    # optional` as the positional order then put `z`'s type at index 1,
+    # where `def trailing(a, *rest, z)` puts whatever `rest` swallowed.
+    it "keeps a trailing required positional required, and trailing" do
       overload = overload_for(<<~RBI)
         class Foo
           sig { params(a: Integer, rest: String, z: Symbol).returns(Integer) }
@@ -214,9 +218,8 @@ RSpec.describe Ovallsp::Signatures::RbiParser do
         end
       RBI
 
-      expect(overload.required_positionals).to eq(
-        [Ovallsp::Types::Nominal.new(name: "Integer"), Ovallsp::Types::Nominal.new(name: "Symbol")]
-      )
+      expect(overload.required_positionals).to eq([Ovallsp::Types::Nominal.new(name: "Integer")])
+      expect(overload.trailing_positionals).to eq([Ovallsp::Types::Nominal.new(name: "Symbol")])
     end
 
     # A block parameter is not something the caller types in the argument

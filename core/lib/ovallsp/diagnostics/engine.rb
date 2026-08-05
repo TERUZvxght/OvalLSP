@@ -56,6 +56,8 @@ module Ovallsp
         end
         findings.concat(unknown_route_helper_findings(summary, resolved_locations, semantic_context))
         findings.concat(argument_count_findings(document, summary, semantic_context))
+        findings.concat(argument_type_findings(document, summary, semantic_context))
+        findings.concat(unassigned_ivar_findings(document, summary, semantic_context))
 
         budget ? findings.first(budget) : findings
       end
@@ -175,6 +177,407 @@ module Ovallsp
         end
       end
 
+      # Reports a read of an instance variable that nothing assigns
+      # (0.2.0, closes 024.R6).
+      #
+      # Ruby answers `nil` for an unassigned ivar rather than raising, so
+      # `@usr` where the code meant `@user` is a mistake the language
+      # never surfaces -- the view renders empty and nobody is told why.
+      #
+      # Runs only where a caller has worked out what this document is
+      # actually given: `assigned_ivars` nil means no such context exists,
+      # and reporting every `@ivar` in a file nobody established a context
+      # for is exactly the wrong report. An *empty* set is a real answer
+      # (an action that assigns nothing) and is checked.
+      def unassigned_ivar_findings(document, summary, context)
+        assigned = context.assigned_ivars
+        return [] unless assigned
+
+        # A name the document assigns itself is assigned, whatever its
+        # caller does or does not hand it.
+        local = ivar_writes(document)
+
+        return [] if local.nil?
+
+        # `defined?(@x)` tests for existence rather than reading a value,
+        # and it is the idiom written specifically to be safe about an
+        # ivar that may not be there. By name rather than by location: a
+        # file defensive about a name is defensive about it, and the typo
+        # this check exists for appears in no `defined?`.
+        tested = ivar_names_tested_for_existence(document)
+
+        summary.reference_candidates.filter_map do |candidate|
+          next unless candidate.kind == :ivar
+          next if local.include?(candidate.name)
+          next if tested.include?(candidate.name)
+          next if assigned.include?(candidate.name)
+
+          Finding.new(
+            code: "unassigned-ivar",
+            message: "`#{candidate.name}` is never assigned before this is read",
+            range: candidate.location, severity: :warning, confidence: :high,
+            evidence: { ivar: candidate.name }, generation: context.generation
+          )
+        end
+      end
+
+      # Every ivar named inside a `defined?`, in one parse of the document.
+      def ivar_names_tested_for_existence(document)
+        collector = DefinedIvarCollector.new
+        Prism.parse(document.text).value.accept(collector)
+        collector.names
+      rescue StandardError
+        []
+      end
+
+      class DefinedIvarCollector < Prism::Visitor
+        attr_reader :names
+
+        def initialize
+          @names = []
+          super
+        end
+
+        def visit_defined_node(node)
+          node.value&.accept(NameOfIvarRead.new(@names))
+          super
+        end
+      end
+
+      class NameOfIvarRead < Prism::Visitor
+        def initialize(sink)
+          @sink = sink
+          super()
+        end
+
+        def visit_instance_variable_read_node(node)
+          @sink << node.name.to_s
+          super
+        end
+      end
+
+      # The parser records a read and a write as the same `:ivar` candidate
+      # kind -- rename and references both want them together -- so the
+      # writes are recovered here instead. This is what makes
+      # `<% @total = 1 %><%= @total %>` in a view not a mistake.
+      def ivar_writes(document)
+        result = Prism.parse(document.text)
+        # A document that will not parse has already been reported as a
+        # syntax error, and Prism still hands back whatever it could make
+        # of it -- so the assignments below the break are simply missing
+        # rather than absent. Reporting from that list adds a second,
+        # wrong finding to a file whose real problem is already named.
+        return nil if result.failure?
+
+        collector = IvarWriteCollector.new
+        result.value.accept(collector)
+        collector.names
+      rescue StandardError
+        nil
+      end
+
+      # Every form of `@x = ...`: plain, `||=`/`&&=`, `+=` and friends,
+      # and a block/rescue target. Missing one reports a variable the file
+      # visibly assigns two lines up.
+      class IvarWriteCollector < Prism::Visitor
+        attr_reader :names
+
+        def initialize
+          @names = []
+          super
+        end
+
+        %i[instance_variable_write_node instance_variable_or_write_node
+           instance_variable_and_write_node instance_variable_operator_write_node
+           instance_variable_target_node].each do |suffix|
+          define_method(:"visit_#{suffix}") do |node|
+            @names << node.name.to_s
+            super(node)
+          end
+        end
+      end
+
+      # Reports a positional argument whose own inferred type cannot be
+      # the type the signature declares for that parameter (0.2.0, closes
+      # 024.R2).
+      #
+      # Held to the same standard as the count check above: a wrong
+      # "expected Integer, got String" on code that runs is worse than no
+      # type checking at all. So this reports only where every input is
+      # stated rather than inferred:
+      #
+      # - the expected type comes from RBS/RBI, not from guessing at what
+      #   a Ruby parameter is "used like" -- Ruby source declares no
+      #   parameter types, and inferring them is a different project;
+      # - the signature has exactly one overload, because an argument that
+      #   cannot match one overload may be exactly right for another, and
+      #   choosing between them is the guessing this refuses to do;
+      # - the declared type is a plain class, not a union or an interface:
+      #   "cannot be any member of this union" is a question this narrow
+      #   version does not answer;
+      # - the argument's own type is a plain class too, and is not that
+      #   class or any of its descendants.
+      #
+      # Everything else stays silent.
+      # Converted RBS names that look like Ruby constants and are not.
+      NOT_A_RUBY_CLASS = %w[Boolean].freeze
+
+      def argument_type_findings(document, summary, context)
+        return [] unless context.signatures
+
+        summary.reference_candidates.flat_map do |candidate|
+          next [] unless candidate.kind == :method_call
+          next [] unless (shape = candidate.arguments)
+          next [] if shape[:splat]
+          # A method whose name is not an identifier is an operator, and
+          # an operator call's receiver is recorded one character inside
+          # itself -- which, when the receiver ends in `)`, is an offset
+          # belonging to the receiver's own last argument. `(a - b) > 0`
+          # then resolved `>`'s receiver to whatever `b` was. The
+          # arguments already decline a composed expression; the receiver
+          # gets the same care here, where the two meet.
+          next [] unless candidate.name.to_s.match?(IDENTIFIER_METHOD_NAME)
+
+          overload = sole_declared_overload(document, candidate, context)
+          next [] unless overload
+
+          mismatched_arguments(document, shape, overload, candidate, context)
+        end
+      end
+
+      def mismatched_arguments(document, shape, overload, candidate, context)
+        locations = shape[:positional_locations] || []
+        expected_types = expected_positional_types(overload, locations.size)
+        return [] unless expected_types
+
+        locations.each_with_index.filter_map do |range, index|
+          expected = expected_types[index]
+          next unless expected.is_a?(Types::Nominal)
+          # RBS's `int`/`string`/`boolish` are aliases meaning "anything
+          # that converts", not classes -- an object of an entirely
+          # unrelated class satisfies one, so reporting against it is a
+          # false positive by construction. A Ruby constant is
+          # capitalised; these are not, which is what tells them apart.
+          next unless expected.name.to_s.match?(/\A[A-Z]/)
+          # `bool` converts to `Boolean`, which is capitalised and so
+          # survives the rule above -- but there is no such Ruby class, so
+          # its ancestor walk can never succeed and every argument would
+          # be reported.
+          next if NOT_A_RUBY_CLASS.include?(expected.name)
+
+          # The *end* of the argument, not its start: at the start of
+          # `SmallInteger.new` the innermost node containing the offset is
+          # the constant, so the answer was `ClassOf[SmallInteger]` -- the
+          # class object rather than the instance being passed. The end
+          # offset is inclusive, so a literal still resolves to itself.
+          # An argument whose source carries a top-level operator is not
+          # judged at all. `infer_at` answers about the innermost node at
+          # the offset it is given, and for `"=" * 80` that is the right
+          # operand -- so the end offset says Integer about a String
+          # argument, and the start offset says `ClassOf[...]` about
+          # `SmallInteger.new`, which is why the end is used at all.
+          # Neither is the argument's own type, and asking for that means
+          # carrying the argument *node* here rather than a range. Until
+          # it does, an expression is a shape this check declines rather
+          # than one it guesses at.
+          next if operator_expression?(document, range)
+
+          actual = context.local_inferencer.infer_at(document, range[:end])
+          next unless actual.is_a?(Types::Nominal)
+          # The same rule as the declared side above, and it was applied
+          # only there: `Boolean` is what the converter calls RBS's
+          # `bool`, no Ruby class has that name, and its ancestor walk can
+          # never succeed -- so every `true`/`false` passed to a
+          # plain-class parameter was reported.
+          next if NOT_A_RUBY_CLASS.include?(actual.name)
+          next if compatible_nominal?(actual, expected, context)
+
+          Finding.new(
+            code: "argument-type",
+            message: "`#{candidate.name}` expects #{expected.name} here, but #{actual.name} is given",
+            range: range, severity: :warning, confidence: :high,
+            evidence: { expected: expected.name, actual: actual.name, position: index },
+            generation: context.generation
+          )
+        end
+      end
+
+      # Which declared type each of `count` arguments lands on, or nil
+      # when nothing can be said.
+      #
+      # It depends on the count because Ruby fills the required
+      # parameters first, the trailing ones last, and the optional ones
+      # with whatever is left over. `def hold(a, b = 1, c)` called with
+      # two arguments binds them to `a` and `c`; called with three, to
+      # `a`, `b` and `c`. A fixed `required + optional` list is right only
+      # when there are no trailing parameters, and was reading `c`'s type
+      # at index 1.
+      #
+      # The two arity failures are not symmetric, and an earlier version
+      # of this treated them as though they were -- returning nil for
+      # both, on the stated grounds that arity is the arity check's
+      # report to make. That is false for a method declared only in a
+      # signature: `argument_count_findings` reads *source* declarations,
+      # so for those nobody reports the arity and nobody checks the
+      # arguments either.
+      #
+      # Too few, and the arguments still bind to the required parameters
+      # in order, so those are checkable and the trailing ones simply
+      # have no argument. Too many, and nothing says which parameter the
+      # extra one was meant for.
+      def expected_positional_types(overload, count)
+        required = overload.required_positionals
+        optional_taken = count - required.size - overload.trailing_positionals.size
+        return required.first(count) if optional_taken.negative?
+        return nil if optional_taken > overload.optional_positionals.size
+
+        required + overload.optional_positionals.first(optional_taken) + overload.trailing_positionals
+      end
+
+      # A subclass is a perfectly good instance of its parent, and
+      # reporting one is the false positive this check most has to avoid:
+      # it fires on correct, idiomatic code.
+      #
+      # The two ancestry sources have to be *joined*, not asked in
+      # parallel. A real chain crosses the boundary -- `MyError <
+      # StandardError` is in the workspace index and `StandardError <
+      # Exception` is only in RBS -- so neither source alone contains the
+      # pair, and asking both about the same class answers "no" for a
+      # relation that plainly holds. The workspace chain is walked first,
+      # then RBS is asked about every name it reached.
+      #
+      # The `expected` side is compared bare; the reachable side is not
+      # normalised at all. `HierarchyIndex` returns a workspace-resolved
+      # entry `::`-prefixed and an external one without -- but the
+      # expected type is necessarily RBS-declared, so the signature
+      # environment returns a bare name for it whichever way the workspace
+      # spelled it. `ancestor_names` below says why normalising there is
+      # a transformation no input reaches.
+      # Ruby's numeric tower is not its class hierarchy. `Integer` does
+      # not inherit `Float`, but `zoom(2)` where a Float is declared is
+      # ordinary working code: Ruby coerces, and every arithmetic
+      # operation such a method can perform accepts both. `Numeric` needs
+      # no entry -- `Integer < Numeric` is a real ancestry. The other
+      # direction stays reported, because a Float where an Integer is
+      # declared is what an array index or `String#*` actually breaks on.
+      COERCES_TO = { "Integer" => %w[Float Complex Rational] }.freeze
+
+      # A name a Ruby method can have *and* a reader would call an
+      # identifier. Anything else -- `<=>`, `==`, `..`, `!`, `[]`, `<<`,
+      # `+` -- is an operator, and the node at the argument's end offset
+      # is then its right operand rather than the argument.
+      IDENTIFIER_METHOD_NAME = /\A[A-Za-z_]\w*[?!]?\z/
+
+      # Node types that are a composition rather than a value: their end
+      # offset belongs to a sub-expression whose type is not the
+      # argument's.
+      COMPOSED_ARGUMENT_NODES = [Prism::RangeNode, Prism::AndNode, Prism::OrNode,
+                                 Prism::IfNode, Prism::UnlessNode].freeze
+
+      # Parsed rather than pattern-matched. The first version of this
+      # listed the arithmetic operators, which is a list that cannot be
+      # finished -- `"a" <=> "b"` is an Integer and was reported as a
+      # String, and `1..5` as an Integer. Asking Prism what the argument
+      # *is* answers for every shape at once, and an argument that does
+      # not parse on its own is declined rather than guessed at.
+      def operator_expression?(document, range)
+        first = document.position_to_char_offset(range[:start])
+        last = document.position_to_char_offset(range[:end])
+        return true unless first && last && last > first
+
+        node = Prism.parse(document.text[first...last].to_s).value.statements.body.first
+        return true if node.nil?
+        return true if COMPOSED_ARGUMENT_NODES.any? { |type| node.is_a?(type) }
+
+        node.is_a?(Prism::CallNode) && !node.name.to_s.match?(IDENTIFIER_METHOD_NAME)
+      rescue StandardError
+        true
+      end
+
+      # Every Ruby object has these, whatever the index knows about it.
+      # `HierarchyIndex` appends the implicit tail only for a name it has
+      # a *class declaration* for, so a class made by `Data.define` or
+      # `Struct.new` -- indexed as a constant -- reached nothing but its
+      # own name and was reported incompatible with `Object`.
+      UNIVERSAL_ANCESTORS = %w[Object Kernel BasicObject].freeze
+
+      def compatible_nominal?(actual, expected, context)
+        target = simple_name(expected.name)
+        return true if UNIVERSAL_ANCESTORS.include?(target)
+        return true if COERCES_TO.fetch(simple_name(actual.name), []).include?(target)
+
+        reachable = ancestor_names(actual.name, context)
+        reachable.include?(target)
+      end
+
+      # No normalisation of the workspace side. `HierarchyIndex` returns a
+      # class's own entry qualified (`::Widget`) and its inherited ones
+      # bare, and the `expected` side arrives bare -- but the expected
+      # type is necessarily RBS-declared, so `via_signatures` below
+      # returns a bare name for it whichever way the workspace spelled it.
+      # An earlier version mapped the workspace entries through
+      # `simple_name` and claimed that without it no workspace ancestor
+      # ever matched; no input reaches that, and both removing it and
+      # doubling it leave every answer unchanged.
+      def ancestor_names(name, context)
+        # Every workspace ancestor in both spellings. `HierarchyIndex`
+        # returns a workspace-resolved entry `::`-qualified and an
+        # external one bare, while the `expected` side is always bare --
+        # and the signature environment cannot be relied on to supply the
+        # bare form, because it is RBS-only: an *RBI*-declared parameter
+        # type has no ancestry there at all, so `::Animal` never matched
+        # `Animal` and a class was reported incompatible with itself.
+        #
+        # `simple_name_of`, not `bare_name`: a namespaced `::Zoo::Animal`
+        # has to reach `Animal`, which stripping the prefix does not do,
+        # and it is the form `TypeConverter` gives the RBS side.
+        found = context.hierarchy_index.ancestors(name).map(&:name)
+        workspace = ([name] + found + ([name] + found).map { |entry| simple_name_of(entry) }).uniq
+
+        # `Signatures::Environment#ancestors` resolves a *qualified* name:
+        # `ancestors("Integer")` is empty while `ancestors("::Integer")` is
+        # the real chain.
+        via_signatures = workspace.flat_map do |entry|
+          # `Environment#ancestors` already maps every name through
+          # `TypeConverter.simple_name`, so they arrive bare -- mapping
+          # them again here was the mirror of the no-op the comment above
+          # confesses to on the workspace side.
+          context.signatures&.ancestors(qualified_owner(entry)) || []
+        end
+
+        (workspace + via_signatures).uniq
+      end
+
+      # The last segment, which is what `TypeConverter` gives a signature's
+      # own names -- as distinct from `simple_name`, which only strips a
+      # leading `::`.
+      def simple_name_of(name)
+        name.to_s.split("::").last.to_s
+      end
+
+      def simple_name(name)
+        Index::SymbolId.bare_name(name)
+      end
+
+      # The one RBS/RBI overload this call's parameters are declared by, or
+      # nil when the answer is not singular. Deliberately mirrors
+      # #sole_source_declaration's shape: same receiver rule, same refusal
+      # to choose between candidates.
+      def sole_declared_overload(document, candidate, context)
+        receiver_type = receiver_type_for(document, candidate, context)
+        return nil unless receiver_type.is_a?(Types::Nominal)
+
+        signature = declared_signature_for(receiver_type, candidate, context, binding_only: true)
+        return nil unless signature
+        return nil unless signature.overloads.size == 1
+
+        overload = signature.overloads.first
+        # A `*rest` parameter makes the positional list a prefix rather
+        # than a mapping, so index N is no longer necessarily parameter N.
+        return nil if overload.rest_positional
+        overload
+      end
+
       def expected_arity(required, maximum)
         count = required == maximum ? required.to_s : "#{required}..#{maximum}"
         "#{count} argument#{maximum == 1 ? '' : 's'}"
@@ -234,6 +637,10 @@ module Ovallsp
 
       def unknown_route_helper_findings(summary, resolved_locations, context)
         return [] unless context.route_registry
+        # `Server` always constructs a registry, so its presence says
+        # nothing; whether a snapshot ever reached it is the question
+        # (024.24).
+        return [] unless context.route_registry.loaded?
 
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :method_call && candidate.receiver.nil?
@@ -259,8 +666,18 @@ module Ovallsp
       # invites. Engine only needs the receiver's *type*, not a full
       # resolved Reference, to decide whether an unresolved candidate is
       # even eligible for the closed-receiver check below.
+      # Every check below names a receiver type in what it reports, so
+      # none of them may act on a name the index resolved by picking
+      # among same-named classes -- see
+      # `WorkspaceIndex#guessed_type_name?`. Refused here, once, rather
+      # than at each of the three call sites: this file has twice had a
+      # rule stated in several places and wrong in one of them.
       def receiver_type_for(document, candidate, context)
-        Semantic::ReceiverResolution.receiver_type_for(context.workspace_index, document, candidate, context.local_inferencer)
+        resolved = Semantic::ReceiverResolution.receiver_type_for(context.workspace_index, document, candidate,
+                                                                  context.local_inferencer)
+        return Types::UNKNOWN if resolved.is_a?(Types::Nominal) && context.workspace_index.guessed_type_name?(resolved.name)
+
+        resolved
       end
 
       # "closed" means every ancestor is either a workspace-declared type
@@ -467,12 +884,65 @@ module Ovallsp
       def rbs_resolves?(candidate, receiver_type, context)
         return false unless context.signatures
 
-        context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).any? do |entry|
+        !declared_signature_for(receiver_type, candidate, context).nil?
+      end
+
+      # The signature declared for this call on the receiver or any of its
+      # ancestors, or nil. Returns the signature rather than a boolean
+      # because 0.2.0's argument check needs the parameter list, and
+      # `rbs_resolves?` above only needs to know whether there was one.
+      #
+      # `binding_only:` is the difference between two questions that share
+      # this walk:
+      #
+      # - "does *anything* declare this" -- `rbs_resolves?`'s question,
+      #   asked immediately before reporting `unknown-method`. Any
+      #   declaration answers it, wherever it came from.
+      # - "what are *this call's* parameters" -- the argument-type
+      #   check's. Ruby method lookup stops at the first ancestor that
+      #   defines the method, so a declaration further along the chain
+      #   describes a method the call never reaches, and judging against
+      #   it reports correct code.
+      #
+      # The second stops at a *source* declaration. `Registry.initialize(a,
+      # b)`, where the workspace writes `class << self; def
+      # initialize(first, second)`, was judged against RBS's
+      # `Class#initialize: (?Class superclass)` -- the single
+      # `argument-type` report Ruby's whole standard library produced, on
+      # `ruby_vm/rjit/compiler.rb:54`.
+      #
+      # That one refusal is enough, and a second was tried and removed:
+      # requiring the signature to be `direct` (declared on that class
+      # rather than inherited by it) changed no answer any input reaches,
+      # because a workspace override is a source declaration and this
+      # already stops there, while a subclass that does *not* override
+      # wants the parent's signature and gets it one entry later either
+      # way.
+      #
+      # Keying on the tail's `:class_object` origin instead -- which is
+      # how the arity check states the first of these -- would not reach
+      # it: `Settings.load(config)` against a workspace `def self.load`
+      # finds RBS's `Kernel#load`, and `Kernel` arrives on an instance
+      # chain with `:default`. What the cases have in common is not where
+      # the signature came from but that something nearer already
+      # answered.
+      def declared_signature_for(receiver_type, candidate, context, binding_only: false)
+        # Returns from inside the walk rather than collecting: this stops
+        # at the first ancestor that answers and the chain can be long --
+        # the shape it replaced (`any?`) short-circuited, and turning it
+        # into a value lookup lost that.
+        context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).each do |entry|
           kind = entry.declaration_kind(singleton: candidate.singleton)
+          # `owner:` is not qualified here: `SymbolId#initialize` does it
+          # (0.1.12). This call site needed it before that existed, and
+          # keeping it made a line no input could reach.
           symbol_id = Index::SymbolId.new(kind: kind, owner: entry.name, name: candidate.name,
                                           discriminator: nil)
-          !context.signatures.method_signatures(symbol_id).nil?
+          signature = context.signatures.method_signatures(symbol_id)
+          return signature if signature
+          return nil if binding_only && !context.workspace_index.declarations(symbol_id).empty?
         end
+        nil
       end
 
       # `Signatures::Environment` resolves a *qualified* name, and the

@@ -67,4 +67,42 @@ RSpec.describe "WorkspaceIndex's cost decisions" do
     expect(body).not_to include("@by_symbol.keys")
   end
 
+  # The same two rules, in the method 0.2.0 added. Completion from a bare
+  # prefix runs this per keystroke on the request path, and it was
+  # written scanning `@by_symbol.keys` -- deriving a simple name per
+  # symbol from a structure whose keys already *are* the simple names --
+  # and sorting every match to keep `limit` of them. Measured on a
+  # 21.7k-symbol workspace, byte-identical answers: 4.8ms per keystroke
+  # against 3.0ms.
+  it "reads the simple-name index and takes only the matches it returns" do
+    body = body_of("prefix_search")
+
+    expect(body).to include("@by_simple_name")
+    expect(body).not_to include("@by_symbol.keys")
+    expect(body).to include("matches.min_by(limit)")
+    expect(body).not_to include(".sort_by")
+  end
+
+end
+
+# `SourceLocation.byte_offset_to_utf16` walks a line character by
+# character, and it runs once per range of every declaration and every
+# argument in every file -- at cold index, twice per `didChange`, and once
+# per file in the workspace pass. An ASCII line has one byte, one
+# character and one UTF-16 unit per position, so the walk cannot answer
+# anything but the offset it was given. Measured over 400 stdlib files:
+# `positional_locations` made `summarize` 30% slower without this, and
+# 55% faster than the shipped line with it.
+#
+# Asserted on the source for the same reason as the two above: reversing
+# it changes no answer, only what every range costs.
+RSpec.describe "SourceLocation's ASCII fast path" do
+  it "answers an ASCII line without walking it" do
+    source = File.read(File.expand_path("../../lib/ovallsp/index/source_location.rb", __dir__),
+                       encoding: "UTF-8")
+    body = source[/      def byte_offset_to_utf16.*?\n      end/m]
+
+    expect(body).not_to be_nil, "byte_offset_to_utf16 has been renamed"
+    expect(body).to include("return byte_offset if line.ascii_only?")
+  end
 end

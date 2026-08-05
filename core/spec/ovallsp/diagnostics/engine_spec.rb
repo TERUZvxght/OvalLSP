@@ -614,8 +614,181 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
     end
   end
 
+  # `resolve_type_name` answers a bare name by picking among every
+  # declared class that ends with it. That is the right trade for
+  # completion and for go-to-definition, where a plausible answer beats
+  # none -- and the wrong one for a diagnostic, which is asserting
+  # something about a class it has not identified. This release put two
+  # `Collector`s in this repository's own source and the check reported
+  # `SemanticTokens::Collector#tokens`, a method the parser records,
+  # because the name resolved to `Observation::Collector`. Recorded as
+  # the same cause as 024.19, which reached the argument-type check.
+  describe "a bare constant that matches more than one declared class" do
+    def two_collectors
+      index(<<~RUBY, uri: "file:///observation.rb")
+        module Observation
+          class Collector
+            def start; end
+          end
+        end
+      RUBY
+      index(<<~RUBY, uri: "file:///tokens.rb")
+        module Tokens
+          class Collector
+            attr_reader :tokens
+            def initialize
+              @tokens = []
+            end
+          end
+        end
+      RUBY
+    end
+
+    it "says nothing about a method on a receiver it had to guess" do
+      two_collectors
+      document = index("module Tokens\n  def self.collect\n    Collector.new.tokens\n  end\nend\n",
+                       uri: "file:///call.rb")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).not_to include("unknown-method")
+    end
+
+    # The control: one `Collector` in the workspace is not a guess, and
+    # the check is still on. Without this the example above passes for a
+    # check that has stopped reporting anything.
+    # The written name is what the index was asked about, and a name
+    # carrying a namespace that resolves to something else entirely is a
+    # substitution whether or not two classes are involved. The first
+    # version of this guard counted candidates, so `::Vendor::Gadgets::
+    # Widget` still resolved to the single workspace `Widget` and every
+    # check acted on it. On shipped Ruby: `ripper.lex` in prism's
+    # `lex_compat.rb` was reported unknown, because `Ripper::Lexer`
+    # resolved to `Prism::Translation::Parser::Lexer`.
+    it "says nothing about a qualified name that resolved to a different class" do
+      index(<<~RUBY, uri: "file:///widget.rb")
+        class Widget
+          def start; end
+        end
+      RUBY
+      document = index("Vendor::Gadgets::Widget.new.nope\n", uri: "file:///call.rb")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).not_to include("unknown-method")
+    end
+
+    # The control, and the reason the rule is about the *name* rather
+    # than about qualification: a qualified name the workspace really
+    # declares resolved as written, so the check is on.
+    it "still reports on a qualified name the workspace declares" do
+      index(<<~RUBY, uri: "file:///widget.rb")
+        module Vendor
+          module Gadgets
+            class Widget
+              def start; end
+            end
+          end
+        end
+      RUBY
+      document = index("Vendor::Gadgets::Widget.new.nope\n", uri: "file:///call.rb")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).to include("unknown-method")
+    end
+
+    it "still reports when the name matches exactly one declared class" do
+      index(<<~RUBY, uri: "file:///tokens.rb")
+        module Tokens
+          class Collector
+            attr_reader :tokens
+          end
+        end
+      RUBY
+      document = index("module Tokens\n  def self.collect\n    Collector.new.nope\n  end\nend\n",
+                       uri: "file:///call.rb")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).to include("unknown-method")
+    end
+  end
+
+  # A superclass name resolves through the same last-segment pick as a
+  # receiver, so a chain can be about a different class entirely without
+  # anything downstream knowing. ActiveRecord 8.1.3 has three classes
+  # named `Association`, and `class ThroughAssociation < Association`
+  # inside `Preloader` picked the wrong one: `loaded?(owner)` there takes
+  # an argument and the one picked takes none, so
+  # `preloader/through_association.rb` was reported twice for a correct
+  # call.
+  describe "an ancestor whose name the index had to guess" do
+    PRELOADER = <<~RUBY
+      module Preloader
+        class Association
+          def loaded?(owner); owner; end
+        end
+
+        class ThroughAssociation < Association
+          def run(owner)
+            loaded?(owner)
+          end
+        end
+      end
+    RUBY
+
+    it "says nothing about a call resolved through it" do
+      index(<<~RUBY, uri: "file:///outer.rb")
+        module Outer
+          class Association
+            def loaded?; end
+          end
+        end
+      RUBY
+      document = index(PRELOADER, uri: "file:///preloader.rb")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).not_to include("argument-count")
+    end
+
+    # The control: with only one `Association` in the workspace the
+    # superclass resolved as written, and the arity check is still on
+    # through the chain -- here against a `loaded?` that really does take
+    # none.
+    it "still reports through an ancestor that resolved as written" do
+      document = index(<<~RUBY, uri: "file:///preloader.rb")
+        module Preloader
+          class Association
+            def loaded?; end
+          end
+
+          class ThroughAssociation < Association
+            def run(owner)
+              loaded?(owner)
+            end
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).to include("argument-count")
+    end
+  end
+
   describe "unknown-route-helper" do
+    def load_routes
+      route_registry.replace([
+                               { name: "widget", verb: "GET", pathTemplate: "/widgets/:id", requiredParts: ["id"],
+                                 optionalParts: [], defaults: { controller: "widgets", action: "show" },
+                                 sourceLocation: nil, routeSet: "main_app" }
+                             ])
+    end
+
     it "flags a bare _path/_url call that matches no known route" do
+      load_routes
       document = index("class WidgetsController\n  def show\n    nope_this_route_path(1)\n  end\nend\n")
 
       findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
@@ -623,6 +796,33 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
 
       expect(finding).not_to be_nil
       expect(finding.confidence).to eq(:high)
+    end
+
+    # An empty table is not the same claim as a loaded one that lacks the
+    # name. Without an Agent -- an untrusted workspace, or any project
+    # that is not Rails -- no snapshot ever arrives, and every method
+    # whose name ends `_path`/`_url` was answered "no such route":
+    # 8 reports across Ruby's own standard library, every one of them an
+    # ordinary method (024.24). 0.2.0 made it worse by publishing for
+    # files nobody opened, so a project-wide pass broadcast it.
+    it "says nothing when no routes have ever been loaded" do
+      document = index("class WidgetsController\n  def show\n    nope_this_route_path(1)\n  end\nend\n")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).not_to include("unknown-route-helper")
+    end
+
+    # A Rails application with no named routes at all has a table that is
+    # empty *and* loaded, and the check is on there: the distinction is
+    # whether a snapshot arrived, not whether it carried anything.
+    it "flags an unknown helper against a route table that loaded empty" do
+      route_registry.replace([])
+      document = index("class WidgetsController\n  def show\n    nope_this_route_path(1)\n  end\nend\n")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).to include("unknown-route-helper")
     end
 
     it "does not flag a call resolving to a real route helper" do

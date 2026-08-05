@@ -79,6 +79,10 @@ module Ovallsp
       # (docs/design/tasks/010-method-summaries-and-call-chains.md; wired
       # in as part of Task 013 after an independent review found Task 010
       # had shipped as a fully isolated, never-called engine).
+      @helper_ivars = {}
+      @workspace_pass_mutex = Mutex.new
+      @workspace_pass_running = false
+      @workspace_pass_requested = false
       @local_inferencer = LocalInferencer.new(
         model_registry: model_registry, method_resolver: @method_resolver, method_analyzer: @method_analyzer,
         signatures: @signatures, observation_store: @observation_store
@@ -114,6 +118,15 @@ module Ovallsp
       @query_service = Semantic::QueryService.new(
         local_inferencer: @local_inferencer, method_resolver: @method_resolver, model_registry: @model_registry,
         signatures: @signatures, workspace_index: @workspace_index
+      )
+      @workspace_diagnostics = WorkspaceDiagnostics.new(
+        analyze: method(:workspace_findings_for),
+        publish: method(:publish_findings),
+        open_in_buffer: ->(uri) { !@document_store.fetch(uri: uri).nil? },
+        logger: @logger
+      )
+      @prefix_completion = Semantic::PrefixCompletion.new(
+        query_service: @query_service, workspace_index: @workspace_index
       )
       @reference_index = Semantic::ReferenceIndex.new
       @reference_state_mutex = Mutex.new
@@ -174,6 +187,13 @@ module Ovallsp
     # logged and swallowed, not left to crash the whole process on its way
     # out.
     def shutdown_background_tasks
+      # Asked to stop *before* the bounded join, not left for it: a
+      # workspace pass checks its token between files, so closing it first
+      # lets it finish the file it is on and return. #close rather than
+      # #begin_pass: a pass is started from inside another background
+      # thread, which could otherwise begin a fresh, valid one after this
+      # point and be killed by the join instead of returning (0.2.0).
+      @workspace_diagnostics&.close
       @background_tasks.shutdown
     rescue StandardError => e
       begin
@@ -257,6 +277,10 @@ module Ovallsp
         respond(id, with_index_snapshot { explain_type_result(message[:params]) })
       when "textDocument/completion"
         respond(id, with_index_snapshot { completion_result(message[:params]) })
+      when "textDocument/semanticTokens/full"
+        respond(id, semantic_tokens_result(message[:params]))
+      when "completionItem/resolve"
+        respond(id, with_index_snapshot { completion_resolve_result(message[:params]) })
       when "textDocument/signatureHelp"
         respond(id, with_index_snapshot { signature_help_result(message[:params]) })
       when "textDocument/references"
@@ -352,7 +376,7 @@ module Ovallsp
       clear_diagnostics(uri)
 
       path = UriUtil.to_path(uri)
-      reindex_from_disk(uri) if path && File.file?(path)
+      publish_workspace_diagnostics_later(uri) if path && File.file?(path) && reindex_from_disk(uri)
     end
 
     def reindex(document)
@@ -371,11 +395,15 @@ module Ovallsp
     # turn that already owns `document`'s current version -- there's no
     # background/async gap for a result to go stale in, so "stale document
     # versionのdiagnosticをpublishしない" holds by construction rather than
-    # needing its own generation check. Only wired into the didOpen/
-    # didChange path (buffer content the client can actually see) --
-    # #reindex_from_disk (files nobody has open) doesn't publish, since
-    # there's no LSP client-side buffer to attach the notification to
-    # meaningfully.
+    # needing its own generation check.
+    #
+    # This is the *buffer* path. Until 0.2.0 it was the only one, on the
+    # reasoning that an unopened file has no client-side buffer to attach
+    # a notification to -- which `WorkspaceDiagnostics`' own header
+    # rejects, because LSP does not work that way: a client shows a
+    # `publishDiagnostics` for any uri. `#reindex_from_disk` now publishes
+    # too, through the workspace pass rather than here, so that the two
+    # cannot both claim the last word on one uri.
     def publish_diagnostics(document)
       # Whether there is a running application to ask has to be known
       # *before* the check runs, not after: a receiver it cannot judge
@@ -383,13 +411,10 @@ module Ovallsp
       # deferring is only right when an answer can actually arrive.
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
       findings = with_index_snapshot do
-        context = diagnostics_semantic_context
+        context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
       end
-      @writer.write_message(
-        jsonrpc: JSONRPC_VERSION, method: "textDocument/publishDiagnostics",
-        params: { uri: document.uri, version: document.version, diagnostics: findings.map { |f| to_lsp_diagnostic(f) } }
-      )
+      publish_findings(document.uri, findings, version: document.version)
     rescue StandardError => e
       @logger.error("failed to compute diagnostics for #{document.uri}: #{e.class}: #{e.message}")
     ensure
@@ -401,6 +426,127 @@ module Ovallsp
         answer_pending_ancestry_questions
       rescue StandardError => e
         @logger.error("failed to ask the Runtime Agent about pending ancestries: #{e.class}: #{e.message}")
+      end
+    end
+
+    def publish_findings(uri, findings, version: nil)
+      @writer.write_message(
+        jsonrpc: JSONRPC_VERSION, method: "textDocument/publishDiagnostics",
+        params: { uri: uri, version: version, diagnostics: findings.map { |f| to_lsp_diagnostic(f) } }
+      )
+    end
+
+    # The same analysis the buffer path runs, minus the notification: the
+    # workspace pass owns when and whether to publish, because it also
+    # owns the decision to abandon a superseded pass mid-file (0.2.0).
+    #
+    # `assigned_ivars:` included, for the same reason it is on the buffer
+    # path. The pass visits `.erb` as well as `.rb`, and
+    # `unassigned_ivar_findings` returns [] when the context does not
+    # carry it -- so leaving it out silently switched that check off for
+    # every view nobody had open, which is most of them. It is the same
+    # call in the same place inside the snapshot, so the two paths cannot
+    # answer differently about one view.
+    def workspace_findings_for(document)
+      @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
+      with_index_snapshot do
+        context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
+        @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
+      end
+    ensure
+      # `analyze` *records* the ancestries it had to defer on; something
+      # has to ask. The buffer path drains in its own `ensure` and this
+      # one did not, so a receiver deferred in an unopened file waited
+      # until an open buffer happened to trigger a drain -- which, on a
+      # workspace where nothing is open, is never.
+      begin
+        answer_pending_ancestry_questions
+      rescue StandardError => e
+        @logger.error("failed to ask the Runtime Agent about pending ancestries: #{e.class}: #{e.message}")
+      end
+    end
+
+    # One file, analyzed on a background thread. The pass's own generation
+    # is not claimed here: this is not a workspace pass and must not
+    # supersede one that is running.
+    def publish_workspace_diagnostics_later(uri)
+      @background_tasks.track_thread(Thread.new do
+        @workspace_diagnostics.publish_for(uri)
+      rescue StandardError => e
+        @logger.error("failed to publish diagnostics for #{uri}: #{e.class}: #{e.message}")
+      end)
+    end
+
+    # Every reason the whole workspace's answers could have changed at
+    # once -- most importantly the Runtime Agent becoming ready, since the
+    # unknown-method check defers rather than guesses without one, and a
+    # file analyzed before that point is under-reported until something
+    # asks again. Supersedes any pass still running.
+    # Coalesced, not restarted. A pass drains the ancestry questions each
+    # file raises, and an installed answer republishes -- which used to
+    # start a fresh pass from file 0 while this one was mid-walk. It
+    # terminated, because an answered name is never re-asked, but the
+    # redundant work grew with the workspace: five passes over 30 files,
+    # twenty-five over 150, each re-taking the index mutex the request
+    # path needs. A request arriving while a pass runs now means "run once
+    # more when this one is done" (024.14's direction).
+    def start_workspace_diagnostics
+      should_start = @workspace_pass_mutex.synchronize do
+        @workspace_pass_requested = true
+        if @workspace_pass_running
+          false
+        else
+          @workspace_pass_running = true
+        end
+      end
+      return unless should_start
+
+      @background_tasks.track_thread(Thread.new { drive_workspace_passes })
+    end
+
+    def drive_workspace_passes
+      loop do
+        keep = @workspace_pass_mutex.synchronize do
+          if @workspace_pass_requested
+            @workspace_pass_requested = false
+            true
+          else
+            # Cleared inside the same lock the requester tests, so a
+            # request arriving as this loop ends cannot be dropped.
+            @workspace_pass_running = false
+            false
+          end
+        end
+        break unless keep
+
+        run_one_workspace_pass
+      end
+    rescue StandardError => e
+      @logger.error("workspace diagnostics pass failed: #{e.class}: #{e.message}")
+      @workspace_pass_mutex.synchronize { @workspace_pass_running = false }
+    end
+
+    def run_one_workspace_pass
+      generation = @workspace_diagnostics.begin_pass
+      # Sorted, because the pass stops at a cap and so *which* files it
+      # reaches is part of the answer. `uris_by_source` is the index's
+      # own insertion order, and `replace_file` moves a file to the end
+      # of it whenever the content changes -- so without an order here,
+      # saving one file changes which files past the cap are never
+      # reported. The pass's own traversal, not a seventh reader of
+      # shared state (024.15).
+      uris = @workspace_index.uris_by_source(:disk).sort
+      return if uris.empty?
+
+      outcome = @workspace_diagnostics.run(uris, generation)
+      # The cap is what stops an unbounded pass on a monorepo, and the
+      # files past it get no diagnostics. Saying so in the log is the
+      # difference between a bounded answer and a quietly partial one --
+      # `WorkspaceDiagnostics` records `truncated` for a caller to
+      # report, and until now no caller read the outcome at all.
+      if outcome.truncated
+        @logger.warn("workspace diagnostics stopped after #{outcome.analyzed} files of #{uris.size}; " \
+                     "the rest are not reported")
       end
     end
 
@@ -994,6 +1140,19 @@ module Ovallsp
                           # rebuild on exactly the "just cold-indexed a
                           # large repo" path.
                           @index_mutation_mutex.synchronize { mark_reference_index_dirty }
+                          # Now, not earlier: a file analyzed before the
+                          # rest of the workspace is indexed resolves
+                          # against a half-built index and reports
+                          # mistakes that are only missing knowledge.
+                          # Not while the Agent's bootstrap is still in
+                          # flight: the unknown-method check defers only
+                          # once there is an Agent to defer to, and
+                          # publishing its static fallback for the whole
+                          # project -- then correcting it a boot later --
+                          # is a Problems panel full of findings about
+                          # working code. The bootstrap starts the pass
+                          # itself when it settles, ready or not.
+                          start_workspace_diagnostics unless @agent_bootstrap_pending
                         }).run
       rescue StandardError => e
         logger.error("cold index failed: #{e.class}: #{e.message}")
@@ -1206,6 +1365,8 @@ module Ovallsp
         return
       end
 
+      @agent_bootstrap_pending = true
+
       bootstrap = @agent_bootstrap
       root = @workspace_root
       logger = @logger
@@ -1274,6 +1435,16 @@ module Ovallsp
         end
       rescue StandardError => e
         logger.error("Runtime Agent bootstrap failed: #{e.class}: #{e.message}")
+      ensure
+        # Settled, ready or not: a bootstrap that never reaches :ready
+        # degrades to static-only with no retry, so this is the only
+        # point at which the workspace's answers stop changing.
+        @agent_bootstrap_pending = false
+        begin
+          start_workspace_diagnostics
+        rescue StandardError => e
+          logger.error("failed to start the workspace pass: #{e.class}: #{e.message}")
+        end
       end
       background_tasks.track_thread(thread)
     end
@@ -1421,6 +1592,233 @@ module Ovallsp
                                           signature_generation: @signatures.generation)
 
       @logger.warn("query for #{query_context.uri} at #{query_context.position} became stale mid-computation")
+    end
+
+    # The instance variables this document is *given*, or nil when nobody
+    # can say (0.2.0's unassigned-@ivar check).
+    #
+    # Only a view has an answer: it is handed exactly what its controller
+    # action and callback chain assign, which is already computed for
+    # type propagation. Everything else -- a controller, a model, a plain
+    # Ruby file -- receives its ivars from wherever it likes, and nil is
+    # the honest answer rather than the empty set.
+    def assigned_ivars_for(uri, view_document = nil)
+      return nil unless erb_view?(uri)
+
+      context = view_action_context(uri)
+      return nil unless context
+      # An `instance_variable_set` anywhere in the chain assigns names
+      # this cannot enumerate, so the set stops being a complete answer
+      # and there is nothing safe to report against.
+      documents = controller_ancestor_documents(context[:owner])
+      return nil if controller_sets_ivars_dynamically?(documents)
+      return nil unless whole_chain_was_read?(context[:owner], documents)
+      return nil unless declared_once_each?(documents)
+      return nil unless ivar_sources_fully_enumerable?(context[:owner], documents)
+      return nil unless class_body_is_accounted_for?(documents)
+      # A view that renders a partial receives whatever the partial
+      # assigns, and this walk reads the view's own text only. Resolving
+      # the partial and reading it is the precise answer and belongs with
+      # the rest of 024.18; until then a render is a contributor that has
+      # not been read.
+      return nil if renders_something?(uri, view_document)
+
+      method_maps = controller_method_maps(documents)
+      actions = contributing_actions(documents, method_maps, context[:action], context[:view_key])
+      # No action renders this view, so nothing establishes what it is
+      # given. That is a different fact from "the action assigns nothing",
+      # and the empty set would say the second while meaning the first.
+      return nil if actions.empty?
+
+      # The union of what the inference walk resolved and every ivar the
+      # controller chain assigns *syntactically*. The walk's set is the
+      # attributed one -- which action assigns what -- but it folds only
+      # the statement shapes it models, and a shape it does not fold
+      # arrives here as a complete-looking set with a name missing, which
+      # is a warning on a view that renders (`@user ||= ...`, an
+      # assignment inside `respond_to do |format|`, a `case`, a `rescue`,
+      # a multiple assignment).
+      #
+      # Widening to the whole chain rather than to the contributing
+      # action's body alone is deliberate: an ivar assigned in a sibling
+      # action silences this check for this view, which is a missed
+      # report. The standard here is that a missed report beats a wrong
+      # one, and a name the controller never writes at all -- the typo
+      # this check exists for -- is still caught.
+      (ivars_for_view(uri).keys.map(&:to_s) +
+       documents.flat_map { |_, document| @local_inferencer.assigned_ivar_names(document) } +
+       helper_assigned_ivar_names).uniq
+    rescue StandardError => e
+      @logger.error("failed to compute assigned ivars for #{uri}: #{e.class}: #{e.message}")
+      nil
+    end
+
+    DYNAMIC_IVAR_ASSIGNMENT = /\binstance_variable_set\b/
+
+    # Takes the chain rather than the owner: building it re-reads and
+    # re-parses every controller in it from disk, and the caller has
+    # already done that.
+    def controller_sets_ivars_dynamically?(documents)
+      documents.any? do |_ancestor_name, document|
+        document.text.match?(DYNAMIC_IVAR_ASSIGNMENT)
+      end
+    end
+
+    # Whether the instance variables a view receives can be *completely*
+    # enumerated (0.2.0).
+    #
+    # The chain builder was written for type propagation, where missing a
+    # source is harmless: the ivar simply infers Unknown. Reused as the
+    # input to a diagnostic, every omission becomes a wrong report on code
+    # that runs -- and `around_action`, `prepend_before_action`, a
+    # block-form callback and a Rails concern are not edge cases. So the
+    # answer here is "no" whenever the chain contains anything this cannot
+    # follow, and the check above turns that into silence.
+    # `controller_ancestor_documents` drops an ancestor whose file it
+    # cannot resolve, and says nothing about having done so -- so a class
+    # this walk never read looks exactly like a class that assigns
+    # nothing. `class UsersController < ApplicationController` analyzed
+    # before the cold index reaches the parent reported the parent's
+    # `@current_user` as never assigned, on a view that renders; and for a
+    # controller whose parent lives outside the workspace it never stops.
+    #
+    # The chain from the hierarchy index is the authority on what should
+    # have been read, and this is where the two are compared, because
+    # nowhere else has both.
+    def whole_chain_was_read?(owner_name, documents)
+      # The *immediate* superclass, whatever its `kind`. One the index has
+      # not seen declared arrives with `kind: nil`, which is the case that
+      # matters: `controller_ancestor_documents` filters on
+      # `kind == :class` and so never even tries to read it.
+      #
+      # Only the immediate one, because the chain does not end in the
+      # workspace -- every Rails controller reaches `ActionController::Base`
+      # and beyond, which no document will ever be produced for, so
+      # demanding the whole chain switches the check off for every real
+      # controller. A framework base does not assign the instance
+      # variables a view reads; the class the user wrote `< X` against
+      # does, and that is the one worth insisting on.
+      # The view's own controller's immediate superclass, and only that
+      # one. Applying the same rule to every class that was read is the
+      # correct depth -- `UsersController < BaseController <
+      # ApplicationController` with the top unread is the same failure one
+      # level up, and it is not caught here -- but it cannot be told from
+      # the ordinary case: the last class the workspace declares inherits
+      # from a gem, which no document will ever exist for, so demanding it
+      # silences every real controller. Separating "a workspace class not
+      # read yet" from "a base class in a gem" is what 024.R7's index
+      # provides, and 024.18 records this as waiting on it.
+      parent = @hierarchy_index.ancestors(owner_name).find { |entry| entry.origin == :superclass }
+      return true unless parent
+
+      read = documents.map { |name, _| Index::SymbolId.qualify_owner(name) }
+      read.include?(Index::SymbolId.qualify_owner(parent.name))
+    end
+
+    # Rails mixes every module under `app/helpers` into the view context
+    # (`include_all_helpers` is on by default), so an ivar a helper
+    # assigns is one the view receives. The controller walk cannot see
+    # them, and no other guard notices: the controller's body is clean and
+    # its ancestry carries no module.
+    #
+    # Every helper rather than the ones this view calls, for the same
+    # reason the controller chain is taken whole -- a name assigned
+    # anywhere a view can reach means "do not warn", and a name no helper
+    # writes at all, which is the typo this check exists for, is still
+    # caught.
+    HELPER_PATH = %r{/app/helpers/}
+    def helper_assigned_ivar_names
+      uris = (@workspace_index.uris_by_source(:disk) + @document_store.open_documents.map(&:uri))
+      uris.uniq.filter_map do |uri|
+        next unless uri.match?(HELPER_PATH)
+
+        # The index's own content hash, which costs neither a read nor a
+        # parse and tracks an open buffer as well as a file on disk --
+        # `didOpen` and `didChange` both re-index. This runs on the
+        # dispatch thread once per `didChange`, per keystroke in a view,
+        # and once per view in the workspace pass, inside the lock every
+        # hover needs: reading and parsing every helper each time measured
+        # 17ms on sixty of them, loading and hashing the text 5.8ms, this
+        # 0.22ms.
+        #
+        # A version cannot be the key: it restarts at 1 every time the
+        # editor opens the file, so it names a text only within one open
+        # session while this cache outlives it, and a helper reopened at
+        # version 1 with different content answered from the previous
+        # session.
+        open_document = @document_store.fetch(uri: uri)
+        fingerprint = @workspace_index.summary_for_uri(uri)&.content_hash
+        cached = @helper_ivars[uri]
+        next cached[1] if fingerprint && cached && cached[0] == fingerprint
+
+        document = open_document || load_document_from_disk(uri)
+        next unless document
+
+        names = @local_inferencer.assigned_ivar_names(document)
+        @helper_ivars[uri] = [fingerprint, names] if fingerprint
+        names
+      end.flatten
+    end
+
+    # `controller_ancestor_documents` resolves each ancestor to *one* uri,
+    # so a second file reopening the class is never read -- and the set
+    # the check then compares against looks complete rather than partial.
+    # `def show; load_user; end` in one file with `load_user` assigning in
+    # another produced a warning on a view that renders.
+    def declared_once_each?(documents)
+      documents.all? { |name, _| @workspace_index.class_declaration_uris(name).size <= 1 }
+    end
+
+    # The class-level declarations this analysis accounts for. Everything
+    # else in a controller's class body is a call whose effect it has not
+    # read -- and a gem's macro is the ordinary case: CanCanCan's
+    # `load_and_authorize_resource`, `expose`, Devise and ActiveAdmin all
+    # install a callback that assigns at runtime, none of it visible to a
+    # walk over `def` bodies.
+    #
+    # A whitelist rather than a blacklist, because the failure direction
+    # matters: a name nobody thought of has to mean "stay silent", not
+    # "assume harmless". `private`/`protected`/`public` and the callback
+    # forms the chain builder reads are the ones accounted for by
+    # construction.
+    #
+    # This is the blunt form of the question. 024.R7 lets the index
+    # attribute a class-body call to the gem that defines it, at which
+    # point this narrows to the calls still unaccounted for -- which
+    # *widens* the check rather than changing an answer it gives today.
+    MODELLED_CLASS_BODY_CALLS = %w[
+      private protected public
+      before_action skip_before_action
+    ].freeze
+
+    # Any `render` in the template's own Ruby regions. Deliberately not
+    # only the partial forms: `render` with a non-literal target is
+    # exactly the case that cannot be resolved later either.
+    def renders_something?(view_uri, view_document = nil)
+      document = view_document || @document_store.fetch(uri: view_uri) || load_document_from_disk(view_uri)
+      return false unless document
+
+      Erb::RubyRegionExtractor.extract_ruby_source(document.text).match?(/(?:\A|[^\w.:])render\b/)
+    rescue StandardError
+      true
+    end
+
+    def class_body_is_accounted_for?(documents)
+      documents.all? do |ancestor_name, document|
+        (@local_inferencer.class_body_call_names(document, owner_name: Index::SymbolId.qualify_owner(ancestor_name)) -
+          MODELLED_CLASS_BODY_CALLS).empty?
+      end
+    end
+
+    def ivar_sources_fully_enumerable?(owner_name, documents)
+      # `:default` entries are Object/Kernel/BasicObject, which every
+      # class has and none of which assigns a controller's ivars. What
+      # matters is a module the workspace mixes in, whose methods
+      # `controller_ancestor_documents` does not walk.
+      mixed_in = @hierarchy_index.ancestors(owner_name).any? do |entry|
+        %i[include extend prepend].include?(entry.origin)
+      end
+      !mixed_in
     end
 
     # No caching here by design: recomputed fresh from the controller's
@@ -1620,8 +2018,35 @@ module Ovallsp
       typed = receiver_type ? @query_service.definitions_of(receiver_type, word) : []
       return typed unless typed.empty?
 
+      on_self = receiverless_definitions(document, position, word)
+      return on_self unless on_self.empty?
+
       lexical = @workspace_index.find_by_simple_name(word).map { |match| { uri: match[:uri], range: match[:range] } }
       (lexical + route_helper_definitions(word)).uniq
+    end
+
+    # A call with no receiver is a call on the enclosing `self`, and that
+    # is the *only* way most Ruby calls a method of its own class.
+    #
+    # Without this the fallback below is the whole answer, and it is a
+    # name lookup restricted to classes, modules and constants -- so
+    # `article_params` in a scaffolded Rails controller resolved to
+    # nothing, while find-references on the same pair answered two.
+    # `EXTENSION_CAPABILITIES.md`'s D1 row promises the jump for "a call
+    # to a workspace method"; its example wrote a receiver, which is why
+    # the row read PASS.
+    #
+    # The same question `PrefixCompletion` answers for "methods callable
+    # here", asked the same way -- through the type engine rather than by
+    # name, so this cannot jump to an unrelated method that happens to
+    # share the word.
+    def receiverless_definitions(document, position, word)
+      return [] if receiver_dot_before?(document, position)
+
+      self_type = @query_service.scope_at(document, position)&.self_type
+      return [] unless self_type
+
+      @query_service.definitions_of(self_type, word)
     end
 
     # A route helper's primary definition is its routes.rb source line (the
@@ -1791,13 +2216,43 @@ module Ovallsp
     def completion_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       document = analyzable_document(@document_store.fetch(uri: uri))
-      return [] unless document
+      return { isIncomplete: false, items: [] } unless document
 
       position = params.fetch(:position)
       prefix = word_prefix_at_position(document, position)
 
-      route_items = prefix.empty? ? [] : @route_registry.completion_names(prefix).map { |name| { label: name, kind: 3 } }
-      route_items + member_completion_items(document, position, prefix)
+      # After a receiver dot the question is "what can be called on this
+      # exact type", and the bare-prefix sources -- whose whole difficulty
+      # is that they match too much -- must not be mixed into it.
+      #
+      # The test is whether there *is* a dot, not whether the member path
+      # found anything. A receiver whose type is Unknown is the ordinary
+      # case, and gating on the empty answer offered `thing.art` every
+      # local named `article`.
+      if receiver_dot_before?(document, position)
+        return { isIncomplete: false, items: member_completion_items(document, position, prefix) }
+      end
+      # A bare identifier is what the workspace and Kernel sources answer
+      # about. `@user`, `$stdout`, `:symbol` and the name in a `def` are
+      # not bare identifiers, and each was answered with every constant
+      # starting with the same letters -- accepting one of which writes
+      # `@UserProfile`. `@` is the one that matters: typing it is about
+      # the most common thing anyone does in a Rails controller or view.
+      return { isIncomplete: false, items: [] } if bound_prefix_before?(document, position)
+
+      route_items =
+        if prefix.empty?
+          []
+        else
+          @route_registry.completion_names(prefix).map do |name|
+            { label: name, kind: 3,
+              sortText: Semantic::PrefixCompletion.sort_text(
+                Semantic::PrefixCompletion::GROUP_ROUTE_HELPER, name
+              ) }
+          end
+        end
+      bare = @prefix_completion.items(document: document, position: position, prefix: prefix)
+      { isIncomplete: bare.incomplete, items: route_items + bare.items }
     end
 
     def member_completion_items(document, position, prefix)
@@ -1805,10 +2260,21 @@ module Ovallsp
       return [] unless receiver_type
 
       @query_service.members_of(receiver_type, prefix: prefix).map do |member|
-        item = { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s }
+        item = { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s,
+                 data: completion_resolve_data(receiver_type, member.name) }
         snippet = completion_snippet(member)
         item.merge(snippet ? { insertText: snippet, insertTextFormat: SNIPPET_INSERT_FORMAT } : {})
       end
+    end
+
+    # What `completionItem/resolve` needs to find this member's
+    # declaration again, and nothing more: it travels to the editor and
+    # back on every item in the list.
+    def completion_resolve_data(receiver_type, name)
+      base = Types.base_nominal(receiver_type)
+      return nil unless base
+
+      { receiver: base.name, name: name }
     end
 
     # LSP InsertTextFormat.Snippet: `$1`/`${1:name}` become tab stops
@@ -1884,7 +2350,15 @@ module Ovallsp
 
     def method_signature_help(document, position, method_name)
       call_start = call_name_position(document, position)
-      receiver_type = call_start && receiver_type_before_dot(document, call_start)
+      return { signatures: [] } unless call_start
+
+      # With no receiver the call is on the enclosing `self`, the same
+      # reading go-to-definition and bare-prefix completion take. Without
+      # this, `takes(` inside the class that declares `takes` answered
+      # nothing -- the third row whose example covered only the
+      # receiver-qualified half of what it promises.
+      receiver_type = receiver_type_before_dot(document, call_start) ||
+                      @query_service.scope_at(document, call_start)&.self_type
       return { signatures: [] } unless receiver_type
 
       signatures = @query_service.signatures_of(receiver_type, method_name)
@@ -1931,6 +2405,39 @@ module Ovallsp
     # Help all share, which is what actually makes Task 013's "同一式に
     # ついてHoverとCompletionが同じreceiver型を利用する" true rather than
     # just documented.
+    # Whether the identifier under the cursor is spoken for -- by a sigil
+    # that makes it a variable or a symbol rather than a name to resolve,
+    # or by a `def` that makes it a name being *declared*.
+    BOUND_PREFIX_SIGILS = %w[@ $ :].freeze
+
+    def bound_prefix_before?(document, position)
+      text = document.text
+      offset = document.position_to_char_offset(position)
+
+      left = offset
+      left -= 1 while left.positive? && word_char?(text[left - 1])
+      return false unless left.positive?
+
+      # The character immediately before the word answers all of them,
+      # `@@count` included -- its nearest neighbour is still an `@`.
+      return true if BOUND_PREFIX_SIGILS.include?(text[left - 1])
+
+      # `undef` names a method the same way `def` does -- a name being
+      # declared or removed, not one to resolve. The boundary is `def`
+      # the keyword rather than the three letters: `predef use` is an
+      # ordinary call and still gets the workspace's answer.
+      text[...left].match?(/(?:\A|[^\w.])(?:un)?def\s+\z/)
+    end
+
+    def receiver_dot_before?(document, position)
+      text = document.text
+      offset = document.position_to_char_offset(position)
+
+      left = offset
+      left -= 1 while left > 0 && word_char?(text[left - 1])
+      left.positive? && text[left - 1] == "."
+    end
+
     def receiver_type_before_dot(document, position)
       text = document.text
       offset = document.position_to_char_offset(position)
@@ -1940,7 +2447,20 @@ module Ovallsp
       return nil if left.zero? || text[left - 1] != "."
 
       dot_position = document.char_offset_to_position(left - 1)
-      type = @query_service.type_at(document, dot_position)
+      # An `@ivar` in a template gets its type from the controller action
+      # that assigned it, and that arrives as the initial environment --
+      # nothing in the template itself assigns it. Hover has always passed
+      # it (H3); completion and go-to-definition, which share this helper,
+      # did not, so `@article.` in a view completed to nothing while
+      # hovering the same `@article` answered `Article`. Task 013 records
+      # "hover and completion use the same receiver type" as the rule.
+      #
+      # Only the environment: `document` here has already been through
+      # `#analyzable_document`, so the ERB is extracted. Extracting again
+      # -- which is what borrowing `#explain_type_in_view` wholesale does
+      # -- breaks the local case this row was written for.
+      initial_env = erb_view?(document.uri) ? ivars_for_view(document.uri) : {}
+      type = @query_service.type_at(document, dot_position, initial_env: initial_env)
       type == Types::UNKNOWN ? nil : type
     end
 
@@ -1983,6 +2503,7 @@ module Ovallsp
     end
 
     def handle_did_change_watched_files(params)
+      reanalyze = []
       changed_models = Set.new
       needs_routes_refresh = false
       needs_restart = false
@@ -1995,10 +2516,19 @@ module Ovallsp
           needs_signature_reload = true
         elsif change.fetch(:type) == FILE_CHANGE_DELETED && @document_store.fetch(uri: uri).nil?
           @index_mutation_mutex.synchronize { remove_index_contribution(uri) }
+          # And retract what the workspace pass published for it. Before
+          # 0.2.0 an unopened file had no diagnostics and there was
+          # nothing to clear; now the Problems panel would keep a finding
+          # about a file that no longer exists, and nothing else ever
+          # publishes for that uri again -- `WorkspaceDiagnostics#publish_for`
+          # returns early on a path that is gone. A rename arrives here as
+          # a delete plus a create, so this is not only the `git checkout`
+          # case.
+          publish_findings(uri, [])
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
           # reindex from disk for files nobody currently has open.
-          reindex_from_disk(uri)
+          reanalyze << uri if reindex_from_disk(uri)
         end
 
         case classify_rails_change(uri)
@@ -2043,6 +2573,33 @@ module Ovallsp
       elsif !changed_models.empty?
         with_ready_agent("app/models/*") { refresh_models(changed_models) }
       end
+
+      # One pass over the whole batch, after it is indexed, rather than a
+      # thread per file while it is being indexed. `WorkspaceDiagnostics`
+      # already checks its token between files, so a newer batch
+      # supersedes this one instead of queueing behind it.
+      analyze_changed_files_later(reanalyze)
+    end
+
+    # A batch of changed files, on one thread. Deliberately *not* through
+    # `begin_pass`/`run`: that takes the single generation a workspace
+    # pass is identified by, which supersedes the pass in flight -- and
+    # unlike every other caller that supersedes one, this has no
+    # replacement to start, so a `git pull` landing during the first pass
+    # ended it and the rest of the workspace was never analysed.
+    #
+    # `publish_for` is what a pass does per file anyway: it skips an open
+    # buffer and a path that is gone, and reports its own failures. The
+    # list is bounded by the notification, so it needs no cap and nothing
+    # needs to supersede it.
+    def analyze_changed_files_later(uris)
+      return if uris.empty?
+
+      @background_tasks.track_thread(Thread.new do
+        uris.each { |uri| @workspace_diagnostics.publish_for(uri) }
+      rescue StandardError => e
+        @logger.error("failed to analyze changed files: #{e.class}: #{e.message}")
+      end)
     end
 
     SCHEMA_FILE_PATTERNS = [%r{db/schema\.rb\z}, %r{db/structure\.sql\z}, %r{db/migrate/}].freeze
@@ -2074,6 +2631,13 @@ module Ovallsp
     # file's content, not when its #replace_file call happened to arrive
     # — see WorkspaceIndex#stale?'s comment
     # (docs/design/tasks/008.6-agent-and-index-hardening.md).
+    # Returns whether the summary was applied, so a caller handling a
+    # batch can collect the uris worth re-analysing and hand them to one
+    # pass rather than starting one per file. Analysing here would put the
+    # work on the dispatch thread; starting a thread per file put it on
+    # the index mutex, which the dispatch thread needs for the *next*
+    # file -- measured at 13.5s for a 200-file batch against 1.5s for the
+    # indexing alone, with no request served meanwhile.
     def reindex_from_disk(uri)
       path = UriUtil.to_path(uri)
       return unless path && File.file?(path)
@@ -2085,6 +2649,10 @@ module Ovallsp
       apply_file_summary(summary)
     rescue StandardError => e
       @logger.error("failed to reindex #{uri} from disk: #{e.class}: #{e.message}")
+      # Explicitly, because the rescue's value would otherwise be the
+      # logger's -- truthy for a real IO -- and a file that failed to
+      # reindex would then be queued for analysis and fail there too.
+      false
     end
 
     MODEL_FILE_PATTERN = %r{app/models/(?<relative>.+)\.rb\z}
@@ -2490,12 +3058,22 @@ module Ovallsp
     # So whenever that data lands, everything currently open is answered
     # again. Failures are per-document: one unparseable buffer must not
     # stop the rest being corrected.
+    # Every caller of this is a place where the answers just changed for
+    # reasons that have nothing to do with any one file -- the Runtime
+    # Agent becoming ready or restarting, routes and models being
+    # installed, trust being granted. All of them apply to the workspace
+    # exactly as much as to the open buffers, and before 0.2.0 only the
+    # buffers were re-asked because only the buffers were ever asked.
+    #
+    # Wired here rather than at each of the six call sites so a seventh
+    # cannot be added that quietly refreshes half the workspace.
     def republish_open_diagnostics
       @document_store.open_documents.each do |document|
         publish_diagnostics(document)
       rescue StandardError => e
         @logger.error("failed to republish diagnostics for #{document.uri}: #{e.class}: #{e.message}")
       end
+      start_workspace_diagnostics
     end
 
     def initialize_result
@@ -2511,7 +3089,11 @@ module Ovallsp
           referencesProvider: true,
           renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
-          completionProvider: { triggerCharacters: ["."] },
+          completionProvider: { triggerCharacters: ["."], resolveProvider: true },
+          semanticTokensProvider: {
+            legend: { tokenTypes: SemanticTokens::LEGEND, tokenModifiers: SemanticTokens::MODIFIERS },
+            full: true
+          },
           signatureHelpProvider: { triggerCharacters: ["("] }
         },
         serverInfo: {
@@ -2555,6 +3137,17 @@ module Ovallsp
       }
     end
 
+    # Semantic highlighting (0.2.0). Answers `{ data: [] }` rather than
+    # nil for a document it has nothing to say about: a null result tells
+    # the client the request failed, and a client told that stops asking.
+    def semantic_tokens_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = @document_store.fetch(uri: uri)
+      return { data: [] } unless document
+
+      { data: SemanticTokens.encode(document) }
+    end
+
     # Task 013: a real, type-engine-backed hover. Deliberately conservative
     # about what it shows — "情報不足時は断定的な表示を避ける"
     # (docs/design/tasks/013-unified-semantic-query-and-lsp-integration.md):
@@ -2590,6 +3183,7 @@ module Ovallsp
     # discarding a hover that otherwise has real content to show.
     def hover_lines(document, position, type)
       lines = type == Types::UNKNOWN ? [] : [type.to_s]
+      documentation = nil
 
       word = word_at_position(document, position)
       # Skipped for .erb views: #receiver_type_before_dot queries #type_at
@@ -2608,10 +3202,64 @@ module Ovallsp
         lines << "Origin: #{origin}" if origin
 
         location = @query_service.definitions_of(receiver_type, word).first
-        lines << "Defined: #{location[:uri]}:#{location[:range][:start][:line] + 1}" if location
+        if location
+          lines << "Defined: #{location[:uri]}:#{location[:range][:start][:line] + 1}"
+          documentation = documentation_at(location)
+        end
       end
 
-      lines
+      # Prose, separated from the type/origin/path lines by a blank line
+      # rather than run together with them -- otherwise the comment's
+      # first line reads as part of the signature.
+      documentation ? lines + ["", documentation] : lines
+    end
+
+    # The comment block above a declaration, read from the buffer if the
+    # file is open and from disk otherwise (0.2.0). Nothing indexes
+    # comments: they live in the source, and this is the only place that
+    # wants them.
+    def documentation_at(location)
+      uri = location[:uri]
+      document = @document_store.fetch(uri: uri) || load_document_from_disk(uri)
+      return nil unless document
+
+      Documentation.above(document.text, location.dig(:range, :start, :line))
+    rescue StandardError => e
+      @logger.error("failed to read documentation for #{uri}: #{e.class}: #{e.message}")
+      nil
+    end
+
+    # Fills in the documentation for the one item the editor is actually
+    # showing (0.2.0).
+    #
+    # Reading the source for every candidate would put a file read per
+    # item on the request path, for documentation the user sees for one of
+    # them at most -- so the list carries only `data`, the receiver and
+    # name this needs to find the declaration again.
+    def completion_resolve_result(params)
+      item = params.dup
+      data = item[:data]
+      # Only that there is a `data`. A `data` missing either key cannot
+      # produce a definition either -- `definitions_of` answers nothing
+      # for a nil name -- so testing the keys here was a condition no
+      # input could reach.
+      return item unless data
+
+      location = @query_service.definitions_of(Types::Nominal.new(name: data[:receiver]), data[:name]).first
+      return item unless location
+
+      documentation = documentation_at(location)
+      return item unless documentation
+
+      # `plaintext`, the same kind hover sends. RDoc/YARD is not markdown:
+      # under CommonMark two comment lines become one run-on paragraph
+      # and `*bold*`/`+code+`/`_italic_` are reinterpreted, so declaring
+      # it markdown rendered one source two ways depending on which
+      # request asked for it.
+      item.merge(documentation: { kind: "plaintext", value: documentation })
+    rescue StandardError => e
+      @logger.error("failed to resolve completion item: #{e.class}: #{e.message}")
+      params
     end
 
     HOVER_ORIGIN_LABEL = {

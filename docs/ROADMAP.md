@@ -15,35 +15,19 @@ planned, are in
 [`design/tasks/024-deferred-review-findings.md`](design/tasks/024-deferred-review-findings.md)
 (024.R3).
 
-## 0.2.0 — Completion from the first keystroke, and diagnostics beyond the open file
-
-- **Typing `A` offers candidates.** Today completion needs a `.` first:
-  a bare prefix matches route helpers and nothing else, so the workspace
-  classes, the locals in scope and the methods callable right there —
-  which is most of what you type — offer nothing until you have typed the
-  whole name. This is the single most-used completion in any editor.
-- **Mistakes in files you have not opened are reported.** Today a
-  diagnostic only exists for a file currently open in an editor, so an
-  error three directories away is invisible until you happen to look at
-  it.
-- **Passing an argument of the wrong type is reported.** Today only the
-  *number* of arguments is checked.
-- **Reading an `@ivar` that is never assigned is reported.** Ruby returns
-  `nil` rather than raising, so today nothing tells you — the view simply
-  renders empty.
-- **Hover and completion show the documentation.** Today hover says what
-  a thing *is* and never what it is *for*, though the RDoc/YARD comment
-  is right above the `def`.
-- **Semantic highlighting.** Ruby's `foo` is ambiguous between a local
-  variable and a method call on self; the engine already knows which and
-  the editor does not. Covers ERB templates' Ruby regions too.
-
 ## 0.3.0 — Knowing what the gems define
 
 - **Unknown methods are reported on classes that inherit from a gem** —
   `ApplicationController`, and so most controllers and jobs. Today the
   check is deliberately silent there, because reporting would mean
   guessing (024.R7).
+- **`Article.all.` completes.** A `Relation` answers what it holds —
+  `where`, `order`, `limit`, and the chain they build. Today hover names
+  the type (`Relation[Article]`) and completion offers nothing, because
+  nothing tells the engine what a Relation's own API is; the gem index
+  above is what supplies it.
+- **`self.` completes.** The methods callable on the object you are
+  writing in. The same list a bare prefix already offers, after a dot.
 - **Inlay hints.** The inferred types and parameter names appear in the
   code itself, not only when you hover.
 - **Quick fixes for each diagnostic.** Define the missing method, correct

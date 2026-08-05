@@ -1548,6 +1548,146 @@ RSpec.describe Ovallsp::LocalInferencer do
     end
   end
 
+  # Completion from a bare prefix needs the *names* in scope, not the
+  # type of one expression, and nothing exposed them: `locate` already
+  # threads an environment down to the cursor exactly as `eval_type`
+  # would, but `infer_at` throws it away and returns only the type it
+  # arrived at. `scope_at` returns that environment instead (0.2.0).
+  describe "#scope_at (0.2.0)" do
+    def document(source)
+      Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
+    end
+
+    # Line/character of the `HERE` marker, which is removed from the
+    # source. Not `|`: a block parameter list contains one, and the first
+    # fixture with a block silently measured a position inside `|entry|`
+    # instead of inside the body.
+    def scope_for(source)
+      line = source.lines.index { |l| l.include?("HERE") }
+      character = source.lines[line].index("HERE")
+      inferencer.scope_at(document(source.sub("HERE", "")), { line: line, character: character })
+    end
+
+    it "reports a local assigned before the cursor, with its inferred type" do
+      scope = scope_for(<<~RUBY)
+        user = User.new
+        HERE
+      RUBY
+
+      expect(scope.locals["user"].to_s).to eq("User")
+    end
+
+    it "does not report a local assigned only after the cursor" do
+      scope = scope_for(<<~RUBY)
+        HERE
+        later = User.new
+      RUBY
+
+      expect(scope.locals).not_to have_key("later")
+    end
+
+    it "reports the enclosing method's parameters" do
+      scope = scope_for(<<~RUBY)
+        class UsersController
+          def show(id, scope: nil)
+            HERE
+          end
+        end
+      RUBY
+
+      expect(scope.locals.keys).to include("id", "scope")
+    end
+
+    it "does not leak a local out of the method that declared it" do
+      scope = scope_for(<<~RUBY)
+        class UsersController
+          def show
+            inner = User.new
+          end
+
+          def index
+            HERE
+          end
+        end
+      RUBY
+
+      expect(scope.locals).not_to have_key("inner")
+    end
+
+    it "reports the enclosing class as the self type" do
+      scope = scope_for(<<~RUBY)
+        class UsersController
+          def show
+            HERE
+          end
+        end
+      RUBY
+
+      expect(scope.self_type.to_s).to eq("UsersController")
+    end
+
+    it "reports ClassOf for a singleton method's self type" do
+      scope = scope_for(<<~RUBY)
+        class UsersController
+          def self.build
+            HERE
+          end
+        end
+      RUBY
+
+      expect(scope.self_type.to_s).to eq("ClassOf[UsersController]")
+    end
+
+    it "reports a block parameter bound by the enclosing block" do
+      scope = scope_for(<<~RUBY)
+        users = [User.new]
+        users.each do |entry|
+          HERE
+        end
+      RUBY
+
+      expect(scope.locals.keys).to include("entry")
+    end
+
+    # `locals` feeds completion for a bare prefix, and `@user` is never
+    # what a bare prefix means -- an ivar is typed with its own sigil, and
+    # offering it here puts it in front of a user who typed `us`.
+    it "does not report an instance variable as a local" do
+      scope = scope_for(<<~RUBY)
+        class UsersController
+          def show
+            @user = User.new
+            HERE
+          end
+        end
+      RUBY
+
+      expect(scope.locals).not_to have_key("@user")
+      expect(scope.locals).not_to have_key(:@user)
+    end
+
+    # `capture_scope` copies the whole environment, and `locate` calls it
+    # once per step of the descent. `infer_at` walks the same path and
+    # wants none of it, so the flag is a cost decision -- it changes no
+    # answer, which is why nothing else here can distinguish it.
+    it "does not build scope snapshots for an ordinary #infer_at" do
+      doc = document("class UsersController\n  def show\n    user = User.new\n    user\n  end\nend\n")
+
+      expect(inferencer).not_to receive(:capture_scope)
+
+      inferencer.infer_at(doc, { line: 3, character: 5 })
+    end
+
+    it "reports no self type at the top level of a file" do
+      scope = scope_for(<<~RUBY)
+        user = User.new
+        HERE
+      RUBY
+
+      expect(scope.self_type).to be_nil
+    end
+  end
+
   describe "#infer_at max_steps override (Task 013 review fix)" do
     it "uses the per-call max_steps instead of the constructor default when given" do
       # A long chain of statements, each one costing at least one #step! --
@@ -1561,6 +1701,152 @@ RSpec.describe Ovallsp::LocalInferencer do
       document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
       widened = inferencer.infer_at(document, { line: 50, character: 0 }, max_steps: 3)
       expect(widened).to eq(Ovallsp::Types::UNKNOWN) # budget exhausted -> degrades, doesn't raise
+    end
+  end
+
+  # A position inside a block whose receiver is not a generic gets
+  # Unknown, not the enclosing call's type: answering `OptionParser` for
+  # a string literal three lines into `opts.on("-x") do` is what 0.2.0
+  # would publish as an `argument-type` diagnostic. Descending into the
+  # body is the right answer and is blocked on 024.20 -- Unknown is what
+  # both checks decline on meanwhile.
+  it "answers Unknown rather than the call's own type inside a plain-receiver block" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", version: 1, language_id: "ruby",
+      text: "opts.on(\"-x\") do\n  \"hello\"\nend\n"
+    )
+
+    expect(described_class.new.infer_at(document, { line: 1, character: 8 }).to_s).to eq("Unknown")
+  end
+
+  # `scope_at` sets a flag that makes every descent step copy the whole
+  # environment, and `infer_at` never clears it -- while `Server` holds
+  # one long-lived inferencer. Without the `ensure`, one bare-prefix
+  # completion left every later `infer_at` paying that copy, on the
+  # request path, holding the index lock. The existing example uses a
+  # fresh inferencer, so it cannot see a flag a previous call left set.
+  it "clears the scope-capture flag for the next call on the same inferencer" do
+    inferencer = described_class.new
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", version: 1, language_id: "ruby",
+                                         text: "def go\n  x = 1\n  x\nend\n")
+
+    inferencer.scope_at(document, { line: 2, character: 2 })
+    inferencer.infer_at(document, { line: 2, character: 2 })
+
+    expect(inferencer.instance_variable_get(:@capturing_scope)).to be(false)
+  end
+
+  # Prism's `end_offset` is one past the node's last character, so an
+  # offset equal to it is *after* the node. Treating it as inside meant
+  # the innermost node containing a receiver's recorded position was the
+  # receiver's own last argument whenever the receiver ended in `)` --
+  # `wrap(Widget.new).go` resolved to `Widget`, and the unknown-method
+  # check then reported a call that runs.
+  # The seed value, not just the names. Ruby declares no parameter types,
+  # so Unknown is the honest answer -- and `Types::NIL` would make hover
+  # print `nil` as the type of every parameter in the workspace, which is
+  # a statement rather than an absence of one.
+  it "seeds a parameter as Unknown rather than as nil" do
+    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", version: 1, language_id: "ruby",
+                                         text: "def go(a)\n  a\nend\n")
+
+    expect(described_class.new.infer_at(document, { line: 1, character: 2 }).to_s).to eq("Unknown")
+  end
+
+  # And it reaches `infer_at`, not only `scope_at`: a branch's merge falls
+  # back to the *entering* environment, so a parameter assigned in one
+  # arm used to merge against an absent key and answer `Integer | nil` --
+  # claiming the method can be reached with `a` already nil, which the
+  # signature does not say.
+  it "merges a conditionally assigned parameter against Unknown, not nil" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", version: 1, language_id: "ruby",
+      text: "def go(a, flag)\n  if flag\n    a = 1\n  end\n  a\nend\n"
+    )
+
+    expect(described_class.new.infer_at(document, { line: 4, character: 2 }).to_s)
+      .to eq("Integer | Unknown")
+  end
+
+  # One fixture per parameter shape the seed has to cover. `posts` had one
+  # and the other three did not, and this is the "adds a whole method
+  # wholesale" hunk CLAUDE.md warns the sweep is blind to: reverting it
+  # proves only that the method exists.
+  {
+    "an optional parameter" => ["def go(alpha = 1)\n  \nend\n", "alpha"],
+    "a splat" => ["def go(*rest)\n  \nend\n", "rest"],
+    "a double splat" => ["def go(**opts)\n  \nend\n", "opts"],
+    "a block parameter" => ["def go(&blk)\n  \nend\n", "blk"]
+  }.each do |description, (source, name)|
+    it "offers #{description}" do
+      document = Ovallsp::TextDocument.new(uri: "file:///a.rb", version: 1, language_id: "ruby",
+                                           text: source)
+
+      locals = described_class.new.scope_at(document, { line: 1, character: 2 }).locals
+
+      expect(locals.keys.map(&:to_s)).to include(name)
+    end
+  end
+
+  # `parameter_env` listed requireds, optionals, keywords, rest, keyword
+  # rest and block -- and not `posts`, the required parameters that come
+  # *after* a splat. `def go(a, *rest, z)` is legal Ruby and `z` was
+  # missing from the locals completion offers.
+  it "offers a required parameter that follows a splat" do
+    document = Ovallsp::TextDocument.new(
+      uri: "file:///a.rb", version: 1, language_id: "ruby",
+      text: "def go(alpha, *rest, omega)\n  \nend\n"
+    )
+
+    locals = described_class.new.scope_at(document, { line: 1, character: 2 }).locals
+
+    expect(locals.keys.map(&:to_s)).to include("omega")
+  end
+
+  # `infer_at` parses the document, and the argument-type check asks it
+  # once per positional argument, so the parse is remembered. The key has
+  # to be the document, not merely "there is a cached tree": two files
+  # open at once, both at version 1, would otherwise answer each other's
+  # question -- and a hover would report a type from a different file.
+  describe "the remembered parse" do
+    def doc(uri, text) = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
+
+    it "does not answer one document's question from another's tree" do
+      inferencer = described_class.new
+      first = doc("file:///a.rb", "x = 1\nx\n")
+      second = doc("file:///b.rb", "y = \"s\"\ny\n")
+
+      inferencer.infer_at(first, { line: 1, character: 0 })
+
+      expect(inferencer.infer_at(second, { line: 1, character: 0 }).to_s).to eq("String")
+    end
+
+    # The point of remembering it: the argument-type check asks for a type
+    # at each positional argument of each call, and each ask parsed the
+    # whole file again.
+    it "parses the document once however many times it is asked" do
+      inferencer = described_class.new
+      document = doc("file:///a.rb", "x = 1\nx\n")
+      parses = 0
+      allow(Prism).to receive(:parse).and_wrap_original do |original, *args|
+        parses += 1
+        original.call(*args)
+      end
+
+      5.times { inferencer.infer_at(document, { line: 1, character: 0 }) }
+
+      expect(parses).to eq(1)
+    end
+
+    it "re-parses when the same document's text changes" do
+      inferencer = described_class.new
+      before = doc("file:///a.rb", "x = 1\nx\n")
+      after = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: "x = \"s\"\nx\n", version: 1,
+                                        language_id: "ruby")
+
+      inferencer.infer_at(before, { line: 1, character: 0 })
+
+      expect(inferencer.infer_at(after, { line: 1, character: 0 }).to_s).to eq("String")
     end
   end
 end

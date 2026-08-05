@@ -28,16 +28,18 @@ Every row below is a promise about one environment, and only that one:
   present), opened as a **trusted** workspace, on **darwin-arm64**, with
   the extension's own bundled Core.
 
-That is what the E2E suite runs against, so it is what is verified. A
+That is what the rows describe. It is not, today, where CI runs them --
+see "How these are verified" below, which states exactly what runs where. A
 plain Ruby project is explicitly *not* covered by these rows yet: much of
 the engine works there, but nothing here has been specified or verified
 for it, and half-supporting it would make both stories worse. Giving the
 Rails conventions an explicit boundary and specifying the plain-Ruby
-experience is roadmap item 024.R1, for 0.2.0.
+experience is roadmap item 024.R1, for 1.0.0.
 
 Untrusted workspaces stay as described at the end of this document: the
 Runtime Agent does not start, and every Rails-derived capability degrades
-to its static-only answer by design.
+to its static-only answer by design — with one exception, which is a
+defect rather than a degradation and is named there.
 
 ## How these are verified
 
@@ -56,6 +58,19 @@ The second layer exists because the first cannot see the failure that
 looks most like "the extension does nothing": an extension present on
 disk but not registered with VS Code, which never loads and never logs.
 This project has been in that state.
+
+**What actually runs where, as of 0.2.0.** Layer 1 runs in CI on
+`ubuntu-latest`, against `core/bin/ovallsp` — the sources — because no
+workflow sets `OVALLSP_E2E_CORE_BIN`. Layer 2 is run by hand; no workflow
+invokes it. The macOS release workflow runs `scripts/vsix_semantic_smoke.rb`
+against the built VSIX, which is a narrower check than either layer. So
+the rows below are verified continuously on Linux against the sources,
+and on darwin-arm64 against the packaged Core only by the smoke check and
+by hand. Closing it needs no new infrastructure: `apple-silicon-release.yml`
+already runs on GitHub's own `macos-14` Apple Silicon runners, so the gap
+is layer 1 against the packaged Core in that job, which is what
+`OVALLSP_E2E_CORE_BIN` above is for. Doing it per published target is
+024.R4.
 
 `core/spec/e2e/capability_coverage_spec.rb` keeps this document and the
 suite in step: every row must have an example, every example a row.
@@ -91,6 +106,7 @@ suite in step: every row must have an example, every example a row.
 | H4 | Hovers a literal (`"s"`, `1`, `[1]`) | `String`, `Integer`, `Array[Integer]` | PASS |
 | H5 | Hovers a method call | its parameter list (`documented(first, second)`) | PASS |
 | H6 | Hovers an expression nested in a keyword argument, array, hash, `case`, `while` or `return` | that expression's own type, not the enclosing structure's | PASS |
+| H7 | Hovers a *call written with a receiver* to a method declared with an RDoc/YARD comment above it | the comment appears in the hover, below the type | PASS |
 
 ## Completion: the single most-used feature
 
@@ -106,7 +122,9 @@ suite in step: every row must have an example, every example a row.
 | C8 | Accepts a completion for a method whose parameters are known | the call is written out with each parameter as a tab stop (`takes_two(first, second)`) | PASS |
 | C9 | Accepts a completion for a method that takes nothing | the bare name, no parentheses | PASS |
 | C10 | Accepts a completion for a method that takes arguments of unknown shape | `where($1)` — parentheses opened, cursor inside | PASS |
-| C11 | Types `post.` inside an ERB template | the model's members, resolved from the template's Ruby regions rather than its HTML | PASS |
+| C11 | Types `post.` or `@post.` inside an ERB template | the model's members, resolved from the template's Ruby regions rather than its HTML — the `@ivar` from the controller action that assigned it, as hover already did | PASS |
+| C12 | Types `Art` with no receiver in front of it | workspace classes, the locals in scope, and the methods callable at that position | PASS |
+| C13 | Highlights a completion candidate declared with an RDoc/YARD comment, *in the list a receiver produced* | the comment appears as the item's documentation | PASS |
 
 C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
 a bare constant inferred as `Unknown`, so nothing downstream ever saw a
@@ -120,7 +138,7 @@ which is what it is for.
 
 | # | What the user does | What must happen | Status |
 |---|---|---|---|
-| D1 | Go to definition on a call to a workspace method | jumps to its `def` | PASS |
+| D1 | Go to definition on a call to a workspace method, with or without a receiver in front | jumps to its `def` | PASS |
 | D2 | Go to definition on an Active Record column/association | jumps to the owning model class | PASS |
 | D3 | Go to definition on a stdlib method | jumps into the RBS declaration | PASS |
 
@@ -141,6 +159,8 @@ which is what it is for.
 | G12 | Has a file open from before the Runtime Agent reported routes | the route diagnostic clears once routes arrive, without touching the file | PASS |
 | G13 | Reopens a class that lives in a gem (`test/test_helper.rb`'s `ActiveSupport::TestCase`) | nothing — the workspace does not own that class, whatever the static chain says | PASS |
 | G14 | Writes a test that inherits from a reopened gem class (`class FooTest < ActiveSupport::TestCase`) | nothing — the reopen is in the chain, not just at the receiver | PASS |
+| G15 | Passes an argument whose type cannot be the one an RBS/RBI signature declares | it is reported, on the argument rather than on the whole call | PASS |
+| G16 | Reads an `@ivar` in a view that no controller action or callback assigns | it is reported | PASS |
 
 G4 used to follow from the same missing-ancestor problem as C4 and is now
 closed: the Runtime Agent reports what each model actually responds to,
@@ -154,10 +174,11 @@ the declaration takes no `*rest`. Everything else says nothing: a false
 "wrong number of arguments" on code that runs would be worse than no
 arity checking.
 
-Argument *type* checking is not a row here at all, deliberately. This
-document's own rule is that a capability with no E2E row is not a
-capability, so a promise with nothing verifying it does not belong in the
-table — it belongs in the non-goals below.
+Argument *type* checking became a row in 0.2.0 (G15), on the same terms:
+it says nothing unless the declared type comes from an RBS/RBI
+declaration, the signature has exactly one overload, both types are plain
+classes, and the argument is not an expression whose own type this cannot
+settle. Everything it declines is listed under the non-goals below.
 
 ## Signature help
 
@@ -166,6 +187,12 @@ table — it belongs in the non-goals below.
 | S1 | Types `(` after a workspace method | its parameter list | PASS |
 | S2 | Types `(` after a stdlib method | the RBS overload label | PASS |
 | S3 | Types `(` after a route helper | the helper's required parts | PASS |
+
+## Semantic highlighting
+
+| # | What the user does | What must happen | Status |
+|---|---|---|---|
+| T1 | Reads `foo` where it is a local variable, and `foo` where it is a call on self | the two are coloured differently, in `.rb` and in an ERB template's Ruby regions alike | PASS |
 
 ## Workspace-wide
 
@@ -180,18 +207,24 @@ table — it belongs in the non-goals below.
 
 - Type checking in the sense a static type checker means it. There is no
   flow-sensitive analysis, no generics beyond the built-in container
-  shapes, and no exhaustiveness. Nothing inspects the *type* of an
-  argument; G5 counts arguments and says nothing about what they are.
+  shapes, and no exhaustiveness. Argument *types* are checked as of 0.2.0
+  (G15), but only where a signature declares one and the argument's type
+  is known — G5 still counts arguments, and a call neither can judge is
+  left alone rather than guessed at.
 - Syntax colouring. A TextMate grammar decides how a file is tokenised
   for display, which is a presentation concern and not what this engine
   knows anything about; VS Code's bundled Ruby extension already
   associates `.erb`, and other Ruby extensions ship grammars of their
   own. Registering another would collide with them for no gain.
-  *Semantic* highlighting is a different thing and is planned (README's
-  matrix, 0.2.0): it layers meaning this engine actually has — whether
-  `foo` is a local variable or a call on self — over whatever grammar is
-  in use, in `.rb` files and in an ERB template's Ruby regions alike.
+  *Semantic* highlighting is a different thing and ships as of 0.2.0
+  (T1 above): it layers meaning this engine actually has — whether `foo`
+  is a local variable or a call on self — over whatever grammar is in
+  use, in `.rb` files and in an ERB template's Ruby regions alike.
 - Anything about a Ruby file outside a workspace folder.
 - Anything while the workspace is untrusted: the Runtime Agent does not
-  start, so every Rails-derived capability (C3, C4, C5, D2, G3, G4)
-  degrades to its static-only answer by design.
+  start, so every Rails-derived capability (H2, C3, C4, C5, C7, C11, D2,
+  G3, G4, G12, S3) degrades to its static-only answer by design. That
+  included one defect rather than a degradation until 0.2.0: G3's check
+  reported *every* `*_path`/`*_url` call as a missing route, because an
+  empty route table answered "no such route" rather than "I do not know".
+  It now says nothing until a route table has been loaded (024.24).

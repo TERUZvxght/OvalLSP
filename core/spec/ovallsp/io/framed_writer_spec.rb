@@ -37,7 +37,9 @@ end
 # Diagnostics go out on the dispatch thread for didOpen/didChange, and on
 # a background one from *every* `server.rb` `republish_open_diagnostics`
 # call site (the Runtime Agent becoming ready, a restart, a routes or
-# models refresh, a deferred ancestry answer landing).
+# models refresh, a deferred ancestry answer landing) -- and from 0.2.0
+# on `WorkspaceDiagnostics`' own thread, which publishes for files nobody
+# has open.
 #
 # A header and its body are two writes: let them interleave
 # and the stream carries a length belonging to someone else's message,

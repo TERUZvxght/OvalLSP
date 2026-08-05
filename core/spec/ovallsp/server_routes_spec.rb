@@ -55,7 +55,7 @@ RSpec.describe "Ovallsp::Server route helper support" do
 
     build_server(input, post_registry).run
 
-    labels = sent_messages.first[:result].map { |item| item[:label] }
+    labels = sent_messages.first[:result][:items].map { |item| item[:label] }
     expect(labels).to include("post_path")
     expect(labels).not_to include("posts_path") # "post_p" isn't a prefix of "posts_path"
   end
@@ -197,6 +197,6 @@ RSpec.describe "Ovallsp::Server route helper support" do
 
     build_server(input, registry).run
 
-    expect(sent_messages.first[:result]).to eq([])
+    expect(sent_messages.first[:result]).to eq(isIncomplete: false, items: [])
   end
 end

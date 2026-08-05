@@ -35,6 +35,18 @@ module Ovallsp
 
       def generation = @mutex.synchronize { @generation }
 
+      # Whether a snapshot has ever been applied. An empty table means two
+      # different things -- "this application has no named routes" and
+      # "nobody has told us about any" -- and the diagnostics check can
+      # only report against the first. Without a Runtime Agent the second
+      # is what holds, and answering "no such route" there reported every
+      # ordinary method whose name happens to end `_path` or `_url`:
+      # 8 across Ruby's own standard library, all false (024.24).
+      #
+      # `@generation` counts applications rather than routes, so an
+      # application whose `routes.rb` is empty still loads.
+      def loaded? = @mutex.synchronize { @generation.positive? }
+
       def replace(route_facts)
         commit_replace(prepare_replace(route_facts))
       end

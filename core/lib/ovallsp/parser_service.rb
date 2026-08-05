@@ -307,8 +307,11 @@ module Ovallsp
       # nesting, the way `@pending_visibility_names` carries `private def`.
       def visit_call_node(node)
         if node.receiver.nil?
-          update_visibility(node) if node.arguments.nil?
-            apply_visibility_arguments(node) unless node.arguments.nil?
+          if node.arguments.nil?
+            update_visibility(node)
+          else
+            apply_visibility_arguments(node)
+          end
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
           record_generated_methods(node) if current_owner && GENERATED_METHOD_DSLS.include?(node.name)
@@ -929,16 +932,24 @@ module Ovallsp
           hash.elements.any? { |element| element.is_a?(Prism::AssocSplatNode) }
         end
         # A double splat makes the whole call unjudgeable, which is what
-        # `splat` already means to the one reader of this shape. Zeroing
-        # `keywords` as well was dead: that reader is past a `next if
-        # shape[:splat]` by the time it looks.
+        # `splat` already means to both readers of this shape -- the arity
+        # check and 0.2.0's argument-type check, each of which opens with
+        # `next if shape[:splat]`. Zeroing `keywords` as well was dead for
+        # the same reason: neither reader is still looking by then.
         splat ||= double_splat
         keywords = keyword_hashes.count
+        positionals = arguments.reject do |argument|
+          argument.is_a?(Prism::KeywordHashNode) || argument.is_a?(Prism::SplatNode) ||
+            argument.is_a?(Prism::ForwardingArgumentsNode) || argument.is_a?(Prism::BlockArgumentNode)
+        end
         {
-          positional: arguments.count do |argument|
-            !argument.is_a?(Prism::KeywordHashNode) && !argument.is_a?(Prism::SplatNode) &&
-              !argument.is_a?(Prism::ForwardingArgumentsNode) && !argument.is_a?(Prism::BlockArgumentNode)
-          end,
+          positional: positionals.size,
+          # Where each positional argument actually sits, so a check can
+          # ask what type is at that position and report *on the argument*
+          # rather than on the whole call (0.2.0's argument type check).
+          # The count above stays as it was: it is what the arity check
+          # needs, and deriving it from this list is the same number.
+          positional_locations: positionals.map { |argument| Index::SourceLocation.to_range(argument.location, @lines) },
           splat: splat,
           keywords: keywords.positive?,
           block: !node.block.nil?

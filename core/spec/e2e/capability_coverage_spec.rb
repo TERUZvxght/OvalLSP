@@ -30,9 +30,9 @@ RSpec.describe "capability document coverage" do
   # locale-dependent read has already broken this project once.
   def read_utf8(path) = File.read(path, encoding: "UTF-8")
 
-  let(:documented) { read_utf8(CAPABILITY_DOC).scan(/^\| ([BHCDGSW]\d+) \|/).flatten }
+  let(:documented) { read_utf8(CAPABILITY_DOC).scan(/^\| ([BHCDGSTW]\d+) \|/).flatten }
   let(:verified) do
-    read_utf8(CAPABILITY_SPEC).scan(/it "([BHCDGSW]\d+)(?:\/([BHCDGSW]\d+))?:/).flatten.compact
+    read_utf8(CAPABILITY_SPEC).scan(/it "([BHCDGSTW]\d+)(?:\/([BHCDGSTW]\d+))?:/).flatten.compact
   end
 
   it "verifies every capability the document lists" do
@@ -46,7 +46,7 @@ RSpec.describe "capability document coverage" do
   end
 
   it "lists no capability whose status is neither PASS nor an explicit gap" do
-    statuses = read_utf8(CAPABILITY_DOC).scan(/^\| [BHCDGSW]\d+ \|[^|]*\|[^|]*\| ([^|]+) \|/).flatten.map(&:strip)
+    statuses = read_utf8(CAPABILITY_DOC).scan(/^\| [BHCDGSTW]\d+ \|[^|]*\|[^|]*\| ([^|]+) \|/).flatten.map(&:strip)
 
     expect(statuses.uniq).to all(match(/\A(PASS|NOT YET)\z/))
   end
@@ -56,7 +56,7 @@ RSpec.describe "capability document coverage" do
   # the other is how a translated document quietly starts describing a
   # different product.
   it "lists the same capabilities in the Japanese pair" do
-    japanese = read_utf8(CAPABILITY_DOC_JA).scan(/^\| ([BHCDGSW]\d+) \|/).flatten
+    japanese = read_utf8(CAPABILITY_DOC_JA).scan(/^\| ([BHCDGSTW]\d+) \|/).flatten
 
     expect(japanese).to eq(documented)
   end

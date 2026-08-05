@@ -24,15 +24,15 @@ updated in the same change, not "later".
 
 | If you changed… | Update | Checked by |
 |---|---|---|
-| **A capability** (anything a user can now do, or can no longer do) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md` (add/alter the row **and** its E2E example), README's matrix in `README.md` + `README.ja.md`, `site/capabilities.html` + `site/ja/capabilities.html`, both changelogs | `core/spec/e2e/capability_coverage_spec.rb` (row ⇔ E2E example), `core/spec/meta/*_parity_spec.rb` (EN ⇔ JA) |
+| **A capability** (anything a user can now do, or can no longer do) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md` (add/alter the row **and** its E2E example), README's matrix in `README.md` + `README.ja.md`, `site/capabilities.html` + `site/ja/capabilities.html`, both changelogs | `core/spec/e2e/capability_coverage_spec.rb` (row ⇔ E2E example), `core/spec/meta/*_parity_spec.rb` (EN ⇔ JA). README's own pair is **not** among them — see 024.25 |
 | **A version number** | `core/lib/ovallsp/version.rb`, `core/Gemfile.lock`, `vscode/package.json`, `vscode/package-lock.json` (two places), both changelogs | `core/spec/meta/changelog_parity_spec.rb`, `vscode/src/test/unit/versionPairing.test.ts` |
 | **A roadmap item** (shipped, dropped, moved) | `docs/ROADMAP.md` + `.ja.md`, README's matrix, `site/roadmap.html` + `site/ja/roadmap.html`, the matching `024.R*` entry in `docs/design/tasks/024-deferred-review-findings.md` | `core/spec/meta/roadmap_parity_spec.rb` (README ⇔ roadmap) |
 | **A change reverted mid-release** (see CLAUDE.md's two-rounds rule) | a `024.*` entry naming the root cause and the direction actually needed, both changelogs if a bullet was already written for it, and the section of `CLAUDE.md` the episode informs | — |
-| **A deferred finding** (`024.*`) | its status line in `docs/design/tasks/024-deferred-review-findings.md`; delete the entry once nothing in the tree still cites it by number — grep first, do not go by the calendar (see that file's own legend) | — |
+| **A deferred finding** (`024.*`) | its `yaml` metadata block in `docs/design/tasks/024-deferred-review-findings.md` — `status`, and `released-in` once it is resolved; delete the entry once nothing in the tree still cites it by number — grep first, do not go by the calendar (see that file's own legend) | — |
 | **Install steps, prerequisites, or the extension id** | `README.md` + `.ja.md`, `docs/PUBLISHING.md` + `.ja.md`, `site/getting-started.html` + `site/ja/getting-started.html` | — |
 | **What the extension records, keeps, or writes to disk** | `vscode/PRIVACY.md` + `.ja.md` — the single source of truth for this; `site/security.html` + `site/ja/security.html`; and every place 0.1.12 found restating the list or the cache path, each of which must point at PRIVACY rather than copy it (this list has been short three times; add to it rather than trusting it): `docs/design/docs/12-release-and-support.md`, `docs/design/tasks/019-runtime-observation.md`, `019-runtime-observation-notes.md`, `021-persistent-cache-notes.md`, the cache paragraph in `vscode/README.md` + `.ja.md`, `docs/SECURITY_CHECKLIST.md`'s observation and cache-deserialisation sections, `core/lib/ovallsp/observation/store.rb`'s `#invalidate_changed` doc, `core/lib/ovallsp/observation/observed_signature.rb`'s `code_fingerprint` doc, and **both changelogs**, which restate the disk claim in prose and went stale against PRIVACY for a whole round because this row did not name them | `core/spec/meta/privacy_parity_spec.rb` (EN ⇔ JA: section count, cross-links, three named claims, and the length of the recorded-items list) |
 | **Anything about the Runtime Agent, workspace trust, or what the extension executes** | `SECURITY.md` + `.ja.md`, `site/security.html` + `site/ja/security.html`, `docs/EXTENSION_CAPABILITIES.md`'s "does not promise" section | — |
-| **A known limitation** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`, and the site page that claims the opposite, if any | — |
+| **A known limitation** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`, and the site page that claims the opposite, if any | `core/spec/meta/deferred_findings_spec.rb` (an open `024.*` defect declaring `user-visible: yes` is cited in both languages; one declaring `no` states why) |
 | **A working agreement** (how this project is built, reviewed or released) | `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md` + `.ja.md` | — |
 
 ## The site is documentation
@@ -40,6 +40,14 @@ updated in the same change, not "later".
 `site/` is the public face and goes stale the same way the rest does. It
 is *not* generated from the Markdown docs, so nothing propagates on its
 own. Treat every page as another row above.
+
+**It is not in this tree.** `site/` lives on
+`claude/github-pages-official-site-fef0f5` and has not been merged, so
+the site rows in the trigger table cannot be followed from here — they
+have to be *carried*, and the list two sections down is where they are
+carried to. Anything a change makes stale on the site goes in that list
+until the branch lands. A trigger you cannot follow is a trigger nobody
+follows.
 
 | Page | Mirrors |
 |---|---|
@@ -77,6 +85,18 @@ workspace class names, which 0.1.x does not have and 0.2.0 does — fixing
 that against 0.1.x and then re-fixing it after 0.2.0 would be two edits
 saying opposite things a week apart. The rest of the list is order-independent:
 
+- **`site/roadmap.html` and `site/ja/roadmap.html` do not carry 0.3.0's
+  two new items** — completion after `self.` and completion on an Active
+  Record `Relation`, both added to `docs/ROADMAP.md` and to README's
+  matrix while measuring 0.2.0 against a real application.
+- **`site/capabilities.html` and `site/ja/capabilities.html` mark all six
+  of 0.2.0's capabilities `planned`** — bare-prefix completion, the
+  unassigned-`@ivar` check, argument types, project-wide diagnostics,
+  documentation in hover, and semantic highlighting — and
+  `site/roadmap.html` still carries the 0.2.0 section that
+  `docs/ROADMAP.md` no longer has. On publication the project's own site
+  would say six shipped features are still to come. This is the reason
+  the front-page item below is order-dependent, and it is the same edit;
 - `site/capabilities.html` **and `site/ja/capabilities.html`** still say
   "Find references, rename, workspace symbols" unqualified; 0.1.15
   narrowed that — a method a macro declared is refused rather than

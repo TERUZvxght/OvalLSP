@@ -55,6 +55,29 @@ module Ovallsp
         @hierarchy_index = hierarchy_index
       end
 
+      # The ancestor chain a lookup on this receiver walks, as
+      # `[owner_name, singleton?]` pairs -- the second element being which
+      # *side* of that owner to ask, which is not the same question as the
+      # side of the walk (`AncestorEntry#declaration_kind`: a class object
+      # is an instance of `Class`, so the tail of a singleton chain is
+      # asked for instance methods).
+      #
+      # Exposed because `QueryService#members_of` needs the same chain for
+      # its signature source and had none: it asked RBS about the
+      # receiver's own name only, so an inherited signature was never
+      # offered. Rather than hand that service a second reference to the
+      # hierarchy index, the object that already owns it answers.
+      def lookup_owners(receiver_type, singleton: false)
+        nominal = base_nominal(receiver_type)
+        return [] unless nominal
+
+        @hierarchy_index.ancestors(nominal.name, singleton: singleton).filter_map do |entry|
+          next if entry.name.nil?
+
+          [entry.name, entry.declaration_kind(singleton: singleton) == :singleton_method]
+        end
+      end
+
       # All candidates named `name` reachable from `receiver_type`, in
       # ancestor order, deduplicated by declaring symbol. For a Union
       # receiver, a candidate not present on every member is marked
@@ -137,6 +160,18 @@ module Ovallsp
       end
 
       def build_candidate(entry, method_name, singleton, rank)
+        # A nameless entry is what `HierarchyIndex` records for a parent it
+        # cannot identify -- `class Foo < <expression>`, or a name that
+        # only resolves by substituting a different class. It names no
+        # owner, so it can declare nothing, and asking anyway is not
+        # merely useless: `SymbolId`'s owner would be nil, which is the
+        # key a *top-level* `def` is recorded under. Every class with an
+        # unknown parent inherited every top-level method in the
+        # workspace. Ruby's own `un.rb` defines a top-level `mv`, and
+        # `rubygems/package_task.rb`'s `mv gem_file, ".."` was reported as
+        # passing two arguments to a method that takes none.
+        return nil if entry.name.nil?
+
         kind = symbol_kind_for(entry, singleton)
         resolved_name = resolve_alias(entry.name, method_name, kind)
         symbol_id = Index::SymbolId.new(kind: kind, owner: entry.name, name: resolved_name, discriminator: nil)

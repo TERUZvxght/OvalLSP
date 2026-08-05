@@ -11,15 +11,17 @@ module Ovallsp
     # (docs/design/tasks/012-rbs-rbi-and-external-signatures.md) matches by
     # shape, not by name.
     Overload = Data.define(
-      :required_positionals, :optional_positionals, :rest_positional,
+      :required_positionals, :optional_positionals, :trailing_positionals, :rest_positional,
       :required_keywords, :optional_keywords, :rest_keyword,
       :block_required, :block_type, :return_type, :type_parameters
     ) do
-      def initialize(required_positionals: [], optional_positionals: [], rest_positional: nil,
+      def initialize(required_positionals: [], optional_positionals: [], trailing_positionals: [],
+                      rest_positional: nil,
                       required_keywords: {}, optional_keywords: {}, rest_keyword: nil,
                       block_required: false, block_type: nil, return_type: Types::UNKNOWN,
                       type_parameters: [])
         super(required_positionals: required_positionals, optional_positionals: optional_positionals,
+              trailing_positionals: trailing_positionals,
               rest_positional: rest_positional, required_keywords: required_keywords,
               optional_keywords: optional_keywords, rest_keyword: rest_keyword,
               block_required: block_required, block_type: block_type, return_type: return_type,

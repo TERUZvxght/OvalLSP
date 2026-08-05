@@ -14,7 +14,27 @@ Each entry states the symptom, who it affects, how to reproduce it, and a
 proposed direction. Nothing here is a shipping blocker; every item was
 triaged as such by the reviewer that raised it.
 
-Status legend: **open** — not started. **fixed** / **done** — resolved.
+Every entry opens with a fenced `yaml` block, directly under its
+heading, and that block is the entry's status — the prose beneath it adds
+narrative and does not restate it:
+
+```yaml
+status: open        # open | fixed | done. Anything else reads as open.
+kind: defect        # defect | roadmap. Roadmap items are plans, not faults.
+released-in: 0.1.14 # only on a resolved entry
+user-visible: yes   # on an open defect: does a user see this?
+```
+
+An open defect with `user-visible: yes` must be cited by number in
+`docs/KNOWN_LIMITATIONS.md` **and** `.ja.md`, so a finding recorded here
+reaches the people it affects. An entry with no user-visible half says
+`user-visible: no` and a `user-visible-note` giving the reason.
+`core/spec/meta/deferred_findings_spec.rb` checks all of that, and fails
+on an entry whose heading carries no block rather than skipping it.
+
+The block exists because the previous attempt at this check parsed the
+file's *prose* and had to be rolled back — 024.25 records why, and this
+format is the direction that entry recommended.
 
 A resolved entry is deleted once nothing in the tree cites it. It is
 **not** deleted while source or spec comments still name it by number:
@@ -44,19 +64,14 @@ roadmap file for the same reason everything else does — one place.
 
 ## 024.1 Duplicate, unused implementation of the controller callback chain
 
-**Status:** fixed in 0.1.10 — the unused copy is deleted, along with
-`#infer_ivars_for_method`, `#find_static_render_target`, `#find_method_node`
-and the `MethodLocator` visitor that existed only to serve it. Its specs
-were re-anchored rather than dropped: the ones covering pieces the Server
-still calls now go through those pieces (`method_nodes` +
-`#infer_ivars_for_method_node`, `#static_render_target_for_node`), and the
-seven chain behaviours that had no equivalent on the live path — `except:`
-on both sides of it, an action overriding a callback's assignment, an
-unresolvable `if:` condition, a conditional `skip_before_action`, a
-missing callback method, and the multi-name forms of `before_action` and
-`skip_before_action` — were ported into `server_views_spec.rb`, where each
-fixture was checked to yield a *different* answer under the opposite
-behaviour.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.10
+```
+
+the unused copy is deleted, along with `#infer_ivars_for_method`, `#find_static_render_target`, `#find_method_node` and the `MethodLocator` visitor that existed only to serve it. Its specs were re-anchored rather than dropped: the ones covering pieces the Server still calls now go through those pieces (`method_nodes` + `#infer_ivars_for_method_node`, `#static_render_target_for_node`), and the seven chain behaviours that had no equivalent on the live path — `except:` on both sides of it, an action overriding a callback's assignment, an unresolvable `if:` condition, a conditional `skip_before_action`, a missing callback method, and the multi-name forms of `before_action` and `skip_before_action` — were ported into `server_views_spec.rb`, where each fixture was checked to yield a *different* answer under the opposite behaviour.
+
 **Area:** `core/lib/ovallsp/local_inferencer.rb`, `core/lib/ovallsp/server.rb`
 
 `LocalInferencer#infer_ivars_for_action` implements the before_action
@@ -83,9 +98,14 @@ one-line change.
 
 ## 024.6 The `seen_uris` spec's comment overclaims
 
-**Status:** fixed in 0.1.10 — the buffer case is now a spec of its own,
-so `@seen_uris << uri` sitting above the open-buffer early return is
-pinned rather than merely claimed.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.10
+```
+
+the buffer case is now a spec of its own, so `@seen_uris << uri` sitting above the open-buffer early return is pinned rather than merely claimed.
+
 **Area:** `core/spec/ovallsp/cold_indexer_spec.rb`
 
 The comment says the spec covers a file already open in a buffer, but no
@@ -99,24 +119,14 @@ actually asserts.
 
 ## 024.8 Ownership retirement on `exited() && known.size === 0` is unpinned
 
-**Status:** fixed in 0.1.10 — the two assignments are deleted; the
-`ownedSessionId` one is load-bearing and pinned by a new regression test,
-and `ownedGroupId` went with it for symmetry (it is set only from a
-validated root row whose `pgid === pid`, and such a row also satisfies the
-expansion test against `ownedSessionId`, so `known` cannot be empty in the
-same pass — no fixture distinguishes that half). The first attempt at this
-entry deleted them as unable to change any answer, reasoning that the
-branch is only reached with the root absent and the expansion gate
-therefore already closed. Independent review disproved both halves:
-`rootObservedAbsent` is assigned at the *end* of the pass, and the root
-row can be present but untracked, because `known` only takes the root
-while the child has not exited. A Core dying inside the ~57ms pre-`setsid`
-window reaches the branch with ownership still meaningful — on Darwin
-especially, where `sid` is 0 on every row. Since `terminateOnce` and
-`waitForAllExit` both refresh after the interval is cleared, retiring
-ownership there permanently lost the survivor those later passes exist to
-catch. The `clearInterval` in the same branch stays, pinned by its own
-test.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.10
+```
+
+the two assignments are deleted; the `ownedSessionId` one is load-bearing and pinned by a new regression test, and `ownedGroupId` went with it for symmetry (it is set only from a validated root row whose `pgid === pid`, and such a row also satisfies the expansion test against `ownedSessionId`, so `known` cannot be empty in the same pass — no fixture distinguishes that half). The first attempt at this entry deleted them as unable to change any answer, reasoning that the branch is only reached with the root absent and the expansion gate therefore already closed. Independent review disproved both halves: `rootObservedAbsent` is assigned at the *end* of the pass, and the root row can be present but untracked, because `known` only takes the root while the child has not exited. A Core dying inside the ~57ms pre-`setsid` window reaches the branch with ownership still meaningful — on Darwin especially, where `sid` is 0 on every row. Since `terminateOnce` and `waitForAllExit` both refresh after the interval is cleared, retiring ownership there permanently lost the survivor those later passes exist to catch. The `clearInterval` in the same branch stays, pinned by its own test.
+
 **Area:** `vscode/src/coreProcess.ts`
 
 As originally recorded, and wrong in its premise — kept here because the
@@ -133,12 +143,13 @@ was actively harmful, not because the invariant was carried elsewhere.
 
 ## 024.10 Four `extension.ts` behaviours cannot be unit-tested
 
-**Status:** fixed in 0.1.10 — the four decisions moved into
-`vscode/src/clientTeardown.ts`, which imports no `vscode` and takes the
-lifecycle manager and the per-folder maps as parameters rather than
-reading module state. `extension.ts` now delegates to it and keeps only
-the `vscode` wiring. Fifteen unit tests cover them, and each decision was
-checked by mutating it and confirming the suite goes red.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.10
+```
+
+the four decisions moved into `vscode/src/clientTeardown.ts`, which imports no `vscode` and takes the lifecycle manager and the per-folder maps as parameters rather than reading module state. `extension.ts` now delegates to it and keeps only the `vscode` wiring. Fifteen unit tests cover them, and each decision was checked by mutating it and confirming the suite goes red.
 
 The fourth took two attempts, and the first one is worth recording:
 exporting the two notification strings for `extension.ts` to choose
@@ -160,6 +171,191 @@ a workspace folder is added, and the restart notification wording.
 
 **Direction:** extract the testable logic out of the `vscode`-importing
 module, or add an integration test host.
+
+## 024.40 Every `argument-count` report on the measurement corpus is false
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`argument_count_findings`,
+`sole_source_declaration`)
+
+G5 has been a ✅ row since 0.1.6. A reviewer read all 17 reports it
+produced at `6f5e86a`; after round 22's fixes there are 15, and all 15
+were read again. Every one is working Ruby:
+
+| shape | count | cause |
+|---|---|---|
+| `def HTTP.get_response` calling `start(...)`, judged against the instance `def start` | 8 | 024.32 |
+| `def CStructEntity.malloc(types, func = nil, size = size(types))` | 1 | 024.32 |
+| `def Runnable.run_suite` | 1 | 024.32 |
+| `create(name, nil, arg)` where `create` is `alias_method :create, :new` in `class << self` | 2 | the alias is resolved, the singleton `new` is not |
+| `run Rails.application` inside `Rack::Builder.new do` | 1 | block self is the enclosing class (024.31) |
+| `readline(@prompt, false)`, `Configuration.instance(:must_exist).load do` | 2 | receiver resolved by substitution |
+
+**What this is not.** It is not "the check is wrong". Every one of these
+is a case where the *declaration* the check found is not the one the call
+reaches, and each has its own recorded cause. Nor is it a 0.2.0
+regression: `main` produces 22 on the same corpus.
+
+**What it is.** A corpus of gems is close to the worst case for this
+check — dependencies absent, so names resolve by substitution; heavy use
+of `def Const.method`, which the parser mis-files. A user's own workspace
+is the opposite: their classes are declared, their names are theirs. The
+honest statement is that the check's precision is unmeasured on the code
+it is actually for, and measured at zero on the code we have.
+
+**What 0.2.0 changes** is the blast radius, exactly as 024.24 argued for
+the route check: diagnostics now publish for files nobody opened, so
+these reach the Problems panel rather than waiting to be found.
+
+**Direction:** the three causes are already recorded — 024.32 (`def
+Const.method`'s kind and owner), 024.31 (a block's self), and the
+index's substitution, which round 22 refused for the *receiver* and for
+a *superclass* but not for an aliased singleton. Fixing 024.32 alone
+removes 10 of the 15. Then re-measure, on a real application rather than
+on gems.
+
+## 024.38 `scope_at` copies the whole environment once per descent step
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  A cost, not an answer. It is quadratic in the number of locals in one
+  scope, which real code keeps small -- 1.2ms at 100 locals, where the
+  measurable curve starts. Recorded rather than fixed because the fix is
+  in the inference core and the round that found it was already
+  repairing the round before it.
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`locate`, `capture_scope`)
+
+`locate` calls `capture_scope(env)` at the top of *every* step, and
+`capture_scope` builds a new Hash of the whole environment. Only the last
+one survives. 0.2.0 is what makes it matter: `PrefixCompletion#items`
+calls `scope_at` for every bare-prefix completion, so this runs on the
+request path per keystroke.
+
+Measured by a reviewer, same document, 10 iterations, parse cache warm,
+against `infer_at` on the same document and position as an in-process
+reference:
+
+| locals in scope | `scope_at` | `infer_at` |
+|---|---|---|
+| 50 | 0.24 ms | 0.03 ms |
+| 100 | 1.17 ms | 0.04 ms |
+| 200 | 3.93 ms | 0.10 ms |
+| 400 | 14.78 ms | 0.19 ms |
+| 800 | 56.10 ms | 0.36 ms |
+
+Four times per doubling, bounded only by `max_steps: 5000`.
+
+**Direction:** capture on *write*, not on step. Keep the `env` reference
+and the self type, and materialise the snapshot at the moment the
+environment is about to be mutated -- there are nine such sites and most
+are on fresh child environments. Taking the snapshot at the end instead
+is wrong: `x = <cursor>` would then see `x`, because
+`LocalVariableWriteNode` assigns after descending into its value.
+
+It wants `spec/meta/workspace_index_cost_spec.rb`'s treatment -- a
+source assertion -- since reversing it changes no answer.
+
+## 024.39 `LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  No wrong answer has been produced. A reviewer ran 2,000 concurrent
+  `infer_at` pairs and 400 `scope_at`/`infer_at` pairs in both size
+  directions and got zero wrong answers, zero leaked locals and zero
+  exceptions. What is recorded is that the reason it holds is not an
+  invariant.
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb`, `core/lib/ovallsp/server.rb`
+
+`@steps`, `@step_budget`, `@self_type_stack`, `@scope_capture`,
+`@capturing_scope` and `@parse_cache` are instance state reset at the top
+of each entry point. `publish_diagnostics` and `workspace_findings_for`
+both hold `@index_mutation_mutex`, so those two are serialised — but
+`hover_result` and `completion_result` do not take it, and 0.2.0 is the
+release that put `analyze` on a background thread.
+
+`@capturing_scope` is the sharpest edge: a background `infer_at` running
+inside a foreground `scope_at` would call `capture_scope` and overwrite
+the completion's answer with another document's locals.
+
+What makes it safe today is that the GVL rarely preempts inside one walk.
+That is a probability, not an invariant, and nothing states it.
+
+**Direction:** the state belongs in a per-call object rather than on the
+inferencer, which is also what would let `@parse_cache` be shared safely
+instead of being the one piece of it that wants to be.
+
+## 024.37 The argument-type check reports nothing on measured real Ruby
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`argument_type_findings`,
+`sole_declared_overload`)
+
+G15 is one of the six capability rows 0.2.0's minor bump is justified by.
+Measured at `ca66774`, after this round's fixes, with
+`scripts/corpus_diagnostics.rb`:
+
+| corpus | files | `argument-type` |
+|---|---|---|
+| Ruby 3.4.7 stdlib + activerecord/activesupport/actionpack/actionview/activemodel 8.1.3 + minitest 6.0.6 | 2,042 | **0** |
+| prism 1.6.0, with its own `sig/` loaded | 41 | **0** |
+
+Before those fixes the same two corpora produced **795** and **151**, and
+every one of them was wrong: a call judged against a signature it does
+not bind to. So the check's entire measured output, over every corpus
+this project has pointed it at, was false positives — and removing them
+left zero. Both diffs are by position and introduce nothing.
+
+The second row is the one that matters, because it answers the objection.
+The harness loads signatures from `Dir.pwd`, so a corpus of gems is
+measured with none of its own types stated, which is the check's floor by
+construction. `OVALLSP_SIGNATURE_ROOT` (added with this entry) lifts that:
+pointed at a gem that ships extensive RBS, the check found 151 things to
+say and all 151 were wrong, and with those fixed it says nothing.
+
+It is not inert — making `argument_type_findings` return `[]`
+unconditionally fails 9 of `argument_type_spec.rb`'s examples, and the
+E2E row passes. (An earlier version of this entry said 25, which was a
+guess dressed as a count; a reviewer measured it.) What it is, is narrow to the point where real code
+does not meet it: an RBS/RBI declaration with exactly one overload and no
+`*rest`, both the declared and the inferred type a plain class with no
+ancestor relation, and no operator expression in the argument. Each of
+those refusals was added to remove a false positive, and each was right
+on its own.
+
+**What is open:** whether a capability whose measured yield on real code
+is zero should carry a README ✅ and a capability row. Both are defensible
+today — the row is verified by an example that fails if the check breaks,
+which is what ✅ is defined to mean — but a user reading the matrix
+expects a check that fires. The alternatives are to widen it (which the
+whole entry above argues is how it produced 795 wrong reports), to mark
+the row the way the `@ivar` row is now marked, or to say plainly in
+`KNOWN_LIMITATIONS` what it will and will not catch.
+
+**Direction:** measure once more with the harness pointed at a workspace
+that states types in the shapes the check accepts — a project with a
+hand-written `sig/`, not a gem's generated one — before deciding. A check
+that fires on the code its users write and not on gems is a different
+answer from one that fires nowhere.
 
 ## 024.36 Instructing a reviewer narrowed what it could find, and a control run proved it
 
@@ -389,12 +585,44 @@ times. Among them `PP.mcall`, `Ripper.lex`, `IRB::Frame.top`,
 (`bundler/shared_helpers.rb:391`), `CGI::Session.callback`
 (`cgi/session.rb:345`) and three in `fiddle/struct.rb`.
 
-**Direction:** the owner is already computed correctly a few lines below
-(`constant_full_name(owner_receiver)`); it is only the `kind` that reads
-`SelfNode` alone. Both should ask the same question. Worth checking what
-else keys on that predicate before changing it — `visit_def_node` also
-uses it for the declaration's visibility, which is `nil` for singleton
-methods.
+**The owner is wrong too, and this entry said it was not.** An earlier
+Direction here read: "the owner is already computed correctly a few
+lines below (`constant_full_name(owner_receiver)`); it is only the
+`kind`". Round 22 of the 0.2.0 loop disproved it.
+`constant_full_name` ends in `qualify`, which nests the name under the
+current owner unconditionally — so `def Fetcher.start` written *inside*
+`class Fetcher` is recorded on `::Fetcher::Fetcher`, a class that does
+not exist. Ruby resolves the constant `Fetcher` there to the class
+itself. Anyone following the old Direction would have produced correctly
+kinded singleton methods on a namespace nothing resolves to.
+
+**And the consequence is not only `unknown-method`.** The arity check
+reads the same declarations, so a call to a `def Const.method` is judged
+against whatever *instance* method shares its name. On the 0.2.0
+measurement corpus, **9 of the 17 remaining `argument-count` reports**
+are this shape: `net/http.rb`'s `def HTTP.get_response` four times, its
+vendored copy under `rubygems/vendor/net-http` four times, and
+`minitest.rb:472`'s `def Runnable.run_suite`. Neither this entry nor
+`KNOWN_LIMITATIONS.md` said so before round 22 measured it.
+
+**Direction:** both the `kind` and the `owner` have to change, and
+neither is a one-line edit.
+
+- `kind`: any explicit constant receiver means a singleton method, not
+  only `self`. Check what else keys on that predicate first —
+  `visit_def_node` also uses it for the declaration's visibility, which
+  is `nil` for singleton methods.
+- `owner`: the parser cannot know at parse time whether `Foo::Bar`
+  exists, so it cannot resolve the constant properly. What it *can* do
+  is stop nesting a name that names an enclosing frame: if the written
+  name matches the last segment of an enclosing owner, that frame is the
+  owner. That covers `def Foo.bar` inside `class Foo`, which is the
+  whole measured population.
+
+Still its own task rather than a ride on another release, for the reason
+this entry gave before and round 22 agreed with: it changes declaration
+kinds, which is what 0.1.14 and 0.1.15 were both spent on, and it wants
+a corpus run in both directions.
 
 ## 024.31 A declaration written inside a block has no owner this parser can name
 
@@ -619,9 +847,70 @@ receiver-qualified: go-to-definition on `LIMIT = 10` under
 corpus first. `module_function` in particular needs a measurement showing
 it changes an answer a user sees; the one taken here says it does not.
 
+## 024.28 Rename refuses on a macro-declared method rather than editing it
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+Refusing is the deliberate behaviour as of 0.1.15; what is open is that
+refusing is not the end state.
+
+**Area:** `core/lib/ovallsp/rename/planner.rb`
+
+`attr_accessor :name` declares `name` and `name=` at a symbol argument,
+not at an identifier token, so there is nothing for an in-place edit to
+rewrite. 0.1.14 emitted a `WorkspaceEdit` that renamed every call site and
+left the declaration behind, producing a file that does not run; 0.1.15
+refuses instead, which is what `#prepare`'s own comment had always
+claimed happened.
+
+The reason reaches the Core log only. `prepare` answers `null`, so the
+editor shows its own "cannot be renamed" message and never asks for the
+edit; nothing in this codebase sends `window/showMessage`. The W4 row's
+E2E example calls `textDocument/rename` directly and asserts an empty
+edit set, so the refusal is verified and the *explanation* is not.
+
+Refusing is correct and is not the end state. The same applies to `enum`,
+`scope` and `delegate`, and has since those shipped.
+
+**Direction:** give a macro-declared declaration a `name_location`
+covering its symbol argument, so `attr_reader :name` can be rewritten to
+`attr_reader :title`. The writer is the hard half: `name=` and `name` are
+one token in the source, so renaming `name=` to `title=` has to write
+`:title`, not `:title=`. That asymmetry is why this is its own entry
+rather than a line in 0.1.15.
+
+## 024.27 `documentSymbol` lists one outline entry per name a macro declares
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`document_symbol_result`)
+
+`attr_accessor :a, :b, :c` declares six methods, all at the same source
+range, so the outline shows six children with byte-identical `range` and
+`selectionRange` on one line. The names are right and each is genuinely a
+method, so this is noise rather than a wrong answer — but an outline is
+read by eye and six identical ranges read as a bug.
+
+**Direction:** either group the methods a single macro call declares under
+one outline node, or narrow each declaration's `selectionRange` to its own
+symbol argument. The second would also give 024.28's rename something to
+edit.
+
 ## 024.26 A workspace `def Object.foo` is reachable from every class in Ruby and from none here
 
-**Status:** open.
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`
 
@@ -655,55 +944,154 @@ standard library or the gems measured for it hits this shape.
 expressed at all. Worth doing with 024.13 rather than alone, since both
 are about what a chain says when the workspace has reopened a core class.
 
-## 024.27 `documentSymbol` lists one outline entry per name a macro declares
+## 024.25 A Markdown-parsing spec is the wrong shape for "these two documents must agree"
 
-**Status:** open.
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  A rolled-back internal guard. Nothing about the product changed, so
+  there is nothing to tell a user; what is open is a decision about how
+  this project keeps its own notes.
+```
 
-**Area:** `core/lib/ovallsp/server.rb` (`document_symbol_result`)
+**Rolled back** rather than fixed. This entry is the deliverable; there
+is no code change to point at.
 
-`attr_accessor :a, :b, :c` declares six methods, all at the same source
-range, so the outline shows six children with byte-identical `range` and
-`selectionRange` on one line. The names are right and each is genuinely a
-method, so this is noise rather than a wrong answer — but an outline is
-read by eye and six identical ranges read as a bug.
+**Area:** was `core/spec/meta/known_limitations_parity_spec.rb` and
+`core/spec/meta/readme_parity_spec.rb`, both deleted.
 
-**Direction:** either group the methods a single macro call declares under
-one outline node, or narrow each declaration's `selectionRange` to its own
-symbol argument. The second would also give 024.28's rename something to
-edit.
+### What was being solved
 
-## 024.28 Rename refuses on a macro-declared method rather than editing it
+A review found that `docs/KNOWN_LIMITATIONS.md` did not mention 024.13,
+024.19 or 024.20, while `025-0.2.0-review-loop-handover.md` claimed every
+open entry was carried there. The prose promise had gone stale, so the
+obvious move was `docs/DOCUMENTATION_MAP.md`'s own principle: where a
+fact is restated in several places, have a machine compare the copies.
 
-**Status:** open, and **deliberately so** as of 0.1.15.
+### Why the shape was wrong
 
-**Area:** `core/lib/ovallsp/rename/planner.rb`
+The two specs had to *parse Markdown with regexes* to find out what the
+documents said — headings, status lines, an opt-out marker, table rows,
+footnote definitions. Every review round then found another input shape
+the parser mishandled, and each fix was one more special case:
 
-`attr_accessor :name` declares `name` and `name=` at a symbol argument,
-not at an identifier token, so there is nothing for an in-place edit to
-rewrite. 0.1.14 emitted a `WorkspaceEdit` that renamed every call site and
-left the declaration behind, producing a file that does not run; 0.1.15
-refuses instead, which is what `#prepare`'s own comment had always
-claimed happened.
+- **Round 2** found eight decisions in the first guard that no example
+  pinned, because the fixtures used `**Status:** Open`, which reads as
+  open under *both* branches of the case-sensitivity decision. Rewriting
+  them onto the resolved side (`Fixed`, `DONE`) fixed that.
+- **Round 3** found ten unpinned decisions in the *second* guard, written
+  in round 2 — including `count("|") == 5`, whose mutation makes the row
+  selector return zero rows for both files and leaves every matrix
+  assertion vacuously green. It also found two soundness holes in the
+  first: a heading with no title (`## 024.25`) is not recognised, so an
+  entry can be added and silently skipped, and the documented "and why"
+  requirement for the opt-out was never enforced at all.
 
-The reason reaches the Core log only. `prepare` answers `null`, so the
-editor shows its own "cannot be renamed" message and never asks for the
-edit; nothing in this codebase sends `window/showMessage`. The W4 row's
-E2E example calls `textDocument/rename` directly and asserts an empty
-edit set, so the refusal is verified and the *explanation* is not.
+Three documents had meanwhile been edited to *claim* the guard enforced
+things it did not. That is worse than no guard: a maintainer reading
+`DOCUMENTATION_MAP.md` would believe an unchecked rule was checked.
 
-Refusing is correct and is not the end state. The same applies to `enum`,
-`scope` and `delegate`, and has since those shipped.
+The pattern is 024.15's, one layer up. There, each round bolted a sort
+onto one more *reader* of an unordered collection. Here, each round
+bolted a fixture onto one more *input shape* of a parser that cannot
+enumerate its own inputs, because Markdown prose has no schema. A guard
+whose correctness depends on a regex surviving every future edit to the
+document it reads is a guard that needs the next round to repair it.
 
-**Direction:** give a macro-declared declaration a `name_location`
-covering its symbol argument, so `attr_reader :name` can be rewritten to
-`attr_reader :title`. The writer is the hard half: `name=` and `name` are
-one token in the source, so renaming `name=` to `title=` has to write
-`:title`, not `:title=`. That asymmetry is why this is its own entry
-rather than a line in 0.1.15.
+### The direction that was actually needed, and taken
+
+Two candidates were named. The first was chosen, and this file's format
+is the result:
+
+1. **Give the data a schema instead of parsing prose.** ✅ Every entry
+   carries a fenced `yaml` block, and `core/spec/meta/deferred_findings_spec.rb`
+   reads that rather than hunting for `**Status:**` in running text. The
+   parser did not disappear — the grammar did the work: one delimited
+   shape instead of however many prose can take. Nine of its decisions
+   were pinned by reverse-applying each and re-running against a green
+   baseline; two survived the first sweep and gained fixtures. It fails
+   on an entry whose heading carries no block, which is precisely the
+   failure mode that let the old guard skip entries in silence.
+2. **Accept that this pair is checked by a person, and make the person's
+   job small.** `DOCUMENTATION_MAP.md` already exists for exactly this,
+   and its release checklist is the place to name the pairing. The map's
+   own preamble says "a machine check *should* compare the copies" — it
+   does not say every pair can be compared by machine, and this pair is
+   evidence that some cannot be, cheaply.
+
+The EN/JA README divergence found in round 2 is real and remains
+unguarded for the same reason. Prefer 1 if this is taken up; it is the
+only one of the two that would also have caught that.
+
+### What was kept
+
+Everything the rounds established about the *product* stayed: 024.21
+through 024.24, the corrected measurements, and the user-facing text in
+both languages. Those were verified against the source and against corpus
+runs, and no round disputed them. Only the enforcement apparatus and the
+claims about it were rolled back.
+
+## 024.24 Every `*_path`/`*_url` call is a missing route when no routes are loaded
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.0
+user-visible: yes
+```
+
+Pre-existing — reproduced identically on `main` (0.1.13).
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+(`unknown_route_helper_findings`)
+
+The check gates on `context.route_registry` being non-nil, and `Server`
+always constructs one (`server.rb:55`, `:90`, `:809`). Without a Runtime
+Agent the registry is *empty* rather than absent, and an empty registry
+answers "no such route" for every helper name. So any receiverless call
+matching `/_(path|url)\z/` is reported.
+
+Measured with `scripts/corpus_diagnostics.rb`: **48 reports across Ruby
+3.4.7's stdlib and 12 more in prism 1.9.0**, every one of them a false
+positive on code that has nothing to do with Rails — `original_path` and
+`dsl_path` are ordinary private methods in bundler.
+
+Who sees it: a user who opens a Rails app and declines Workspace Trust
+(`vscode/package.json` declares `untrustedWorkspaces: "limited"` and
+`extension.ts:209` starts the Core with `workspaceTrusted: false` rather
+than refusing), and anyone with a non-Rails project containing a method
+whose name ends that way.
+
+Two documents assert the opposite today and have been corrected:
+README's legend said `—` means "absent by design, not broken", and
+`EXTENSION_CAPABILITIES.md` said an untrusted workspace "degrades to its
+static-only answer by design".
+
+**Fixed in 0.2.0**, as the direction recorded here said: `RouteRegistry`
+answers `#loaded?`, meaning a snapshot has been applied, and the check
+returns nothing until one has. `@generation` already counted
+applications rather than routes, so a Rails application whose `routes.rb`
+declares nothing still loads and the check is still on there — which is
+the distinction the old gate could not make.
+
+What made it worth doing now rather than deferring again: 0.2.0 publishes
+diagnostics for files nobody opened, so the same false report went from
+the open buffer to every file in the project. A reviewer reproduced that
+against a two-file plain-Ruby workspace with trust declined.
+
+Three examples: a loaded table that lacks the name still reports, a table
+that loaded empty still reports, and a registry no snapshot ever reached
+says nothing.
 
 ## 024.23 The singleton chain did not model `Class`/`Module`
 
-**Status:** fixed in 0.1.14.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.14
+```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
 `core/lib/ovallsp/parser_service.rb`
@@ -755,9 +1143,320 @@ attributes `attr_*` lexically, exactly as 0.1.14 did. Wrong `argument-count` fel
 48 → 8, the latter because a `*_path` name that resolves to a declaration
 is no longer guessed at -- which reduces 024.24 without fixing it.
 
+## 024.22 The unassigned-`@ivar` check is silent in an application `rails new` produces
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`MODELLED_CLASS_BODY_CALLS`,
+`class_body_is_accounted_for?`)
+
+The check requires every class body in the controller chain to call
+nothing beyond `private`/`protected`/`public`/`before_action`/
+`skip_before_action`. Railties 7.2, 8.0 and 8.1 all generate an
+`ApplicationController` whose body calls `allow_browser versions:
+:modern`. That is unmodelled, the rule applies to the whole chain, and so
+the check is silenced for **every view in a default Rails application**.
+
+The G16 capability row passes because
+`core/spec/fixtures/rails_real/app/controllers/application_controller.rb`
+is a hand-written empty class — a shape `rails new` does not produce. The
+row is honest about what it exercises; what it exercises is not what a
+user has.
+
+`KNOWN_LIMITATIONS.md` stated the rule abstractly ("`ApplicationController`'s
+own body decides this for every view beneath it") without saying that the
+default application trips it. That has been corrected.
+
+**Direction:** not another name in the list — `allow_browser` today,
+something else next Railties. Two shapes are defensible: treat a
+class-body call that assigns no ivar and is not a callback as irrelevant
+rather than disqualifying (which needs 024.R7's gem index to know what a
+macro installs), or narrow the disqualification to the chain's *workspace*
+classes and treat gem superclasses as opaque-but-harmless. Until then the
+E2E fixture should carry the generated `ApplicationController`, so the
+row measures the real shape and fails honestly.
+
+## 024.21 A qualified constant is coloured half one way, half the other
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+Pre-existing for `Foo::Bar` reads; 0.2.0 is where semantic tokens became a user-visible capability (T1).
+
+**Area:** `core/lib/ovallsp/semantic_tokens.rb` (`Collector`)
+
+`Collector` overrides `visit_constant_read_node` but not
+`visit_constant_path_node`, so in `Ovallsp::Server` only `Ovallsp`
+receives a token and `Server` receives none. A semantic token overrides
+the editor's grammar colour, so the two halves of every namespaced
+constant render differently — the first half semantic, the second half
+whatever TextMate says.
+
+The same module is also `namespace` where it is declared and `class`
+where it is read, which is a second inconsistency in the same feature.
+
+**Direction:** visit the path node and emit a token per segment. The
+kinds want deciding together with the declaration case rather than
+patched one at a time.
+
+## 024.20 `contains?` treats an exclusive end offset as inclusive
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+and it blocks a correct answer 0.2.0 had to settle for approximating.
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`contains?`,
+`locate_in_block`), `core/lib/ovallsp/parser_service.rb` (the receiver
+position a candidate records)
+
+Prism's `end_offset` is one past a node's last character. `contains?`
+compares `offset <= end_offset`, so an offset that sits *just past* a
+node is answered as being inside it. The consequence is not academic: a
+method-call candidate records its receiver's position as one character
+inside the receiver, which for a receiver ending in `)` is the `)` -- and
+the receiver's own last argument ends exactly there. `wrap(Widget.new).go`
+therefore resolves the receiver to `Widget`, and `unknown-method` reports
+a call that runs.
+
+Measured: making `contains?` exclusive fixes it and **fails 39 examples**,
+because every caller that hands it an LSP range end -- whose end is
+likewise exclusive -- depends on the current rule. The fix is the rule
+plus every call site, which is a change of its own size.
+
+What 0.2.0 did instead: `locate_in_block` answers `Types::UNKNOWN` for a
+position inside a block whose receiver is not a generic. Descending into
+the body is the right answer and was tried -- it produced **230
+`unknown-method` reports the shipped line never made**, across Ruby
+3.4.7's own stdlib, because descending is exactly what stops masking the
+mis-resolution above (`s[:dependencies].map { }` reported as "Symbol has
+no method named `map`"). Returning the *enclosing call's* type, which is
+what the code did before, is equally wrong in the other direction and is
+what made `argument-type` report a string literal inside
+`opts.on("-x") do` as an `OptionParser`. Unknown is the only one of the
+three that no check acts on.
+
+**Direction:** make `contains?` exclusive, then fix each caller that
+passes a range end to pass the last character instead. `mismatched_arguments`'s
+`infer_at(document, range[:end])` is the clearest of them -- its own
+comment already explains that it wants the argument's last character and
+relies on the inclusive rule to get it. With that done, `locate_in_block`
+can descend and hover becomes right inside every block.
+
+## 024.19 The argument-type check judges against a class the receiver is not
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+Reported by an independent review that drove the engine over 25 installed gems; not reproduced from a fixture here, which is why it is recorded rather than fixed.
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`sole_declared_overload`)
+
+A receiver whose constant path the workspace does not declare reaches
+`WorkspaceIndex`'s documented simple-name fallback -- "名前ヒューリスティック",
+the one that answers with whatever class shares the last segment. The
+unknown-method check has `closed_nominal?` to stop exactly there; the
+argument-type check has no equivalent, so it can resolve
+`::Vendor::Gadgets::Widget` to an unrelated `Widget` and type-check
+against that class's signature.
+
+There is no second report to notice it by, and an earlier version of this
+entry had that backwards. `unresolved_constant_findings` skips a
+candidate the index resolves (`engine.rb:579`) — and the resolution that
+makes the argument check misfire is the same one — so precisely when the
+fallback fires, the full constant is *not* reported unresolvable. Only
+its unresolvable prefixes are. Verified against a two-file corpus:
+`::Vendor::Gadgets::Widget.make(1)` with a workspace `class Widget`
+reports `::Vendor::Gadgets` and `::Vendor`, never
+`::Vendor::Gadgets::Widget`.
+
+Reported instance: `prism-1.9.0/lib/prism/translation/parser.rb:320`,
+`::Parser::Source::Comment.new(build_range(...))` reported as "`new`
+expects Location here, but Parser::Source::Range is given" -- where
+`Location` is Prism's own type, not the `Parser` gem's.
+
+**Direction:** the check needs the receiver it was written against, not
+the one the index guessed. Either gate on the same closedness the
+unknown-method check uses, or require the resolved name to end with the
+constant path as written. A fixture has to make the simple-name fallback
+fire, which the current spec's RBS shape does not.
+
+## 024.18 The unassigned-`@ivar` check cannot enumerate what it needs to
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+and **blocked on 024.R7** for the part that needs it. Three of the five shapes are closed in 0.2.0 by staying silent rather than guessing: a class-body call this analysis does not model (which covers every gem macro), a view that renders anything, and everything rounds 3 and 4 fixed. What is left is *precision* -- turning those two silences back into answers -- and one shape that is still wrong rather than silent, and one that is wrong only at depth two or more:
+
+- a view rendered by *another* controller's action (`render "users/show"`
+  from elsewhere) sees only its own controller's ivars;
+- `UsersController < BaseController < ApplicationController` with the top
+  of the chain not yet read. The depth-1 guard covers
+  `UsersController < ApplicationController`; applying the same rule to
+  every class read is the correct depth but cannot be told from the
+  ordinary case, because the last class a workspace declares inherits
+  from a gem that no document will ever exist for. Separating "a
+  workspace class not read yet" from "a base class in a gem" is exactly
+  what R7's attribution provides.
+
+Recorded under the rule in `CLAUDE.md` about a fix aimed at a symptom: three consecutive review rounds each found a *new*
+shape where this check warns on code that renders, and each round's fix
+addressed the shape rather than the class.
+
+**Area:** `core/lib/ovallsp/server.rb` (`assigned_ivars_for` and its
+guards), `core/lib/ovallsp/diagnostics/engine.rb`
+(`unassigned_ivar_findings`)
+
+The check reports an `@ivar` a view reads that the controller never
+assigns. To be safe it needs a *complete* enumeration of the assignments
+a view can receive, and it guards the cases where it knows it cannot get
+one: `instance_variable_set`, a mixed-in module, an unmodelled callback
+form, an unread superclass, a shape the walk does not fold.
+
+The shapes found round after round, each a warning on a working page:
+
+| round | shape | fix that round applied |
+|---|---|---|
+| 3 | `@user \|\|= ...`, an assignment in a block, a `case`, a `rescue`, a multiple assignment | count assignments syntactically instead of by type inference |
+| 4 | a superclass the index had not read yet | insist the immediate superclass was read |
+| 5 | a gem's class-level macro (`load_and_authorize_resource`, `expose`, Devise, ActiveAdmin) | — |
+| 5 | an ivar assigned in a partial the view renders | — |
+| 5 | a view rendered by a *different* controller's action | — |
+
+The list does not converge, and the reason is structural: **Ruby has
+unboundedly many ways to assign an instance variable that this analysis
+cannot see**, and a gem's class-level macro is the ordinary case, not the
+exotic one. The same repository already draws this line correctly
+elsewhere -- README says the unknown-method check stays silent on classes
+inheriting from a gem, "so most controllers and jobs", because reporting
+there means guessing. This check reports there.
+
+**Direction: ask the Runtime Agent, rather than adding a sixth static
+guard.** This is the answer to the question the static approach cannot
+reach, and it closes a whole class rather than a shape.
+
+The Agent has the real application loaded. It cannot say *what* a gem's
+macro assigns -- that would mean executing the action -- but it can
+report a controller's actual `_process_action_callbacks` chain, which is
+exactly where `load_and_authorize_resource`, `expose`, Devise and
+ActiveAdmin install themselves. Comparing that chain against the methods
+the workspace defines answers the question this check actually needs:
+
+> is every source that contributes to this action one this analysis has
+> read?
+
+A callback the workspace cannot account for means stay silent. That
+subsumes the gem-macro shape, the concern shape, and every framework
+callback at once -- and it is the same shape of question the ancestry
+registry already asks the Agent, so the transport, the deferral and the
+"answer arrives later" handling all exist.
+
+Two of the five known shapes are *not* covered by it and stay static
+work: an ivar assigned in a partial the view renders (collect ivar writes
+from the partials a template renders, which is a parse away), and a view
+rendered by another controller's action (`render "users/show"` from
+`AdminController`; the index already knows every literal render target,
+so this is a reverse lookup rather than new information).
+
+Until that exists the check does not meet its own stated bar -- "a wrong
+report is worse than a missed one" -- on gem-backed controllers, which is
+most of them. Whether 0.2.0 ships it meanwhile is a decision about the
+release, not a defect to patch in the current change set.
+
+## 024.14 Workspace-wide diagnostics do not fire against the real Rails fixture
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/workspace_diagnostics.rb`, `core/lib/ovallsp/server.rb`
+
+0.2.0's workspace pass is covered by Server-level specs (a mistake in an
+unopened file is reported, cleared, re-reported on a disk change, and
+refreshed when the answers change workspace-wide) and by unit specs for
+the pass itself. It has **no E2E row**, because the example written for
+one did not pass: a probe file carrying `UnopenedProbe.new
+.definitely_not_here`, present in `spec/fixtures/rails_real` before Core
+starts and never opened, produced no diagnostic within 45 seconds.
+
+**A diagnosed cause, not yet fixed.** `republish_open_diagnostics` ends
+with `start_workspace_diagnostics`, which calls `begin_pass` --
+invalidating whatever pass is running -- and `WorkspaceDiagnostics#run`
+restarts from `uris.first` with no resume point. That method is called
+from six sites, two of which are *loops*: the ancestry drain (which
+drains until the queue is empty) and the model-refresh batch (once per
+batch). On a real Rails
+app each iteration therefore aborts an O(workspace) pass and starts a new
+one from zero, and each new one takes the same global index mutex. That
+is a credible mechanism for the 45-second silence above, and it is not
+among the three causes guessed at below.
+
+The direction is to coalesce rather than restart: a request arriving
+while a pass runs should set "run once more when this one finishes"
+instead of spawning a pass of its own. Deliberately *not* done in this
+release. It is a concurrency change, the harm is reasoned rather than
+measured, and the deterministic test it needs -- one that makes the
+overlap real rather than racing it -- is the part that is not cheap. A
+half-tested concurrency change made late in a review loop is how a change
+set drifts. Its own task, with the 45-second reproduction as the
+acceptance test.
+
+What *was* fixed here: `workspace_findings_for` recorded deferred
+ancestry questions and never asked them. The buffer path drains in an
+`ensure`; this one now does too, so a receiver deferred in an unopened
+file is answered rather than waiting for someone to open a buffer.
+
+A second gap in the same pass was found when 0.1.11-0.1.13 were merged
+in and the whole branch was reviewed: `workspace_findings_for` built its
+semantic context without `assigned_ivars:`, and
+`Engine#unassigned_ivar_findings` returns [] without it -- so the
+unassigned-`@ivar` check (G16) never ran for any view nobody had open,
+which is most of them. The pass does visit `.erb`;
+`WorkspaceDiagnostics#language_id_for` exists for that. Fixed on the
+merge branch, with a spec that fails without it. It is listed here rather
+than as its own entry because it is the same capability's E2E story.
+
+The capability row was withdrawn rather than marked PASS on the strength
+of the in-process specs — the document's own rule is that a capability
+with no E2E row is not a capability, and marking it anyway is exactly the
+failure that rule exists to prevent.
+
+Three causes were guessed at before the one above was found, and they
+are kept because none is ruled out and any could compound it: the pass
+runs before the Runtime Agent is ready and the later refresh does not
+reach it; the receiver is not `closed_nominal?` in a real Rails app the
+way it is in the fixture-free specs; the pass never starts at all in that
+configuration.
+
+**Direction:** fix the restart-without-resume above, then reproduce
+against `spec/fixtures/rails_real` directly to see whether anything is
+left, and restore the row with an E2E example behind it.
+
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
-**Status:** open — roadmap
+```yaml
+status: open
+kind: roadmap
+```
+
 **Area:** `core/lib/ovallsp/server.rb`, `core/lib/ovallsp/parser_service.rb`,
 `core/lib/ovallsp/local_inferencer.rb`
 
@@ -805,9 +1504,32 @@ what 1.0.0 requires"): a plain Ruby project must be guaranteed, not only
 a Rails one. Until then README's capability matrix carries ⚠️ for that
 column and this entry is why.
 
-## 024.R2 Argument *type* checking (roadmap, 0.2.0)
+## 024.R2 Argument *type* checking (done, 0.2.0)
 
-**Status:** open — roadmap
+```yaml
+status: done
+kind: roadmap
+released-in: 0.2.0
+```
+
+as the narrow version this entry described: the expected type comes from an RBS/RBI declaration, the signature must have exactly one overload and no `*rest`, and both the declared and the inferred type must be concrete classes with no ancestor relation between them. Everything else stays silent.
+
+Two false positives were found while building it, both by mutating the
+new code rather than by reading it:
+
+- `Signatures::Environment#ancestors` resolves a *qualified* name, so
+  asking with a bare one reported every stdlib subclass as incompatible
+  with its parent — an `Integer` passed where `Numeric` is declared.
+- RBS's `int`/`string`/`boolish` are aliases meaning "anything that
+  converts", not classes, so an object of an unrelated class satisfies
+  one. They are excluded by the same rule that tells them apart from Ruby
+  constants: capitalisation.
+
+A third, pre-existing, was found on the same lookup: `HierarchyIndex`
+reports a class's own entry already qualified, so `rbs_resolves?` asked
+for `::::Widget` and found nothing — meaning anything a project declared
+in its own `sig/` without also writing it in Ruby was reported as an
+unknown method. Both call sites now share one helper.
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
 
 0.1.6 added an argument *count* check (capability G5). Nothing inspects
@@ -832,7 +1554,12 @@ for, so the table's promise and this entry stay in step.
 
 ## 024.R3 Feature parity roadmap, measured against Pylance
 
-**Status:** open — roadmap
+```yaml
+status: open
+kind: roadmap
+```
+
+roadmap. Its three 0.2.0 rows are done; the table below carries a **shipped in** column so the entry can be read as a record rather than only as a plan. Two of the three shipped outright; whole-project diagnostics shipped without a capability row, because the E2E example written for it did not pass (024.14) -- README marks that row ⚠️ and both changelogs say so.
 
 Pylance is the closest well-known reference point for "what a language
 server is expected to do" in a dynamically typed language with optional
@@ -841,26 +1568,27 @@ Rows Pylance has that make no sense here (Jupyter support, IntelliCode's
 ranked completions, Python-specific stub packaging) are deliberately
 absent rather than listed and dismissed.
 
-Current OvalLSP capabilities were read from the `initialize` response and
-the code, not assumed: `hoverProvider`, `documentSymbolProvider`,
+Capabilities were read from the `initialize` response and the code, not
+assumed. As of 0.2.0: `hoverProvider`, `documentSymbolProvider`,
 `definitionProvider`, `referencesProvider`, `renameProvider`,
-`workspaceSymbolProvider`, `completionProvider`, `signatureHelpProvider`.
-Everything else below is absent.
+`workspaceSymbolProvider`, `completionProvider`, `signatureHelpProvider`
+and `semanticTokensProvider`. Everything below without a "shipped in" is
+still absent.
 
-| Pylance capability | OvalLSP today | Planned for | Notes |
-|---|---|---|---|
-| Diagnostics across the whole project | Open files only | **0.2.0** | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
-| Docstrings in hover and completion | Type, origin and definition location only | **0.2.0** | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
-| Semantic highlighting (semantic tokens) | None | **0.2.0** | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. Covers ERB templates' Ruby regions too, which the shared extraction path now makes free. Distinct from shipping a TextMate grammar, which is a non-goal: VS Code already associates `.erb`, and another grammar would only collide. |
-| Inlay hints (inferred types, parameter names) | None | **0.3.0** | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |
-| Code actions / quick fixes | None | **0.3.0** | Each existing diagnostic implies one: define the missing method, correct the route helper name, fix the argument count. A diagnostic that only complains is half a feature. |
-| Go to type definition | Go to definition only | **0.3.0** | Cheap given `explainType` already resolves the type: jump from an expression to the class it evaluates to, rather than to the method being called. |
-| Document highlight (occurrences in file) | None | **0.3.0** | Small and self-contained: the reference index already answers this workspace-wide, so scoping it to one file is nearly free. |
-| Call hierarchy | Find references only | **0.3.0** | An incremental step on the same index. Callers/callees of a method, navigable, rather than a flat list. |
-| Auto-import / add `require` | None | **0.4.0** | Much weaker payoff than in Python: Rails autoloads, and plain Ruby projects mostly `require` at the entry point. Worth revisiting only after the plain-Ruby story (024.R1) exists. |
-| Type checking strictness levels | One fixed set of checks | **0.4.0** (as per-check severity) | Pylance's basic/strict switch matters because its checks are numerous and opinionated. With four checks, a per-check severity setting would cover the same need more simply. |
-| Signature help with active parameter tracking | Signature label only | **0.4.0** | Already useful; highlighting which argument the cursor is in is a refinement, not a gap. |
-| Generating type stubs from source | RBS/RBI are read, never written | not planned | Interesting for library authors, irrelevant to the Rails application developer this Preview targets. |
+| Pylance capability | OvalLSP before it | Planned for | Shipped in | Notes |
+|---|---|---|---|---|
+| Diagnostics across the whole project | Open files only | **0.2.0** | 0.2.0, no capability row (024.14) | The first thing a user noticed as missing. `publishDiagnostics` fires from `reindex`, which only runs for open buffers, so a mistake in a file you are not looking at is invisible. Needs a workspace-wide pass plus a budget, or LSP pull diagnostics. |
+| Docstrings in hover and completion | Type, origin and definition location only | **0.2.0** | 0.2.0 | Ruby has RDoc/YARD comments directly above a `def`. Nothing reads them. Hover shows what a thing *is* but never what it is *for*, which is most of hover's value. |
+| Semantic highlighting (semantic tokens) | None | **0.2.0** | 0.2.0 | Unusually valuable in Ruby, where `foo` alone is ambiguous between a local variable and a method call on self — the engine already knows which, and the editor currently does not. Covers ERB templates' Ruby regions too, which the shared extraction path now makes free. Distinct from shipping a TextMate grammar, which is a non-goal: VS Code already associates `.erb`, and another grammar would only collide. |
+| Inlay hints (inferred types, parameter names) | None | **0.3.0** | — | The type engine's answers are only visible on hover today. Inlay hints put them where the code is, which is the difference between a feature people use and one they remember exists. |
+| Code actions / quick fixes | None | **0.3.0** | — | Each existing diagnostic implies one: define the missing method, correct the route helper name, fix the argument count. A diagnostic that only complains is half a feature. |
+| Go to type definition | Go to definition only | **0.3.0** | — | Cheap given `explainType` already resolves the type: jump from an expression to the class it evaluates to, rather than to the method being called. |
+| Document highlight (occurrences in file) | None | **0.3.0** | — | Small and self-contained: the reference index already answers this workspace-wide, so scoping it to one file is nearly free. |
+| Call hierarchy | Find references only | **0.3.0** | — | An incremental step on the same index. Callers/callees of a method, navigable, rather than a flat list. |
+| Auto-import / add `require` | None | **0.4.0** | — | Much weaker payoff than in Python: Rails autoloads, and plain Ruby projects mostly `require` at the entry point. Worth revisiting only after the plain-Ruby story (024.R1) exists. |
+| Type checking strictness levels | One fixed set of checks | **0.4.0** (as per-check severity) | — | Pylance's basic/strict switch matters because its checks are numerous and opinionated. With the checks this engine has, a per-check severity setting would cover the same need more simply. |
+| Signature help with active parameter tracking | Signature label only | **0.4.0** | — | Already useful; highlighting which argument the cursor is in is a refinement, not a gap. |
+| Generating type stubs from source | RBS/RBI are read, never written | not planned | — | Interesting for library authors, irrelevant to the Rails application developer this Preview targets. |
 
 Not planned, and listed only so their absence is a decision rather than
 an oversight: unreachable-code dimming (RuboCop covers the same ground
@@ -880,7 +1608,11 @@ section is the reasoning behind each. Keep the two in step.
 
 ## 024.R4 Only one platform is published or verified (roadmap, 1.0.0)
 
-**Status:** open — roadmap
+```yaml
+status: open
+kind: roadmap
+```
+
 **Area:** `vscode/package.json` (`--target darwin-arm64`),
 `.github/workflows/apple-silicon-release.yml`, `vscode/scripts/copy-core.js`
 
@@ -917,8 +1649,14 @@ and what 1.0.0 requires").
 
 ## 024.R5 A reopened gem class still looks closed (done, 0.1.7)
 
-**Status:** done — shipped in 0.1.7. Measured against the same real
-application that reported it: 2 diagnostics before, 0 after.
+```yaml
+status: done
+kind: roadmap
+released-in: 0.1.7
+```
+
+Measured against the same real application that reported it: 2 diagnostics before, 0 after.
+
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
 `core/lib/ovallsp/runtime_agent/agent.rb`
 
@@ -1108,9 +1846,24 @@ wherever there is no Runtime Agent to ask.
 
 ---
 
-## 024.R6 Reading an instance variable that is never assigned (roadmap, 0.2.0)
+## 024.R6 Reading an instance variable that is never assigned (done, 0.2.0)
 
-**Status:** open — roadmap
+```yaml
+status: done
+kind: roadmap
+released-in: 0.2.0
+```
+
+scoped to views, which is where the symptom the entry describes actually appears. A view is handed exactly what its controller action and callback chain assign, and that set was already computed for type propagation; everything else receives its ivars from wherever it likes, so nothing is reported there.
+
+The safety of the check is one distinction: the set is `nil` when nobody
+worked out a context and *empty* when an action genuinely assigns
+nothing. Collapsing the two would report every `@ivar` in any file no
+context could be established for. `nil` is therefore also the answer for
+a view outside the naming convention, a view no action renders, a
+controller chain containing `instance_variable_set`, and a document whose
+Ruby does not parse — each pinned by asserting nothing was logged, since
+the rescue above them produces the same silence for the wrong reason.
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
 
 Nothing reports `@usr` where the code meant `@user`. Ruby returns `nil`
@@ -1132,7 +1885,11 @@ same standard as every other check here.
 
 ## 024.R7 Index what the gems actually define, and keep it fresh (roadmap, 0.3.0)
 
-**Status:** open — roadmap
+```yaml
+status: open
+kind: roadmap
+```
+
 **Area:** `core/lib/ovallsp/runtime_agent/agent.rb`,
 `core/lib/ovallsp/cache/`, `core/lib/ovallsp/diagnostics/engine.rb`
 
@@ -1166,6 +1923,22 @@ every query.
   question. Most receivers in a Rails app become closed, and the check
   becomes useful where the code actually is.
 
+**It is also what 024.18 waits for.** The unassigned-`@ivar` check
+currently stays silent whenever a controller's class body calls anything
+it does not model, because a gem's macro
+(`load_and_authorize_resource`, `expose`, Devise, ActiveAdmin) installs a
+callback that assigns at runtime and nothing can tell that call apart
+from a harmless one. With this index, such a call is attributable: "a
+method CanCanCan defines, whose body this analysis has not read" is a
+sound reason to stay silent, and a class-body call that resolves to a
+*workspace* method that *was* read is a sound reason to report. That
+narrows the guard rather than replacing it -- every answer the check
+gives today it still gives, and it starts covering controllers it
+currently declines. Doing it before this index exists would mean
+guessing, which is the thing this check refuses to do. **This is a
+required part of R7, not an optional extension of it: 024.18 is not
+closed until it lands.**
+
 It also subsumes several entries above: 024.R5's reopened-gem-class case
 (the index knows `ActiveSupport::TestCase` is a gem class), and the
 latent `unresolved-constant` flood (the index knows `Rails` exists).
@@ -1186,14 +1959,33 @@ competing design.
   query — the same background/degrade-to-static shape the Agent already
   uses.
 
-
 ---
 
-## 024.R8 Completion does nothing until you type a dot (roadmap, 0.2.0)
+## 024.R8 Completion does nothing until you type a dot (done, 0.2.0)
 
-**Status:** open — roadmap
+```yaml
+status: done
+kind: roadmap
+released-in: 0.2.0
+```
+
+The entry's own reading was right: the work was mostly ranking and bounding, not calling the existing pieces. The order it proposed is the order that shipped (locals, methods on self, workspace constants, Kernel), with two decisions it left open settled as it suggested — a hard cap with `isIncomplete`, and a one-character prefix that returns only the two sources near the cursor.
+
+Two things the entry did not anticipate. The ranking has to be rendered
+into `sortText`: an editor re-sorts a completion list itself, so array
+order alone pins nothing, and a spec checking array positions passes with
+`sortText` deleted. And `WorkspaceIndex#search` matches by substring
+because `workspace/symbol` wants that, while a completion prefix means the
+start of the name. Filtering `search`'s answer down was the first attempt
+and it was wrong: `search` truncates, so on a workspace with more than
+`limit` substring matches every prefix match can already be gone -- 250
+classes merely containing `art` made typing `art` return nothing at all.
+The index gained `#prefix_search`, which applies both the prefix and the
+offerable kinds *before* the truncation.
 **Area:** `core/lib/ovallsp/server.rb` (`completion_result`),
-`core/lib/ovallsp/semantic/query_service.rb`
+`core/lib/ovallsp/semantic/query_service.rb`,
+`core/lib/ovallsp/semantic/prefix_completion.rb`,
+`core/lib/ovallsp/workspace_index.rb` (`#prefix_search`)
 
 `completion_result` matches a bare prefix against the route registry and
 nothing else; every other candidate comes from
@@ -1247,9 +2039,13 @@ roadmap entry rather than folded into another release's work.
 
 ## 024.16 The capability E2E suite can skip in full while CI stays green
 
-**Status:** fixed in 0.1.13 -- `ci.yml`'s skip guard now checks both
-`spec/integration/real_rails_spec.rb` and `spec/e2e/capabilities_spec.rb`,
-by table rather than by a second copy of the check.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.13
+```
+
+`ci.yml`'s skip guard now checks both `spec/integration/real_rails_spec.rb` and `spec/e2e/capabilities_spec.rb`, by table rather than by a second copy of the check.
 
 Two things the one-line direction below did not anticipate. First, a
 guard that failed on *any* pending example would have made this
@@ -1294,16 +2090,13 @@ for widening past its own subject.
 
 ## 024.17 `vscode/src/extension.ts` is covered by no test that runs anywhere
 
-**Status:** fixed in 0.1.13 for the two decisions a user notices --
-`documentSelectorFor` and `statusPresentation` moved into
-`vscode/src/clientPresentation.ts`, which imports no `vscode`, with
-fifteen unit tests -- thirteen behavioural, plus two that assert
-`extension.ts` actually calls them (024.10's first attempt exported the
-strings but left the choice between them at the call site, so the tests
-described code the extension did not reach). `resolveStatus` was added in a second pass: the
-extraction had left the "no client" / "the client did not answer"
-decision at the call site, where a mutation reporting a failure as "no
-client" passed all 167 tests.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.13
+```
+
+for the two decisions a user notices -- `documentSelectorFor` and `statusPresentation` moved into `vscode/src/clientPresentation.ts`, which imports no `vscode`, with fifteen unit tests -- thirteen behavioural, plus two that assert `extension.ts` actually calls them (024.10's first attempt exported the strings but left the choice between them at the call site, so the tests described code the extension did not reach). `resolveStatus` was added in a second pass: the extraction had left the "no client" / "the client did not answer" decision at the call site, where a mutation reporting a failure as "no client" passed all 167 tests.
 
 Three of the extracted decisions were then found unpinned, all the same
 shape: the specs compared the render against the very table it renders
@@ -1341,14 +2134,13 @@ remaining decisions the way 024.10 extracted `clientTeardown.ts`.
 
 ## 024.15 The index's answers depend on which file was edited last
 
-**Status:** fixed in 0.1.13 by option 1 below, in the half of it that
-carries the cost. Option 1 called for both collections to be maintained
-sorted at write time; `@by_symbol`'s entry lists are, and
-`@by_simple_name` is still an unordered Set sorted per read -- but by one
-centralised reader rather than by each of eleven, which is the property
-the option was chosen for. Sorting a Set on insert would have cost every
-`replace_file` a sort of every bucket its declarations touch, against a
-read path that filters first and so sorts a handful of elements.
+```yaml
+status: fixed
+kind: defect
+released-in: 0.1.13
+```
+
+by option 1 below, in the half of it that carries the cost. Option 1 called for both collections to be maintained sorted at write time; `@by_symbol`'s entry lists are, and `@by_simple_name` is still an unordered Set sorted per read -- but by one centralised reader rather than by each of eleven, which is the property the option was chosen for. Sorting a Set on insert would have cost every `replace_file` a sort of every bucket its declarations touch, against a read path that filters first and so sorts a handful of elements.
 
 Entry lists are sorted by `[uri, line, character]` in `replace_file`, and
 `ordered_symbol_ids` is the one place a query reads `@by_simple_name`, ordered
@@ -1502,7 +2294,12 @@ exactly the state in which the bug is invisible.
 
 ## 024.13 A reopened core class looks closed, in both directions (0.3.x)
 
-**Status:** open
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
 
 `closed_nominal?` calls a receiver closed when every ancestor is

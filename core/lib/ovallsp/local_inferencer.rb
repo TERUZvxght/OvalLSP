@@ -84,13 +84,45 @@ module Ovallsp
     # single request rather than fixed per LocalInferencer instance).
     # Never raises — returns Types::UNKNOWN for anything unresolved, out
     # of budget, or on unexpected parser input.
+    # What is nameable at a cursor position: the local bindings visible
+    # there (name String => Types value) and the type of `self`, or nil
+    # for `self` at the top level of a file, where there is no useful
+    # enclosing type to offer members from.
+    Scope = Data.define(:locals, :self_type)
+
+    # The environment `locate` builds on its way to `offset`, rather than
+    # the type it arrives at. Completion from a bare prefix needs the
+    # names in scope; `infer_at` computes them and then discards them.
+    #
+    # Returns the *innermost* scope containing the position, so a local
+    # declared in a method the cursor is not in does not appear -- the
+    # descent already starts a fresh environment per `def`, which is what
+    # makes that true rather than anything here.
+    def scope_at(document, position, max_steps: nil)
+      offset = document.position_to_byte_offset(position)
+      result = parse_cached(document)
+      @steps = 0
+      @step_budget = max_steps || @max_steps
+      @self_type_stack = []
+      @scope_capture = nil
+      @capturing_scope = true
+
+      locate(result.value.statements, offset, {})
+      @scope_capture || Scope.new(locals: {}, self_type: nil)
+    rescue BudgetExceeded, StandardError
+      @scope_capture || Scope.new(locals: {}, self_type: nil)
+    ensure
+      @capturing_scope = false
+      @scope_capture = nil
+    end
+
     def infer_at(document, position, initial_env: {}, max_steps: nil)
       # Prism node locations are UTF-8 byte offsets, not Ruby character
       # offsets — using #position_to_char_offset here would select the
       # wrong node whenever a multibyte character appears anywhere before
       # the target position (docs/design/tasks/008.5-runtime-and-index-corrections.md).
       offset = document.position_to_byte_offset(position)
-      result = Prism.parse(document.text)
+      result = parse_cached(document)
       @steps = 0
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
@@ -147,6 +179,61 @@ module Ovallsp
       nil
     end
 
+    # Every instance variable `document` assigns anywhere, by any of the
+    # five write shapes Ruby has.
+    #
+    # Syntactic on purpose. The inference walk above answers "what type
+    # does this ivar have", and folds only the statement shapes it models
+    # -- which is right for types, where an unfolded shape infers Unknown
+    # and nothing is lost, and wrong for "was it assigned at all", where
+    # an unfolded shape produces a complete-looking set with a name
+    # missing. `@user ||= ...`, an assignment inside `respond_to do
+    # |format|`, inside a `case`, inside a `rescue`, and a multiple
+    # assignment all reached that second question and each produced a
+    # warning on a view that renders (0.2.0).
+    def assigned_ivar_names(document)
+      collector = Diagnostics::Engine::IvarWriteCollector.new
+      Prism.parse(document.text).value.accept(collector)
+      collector.names.uniq
+    rescue StandardError
+      []
+    end
+
+    # One parse, remembered, because the argument-type check asks for a
+    # type at each positional argument of each call and `infer_at` parsed
+    # the whole file again every time -- on a 1,000-line file that is
+    # 5,001 parses where 3,001 would do, on the path the workspace pass
+    # runs over every file while holding the index mutex.
+    #
+    # Keyed by uri, version and text so a hit cannot be another document's
+    # tree, and stored as one frozen pair so a reader sees either the
+    # whole entry or the previous one. One entry is enough: the callers
+    # that repeat are repeating within one document.
+    def parse_cached(document)
+      key = [document.uri, document.version, document.text.hash].freeze
+      cached = @parse_cache
+      return cached[1] if cached && cached[0] == key
+
+      parsed = Prism.parse(document.text)
+      @parse_cache = [key, parsed].freeze
+      parsed
+    end
+
+    # Receiverless calls made directly in `owner_name`'s class body --
+    # not inside its method bodies, where a same-named call is an ordinary
+    # call rather than a class-level declaration.
+    #
+    # `BeforeActionFinder` walks the same statements looking for the two
+    # names it models; this reports all of them, so a caller can ask the
+    # different question of whether anything *unmodelled* is there.
+    def class_body_call_names(document, owner_name:)
+      finder = ClassBodyCallFinder.new(owner_name)
+      Prism.parse(document.text).value.accept(finder)
+      finder.names
+    rescue StandardError
+      []
+    end
+
     private
 
     def ivars_from(env)
@@ -158,6 +245,31 @@ module Ovallsp
       raise BudgetExceeded if @steps > @step_budget
     end
 
+    # Recorded on every step of the descent, so the last write is the
+    # innermost scope containing the cursor. `env` is duplicated because
+    # the caller keeps mutating the same Hash as it evaluates the
+    # statements that follow the one we descended into -- holding the
+    # reference would report bindings from after the cursor.
+    #
+    # Guarded at both call sites by `@capturing_scope` rather than here,
+    # so that "an ordinary #infer_at builds no snapshots" is a fact a test
+    # can state directly. The saving is real: this copies the whole
+    # environment, and `locate` runs once per step of the descent.
+    def capture_scope(env)
+      locals = env.each_with_object({}) do |(key, value), acc|
+        name = key.to_s
+        acc[name] = value unless name.start_with?("@")
+      end
+      @scope_capture = Scope.new(locals: locals, self_type: @self_type_stack.last)
+    end
+
+    # Inclusive of `end_offset`, which is one past the node's last
+    # character -- so an offset equal to it answers about a node it is
+    # actually just past. That is wrong, and it is why a receiver ending
+    # in `)` resolves to its own last argument (024.20); making it
+    # exclusive is the right rule and breaks 39 examples, because every
+    # caller that hands it an LSP range end depends on the current one.
+    # Recorded rather than changed here.
     def contains?(location, offset)
       location.start_offset <= offset && offset <= location.end_offset
     end
@@ -167,6 +279,7 @@ module Ovallsp
     # accumulate correctly on the way down to the target.
     def locate(node, offset, env)
       step!
+      capture_scope(env) if @capturing_scope
       return Types::UNKNOWN if node.nil?
 
       case node
@@ -298,9 +411,47 @@ module Ovallsp
       singleton = node.receiver.is_a?(Prism::SelfNode)
       enclosing_self = @self_type_stack.last
       @self_type_stack.push(singleton ? Types::Generic.new(name: "ClassOf", type_arg: enclosing_self) : enclosing_self)
-      locate(node.body, offset, {})
+      locate(node.body, offset, parameter_env(node))
     ensure
       @self_type_stack.pop
+    end
+
+    # A method's parameters are bindings its body can see, so a cursor
+    # inside that body is in their scope. Nothing infers their types
+    # without a call site, so they enter as Unknown -- which is the honest
+    # answer and still lets completion offer the name.
+    #
+    # It reaches `infer_at` as well, which an earlier version of this
+    # comment denied. A branch's merge falls back to the *entering*
+    # environment, so a parameter assigned in one arm used to merge
+    # against an absent key and answer `Integer | nil` -- claiming the
+    # method can be reached with the parameter already nil, which its
+    # signature does not say. It answers `Integer | Unknown` now.
+    #
+    # The Symbol keys are the environment's convention everywhere else,
+    # because that is how Prism names a node -- but no test can currently
+    # distinguish them from String keys, and the reason is worth stating
+    # rather than rediscovering: a read misses on the wrong key and
+    # `eval_type` answers Unknown for a miss, which is also what a hit
+    # answers while every parameter enters as Unknown. The choice stops
+    # being unobservable the moment a parameter carries a real type (a
+    # signature, an inferred call site), at which point a String key would
+    # silently un-shadow a same-named method.
+    def parameter_env(def_node)
+      params = def_node.parameters
+      return {} unless params
+
+      names = []
+      names.concat(params.requireds.map { |p| p.respond_to?(:name) ? p.name : nil })
+      names.concat(params.optionals.map(&:name))
+      # `posts` are the requireds that follow a splat -- `def go(a, *rest,
+      # z)`. Legal Ruby, and `z` was simply absent from the locals.
+      names.concat(params.posts.map { |p| p.respond_to?(:name) ? p.name : nil })
+      names.concat(params.keywords.map(&:name))
+      names << params.rest&.name
+      names << params.keyword_rest&.name if params.keyword_rest.respond_to?(:name)
+      names << params.block&.name
+      names.compact.to_h { |name| [name.to_sym, Types::UNKNOWN] }
     end
 
     # A position inside a block (its parameter list or its body) needs its
@@ -312,7 +463,17 @@ module Ovallsp
     def locate_in_block(node, offset, env)
       receiver_type = node.receiver && eval_type(node.receiver, env)
       nested_env = block_nested_env(node, receiver_type, env)
-      return eval_type(node, env) unless nested_env
+      # Unknown, not the enclosing call's type and not a descent. The
+      # receiver is not a generic, so nothing is known about what the
+      # block yields -- and answering with the *call's* type said
+      # `OptionParser` for a string literal inside `opts.on(...) do`,
+      # which 0.2.0 publishes as an `argument-type` diagnostic. Descending
+      # is the right answer and cannot be given yet: the offsets a
+      # receiver is recorded at resolve to the wrong node under this
+      # file's inclusive `contains?`, so descending turned that latent
+      # mis-resolution into 230 new `unknown-method` reports across the
+      # stdlib (024.20). Unknown is what both checks decline on.
+      return Types::UNKNOWN unless nested_env
 
       param_node = block_parameter_node_at(node.block, offset)
       return nested_env.fetch(param_node.name, Types::UNKNOWN) if param_node
@@ -359,6 +520,14 @@ module Ovallsp
           # #eval_conditional) already folds its surviving branches'
           # bindings into `env` in place — nothing further needed here.
           eval_type(stmt, env)
+          # A cursor on a blank line sits inside no statement, so the
+          # entry capture in #locate saw only the bindings from before
+          # this one. Re-capturing here is what makes a local assigned on
+          # the previous line visible -- but only for a statement that
+          # *ends before* the cursor, since this loop also walks the
+          # statements that follow it and their bindings are not in scope
+          # yet (0.2.0).
+          capture_scope(env) if @capturing_scope && stmt.location.end_offset <= offset
         end
       end
       result
@@ -1113,6 +1282,40 @@ module Ovallsp
       end
     end
     private_constant :RenderTargetFinder
+
+    # Every receiverless call made directly in the requested class body.
+    # `BeforeActionFinder` below walks the same statements looking for the
+    # two names it models; this reports all of them, so a caller can ask
+    # whether anything *unmodelled* is there.
+    class ClassBodyCallFinder < Prism::Visitor
+      attr_reader :names
+
+      def initialize(owner_name)
+        super()
+        @owner_name = owner_name
+        @owner_stack = []
+        @names = []
+      end
+
+      def visit_module_node(node) = visit_namespace(node)
+      def visit_class_node(node) = visit_namespace(node)
+
+      private
+
+      def visit_namespace(node)
+        @owner_stack.push(Index::SymbolId.qualify_within(@owner_stack.last, node.constant_path.full_name))
+        if @owner_stack.last == @owner_name
+          node.body&.body&.each do |statement|
+            @names << statement.name.to_s if statement.is_a?(Prism::CallNode) && statement.receiver.nil?
+          end
+        else
+          node.each_child_node { |child| child.accept(self) }
+        end
+      ensure
+        @owner_stack.pop
+      end
+    end
+    private_constant :ClassBodyCallFinder
 
     # Extracts receiver-less before_action declarations directly from the
     # requested class body. This intentionally does not descend into

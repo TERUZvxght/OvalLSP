@@ -41,7 +41,9 @@ module Ovallsp
       def positional_arity_matches?(overload, count)
         return true if overload.rest_positional
 
-        min = overload.required_positionals.size
+        # A trailing positional -- `(String, ?Integer, Symbol)` -- is
+        # required too, so it raises the floor as well as the ceiling.
+        min = overload.required_positionals.size + overload.trailing_positionals.size
         max = min + overload.optional_positionals.size
         count.between?(min, max)
       end

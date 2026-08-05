@@ -158,6 +158,22 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    it "H7: shows the RDoc comment above the method being hovered" do
+      with_file("app/models/hover_doc_probe.rb", <<~RUBY) do |uri|
+        class HoverDocProbe
+          # Charges the card.
+          def charge_it
+          end
+
+          def run
+            HoverDocProbe.new.charge_it
+          end
+        end
+      RUBY
+        expect(@client.hover_text(uri, 6, 25)).to include("Charges the card.")
+      end
+    end
+
     it "H3: reports an ivar's type in a view from the action that assigned it" do
       with_file("app/controllers/hover_view_controller.rb", <<~RUBY) do |_uri|
         class HoverViewController < ApplicationController
@@ -289,7 +305,11 @@ RSpec.describe "Extension capabilities", :e2e do
           end
         end
       RUBY
-        expect(@client.completion_labels(uri, 2, 9)).to include("find", "where", "all")
+        # The row names `new` alongside the rest, and it was the one the
+        # list did not have: `new` is `Class`'s, one step up the singleton
+        # chain, and the signature source answered about the receiver's
+        # own name only.
+        expect(@client.completion_labels(uri, 2, 9)).to include("find", "where", "all", "create", "new")
       end
     end
 
@@ -377,6 +397,65 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # C11's own row, for the way a Rails view actually refers to a model.
+    # Its example types `post.`, a local -- and a local in a template is
+    # what a partial receives. An action's `@ivar` is the common case,
+    # and it answered nothing: hover resolves an ivar in a view through
+    # the controller action that assigned it (H3), and
+    # `receiver_type_before_dot` -- which completion and go-to-definition
+    # both use -- did not, though Task 013 records "hover and completion
+    # use the same receiver type" as the rule.
+    it "C11: offers a model's members after an `@ivar` in an ERB template" do
+      with_file("app/controllers/ivar_completion_controller.rb", <<~RUBY) do |_uri|
+        class IvarCompletionController < ApplicationController
+          def show
+            @record = Post.find(1)
+          end
+        end
+      RUBY
+        with_file("app/views/ivar_completion/show.html.erb", "<%= @record. %>\n") do |view_uri|
+          labels = @client.completion_labels(view_uri, 0, 12)
+
+          expect(labels).to include("title")
+          expect(labels).to include("save")
+        end
+      end
+    end
+
+    it "C12: offers workspace classes and locals with no receiver in front" do
+      with_file("app/models/prefix_probe.rb", <<~RUBY) do |uri|
+        class PrefixProbe
+          def run
+            prefix_local = 1
+            pre
+          end
+        end
+      RUBY
+        labels = @client.completion_labels(uri, 3, 7)
+        expect(labels).to include("prefix_local")
+        expect(labels).to include("PrefixProbe")
+      end
+    end
+
+    it "C13: resolves a completion item to the RDoc comment above its declaration" do
+      with_file("app/models/documented_probe.rb", <<~RUBY) do |uri|
+        class DocumentedProbe
+          # Charges the card.
+          def charge_it
+          end
+
+          def run
+            DocumentedProbe.new.cha
+          end
+        end
+      RUBY
+        item = @client.completion_item(uri, 6, 29, "charge_it")
+        expect(item).not_to be_nil
+        resolved = @client.raw_request("completionItem/resolve", item)
+        expect(resolved.dig(:documentation, :value).to_s).to include("Charges the card.")
+      end
+    end
+
     it "C7: offers route helpers by prefix" do
       with_file("app/controllers/route_probe_controller.rb", <<~RUBY) do |uri|
         class RouteProbeController < ApplicationController
@@ -404,6 +483,29 @@ RSpec.describe "Extension capabilities", :e2e do
       RUBY
         locations = @client.definitions(uri, 5, 12)
         expect(locations.map { |l| l[:uri] }).to include(uri)
+      end
+    end
+
+    # The same row, for the call shape Ruby actually uses most. The
+    # example above writes a receiver; without one, `definition_result`
+    # fell through to a *name* lookup that only matches classes, modules
+    # and constants -- so a call to a method of the class you are writing
+    # in resolved to nothing. Measured on a real Rails application:
+    # `article_params` in a scaffolded controller, 0 locations, while
+    # find-references on the same pair answered 2.
+    it "D1: jumps to a workspace method's declaration with no receiver in front" do
+      with_file("app/models/receiverless_definition_probe.rb", <<~RUBY) do |uri|
+        class ReceiverlessDefinitionProbe
+          def target_method; end
+
+          def run
+            target_method
+          end
+        end
+      RUBY
+        locations = @client.definitions(uri, 4, 8)
+        expect(locations.map { |l| l[:uri] }).to include(uri)
+        expect(locations.map { |l| l[:range][:start][:line] }).to include(1)
       end
     end
   end
@@ -438,6 +540,63 @@ RSpec.describe "Extension capabilities", :e2e do
     end
   end
 
+  describe "semantic highlighting" do
+    it "T1: distinguishes a local variable from a call on self" do
+      with_file("app/models/token_probe.rb", <<~RUBY) do |uri|
+        class TokenProbe
+          def helper
+          end
+
+          def run
+            value = 1
+            value
+            helper
+          end
+        end
+      RUBY
+        by_line = semantic_token_types_by_line(uri)
+
+        # The row promises the two are coloured *differently*, so the
+        # assertion has to be per position. Asserting only that both
+        # kinds appear somewhere passed with the classification fully
+        # inverted -- a reviewer swapped `:variable` and `:method` in the
+        # collector and both T1 examples stayed green.
+        expect(by_line[6]).to eq(["variable"])
+        expect(by_line[7]).to eq(["method"])
+      end
+    end
+
+    # The row promises the distinction holds "in `.rb` and in an ERB
+    # template's Ruby regions alike", and a row is what this document
+    # says a capability is -- so the ERB half needs to be in the row, not
+    # only in `semantic_tokens_spec.rb`.
+    it "T1: makes the same distinction inside an ERB template's Ruby regions" do
+      with_file("app/views/probes/show.html.erb", <<~ERB) do |uri|
+        <% value = 1 %>
+        <%= value %>
+        <%= helper %>
+      ERB
+        by_line = semantic_token_types_by_line(uri)
+
+        expect(by_line[1]).to eq(["variable"])
+        expect(by_line[2]).to eq(["method"])
+      end
+    end
+
+    # LSP semantic tokens are delta-encoded against the previous token,
+    # so a type is only meaningful once the deltas are accumulated back
+    # into absolute positions.
+    def semantic_token_types_by_line(uri)
+      data = @client.raw_request("textDocument/semanticTokens/full",
+                                 { textDocument: { uri: uri } })[:data]
+      line = 0
+      data.each_slice(5).each_with_object(Hash.new { |h, k| h[k] = [] }) do |token, by_line|
+        line += token[0]
+        by_line[line] << Ovallsp::SemanticTokens::LEGEND[token[3]]
+      end
+    end
+  end
+
   describe "diagnostics" do
     it "G1: reports a syntax error" do
       with_file("app/models/syntax_probe.rb", "class SyntaxProbe\n  def broken(\n") do |uri|
@@ -455,6 +614,35 @@ RSpec.describe "Extension capabilities", :e2e do
         end
       RUBY
         expect(@client.diagnostic_messages(uri).join(" ")).to match(/no method named/i)
+      end
+    end
+
+    # Needs a *declared* parameter type, which Ruby source does not carry
+    # -- hence the fixture's own `sig/argument_probe.rbs`, loaded at boot
+    # like any project signature.
+    it "G15: reports an argument whose type cannot be the declared one" do
+      with_file("app/models/argument_call_probe.rb", <<~RUBY) do |uri|
+        class ArgumentCallProbe
+          def run
+            ArgumentProbe.new.resize("large")
+          end
+        end
+      RUBY
+        expect(@client.diagnostic_messages(uri).join(" ")).to match(/expects Integer/i)
+      end
+    end
+
+    it "G16: reports a view reading an ivar no action assigns" do
+      with_file("app/controllers/ivar_probe_controller.rb", <<~RUBY) do |_uri|
+        class IvarProbeController < ApplicationController
+          def show
+            @record = Post.find(1)
+          end
+        end
+      RUBY
+        with_file("app/views/ivar_probe/show.html.erb", "<%= @recrod %>\n") do |view_uri|
+          expect(@client.diagnostic_messages(view_uri).join(" ")).to match(/never assigned/i)
+        end
       end
     end
 
@@ -576,7 +764,18 @@ RSpec.describe "Extension capabilities", :e2e do
         uri = client.open(path)
         client.wait_until_ready
 
-        expect(client.diagnostic_messages(uri, timeout: 20).join(" ")).not_to match(/no route named/i)
+        # Two halves, because `not_to match` alone is satisfied by a
+        # world in which the check never ran: 0.2.0 made a route table
+        # that has never loaded answer nothing at all (024.24), so this
+        # example passed whether or not anything ever cleared. The
+        # positive assertion is what makes the negative one mean
+        # something -- routes arrived, the file was not touched, and
+        # `posts_path` resolves.
+        messages = client.diagnostic_messages(uri, timeout: 20)
+        expect(messages.join(" ")).not_to match(/no route named/i)
+        expect(Array(client.raw_request("textDocument/definition",
+                                        { textDocument: { uri: uri },
+                                          position: { line: 2, character: 18 } }))).not_to be_empty
       ensure
         client.stop
       end
@@ -638,6 +837,23 @@ RSpec.describe "Extension capabilities", :e2e do
         end
       RUBY
         expect(@client.signature_labels(uri, 5, 16).join(" ")).to include("first")
+      end
+    end
+
+    # The same row, without a receiver -- the third capability whose
+    # example only covered the receiver-qualified half. `documented(` in
+    # the class that declares `documented` answered nothing.
+    it "S1: reports a workspace method's parameters with no receiver in front" do
+      with_file("app/models/receiverless_signature_probe.rb", <<~RUBY) do |uri|
+        class ReceiverlessSignatureProbe
+          def takes(first, second); end
+
+          def run
+            takes(
+          end
+        end
+      RUBY
+        expect(@client.signature_labels(uri, 4, 10).join(" ")).to include("first")
       end
     end
   end

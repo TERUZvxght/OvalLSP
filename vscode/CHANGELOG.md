@@ -6,6 +6,135 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.0 — Completion from the first keystroke, and diagnostics beyond the open file
+
+**If you are on 0.1.13, this brings 0.1.14 and 0.1.15 with it.** Both were
+tagged and never published, so their entries below describe changes that
+reach you here for the first time. 0.1.14 removed about twelve thousand
+wrong reports and introduced a handful of its own; 0.1.15 is those
+corrections. Arriving together, the intermediate state never existed for
+anyone.
+
+- Added: typing `Ar` offers candidates. Completion needed a `.` first, so
+  workspace classes, the locals in scope and the methods callable right
+  there offered nothing until the whole name was written. Two characters,
+  not one: at a single character the locals and methods on self are
+  offered but workspace classes and Kernel are not, because at that
+  length they match almost everything.
+- Added: mistakes in files you have not opened are reported. (Verified
+  in-process; see 024.14 for the end-to-end gap still open against a real
+  Rails app.)
+- Added: passing an argument of the wrong type is reported. Only the
+  *number* of arguments was checked before.
+- Added: reading an `@ivar` that is never assigned is reported. In an
+  application `rails new` produces this stays silent, because the
+  generated `ApplicationController` calls `allow_browser` and any
+  class-body call the analysis does not model silences the check for
+  every view beneath it (024.22).
+- Added: hover and completion show the RDoc/YARD documentation, where a
+  receiver was written — `widget.charge` and the list a `.` produces.
+  Hovering the `def` itself, a receiverless call, or anything in an ERB
+  template shows the type without the comment, and the bare-prefix
+  completion added above carries no documentation.
+- Changed: hovering inside a block whose receiver is not a container
+  (`Array`, an Active Record `Relation`, a `CollectionProxy`) now answers
+  nothing, where it used to answer with the enclosing call's type. That
+  answer was frequently wrong — a string literal inside `opts.on("-x") do`
+  read as an `OptionParser` — and 0.2.0's new checks would have published
+  it as a diagnostic. Reading the block's body is the right answer and is
+  blocked on an offset rule fixed separately (024.20).
+- Added: semantic highlighting, in `.rb` and in an ERB template's Ruby
+  regions.
+- Fixed: `Widget.new` is offered. Completion asked RBS about the
+  receiver's own name and nothing else, so a member declared by an
+  ancestor was never in the list — and `new` is `Class`'s. A workspace
+  class instance now also offers what every Ruby object has (`tap`,
+  `frozen?`, `then`), after its own methods rather than before them.
+- Fixed: signature help works on a call written without a receiver, the
+  same shape as go to definition below.
+- Fixed: go to definition works on a call written without a receiver —
+  `article_params` inside the controller that defines it. That is how
+  most Ruby calls a method of its own class, and it resolved to nothing:
+  without a receiver the request fell through to a name lookup that only
+  matches classes, modules and constants. Find references on the same
+  pair always worked, which is what made it visible.
+- Fixed: `@article.` completes in an ERB template. Hover on the same
+  `@article` already answered `Article` — an ivar in a view gets its type
+  from the controller action that assigned it, and only hover was passing
+  that along, so completion and go-to-definition saw nothing.
+- Fixed: a `*_path`/`*_url` call is no longer reported as a missing route
+  when no routes have been loaded — an untrusted workspace, or any
+  project that is not Rails. An empty route table used to answer "no such
+  route" rather than "I do not know": 8 reports across Ruby's own
+  standard library, every one of them an ordinary method. Project-wide
+  diagnostics would otherwise have published each of them for every file
+  rather than only for open ones (024.24).
+- Fixed: an argument is no longer judged against a signature the call
+  does not reach. `Invariants.initialize(cb, ocb)`, whose singleton
+  `initialize` the workspace declares, was checked against RBS's
+  `Class#initialize` — the single argument-type report Ruby's whole
+  standard library produced, and it was wrong. A parameter written after
+  an optional one (`def hold(a, b = 1, c)`) is also placed correctly now;
+  it was read as the second argument's rather than the third's.
+
+A minor release under the versioning rule in `docs/PUBLISHING.md`: six
+capability rows are added (H7, C12, C13, G15, G16, T1 — documentation is
+one feature and two rows, in hover and in completion). Six features ship
+too, but not the same six: workspace-wide diagnostics has no row, because
+the E2E example written for it did not pass and
+`docs/EXTENSION_CAPABILITIES.md`'s own rule is that a capability with no
+row is not a capability (024.14). It is in the list above with that
+qualification rather than left unmentioned. It closes the last three roadmap entries scheduled
+for it (024.R2, 024.R6, 024.R8).
+
+### Details
+
+Completion from a bare prefix is mostly a *ranking and bounding* problem,
+which is a different problem from the one the receiver-based path solves.
+A receiver narrows the answer to one type's members; a bare prefix matches
+far more, and an editor handed a thousand alphabetically-sorted candidates
+is worse than one handed none — the right answer is on page four and the
+user learns to stop pressing the key. The order is closeness to the
+cursor: locals, then methods on self, then workspace constants, then
+Kernel, rendered into `sortText` because that is what the editor actually
+sorts by. A one-character prefix returns only the first two: the other two
+match essentially everything at that length. The list is capped and says
+`isIncomplete`, so the editor re-asks as the prefix narrows.
+
+Workspace-wide diagnostics run on a background thread, never for a file
+open in a buffer (those belong to the path that knows the buffer's version
+and unsaved text), and abandon a superseded pass between files rather than
+finishing one already known to be stale. They are re-run whenever the
+answers change workspace-wide — most importantly when the Runtime Agent
+becomes ready, since the unknown-method check defers rather than guesses
+without one, and until now every unopened file kept the pre-Agent answer.
+
+The two new checks are held to the standard the argument-count check was
+held to: a wrong report on code that runs is worse than no check at all.
+Argument types are only compared where the expected type is *stated* — an
+RBS/RBI declaration with exactly one overload and no `*rest` — and only
+when both it and the argument's inferred type are concrete classes with no
+ancestor relation. RBS's `int`/`string`/`boolish` are excluded: they mean
+"anything that converts", not a class. The `@ivar` check is scoped to
+views, which are handed exactly what their controller action and callback
+chain assign; its whole safety is the distinction between "no context
+could be established" and "the action assigns nothing", and the first of
+those is silent.
+
+Semantic highlighting reports only what a parser settles and a regex
+cannot — a local variable read against a receiverless call, an instance
+variable, a parameter, a constant. It does not re-colour keywords, strings
+or numbers, which the grammar already gets right and which a second,
+disagreeing opinion would only make flicker. A file that does not parse
+reports nothing rather than half a file, so highlighting does not fall off
+as you type.
+
+Documentation is read from the source, where it already lives; nothing
+indexes comments. Completion goes through `completionItem/resolve` rather
+than putting documentation on the list, since reading the source for every
+candidate is a file read per item for documentation the user sees for one
+of them at most.
+
 ## 0.1.15 — the class-body fix, corrected
 
 0.1.14 removed about twelve thousand wrong reports and introduced a

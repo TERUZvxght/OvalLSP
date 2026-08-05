@@ -17,7 +17,9 @@ module Ovallsp
       # dispatch thread for didOpen/didChange, and *every*
       # `Server#republish_open_diagnostics` call site runs on a background
       # one: the Runtime Agent becoming ready, a restart, a routes or
-      # models refresh, a deferred ancestry answer landing.
+      # models refresh, a deferred ancestry answer landing. 0.2.0 adds
+      # another -- `WorkspaceDiagnostics` publishes for files nobody has
+      # open, on its own thread.
       #
       # The mutex is what makes a frame safe: no two writers are ever
       # inside the sink at once, so a `Content-Length` can never land in

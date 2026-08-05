@@ -220,7 +220,7 @@ module Ovallsp
         @includes_by_owner.fetch(canonical, []).reverse_each { |fact| entries.concat(ancestor_entries_for(fact, visited)) }
 
         superclass_fact = @superclass_by_owner[canonical]
-        if superclass_fact && superclass_fact.target.nil?
+        if superclass_fact && unresolvable_superclass?(superclass_fact.target)
           # `class Foo < <expression>`: the class has a parent whose name
           # we cannot resolve, so its method set is unbounded. Recorded as
           # a nameless, kindless ancestor rather than omitted, because
@@ -247,7 +247,7 @@ module Ovallsp
         @extends_by_owner.fetch(canonical, []).reverse_each { |fact| entries.concat(ancestor_entries_for(fact, visited)) }
 
         superclass_fact = @superclass_by_owner[canonical]
-        if superclass_fact && superclass_fact.target.nil?
+        if superclass_fact && unresolvable_superclass?(superclass_fact.target)
           # Unbounded parent: no tail, for the same reason the instance
           # side omits one. Appending Class/Module here would say the
           # chain is fully accounted for when its middle is not.
@@ -284,6 +284,29 @@ module Ovallsp
         when :module then DEFAULT_MODULE_SINGLETON_CHAIN
         else []
         end
+      end
+
+      # A parent this index cannot identify, which is two things rather
+      # than one:
+      #
+      # - `class Foo < <expression>` records no name at all;
+      # - a name `WorkspaceIndex` answers only by substituting a
+      #   different class. Resolution here is by last segment and is
+      #   deliberately not lexical (see this class's own comment), so
+      #   `class ThroughAssociation < Association` inside `Preloader`
+      #   picked whichever `Association` sorted first -- and ActiveRecord
+      #   8.1.3 has three. Every answer about the subclass was then about
+      #   a chain it does not have: `loaded?(owner)` was reported as
+      #   taking no arguments, twice, on correct code.
+      #
+      # Both mean the same thing to every reader of this chain -- the
+      # method set above this class is unbounded -- so both produce the
+      # same nameless entry rather than a resolved one. That is what
+      # makes the checks decline rather than report about the wrong
+      # class; `WorkspaceIndex#guessed_type_name?` states the rule for a
+      # receiver and this is the same rule one level up.
+      def unresolvable_superclass?(target)
+        target.nil? || @workspace_index.guessed_type_name?(target)
       end
 
       # Shared by prepend/include (their target's own *instance* side —

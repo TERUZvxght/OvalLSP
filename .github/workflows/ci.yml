@@ -7,14 +7,24 @@ on:
 
 jobs:
   core:
-    name: Core Server (Ruby)
+    name: Core Server (Ruby ${{ matrix.ruby }})
     runs-on: ubuntu-latest
+    # Both ends of what the gemspec allows. `docs/KNOWN_LIMITATIONS.md`
+    # says a version is supported once this suite exercises it, and until
+    # now the suite ran on 3.3 alone -- the one version that document
+    # called unsupported, while the two it called supported ran nowhere in
+    # CI. Either the claim or the matrix had to move; this is the half
+    # that makes the claim true rather than reworded.
+    strategy:
+      fail-fast: false
+      matrix:
+        ruby: ["3.3", "3.4"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: ruby/setup-ruby@v1
         with:
-          ruby-version: "3.3"
+          ruby-version: ${{ matrix.ruby }}
           bundler-cache: true
           working-directory: core
 

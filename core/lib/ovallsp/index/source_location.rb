@@ -26,6 +26,13 @@ module Ovallsp
 
       def byte_offset_to_utf16(line, byte_offset)
         return 0 if byte_offset <= 0
+        # An ASCII line has one byte, one character and one UTF-16 unit
+        # per position, so the walk below cannot answer anything but the
+        # offset itself. Most Ruby source is ASCII, and this runs once per
+        # range of every declaration and every argument in every file --
+        # `positional_locations` alone made `summarize` 30% slower over
+        # 400 stdlib files before this.
+        return byte_offset if line.ascii_only?
 
         bytes = 0
         units = 0

@@ -59,7 +59,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Completion: Active Record instance API | ✅ | — (no Runtime Agent) | — |
 | Completion: Active Record class API | ✅ | — (no Runtime Agent) | — |
 | Completion: route helpers | ✅ | — (no Runtime Agent) | — |
-| Completion at the start of an identifier — workspace classes, locals in scope, methods callable here | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
+| Completion at the start of an identifier — workspace classes, locals in scope, methods callable here | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion inserts a call template with tab stops | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Hover on a method shows its parameters | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Go to definition: workspace methods | ✅ | ⚠️ | ⚠️ 1.0.0 |
@@ -69,15 +69,17 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown method on a workspace class | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: unknown method on a model | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: unknown route helper | ✅ | — (no Runtime Agent) | — |
-| Diagnostics: wrong number of arguments | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics: wrong number of arguments | ⚠️ [^argcount] | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Diagnostics: reading an `@ivar` that is never assigned | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
+| Diagnostics: reading an `@ivar` that is never assigned | ⚠️ [^ivar] | ⚠️ | — |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
 | Find references, rename [^rename], workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Diagnostics: wrong argument *type* | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
-| Diagnostics across the whole project, not just open files | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
-| Documentation (RDoc/YARD) in hover and completion | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
-| Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | 0.2.0 | ⚠️ 0.2.0 | ⚠️ 1.0.0 |
+| Diagnostics: wrong argument *type* | ⚠️ [^argtype] | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics across the whole project, not just open files | ⚠️ [^ws] | ⚠️ | ⚠️ 1.0.0 |
+| Documentation (RDoc/YARD) in hover and completion [^doc] | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Completion: Active Record `Relation` API (`where`, `order`, `limit`) | 0.3.0 | — (no Runtime Agent) | — |
+| Completion after `self.` | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Inlay hints (inferred types, parameter names) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Code actions / quick fixes for each diagnostic | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Go to type definition | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
@@ -87,25 +89,71 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 
+[^argcount]: Verified by tests that fail if it breaks, and it does fire —
+    but every one of the 15 reports it produces over Ruby's standard
+    library, five Rails gems and minitest is wrong. Each has a recorded
+    cause: `def Const.method` recorded as an instance method (10 of the
+    15), a block's `self` read as the enclosing class, and a receiver
+    resolved by name collision. A corpus of gems is close to the worst
+    case — their dependencies are absent, so names resolve by
+    substitution — and the check's precision on a real application is
+    unmeasured (024.40).
+
+[^argtype]: The check is verified by a test that fails if it breaks, but
+    it has never fired on real Ruby: **zero** findings over Ruby's
+    standard library, five Rails gems and minitest — 2,042 files —
+    and zero over prism with its own RBS loaded. Every finding it
+    produced before 0.2.0's last review round was wrong, and fixing those
+    left none. It reports only where an RBS/RBI declaration states the
+    parameter type, has exactly one overload and no `*rest`, and both the
+    declared and the argument's own type are plain classes (024.37).
+
+[^ivar]: ✅ would mean a test fails if it breaks in that environment,
+    and the E2E example passes against a hand-written empty
+    `ApplicationController` — a shape `rails new` does not produce.
+    Railties 7.2, 8.0 and 8.1 all generate one that calls `allow_browser
+    versions: :modern`, and a class-body call the analysis does not model
+    silences the check for every view beneath it. So in a default Rails
+    application this check never fires (024.22).
+
 [^rename]: A method a macro declared — `attr_accessor :name`,
     `delegate :title, to: :author` — is refused rather than renamed. There
     is no identifier token to rewrite, and editing only the call sites
     would leave the declaration behind and the file would not run
     (024.28).
 
+[^ws]: More than ⚠️ promises and less than ✅ requires. The workspace-wide
+    pass is covered by Server-level and unit specs, but it has no
+    end-to-end row in `docs/EXTENSION_CAPABILITIES.md`: the example
+    written for one — a never-opened probe file in the real Rails fixture
+    — produced no diagnostic in 45 seconds. Recorded as 024.14, open.
+
+[^doc]: Only where a receiver was written. In hover, that means
+    `widget.charge`; hovering the `def` itself, a call on implicit self,
+    or anything inside an ERB template shows the type without the
+    documentation. In completion it means the list a `.` produces —
+    the bare-prefix list this release added carries no documentation,
+    because only the receiver path attaches what `completionItem/resolve`
+    needs to find the comment.
+
 Rows carrying a version are not built anywhere yet; the version is the
 release they are planned for, ordered by what a user notices soonest.
 Each names a **minor** release exactly, never a `0.2.x`-style range,
 because a capability can only ever arrive in a minor one — that is what
 minor means here. A patch never adds a row. Several rows sharing a
-version ship together in that release, the way 0.1.6 shipped five. The
-first three are measured against Pylance, the closest well-known
-reference point for a language server in a dynamically typed language:
-project-wide diagnostics (today a mistake in a file you are not looking
-at is invisible), documentation in hover (hover says what a thing is,
-never what it is for), and semantic highlighting (Ruby's `foo` is
-ambiguous between a local variable and a method call — the engine already
-knows which, the editor does not). Rationale for each, and for the
+version ship together in that release, the way 0.1.6 shipped five.
+
+Three of the rows above were measured against Pylance, the closest
+well-known reference point for a language server in a dynamically typed
+language. 0.2.0 ships two of them outright — documentation in
+hover (hover said what a thing is and never what it is for) and
+semantic highlighting (Ruby's `foo` is ambiguous between a local
+variable and a method call — the engine already knew which, the editor
+did not) — and the third, project-wide diagnostics (a mistake in a file
+you are not looking at used to be invisible), with the qualification the
+matrix marks. The rows that still carry a version are measured the same
+way.
+Rationale for each, and for the
 Pylance features deliberately *not* planned, is in
 [`docs/design/tasks/024-deferred-review-findings.md`](docs/design/tasks/024-deferred-review-findings.md)
 (024.R3). [`docs/ROADMAP.md`](docs/ROADMAP.md) states the same plan
@@ -140,10 +188,19 @@ variable is reported by the same check, under the same limitation. An
 unassigned `@ivar` is genuinely different — Ruby returns `nil` rather
 than raising — and has its own row.
 
-A dash means the capability is defined by Rails data that only the
-Runtime Agent can supply. In an untrusted workspace the Agent
-deliberately does not start, and outside a Rails app there is nothing for
-it to report — so these are absent by design, not broken.
+A dash means the capability cannot apply in that environment. Usually
+that is because it is defined by Rails data only the Runtime Agent can
+supply: in an untrusted workspace the Agent deliberately does not start,
+and outside a Rails app there is nothing for it to report. The two
+`@ivar` rows are dashed for a different reason — they are scoped to ERB
+views reached by Rails' controller/view convention, which a plain Ruby
+project does not have. Either way, absent by design, not broken.
+
+One dashed row used to be worse than absent: with no routes loaded,
+every `*_path`/`*_url` call was reported as a missing route rather than
+left alone. 0.2.0 fixed it — the check now waits for a route table to
+actually arrive, rather than reading an empty one as an answer
+([024.24](docs/KNOWN_LIMITATIONS.md#reports-that-are-wrong-today)).
 
 The ⚠️ column for plain Ruby is not a guess that it fails. Most of it
 almost certainly works today. It carries 1.0.0 because guaranteeing it —
@@ -160,8 +217,11 @@ relied on stopped working. The full statement is in
 
 Each ✅ corresponds to a row of [`docs/EXTENSION_CAPABILITIES.md`](docs/EXTENSION_CAPABILITIES.md),
 which describes what the user does and what must happen, and is verified
-by `core/spec/e2e/capabilities_spec.rb` plus
-`vscode/scripts/verify-installed-extension.sh`.
+by `core/spec/e2e/capabilities_spec.rb`. That suite runs in CI on Linux
+against the Core's sources; the rows describe darwin-arm64 with the
+bundled Core, and no workflow runs them there.
+`vscode/scripts/verify-installed-extension.sh` checks the installed
+extension end to end but is run by hand — no workflow invokes it.
 
 ## Status
 

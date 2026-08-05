@@ -123,6 +123,11 @@ module E2E
       []
     end
 
+    # Raw request access, for a capability with no purpose-built helper --
+    # semantic tokens and completion-item resolve both answer shapes that
+    # only one example each looks at.
+    def raw_request(method, params, timeout: 60) = request(method, params, timeout: timeout)
+
     # The pid of the Core process this client owns, so B3 can assert what
     # actually matters after a shutdown: that nothing survives it.
     def core_pid = @wait.pid

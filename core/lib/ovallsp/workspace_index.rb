@@ -262,6 +262,54 @@ module Ovallsp
       @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
     end
 
+    # Whether `resolve_type_name` answered about a *different name* than
+    # the one it was asked about. It always answers when the last segment
+    # matches something, and should -- for completion and go-to-definition
+    # a plausible class beats none.
+    #
+    # A diagnostic is the other case. Reporting "X has no method named y"
+    # about a class the engine substituted is an assertion about a
+    # receiver it has not identified.
+    #
+    # Two ways the substitution happens, and the first version of this
+    # guard only caught the second:
+    #
+    # - **the name carries a namespace and no declared type has it.**
+    #   `Ripper::Lexer` in prism's `lex_compat.rb` resolved to
+    #   `Prism::Translation::Parser::Lexer` and `ripper.lex` was reported
+    #   unknown. Counting candidates does not see this: there is only one
+    #   `Lexer`, and it is the wrong one. What gives it away is that the
+    #   caller wrote a namespace and got a class from a different one.
+    # - **the name is bare and several types share it.** Then the pick is
+    #   between them, and there is nothing to prefer. This repository grew
+    #   a second `Collector` in 0.2.0 and a method the parser records was
+    #   reported unknown.
+    #
+    # A bare name matching exactly one type is *not* a guess: that is the
+    # lookup working, and it is how every reference from inside a
+    # namespace resolves -- `LocalInferencer` hands over the constant as
+    # written, without the lexical qualification `ReceiverResolution`
+    # applies to an explicit receiver.
+    #
+    # 024.19 is this, reaching the argument-type check.
+    def guessed_type_name?(name)
+      @mutex.synchronize do
+        candidates, qualified = type_candidates_locked(name)
+        # Nothing matched, so nothing was substituted: `resolve_type_name`
+        # answers nil and every caller keeps the name as written. Calling
+        # that a guess silenced 2,517 `unknown-method` reports over the
+        # standard library and five Rails gems -- every class whose
+        # superclass lives outside the corpus stopped being closed, and
+        # the check went off for the whole class. Measured, not reasoned:
+        # the corpus run is what caught it.
+        next false if candidates.empty?
+        next false if candidates.any? { |sid| sid.name == qualified }
+        next true if Index::SymbolId.bare_name(name.to_s).include?("::")
+
+        candidates.size > 1
+      end
+    end
+
     # Same resolution as #resolve_type_name, but returns the declared
     # kind (:class or :module) instead of the name — Semantic::HierarchyIndex
     # uses this to decide whether a type implicitly inherits from Object
@@ -291,6 +339,45 @@ module Ovallsp
     def method_symbol_ids(owner, kind:)
       needle = Index::SymbolId.qualify_owner(owner)
       @mutex.synchronize { @by_owner_kind.fetch([needle, kind], []).sort_by(&:name) }
+    end
+
+    # Completion's question, which is not `search`'s. A completion prefix
+    # means the *start* of the simple name and only certain kinds are
+    # offerable, and both predicates have to run before the truncation:
+    # filtering `search`'s already-truncated answer filters what is left
+    # after `limit` substring matches were kept, and on any workspace with
+    # more than `limit` of those, every prefix match can already be gone.
+    # Measured before this existed: 250 classes named `Aaa001Artish`... and
+    # one named `Artzzz`, typing `art` returned nothing at all.
+    #
+    # Distinct SymbolIds rather than declarations, because `limit:` should
+    # count names a user could pick, and one class reopened in forty files
+    # is one name.
+    #
+    # Reads `@by_simple_name`, whose keys are already the downcased simple
+    # names this asks about, rather than scanning `@by_symbol` and
+    # deriving one per symbol -- and takes `min_by(limit)` rather than
+    # sorting everything to keep the first `limit`. Both are the rules
+    # `spec/meta/workspace_index_cost_spec.rb` already states for
+    # `#method_symbol_ids` and `#rank`; this method was written after
+    # them and carried neither. Measured on a 21.7k-symbol workspace,
+    # same prefixes, byte-identical answers: 4.8ms per keystroke against
+    # 3.0ms for `wi`/`wid`/`widg`, 2.6ms against 1.4ms for a prefix that
+    # narrows. This runs on the request path, per keystroke, holding the
+    # lock every hover and every diagnostic needs.
+    def prefix_search(prefix, limit:, kinds:)
+      needle = prefix.to_s.downcase
+      @mutex.synchronize do
+        matches = []
+        @by_simple_name.each do |name, symbol_ids|
+          next unless name.start_with?(needle)
+
+          symbol_ids.each { |sid| matches << sid if kinds.include?(sid.kind) }
+        end
+        matches.min_by(limit) do |sid|
+          [simple_name(sid).downcase == needle ? 0 : 1, sid.name.to_s, sid.kind.to_s, sid.owner.to_s]
+        end
+      end
     end
 
     # Workspace symbol search: case-insensitive substring match on the
@@ -381,19 +468,32 @@ module Ovallsp
       name.to_s.split("::").last.to_s
     end
 
-    def resolve_type_symbol_locked(name)
+    # Every declared class or module whose last segment is this name's
+    # last segment, in a stable order, paired with the name as written
+    # normalised for comparison against them.
+    #
+    # One place, because `#resolve_type_symbol_locked` picks from this
+    # list and `#guessed_type_name?` reports whether the pick was a
+    # substitution. Computed twice, the two could disagree about which
+    # candidates exist, and the flag would then describe a different pick
+    # than the one returned.
+    #
+    # Only the written name needs normalising: an indexed class/module
+    # name always carries the `::`, so normalising that side too was a
+    # branch no input could reach (0.1.12, round 8).
+    def type_candidates_locked(name)
       raw = name.to_s
       simple = raw.split("::").last
       candidates = ordered_symbol_ids(simple, matching: lambda { |sid|
         %i[class module].include?(sid.kind) && simple_name(sid) == simple
       })
+      [candidates, Index::SymbolId.qualify_owner(raw)]
+    end
+
+    def resolve_type_symbol_locked(name)
+      candidates, qualified = type_candidates_locked(name)
       return nil if candidates.empty?
 
-      # Only `raw` needs normalising: it is a name as written, and may be
-      # bare. An indexed class/module name always carries the `::`, so
-      # normalising that side too was a branch no input could reach
-      # (0.1.12, round 8).
-      qualified = Index::SymbolId.qualify_owner(raw)
       # `.first` is safe here because `candidates` came from
       # `ordered_symbol_ids`, not from the Set directly. Until 0.1.13 it
       # was index order, so an ambiguous bare name resolved to a different

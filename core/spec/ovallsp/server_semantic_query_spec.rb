@@ -44,7 +44,7 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
 
     build_server(input).run
 
-    labels = sent_messages.first[:result].map { |item| item[:label] }
+    labels = sent_messages.first[:result][:items].map { |item| item[:label] }
     expect(labels).to include("build", "burn")
   end
 
@@ -59,7 +59,7 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
 
     build_server(input).run
 
-    labels = sent_messages.first[:result].map { |item| item[:label] }
+    labels = sent_messages.first[:result][:items].map { |item| item[:label] }
     expect(labels).to include("upcase")
   end
 
