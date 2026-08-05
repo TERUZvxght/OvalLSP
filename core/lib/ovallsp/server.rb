@@ -2380,7 +2380,26 @@ module Ovallsp
     def enclosing_call_name_range(document, position)
       text = document.text
       idx = document.position_to_char_offset(position) - 1
-      idx -= 1 while idx >= 0 && text[idx] != "("
+      # *Unmatched*, which this claimed and did not do: it stopped at the
+      # first `(` going back, so a call that had already closed before the
+      # cursor won. `takes(compute(1), 2)` answered with `compute`'s
+      # signature from the closing paren onward, and on scaffolded Rails
+      # `link_to "Edit", edit_article_path(@article), class: "btn"` showed
+      # `edit_article_path`'s parameters for the rest of the line.
+      #
+      # Harmless while the receiverless path did not resolve -- every such
+      # position has `(` rather than `.` before the name, so signature help
+      # answered nothing. 0.2.0 gave that path a receiver (the enclosing
+      # `self`) and turned silence into a wrong answer, which is the trade
+      # this project takes the other way round.
+      depth = 0
+      while idx >= 0
+        case text[idx]
+        when ")" then depth += 1
+        when "(" then (depth.zero? ? break : depth -= 1)
+        end
+        idx -= 1
+      end
       return nil if idx.negative?
 
       name_end = idx

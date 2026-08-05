@@ -1214,6 +1214,43 @@ kind: defect
 user-visible: yes
 ```
 
+**The half that reached users is fixed in 0.2.1**, and it was the
+largest single source of wrong diagnostics this engine produced. The
+receiver position a candidate records is the receiver's *exclusive* end
+now, which works with the inclusive `contains?` rather than against it:
+no inner element's range reaches that offset and the receiver's does, so
+the walk answers with the receiver.
+
+Measured over Ruby 3.4.7's standard library, five Rails 8.1.3 gems and
+minitest, both revisions over one corpus, diffed by position:
+**`unknown-method` 3,362 -> 1,810 — 1,556 removed, 4 introduced.**
+`[w].each` reported that a workspace class has no `each`;
+`listeners[:on_x]&.each` that a Symbol has none, 604 times in prism's
+`dispatcher.rb` alone.
+
+The 4 introduced are all `OpenSSL::Cipher.new(x).key_len` and its
+neighbours, and they are 024.13's family rather than this one: the
+receiver now resolves *correctly* to `OpenSSL::Cipher`, which the
+standard library reopens in Ruby while implementing it in C, so it looks
+closed and its C methods look missing. Verified against the interpreter
+-- `key_len`, `iv_len` and `digest_length` all exist. Over the real
+Rails application at `ovaldev` the change introduces nothing: the two
+revisions are byte-identical there, because an ordinary project does not
+reopen `OpenSSL::Cipher`.
+
+`contains?` itself is still inclusive, and the entry stays open for it.
+What is fixed is one caller that had been compensating for it wrongly.
+
+Two things about how this survived twenty-two rounds are worth keeping:
+
+- **The document's own user-facing half described a different
+  consequence.** `KNOWN_LIMITATIONS` cited 024.20 only in the paragraph
+  about blocks having no type. Nothing told a reader that the engine's
+  largest false-positive family was this, so no round went looking.
+- **Every round measured the total and not the shape.** 3,362 is a
+  number that moves for many reasons; "1,545 of them have a receiver
+  ending in `]` or `)`" is one grep, and it names the cause.
+
 and it blocks a correct answer 0.2.0 had to settle for approximating.
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`contains?`,

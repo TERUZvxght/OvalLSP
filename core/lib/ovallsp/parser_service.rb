@@ -895,14 +895,32 @@ module Ovallsp
           elsif (name = raw_constant_name(node.receiver))
             [name, true] # `Foo.bar` -- always a class-level call, regardless of the lexical writing context
           else
-            # One character *inside* the receiver, not one past it. Past
-            # it is the following token -- the `[` of `params[:id]` --
-            # and that position belongs to the enclosing expression too,
-            # so `Article.find(params[:id])` resolved `[]`'s receiver to
-            # Article and reported a missing `[]` on the model. The last
-            # character of the receiver is unambiguously the receiver's.
+            # The receiver's *exclusive* end, which is what selects the
+            # receiver itself.
+            #
+            # `contains?` reads a node's exclusive end offset as
+            # inclusive (024.20), so an offset one character *inside* the
+            # receiver -- which is what this recorded until 0.2.1 -- is
+            # also the exclusive end of the receiver's own last element,
+            # and the walk answers with the innermost node containing it.
+            # Every receiver whose text ends in `]` or `)` was therefore
+            # judged as its own last inner expression: `[w].each`
+            # reported that a workspace class has no `each`, and
+            # `listeners[:on_x]&.each` that a Symbol has none. 1,545 of
+            # the 3,362 `unknown-method` reports over Ruby's standard
+            # library, five Rails gems and minitest had a receiver of
+            # that shape -- 604 in prism's `dispatcher.rb` alone.
+            #
+            # The exclusive end works *with* the inclusive `contains?`
+            # rather than against it: no inner element's range reaches
+            # it, and the receiver's does, so the innermost containing
+            # node is the receiver. The comment this replaces argued for
+            # the character before on the strength of
+            # `Article.find(params[:id])` resolving `[]`'s receiver to
+            # `Article` -- a constant receiver never reaches this branch,
+            # and the shape does not reproduce in either direction.
             position = Index::SourceLocation.to_position(node.receiver.location.end_line,
-                                                           [node.receiver.location.end_column - 1, 0].max, @lines)
+                                                           node.receiver.location.end_column, @lines)
             [{ position: position }, false] # arbitrary expression receiver -- always an instance call
           end
 

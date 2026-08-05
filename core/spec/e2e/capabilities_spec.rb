@@ -859,6 +859,34 @@ RSpec.describe "Extension capabilities", :e2e do
   end
 
   describe "signature help (continued)" do
+    # Every other example here ends the source at an *unclosed* `(`,
+    # which is the one input for which "scan back for any `(`" and "scan
+    # back for an unmatched one" agree. With a call that has already
+    # closed before the cursor they disagree, and the scan answered with
+    # the inner call's signature for the rest of the line -- on
+    # scaffolded Rails code, `link_to "Edit", edit_article_path(@article),
+    # class: "btn"` showed `edit_article_path`'s parameters from the
+    # closing paren onward.
+    it "S1: reports the enclosing call's parameters, not an inner call that has already closed" do
+      with_file("app/models/nested_signature_probe.rb", <<~RUBY) do |uri|
+        class NestedSignatureProbe
+          def takes(first, second); end
+          def compute(a); a; end
+
+          def run
+            takes(compute(1), 2)
+          end
+        end
+      RUBY
+        # `    takes(compute(1), 2)` -- column 22 is the `2`, `takes`'s
+        # second argument, with `compute(1)` closed behind it.
+        labels = @client.signature_labels(uri, 5, 22).join(" ")
+
+        expect(labels).to include("first")
+        expect(labels).not_to include("compute")
+      end
+    end
+
     it "S2: reports an RBS overload label for a stdlib method" do
       with_file("app/models/stdlib_signature_probe.rb", <<~RUBY) do |uri|
         class StdlibSignatureProbe

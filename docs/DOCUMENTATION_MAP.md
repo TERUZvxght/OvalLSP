@@ -41,13 +41,14 @@ updated in the same change, not "later".
 is *not* generated from the Markdown docs, so nothing propagates on its
 own. Treat every page as another row above.
 
-**It is not in this tree.** `site/` lives on
-`claude/github-pages-official-site-fef0f5` and has not been merged, so
-the site rows in the trigger table cannot be followed from here — they
-have to be *carried*, and the list two sections down is where they are
-carried to. Anything a change makes stale on the site goes in that list
-until the branch lands. A trigger you cannot follow is a trigger nobody
-follows.
+**It is in this tree**, as of 0.2.0, and the trigger table's site rows
+are followable directly — `git ls-files site` lists seventeen files.
+This paragraph said the opposite until 0.2.1, because the sentence was
+written while the site was still on a branch and the section two below
+was rewritten when it landed without anyone re-reading this one. A
+mandatory checklist that contradicts itself is worse than one that is
+merely stale: a contributor who believes this paragraph skips five rows
+and defers them to a list that no longer exists.
 
 | Page | Mirrors |
 |---|---|

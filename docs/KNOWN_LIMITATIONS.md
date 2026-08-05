@@ -243,15 +243,18 @@ Six more are older than this release and untouched by it:
 - **A method a loop defines is reported as unknown.** `EVENTS.each { |id,
   _| alias_method "on_#{id}", :_dispatch_1 }` is idiomatic in generated
   code, and the name is not a literal, so the index records nothing and
-  every call to it is reported. This is the single largest concentration
-  the engine produces on any measured corpus: **525 reports in one file**,
-  prism's `translation/ripper.rb`. `define_method` with a computed name
-  is the same shape. It is listed here rather than only under "static
+  every call to it is reported. `define_method` with a computed name is
+  the same shape. It is listed here rather than only under "static
   analysis limitations" because the engine's own policy is that a wrong
   report is worse than a missed one, and this is a wrong report, not a
   missed one. What 0.2.0 changes is the blast radius: diagnostics now
   publish for files nobody opened, so it reaches the Problems panel
-  rather than waiting to be found.
+  rather than waiting to be found. (This bullet claimed "525 reports in
+  one file, prism's `translation/ripper.rb`" and called it the largest
+  concentration the engine produces. That was measured before the same
+  release removed those reports; the file now produces 7, none of them
+  this shape. A number recorded and not re-measured after the fix that
+  invalidated it.)
 - **`attr_accessor` written inside a `def` inside `class << self` is
   recorded as declaring class-level methods**, where Ruby defines
   instance ones — the macro runs when that method is *called*, with the

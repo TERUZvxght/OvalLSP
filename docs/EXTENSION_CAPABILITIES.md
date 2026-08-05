@@ -38,8 +38,9 @@ experience is roadmap item 024.R1, for 1.0.0.
 
 Untrusted workspaces stay as described at the end of this document: the
 Runtime Agent does not start, and every Rails-derived capability degrades
-to its static-only answer by design — with one exception, which is a
-defect rather than a degradation and is named there.
+to its static-only answer by design. Until 0.2.0 there was one exception
+that was a defect rather than a degradation; it is fixed, and the closing
+section says which.
 
 ## How these are verified
 
