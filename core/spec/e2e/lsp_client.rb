@@ -95,6 +95,11 @@ module E2E
       Array(result && result[:signatures]).map { |signature| signature[:label] }
     end
 
+    def signature_active_parameter(uri, line, character)
+      result = request("textDocument/signatureHelp", { textDocument: { uri: uri }, position: { line: line, character: character } })
+      result && result[:activeParameter]
+    end
+
     def references(uri, line, character)
       Array(request("textDocument/references", { textDocument: { uri: uri }, position: { line: line, character: character } }))
     end

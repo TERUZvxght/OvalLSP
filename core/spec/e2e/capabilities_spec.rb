@@ -973,6 +973,24 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(@client.signature_labels(uri, 4, 10).join(" ")).to include("first")
       end
     end
+
+    # The parameter list is only half of what the popup shows: the editor
+    # also bolds one of them. With nothing said about which, VS Code bolds
+    # the first for the whole call, so past the first comma the popup is
+    # pointing at the wrong parameter rather than at none.
+    it "S4: says which parameter the cursor is on" do
+      with_file("app/models/active_parameter_probe.rb", <<~RUBY) do |uri|
+        class ActiveParameterProbe
+          def takes(first, second); end
+
+          def run
+            takes("a", 2
+          end
+        end
+      RUBY
+        expect(@client.signature_active_parameter(uri, 4, 16)).to eq(1)
+      end
+    end
   end
 
   describe "signature help (continued)" do

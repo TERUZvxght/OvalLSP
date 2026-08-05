@@ -6,6 +6,70 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.1 — Fewer wrong reports, and the promises already published
+
+Nothing new to learn here. This release is about the engine saying fewer
+things that are not true, and about the places where the site, the README
+and the capability tables promised something the build did not do.
+
+- Fixed: a call whose receiver ends in `]` or `)` — `[widget].each`,
+  `handlers[:on_save]&.call` — was reported as an unknown method. The
+  receiver was looked up one character inside itself, so the lookup
+  answered with the receiver's own last element. Over Ruby 3.4.7's
+  standard library, five Rails 8.1.3 gems and minitest, **1,556 of 3,362
+  unknown-method reports are gone**; four are new, and all four belong to
+  a separately recorded case (024.13). On a real Rails application the
+  two builds report identically.
+- Fixed: `delegate`, `class_attribute`, `mattr_accessor`,
+  `thread_mattr_accessor`, `concerning` and `deprecate` were reported as
+  unknown methods in a model or controller body. The Runtime Agent read a
+  class's own methods as `base.methods - Object.methods`, and `Object` is
+  itself a class object — so everything `Module` defines was subtracted
+  away. Five wrong reports on a scaffolded application; none now.
+- Fixed: a workspace class sharing a name with a core one no longer
+  answers for the core one. Your own `Serializer::Elements::String` stood
+  in for the `String` a literal produces, so `"hello".upcase` was reported
+  unknown while hover at the same position said `upcase() -> String`.
+- Fixed: a file that does not parse gets its syntax errors and nothing
+  else. Typing `.` at the end of a method made `a.end` a call, and the
+  engine reported that your class has no method named `end` — on the
+  commonest editing action there is. The other half of this is not fixed:
+  `a.` followed by a line like `b = "str"` parses cleanly as `a.b =` and
+  is reported as such.
+- Fixed: `Range` and `Regexp` literals have a type. `(1..10).` completed
+  to nothing and hovering `/abc/` answered an empty popup, against a
+  capability row promising a literal's type.
+- Changed: typing `A` offers candidates. 0.2.0 needed two characters
+  before workspace classes joined the list — which is exactly the example
+  the site used. Measured before removing the floor: it bought 0.4 ms per
+  keystroke. On a real application `A` goes from 2 candidates to 14, with
+  the local still ahead of every class.
+- Added: hover answers a call written with no receiver. `article_params`
+  in your own controller showed an empty popup; go to definition and
+  signature help were given that reading in 0.2.0 and hover was not.
+- Added: signature help marks the parameter the cursor is on. The popup
+  listed the parameters and said nothing about which one you were
+  writing, so the editor bolded the first for the whole call — pointing
+  at the wrong parameter rather than at none, from the first comma on.
+
+### Details
+
+Six capability rows read PASS while their examples verified something
+narrower than the row promised, and one row (`C7`) asked for a prefix
+that could not match what it promised. All seven now say and test the
+same thing.
+
+`024.14` — recorded as "project-wide diagnostics produce nothing end to
+end" — does not reproduce: on a real Rails application a file nobody
+opened is answered 1.35 s from process start, 42 URIs published. The
+capability row and example 0.2.0 shipped without now exist.
+
+Three corpus measurements during this release produced confident false
+results — a diff of a file still being written, a diff between runs over
+different corpora, and a `cd` that persisted so both sides ran the same
+build. Each is recorded, and the check that caught the last one was a
+test, not a second reading of the numbers.
+
 ## 0.2.0 — Completion from the first keystroke, and diagnostics beyond the open file
 
 **If you are on 0.1.13, this brings 0.1.14 and 0.1.15 with it.** Both were
@@ -15,11 +79,10 @@ wrong reports and introduced a handful of its own; 0.1.15 is those
 corrections. Arriving together, the intermediate state never existed for
 anyone.
 
-- Added: typing `A` offers candidates. Completion needed a `.` first, so
+- Added: typing `Ar` offers candidates. Completion needed a `.` first, so
   workspace classes, the locals in scope and the methods callable right
-  there offered nothing until the whole name was written. From the first
-  character: the sources nearer the cursor rank ahead of the workspace-wide
-  ones, so a class is in the list without displacing a local.
+  there offered nothing until the whole name was written. Two characters,
+  not one, in this release — 0.2.1 removed that floor.
 - Added: mistakes in files you have not opened are reported. (0.2.0
   shipped this without a capability row, on a measurement that said an
   end-to-end example produced nothing; 0.2.1 found it working, added the

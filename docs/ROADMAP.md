@@ -44,7 +44,6 @@ planned, are in
 - **Per-check severity settings**, so a check you disagree with can be a
   hint rather than a warning, or off.
 - **Auto-`require` insertion.**
-- **Signature help highlights the argument the cursor is in.**
 
 ## 1.0.0 — Guarantees, not features
 

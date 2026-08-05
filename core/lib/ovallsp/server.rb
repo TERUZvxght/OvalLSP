@@ -2320,10 +2320,56 @@ module Ovallsp
       method_name = enclosing_call_name(document, position)
       return { signatures: [] } unless method_name
 
-      route_signature = route_signature_help(method_name)
-      return route_signature if route_signature
+      help = route_signature_help(method_name) || method_signature_help(document, position, method_name)
+      return help if help.fetch(:signatures).empty?
 
-      method_signature_help(document, position, method_name)
+      # Which parameter is being typed. Without it every popup bolds the
+      # first one for the whole call, which stops being a missing detail
+      # and starts being a wrong claim the moment a comma is written.
+      help.merge(activeParameter: active_parameter_index(document, position))
+    end
+
+    # Argument separators of *this* call: the top-level commas between its
+    # `(` and the cursor. A comma inside a nested call, an array or hash
+    # literal, or a string belongs to something else.
+    #
+    # Text rather than AST for the same reason #enclosing_call_name_range
+    # is: signature help is asked for mid-typing, when the argument list
+    # is by definition unfinished and often unparseable.
+    def active_parameter_index(document, position)
+      range = enclosing_call_name_range(document, position)
+      return 0 unless range
+
+      text = document.text
+      cursor = document.position_to_char_offset(position)
+      index = 0
+      depth = 0
+      offset = range.end + 1
+      while offset < cursor
+        case text[offset]
+        when "(", "[", "{" then depth += 1
+        when ")", "]", "}" then depth -= 1
+        when "," then index += 1 if depth.zero?
+        when '"', "'" then offset = string_literal_end(text, offset, cursor)
+        end
+        offset += 1
+      end
+      index
+    end
+
+    # The offset of the quote that closes the literal opening at `start`,
+    # or `limit` if the cursor is still inside it — an unterminated string
+    # is the normal state of a half-written argument, and scanning on past
+    # the cursor would let a later quote in the file close it.
+    def string_literal_end(text, start, limit)
+      quote = text[start]
+      offset = start + 1
+      while offset < limit
+        return offset if text[offset] == quote
+        offset += 1 if text[offset] == "\\"
+        offset += 1
+      end
+      limit
     end
 
     def route_signature_help(method_name)

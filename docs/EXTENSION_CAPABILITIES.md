@@ -189,6 +189,7 @@ settle. Everything it declines is listed under the non-goals below.
 | S1 | Types `(` after a workspace method | its parameter list | PASS |
 | S2 | Types `(` after a stdlib method | the RBS overload label | PASS |
 | S3 | Types `(` after a route helper | the helper's required parts | PASS |
+| S4 | Types a second argument | the popup marks the *second* parameter as the active one | PASS |
 
 ## Semantic highlighting
 

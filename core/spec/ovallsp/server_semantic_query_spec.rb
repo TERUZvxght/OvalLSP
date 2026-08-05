@@ -93,6 +93,55 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
     expect(signature[:label]).to eq("build(name, count)")
   end
 
+  # A signature help popup that lists parameters but never says which one
+  # you are typing bolds the first one for the whole call, which is
+  # actively misleading past the first comma -- the editor is asserting
+  # something, and after `,` the assertion is wrong. The index is the
+  # count of top-level commas between the call's `(` and the cursor:
+  # commas nested inside another call's arguments, inside an array or
+  # hash literal, or inside a string are not argument separators of this
+  # call.
+  describe "which parameter the cursor is on" do
+    def active_parameter_for(argument_text)
+      source = "class Widget\n  def build(name, count)\n  end\nend\n\nWidget.new.build(#{argument_text}\n"
+      input =
+        did_open("file:///widget.rb", source) +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
+          params: { textDocument: { uri: "file:///widget.rb" },
+                    position: { line: 5, character: 17 + argument_text.length } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+      sent_messages.first[:result][:activeParameter]
+    end
+
+    it "is the first before any comma" do
+      expect(active_parameter_for("")).to eq(0)
+    end
+
+    it "advances with each argument written" do
+      expect(active_parameter_for('"a", ')).to eq(1)
+    end
+
+    it "ignores a comma belonging to a nested call" do
+      expect(active_parameter_for("compute(1, 2)")).to eq(0)
+    end
+
+    it "ignores a comma inside an array literal" do
+      expect(active_parameter_for("[1, 2], ")).to eq(1)
+    end
+
+    it "ignores a comma inside a hash literal" do
+      expect(active_parameter_for("{ a: 1, b: 2 }")).to eq(0)
+    end
+
+    it "ignores a comma inside a string" do
+      expect(active_parameter_for('"a, b"')).to eq(0)
+    end
+  end
+
   # Wiring MethodAnalyzer's return-type inference into LocalInferencer
   # (the Finding-1 fix above) needs its own cache invalidation: without
   # it, editing a method's body would keep hovering its *stale* return
