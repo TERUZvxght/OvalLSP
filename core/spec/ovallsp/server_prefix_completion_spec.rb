@@ -467,6 +467,29 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
       expect(labels).to include("@article", "@articles")
     end
 
+    # Both reviewers of round 25 found this independently, and it is the
+    # two places an `@ivar` is most typed: a view, and an action other
+    # than the one that assigned it. `ivar_items` read only the bindings
+    # the walk to the cursor had built, so a `before_action` callback's
+    # `@article` was invisible from `edit`, and a controller's ivars were
+    # invisible from the template it rendered. Hover has read both since
+    # 0.2.0.
+    it "offers an instance variable assigned in another method of the same class" do
+      result = complete(<<~RUBY)
+        class ArticlesController
+          def set_article
+            @article = Article.new
+          end
+
+          def edit
+            @aHERE
+          end
+        end
+      RUBY
+
+      expect(result[:items].map { |item| item[:label] }).to include("@article")
+    end
+
     it "offers nothing that cannot be written after an `@`" do
       labels = complete(IVAR_SOURCE, extra_opens: did_open("file:///p.rb", "class ArticleProfile; end\n"))[:items]
                .map { |item| item[:label] }

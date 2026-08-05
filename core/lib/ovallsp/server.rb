@@ -2341,7 +2341,8 @@ module Ovallsp
       # and propose `article` for `@a`, without its sigil.
       ivar_prefix = ivar_prefix_at_position(document, position)
       if ivar_prefix
-        result = @prefix_completion.ivar_items(document: document, position: position, prefix: ivar_prefix)
+        result = @prefix_completion.ivar_items(document: document, position: position, prefix: ivar_prefix,
+                                               initial_env: ivar_environment(document))
         return { isIncomplete: result.incomplete, items: result.items }
       end
 
@@ -2756,6 +2757,34 @@ module Ovallsp
     # `LocalInferencer` has no `ClassVariableWriteNode` case, so the
     # environment holds no `@@` keys; this used to carry a comment saying
     # they took the same path, which was false.
+    # The instance variables in scope that the document itself does not
+    # assign: a view's come from the controller action that rendered it,
+    # and a controller action's from every other method of the same class
+    # -- a `before_action` callback most of all, which is where a
+    # scaffolded controller puts `@article`.
+    #
+    # Hover has read the first of these since 0.2.0 (H3); completion after
+    # `@` shipped reading neither, so it answered nothing in a view and
+    # nothing in any action but the assigning one -- the two places an
+    # `@ivar` is most typed.
+    def ivar_environment(document)
+      return ivars_for_view(document.uri) if erb_view?(document.uri)
+
+      sibling_ivars(document)
+    rescue StandardError
+      {}
+    end
+
+    def sibling_ivars(document)
+      summary = @file_summaries[document.uri] || @parser_service.summarize(document)
+      owners = summary.declarations.filter_map { |d| d.symbol_id.owner if d.symbol_id.kind == :instance_method }.uniq
+      owners.reduce({}) do |acc, owner|
+        @local_inferencer.method_nodes(document, owner_name: owner).values.reduce(acc) do |inner, node|
+          inner.merge(@local_inferencer.infer_ivars_for_method_node(node, self_type_name: owner))
+        end
+      end
+    end
+
     def ivar_prefix_at_position(document, position)
       text = document.text
       offset = document.position_to_char_offset(position)

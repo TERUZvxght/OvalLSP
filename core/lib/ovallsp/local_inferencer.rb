@@ -102,7 +102,14 @@ module Ovallsp
     # declared in a method the cursor is not in does not appear -- the
     # descent already starts a fresh environment per `def`, which is what
     # makes that true rather than anything here.
-    def scope_at(document, position, max_steps: nil)
+    # `initial_env` seeds bindings before the walk, exactly as `#infer_at`
+    # takes one: an ERB template assigns no instance variables of its own,
+    # so without it the ivars a controller action put there are invisible
+    # to everything that reads a scope -- which is why completion after
+    # `@` answered nothing in a view while hovering the same name in the
+    # same view answered its type.
+    def scope_at(document, position, initial_env: {}, max_steps: nil)
+      @seeded_ivars = ivars_from(initial_env)
       offset = document.position_to_byte_offset(position)
       result = parse_cached(document)
       @steps = 0
@@ -111,7 +118,7 @@ module Ovallsp
       @scope_capture = nil
       @capturing_scope = true
 
-      locate(result.value.statements, offset, {})
+      locate(result.value.statements, offset, initial_env.dup)
       @scope_capture || Scope.new(locals: {}, ivars: {}, self_type: nil)
     rescue BudgetExceeded, StandardError
       @scope_capture || Scope.new(locals: {}, ivars: {}, self_type: nil)
@@ -120,7 +127,10 @@ module Ovallsp
       @scope_capture = nil
     end
 
+    def seeded_ivars = @seeded_ivars || {}
+
     def infer_at(document, position, initial_env: {}, max_steps: nil)
+      @seeded_ivars = ivars_from(initial_env)
       # Prism node locations are UTF-8 byte offsets, not Ruby character
       # offsets — using #position_to_char_offset here would select the
       # wrong node whenever a multibyte character appears anywhere before
@@ -431,7 +441,13 @@ module Ovallsp
       singleton = node.receiver.is_a?(Prism::SelfNode)
       enclosing_self = @self_type_stack.last
       @self_type_stack.push(singleton ? Types::Generic.new(name: "ClassOf", type_arg: enclosing_self) : enclosing_self)
-      locate(node.body, offset, parameter_env(node))
+      # Locals do not cross a `def` and instance variables do: `@article`
+      # assigned by a `before_action` callback is visible from every
+      # action of that controller, which is how Rails is written. Only
+      # what was *seeded* carries in -- an ivar the walk itself assigned
+      # in an earlier sibling method is not in scope here, because the
+      # walk only ever descends towards the cursor.
+      locate(node.body, offset, seeded_ivars.merge(parameter_env(node)))
     ensure
       @self_type_stack.pop
     end

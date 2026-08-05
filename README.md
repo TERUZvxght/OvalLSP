@@ -134,10 +134,12 @@ verified per platform, is what 1.0.0 requires (024.R4).
 
 Rows carrying a version are not built anywhere yet; the version is the
 release they are planned for, ordered by what a user notices soonest.
-Each names a **minor** release exactly, never a `0.2.x`-style range,
-because a capability can only ever arrive in a minor one — that is what
-minor means here. A patch never adds a row. Several rows sharing a
-version ship together in that release, the way 0.1.6 shipped five.
+Each names a **minor** release exactly, never a `0.2.x`-style range: a
+minor release is where something *newly announced* arrives. A patch may
+still turn a row ✅, when the row names something the previous release
+was already understood to do and did not — 0.2.1 did that four times.
+Several rows sharing a version ship together in that release, the way
+0.1.6 shipped five.
 
 Three of the rows above were measured against Pylance, the closest
 well-known reference point for a language server in a dynamically typed
@@ -206,8 +208,9 @@ non-Rails project should expect (`docs/design/tasks/024-deferred-review-findings
 publishing and verifying the remaining platforms. Until then, nothing in
 that column is promised.
 
-Versions in this table are read as: patch means nothing a user sees
-changed, minor means a capability was added, major means something a user
+Versions in this table are read as: patch means nothing new was
+announced — a user may well see something change, and usually does —
+minor means a capability was announced, major means something a user
 relied on stopped working. The full statement is in
 [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
 

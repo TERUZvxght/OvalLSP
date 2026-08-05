@@ -218,6 +218,36 @@ end
 # The index pages carry an *excerpt* of the matrix -- a subset, in the
 # same order -- so every row they do have must agree, and rows they omit
 # are not an error.
+# The row *count* the index pages advertise, against the matrix they link
+# to. Round 23 corrected it from 39 to 41 by hand and round 25 found it
+# saying 41 against 42 — the same sentence, one release later, on the same
+# two pages. Counting is the one thing a check does better than a reader.
+#
+# The capability pages ship a static count of their own inside
+# `result-count`, which the page's JavaScript overwrites on load; it is
+# only visible with JavaScript off, and it was a third number again.
+[["index.html", "capabilities.html"], [File.join("ja", "index.html"), File.join("ja", "capabilities.html")]]
+  .each do |page_rel, matrix_rel|
+  page = read_page(File.join(SITE, page_rel))
+  total = read_page(File.join(SITE, matrix_rel)).scan(/<tr[^>]*data-status/).length
+  advertised = page.scan(/(\d+)(?:\s*(?:rows|項目))/).flatten.map(&:to_i)
+  next problems << "#{page_rel}: advertises no matrix row count" if advertised.empty?
+
+  advertised.reject { |count| count == total }.each do |count|
+    problems << "#{page_rel}: advertises #{count} matrix rows and #{matrix_rel} has #{total}"
+  end
+end
+
+[["capabilities.html", nil], [File.join("ja", "capabilities.html"), nil]].each do |page_rel, _|
+  page = read_page(File.join(SITE, page_rel))
+  total = page.scan(/<tr[^>]*data-status/).length
+  page.scan(%r{<p class="result-count"[^>]*>([^<]*)</p>}).flatten.each do |text|
+    text.scan(/(\d+)/).flatten.map(&:to_i).reject { |count| count == total }.each do |count|
+      problems << "#{page_rel}: its no-JavaScript row count says #{count} and the table has #{total}"
+    end
+  end
+end
+
 english_excerpt = site_matrix(read_page(File.join(SITE, "index.html")))
 expected = readme_matrix(File.join(REPO, "README.md")).to_h
 problems << "index.html: no capability rows found -- the excerpt markup changed shape" if english_excerpt.empty?

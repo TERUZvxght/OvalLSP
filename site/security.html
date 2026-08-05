@@ -248,11 +248,14 @@
           <p>
             The only thing OvalLSP itself writes to disk is its persistent parse cache under
             <code>$XDG_CACHE_HOME/ovallsp/</code> — or <code>~/.cache/ovallsp/</code> when that
-            variable is unset or empty — keyed by workspace and toolchain version.
-            <strong>It contains parts of your source code.</strong> Alongside the parsed
-            declarations and types it stores each method's body text and each parameter's
+            variable is unset or empty — keyed by workspace, toolchain version and OvalLSP's
+            own version. <strong>It contains parts of your source code.</strong> Alongside the
+            parsed declarations and types it stores each method's body text and each parameter's
             default expression verbatim, and each file's absolute path. Nothing in it is
-            transmitted anywhere, and deleting the directory is safe at any time.
+            transmitted anywhere, and deleting the directory is safe at any time. As of 0.2.1
+            OvalLSP also removes directories under that root at startup — this workspace's
+            older generations beyond the eight most recent, and workspaces that no longer
+            exist on disk.
           </p>
           <p class="text-mute">
             An earlier version of this page said &ldquo;not your source code's contents&rdquo;.

@@ -92,8 +92,8 @@ module Ovallsp
       # `prefix` includes the sigil, and so does every label: an editor
       # replaces the word it is completing, and the word here starts at
       # the `@`.
-      def ivar_items(document:, position:, prefix:)
-        scope = @query_service.scope_at(document, position)
+      def ivar_items(document:, position:, prefix:, initial_env: {})
+        scope = @query_service.scope_at(document, position, initial_env: initial_env)
         items = scope.ivars.filter_map do |name, type|
           next unless matches?(name, prefix)
 
