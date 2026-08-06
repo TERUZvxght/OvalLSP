@@ -323,6 +323,22 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
       expect(active_parameter_for("puts (1), ")).to eq(1)
     end
 
+    # An *unmatched* opener -- the cursor inside a literal whose call is
+    # still open -- drove the depth negative, so the scan kept walking
+    # past the real call and out into earlier lines. Two things came of
+    # it: `alpha([1, |2], 3)` answered nothing where 0.2.0 answered, and
+    # a cursor inside a literal with no enclosing call at all re-balanced
+    # against an earlier statement and answered with a call it is nowhere
+    # near. Depth cannot go below zero: there is no such thing as being
+    # more closed than closed.
+    it "finds the call when the cursor is inside an unclosed argument literal" do
+      expect(signature_labels_for("[1, ")).to include("build(name, count)")
+    end
+
+    it "finds the call when the cursor is inside an unclosed hash argument" do
+      expect(signature_labels_for("{ a: 1, ")).to include("build(name, count)")
+    end
+
     it "counts no comma written inside a comment" do
       expect(active_parameter_for("1, # a, comment\n    2")).to eq(1)
     end

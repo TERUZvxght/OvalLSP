@@ -2579,7 +2579,15 @@ module Ovallsp
         # call's, and an opener this scan ignored would leave that pair
         # unbalanced.
         when :paren_close, :nest_close then depth += 1
-        when :nest_open then depth -= 1
+        # Never below zero: an *unmatched* opener -- the cursor inside a
+        # literal whose call is still open -- drove the count negative,
+        # so the scan walked past the real call and out into earlier
+        # lines. `alpha([1, |2], 3)` answered nothing where 0.2.0
+        # answered, and a cursor in a literal with no enclosing call at
+        # all re-balanced against an earlier statement and answered with
+        # a call it is nowhere near. There is no being more closed than
+        # closed.
+        when :nest_open then depth -= 1 unless depth.zero?
         when :paren_open
           if depth.zero?
             idx = offset
@@ -2765,6 +2773,11 @@ module Ovallsp
       offset = document.position_to_char_offset(position)
 
       left = offset
+      # A Ruby method name can end in `!` or `?`, and stopping at one left
+      # the scan looking at the sigil rather than at what precedes the
+      # name -- so `def save!(a|)` answered with the method being
+      # *declared*.
+      left -= 1 if left.positive? && METHOD_NAME_SUFFIXES.include?(text[left - 1])
       left -= 1 while left.positive? && word_char?(text[left - 1])
       return false unless left.positive?
 
@@ -2776,7 +2789,10 @@ module Ovallsp
       # declared or removed, not one to resolve. The boundary is `def`
       # the keyword rather than the three letters: `predef use` is an
       # ordinary call and still gets the workspace's answer.
-      text[...left].match?(/(?:\A|[^\w.])(?:un)?def\s+\z/)
+      #
+      # `def self.` and `def Foo.` are the same declaration with a
+      # receiver written between, which the anchor below cannot see past.
+      text[...left].match?(/(?:\A|[^\w.])(?:un)?def\s+(?:[A-Za-z_][\w:]*\.)?\z/)
     end
 
     def receiver_dot_before?(document, position)

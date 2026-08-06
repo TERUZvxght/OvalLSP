@@ -105,6 +105,13 @@ and the capability tables promised something the build did not do.
   hundred KB with any non-ASCII character in it took seconds — and the
   Core answers one request at a time, so hover, completion and
   diagnostics waited behind it.
+- Fixed: the signature popup no longer vanishes when the cursor is
+  inside an argument that is still being written — `create(tags: [1, |2],`
+  — and no longer answers with a call from an earlier line when there is
+  no enclosing call at all.
+- Fixed: no signature popup inside the parameter list of a `def` whose
+  name ends in `!` or `?`, or a `def self.` — it was answering with the
+  method being declared.
 
 ### Details
 

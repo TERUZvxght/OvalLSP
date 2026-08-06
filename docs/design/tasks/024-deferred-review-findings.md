@@ -2555,3 +2555,46 @@ so it needs the same propagation `ivars_for_view` already does for
 instance variables, keyed by partial name instead of by action. Deferred
 rather than done: it is a new inference path, not a correction, and 0.2.1
 is a patch.
+
+## 024.45 Re-analysis after a keystroke is seconds on a large file, against a stated 300 ms
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#reindex`, `#publish_diagnostics`,
+called synchronously from `#handle_did_change`),
+`core/lib/ovallsp/workspace_index.rb`, `core/lib/ovallsp/diagnostics/engine.rb`
+
+Measured as the difference between a run with five `didChange`
+notifications and one with none, so the one-off RBS load cancels:
+
+| file | lines | per-edit re-analysis |
+|---|---|---|
+| `uri/generic.rb` | 1,592 | 4.31 s |
+| `net/http.rb` | 2,574 | 2.06 s |
+| `rubygems/specification.rb` | 2,666 | 5.25 s |
+
+Super-linear: a synthetic file at 506 lines costs 0.10 s and at 16,006
+lines 23.7 s. `ParserService#summarize` is about 19 ms of it; the rest is
+reference resolution and the diagnostics engine.
+
+`docs/design/docs/01-product-requirements.md` states `p95 <= 300ms` for
+single-file re-analysis, so this is seven to seventeen times over on
+files an ordinary Rails application contains. The Core answers one
+request at a time, so hover, completion and signature help queue behind
+every keystroke.
+
+**Not a 0.2.1 regression** -- `main` measures 4.86 s on
+`specification.rb` against 0.2.1's 5.17 s. It is recorded now because
+nothing recorded it: `KNOWN_LIMITATIONS` had no mention of latency or
+file size in either language, so the product shipped a numeric
+requirement it misses by an order of magnitude with no limitation row.
+
+**Direction:** the requirement is about *re-analysis*, and the Server
+does it on the dispatch thread inside `didChange`. The two halves are
+debouncing (which `024.41` also wants, for a different reason) and
+incremental re-analysis of the edited region rather than the file. Both
+are their own task; neither belongs in a patch.

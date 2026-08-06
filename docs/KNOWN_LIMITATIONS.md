@@ -384,6 +384,20 @@ missed one", so each is narrow on purpose. What that costs a user:
   The G17 row and its example exist now, and 024.14 records what the
   original measurement most likely hit.)
 
+## How long an edit takes to re-analyse
+
+**Seconds, on a file of a couple of thousand lines.** Measured per
+keystroke, with the one-off signature load excluded: `net/http.rb` (2,574
+lines) 2.1 s, `rubygems/specification.rb` (2,666 lines) 5.3 s, and it
+grows faster than the file does. The Core answers one request at a time,
+so hover, completion and signature help wait behind it.
+
+The design document states 300 ms for this, so it is not a matter of
+taste — it is a requirement the product misses by an order of magnitude,
+and it had no entry here until 0.2.1 (024.45). It is not new in this
+release; 0.2.0 measures the same. Files of a few hundred lines, which is
+most application code, re-analyse in well under a tenth of a second. <!-- documents: 024.45 -->
+
 ## What a partial's local resolves to
 
 **Nothing.** In `_article.html.erb`, `article` is supplied by whatever

@@ -71,6 +71,10 @@ RSpec.describe "Ovallsp::Server declarations under the cursor" do
         42
         first
       end
+
+      def caller_of_run
+        run(1)
+      end
     end
   RUBY
 
@@ -120,10 +124,45 @@ RSpec.describe "Ovallsp::Server declarations under the cursor" do
     expect(ask("textDocument/signatureHelp", line: 1, character: 12)[:signatures]).to be_empty
   end
 
+  # This example asserted `be_empty` at line 5 -- a bare local, not a call
+  # and not inside any argument list -- so it passed with signature help
+  # working and passed with signature help deleted. It was the only
+  # counterweight to the `def` guard two examples above, which left that
+  # guard's direction untested: nothing failed if it started refusing
+  # every call in the file.
   it "still offers signature help from inside a real call's arguments" do
-    result = ask("textDocument/signatureHelp", line: 5, character: 9)
+    result = ask("textDocument/signatureHelp", line: 9, character: 8)
 
-    expect(result[:signatures]).to be_empty
+    expect(result[:signatures].map { |signature| signature[:label] }).to include("run(first)")
+  end
+
+  # The `def` guard reads the characters before the name, and a Ruby
+  # method name can end in `!` or `?` -- which stopped that scan dead, so
+  # `def save!(a|)` answered with the method being *declared*. `def self.`
+  # missed the same guard for a different reason: the regex anchors on
+  # `def\s+`, and `self.` sits between.
+  {
+    "a bang" => ["def bang!(beta)", 15],
+    "a question mark" => ["def query?(gamma)", 16],
+    "a singleton receiver" => ["def self.built(delta)", 20]
+  }.each do |description, (declaration, character)|
+    it "offers no signature help inside the parameter list of a def with #{description}" do
+      source = "class Probe\n  #{declaration}\n  end\nend\n"
+      input =
+        frame(
+          jsonrpc: "2.0", method: "textDocument/didOpen",
+          params: { textDocument: { uri: "file:///d.rb", text: source, version: 1, languageId: "ruby" } }
+        ) +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
+          params: { textDocument: { uri: "file:///d.rb" }, position: { line: 1, character: character } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+
+      expect(sent_messages.first[:result][:signatures]).to be_empty
+    end
   end
 
   # Jumping from a declaration to itself is a no-op, and returning nothing
