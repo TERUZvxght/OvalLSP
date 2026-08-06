@@ -21,9 +21,14 @@
 RSpec.describe "documented example counts" do
   def read(name) = File.read(File.expand_path("../../../#{name}", __dir__), encoding: "UTF-8")
 
+  # Only when the runner was given no files and no filters -- `rspec` with
+  # nothing after it. Anything narrower is a subset, and `example_count`
+  # would be the subset's size, which is not what the documents claim.
   def whole_suite?
-    manager = RSpec.configuration.filter_manager
-    manager.inclusions.empty? && RSpec.configuration.files_to_run.length > 1
+    return false unless RSpec.configuration.filter_manager.inclusions.empty?
+
+    Dir.glob(File.expand_path("../**/*_spec.rb", __dir__.sub(%r{/meta\z}, ""))).length ==
+      RSpec.configuration.files_to_run.length
   end
 
   # `1,833` and `1833` are the same claim; the documents use the first and
