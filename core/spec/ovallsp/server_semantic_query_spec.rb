@@ -212,6 +212,80 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
       expect(signature_labels_for("%w[a (b], 2")).to include("build(name, count)")
     end
 
+    # A budget rather than a benchmark: the number below is three orders
+    # of magnitude above what this costs and still catches the regression
+    # it exists for.
+    #
+    # 0.2.1 made the backward scan stop at the first *unmatched* `(`,
+    # which is correct and removed the early exit -- with the parens
+    # before the cursor balanced there is nothing to stop at, so the loop
+    # ran to offset 0. It asked a per-character mask about each character
+    # on the way, and `text[idx]` on a string Ruby has classed as
+    # multibyte is not constant time. Measured on a 603 KB file with one
+    # Japanese comment in it: **8.0 seconds** to answer that there is no
+    # signature, on a single-threaded server, with completion and
+    # diagnostics queued behind it. Reachable by pressing the signature
+    # help shortcut anywhere the parens happen to balance.
+    it "answers a position with no enclosing call quickly, on a large file with a multibyte character in it" do
+      body = (1..8000).map { |i| "  def m#{i}(a, b)\n    x = a + b\n    x\n  end\n" }.join
+      source = "class Big\n  # 日本語のコメント\n#{body}end\n"
+      document = Ovallsp::TextDocument.new(uri: "file:///big.rb", text: source, version: 1, language_id: "ruby")
+      server = Ovallsp::Server.allocate
+      position = { line: source.lines.length - 2, character: 4 }
+      server.send(:enclosing_call_name_range, document, position)
+
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      3.times { server.send(:enclosing_call_name_range, document, position) }
+      elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - elapsed) / 3
+
+      expect(elapsed).to be < 1.0, "#{(elapsed * 1000).round} ms per call to answer that there is no enclosing call"
+    end
+
+    # The *cold* half of the same cost, which the example above cannot
+    # see: its cache is keyed on the document version, so an editor pays
+    # this on every keystroke. Prism reports byte offsets and these scans
+    # count characters, and converting each with `byteslice(0, n).length`
+    # is O(offsets x filesize) -- 13 seconds on a 530 KB file with one
+    # Japanese comment in it, four times worse with every doubling, while
+    # its ASCII twin cost 21 ms.
+    it "converts a multibyte file's token offsets in one pass, not one pass per token" do
+      body = (1..3000).map { |i| "  def m#{i}(a, b)\n    x = a + b\n    x\n  end\n" }.join
+      source = "class Big\n  # 日本語のコメント\n#{body}end\n"
+      server = Ovallsp::Server.allocate
+
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      server.send(:compute_structural_tokens, source)
+      server.send(:compute_non_code_spans, source)
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - elapsed
+
+      expect(elapsed).to be < 2.0, "#{(elapsed * 1000).round} ms to index a #{source.bytesize / 1024} KB file once"
+    end
+
+    # `activeParameter` is an index into *one* signature, and a client
+    # that is told nothing takes the first. RBS overloads are ordered
+    # shortest-first, so `h.fetch(:a, ` sent index 1 against an overload
+    # declaring one parameter -- outside it, which LSP says means no
+    # highlight at all. The popup bolded `_Key` while the cursor was on
+    # the second argument: the exact failure S4 was added to remove.
+    it "picks the overload that has the parameter the cursor is on" do
+      source = "h = {}\nh.fetch(:a, 2\n"
+      input =
+        did_open("file:///f.rb", source) +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
+          params: { textDocument: { uri: "file:///f.rb" }, position: { line: 1, character: 13 } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+
+      result = sent_messages.first[:result]
+      active = result[:signatures][result[:activeSignature]]
+      expect(result[:activeParameter]).to eq(1)
+      expect(active[:parameters].length).to be > result[:activeParameter],
+                                            "activeParameter #{result[:activeParameter]} is outside #{active[:label]}"
+    end
+
     it "counts no comma written inside a comment" do
       expect(active_parameter_for("1, # a, comment\n    2")).to eq(1)
     end

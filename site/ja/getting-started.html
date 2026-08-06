@@ -108,7 +108,7 @@
             明示的な <code>ovallsp.rubyExecutablePath</code>、あるいは
             <a href="https://mise.jdx.dev/">mise</a>、<a href="https://asdf-vm.com/">asdf</a>、
             <a href="https://github.com/rbenv/rbenv">rbenv</a>、
-            <a href="https://brew.sh/">Homebrew</a>（<code>/opt/homebrew</code>）のいずれかで検出できる必要があります。検証しているのは 3.4.5 と 3.4.7 です。<strong>3.4 ちょうど</strong>である必要があります。VSIX はビルド時のバージョン向けにコンパイルされたネイティブ拡張を同梱し、それ以外を拒否するため、3.3 の環境では機能が縮退するのではなく不一致のメッセージが出ます。Core のソース自体は 3.3 にも対応していて CI も両方で走らせていますが、それが意味を持つのはチェックアウトから Core を動かす場合だけです。
+            <a href="https://brew.sh/">Homebrew</a>（<code>/opt/homebrew</code>）のいずれかで検出できる必要があります。検証しているのは 3.4.5 と 3.4.7 です。<strong>検証しているのは 3.4 です。</strong>VSIX はビルド時のバージョン向けにコンパイルされたネイティブ拡張を同梱しているため、それ以外の Ruby では同梱物は使われません。0.2.1 からは、その Ruby が <code>prism</code> と <code>rbs</code> を自前で読めるかを拡張機能が確認します。読めればそちらで動かし、Output チャンネルにその旨を出します。読めなければ導入を促します。Ruby 3.3 はたいてい前者になります — サポート対象ではなく、未検証の組み合わせです。
           </p>
         </div>
         <div class="card">

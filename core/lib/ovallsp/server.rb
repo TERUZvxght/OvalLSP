@@ -1543,7 +1543,9 @@ module Ovallsp
 
       position = params.fetch(:position)
       query_context = build_query_context(uri, position)
-      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(document, position, budget: query_context.budget)
+      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(
+        document, position, initial_env: ivar_environment(document), budget: query_context.budget
+      )
       warn_if_stale(query_context)
       { type: type.to_s }
     end
@@ -2438,7 +2440,19 @@ module Ovallsp
       # Which parameter is being typed. Without it every popup bolds the
       # first one for the whole call, which stops being a missing detail
       # and starts being a wrong claim the moment a comma is written.
-      help.merge(activeParameter: active_parameter_index(document, position))
+      #
+      # And *which signature* it indexes into. A client told nothing takes
+      # the first, and RBS orders overloads shortest-first, so
+      # `h.fetch(:a, ` sent index 1 against an overload declaring one
+      # parameter -- outside it, which LSP reads as "highlight nothing",
+      # while the popup showed `_Key` bolded. The first overload that
+      # actually has that parameter is the one the user is writing.
+      active = active_parameter_index(document, position)
+      help.merge(activeParameter: active, activeSignature: active_signature_index(help[:signatures], active))
+    end
+
+    def active_signature_index(signatures, active_parameter)
+      signatures.index { |signature| signature.fetch(:parameters, []).length > active_parameter } || 0
     end
 
     # Argument separators of *this* call: the top-level commas between its
@@ -2452,21 +2466,19 @@ module Ovallsp
       range = enclosing_call_name_range(document, position)
       return 0 unless range
 
-      text = document.text
-      code = code_offsets(document)
+      tokens = structural_tokens(document)
       cursor = document.position_to_char_offset(position)
       index = 0
       depth = 0
-      offset = range.end + 1
-      while offset < cursor
-        if code.include?(offset)
-          case text[offset]
-          when "(", "[", "{" then depth += 1
-          when ")", "]", "}" then depth -= 1
-          when "," then index += 1 if depth.zero?
-          end
+      tokens.each do |offset, kind|
+        next if offset <= range.end
+        break if offset >= cursor
+
+        case kind
+        when :paren_open, :nest_open then depth += 1
+        when :paren_close, :nest_close then depth -= 1
+        when :comma then index += 1 if depth.zero?
         end
-        offset += 1
       end
       index
     end
@@ -2553,16 +2565,23 @@ module Ovallsp
       # walk past the real call and answer nothing, and
       # `takes(label("x("), ` answer with `label` -- silence turned into a
       # wrong answer by the same depth count that was added to remove one.
-      code = code_offsets(document)
+      tokens = structural_tokens(document)
+      cursor = idx + 1
+      index = last_token_index_before(tokens, cursor)
       depth = 0
-      while idx >= 0
-        if code.include?(idx)
-          case text[idx]
-          when ")" then depth += 1
-          when "(" then (depth.zero? ? break : depth -= 1)
+      idx = -1
+      while index >= 0
+        offset, kind = tokens[index]
+        if kind == :paren_close
+          depth += 1
+        elsif kind == :paren_open
+          if depth.zero?
+            idx = offset
+            break
           end
+          depth -= 1
         end
-        idx -= 1
+        index -= 1
       end
       return nil if idx.negative?
 
@@ -2596,72 +2615,111 @@ module Ovallsp
     # wrong in the direction the old code was already wrong in, and
     # signature help does not reach across one.
     #
-    # Recomputed per request, so it is built as *spans* rather than as a
-    # set of every offset: a 570 KB file made 222,893 Set entries and cost
-    # 100 ms, and both scans that read it ask a handful of questions. The
-    # spans are the non-code ones, sorted and disjoint by construction
-    # (they come from the lexer in order), so a lookup is a binary search.
-    def code_offsets(document)
+    # The structural tokens of this document -- the parentheses, brackets,
+    # braces and commas that are *code* -- as a sorted array of
+    # `[offset, symbol]`, cached per document version.
+    #
+    # Both of signature help's scans used to walk the text one character
+    # at a time, asking a per-character mask whether each was code. That
+    # was correct and unusably slow: with the parens before the cursor
+    # balanced there is no early exit, so the loop ran to offset 0, and
+    # `text[idx]` on a string Ruby has classed as multibyte is not a
+    # constant-time operation. Measured on a 603 KB file with one Japanese
+    # comment in it: **8.0 s** to answer that there is no signature at
+    # all, on a single-threaded server, with completion and diagnostics
+    # queued behind it.
+    #
+    # Prism already told us which tokens these are while building the
+    # mask, so keeping *them* instead of a set of every code offset makes
+    # both scans walk parentheses rather than characters -- and the
+    # multibyte cost disappears with the character indexing. `%w(`'s
+    # parenthesis never appears here because Prism lexes it as a string
+    # delimiter, which is the same reason the mask existed.
+    #
+    # `#{` and `}` are kept as a brace pair: they nest and balance like
+    # any other, and what is written between them is real Ruby.
+    STRUCTURAL_TOKENS = {
+      PARENTHESIS_LEFT: :paren_open, PARENTHESIS_RIGHT: :paren_close,
+      BRACKET_LEFT: :nest_open, BRACKET_RIGHT: :nest_close,
+      BRACE_LEFT: :nest_open, BRACE_RIGHT: :nest_close,
+      EMBEXPR_BEGIN: :nest_open, EMBEXPR_END: :nest_close,
+      COMMA: :comma
+    }.freeze
+
+    def structural_tokens(document)
       key = [document.uri, document.version, document.text.length]
-      return @code_offsets_value if @code_offsets_key == key
+      return @structural_tokens_value if @structural_tokens_key == key
 
-      @code_offsets_key = key
-      @code_offsets_value = CodeMask.new(compute_non_code_spans(document.text))
+      @structural_tokens_key = key
+      @structural_tokens_value = compute_structural_tokens(document.text)
     end
 
-    # "Is this character offset code" over a sorted list of non-code
-    # spans. `include?` so the two scans read it exactly as they read the
-    # Set it replaces.
-    class CodeMask
-      def initialize(spans)
-        @starts = spans.map(&:first)
-        @spans = spans
+    def compute_structural_tokens(text)
+      found = Prism.lex(text).value.filter_map do |token, _state|
+        kind = STRUCTURAL_TOKENS[token.type]
+        kind && [token.location.start_offset, kind]
       end
-
-      def include?(offset)
-        index = (@starts.bsearch_index { |start| start > offset } || @starts.length) - 1
-        return true if index.negative?
-
-        span = @spans[index]
-        offset >= span[1]
-      end
+      to_character_offsets(text, found)
+    rescue StandardError
+      []
     end
 
-    # Prism's own lexer, not a hand-written scan of quotes and `#`.
-    #
-    # The scan this replaces knew about `"`, `\'` and `#` and nothing else,
-    # which is not enough to be right about Ruby: everything between
-    # quotes was "not code", so a call written inside `#{...}` was
-    # invisible and signature help went dark there; and a `#` that opens
-    # no comment (`/a#b/`, `"%d#%d"`) blanked the rest of the line, so the
-    # comma after it was not counted and the popup bolded the wrong
-    # parameter. Round 24 wrote it and round 25 found both, which is the
-    # point at which this project stops writing a third approximation.
-    #
-    # A token is not code if it is a string\'s, a regexp\'s, a heredoc\'s or
-    # a comment\'s own text or delimiters -- `%w(` is a delimiter, and its
-    # `(` opens no call. `#{` and `}` are ordinary tokens and stay code:
-    # they nest and balance like any other brace, and what is written
-    # between them is real Ruby.
-    NON_CODE_TOKEN_PREFIXES = %w[STRING_ REGEXP_ HEREDOC_ EMBDOC_].freeze
+    # Prism reports byte offsets and every caller here counts characters.
+    # They are the same number until the file contains one multibyte
+    # character, and converting each offset with `byteslice(0, n).length`
+    # is O(offsets x filesize) -- which is why one Japanese comment made a
+    # 265 KB file cost 3.4 seconds per keystroke while its ASCII twin cost
+    # 150 ms, and why it got four times worse with every doubling. One
+    # pass over the string converts all of them.
+    def to_character_offsets(text, entries)
+      return entries if entries.empty? || text.bytesize == text.length
+
+      mapping = {}
+      byte = 0
+      character = 0
+      text.each_char do |char|
+        mapping[byte] = character
+        byte += char.bytesize
+        character += 1
+      end
+      mapping[byte] = character
+      entries.map { |entry| entry.map { |value| value.is_a?(Integer) ? mapping.fetch(value, value) : value } }
+    end
+    # The index of the last structural token at or before `offset`.
+    def last_token_index_before(tokens, offset)
+      (tokens.bsearch_index { |token| token.first >= offset } || tokens.length) - 1
+    end
+
+    # Whether `offset` falls inside a string, a regexp, a heredoc or a
+    # comment. Only the `@` completion asks this -- a YARD `@param` tag or
+    # an `@` inside a string is nobody typing an instance variable -- and
+    # it asks about one offset per request, so the spans are kept rather
+    # than a per-character mask.
+    NON_CODE_TOKEN_PREFIXES = %w[STRING_ REGEXP_ HEREDOC_ EMBDOC_ PERCENT_ SYMBOL_ WORDS_SEP].freeze
     NON_CODE_TOKEN_TYPES = %i[COMMENT CHARACTER_LITERAL].freeze
 
+    def inside_string_or_comment?(document, offset)
+      key = [document.uri, document.version, document.text.length]
+      unless @non_code_spans_key == key
+        @non_code_spans_key = key
+        @non_code_spans_value = compute_non_code_spans(document.text)
+      end
+      @non_code_spans_value.any? { |start, finish| offset >= start && offset < finish }
+    end
+
     def compute_non_code_spans(text)
-      spans = Prism.lex(text).value.filter_map do |token, _state|
-        next unless non_code_token?(token.type)
+      found = Prism.lex(text).value.filter_map do |token, _state|
+        name = token.type.to_s
+        next unless NON_CODE_TOKEN_TYPES.include?(token.type) ||
+                    NON_CODE_TOKEN_PREFIXES.any? { |prefix| name.start_with?(prefix) }
 
         [token.location.start_offset, token.location.end_offset]
       end
-      # `Prism` locations are byte offsets and the callers count
-      # characters, which are the same thing only until the file contains
-      # one multibyte character.
-      text.bytesize == text.length ? spans : spans.map { |span| span.map { |b| text.byteslice(0, b).length } }
+      to_character_offsets(text, found)
+    rescue StandardError
+      []
     end
 
-    def non_code_token?(type)
-      name = type.to_s
-      NON_CODE_TOKEN_TYPES.include?(type) || NON_CODE_TOKEN_PREFIXES.any? { |prefix| name.start_with?(prefix) }
-    end
 
     # If `position` sits on an identifier immediately preceded by `.`
     # (`receiver.|method`, cursor anywhere in "method"), returns the
@@ -2726,8 +2784,15 @@ module Ovallsp
       # `#analyzable_document`, so the ERB is extracted. Extracting again
       # -- which is what borrowing `#explain_type_in_view` wholesale does
       # -- breaks the local case this row was written for.
-      initial_env = erb_view?(document.uri) ? ivars_for_view(document.uri) : {}
-      type = @query_service.type_at(document, dot_position, initial_env: initial_env)
+      # The same environment the `@` list is built from, for the same
+      # reason: a scaffolded controller assigns `@article` in a
+      # `before_action` and uses it in `edit`, `update` and `destroy`, so
+      # a walk that only sees the current method body finds nothing. 0.2.1
+      # gave the `@` list that environment and left this one behind, which
+      # produced the disagreement it had just spent the release removing
+      # elsewhere: the `@` popup said `Article` and `@article.` a
+      # keystroke later offered nothing.
+      type = @query_service.type_at(document, dot_position, initial_env: ivar_environment(document))
       type == Types::UNKNOWN ? nil : type
     end
 
@@ -2795,7 +2860,7 @@ module Ovallsp
 
       left -= 1
       left -= 1 if left.positive? && text[left - 1] == "@"
-      return nil unless code_offsets(document).include?(left)
+      return nil if inside_string_or_comment?(document, left)
 
       text[left...offset]
     end
@@ -3482,7 +3547,9 @@ module Ovallsp
 
       position = params.fetch(:position)
       query_context = build_query_context(uri, position)
-      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(document, position, budget: query_context.budget)
+      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(
+        document, position, initial_env: ivar_environment(document), budget: query_context.budget
+      )
       warn_if_stale(query_context)
       lines = hover_lines(document, position, type)
       return empty_hover if lines.empty?

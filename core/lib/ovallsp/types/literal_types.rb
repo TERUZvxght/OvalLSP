@@ -81,9 +81,16 @@ module Ovallsp
         Types.normalize_union([Types.remove_nil(left), right])
       end
 
+      # A falsy left contributes what it *is* when falsy, and only `nil`
+      # and `false` are falsy. So a `Boolean` left contributes `Boolean`,
+      # not `nil` -- `true && false` was answered `Boolean | nil`, and
+      # `true && 5` `Integer | nil`, neither of which the expression can
+      # ever be. Anything else this engine cannot rule out being nil
+      # contributes the nil it might have been.
       def and_type(left, right)
         return left if left == Types::NIL
-        return right if left.is_a?(Nominal) && left.name != "Boolean"
+        return Types.normalize_union([right, left]) if left.is_a?(Nominal) && left.name == "Boolean"
+        return right if left.is_a?(Nominal)
 
         Types.normalize_union([right, Types::NIL])
       end

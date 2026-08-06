@@ -126,7 +126,7 @@ suite in step: every row must have an example, every example a row.
 | C11 | Types `post.` or `@post.` inside an ERB template | the model's members, resolved from the template's Ruby regions rather than its HTML — the `@ivar` from the controller action that assigned it, as hover already did | PASS |
 | C12 | Types `Art` with no receiver in front of it | workspace classes, the locals in scope, and the methods callable at that position | PASS |
 | C13 | Highlights a completion candidate declared with an RDoc/YARD comment, *in the list a receiver produced* | the comment appears as the item's documentation | PASS |
-| C14 | Types `@` in a method that assigns instance variables | the instance variables in scope, each with its sigil and its inferred type — and nothing that cannot be written after an `@` | PASS |
+| C14 | Types `@` in a controller action, or in the view it renders | the instance variables in scope, each with its sigil and its inferred type — including ones a `before_action` or another action assigned — and nothing that cannot be written after an `@` | PASS |
 
 C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
 a bare constant inferred as `Unknown`, so nothing downstream ever saw a

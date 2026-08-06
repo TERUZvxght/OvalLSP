@@ -115,11 +115,12 @@
             <a href="https://mise.jdx.dev/">mise</a>, <a href="https://asdf-vm.com/">asdf</a>,
             <a href="https://github.com/rbenv/rbenv">rbenv</a> or
             <a href="https://brew.sh/">Homebrew</a> (<code>/opt/homebrew</code>). Tested against
-            3.4.5 and 3.4.7. <strong>3.4 exactly</strong>: the VSIX bundles native extensions
-            compiled for the version it was built under and refuses any other, so a 3.3
-            installation gets a mismatch message rather than a degraded experience. The Core's
-            own source does support 3.3 — CI runs its suite on both — which matters only if you
-            run the Core from a checkout.
+            3.4.5 and 3.4.7. <strong>3.4 is what is verified.</strong> The VSIX bundles native extensions
+            compiled for the version it was built under, so on any other Ruby they are not used.
+            Since 0.2.1 the extension checks whether that Ruby can load <code>prism</code> and
+            <code>rbs</code> itself: if it can, OvalLSP runs against those and notes it in the
+            Output channel; if it cannot, it tells you to install them. Ruby 3.3 usually takes
+            the first path — an unverified combination rather than a supported one.
           </p>
         </div>
         <div class="card">

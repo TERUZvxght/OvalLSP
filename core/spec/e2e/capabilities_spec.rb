@@ -569,6 +569,28 @@ RSpec.describe "Extension capabilities", :e2e do
 
         expect(items.map { |item| item[:label] }).to include("@article")
         expect(items.map { |item| item[:label] }).to all(start_with("@"))
+        # The row promises "with its inferred type", which nothing looked
+        # at.
+        expect(items.find { |item| item[:label] == "@article" }[:detail]).to eq("Article")
+      end
+    end
+
+    # The half 0.2.1 actually fixed, and the half the row had no clause
+    # for: a scaffolded controller assigns `@article` in a `before_action`
+    # and uses it in `edit`, `update` and `destroy`.
+    it "C14: offers an instance variable another method of the class assigned" do
+      with_file("app/models/ivar_sibling_probe.rb", <<~RUBY) do |uri|
+        class IvarSiblingProbe
+          def set_article
+            @article = Article.new
+          end
+
+          def edit
+            @a
+          end
+        end
+      RUBY
+        expect(@client.completion_items(uri, 6, 6).map { |item| item[:label] }).to include("@article")
       end
     end
 

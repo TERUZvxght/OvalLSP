@@ -490,6 +490,29 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
       expect(result[:items].map { |item| item[:label] }).to include("@article")
     end
 
+    # The `@` list and the `.` after it must answer the same question. In
+    # a scaffolded controller `@article` is assigned by a `before_action`
+    # and used in `edit`, `update` and `destroy`, so a walk that only sees
+    # the current method body finds nothing -- and 0.2.1 gave the `@` list
+    # the environment that fixes it and left the receiver path behind. The
+    # popup said `Article` and `@article.` a keystroke later offered
+    # nothing: the same disagreement this release spent itself removing.
+    it "completes the members of an instance variable another method assigned" do
+      result = complete(<<~RUBY, extra_opens: did_open("file:///article.rb", "class Article\n  def publish\n  end\nend\n"))
+        class ArticlesController
+          def set_article
+            @article = Article.new
+          end
+
+          def edit
+            @article.pubHERE
+          end
+        end
+      RUBY
+
+      expect(result[:items].map { |item| item[:label] }).to include("publish")
+    end
+
     it "offers nothing that cannot be written after an `@`" do
       labels = complete(IVAR_SOURCE, extra_opens: did_open("file:///p.rb", "class ArticleProfile; end\n"))[:items]
                .map { |item| item[:label] }

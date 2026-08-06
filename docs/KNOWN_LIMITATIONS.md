@@ -71,18 +71,20 @@ evidence-based supported/unsupported table this summarizes.
 
 ## Ruby version scope
 
-**The published extension requires Ruby 3.4.x**, and refuses anything
-else. The VSIX bundles Prism and RBS native extensions compiled for the
-exact `major.minor` it was built under, and
-`vscode/src/platformCompatibility.ts` compares that against the Ruby it
-finds: a 3.3 installation gets a platform-mismatch message, not a
-degraded experience. 3.4.5 and 3.4.7 are the patch versions actually
-exercised.
+**The published extension is built for Ruby 3.4.x**, and only 3.4.5 and
+3.4.7 are actually exercised. The VSIX bundles Prism and RBS native
+extensions compiled for the exact `major.minor` it was built under, so on
+any other Ruby they are not used.
 
-**The Core's own source supports 3.3 as well** — CI runs the full suite
-on 3.3 and 3.4, and `core/ovallsp.gemspec` allows `>= 3.3`. That matters
-if you run the Core from a checkout; it does not change what the
-published VSIX accepts, and those are two different questions.
+**On another Ruby it does not refuse — it checks.** As of 0.2.1,
+`vscode/src/platformCompatibility.ts` asks whether that interpreter can
+`require` `prism` and `rbs` itself. If it can, OvalLSP runs against
+those and says so in the Output channel; if it cannot, you get the error
+naming `gem install prism rbs`. Ruby 3.3 ships both, so a 3.3 user
+usually gets the first — **which means an unverified combination, not a
+verified one**. Nothing about 3.3 is exercised beyond `core/`'s own suite
+under CI, and prism's version there may be older than the gemspec's
+floor. Treat it as running at your own risk rather than as supported.
 
 Ruby 3.5.x is unsupported on both counts until it is exercised.
 

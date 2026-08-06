@@ -74,7 +74,11 @@ RSpec.describe Ovallsp::Types::LiteralTypes do
     # Written as a plain union first, which claimed `"str" && 5` could be
     # a String.
     "an `&&` on an always-truthy left" => ["User.new && Company.new", "Company"],
-    "an `&&` on a left that might be nil" => ["Article.find_by(id: 1) && \"x\"", "String | nil"]
+    "an `&&` on a left that might be nil" => ["Article.find_by(id: 1) && \"x\"", "String | nil"],
+    # A falsy `Boolean` is `false`, not `nil`. `true && false` was
+    # answered `Boolean | nil` and `true && 5` `Integer | nil` -- neither
+    # of which the expression can be.
+    "an `&&` on a Boolean left" => ["true && 5", "Boolean | Integer"]
   }.each do |description, (source, expected)|
     it "answers the same for #{description} as an expression and as a method's return type" do
       expect(expression_type(source)).to eq(expected)
