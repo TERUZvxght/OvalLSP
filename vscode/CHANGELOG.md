@@ -16,6 +16,26 @@ the disproved approaches are kept below it under **Details**.
   differently. The Core is running under that Ruby, which is what makes
   it a note rather than a fault; it goes to the Output channel now. A
   different *engine* — a Core under JRuby — is still an incompatibility.
+- **Diagnostics wait for you to stop typing.** Every edit used to
+  publish in the turn that received it, which is where two long-standing
+  complaints met: typing `.` reported a method on the *next* line — `a.`
+  followed by `b = "str"` is valid Ruby meaning `a.b = "str"`, so nothing
+  marked it as mid-edit — and re-analysis costs seconds on a file of a
+  couple of thousand lines, on a server that answers one request at a
+  time, so hover and completion queued behind every keystroke. A document
+  now has to stay still for 300 ms, and a burst of typing costs one
+  re-analysis rather than one per keystroke. Completion and hover still
+  see the character you just typed: the index is applied immediately and
+  only the report waits.
+- **Ruby 4.0 is best effort**, which `docs/SUPPORT_MATRIX.md` has said
+  since 0.2.1 and no changelog did. The whole story in one place, because
+  a version table is not where anyone looks: 0.2.1 measured the Core's
+  suite green under 4.0.6 and stopped refusing a Ruby the bundled
+  dependencies were not built for — it checks for `prism` and `rbs` and
+  runs against yours instead. But the toast above meant a 4.0 user still
+  got "not version compatible" on every window while it worked. 0.2.2 is
+  the release where that combination is quiet. Nothing verifies 4.0
+  continuously: CI runs 3.3 and 3.4.
 
 ## 0.2.1 — Fewer wrong reports, and the promises already published
 

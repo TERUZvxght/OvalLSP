@@ -2468,6 +2468,14 @@ entry: a finding parked in a round's handover is invisible to
 `deferred_findings_spec.rb`, and `DOCUMENTATION_MAP`'s "A known
 limitation" row was therefore unenforced for it.
 
+**0.2.2: fixed by debouncing.** `didChange` no longer publishes in the
+turn that receives it -- a document has to stay still for 300 ms first,
+and a version arriving while one waits supersedes it. Nothing in the text
+distinguishes `a.` mid-edit from `a.b = "str"` written deliberately, and
+nothing was ever going to; stopping typing does. The index is still
+applied in the same turn, so completion and hover see the character just
+typed.
+
 ## 024.42 An RBS signature label says `Unknown` where RBS says `self`, and leaks method type variables
 
 ```yaml
@@ -2598,6 +2606,13 @@ does it on the dispatch thread inside `didChange`. The two halves are
 debouncing (which `024.41` also wants, for a different reason) and
 incremental re-analysis of the edited region rather than the file. Both
 are their own task; neither belongs in a patch.
+
+**0.2.2: reduced, not fixed.** The same debounce means a burst of typing
+costs one re-analysis rather than one per keystroke, so the seconds are
+paid once when you stop rather than repeatedly while you type. The
+per-analysis cost itself is unchanged and still exceeds the 300 ms the
+design document states; incremental re-analysis of the edited region is
+the other half and is not done.
 
 ## 024.46 Typing `self` cost 55 false diagnostics and was rolled back
 
