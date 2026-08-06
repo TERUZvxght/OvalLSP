@@ -458,20 +458,36 @@ one-off signature load excluded: `net/http.rb` (2,574 lines) 2.1 s,
 the file does. The Core answers one request at a time, so hover,
 completion and signature help wait behind it.
 
-**0.2.2 changed how often you pay it, not how much it costs.**
-Diagnostics now wait for a 300 ms pause, and a version arriving during
-that wait replaces the one waiting — so a burst of typing costs one
-re-analysis rather than one per keystroke, and typing at speed costs
-none at all. What you still pay is the pause: stop for a moment on a file
-of that size and hover, completion and signature help queue behind those
-seconds. The figures above are per analysis, and were per keystroke
-before 0.2.2.
+**0.2.2 attempted to change this and the attempt was rolled back.**
+Deferring the report until you stop typing coalesces a burst into one
+analysis, and it was measured doing that — but it also produced two
+races and could not bound how many analyses of one file run at once, and
+each of three review rounds found another defect in it. It is recorded in
+full at `024.57` and will be tried again with a different design. Today
+the cost is what it was: per keystroke.
 
-The design document states 300 ms for the analysis itself, so it is not a
+The design document states 300 ms for the analysis, so it is not a
 matter of taste — it is a requirement the product misses by an order of
 magnitude, and it had no entry here until 0.2.1 (024.45). Files of a few
 hundred lines, which is most application code, re-analyse in well under a
 tenth of a second. <!-- documents: 024.45 -->
+
+## Diagnostics still arrive on every keystroke
+
+**They are not debounced, and 0.2.2 tried to make them so.** Deferring a
+file's report until you stop typing coalesces a burst into one analysis,
+and it did measurably do that — but the same change produced two ways for
+a report to land after the panel had been cleared, and it could not bound
+how many analyses of one file run at once: twelve edits four-tenths of a
+second apart started twelve analyses, five of them concurrent, each
+holding the lock hover and completion need. Four review rounds each found
+a different defect in it, so it was removed rather than shipped.
+
+What that costs you is above, under
+[how long an edit takes to re-analyse](#how-long-an-edit-takes-to-re-analyse):
+on a file of a couple of thousand lines, every keystroke. It will be
+tried again with a design that has one writer deciding what gets
+published, rather than each publisher deciding for itself (024.57). <!-- documents: 024.57 -->
 
 ## What a partial's local resolves to
 

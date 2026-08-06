@@ -2900,14 +2900,13 @@ rather than a guess", and this one is a guess.
 
 ```yaml
 status: fixed
-released-in: 0.2.2
+released-in: reverted
 kind: defect
 user-visible: yes
 user-visible-note: >
-  Fixed in the same release that introduced it, so no published build
-  ever had it. Recorded because the *class* of defect is what debouncing
-  bought, and the next thing moved off the dispatch thread will buy it
-  again.
+  The change this was a defect in was rolled back before shipping
+  (024.57), so no build ever had it. Kept because the next attempt at
+  deferring a publish will meet it again.
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#await_and_publish`,
@@ -3013,13 +3012,13 @@ it wrong.
 
 ```yaml
 status: fixed
-released-in: 0.2.2
+released-in: reverted
 kind: defect
 user-visible: yes
 user-visible-note: >
-  Fixed in the same release that introduced it. Recorded because it is
-  the second defect the debounce produced by the same mechanism, and
-  because the countermeasure it forced is the durable part.
+  The change this was a defect in was rolled back before shipping
+  (024.57). The `#reindex` correction it produced was kept, because it
+  is a fix to the synchronous path and stands on its own.
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#reindex`, `#schedule_diagnostics`)
@@ -3155,3 +3154,128 @@ Recorded rather than done because 0.2.2's rule is fix, don't add, and
 because a rule about which publish wins wants its own change set and its
 own corpus run -- it can silence a publish, which is the direction that
 does not announce itself.
+
+## 024.57 The debounce, and why it was rolled back
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#publish_diagnostics`,
+`#republish_open_diagnostics`, `#publish_findings`), and whatever
+replaces the deferral.
+
+0.2.2 made `didChange` publish diagnostics from a waiter thread after a
+300 ms pause, to answer 024.45. **Rounds 32, 33, 34 and 35 each found a
+defect in it**, and `CLAUDE.md`'s same-place rule fired: the whole thread
+was rolled back on 2026-08-07, at the maintainer's direction, and this
+entry is the deliverable rather than the code.
+
+The measurements are worth keeping, because the change did work at what
+it was for. Round 35, on this machine:
+
+| what | result |
+|---|---|
+| the per-keystroke half it did *not* defer (summarize + index apply), `net/http.rb` | 0.017 s |
+| the per-analysis half it did | 1.72 s |
+| 32 edits 0.15 s apart (faster than the debounce) | **1 analysis** |
+| 12 edits 0.4 s apart, 1.72 s analysis | **12 analyses, 5 concurrent** |
+| 32 edits 0.4 s apart, 5.25 s analysis | **32 analyses, 13 concurrent** |
+
+### What went wrong, in the order it was found
+
+- **Round 32.** `didClose` clears the panel on the dispatch thread; a
+  waiter already computing wrote its findings after the clear. Errors in
+  the Problems panel for a file nobody has open, permanently for an
+  unsaved buffer. Fixed by taking a mutex across the store re-read and
+  the write, and taking the same mutex in `#handle_did_close`.
+- **Round 33.** A `didChange` whose text is byte-identical to the indexed
+  text did not refresh the pending entry, because `#reindex` reached the
+  scheduler only inside `if apply_file_summary(...)` and
+  `WorkspaceIndex#replace_file` returns false for identical content. The
+  waiter woke, found a version mismatch, published nothing, and nothing
+  rescheduled (024.54). Countermeasure:
+  `spec/ovallsp/server_publish_invariant_spec.rb`.
+- **Round 34.** `@publish_threads` written in four places and read in
+  none; the 50 ms sleep cap -- the entire mechanism by which a waiter
+  notices a close -- unpinned.
+- **Round 35.** Two findings, and they are the ones that ended it.
+
+### The two that ended it
+
+1. **`#republish_open_diagnostics` has the same race, and the fix did not
+   reach it.** It snapshots the open documents, then computes and
+   publishes for each without re-reading the store, on a background
+   thread, from six call sites. Close one file while another is being
+   analysed and the clear lands first, the findings second. Reproduced
+   three times identically: publishes for the closed file came out
+   `[2, 0, 2]`. Round 32 fixed this symptom on the waiter path and left
+   the older path alone, and the invariant spec written as the
+   countermeasure has no row containing a republish -- **a property is
+   only as wide as its table.**
+2. **The debounce cannot bound concurrent analyses.**
+   `#await_and_publish` releases `@pending_publish[uri]` at the moment it
+   decides to publish, *before* the 2--5 s analysis. The next `didChange`
+   therefore finds the slot empty and starts a second waiter while the
+   first is still computing. Every one but the last is discarded by the
+   version re-check, and each holds `@index_mutation_mutex` for its whole
+   duration -- the lock hover, completion and `didChange` itself need. The
+   coalescing window is 0.3 s against a 1.7--5.3 s cycle, so it coalesces
+   edits arriving while a waiter *waits* and never while one *analyses*.
+   Pausing just over 300 ms -- which is 024.41's own scenario, reading the
+   completion popup -- is the common case, not the corner.
+
+### The root cause
+
+**Four publishers write to one stream and nothing owns the order.** The
+dispatch thread, the workspace pass, the debounce waiters and
+`#republish_open_diagnostics` all reach `#publish_findings`, and ordering
+was added pairwise, at call sites, one round at a time: a mutex between
+the waiter and `didClose`, a version re-check inside the waiter, nothing
+at all between the republish and either. Each fix was correct about the
+pair it named and silent about the rest, which is why every round found
+another pair.
+
+That is the same shape `CLAUDE.md` records from 0.1.12 -- bolting a sort
+onto one more *reader* of a collection whose storage has no order. The
+sort belongs where the value is produced.
+
+### The direction that was actually needed
+
+**One writer that remembers what it last published.**
+`#publish_findings` is already the single funnel; it just has no memory.
+Give it `@published_version[uri]`, and:
+
+- refuse a write whose version is older than the last written for that
+  uri;
+- let a clear (`#clear_diagnostics`) always win and reset the record;
+- delete the record on `didClose`.
+
+That subsumes the version re-check the waiter does by hand, covers the
+republish and the workspace pass without either knowing about the other,
+and is the one place a future publisher would have to be wrong on
+purpose to bypass. It is the same move as `Index::TypeNameResolution` and
+`#code_offsets`: put the rule where the value is produced so there is
+nothing to copy.
+
+**And the deferral itself needs a different shape.** Keep the pending
+slot until the publish *completes*, and re-loop rather than return if a
+newer version arrived while computing. That is one analysis in flight per
+uri, the last version always published, and it is what makes the
+coalescing claim true rather than true-only-between-analyses.
+
+### What was kept
+
+Not everything from those rounds was part of the thread:
+
+- `server_publish_invariant_spec.rb`, which holds for the synchronous
+  path unchanged -- the argument for writing a property rather than a
+  regression test.
+- The `#reindex` correction that publishes outside
+  `if apply_file_summary(...)`. It is a fix to the synchronous path and
+  stands on its own; the debounce only made it visible.
+- Everything from rounds 32--35 about the cache, the version checks, the
+  documents and the other five countermeasures.

@@ -25,32 +25,6 @@ the disproved approaches are kept below it under **Details**.
 - Fixed: a project on an unmounted volume or a network share that is
   briefly away no longer loses its warm cache. A missing directory was
   taken as proof the project was gone; it is held for thirty days now.
-- **Diagnostics wait for you to stop typing.** Every edit used to publish
-  in the turn that received it, on a server that answers one request at a
-  time — so on a file of a couple of thousand lines, where re-analysis
-  costs seconds, hover and completion queued behind every keystroke. A
-  document now has to stay still for 300 ms, and a burst of typing costs
-  one re-analysis rather than one per keystroke. Completion and hover
-  still see the character you just typed: the index is applied
-  immediately and only the report waits.
-
-  This does **not** remove the report on the next line, and that turns
-  out not to be a bug to remove. `a.` followed by `b = "str"` is valid
-  Ruby meaning `a.b = "str"` — `ruby -c` says `Syntax OK` and running it
-  raises `undefined method 'b='`, on the line OvalLSP marks. The report
-  is correct about text you have not finished writing, so waiting is all
-  a debounce can do; pause to read the completion popup and you still get
-  it, 300 ms later. Suppressing it needs the edit position and costs
-  hiding real errors on the line under your cursor, which makes it a
-  deliberate refinement — it is on the roadmap for 0.4.0. An earlier
-  draft of this entry claimed the debounce had fixed it.
-
-  Closing a file while its analysis is in flight is handled: the
-  analysis now finishes on a background thread, so on a large file it
-  could otherwise land after the panel was cleared and leave errors on a
-  file nobody has open. Nothing you could have hit before 0.2.2 — there
-  was no background analysis to lose the race with — but new here, and
-  worth knowing it was considered.
 - **Ruby 4.0 is best effort**, which `docs/SUPPORT_MATRIX.md` has said
   since 0.2.1 and no changelog did. The whole story in one place, because
   a version table is not where anyone looks: 0.2.1 measured the Core's

@@ -11,13 +11,8 @@ RSpec.describe "Ovallsp::Server textDocument/publishDiagnostics (Task 015)" do
     "Content-Length: #{json.bytesize}\r\n\r\n#{json}"
   end
 
-  # `diagnostics_debounce: 0` because these examples are about *what* is
-  # published, not when. A change's report waits for the user to stop
-  # typing (024.41, 024.45), and every example here sends its edits and
-  # exits in the same breath, which is a user who never stopped.
   def build_server(input_string)
-    Ovallsp::Server.new(input: StringIO.new(input_string), output: output, logger: logger,
-                        diagnostics_debounce: 0)
+    Ovallsp::Server.new(input: StringIO.new(input_string), output: output, logger: logger)
   end
 
   def all_sent_messages

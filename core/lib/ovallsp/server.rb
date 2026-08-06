@@ -55,8 +55,7 @@ module Ovallsp
     def initialize(input:, output:, logger:, route_registry: Routes::RouteRegistry.new,
                    model_registry: Models::ModelRegistry.new, workspace_root: Dir.pwd,
                    ancestry_registry: Runtime::AncestryRegistry.new,
-                   agent_bootstrap: RailsBootstrap, background_task_shutdown_timeout: BackgroundTasks::DEFAULT_SHUTDOWN_TIMEOUT,
-                   diagnostics_debounce: DEFAULT_DIAGNOSTICS_DEBOUNCE)
+                   agent_bootstrap: RailsBootstrap, background_task_shutdown_timeout: BackgroundTasks::DEFAULT_SHUTDOWN_TIMEOUT)
       @reader = Ovallsp::IO::FramedReader.new(input)
       @writer = Ovallsp::IO::FramedWriter.new(output)
       @logger = logger
@@ -153,10 +152,6 @@ module Ovallsp
       @agent_retry_mutex = Mutex.new
       @agent_retry_generation = 0
       @background_tasks = BackgroundTasks.new(shutdown_timeout: background_task_shutdown_timeout)
-      @diagnostics_debounce = diagnostics_debounce
-      @pending_publish = {}
-      @stopping_publishes = false
-      @pending_publish_mutex = Mutex.new
     end
 
     # Runs the read/dispatch loop until `exit` is received or the input
@@ -202,13 +197,6 @@ module Ovallsp
       # thread, which could otherwise begin a fresh, valid one after this
       # point and be killed by the join instead of returning (0.2.0).
       @workspace_diagnostics&.close
-      # Same idea, for the debounce waiters: tell them to stop *waiting*
-      # before the join, so a waiter still counting down 300 ms returns
-      # instead of spending the join's budget asleep. It does not join
-      # them -- they are tracked, so the line below joins them, once, on
-      # one budget. An earlier version joined them here as well, which
-      # made shutdown's worst case the sum of two budgets rather than one.
-      stop_waiting_for_debounces
       @background_tasks.shutdown
     rescue StandardError => e
       begin
@@ -361,26 +349,8 @@ module Ovallsp
         version: doc.fetch(:version),
         changes: params.fetch(:contentChanges)
       )
-      reindex(document, publish: :debounced)
+      reindex(document)
     end
-
-    # How long a document has to stay still before its diagnostics are
-    # published.
-    #
-    # Not a refinement. Two of this project's oldest complaints are the
-    # same fact seen from different ends. `a.` followed by a line like
-    # `b = "str"` is *valid Ruby* meaning `a.b = "str"` -- there is no
-    # syntax error to gate on, and the report is correct about a program
-    # nobody is writing (024.41). And re-analysis costs seconds on a file
-    # of a couple of thousand lines, on a server that answers one request
-    # at a time, so hover and completion queue behind every keystroke
-    # (024.45). Nothing in the text distinguishes mid-edit from finished;
-    # stopping typing does.
-    #
-    # 300 ms is the figure `docs/design/docs/01-product-requirements.md`
-    # already gives for single-file re-analysis, so a user who has stopped
-    # typing waits no longer than the document says they should.
-    DEFAULT_DIAGNOSTICS_DEBOUNCE = 0.3
 
     # Closing a buffer ends its authority over WorkspaceIndex — whatever's
     # on disk becomes the truth again (docs/design/tasks/008.5-runtime-and-index-corrections.md).
@@ -406,24 +376,13 @@ module Ovallsp
       # a still-buffer-sourced existing entry and be silently rejected as
       # stale (docs/design/tasks/008.6-agent-and-index-hardening.md).
       @index_mutation_mutex.synchronize { remove_index_contribution(uri) }
-      # Between closing the store and clearing the panel, and in that
-      # order: a debounced publish that is already computing re-reads the
-      # store under this same mutex before it writes, so taking it here
-      # means it either wrote before the close was visible (and the clear
-      # below is the last word) or sees the closed store and writes
-      # nothing. Without it, a 2--5 s analysis on a large file could land
-      # after the clear and leave findings on a file nobody has open.
-      cancel_pending_diagnostics(uri)
       clear_diagnostics(uri)
 
       path = UriUtil.to_path(uri)
       publish_workspace_diagnostics_later(uri) if path && File.file?(path) && reindex_from_disk(uri)
     end
 
-    # `publish:` decides *when*, never *whether*. The index is applied in
-    # this same turn either way, because completion and hover read it and
-    # must see the character just typed -- only the publish waits.
-    def reindex(document, publish: :now)
+    def reindex(document)
       summary = @parser_service.summarize(document)
       invalidate_stale_observations if apply_file_summary(summary)
       # *Not* inside that `if`. `WorkspaceIndex#replace_file` returns false
@@ -431,17 +390,16 @@ module Ovallsp
       # byte-identical to the indexed text -- a formatter applying a
       # full-range replace that changes nothing, another extension writing
       # the buffer, a client re-sending. The index is right to do nothing
-      # there. The publish is not.
+      # there; the publish is not, because the client asked for this
+      # version and `publishDiagnostics` carries one.
       #
-      # While it was inside, such an edit landing during the debounce
-      # abandoned the *previous* edit's pending report: the pending entry
-      # kept the older version, the waiter woke, found `document.version`
-      # no longer matched and published nothing, and nothing rescheduled.
-      # A file with a syntax error and an empty Problems panel until the
-      # next edit that changes bytes (round 33). Republishing an unchanged
-      # document costs one analysis and is what the client asked for by
-      # sending a new version.
-      publish == :debounced ? schedule_diagnostics(document) : publish_diagnostics(document)
+      # Found while the 0.2.2 debounce was in place, where it was
+      # user-visible: such an edit abandoned the *previous* edit's pending
+      # report and left a syntax error with an empty Problems panel
+      # (024.54). The debounce was rolled back and this was not -- it is a
+      # correction to the synchronous path, which stands on its own, and
+      # `server_publish_invariant_spec` pins it.
+      publish_diagnostics(document)
     rescue StandardError => e
       # Parsing must never take the server down: keep the previous summary
       # (if any) and let static features degrade gracefully for this file.
@@ -449,17 +407,15 @@ module Ovallsp
     end
 
     # Task 015: computed and published synchronously, in the same dispatch
-    # turn that already owns `document`'s current version. That is still
-    # true of `didOpen` and of the disk paths, and it is what
-    # made "stale document versionのdiagnosticをpublishしない" hold by
-    # construction for them.
+    # turn that already owns `document`'s current version -- there's no
+    # background/async gap for a result to go stale in, so "stale document
+    # versionのdiagnosticをpublishしない" holds by construction rather than
+    # needing its own generation check.
     #
-    # It stopped being true of `didChange` in 0.2.2, which publishes from
-    # a waiter thread. There the property is *not* structural and has to
-    # be checked: `#await_and_publish` re-reads the store after computing
-    # and before writing, holding `@pending_publish_mutex` across the two
-    # so that `didClose` -- which takes the same mutex after closing the
-    # document -- cannot land between them.
+    # 0.2.2 briefly made `didChange` publish from a waiter thread instead,
+    # and that property stopped holding by construction. It was rolled
+    # back; `024.57` records why, and what the next attempt needs before
+    # it is tried again.
     #
     # This is the *buffer* path. Until 0.2.0 it was the only one, on the
     # reasoning that an unopened file has no client-side buffer to attach
@@ -468,141 +424,6 @@ module Ovallsp
     # `publishDiagnostics` for any uri. `#reindex_from_disk` now publishes
     # too, through the workspace pass rather than here, so that the two
     # cannot both claim the last word on one uri.
-    # A pending publish is *superseded*, not queued: the version that
-    # arrives while one is waiting replaces it, so a burst of typing
-    # produces one publish rather than one per keystroke. The waiter
-    # re-reads the document from the store when it fires, and publishes
-    # nothing if a newer version has arrived since -- which is what keeps
-    # the "never publish a stale version" property the synchronous path
-    # held by construction.
-    def schedule_diagnostics(document)
-      uri = document.uri
-      deadline = monotonic_now + @diagnostics_debounce
-      start = @pending_publish_mutex.synchronize do
-        first = !@pending_publish.key?(uri)
-        @pending_publish[uri] = { version: document.version, deadline: deadline }
-        first
-      end
-      return unless start
-
-      # `#track_thread` returns the thread, so it cannot be asked whether
-      # tracking succeeded -- and an untracked waiter is not the failure
-      # worth guarding against anyway. What is: never starting one, which
-      # leaves `@pending_publish[uri]` set with nothing to consume it, and
-      # `first` above is then false for every later edit. That uri's
-      # diagnostics stop for the rest of the session.
-      begin
-        thread = Thread.new { await_and_publish(uri) }
-      rescue StandardError => e
-        @logger.error("failed to start the diagnostics waiter for #{uri}: #{e.class}: #{e.message}")
-        @pending_publish_mutex.synchronize { @pending_publish.delete(uri) }
-        return
-      end
-
-      # Tracked and then forgotten. `BackgroundTasks` is what joins it on
-      # the way out, and nothing here needs a handle: a waiter is reached
-      # through `@pending_publish[uri]`, which is the entry it consumes,
-      # and it removes that itself.
-      #
-      # There was a `@publish_threads` hash beside it until round 34 --
-      # written, deleted from in three places, cleared at shutdown, and
-      # read by nothing, with three comments describing a consumer that
-      # did not exist. It was left behind when the shutdown join moved to
-      # `BackgroundTasks` in round 33.
-      @background_tasks.track_thread(thread)
-    end
-
-    def await_and_publish(uri)
-      entry = nil
-      loop do
-        done = @pending_publish_mutex.synchronize do
-          entry = @pending_publish[uri]
-          # Nothing pending, or shutting down before the debounce elapsed:
-          # either way this waiter is finished and must take its entry
-          # with it, or `#schedule_diagnostics` will never start another.
-          if entry.nil? || (@stopping_publishes && entry[:deadline] > monotonic_now)
-            @pending_publish.delete(uri)
-            next :abandon
-          end
-
-          remaining = entry[:deadline] - monotonic_now
-          next [:sleep, remaining] if remaining.positive?
-
-          @pending_publish.delete(uri)
-          :publish
-        end
-        break if done == :publish
-        return if done == :abandon
-
-        # Capped for the things that do *not* move the deadline: a
-        # `didClose` dropping the entry, and shutdown setting
-        # `@stopping_publishes`. Neither wakes this thread, so the cap is
-        # how soon it notices. (An edit only ever moves the deadline
-        # later, and an uncapped sleep would observe that correctly on the
-        # next pass -- it is not what the cap is for.)
-        sleep([done.last, 0.05].min)
-      end
-
-      document = @document_store.fetch(uri: uri)
-      return unless document && document.version == entry[:version]
-
-      # No `with_index_snapshot` here: `#workspace_findings_for` takes what
-      # it needs itself, and wrapping it from this thread deadlocked on the
-      # re-entrant take.
-      #
-      # Computed outside the mutex -- this is the 2--5 s part on a large
-      # file -- and published inside it, after re-reading the store. The
-      # document can be closed while the analysis runs, and `didClose`
-      # clears the file's diagnostics on the dispatch thread; without this
-      # the clear could land first and the findings after it, leaving
-      # errors in the Problems panel for a file nobody has open. Which
-      # order the two take is then decided by the mutex, and both orders
-      # are right: publish-then-clear ends clear, and close-then-publish
-      # sees the closed store and writes nothing.
-      findings = workspace_findings_for(document)
-      @pending_publish_mutex.synchronize do
-        current = @document_store.fetch(uri: uri)
-        next unless current && current.version == entry[:version]
-
-        publish_findings(uri, findings, version: entry[:version])
-      end
-    rescue StandardError => e
-      @logger.error("failed to publish debounced diagnostics for #{uri}: #{e.class}: #{e.message}")
-    end
-
-    def monotonic_now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-
-    # Drops a waiting publish and releases the latch that stops a new
-    # waiter being started. Also the ordering point described at the call
-    # site: the mutex is the whole point, not the deletions.
-    def cancel_pending_diagnostics(uri)
-      @pending_publish_mutex.synchronize { @pending_publish.delete(uri) }
-    end
-
-    # Releases the waiters; joins nothing.
-    #
-    # A publish whose debounce has *not* elapsed is dropped rather than
-    # forced. The user was still typing when the server was asked to stop,
-    # and a report they never stopped long enough to earn is the thing the
-    # debounce exists to withhold -- firing it on the way out would put it
-    # back exactly where it is least useful. A waiter whose deadline *has*
-    # passed goes on to publish, and `BackgroundTasks#shutdown` gives it
-    # the time to.
-    #
-    # This joined the waiters itself until round 33. Two rounds in a row
-    # found a defect in that join -- first a per-thread deadline making it
-    # O(task_count * timeout), then a shared one that was still additive
-    # with the budget that follows it. Both were the same mistake: these
-    # threads are *tracked*, so something already joins them correctly,
-    # and the second joiner had nothing to add but its own budget.
-    def stop_waiting_for_debounces
-      @pending_publish_mutex.synchronize do
-        @stopping_publishes = true
-      end
-    rescue StandardError => e
-      @logger.error("failed to release pending diagnostics: #{e.class}: #{e.message}")
-    end
-
     def publish_diagnostics(document)
       # Whether there is a running application to ask has to be known
       # *before* the check runs, not after: a receiver it cannot judge
@@ -1992,10 +1813,9 @@ module Ovallsp
 
         # The index's own content hash, which costs neither a read nor a
         # parse and tracks an open buffer as well as a file on disk --
-        # `didOpen` and `didChange` both re-index. This runs once per
-        # `didChange` -- on the dispatch thread, per keystroke in a view,
-        # because indexing is the half 0.2.2 did *not* defer -- and once
-        # per view in the workspace pass, inside the lock every
+        # `didOpen` and `didChange` both re-index. This runs on the
+        # dispatch thread once per `didChange`, per keystroke in a view,
+        # and once per view in the workspace pass, inside the lock every
         # hover needs: reading and parsing every helper each time measured
         # 17ms on sixty of them, loading and hashing the text 5.8ms, this
         # 0.22ms.

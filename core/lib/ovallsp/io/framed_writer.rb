@@ -14,8 +14,7 @@ module Ovallsp
       end
 
       # More than one thread reaches this. Diagnostics go out on the
-      # dispatch thread for didOpen, on a debounce waiter for didChange
-      # (0.2.2), and *every*
+      # dispatch thread for didOpen/didChange, and *every*
       # `Server#republish_open_diagnostics` call site runs on a background
       # one: the Runtime Agent becoming ready, a restart, a routes or
       # models refresh, a deferred ancestry answer landing. 0.2.0 adds

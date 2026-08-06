@@ -9,32 +9,28 @@ require "stringio"
 # current version, and a closed document's are empty.** Nothing else here
 # is about a particular bug.
 #
-# It exists because the debounce is the second place two review rounds in
-# a row have found a defect, and each was a different way for the same
-# three pieces of state to disagree -- `@pending_publish`'s captured
-# version, `@document_store`'s current one, and whether a waiter is alive
-# to reconcile them:
+# It was written as the countermeasure for 0.2.2's debounce, which two
+# review rounds in a row found a defect in, and it **outlived the change
+# it was written for**: the debounce was rolled back (024.57) and this
+# holds for the synchronous path unchanged. That is the argument for
+# writing a property rather than a regression test — the property was
+# true before the change, true during it, and true after it was removed.
 #
-# - **Round 32** found `didClose` racing a publish that was already
-#   computing, so findings landed after the panel was cleared.
-# - **Round 33** found a `didChange` whose text is byte-identical to the
-#   indexed text discarding the *previous* edit's pending report, because
-#   `#reindex` reached `#schedule_diagnostics` only when
-#   `apply_file_summary` returned true, and `WorkspaceIndex#replace_file`
-#   returns false for identical content. The pending entry kept the older
-#   version, the waiter fired, saw a mismatch and published nothing. A
-#   file with a syntax error, and an empty Problems panel until the next
-#   edit that changes bytes.
+# The two defects it was written against are worth keeping in view,
+# because the next attempt at deferring a publish will meet both:
 #
-# `CLAUDE.md`'s same-place rule asks for a mechanical countermeasure at
-# that point rather than a third hand-written regression test. This is it:
-# a regression test pins the one sequence someone thought of, and this
-# pins the property for every sequence in the table -- including the ones
-# added by whoever finds the next defect.
+# - **Round 32.** `didClose` raced a publish that was already computing,
+#   so findings landed after the panel was cleared.
+# - **Round 33.** A `didChange` whose text was byte-identical to the
+#   indexed text discarded the *previous* edit's pending report, because
+#   `#reindex` reached the scheduler only when `apply_file_summary`
+#   returned true and `WorkspaceIndex#replace_file` returns false for
+#   identical content.
 #
-# Run with a zero debounce, so nothing is dropped for not having been
-# earned and every publish the design promises is one the example can
-# demand.
+# And what it does *not* reach, which round 35 found and 024.56 records:
+# `#republish_open_diagnostics` is a third publisher, and no row here
+# involves one. A property is only as wide as its table.
+
 RSpec.describe "Ovallsp::Server publish invariant" do
   let(:output) { StringIO.new }
   let(:logger) { instance_double(Ovallsp::Logger, info: nil, warn: nil, error: nil) }
@@ -82,8 +78,7 @@ RSpec.describe "Ovallsp::Server publish invariant" do
 
   def run_sequence(*notifications)
     input = notifications.join + frame(jsonrpc: "2.0", method: "exit", params: nil)
-    Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger,
-                        diagnostics_debounce: 0).run
+    Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger).run
   end
 
   # `[description, notifications, final version]`. A `nil` final version

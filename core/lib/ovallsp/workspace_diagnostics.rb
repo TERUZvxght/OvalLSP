@@ -122,9 +122,8 @@ module Ovallsp
       findings = @analyze.call(document)
       # Asked again after the analysis, which takes long enough for a
       # `didOpen` to arrive inside it. The buffer path publishes correct
-      # diagnostics for that URI -- on the dispatch thread for `didOpen`,
-      # on a debounce waiter for `didChange` since 0.2.2 -- and this would
-      # then overwrite them with disk-derived ones, for text the user is
+      # diagnostics for that URI on the dispatch thread, and this would
+      # then overwrite them with disk-derived ones -- for text the user is
       # not looking at, with nothing to correct it until the next edit.
       return false if @open.call(uri)
 
