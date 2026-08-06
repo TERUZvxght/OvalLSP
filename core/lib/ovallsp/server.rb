@@ -2572,9 +2572,15 @@ module Ovallsp
       idx = -1
       while index >= 0
         offset, kind = tokens[index]
-        if kind == :paren_close
-          depth += 1
-        elsif kind == :paren_open
+        case kind
+        # Everything that closes counts, and everything that opens
+        # cancels one -- including a bracket or brace, because Prism
+        # closes `puts (1)`'s parenthesis with the same token it closes a
+        # call's, and an opener this scan ignored would leave that pair
+        # unbalanced.
+        when :paren_close, :nest_close then depth += 1
+        when :nest_open then depth -= 1
+        when :paren_open
           if depth.zero?
             idx = offset
             break
@@ -2585,12 +2591,17 @@ module Ovallsp
       end
       return nil if idx.negative?
 
+      # The same `!`/`?` rule, read the other way: the character before a
+      # call's `(` is the last of its *name*, so `refresh!(` has to give
+      # up its `!` before the word scan starts or the name comes back
+      # empty and signature help answers nothing.
       name_end = idx
+      name_end -= 1 if name_end.positive? && METHOD_NAME_SUFFIXES.include?(text[name_end - 1])
       name_start = name_end
       name_start -= 1 while name_start.positive? && word_char?(text[name_start - 1])
       return nil if name_start == name_end
 
-      name_start...name_end
+      name_start...(idx)
     end
 
     def call_name_position(document, position)
@@ -2638,10 +2649,24 @@ module Ovallsp
     #
     # `#{` and `}` are kept as a brace pair: they nest and balance like
     # any other, and what is written between them is real Ruby.
+    # Prism gives the *same character* different token types depending on
+    # what it opens, and every one of them has to be here or the depth
+    # count goes wrong in one direction only: an unmapped opener still
+    # meets a mapped closer. An array literal opens `BRACKET_LEFT_ARRAY`,
+    # a block's brace is `BRACE_LEFT` but a lambda's is `LAMBDA_BEGIN`,
+    # and `puts (1)` opens `PARENTHESIS_LEFT_PARENTHESES` -- so
+    # `takes([1, 2, 3], ` counted the literal's commas as this call's and
+    # bolded a parameter two along.
+    #
+    # A parenthesised *expression* is deliberately `:nest_open` rather
+    # than `:paren_open`: it is not a call's argument list, so the scan
+    # looking for the enclosing call must pass through it rather than
+    # stop at it.
     STRUCTURAL_TOKENS = {
       PARENTHESIS_LEFT: :paren_open, PARENTHESIS_RIGHT: :paren_close,
-      BRACKET_LEFT: :nest_open, BRACKET_RIGHT: :nest_close,
-      BRACE_LEFT: :nest_open, BRACE_RIGHT: :nest_close,
+      PARENTHESIS_LEFT_PARENTHESES: :nest_open,
+      BRACKET_LEFT: :nest_open, BRACKET_LEFT_ARRAY: :nest_open, BRACKET_RIGHT: :nest_close,
+      BRACE_LEFT: :nest_open, LAMBDA_BEGIN: :nest_open, BRACE_RIGHT: :nest_close,
       EMBEXPR_BEGIN: :nest_open, EMBEXPR_END: :nest_close,
       COMMA: :comma
     }.freeze
@@ -2804,11 +2829,20 @@ module Ovallsp
       left -= 1 while left > 0 && word_char?(text[left - 1])
       right = offset
       right += 1 while right < text.length && word_char?(text[right])
+      # A Ruby method name can end in `!` or `?`, and stopping at them
+      # looked up `destroy` for `destroy!`: hover opened an empty popup
+      # and F12 said "No definition found", on the names a Rails
+      # controller is mostly made of. Only one, only at the end -- that is
+      # all Ruby allows, and `a ? b : c` must not be swallowed, which is
+      # why the scan does not start here.
+      right += 1 if right > left && METHOD_NAME_SUFFIXES.include?(text[right])
 
       return nil if left == right
 
       text[left...right]
     end
+
+    METHOD_NAME_SUFFIXES = ["!", "?"].freeze
 
     # The instance-variable prefix under the cursor, sigil included, or nil
     # if the cursor is not writing one.

@@ -31,7 +31,23 @@ RSpec.describe "release artifacts" do
     `cd #{REPO_ROOT.shellescape} && git tag --list 'v*'`.split("\n").map { |tag| tag.delete_prefix("v") }
   end
 
+  # A checkout with no tags cannot answer either question, and answering
+  # them anyway is worse than skipping: `actions/checkout@v4` fetches
+  # `--no-tags`, so on CI one of the two examples below failed on every
+  # push -- reporting every recorded version as never tagged -- while the
+  # other, the one that actually protects users by catching a shipped
+  # VSIX with no recorded hash, passed *vacuously* against an empty list.
+  # A red gate nobody can act on is where a real regression hides.
+  #
+  # The same is true of a source tarball or a `git archive` extraction,
+  # which is how reviewers read this tree.
+  def tags_available?
+    !tags.empty?
+  end
+
   it "accounts for every tag, in one table or the other" do
+    skip "no tags in this checkout (CI fetches --no-tags; a tarball has none)" unless tags_available?
+
     recorded = published.map(&:first) + unpublished
 
     expect(tags - recorded).to be_empty,
@@ -40,6 +56,8 @@ RSpec.describe "release artifacts" do
   end
 
   it "records no version that was never tagged" do
+    skip "no tags in this checkout (CI fetches --no-tags; a tarball has none)" unless tags_available?
+
     recorded = published.map(&:first) + unpublished
 
     expect(recorded - tags).to be_empty, "recorded but never tagged: #{(recorded - tags).join(', ')}"

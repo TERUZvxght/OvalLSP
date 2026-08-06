@@ -133,4 +133,68 @@ RSpec.describe "Ovallsp::Server receiverless readings" do
       expect(locations.map { |l| l[:range][:start][:line] }).to include(2)
     end
   end
+  # A Ruby method name can end in `!` or `?`, and the text scans that find
+  # the word under the cursor stopped at those characters -- so the name
+  # looked up was `destroy`, not `destroy!`. Hover opened an empty popup,
+  # F12 said "No definition found", and signature help returned nothing
+  # at all, on `save!`, `valid?`, `destroy!`, `update!` -- the names a
+  # Rails controller is mostly made of. Completion offers them, so a user
+  # is led straight into it.
+  #
+  # Rows H5, D1 and S1 all read PASS, and Find References, Rename and
+  # occurrence highlighting were unaffected throughout, because they read
+  # the parser's call records rather than scanning text.
+  describe "a method whose name ends in `!` or `?`" do
+    BANG_SOURCE = <<~RUBY
+      class Account
+        def refresh!(currency)
+          currency
+        end
+
+        def stale?
+          false
+        end
+
+        def run
+          refresh!(:usd)
+          stale?
+        end
+      end
+    RUBY
+
+    def bang(method, line:, character:)
+      input =
+        did_open("file:///bang.rb", BANG_SOURCE) +
+        frame(
+          jsonrpc: "2.0", id: 1, method: method,
+          params: { textDocument: { uri: "file:///bang.rb" }, position: { line: line, character: character } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+      sent_messages.first[:result]
+    end
+
+    it "hovers it with its parameters" do
+      result = bang("textDocument/hover", line: 10, character: 6)
+
+      expect(result[:contents][:value]).to include("refresh!(currency)")
+    end
+
+    it "hovers a predicate too" do
+      expect(bang("textDocument/hover", line: 11, character: 6)[:contents][:value]).to include("stale?")
+    end
+
+    it "jumps to its declaration" do
+      locations = bang("textDocument/definition", line: 10, character: 6)
+
+      expect(locations.map { |l| l[:range][:start][:line] }).to include(1)
+    end
+
+    it "offers signature help inside its arguments" do
+      labels = bang("textDocument/signatureHelp", line: 10, character: 14)[:signatures].map { |s| s[:label] }
+
+      expect(labels).to include("refresh!(currency)")
+    end
+  end
 end

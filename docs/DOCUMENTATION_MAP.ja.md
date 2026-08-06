@@ -35,6 +35,7 @@
 | **拡張機能が記録する・保持する・ディスクに書くもの** | `vscode/PRIVACY.md` + `.ja.md`(これが唯一の正)。`site/security.html` + `site/ja/security.html`。加えて、0.1.12 が「一覧またはキャッシュパスを書き写している」と特定した箇所すべて(この一覧は3度不足していた。信用せず、見つけたら追加すること)——`docs/design/docs/12-release-and-support.md`、`docs/design/tasks/019-runtime-observation.md`、`019-runtime-observation-notes.md`、`021-persistent-cache-notes.md`、`vscode/README.md` + `.ja.md` のキャッシュ段落、`docs/SECURITY_CHECKLIST.md` の観測節とキャッシュのデシリアライズ節、`core/lib/ovallsp/observation/store.rb` の `#invalidate_changed` の説明、`core/lib/ovallsp/observation/observed_signature.rb` の `code_fingerprint` の説明、そして**両CHANGELOG**(散文でディスクに関する記述を書き写しており、この行が名指ししていなかったために1ラウンド丸ごと PRIVACY と食い違ったまま残った)——は書き直さず PRIVACY を指すこと | `core/spec/meta/privacy_parity_spec.rb`(EN⇔JA: 節数・相互リンク・名指しした3つの主張・記録項目一覧の項目数) |
 | **Runtime Agent・ワークスペースの信頼・拡張機能が実行するものに関すること** | `SECURITY.md` + `.ja.md`、`site/security.html` + `site/ja/security.html`、`docs/EXTENSION_CAPABILITIES.md` の「約束しないこと」節 | — |
 | **既知の制限** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`、およびそれと反することを書いているサイトのページ | `core/spec/meta/deferred_findings_spec.rb`(`user-visible: yes` の未解決 `024.*` 欠陥は両言語から参照されていること。`no` の場合は理由を書くこと) |
+| **どのRuby・Rails・プラットフォームを受け入れるか**(`vscode/src/platformCompatibility.ts` や `rubyResolver.ts` の変更を含む) | `docs/SUPPORT_MATRIX.md` + `.ja.md`(用のあった行だけでなく影響する全行)、`docs/KNOWN_LIMITATIONS.md` + `.ja.md`、`site/getting-started.html` + `site/ja/`、下限が動いたなら `core/ovallsp.gemspec` の `required_ruby_version` | — |
 | **進め方の取り決め**(構築・レビュー・リリースの方法) | `CLAUDE.md`、`AGENTS.md`、`CONTRIBUTING.md` + `.ja.md` | — |
 
 ## サイトもドキュメントです

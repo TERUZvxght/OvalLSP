@@ -286,6 +286,43 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
                                             "activeParameter #{result[:activeParameter]} is outside #{active[:label]}"
     end
 
+    # Prism has more than one token for the same character, and the map
+    # this reads paired only the plainest: an array *literal* opens with
+    # `BRACKET_LEFT_ARRAY`, a block's brace with `BRACE_LEFT` but a
+    # lambda's with `LAMBDA_BEGIN`, and `puts (1)` with
+    # `PARENTHESIS_LEFT_PARENTHESES`. Each unmapped opener met a mapped
+    # closer, so the depth went negative and the commas after it were
+    # counted as this call's -- the popup bolding a parameter two along,
+    # which is the wrong claim this whole feature exists to stop making.
+    # Both S4 examples pass scalars only, so nothing failed.
+    {
+      "an array literal" => ["[1, 2, 3], ", 1],
+      "two array literals" => ["[1, 2], [3, 4], ", 2],
+      "a block" => ["[1].map { |x| x }, ", 1],
+      "a lambda" => ["->(x) { x }, ", 1],
+      "a parenthesised expression" => ["(1 + 2), ", 1]
+    }.each do |description, (argument, expected)|
+      it "counts the arguments after #{description} correctly" do
+        expect(active_parameter_for(argument)).to eq(expected)
+      end
+    end
+
+    it "still finds the call after a parenthesised argument" do
+      expect(signature_labels_for("(1 + 2), ")).to include("build(name, count)")
+    end
+
+    # `puts (1)` -- a space before the parenthesis -- opens with a token
+    # of its own and closes with the same one a call's argument list
+    # does, so an opener the call scan ignored left that pair unbalanced
+    # and the popup vanished for the rest of the line.
+    it "still finds the call after an argument written with a space before its parenthesis" do
+      expect(signature_labels_for("puts (1), ")).to include("build(name, count)")
+    end
+
+    it "counts the arguments after a space-before-parenthesis argument correctly" do
+      expect(active_parameter_for("puts (1), ")).to eq(1)
+    end
+
     it "counts no comma written inside a comment" do
       expect(active_parameter_for("1, # a, comment\n    2")).to eq(1)
     end

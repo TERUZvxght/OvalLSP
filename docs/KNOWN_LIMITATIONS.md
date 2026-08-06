@@ -384,6 +384,16 @@ missed one", so each is narrow on purpose. What that costs a user:
   The G17 row and its example exist now, and 024.14 records what the
   original measurement most likely hit.)
 
+## What a partial's local resolves to
+
+**Nothing.** In `_article.html.erb`, `article` is supplied by whatever
+called `render`, and the engine does not read the call site — so hovering
+it answers an empty popup and `article.` completes to nothing, while an
+`@ivar` in the same template resolves through the controller action that
+assigned it. A local the template assigns itself (`<% post = Post.new %>`)
+does resolve. This is the commonest shape in a scaffolded app's views
+(024.44). <!-- documents: 024.44 -->
+
 ## What the signature popup shows for a stdlib or gem method
 
 Two things, both about the *label* rather than about which method was

@@ -2525,3 +2525,33 @@ instead of the workspace one.
 **Direction:** the receiverless chain should end in `Kernel` the way
 `PrefixCompletion#kernel_methods` already does — one source of "what a
 receiverless call can reach", read by both, rather than each deciding.
+
+## 024.44 A partial's local is not resolved, and C11's stated basis names it
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`ivars_for_view`,
+`analyzable_document`), `core/lib/ovallsp/local_inferencer.rb`
+
+In a scaffolded application, `app/views/articles/_article.html.erb` uses
+`article` — a local the *`render` call site* supplies. Hovering it
+answers `""` and `article.` completes to nothing, while the same file's
+`@article` (were there one) resolves through the controller action.
+
+C11 reads PASS, and its example writes `<% post = Post.new %>` into the
+template first — a local the template assigns itself, which is a
+different thing. The example's own comment gives the row's justification
+as "a local in a template is what a partial receives", which is exactly
+the case it does not cover. The row now says so; this entry is what it
+points at.
+
+**Direction:** the type comes from the `render` call site
+(`render @article`, `render partial: "article", locals: {article: a}`),
+so it needs the same propagation `ivars_for_view` already does for
+instance variables, keyed by partial name instead of by action. Deferred
+rather than done: it is a new inference path, not a correction, and 0.2.1
+is a patch.

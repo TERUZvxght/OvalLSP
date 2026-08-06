@@ -91,6 +91,20 @@ and the capability tables promised something the build did not do.
   with their inferred types.
 - Fixed: `->() {}`, `!x`, `a && b` and `a || b` have a type. A default
   written `name || "anonymous"` is a String rather than nothing.
+- Fixed: **a method whose name ends in `!` or `?` gets answers.** Hover,
+  go to definition and signature help all stopped reading the name at the
+  `!`, so `@article.destroy!` opened an empty popup, F12 said "No
+  definition found", and typing `(` after it showed no parameters — on
+  `save!`, `valid?`, `update!`, the names a Rails controller is mostly
+  made of. Completion offered them the whole time.
+- Fixed: the signature popup no longer bolds the wrong parameter after an
+  array literal, a block, a lambda or a parenthesised argument, and no
+  longer disappears after `%w(...)` or `puts (1)`.
+- Fixed: signature help on a large file. Answering "there is no
+  signature here" walked the file one character at a time, which on a few
+  hundred KB with any non-ASCII character in it took seconds — and the
+  Core answers one request at a time, so hover, completion and
+  diagnostics waited behind it.
 
 ### Details
 
