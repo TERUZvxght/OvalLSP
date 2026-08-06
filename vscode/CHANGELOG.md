@@ -25,17 +25,23 @@ the disproved approaches are kept below it under **Details**.
 - Fixed: a project on an unmounted volume or a network share that is
   briefly away no longer loses its warm cache. A missing directory was
   taken as proof the project was gone; it is held for thirty days now.
-- **Diagnostics wait for you to stop typing.** Every edit used to
-  publish in the turn that received it, which is where two long-standing
-  complaints met: typing `.` reported a method on the *next* line — `a.`
-  followed by `b = "str"` is valid Ruby meaning `a.b = "str"`, so nothing
-  marked it as mid-edit — and re-analysis costs seconds on a file of a
-  couple of thousand lines, on a server that answers one request at a
-  time, so hover and completion queued behind every keystroke. A document
-  now has to stay still for 300 ms, and a burst of typing costs one
-  re-analysis rather than one per keystroke. Completion and hover still
-  see the character you just typed: the index is applied immediately and
-  only the report waits.
+- **Diagnostics wait for you to stop typing.** Every edit used to publish
+  in the turn that received it, on a server that answers one request at a
+  time — so on a file of a couple of thousand lines, where re-analysis
+  costs seconds, hover and completion queued behind every keystroke. A
+  document now has to stay still for 300 ms, and a burst of typing costs
+  one re-analysis rather than one per keystroke. Completion and hover
+  still see the character you just typed: the index is applied
+  immediately and only the report waits.
+
+  This does **not** fix the report on the next line. `a.` followed by
+  `b = "str"` is valid Ruby meaning `a.b = "str"`; nothing in the text
+  marks it as mid-edit, and waiting only delays it. Pause to read the
+  completion popup and you still get it, 300 ms later. An earlier draft
+  of this entry claimed otherwise.
+- Fixed: diagnostics can no longer be left behind in the Problems panel
+  for a file you have closed. Analysis now finishes on a background
+  thread, so on a large file it could land after the panel was cleared.
 - **Ruby 4.0 is best effort**, which `docs/SUPPORT_MATRIX.md` has said
   since 0.2.1 and no changelog did. The whole story in one place, because
   a version table is not where anyone looks: 0.2.1 measured the Core's

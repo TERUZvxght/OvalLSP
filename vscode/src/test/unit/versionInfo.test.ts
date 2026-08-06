@@ -123,10 +123,15 @@ describe('compareVersionInfo', () => {
     assert.ok(result.reasons.some((r) => r.includes('Ruby engine mismatch')));
   });
 
-  it('does not flag a patch-version-only difference as a mismatch', () => {
+  // Both halves. `compatible` alone passes for a build that notes every
+  // patch difference in the Output channel, which is noise on the
+  // overwhelmingly common case -- a note is for a Ruby the payload was
+  // not built for, and 3.4.5 against a 3.4 manifest is not that.
+  it('does not flag a patch-version-only difference as a mismatch, or note it', () => {
     const server = baseServer({ ruby: { engine: 'ruby', version: '3.4.5', platform: 'arm64-darwin25' } });
     const result = compareVersionInfo(bundledClient(), server);
     assert.strictEqual(result.compatible, true);
+    assert.deepStrictEqual(result.notes, []);
   });
 
   it('never compares coreVersion/build/payload/platform/ruby against a bundled manifest for a custom Core path', () => {

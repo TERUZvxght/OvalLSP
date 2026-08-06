@@ -2468,13 +2468,38 @@ entry: a finding parked in a round's handover is invisible to
 `deferred_findings_spec.rb`, and `DOCUMENTATION_MAP`'s "A known
 limitation" row was therefore unenforced for it.
 
-**0.2.2: fixed by debouncing.** `didChange` no longer publishes in the
-turn that receives it -- a document has to stay still for 300 ms first,
-and a version arriving while one waits supersedes it. Nothing in the text
-distinguishes `a.` mid-edit from `a.b = "str"` written deliberately, and
-nothing was ever going to; stopping typing does. The index is still
-applied in the same turn, so completion and hover see the character just
-typed.
+**0.2.2: reduced by debouncing, not fixed.** `didChange` no longer
+publishes in the turn that receives it -- a document has to stay still for
+300 ms first, and a version arriving while one waits supersedes it. The
+index is still applied in the same turn, so completion and hover see the
+character just typed.
+
+That removes the report for as long as you keep typing and no longer.
+**Pause to read the completion popup -- which is what one does after
+typing `.` -- and it arrives, 300 ms late.** Round 32 reproduced it on a
+real Rails application at `+0.33s`.
+
+This entry said "fixed by debouncing" for one commit, and
+`vscode/CHANGELOG.md` said the same. It was written from the intent
+rather than from a measurement: a debounce answers 024.45, whose problem
+*is* the repeated work, and it was assumed to answer this one because
+both were listed against the same change. They are not the same problem.
+024.45's own note ("reduced, not fixed") was accurate throughout; this
+one was not.
+
+The spec written alongside it could not have caught that. It ran with a
+30-second debounce and then exited, so nothing was published at all, and
+it asserted the report was absent -- which it would have been on a build
+with diagnostics broken outright. `CLAUDE.md`'s rule names that shape: a
+fixture that cannot distinguish the two candidate behaviours is unpinned
+even though it passes. It has been replaced by one that asserts the
+report *is* there once the wait is over, so this entry cannot be closed
+without something failing.
+
+**Direction, unchanged.** Not another check. Debouncing was always only
+the cheap half; the rest needs the edit position, which the notification
+already carries and `Server` discards -- a report about the line being
+edited is the one to withhold, and a report elsewhere in the file is not.
 
 ## 024.42 An RBS signature label says `Unknown` where RBS says `self`, and leaks method type variables
 
@@ -2748,7 +2773,8 @@ would run it in".
 ## 024.49 The red toast 0.2.1 removed is still shown, from the other code path
 
 ```yaml
-status: open
+status: fixed
+released-in: 0.2.2
 kind: defect
 user-visible: yes
 ```
@@ -2780,7 +2806,8 @@ call sites read it. Today two functions decide and only one was changed.
 ## 024.50 The Marketplace description promises the behaviour 0.2.1 removed
 
 ```yaml
-status: open
+status: fixed
+released-in: 0.2.2
 kind: defect
 user-visible: yes
 ```
@@ -2809,7 +2836,8 @@ getting-started pages, and not these two.
 ## 024.51 The first launch after an upgrade blocks while it sweeps the old cache
 
 ```yaml
-status: open
+status: fixed
+released-in: 0.2.2
 kind: defect
 user-visible: yes
 ```
@@ -2834,3 +2862,116 @@ whenever `File.directory?` of the recorded workspace path is false, so a
 project on an unmounted volume or a temporarily unavailable network share
 loses its warm cache. The method's comment calls each removal "a fact
 rather than a guess", and this one is a guess.
+
+## 024.52 A publish could outlive the document it was about
+
+```yaml
+status: fixed
+released-in: 0.2.2
+kind: defect
+user-visible: yes
+user-visible-note: >
+  Fixed in the same release that introduced it, so no published build
+  ever had it. Recorded because the *class* of defect is what debouncing
+  bought, and the next thing moved off the dispatch thread will buy it
+  again.
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#await_and_publish`,
+`#handle_did_close`)
+
+Debouncing moved `didChange`'s publish onto a waiter thread. `didClose`
+stayed on the dispatch thread, where it clears the file's diagnostics.
+Nothing ordered the two, and the gap is the analysis itself -- 2--5 s on a
+large file by 024.45's own measurement. Close a tab a second or two after
+pausing, and the clear lands first and the findings after it: errors in
+the Problems panel for a file nobody has open, for the rest of the
+session. Nothing republishes an unsaved buffer or a deleted file.
+
+Round 32 reproduced it by widening the window and reading the order:
+
+```
+publish 0: version=1 count=0
+publish 1: version=nil count=0        <- didClose's clear
+publish 2: version=2 count=1          <- the debounced publish, after
+```
+
+**What made it possible** is stated one line above the code that
+introduced it. `#publish_diagnostics`' comment says the buffer path is
+"computed and published synchronously, in the same dispatch turn ... so
+[never publish a stale version] holds by construction". That was true and
+0.2.2 stopped it being true, and appended a paragraph about the debounce
+to the same comment block without correcting the sentence above it.
+
+**Fixed** by making the property checked rather than structural: the
+analysis runs outside the lock, and the re-read of the document store and
+the write happen together under `@pending_publish_mutex`, which
+`#handle_did_close` also takes -- after closing the store, before
+clearing. Both orders are then right. Publish-then-clear ends clear;
+close-then-publish sees the closed store and writes nothing.
+
+Pinned by `server_diagnostics_debounce_spec.rb`. The example needed two
+tries and both failures are worth knowing:
+
+- **A rendezvous, not two sleeps.** The waiter has to have read the
+  document *before* `didClose` runs. Started near each other, the
+  dispatch thread wins every time and the example passes without
+  exercising anything.
+- **A syntax error, not an unknown-method report.** `didClose` removes the
+  file's index contribution, so a *semantic* finding computed after it
+  comes back empty -- the stale publish still happens, carrying nothing,
+  and an assertion about counts passes. A syntax error needs no index.
+
+## 024.53 The absent-workspace grace measured the wrong clock
+
+```yaml
+status: fixed
+released-in: 0.2.2
+kind: defect
+user-visible: yes
+user-visible-note: >
+  Fixed in the same release that introduced it. Recorded for the mistake
+  rather than the outcome: a plausible mtime that answers a different
+  question than the one being asked.
+```
+
+**Area:** `core/lib/ovallsp/cache/store.rb` (`.prune_workspaces`)
+
+024.51's fix held an absent workspace's cache for thirty days rather than
+removing it the moment its directory could not be found. The age it read
+was the *scope directory's* mtime -- and a directory's mtime advances
+when an entry is created or removed inside it, which for a scope
+directory happens only when a generation is minted: a Ruby upgrade, a
+`bundle install`, a release. That is "how long since the cache key
+changed". The question is "how long since anyone opened this project".
+
+Measured by round 32, driving the real `Cache::Store`:
+
+```
+workspace unreachable for: 0 seconds
+scope directory mtime age: 90.0 days
+cache survived the sweep:  false
+```
+
+So the retention was inverted against its own purpose. A project on an
+external drive, opened daily on a stable toolchain, still lost its cache
+the first time the volume was away -- the exact scenario the grace was
+written for -- while a project deleted the day after a `bundle install`
+kept a verbatim copy of its source for thirty days.
+
+**Fixed** by reading the `.workspace` marker's mtime instead.
+`.mark_workspace` rewrites it on every launch that opens the workspace,
+so it is already the answer; nothing new had to be recorded.
+
+**The spec could not have caught it.** It created the scope directory
+inside the example, so its mtime was *now* -- the one configuration in
+which the wrong clock gives the right answer. The replacement ages the
+two in opposite directions: a scope directory 90 days old, a marker
+written today. That is the general form worth keeping — a fixture where
+both candidate readings are present and disagree, rather than one where
+they happen to coincide.
+
+`.monotonic_age` was renamed `.seconds_since_write` in the same change.
+It was `Time.now - File.mtime(path)`, which is not monotonic, and a name
+asserting a property the code does not have is how the next reader gets
+it wrong.

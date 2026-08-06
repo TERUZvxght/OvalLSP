@@ -63,6 +63,24 @@ module DeferredFindings
                           .reject { |number| documents.all? { |doc| documents?(doc, number) } }
   end
 
+  def resolved(markdown)
+    entries(markdown).select { |_, fields| RESOLVED.include?(fields["status"]) }
+  end
+
+  # The other direction, and the one 0.2.2 found missing. This guard only
+  # ever asked whether an *open* finding is cited, so retiring one left
+  # its paragraph in `KNOWN_LIMITATIONS` with nothing to complain -- and
+  # 0.2.2 shipped three at once, each telling a reader to expect
+  # behaviour the release had just removed. Worse than no limitation at
+  # all: it sends them looking for something that is not there.
+  #
+  # `027-0.2.2-review-loop.md` states the lesson as "a revert has the same
+  # documentation trigger as a change". This is that lesson mechanised, so
+  # it does not depend on anyone remembering it.
+  def wrongly_documented(markdown, *documents)
+    resolved(markdown).keys.select { |number| documents.any? { |doc| anchors(doc, number).any? } }
+  end
+
   # What counts as documenting a finding, as opposed to mentioning it.
   #
   # The bare number was the whole test until 0.2.1, and it cannot tell the
@@ -183,6 +201,21 @@ RSpec.describe "deferred findings metadata" do
       expect(DeferredFindings.undocumented(entry("024.30", status: "open", kind: "defect"), "none")).to eq(["024.30"])
     end
 
+    # Each half stated with the case that must *fail*, or it cannot tell a
+    # working rule from one that answers the same either way.
+    it "reports a resolved entry that is still cited as a limitation" do
+      markdown = entry("024.30", status: "fixed", kind: "defect")
+
+      expect(DeferredFindings.wrongly_documented(markdown, "still broken <!-- documents: 024.30 -->")).to eq(["024.30"])
+      expect(DeferredFindings.wrongly_documented(markdown, "no mention")).to be_empty
+    end
+
+    it "does not report an open entry as wrongly cited" do
+      markdown = entry("024.30", status: "open", kind: "defect")
+
+      expect(DeferredFindings.wrongly_documented(markdown, "a limitation <!-- documents: 024.30 -->")).to be_empty
+    end
+
     it "requires every named document to cite the entry, not just one" do
       markdown = entry("024.30", status: "open", kind: "defect")
 
@@ -232,6 +265,15 @@ RSpec.describe "deferred findings metadata" do
                          "open findings absent from KNOWN_LIMITATIONS: #{missing.join(", ")}. " \
                          "Document the user-visible half in both languages, or declare " \
                          "`user-visible: no` with a `user-visible-note` saying why."
+    end
+
+    it "stops documenting a finding once it is fixed" do
+      stale = DeferredFindings.wrongly_documented(deferred, english, japanese)
+
+      expect(stale).to be_empty,
+                       "findings recorded as fixed but still published as current limitations: " \
+                       "#{stale.join(", ")}. Remove the paragraph, in both languages -- a limitation " \
+                       "naming a defect the release does not have is worse than none."
     end
   end
 end

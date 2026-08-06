@@ -255,7 +255,10 @@
             transmitted anywhere, and deleting the directory is safe at any time. As of 0.2.1
             OvalLSP also removes directories under that root at startup — this workspace's
             older generations beyond the eight most recent, and workspaces that no longer
-            exist on disk.
+            exist on disk. Since 0.2.2 a workspace that has disappeared is held for thirty
+            days after it was last opened, because an unmounted volume looks exactly like a
+            deleted project; the cost is that a deleted project's cached source outlives it
+            by up to a month, and deleting the directory yourself is always safe.
           </p>
           <p class="text-mute">
             An earlier version of this page said &ldquo;not your source code's contents&rdquo;.

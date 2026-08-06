@@ -180,6 +180,17 @@ RSpec.describe Ovallsp::Cache::Store do
       dir
     end
 
+    # How long ago this workspace was last *opened*. `.mark_workspace`
+    # rewrites the marker on every launch, so its mtime is that; the scope
+    # directory's own mtime is something else entirely (it advances when a
+    # generation is minted), which is the distinction the two examples
+    # below exist to hold apart.
+    def last_opened(scope, days_ago)
+      marker = File.join(scope, Ovallsp::Cache::Store::WORKSPACE_MARKER)
+      time = Time.now - (days_ago * 24 * 60 * 60)
+      File.utime(time, time, marker)
+    end
+
     it "keeps the current generation however old it looks" do
       Dir.mktmpdir do |root|
         scope = scope_for(root, "w1", root)
@@ -233,8 +244,7 @@ RSpec.describe Ovallsp::Cache::Store do
         FileUtils.mkdir_p(gone)
         vanished = scope_for(root, "vanished", gone)
         generation(vanished, "g", 1)
-        age = Time.now - (Ovallsp::Cache::Store::ABSENT_WORKSPACE_GRACE + 60)
-        File.utime(age, age, vanished)
+        last_opened(vanished, 31)
         FileUtils.remove_entry(gone)
         current = generation(scope_for(root, "mine", root), "current", 0)
 
@@ -266,6 +276,32 @@ RSpec.describe Ovallsp::Cache::Store do
         FileUtils.mkdir_p(gone)
         away = scope_for(root, "away", gone)
         generation(away, "g", 1)
+        FileUtils.remove_entry(gone)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(away)).to be(true)
+      end
+    end
+
+    # The case the grace was written for, and the one it did not cover
+    # until 0.2.2: a project on an external drive, opened this morning, on
+    # a toolchain that has not changed in three months. The scope
+    # directory's mtime is 90 days old because that is when its last
+    # generation was minted; the *workspace* went away minutes ago. Aging
+    # the two in opposite directions is what makes this example able to
+    # fail -- reading either mtime alone answers a different question, and
+    # only one of them is "has anyone opened this project lately".
+    it "keeps a workspace opened today whose cache key last changed months ago" do
+      Dir.mktmpdir do |root|
+        gone = File.join(root, "..", "ovallsp-external-#{Process.pid}")
+        FileUtils.mkdir_p(gone)
+        away = scope_for(root, "away", gone)
+        generation(away, "g", 90)
+        stale = Time.now - (90 * 24 * 60 * 60)
+        File.utime(stale, stale, away)
+        last_opened(away, 0)
         FileUtils.remove_entry(gone)
         current = generation(scope_for(root, "mine", root), "current", 0)
 

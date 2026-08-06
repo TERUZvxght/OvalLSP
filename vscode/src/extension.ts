@@ -448,8 +448,11 @@ function runVersionHandshake(
   // True of the combination but not wrong with it -- a Ruby the bundled
   // payload was not built for, which the Core is nonetheless running
   // under. Worth a line; not worth a toast.
+  // Named by folder, like the incompatibility block below: in a
+  // multi-root workspace each folder gets its own Core, and a bare
+  // `OvalLSP:` line does not say which one it is about.
   for (const note of diagnostic.notes) {
-    outputChannel.appendLine(`OvalLSP: ${note}`);
+    outputChannel.appendLine(`OvalLSP (${folder.name}): ${note}`);
   }
 
   if (!diagnostic.compatible) {
@@ -691,6 +694,14 @@ function registerEnvironmentCommands(
       outputChannel.appendLine(`Ruby expected: ${d.rubyExpected ?? '(no bundled manifest -- monorepo/custom Core)'}`);
       outputChannel.appendLine(`Core selection: ${d.classification}`);
       outputChannel.appendLine(`Selected Core path: ${d.selectedCorePath}`);
+      // Notes before reasons, and here as well as at start-up. This is the
+      // command whose whole job is explaining the environment, and the
+      // start-up line scrolls away; without this a user on Ruby 4.0 or 3.3
+      // reads `Compatible: yes` next to two different Ruby versions with
+      // nothing saying why that is fine.
+      for (const note of diagnostic.notes) {
+        outputChannel.appendLine(`  · ${note}`);
+      }
       for (const reason of diagnostic.reasons) {
         outputChannel.appendLine(`  ✗ ${reason}`);
       }

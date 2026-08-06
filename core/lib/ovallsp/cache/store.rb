@@ -138,7 +138,15 @@ module Ovallsp
           # is.
           workspace = File.read(marker).strip
           next if workspace.empty? || File.directory?(workspace)
-          next if monotonic_age(path) < ABSENT_WORKSPACE_GRACE
+          # The *marker's* mtime, not the scope directory's. A directory's
+          # mtime advances when an entry is created or removed inside it,
+          # which for a scope directory happens only when a generation is
+          # minted -- a Ruby upgrade, a `bundle install`, a release. That
+          # is "how long since the cache key changed", and the question
+          # here is "how long since anyone opened this project". The
+          # marker is rewritten by `.mark_workspace` on every launch that
+          # opens this workspace, so its mtime answers the second one.
+          next if seconds_since_write(marker) < ABSENT_WORKSPACE_GRACE
 
           FileUtils.remove_entry(path)
         end
@@ -149,7 +157,11 @@ module Ovallsp
       # that a genuinely deleted project does not keep one for ever.
       ABSENT_WORKSPACE_GRACE = 30 * 24 * 60 * 60
 
-      def self.monotonic_age(path)
+      # Wall clock, deliberately. A monotonic clock does not survive the
+      # reboot this measures across; the cost is that changing the system
+      # clock changes the answer, which is the lesser problem for a
+      # thirty-day window.
+      def self.seconds_since_write(path)
         Time.now - File.mtime(path)
       rescue StandardError
         0

@@ -52,7 +52,13 @@ unset or empty, keyed by workspace, toolchain version and OvalLSP's own
 version. Directories for combinations no longer in use are removed at
 startup rather than accumulating for as long as the extension is
 installed, which is what happened until 0.2.1; the eight most recently
-used are kept. **It
+used are kept. A workspace that has *disappeared* from disk is the one
+exception, as of 0.2.2: its cache is held for thirty days after the last
+time that workspace was opened, and removed at the first startup after
+that. An unmounted volume and a deleted project look identical from here,
+and the thirty days are how a project on an external drive keeps its
+cache — the cost is that a deleted project's cache outlives it by up to a
+month. Delete the directory yourself if that matters to you. **It
 contains parts of your source code.** Alongside the parsed
 declarations and types it stores each method's body text and each
 parameter's default expression, verbatim — the body so a method's return
