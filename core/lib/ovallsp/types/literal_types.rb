@@ -81,7 +81,7 @@ module Ovallsp
         # its right side -- the mirror of the rule `#and_type` applies,
         # which this was missing: `1 || "b"` answered `Integer | String`
         # where Ruby guarantees `Integer`.
-        return left if left.is_a?(Nominal) && left.name != "Boolean"
+        return left if always_truthy?(left)
 
         Types.normalize_union([Types.remove_nil(left), right])
       end
@@ -95,9 +95,21 @@ module Ovallsp
       def and_type(left, right)
         return left if left == Types::NIL
         return Types.normalize_union([right, left]) if left.is_a?(Nominal) && left.name == "Boolean"
-        return right if left.is_a?(Nominal)
+        return right if always_truthy?(left)
 
         Types.normalize_union([right, Types::NIL])
+      end
+
+      # An instance of a class is truthy, and so is a container over one:
+      # `Types.base_nominal` is the function that already answers "is this
+      # a class instance", and asking `is_a?(Nominal)` instead missed
+      # every `Generic` -- so `items || []` rendered
+      # `Array[Integer] | Array[Unknown]`, a union of a container with
+      # itself, which reads as an engine defect even to someone who does
+      # not know it is one.
+      def always_truthy?(type)
+        base = Types.base_nominal(type)
+        !base.nil? && base.name != "Boolean"
       end
     end
   end

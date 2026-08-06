@@ -122,6 +122,16 @@ and the capability tables promised something the build did not do.
   help and completion on the identifier below it.
 - Fixed: `1 || "b"` is an `Integer`. An instance is always truthy, so
   `||` never reaches its right-hand side.
+- Fixed: `self.method(...)` resolves. Go to definition, hover and
+  signature help all answered nothing on the explicit-receiver form of a
+  call to your own class, because the engine had no type for `self`.
+- Fixed: `@ivar` features work inside a namespaced class — `module Admin`
+  / `class Importer`, which is what `rails g controller Admin::Articles`
+  writes. They had gone silent there.
+- Fixed: clicking the first character of a negated name (`!ready`) no
+  longer says "No definition found".
+- Fixed: `items || []` is an `Array[Integer]`, not a union of that array
+  with another array.
 
 ### Details
 

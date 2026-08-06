@@ -625,6 +625,12 @@ module Ovallsp
       # value does not render two ways depending on how it was written.
       when Prism::HashNode then Types::Generic.new(name: "Hash", type_arg: Types::UNKNOWN)
       when ->(other) { Types::LiteralTypes.for_node(other) } then Types::LiteralTypes.for_node(node)
+      # `self` is the enclosing class, which the descent already tracks --
+      # `MethodAnalyzer` had this case and this walk did not, so
+      # `self.target(1)` resolved its receiver to Unknown and go to
+      # definition, hover and signature help all answered nothing on the
+      # explicit-receiver form of a call to your own class.
+      when Prism::SelfNode then @self_type_stack.last || Types::UNKNOWN
       when Prism::ParenthesesNode then eval_type(node.body, env)
       # `!x` is a CallNode whose message is `!`, and Ruby guarantees its
       # class whatever `x` is -- one of the few calls whose return type

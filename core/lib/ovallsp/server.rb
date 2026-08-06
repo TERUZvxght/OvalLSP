@@ -2815,8 +2815,7 @@ module Ovallsp
       text = document.text
       offset = document.position_to_char_offset(position)
 
-      left = offset
-      left -= 1 while left > 0 && word_char?(text[left - 1])
+      left = name_start_offset(text, offset)
       left.positive? && text[left - 1] == "."
     end
 
@@ -2824,8 +2823,7 @@ module Ovallsp
       text = document.text
       offset = document.position_to_char_offset(position)
 
-      left = offset
-      left -= 1 while left > 0 && word_char?(text[left - 1])
+      left = name_start_offset(text, offset)
       return nil if left.zero? || text[left - 1] != "."
 
       dot_position = document.char_offset_to_position(left - 1)
@@ -2857,14 +2855,7 @@ module Ovallsp
       text = document.text
       offset = document.position_to_char_offset(position)
 
-      left = offset
-      # The caret one past the `!` is where it lands after you type the
-      # name or double-click it, and without this the left scan found no
-      # word at all there -- so 0.2.1's `save!`/`valid?` fix worked inside
-      # the word and not at its end, while every name without a suffix
-      # worked at both.
-      left -= 1 if left.positive? && METHOD_NAME_SUFFIXES.include?(text[left - 1])
-      left -= 1 while left > 0 && word_char?(text[left - 1])
+      left = name_start_offset(text, offset)
       right = offset
       right += 1 while right < text.length && word_char?(text[right])
       # A Ruby method name can end in `!` or `?`, and stopping at them
@@ -2881,6 +2872,22 @@ module Ovallsp
     end
 
     METHOD_NAME_SUFFIXES = ["!", "?"].freeze
+
+    # Where the name containing -- or ending at -- `offset` starts.
+    #
+    # Every scan in this file that walks left off a name needs the same
+    # two rules, and four consecutive rounds of review found them missing
+    # from one place at a time: a Ruby name may end in `!` or `?`, and
+    # such a character belongs to the name only when a word character
+    # precedes it, because the `!` of `!ready` is negation. Written once
+    # so that the next caller cannot get a different answer, which is how
+    # each of those four rounds happened.
+    def name_start_offset(text, offset)
+      left = offset
+      left -= 1 if left > 1 && METHOD_NAME_SUFFIXES.include?(text[left - 1]) && word_char?(text[left - 2])
+      left -= 1 while left.positive? && word_char?(text[left - 1])
+      left
+    end
 
     # The instance-variable prefix under the cursor, sigil included, or nil
     # if the cursor is not writing one.
@@ -2938,9 +2945,14 @@ module Ovallsp
       declaration = summary.declarations
                            .select { |d| %i[class module].include?(d.symbol_id.kind) && position_within?(d.location, position) }
                            .min_by { |d| range_span(d.location) }
-      declaration && Index::SymbolId.qualify_owner(
-        [declaration.symbol_id.owner, declaration.symbol_id.name].compact.reject(&:empty?).join("::")
-      )
+      # `name` is already fully qualified for a class or module --
+      # `SymbolId` runs `qualify_owner` on it at construction -- so
+      # joining the owner on again produced `::Admin::::Admin::Importer`,
+      # which names nothing. Every `@ivar` feature then went silent inside
+      # `module Admin / class Importer`, which is what `rails g controller
+      # Admin::Articles` emits and how every `app/services/billing/*.rb`
+      # is written.
+      declaration&.symbol_id&.name
     end
 
     def ivar_prefix_at_position(document, position)
