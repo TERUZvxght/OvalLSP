@@ -112,6 +112,16 @@ and the capability tables promised something the build did not do.
 - Fixed: no signature popup inside the parameter list of a `def` whose
   name ends in `!` or `?`, or a `def self.` — it was answering with the
   method being declared.
+- Fixed: an `@ivar` no longer takes its type from a different class in
+  the same file. A nested `Row` or a second class assigning the same name
+  overwrote the one you are in, so hover answered with a type from a
+  class the cursor is not in — 0.2.0 said nothing there, which was better.
+- Fixed: hover and go to definition work with the caret at the *end* of a
+  `save!` or `valid?`, which is where it lands after you type the name.
+- Fixed: a comment whose last word is `def` no longer silences signature
+  help and completion on the identifier below it.
+- Fixed: `1 || "b"` is an `Integer`. An instance is always truthy, so
+  `||` never reaches its right-hand side.
 
 ### Details
 

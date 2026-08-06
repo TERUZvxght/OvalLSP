@@ -194,10 +194,12 @@ RSpec.describe Ovallsp::LocalInferencer do
       expect(infer("x = !User.new\n", line: 0, character: 1).to_s).to eq("Boolean")
     end
 
-    it "unions both sides of an `||`, which is what it can return" do
-      expect(infer("x = User.new || Company.new\n", line: 0, character: 1).to_s)
-        .to eq(Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "User"),
-                                               Ovallsp::Types::Nominal.new(name: "Company")]).to_s)
+    # An instance of a class is always truthy, so `||` never reaches its
+    # right side -- the mirror of the `&&` rule below, which this used to
+    # be missing: `1 || "b"` answered `Integer | String` where Ruby
+    # guarantees `Integer`.
+    it "answers the left of an `||` whose left is always truthy" do
+      expect(infer("x = User.new || Company.new\n", line: 0, character: 1).to_s).to eq("User")
     end
 
     # `a && b` yields `a` only when `a` is *falsy*, so an instance of a

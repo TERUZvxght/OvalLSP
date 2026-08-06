@@ -77,6 +77,11 @@ module Ovallsp
 
       def or_type(left, right)
         return right if left == Types::NIL
+        # An instance of a class is always truthy, so `||` never reaches
+        # its right side -- the mirror of the rule `#and_type` applies,
+        # which this was missing: `1 || "b"` answered `Integer | String`
+        # where Ruby guarantees `Integer`.
+        return left if left.is_a?(Nominal) && left.name != "Boolean"
 
         Types.normalize_union([Types.remove_nil(left), right])
       end

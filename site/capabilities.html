@@ -245,14 +245,15 @@
 
       <h3>What the version numbers mean</h3>
       <p>
-        A patch means <em>the set of capabilities is unchanged</em> — not that nothing a
-        user sees changed. Patches routinely change what you see: 0.1.14 removed about
-        twelve thousand wrong reports, which every Rails project noticed, and it was still
-        a patch because it added no row here. A minor means a capability was added. A major
-        means something a user relied on stopped working. That is why every planned row
-        names a minor release exactly, never a <code>0.2.x</code>-style range: a patch
-        never adds a row, and several rows sharing a version ship together, the way 0.1.6
-        shipped five.
+        A patch means <em>nothing new was announced</em> — not that nothing a user sees
+        changed. Patches routinely change what you see: 0.1.14 removed about twelve
+        thousand wrong reports, which every Rails project noticed. A row here can still
+        appear or turn Verified in one, when it names something the previous release was
+        already understood to do and did not — 0.2.1 did that four times. A minor means a
+        capability was <em>announced</em>; a major means something a user relied on stopped
+        working. Planned rows name a minor release exactly, never a
+        <code>0.2.x</code>-style range, and several rows sharing a version ship together,
+        the way 0.1.6 shipped five.
       </p>
 
       <div class="callout mt-3">

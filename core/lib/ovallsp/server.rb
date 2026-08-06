@@ -1544,7 +1544,7 @@ module Ovallsp
       position = params.fetch(:position)
       query_context = build_query_context(uri, position)
       type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(
-        document, position, initial_env: ivar_environment(document), budget: query_context.budget
+        document, position, initial_env: ivar_environment(document, position), budget: query_context.budget
       )
       warn_if_stale(query_context)
       { type: type.to_s }
@@ -2344,7 +2344,7 @@ module Ovallsp
       ivar_prefix = ivar_prefix_at_position(document, position)
       if ivar_prefix
         result = @prefix_completion.ivar_items(document: document, position: position, prefix: ivar_prefix,
-                                               initial_env: ivar_environment(document))
+                                               initial_env: ivar_environment(document, position))
         return { isIncomplete: result.incomplete, items: result.items }
       end
 
@@ -2433,6 +2433,14 @@ module Ovallsp
       position = params.fetch(:position)
       method_name = enclosing_call_name(document, position)
       return { signatures: [] } unless method_name
+
+      # The guard belongs here rather than inside `#method_signature_help`:
+      # a route helper answered first and never reached it, so writing
+      # `def post_path(record)` -- overriding a route helper is ordinary
+      # Rails -- popped the *helper's* signature with `id` bolded.
+      name_range = enclosing_call_name_range(document, position)
+      return { signatures: [] } if name_range &&
+                                   bound_prefix_before?(document, document.char_offset_to_position(name_range.end))
 
       help = route_signature_help(method_name) || method_signature_help(document, position, method_name)
       return help if help.fetch(:signatures).empty?
@@ -2792,7 +2800,15 @@ module Ovallsp
       #
       # `def self.` and `def Foo.` are the same declaration with a
       # receiver written between, which the anchor below cannot see past.
-      text[...left].match?(/(?:\A|[^\w.])(?:un)?def\s+(?:[A-Za-z_][\w:]*\.)?\z/)
+      keyword = text[...left].rindex(/(?:\A|[^\w.])(?:un)?def\s+(?:[A-Za-z_][\w:]*\.)?\z/)
+      return false unless keyword
+
+      # Over *code* only. `\s+` spans newlines, so a comment whose last
+      # word happens to be `def` -- "# a def", "# undef this later" --
+      # silenced signature help and completion on the identifier below it,
+      # with nothing to tell the user why. The same mistake the call scan
+      # made until it was given this mask.
+      !inside_string_or_comment?(document, text[...left].rindex(/(?:un)?def/) || keyword)
     end
 
     def receiver_dot_before?(document, position)
@@ -2833,7 +2849,7 @@ module Ovallsp
       # produced the disagreement it had just spent the release removing
       # elsewhere: the `@` popup said `Article` and `@article.` a
       # keystroke later offered nothing.
-      type = @query_service.type_at(document, dot_position, initial_env: ivar_environment(document))
+      type = @query_service.type_at(document, dot_position, initial_env: ivar_environment(document, position))
       type == Types::UNKNOWN ? nil : type
     end
 
@@ -2842,6 +2858,12 @@ module Ovallsp
       offset = document.position_to_char_offset(position)
 
       left = offset
+      # The caret one past the `!` is where it lands after you type the
+      # name or double-click it, and without this the left scan found no
+      # word at all there -- so 0.2.1's `save!`/`valid?` fix worked inside
+      # the word and not at its end, while every name without a suffix
+      # worked at both.
+      left -= 1 if left.positive? && METHOD_NAME_SUFFIXES.include?(text[left - 1])
       left -= 1 while left > 0 && word_char?(text[left - 1])
       right = offset
       right += 1 while right < text.length && word_char?(text[right])
@@ -2882,22 +2904,43 @@ module Ovallsp
     # `@` shipped reading neither, so it answered nothing in a view and
     # nothing in any action but the assigning one -- the two places an
     # `@ivar` is most typed.
-    def ivar_environment(document)
+    def ivar_environment(document, position)
       return ivars_for_view(document.uri) if erb_view?(document.uri)
 
-      sibling_ivars(document)
+      sibling_ivars(document, position)
     rescue StandardError
       {}
     end
 
-    def sibling_ivars(document)
+    # The instance variables *this class* assigns, in methods other than
+    # the one the cursor is in.
+    #
+    # `position` is not a refinement: without it this collected every
+    # owner in the file and merged them into one hash, so a nested `Row`
+    # or a second top-level class overwrote the outer one's `@data` and
+    # hover answered with a type from a class the cursor is not in. That
+    # turned 0.2.0's silence into a wrong answer -- the trade this project
+    # takes the other way round -- across hover, completion after `@`,
+    # member completion and `explainType` at once.
+    def sibling_ivars(document, position)
       summary = @file_summaries[document.uri] || @parser_service.summarize(document)
-      owners = summary.declarations.filter_map { |d| d.symbol_id.owner if d.symbol_id.kind == :instance_method }.uniq
-      owners.reduce({}) do |acc, owner|
-        @local_inferencer.method_nodes(document, owner_name: owner).values.reduce(acc) do |inner, node|
-          inner.merge(@local_inferencer.infer_ivars_for_method_node(node, self_type_name: owner))
-        end
+      owner = enclosing_owner_at(summary, position)
+      return {} unless owner
+
+      @local_inferencer.method_nodes(document, owner_name: owner).values.reduce({}) do |acc, node|
+        acc.merge(@local_inferencer.infer_ivars_for_method_node(node, self_type_name: owner))
       end
+    end
+
+    # The innermost class or module whose body contains `position`, by
+    # name. Smallest-first, because a class's range spans its nested ones.
+    def enclosing_owner_at(summary, position)
+      declaration = summary.declarations
+                           .select { |d| %i[class module].include?(d.symbol_id.kind) && position_within?(d.location, position) }
+                           .min_by { |d| range_span(d.location) }
+      declaration && Index::SymbolId.qualify_owner(
+        [declaration.symbol_id.owner, declaration.symbol_id.name].compact.reject(&:empty?).join("::")
+      )
     end
 
     def ivar_prefix_at_position(document, position)
@@ -3598,7 +3641,7 @@ module Ovallsp
       position = params.fetch(:position)
       query_context = build_query_context(uri, position)
       type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(
-        document, position, initial_env: ivar_environment(document), budget: query_context.budget
+        document, position, initial_env: ivar_environment(document, position), budget: query_context.budget
       )
       warn_if_stale(query_context)
       lines = hover_lines(document, position, type)

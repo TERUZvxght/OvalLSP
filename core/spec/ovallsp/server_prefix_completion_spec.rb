@@ -513,6 +513,47 @@ RSpec.describe "Ovallsp::Server completion from a bare prefix (0.2.0)" do
       expect(result[:items].map { |item| item[:label] }).to include("publish")
     end
 
+    # Scoped to the class the cursor is in. Collecting every owner in the
+    # file and merging them made a nested class's `@data` overwrite the
+    # outer one's, so hover answered with a type from a class the cursor
+    # is not in -- 0.2.0's silence turned into a wrong answer, across four
+    # features at once.
+    it "does not offer an instance variable that only a nested class assigns" do
+      result = complete(<<~RUBY)
+        class Importer
+          def run
+            @dHERE
+          end
+
+          class Row
+            def setup
+              @detail = "nested"
+            end
+          end
+        end
+      RUBY
+
+      expect(result[:items].map { |item| item[:label] }).not_to include("@detail")
+    end
+
+    it "does not offer an instance variable that only a sibling class assigns" do
+      result = complete(<<~RUBY)
+        class Alpha
+          def run
+            @dHERE
+          end
+        end
+
+        class Beta
+          def setup
+            @detail = "other class"
+          end
+        end
+      RUBY
+
+      expect(result[:items].map { |item| item[:label] }).not_to include("@detail")
+    end
+
     it "offers nothing that cannot be written after an `@`" do
       labels = complete(IVAR_SOURCE, extra_opens: did_open("file:///p.rb", "class ArticleProfile; end\n"))[:items]
                .map { |item| item[:label] }

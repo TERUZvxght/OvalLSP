@@ -68,7 +68,9 @@ RSpec.describe Ovallsp::Types::LiteralTypes do
   {
     "a negation" => ["!true", "Boolean"],
     "an `||` default" => ['nil || "anonymous"', "String"],
-    "an `||` of two classes" => ["User.new || Company.new", "Company | User"],
+    # An instance is always truthy, so `||` never reaches its right side --
+    # the mirror of the `&&` rule below, which this was missing.
+    "an `||` on an always-truthy left" => ["User.new || Company.new", "User"],
     # `a && b` yields `a` only when `a` is *falsy*, so an instance --
     # always truthy -- drops out and the answer is the right-hand side.
     # Written as a plain union first, which claimed `"str" && 5` could be
