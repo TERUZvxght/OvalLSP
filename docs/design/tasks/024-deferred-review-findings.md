@@ -2664,7 +2664,7 @@ what caught it here was a measurement, not a reviewer's reading. Giving
 measure it properly, with `ClassOf` handled for singleton bodies and
 `.class` resolving to the class object rather than to `Class`.
 
-## 024.47 A namespaced class named after a core class stops resolving
+## 024.47 A literal's type can be answered by a same-named workspace class
 
 ```yaml
 status: open
@@ -2672,47 +2672,51 @@ kind: defect
 user-visible: yes
 ```
 
-**Area:** `core/lib/ovallsp/index/type_name_resolution.rb`
-(`#substitution?`), applied by `Semantic::HierarchyIndex#canonical_name`
+**Area:** `core/lib/ovallsp/index/type_name_resolution.rb`,
+`core/lib/ovallsp/semantic/hierarchy_index.rb` (`#canonical_name`),
+`core/lib/ovallsp/semantic/query_service.rb` (`#add_signature_members`)
 
-The rule refuses to resolve a *bare* name that signatures declare to a
-workspace class in a different namespace. That is right for a type an
-expression produced -- a literal's `String` must not be answered by
-`Serializer::Elements::String` -- and wrong for a name the user *wrote*,
-because a bare name is exactly how Ruby refers to a class from inside its
-own namespace:
+With a `Serializer::Elements::String` anywhere in the workspace,
+`"hello".` completes to **121 candidates containing `emit` and not
+`upcase`**: every method RBS declares on `String` is gone, replaced by
+the workspace class's. Hover and go to definition follow the same
+substitution. The *diagnostic* is silent -- 0.2.1 taught the engine not
+to report about a receiver it substituted -- so nothing is red, but three
+readers answer about a class the expression cannot be.
 
-```ruby
-module Billing
-  class Range
-    def tag(name) = name
-  end
-  class Invoice
-    def run
-      r = Range.new
-      r.tag("x")     # 0.2.0: hover, definition and completion all answer
-    end              # 0.2.1: all three answer nothing
-  end
-end
-```
+Measured at 0.2.1: `upcase: false, emit: true, total: 121`.
 
-Reproduces for `Data`, `Set`, `Method`, `File`, `Time`, `Struct`,
-`Comparable`, `IO` and `Random` -- any core name a namespaced class
-shares. `Billing::Logger` survives only because `logger`'s RBS is not
-loaded by default.
+**This entry described the opposite until 0.2.2 corrected it**, and the
+`KNOWN_LIMITATIONS` paragraphs in both languages said the same wrong
+thing. 0.2.1 moved the refusal into resolution, which fixed the
+substitution above and broke a bare name the user *wrote* -- `Range.new`
+inside `module Billing` stopped resolving at all. That was reverted
+before 0.2.1 shipped, and the entry, written before the revert, was not.
+A published limitation that names a defect the release does not have is
+worse than none: it sends a reader looking for something that is not
+there.
 
-**Direction:** the two cases differ in whether the name was *written* or
-*inferred*, and `HierarchyIndex#ancestors` knows neither -- it is handed
-a name with no lexical context. Two shapes are plausible and neither is a
-patch: carry that distinction into the type (an inferred Nominal is not
-the same thing as a written constant reference), or stop choosing and let
-the chain hold both the workspace class and the RBS type, so a member
-lookup finds whichever declares it. The second is cheaper and costs one
-spurious completion candidate on a literal.
+**Why it is not a patch.** `#ancestors` is handed a name and no lexical
+context, and the two cases are the same string there:
 
-**Not caught for seven rounds** because `scripts/corpus_diagnostics.rb`
-built its `HierarchyIndex` without `signatures:`, so this rule was inert
-in every corpus measurement the release quoted (024.48).
+| the name | where it came from | the right answer |
+|---|---|---|
+| `String` from `"hello"` | inferred | RBS's `String` |
+| `Range` inside `module Billing` | written by the user | `Billing::Range` |
+
+**Two directions, both design changes.**
+
+1. *Carry the distinction into the type.* An inferred `Nominal` is not the
+   same thing as a written constant reference, and if the type said so,
+   resolution could apply the rule to one and not the other. Correct, and
+   it reaches the whole type model.
+2. *Stop choosing.* Let the chain hold both the workspace class and the
+   RBS type, so a member lookup finds whichever declares the name.
+   Cheaper, loses nothing, and costs one spurious candidate on a literal
+   (`"hello".` would offer `emit` alongside `upcase`).
+
+The second is the one to try first: nothing is lost by it, and an extra
+candidate is a smaller wrong than a missing method.
 
 ## 024.48 The measurement tool ran an engine the server never runs
 

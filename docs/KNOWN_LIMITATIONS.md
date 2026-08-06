@@ -410,14 +410,17 @@ a minute, once (024.51). Later launches are unaffected. <!-- documents: 024.51 -
 
 ## A class of yours named after a core class
 
-**If it lives in a namespace, it stops resolving.** `Billing::Range`,
-`Admin::File`, `Reporting::Time` — referred to the way Ruby refers to a
-class from inside its own namespace, by its bare name — get no hover, no
-go to definition and no completion as of 0.2.1, where 0.2.0 answered.
-The engine refuses to let a bare name that Ruby itself declares be
-answered by a workspace class, which is right for the `String` a literal
-produced and wrong for the `Range` you wrote (024.47). A class named
-after a core one at the *top* level is unaffected. <!-- documents: 024.47 -->
+**A literal of that class stops finding its own methods.** If your
+workspace contains a `Serializer::Elements::String` — at any nesting
+depth — then `"hello".` offers that class's methods and none of Ruby's:
+no `upcase`, no `strip`. Hover and go to definition follow it too. The
+same applies to a workspace `Set`, `Time`, `File` or `Range`.
+
+No diagnostic is produced there — 0.2.1 taught the engine not to report
+about a receiver it substituted — so nothing is marked wrong; the answers
+are simply about the wrong class. Your own class *is* found correctly
+from inside its own namespace, which is the case an earlier version of
+this paragraph wrongly said was broken (024.47). <!-- documents: 024.47 -->
 
 ## How long an edit takes to re-analyse
 
