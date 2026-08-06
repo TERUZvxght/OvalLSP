@@ -222,12 +222,19 @@ RSpec.describe Ovallsp::Cache::Store do
       end
     end
 
-    it "removes a workspace whose directory no longer exists" do
+    # A missing directory is not proof the project is gone -- an unmounted
+    # volume and a network share that is briefly away look exactly like a
+    # deleted one -- so the scope is held for a grace period first. Aged
+    # past it here, because what is being pinned is that it *is* removed
+    # eventually, not that it survives.
+    it "removes a workspace whose directory has been gone for longer than the grace period" do
       Dir.mktmpdir do |root|
         gone = File.join(root, "..", "ovallsp-vanished-#{Process.pid}")
         FileUtils.mkdir_p(gone)
         vanished = scope_for(root, "vanished", gone)
         generation(vanished, "g", 1)
+        age = Time.now - (Ovallsp::Cache::Store::ABSENT_WORKSPACE_GRACE + 60)
+        File.utime(age, age, vanished)
         FileUtils.remove_entry(gone)
         current = generation(scope_for(root, "mine", root), "current", 0)
 
@@ -250,6 +257,21 @@ RSpec.describe Ovallsp::Cache::Store do
         described_class.prune_generations(cache_root: root, current: current, keep: 8)
 
         expect(Dir.exist?(legacy)).to be(false)
+      end
+    end
+
+    it "keeps a workspace that has only just become unreachable" do
+      Dir.mktmpdir do |root|
+        gone = File.join(root, "..", "ovallsp-unmounted-#{Process.pid}")
+        FileUtils.mkdir_p(gone)
+        away = scope_for(root, "away", gone)
+        generation(away, "g", 1)
+        FileUtils.remove_entry(gone)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(away)).to be(true)
       end
     end
 

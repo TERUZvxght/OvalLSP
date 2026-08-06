@@ -47,7 +47,8 @@ implemented and tested today, not a roadmap.
 | macOS, Intel / Rosetta | Not supported in this Preview |
 | Linux, Windows | Not supported in this Preview |
 | Ruby 3.4.x | **Supported** (tested: 3.4.5, 3.4.7) |
-| Ruby 3.3.x, 3.5.x | Not verified — treated as unsupported |
+| Ruby 4.0.x | Best effort — the Core's suite is green under 4.0.6, nothing verifies it continuously |
+| Ruby 3.3.x, 3.5.x | Not verified |
 | Rails 8.1 | **Supported** (tested against the real integration suite) |
 | Rails ≤ 7.x | Not verified |
 | WSL / Dev Containers / Remote SSH | Not supported in this Preview |
@@ -55,9 +56,13 @@ implemented and tested today, not a roadmap.
 Full detail and rationale: [docs/SUPPORT_MATRIX.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/SUPPORT_MATRIX.md)
 and [Known Limitations](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.md).
 
-On an unsupported platform/Ruby combination, OvalLSP does not silently
-degrade or guess — it refuses to load its bundled native dependencies and
-shows a clear diagnostic instead (see
+On a platform this build was not made for, OvalLSP refuses to load its
+bundled native dependencies and says so. On a *Ruby* it was not built
+for, it asks whether that Ruby carries `prism` and `rbs` of its own: if
+it does, OvalLSP runs against those and notes it in the Output channel,
+which is a combination nothing here verifies rather than one that is
+supported; if it does not, you get a clear diagnostic naming
+`gem install prism rbs` (see
 [Version and compatibility errors](#version-and-compatibility-errors)).
 
 ## Requirements
@@ -83,10 +88,12 @@ else needed to run — the Core Server itself and its own runtime
 dependencies (Prism, RBS) — ships inside the VSIX; there is no second
 download, no `bundle install`, and no repository checkout involved.
 
-If no compatible Ruby can be found, or the one found doesn't match what
-this build's native dependencies were compiled for, OvalLSP does not
-silently degrade or half-start — it shows a clear diagnostic explaining
-what's wrong and what to do (see [Ruby resolution](#ruby-resolution) and
+If no Ruby can be found at all, OvalLSP shows a clear diagnostic
+explaining what's wrong and what to do rather than half-starting. If the
+Ruby found simply differs from the one this build's native dependencies
+were compiled for, see the paragraph above: it runs against that Ruby's
+own `prism`/`rbs` when they are there, and tells you in the Output
+channel that it is doing so (see [Ruby resolution](#ruby-resolution) and
 [Version and compatibility errors](#version-and-compatibility-errors)).
 
 ## Quick start

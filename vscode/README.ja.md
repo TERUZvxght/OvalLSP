@@ -43,7 +43,8 @@ OvalLSPはRuby実装の言語サーバー(`ovallsp`)をVS Codeと並行して起
 | macOS, Intel / Rosetta | このPreviewでは非対応 |
 | Linux, Windows | このPreviewでは非対応 |
 | Ruby 3.4.x | **対応**(3.4.5、3.4.7で動作確認済み) |
-| Ruby 3.3.x, 3.5.x | 未検証(非対応として扱う) |
+| Ruby 4.0.x | best effort(Coreのスイートは4.0.6でgreen。継続的な検証は無し) |
+| Ruby 3.3.x, 3.5.x | 未検証 |
 | Rails 8.1 | **対応**(実際の統合テストで確認済み) |
 | Rails 7.x以下 | 未検証 |
 | WSL / Dev Container / Remote SSH | このPreviewでは非対応 |
@@ -52,9 +53,13 @@ OvalLSPはRuby実装の言語サーバー(`ovallsp`)をVS Codeと並行して起
 と[既知の制限事項](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md)
 を参照してください。
 
-対応外のプラットフォーム/Rubyの組合せでは、OvalLSPは黙って劣化動作したり
-推測したりせず、同梱されたnative依存の読み込みを拒否し、明確な診断を
-表示します([バージョン・互換性エラー](#バージョン互換性エラー)参照)。
+このビルドが対象としていないプラットフォームでは、OvalLSPは同梱された
+native依存の読み込みを拒否し、そう伝えます。対象としていない*Ruby*では、
+その Ruby が `prism` と `rbs` を自前で持っているかを確認します。持って
+いればそちらで動かし、Outputチャンネルにその旨を出します — これは
+「対応している組み合わせ」ではなく「ここでは何も検証していない組み合わせ」
+です。持っていなければ `gem install prism rbs` を示す明確な診断が出ます
+([バージョン・互換性エラー](#バージョン互換性エラー)参照)。
 
 ## 必要環境
 
@@ -79,10 +84,11 @@ Homebrew経由、または明示的な`ovallsp.rubyExecutablePath`で、Ruby 3.4
 Prism・RBS)はVSIX自体に同梱されており、追加のダウンロード・
 `bundle install`・リポジトリのチェックアウトは一切発生しません。
 
-互換性のあるRubyが見つからない場合、または見つかったRubyがこのビルドの
-native依存がコンパイルされた対象と一致しない場合、OvalLSPは黙って
-劣化動作したり中途半端に起動したりせず、何が問題で何をすべきかを説明する
-明確な診断を表示します([Ruby解決](#ruby解決)と
+Rubyがまったく見つからない場合、OvalLSPは中途半端に起動せず、何が問題で
+何をすべきかを説明する明確な診断を表示します。見つかったRubyが、このビルドの
+native依存がコンパイルされた対象と単に異なるだけの場合は上の段落のとおりです
+— その Ruby 自身の `prism`/`rbs` があればそちらで動かし、そうしていることを
+Outputチャンネルで伝えます([Ruby解決](#ruby解決)と
 [バージョン・互換性エラー](#バージョン互換性エラー)を参照)。
 
 ## クイックスタート

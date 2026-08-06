@@ -129,9 +129,30 @@ module Ovallsp
           # No marker: a pre-0.2.1 generation, unreadable by this build.
           next FileUtils.remove_entry(path) unless File.file?(marker)
 
+          # A missing directory is not proof the project is gone: an
+          # unmounted volume and a network share that is briefly away both
+          # look exactly like a deleted one, and this method's own comment
+          # calls every removal it makes "a fact rather than a guess".
+          # Held for a grace period instead, so a project only loses its
+          # warm cache after being unreachable for longer than any mount
+          # is.
           workspace = File.read(marker).strip
-          FileUtils.remove_entry(path) unless workspace.empty? || File.directory?(workspace)
+          next if workspace.empty? || File.directory?(workspace)
+          next if monotonic_age(path) < ABSENT_WORKSPACE_GRACE
+
+          FileUtils.remove_entry(path)
         end
+      end
+
+      # Thirty days: long enough that no mount, no external disk and no
+      # laptop left closed over a holiday loses a warm cache, short enough
+      # that a genuinely deleted project does not keep one for ever.
+      ABSENT_WORKSPACE_GRACE = 30 * 24 * 60 * 60
+
+      def self.monotonic_age(path)
+        Time.now - File.mtime(path)
+      rescue StandardError
+        0
       end
 
       def self.children_of(dir)

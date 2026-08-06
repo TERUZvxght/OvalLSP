@@ -1413,7 +1413,21 @@ module Ovallsp
       # one swept. Once per start: a generation is only minted when the
       # key changes, which is a Ruby upgrade, a `bundle install` or a
       # release, not something that happens mid-session.
-      Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir)
+      #
+      # On a background thread, because this runs on the `initialize`
+      # dispatch and every request the editor sends afterwards queues
+      # behind it. 0.9 s to remove 1,000 abandoned directories, measured
+      # -- and the machine this sweep exists for had 28,643 of them and
+      # 2.8 GB, which is the better part of a minute of a server that
+      # answers nothing. The first launch after an upgrade is exactly when
+      # that bill comes due, because putting the build's version in the
+      # key is what abandoned them (024.51).
+      #
+      # Nothing waits on it: the current generation's directory already
+      # exists, and removing *other* directories cannot change what this
+      # one reads.
+      sweep = Thread.new { Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir) }
+      @background_tasks.track_thread(sweep)
       store
     rescue StandardError => e
       @logger.error("failed to initialize persistent cache; continuing without one: #{e.class}: #{e.message}")

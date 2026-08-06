@@ -16,6 +16,15 @@ the disproved approaches are kept below it under **Details**.
   differently. The Core is running under that Ruby, which is what makes
   it a note rather than a fault; it goes to the Output channel now. A
   different *engine* — a Core under JRuby — is still an incompatibility.
+- Fixed: the first launch after upgrading no longer waits while the old
+  cache is swept. Putting the build's version into the cache key in 0.2.1
+  abandons every directory the previous version wrote, and removing them
+  ran on the thread that answers requests — the better part of a minute
+  on a long-accumulated cache, once, at exactly the moment you have just
+  updated. It runs in the background now.
+- Fixed: a project on an unmounted volume or a network share that is
+  briefly away no longer loses its warm cache. A missing directory was
+  taken as proof the project was gone; it is held for thirty days now.
 - **Diagnostics wait for you to stop typing.** Every edit used to
   publish in the turn that received it, which is where two long-standing
   complaints met: typing `.` reported a method on the *next* line — `a.`
