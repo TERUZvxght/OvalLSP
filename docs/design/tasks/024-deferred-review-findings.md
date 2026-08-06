@@ -2725,3 +2725,93 @@ Fixed by building it the way the server does. The lesson is the one
 `CLAUDE.md` already carries, one level up: *confirm each side ran the
 code you think it ran* has to include "and in the configuration a user
 would run it in".
+
+## 024.49 The red toast 0.2.1 removed is still shown, from the other code path
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `vscode/src/versionInfo.ts` (`compareVersionInfo`, the Ruby
+mismatch branch), `vscode/src/extension.ts` (the `showErrorMessage` for a
+version-incompatible Core)
+
+0.2.1 changed `platformCompatibility.ts` so that a Ruby the bundled
+payload was not built for is checked rather than refused: if it carries
+`prism` and `rbs`, OvalLSP runs against those and says so in the Output
+channel. `versionInfo.ts` still compares the manifest's
+`rubyVersionMajorMinor` against the running Core's Ruby and reports
+incompatible, and `extension.ts` shows an error toast for that
+unconditionally.
+
+Measured against the compiled `out/versionInfo.js` with a 3.4 manifest:
+`3.4.7` compatible, `4.0.6` and `3.3.9` incompatible with "Ruby version
+mismatch".
+
+**What a user sees:** on Ruby 3.3 or 4.0 with the gems present, a red
+error toast on every window -- the thing 0.2.1's change was for --
+worded differently. `docs/SUPPORT_MATRIX.md`'s 3.3 and 4.0 rows and both
+getting-started pages say it is an Output-channel line.
+
+**Direction:** one function decides whether a Ruby is usable, and both
+call sites read it. Today two functions decide and only one was changed.
+
+## 024.50 The Marketplace description promises the behaviour 0.2.1 removed
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `vscode/README.md` and `vscode/README.ja.md` -- the paragraphs
+about unsupported platform/Ruby combinations
+
+They say OvalLSP "does not silently degrade or guess -- it refuses to
+load its bundled native dependencies and shows a clear diagnostic
+instead" and "does not silently degrade or half-start". As of 0.2.1 a
+mismatched Ruby carrying `prism`/`rbs` starts and runs an unverified
+combination, which is exactly degrading. `vscode/README.md` is the
+Marketplace description, so this is a published claim the build does not
+honour.
+
+The same file's environment table still reads "Ruby 3.3.x, 3.5.x | Not
+verified" with no 4.0 row, while `docs/SUPPORT_MATRIX.md` carries 4.0 as
+best effort.
+
+**Direction:** fix the prose, and add `vscode/README.md` +
+`vscode/README.ja.md` to `docs/DOCUMENTATION_MAP.md`'s Ruby/platform
+trigger row -- which is why it was missed: the row names
+`docs/SUPPORT_MATRIX`, `docs/KNOWN_LIMITATIONS` and the two
+getting-started pages, and not these two.
+
+## 024.51 The first launch after an upgrade blocks while it sweeps the old cache
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/cache/store.rb` (`.prune_generations`,
+`.prune_workspaces`), called from `Server#build_cache_store`, which runs
+synchronously on the `initialize` dispatch
+
+Measured: 0.9 s to remove 1,000 legacy generation directories of 20 files
+each. The comment in that file cites a real machine at 28,643 directories
+and 2.8 GB, which extrapolates to roughly half a minute of a server that
+answers nothing -- once, on the first start after upgrading to 0.2.1,
+because that is the release that put the version in the cache key. Every
+request VS Code sends after `initialize` queues behind it.
+
+**Direction:** do the sweep on a background thread, or after the first
+cold-index batch. The current generation directory already exists before
+pruning runs, so nothing depends on it finishing first.
+
+**Secondary, same file:** `prune_workspaces` removes a scope directory
+whenever `File.directory?` of the recorded workspace path is false, so a
+project on an unmounted volume or a temporarily unavailable network share
+loses its warm cache. The method's comment calls each removal "a fact
+rather than a guess", and this one is a guess.

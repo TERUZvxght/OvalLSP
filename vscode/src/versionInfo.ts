@@ -80,6 +80,16 @@ export interface VersionDiagnostic {
   reasons: string[];
   /** Always populated, so the diagnostic is useful even when compatible. */
   details: VersionDiagnosticDetails;
+  /**
+   * True of the combination but not wrong with it. A Ruby the payload was
+   * not built for is the case this exists for: 0.2.1 made
+   * `platformCompatibility` check whether that Ruby carries prism and rbs
+   * rather than refuse it, and this function was left calling the same
+   * situation incompatible -- so the red toast that change removed was
+   * still shown, from here, on every window. A note goes to the Output
+   * channel; only `reasons` produces a toast.
+   */
+  notes: string[];
   /** Only set when incompatible -- what the user should actually do. */
   action?: string;
 }
@@ -205,6 +215,7 @@ function majorMinor(version: string): string {
  */
 export function compareVersionInfo(client: ClientVersionInfo, server: OvallspServerInfo | undefined): VersionDiagnostic {
   const reasons: string[] = [];
+  const notes: string[] = [];
   const details: VersionDiagnosticDetails = {
     extensionVersion: client.extensionVersion,
     coreVersion: server?.coreVersion ?? null,
@@ -222,6 +233,7 @@ export function compareVersionInfo(client: ClientVersionInfo, server: OvallspSer
     return {
       compatible: false,
       reasons: ['Core did not report version information in its initialize response (ovallspInfo missing or malformed).'],
+      notes: [],
       details,
       action:
         'Restart the Core Server (OvalLSP: Restart Server) and check the OvalLSP output channel. If this persists, ' +
@@ -282,20 +294,28 @@ export function compareVersionInfo(client: ClientVersionInfo, server: OvallspSer
           `is ${server.ruby.engine}.`
       );
     } else if (manifest.rubyVersionMajorMinor !== majorMinor(server.ruby.version)) {
-      reasons.push(
-        `Ruby version mismatch: this Extension's bundled Core expects Ruby ${manifest.rubyVersionMajorMinor}, but ` +
-          `the running Core is Ruby ${majorMinor(server.ruby.version)}.`
+      // A note, not a reason. The Core is *running* under that Ruby, so it
+      // is by definition one it can run under -- the bundled native
+      // extensions are simply not the ones being used, which
+      // `platformCompatibility` has already established and said so in the
+      // Output channel. Two functions were deciding this and only one was
+      // changed in 0.2.1.
+      notes.push(
+        `Ruby version differs: this Extension's bundled native dependencies were built for Ruby ` +
+          `${manifest.rubyVersionMajorMinor} and the running Core is Ruby ${majorMinor(server.ruby.version)}, ` +
+          `so they are not being used. See docs/SUPPORT_MATRIX.md for which combinations are verified.`
       );
     }
   }
 
   if (reasons.length === 0) {
-    return { compatible: true, reasons: [], details };
+    return { compatible: true, reasons: [], notes, details };
   }
 
   return {
     compatible: false,
     reasons,
+    notes,
     details,
     action:
       client.classification === 'custom'

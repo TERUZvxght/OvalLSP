@@ -6,6 +6,17 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.2 — unreleased
+
+- Fixed: no red error toast on a Ruby the bundled dependencies were not
+  built for. 0.2.1 made the extension check whether that Ruby carries
+  `prism` and `rbs` and run against them if it does — and left a second
+  version check calling the same situation incompatible, so the toast
+  that change removed was still shown, on every window, worded
+  differently. The Core is running under that Ruby, which is what makes
+  it a note rather than a fault; it goes to the Output channel now. A
+  different *engine* — a Core under JRuby — is still an incompatibility.
+
 ## 0.2.1 — Fewer wrong reports, and the promises already published
 
 Nothing new to learn here. This release is about the engine saying fewer

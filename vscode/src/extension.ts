@@ -445,6 +445,13 @@ function runVersionHandshake(
   const diagnostic = compareVersionInfo(clientInfo, ovallspInfo);
   versionDiagnostics.set(key, diagnostic);
 
+  // True of the combination but not wrong with it -- a Ruby the bundled
+  // payload was not built for, which the Core is nonetheless running
+  // under. Worth a line; not worth a toast.
+  for (const note of diagnostic.notes) {
+    outputChannel.appendLine(`OvalLSP: ${note}`);
+  }
+
   if (!diagnostic.compatible) {
     outputChannel.appendLine(`--- OvalLSP version compatibility (${folder.name}) ---`);
     for (const reason of diagnostic.reasons) {

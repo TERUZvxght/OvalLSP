@@ -97,11 +97,30 @@ describe('compareVersionInfo', () => {
     assert.ok(result.reasons.some((r) => r.includes('Ruby engine mismatch')));
   });
 
-  it('detects a Ruby major.minor version mismatch, ignoring patch version', () => {
+  // 0.2.1 changed what a Ruby the payload was not built for *means*:
+  // `platformCompatibility` asks whether that Ruby carries prism and rbs
+  // and, if it does, runs against them and says so in the Output channel.
+  // This second check was not changed with it, and `extension.ts` shows a
+  // red error toast for anything it calls incompatible -- so the toast
+  // 0.2.1 removed was still shown, on every window, worded differently.
+  //
+  // A Ruby the Core is *running under* is by definition one it can run
+  // under. The mismatch is worth saying; it is not an incompatibility,
+  // and only one of these two functions gets to decide that.
+  it('notes a Ruby major.minor difference without calling the Core incompatible', () => {
     const server = baseServer({ ruby: { engine: 'ruby', version: '3.3.9', platform: 'arm64-darwin25' } });
     const result = compareVersionInfo(bundledClient(), server);
+    assert.strictEqual(result.compatible, true);
+    assert.ok(result.notes.some((n) => n.includes('Ruby version differs')));
+  });
+
+  // The engine is a different question: a Core running under JRuby is not
+  // one this VSIX's payload can serve at all.
+  it('still detects a Ruby engine mismatch as incompatible', () => {
+    const server = baseServer({ ruby: { engine: 'jruby', version: '3.4.7', platform: 'arm64-darwin25' } });
+    const result = compareVersionInfo(bundledClient(), server);
     assert.strictEqual(result.compatible, false);
-    assert.ok(result.reasons.some((r) => r.includes('Ruby version mismatch')));
+    assert.ok(result.reasons.some((r) => r.includes('Ruby engine mismatch')));
   });
 
   it('does not flag a patch-version-only difference as a mismatch', () => {

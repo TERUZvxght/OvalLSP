@@ -384,6 +384,30 @@ missed one", so each is narrow on purpose. What that costs a user:
   The G17 row and its example exist now, and 024.14 records what the
   original measurement most likely hit.)
 
+## What happens on a Ruby the VSIX was not built for
+
+Since 0.2.1 the extension checks whether that Ruby carries `prism` and
+`rbs` of its own and runs against those if it does — an unverified
+combination rather than a refusal. Two things about that are still wrong
+and are worth knowing:
+
+- **You still get a red error toast**, from a second version check that
+  was not changed with the first, saying the Core is not version
+  compatible (024.49). OvalLSP is running; the toast is describing the
+  bundled payload, not your situation. <!-- documents: 024.49 -->
+- **The Marketplace description still says the opposite** — that OvalLSP
+  "does not silently degrade or half-start" on such a combination
+  (024.50) — it does now, deliberately, and that text has not caught up. <!-- documents: 024.50 -->
+
+## The first launch after upgrading to 0.2.1
+
+**It may take a while before anything answers.** 0.2.1 put the build's
+version into the cache key, which abandons every directory the previous
+version wrote, and the sweep that removes them runs on the thread that
+answers requests. On a machine with a long-accumulated cache — one was
+measured at 28,643 directories and 2.8 GB — that is on the order of half
+a minute, once (024.51). Later launches are unaffected. <!-- documents: 024.51 -->
+
 ## A class of yours named after a core class
 
 **If it lives in a namespace, it stops resolving.** `Billing::Range`,
