@@ -126,7 +126,6 @@ suite in step: every row must have an example, every example a row.
 | C11 | Types `post.` or `@post.` inside an ERB template, where the template itself assigns `post` or a controller action assigns `@post` | the model's members, resolved from the template's Ruby regions rather than its HTML — the `@ivar` from the controller action that assigned it, as hover already did. **A partial's local** (`article` in `_article.html.erb`) is not resolved: its type comes from the `render` call site, which nothing reads (024.44) | PASS |
 | C12 | Types `Art` with no receiver in front of it | workspace classes, the locals in scope, and the methods callable at that position | PASS |
 | C13 | Highlights a completion candidate declared with an RDoc/YARD comment, *in the list a receiver produced* | the comment appears as the item's documentation | PASS |
-| C14 | Types `@` in a controller action, or in the view it renders | the instance variables in scope, each with its sigil and its inferred type — including ones a `before_action` or another action assigned — and nothing that cannot be written after an `@` | PASS |
 
 C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
 a bare constant inferred as `Unknown`, so nothing downstream ever saw a
@@ -190,7 +189,6 @@ settle. Everything it declines is listed under the non-goals below.
 | S1 | Types `(` after a workspace method | its parameter list | PASS |
 | S2 | Types `(` after a stdlib method | the RBS overload label | PASS |
 | S3 | Types `(` after a route helper | the helper's required parts | PASS |
-| S4 | Types a second argument, of a workspace method or of one RBS declares | the popup marks the *second* parameter as the active one | PASS |
 
 ## Semantic highlighting
 
@@ -206,7 +204,6 @@ settle. Everything it declines is listed under the non-goals below.
 | W2 | Rename a workspace method declared with `def` | every call site is rewritten | PASS |
 | W3 | Workspace symbol search | matching classes and methods | PASS |
 | W4 | Renames a method a macro declared (`attr_accessor`, `delegate`, …) | nothing is edited — there is no identifier token to rewrite, and editing only the call sites would leave the declaration behind. The editor shows its own refusal; the reason is logged, not surfaced (024.28) | PASS |
-| W5 | Rests the cursor on an identifier | its other uses in that file are marked — an instance variable including its `@`, a local variable without matching the same word inside one | PASS |
 
 ## What this document deliberately does not promise
 

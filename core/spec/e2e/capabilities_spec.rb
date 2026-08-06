@@ -553,46 +553,7 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
-    # `@` was silent, and silence is not neutral: the editor fell back to
-    # matching words in the buffer and proposed `article` -- the ivar's
-    # name without its sigil, which is not what anyone is typing.
-    it "C14: offers the instance variables in scope after an `@`" do
-      with_file("app/models/ivar_completion_probe.rb", <<~RUBY) do |uri|
-        class IvarCompletionProbe
-          def run
-            @article = Article.new
-            @a
-          end
-        end
-      RUBY
-        items = @client.completion_items(uri, 3, 6)
 
-        expect(items.map { |item| item[:label] }).to include("@article")
-        expect(items.map { |item| item[:label] }).to all(start_with("@"))
-        # The row promises "with its inferred type", which nothing looked
-        # at.
-        expect(items.find { |item| item[:label] == "@article" }[:detail]).to eq("Article")
-      end
-    end
-
-    # The half 0.2.1 actually fixed, and the half the row had no clause
-    # for: a scaffolded controller assigns `@article` in a `before_action`
-    # and uses it in `edit`, `update` and `destroy`.
-    it "C14: offers an instance variable another method of the class assigned" do
-      with_file("app/models/ivar_sibling_probe.rb", <<~RUBY) do |uri|
-        class IvarSiblingProbe
-          def set_article
-            @article = Article.new
-          end
-
-          def edit
-            @a
-          end
-        end
-      RUBY
-        expect(@client.completion_items(uri, 6, 6).map { |item| item[:label] }).to include("@article")
-      end
-    end
 
     # The same row, for the call shape Ruby actually uses most. The
     # example above writes a receiver; without one, `definition_result`
@@ -996,34 +957,6 @@ RSpec.describe "Extension capabilities", :e2e do
     end
   end
 
-  describe "occurrence highlighting" do
-    # Not answering is not neutral. With no provider the client falls back
-    # to matching the word under the cursor as *text*, and `@` is not a
-    # word character -- so on a scaffolded controller, resting in
-    # `@articles` marked the word `articles` inside every `# GET /articles`
-    # comment, and resting in a local named `article` marked every
-    # `@article` in the file. Both reported from a real editing session.
-    it "W5: marks an instance variable's other uses, sigil included, and nothing in a comment" do
-      with_file("app/models/highlight_probe.rb", <<~RUBY) do |uri|
-        class HighlightProbe
-          # article is mentioned here and is not a variable
-          def run
-            @article = Article.new
-            article = "not the ivar"
-            [@article, article]
-          end
-        end
-      RUBY
-        ivar = @client.document_highlights(uri, 3, 6)
-        local = @client.document_highlights(uri, 4, 6)
-
-        expect(ivar.map { |h| h[:range][:start][:line] }).to contain_exactly(3, 5)
-        expect(ivar.first[:range][:end][:character] - ivar.first[:range][:start][:character]).to eq(8)
-        expect(local.map { |h| h[:range][:start][:line] }).to contain_exactly(4, 5)
-      end
-    end
-
-  end
 
   describe "signature help" do
 
@@ -1056,41 +989,6 @@ RSpec.describe "Extension capabilities", :e2e do
         end
       RUBY
         expect(@client.signature_labels(uri, 4, 10).join(" ")).to include("first")
-      end
-    end
-
-    # The parameter list is only half of what the popup shows: the editor
-    # also bolds one of them. With nothing said about which, VS Code bolds
-    # the first for the whole call, so past the first comma the popup is
-    # pointing at the wrong parameter rather than at none.
-    it "S4: says which parameter the cursor is on" do
-      with_file("app/models/active_parameter_probe.rb", <<~RUBY) do |uri|
-        class ActiveParameterProbe
-          def takes(first, second); end
-
-          def run
-            takes("a", 2
-          end
-        end
-      RUBY
-        expect(@client.signature_active_parameter(uri, 4, 16)).to eq(1)
-      end
-    end
-
-    # The row's other half, added when RBS signatures gained the parameter
-    # list an editor needs to highlight one. Only workspace methods
-    # carried it before, so `"abc".sub(` was told which argument the
-    # cursor was on and had nothing to apply it to.
-    it "S4: says which parameter the cursor is on for a method RBS declares" do
-      with_file("app/models/rbs_active_parameter_probe.rb", <<~RUBY) do |uri|
-        class RbsActiveParameterProbe
-          def run
-            "abc".sub("a", "b"
-          end
-        end
-      RUBY
-        expect(@client.signature_active_parameter(uri, 2, 22)).to eq(1)
-        expect(@client.signature_labels(uri, 2, 22).join(" ")).to include("sub(")
       end
     end
   end

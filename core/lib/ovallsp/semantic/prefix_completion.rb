@@ -78,31 +78,6 @@ module Ovallsp
       # front of it. An empty prefix returns nothing: there is no signal in
       # it, and answering with the workspace is the failure mode this class
       # exists to avoid.
-      # The instance variables in scope, for a prefix that opens with `@`.
-      #
-      # Separate from #items rather than a branch inside it because the
-      # two share no source at all: nothing a bare prefix offers -- a
-      # local, a method on self, a workspace constant, a Kernel method --
-      # can be written after an `@`, and no ivar can be written without
-      # one. Offering the bare-prefix sources there wrote `@UserProfile`,
-      # so the path was made silent instead; silence then let the editor
-      # fall back to matching words in the buffer, which proposed the
-      # ivar's name *without* its sigil.
-      #
-      # `prefix` includes the sigil, and so does every label: an editor
-      # replaces the word it is completing, and the word here starts at
-      # the `@`.
-      def ivar_items(document:, position:, prefix:, initial_env: {})
-        scope = @query_service.scope_at(document, position, initial_env: initial_env)
-        items = scope.ivars.filter_map do |name, type|
-          next unless matches?(name, prefix)
-
-          { label: name, kind: KIND_VARIABLE, detail: type.to_s, __group: GROUP_LOCAL }
-        end
-        ranked = items.sort_by { |item| item[:label] }
-        Result.new(items: ranked.first(MAX_ITEMS).map { |item| finalize(item) }, incomplete: ranked.size > MAX_ITEMS)
-      end
-
       def items(document:, position:, prefix:)
         return Result.new(items: [], incomplete: false) if prefix.to_s.empty?
 

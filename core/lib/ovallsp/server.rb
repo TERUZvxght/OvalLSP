@@ -288,8 +288,6 @@ module Ovallsp
         respond(id, with_index_snapshot { signature_help_result(message[:params]) })
       when "textDocument/references"
         respond(id, with_index_snapshot { references_result(message[:params]) })
-      when "textDocument/documentHighlight"
-        respond(id, with_index_snapshot { document_highlight_result(message[:params]) })
       when "textDocument/prepareRename"
         respond(id, with_index_snapshot { prepare_rename_result(message[:params]) })
       when "textDocument/rename"
@@ -1543,9 +1541,7 @@ module Ovallsp
 
       position = params.fetch(:position)
       query_context = build_query_context(uri, position)
-      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(
-        document, position, initial_env: ivar_environment(document, position), budget: query_context.budget
-      )
+      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(document, position, budget: query_context.budget)
       warn_if_stale(query_context)
       { type: type.to_s }
     end
@@ -2147,47 +2143,14 @@ module Ovallsp
       @reference_index.references(symbol_id, minimum_confidence: :high).map { |r| { uri: r.uri, range: r.location } }
     end
 
-    # The other uses of whatever is under the cursor, within this one file
-    # — the boxes an editor draws while you rest on an identifier.
-    #
-    # Answering matters more than it looks. A client with no provider does
-    # not leave the identifier unmarked: VS Code falls back to matching the
-    # word as *text*, and `@` is not a word character, so on a scaffolded
-    # controller resting in `@articles` boxed the word `articles` inside
-    # every `# GET /articles` comment, and resting in a local named
-    # `article` boxed every `@article` in the file. Both were reported from
-    # a real session, and both are cases where a word pattern cannot help:
-    # only resolution can say that `article` and `@article` are different
-    # symbols.
-    #
-    # The same question Find References asks — deliberately, so the two can
-    # never disagree about what the cursor is on — narrowed to this
-    # document and with the declaration site included, which a *usage*
-    # index does not carry.
-    def document_highlight_result(params)
-      uri = params.fetch(:textDocument).fetch(:uri)
-      document = analyzable_document(@document_store.fetch(uri: uri))
-      summary = @file_summaries[uri]
-      return [] unless document && summary
-
-      symbol_id, = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
-      return [] unless symbol_id
-
-      ensure_reference_index_current
-      ranges = @reference_index.references(symbol_id, minimum_confidence: :high)
-                               .select { |reference| reference.uri == uri }
-                               .map(&:location)
-      declaration = summary.declarations.find { |d| d.symbol_id == symbol_id }
-      ranges = ranges + [declaration.name_location || declaration.location] if declaration
-
-      ranges.uniq.map { |range| { range: range, kind: HIGHLIGHT_TEXT } }
-    end
-
-    # LSP DocumentHighlightKind.Text. Read/Write (2/3) would be a second
-    # claim — which of these occurrences assigns — and nothing here
-    # distinguishes them; a wrong one would colour an assignment as a read.
-    HIGHLIGHT_TEXT = 1
-
+    # `textDocument/documentHighlight` was implemented during 0.2.1's
+    # review loop and is deferred to 0.3.0 with the capability row that
+    # named it -- it is on the roadmap, not a correction to something this
+    # release already claimed. Note when it returns: it calls
+    # `ensure_reference_index_current`, which the comment on that method
+    # says to defer until Find References or Rename needs it, because
+    # rebuilding is O(workspace) and the editor asks for highlights on
+    # every cursor move.
     def reference_symbol_id_at(document, summary, uri, position)
       candidate = summary.reference_candidates.find { |c| position_within?(c.location, position) }
       return nil unless candidate
@@ -2335,19 +2298,9 @@ module Ovallsp
       if receiver_dot_before?(document, position)
         return { isIncomplete: false, items: member_completion_items(document, position, prefix) }
       end
-      # `@` is the one sigil with an answer of its own: the instance
-      # variables in scope, which is about the most common thing anyone
-      # types in a Rails controller or view. Silence here was only half
-      # right -- offering the workspace wrote `@UserProfile`, but offering
-      # nothing let the editor fall back to matching words in the buffer
-      # and propose `article` for `@a`, without its sigil.
-      ivar_prefix = ivar_prefix_at_position(document, position)
-      if ivar_prefix
-        result = @prefix_completion.ivar_items(document: document, position: position, prefix: ivar_prefix,
-                                               initial_env: ivar_environment(document, position))
-        return { isIncomplete: result.incomplete, items: result.items }
-      end
-
+      # Completion after `@` -- the instance variables in scope -- was
+      # built during 0.2.1's review loop and is deferred to 0.3.0 with the
+      # capability row that named it.
       # A bare identifier is what the workspace and Kernel sources answer
       # about. `$stdout`, `:symbol` and the name in a `def` are not bare
       # identifiers, and each was answered with every constant starting
@@ -2445,52 +2398,12 @@ module Ovallsp
       help = route_signature_help(method_name) || method_signature_help(document, position, method_name)
       return help if help.fetch(:signatures).empty?
 
-      # Which parameter is being typed. Without it every popup bolds the
-      # first one for the whole call, which stops being a missing detail
-      # and starts being a wrong claim the moment a comma is written.
-      #
-      # And *which signature* it indexes into. A client told nothing takes
-      # the first, and RBS orders overloads shortest-first, so
-      # `h.fetch(:a, ` sent index 1 against an overload declaring one
-      # parameter -- outside it, which LSP reads as "highlight nothing",
-      # while the popup showed `_Key` bolded. The first overload that
-      # actually has that parameter is the one the user is writing.
-      active = active_parameter_index(document, position)
-      help.merge(activeParameter: active, activeSignature: active_signature_index(help[:signatures], active))
+      # `activeParameter` -- which parameter the cursor is on -- was built
+      # here during 0.2.1's review loop and is deferred to 0.3.0 with the
+      # capability row that named it. It is on the roadmap, not a
+      # correction to something this release already claimed.
+      help
     end
-
-    def active_signature_index(signatures, active_parameter)
-      signatures.index { |signature| signature.fetch(:parameters, []).length > active_parameter } || 0
-    end
-
-    # Argument separators of *this* call: the top-level commas between its
-    # `(` and the cursor. A comma inside a nested call, an array or hash
-    # literal, or a string belongs to something else.
-    #
-    # Text rather than AST for the same reason #enclosing_call_name_range
-    # is: signature help is asked for mid-typing, when the argument list
-    # is by definition unfinished and often unparseable.
-    def active_parameter_index(document, position)
-      range = enclosing_call_name_range(document, position)
-      return 0 unless range
-
-      tokens = structural_tokens(document)
-      cursor = document.position_to_char_offset(position)
-      index = 0
-      depth = 0
-      tokens.each do |offset, kind|
-        next if offset <= range.end
-        break if offset >= cursor
-
-        case kind
-        when :paren_open, :nest_open then depth += 1
-        when :paren_close, :nest_close then depth -= 1
-        when :comma then index += 1 if depth.zero?
-        end
-      end
-      index
-    end
-
 
     def route_signature_help(method_name)
       helper = @route_registry.find_by_method_name(method_name)
@@ -2847,7 +2760,8 @@ module Ovallsp
       # produced the disagreement it had just spent the release removing
       # elsewhere: the `@` popup said `Article` and `@article.` a
       # keystroke later offered nothing.
-      type = @query_service.type_at(document, dot_position, initial_env: ivar_environment(document, position))
+      initial_env = erb_view?(document.uri) ? ivars_for_view(document.uri) : {}
+      type = @query_service.type_at(document, dot_position, initial_env: initial_env)
       type == Types::UNKNOWN ? nil : type
     end
 
@@ -2889,86 +2803,9 @@ module Ovallsp
       left
     end
 
-    # The instance-variable prefix under the cursor, sigil included, or nil
-    # if the cursor is not writing one.
-    #
-    # Only where the `@` is *code*. A raw text scan offered the list for a
-    # YARD `@param` tag and for an `@` inside a string, which is nobody
-    # typing an instance variable -- the same mistake the call scan in
-    # this file made until it was given the same mask.
-    #
-    # A class variable is matched and answered with nothing, deliberately.
-    # `LocalInferencer` has no `ClassVariableWriteNode` case, so the
-    # environment holds no `@@` keys; this used to carry a comment saying
-    # they took the same path, which was false.
-    # The instance variables in scope that the document itself does not
-    # assign: a view's come from the controller action that rendered it,
-    # and a controller action's from every other method of the same class
-    # -- a `before_action` callback most of all, which is where a
-    # scaffolded controller puts `@article`.
-    #
-    # Hover has read the first of these since 0.2.0 (H3); completion after
-    # `@` shipped reading neither, so it answered nothing in a view and
-    # nothing in any action but the assigning one -- the two places an
-    # `@ivar` is most typed.
-    def ivar_environment(document, position)
-      return ivars_for_view(document.uri) if erb_view?(document.uri)
 
-      sibling_ivars(document, position)
-    rescue StandardError
-      {}
-    end
 
-    # The instance variables *this class* assigns, in methods other than
-    # the one the cursor is in.
-    #
-    # `position` is not a refinement: without it this collected every
-    # owner in the file and merged them into one hash, so a nested `Row`
-    # or a second top-level class overwrote the outer one's `@data` and
-    # hover answered with a type from a class the cursor is not in. That
-    # turned 0.2.0's silence into a wrong answer -- the trade this project
-    # takes the other way round -- across hover, completion after `@`,
-    # member completion and `explainType` at once.
-    def sibling_ivars(document, position)
-      summary = @file_summaries[document.uri] || @parser_service.summarize(document)
-      owner = enclosing_owner_at(summary, position)
-      return {} unless owner
 
-      @local_inferencer.method_nodes(document, owner_name: owner).values.reduce({}) do |acc, node|
-        acc.merge(@local_inferencer.infer_ivars_for_method_node(node, self_type_name: owner))
-      end
-    end
-
-    # The innermost class or module whose body contains `position`, by
-    # name. Smallest-first, because a class's range spans its nested ones.
-    def enclosing_owner_at(summary, position)
-      declaration = summary.declarations
-                           .select { |d| %i[class module].include?(d.symbol_id.kind) && position_within?(d.location, position) }
-                           .min_by { |d| range_span(d.location) }
-      # `name` is already fully qualified for a class or module --
-      # `SymbolId` runs `qualify_owner` on it at construction -- so
-      # joining the owner on again produced `::Admin::::Admin::Importer`,
-      # which names nothing. Every `@ivar` feature then went silent inside
-      # `module Admin / class Importer`, which is what `rails g controller
-      # Admin::Articles` emits and how every `app/services/billing/*.rb`
-      # is written.
-      declaration&.symbol_id&.name
-    end
-
-    def ivar_prefix_at_position(document, position)
-      text = document.text
-      offset = document.position_to_char_offset(position)
-
-      left = offset
-      left -= 1 while left.positive? && word_char?(text[left - 1])
-      return nil unless left.positive? && text[left - 1] == "@"
-
-      left -= 1
-      left -= 1 if left.positive? && text[left - 1] == "@"
-      return nil if inside_string_or_comment?(document, left)
-
-      text[left...offset]
-    end
 
     def word_prefix_at_position(document, position)
       text = document.text
@@ -3579,10 +3416,9 @@ module Ovallsp
           documentSymbolProvider: true,
           definitionProvider: true,
           referencesProvider: true,
-          documentHighlightProvider: true,
           renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
-          completionProvider: { triggerCharacters: [".", "@"], resolveProvider: true },
+          completionProvider: { triggerCharacters: ["."], resolveProvider: true },
           semanticTokensProvider: {
             legend: { tokenTypes: SemanticTokens::LEGEND, tokenModifiers: SemanticTokens::MODIFIERS },
             full: true
@@ -3652,9 +3488,7 @@ module Ovallsp
 
       position = params.fetch(:position)
       query_context = build_query_context(uri, position)
-      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(
-        document, position, initial_env: ivar_environment(document, position), budget: query_context.budget
-      )
+      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(document, position, budget: query_context.budget)
       warn_if_stale(query_context)
       lines = hover_lines(document, position, type)
       return empty_hover if lines.empty?

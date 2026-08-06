@@ -37,12 +37,16 @@ planned, are in
   to, rather than to the method being called.
 - **Call hierarchy** — callers and callees, navigable, instead of a flat
   list of references.
+- **Highlight the other occurrences** of the symbol under the cursor,
+  within the file.
+- **Completion of `@ivar` names** the moment you type the sigil.
 
 ## 0.4.0 — Refinements
 
 - **Per-check severity settings**, so a check you disagree with can be a
   hint rather than a warning, or off.
 - **Auto-`require` insertion.**
+- **Signature help highlights the argument the cursor is in.**
 
 ## 1.0.0 — Guarantees, not features
 

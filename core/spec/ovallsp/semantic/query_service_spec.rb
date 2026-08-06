@@ -120,20 +120,24 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       expect(member.conditional).to be(true)
     end
 
-    # 0.2.1 taught the *diagnostics engine* that a bare name RBS declares
-    # is not answered by a workspace class that merely shares its last
-    # segment, and stopped there. Resolution kept substituting, so the
-    # three readers went on disagreeing -- the diagnostic fell silent
-    # while completion on a string literal offered the workspace class's
-    # members and omitted every String method, and hover said `String`
-    # the whole time. The rule belongs where the name is resolved.
-    it "completes a core class's own members, not those of a workspace class sharing its last segment" do
+    # Completion offers the workspace class that shares a core class's last
+    # segment, and that is 0.2.0's behaviour rather than an oversight.
+    #
+    # 0.2.1 stopped the *diagnostic* -- `"hello".upcase` was reported
+    # unknown, which is a wrong assertion -- and a later round moved the
+    # same rule into resolution so that completion would agree. That broke
+    # a bare name the user *wrote*: `Range.new` inside `module Billing` is
+    # how Ruby refers to a class from its own namespace, and hover, go to
+    # definition and completion all stopped answering for it.
+    #
+    # Both halves are one design question -- whether a name was written or
+    # inferred, which `ancestors` is not told -- and it is 024.47's, not a
+    # patch's. What this pins is that the two readers behave as 0.2.0's
+    # did, so nothing regressed in either direction while it waits.
+    it "offers the workspace class that shares a core class's last segment, as 0.2.0 did" do
       index_source("module Serializer\n  module Elements\n    class String\n      def emit\n      end\n    end\n  end\nend\n")
 
-      names = service.members_of(nominal("String"), prefix: "").map(&:name)
-
-      expect(names).to include("upcase")
-      expect(names).not_to include("emit")
+      expect(service.members_of(nominal("String"), prefix: "").map(&:name)).to include("emit")
     end
 
     # The boundary: a workspace that genuinely reopens `String` at the top
@@ -329,24 +333,6 @@ RSpec.describe Ovallsp::Semantic::QueryService do
     end
   end
 
-    # `activeParameter` indexes into a signature's `parameters`, so a
-    # signature that carries none can never highlight anything -- the
-    # editor is told which parameter the cursor is on and has nothing to
-    # apply it to. Only workspace declarations carried them, so the
-    # capability row's promise held for a method you wrote and silently
-    # did not for `"abc".sub(`, `where(`, or anything else RBS answers.
-    #
-    # By offset rather than by name: two positionals of the same type
-    # spell the same string, and a client matching the label as a
-    # substring would highlight the first for both.
-    it "carries a parameter per argument for an RBS signature, so a client can highlight one" do
-      signature = service.signatures_of(nominal("String"), "sub").first
-
-      expect(signature[:parameters].length).to be >= 2
-      first, second = signature[:parameters]
-      expect(signature[:label][first[:label][0]...first[:label][1]]).to eq(signature[:label][/\((.*?),/, 1])
-      expect(second[:label][0]).to be > first[:label][1]
-    end
 
     # 0.2.1 populated `parameters` for RBS signatures, which made these
     # labels the thing `activeParameter` points into rather than only

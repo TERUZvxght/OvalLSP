@@ -11,11 +11,10 @@ require "stringio"
 # comment, the contents of a string, a bare number, the `def` keyword, the
 # `end`, a parameter name.
 #
-# It was survivable while only Find References and F2 read it — both are
-# things a user asks for deliberately. Occurrence highlighting is not: the
-# editor asks on every cursor move, so 0.2.1 turned a latent wrong answer
-# into a box drawn on the enclosing method's name almost anywhere the
-# caret went, which is the failure that capability was added to remove.
+# Find References and F2 both read it, so a click on a word in a comment
+# offered to rename the method around it. Occurrence highlighting would
+# have made it continuous; that capability is deferred to 0.3.0, and this
+# rule stays because the two readers that remain are wrong without it.
 #
 # The rule is that the cursor must be on the declaration's *name*. Fixed
 # here rather than in each reader, because all three had it and a fourth
@@ -87,14 +86,14 @@ RSpec.describe "Ovallsp::Server declarations under the cursor" do
     "the `end` that closes the method" => [6, 3]
   }.each do |description, (line, character)|
     it "does not resolve #{description} to the enclosing method" do
-      expect(ask("textDocument/documentHighlight", line: line, character: character)).to eq([])
+      expect(ask("textDocument/prepareRename", line: line, character: character)).to be_nil
     end
   end
 
   it "still resolves the declaration's own name" do
-    highlights = ask("textDocument/documentHighlight", line: 1, character: 7)
+    result = ask("textDocument/prepareRename", line: 1, character: 7)
 
-    expect(highlights.map { |h| h[:range][:start][:line] }).to include(1)
+    expect(result[:range][:start][:line]).to eq(1)
   end
 
   # The same fallback, and the reason it was worth fixing at the source:

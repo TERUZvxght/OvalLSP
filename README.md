@@ -62,8 +62,6 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Completion: route helpers | ✅ | — (no Runtime Agent) | — |
 | Completion at the start of an identifier — workspace classes, locals in scope, methods callable here | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion inserts a call template with tab stops | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Completion of `@ivar` names after typing `@` | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Document highlight (occurrences within a file) | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Hover on a method shows its parameters | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Go to definition: workspace methods | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Go to definition: model columns/associations | ✅ | — (no Runtime Agent) | — |
@@ -76,7 +74,6 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Diagnostics: reading an `@ivar` that is never assigned | ⚠️ [^ivar] | ⚠️ | — |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
-| Signature help: active parameter highlighting | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Find references, rename [^rename], workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: wrong argument *type* | ⚠️ [^argtype] | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics across the whole project, not just open files | ✅ | ⚠️ | ⚠️ 1.0.0 |
@@ -88,8 +85,11 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Code actions / quick fixes for each diagnostic | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Go to type definition | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Call hierarchy (callers and callees) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Document highlight (occurrences within a file) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Completion of `@ivar` names after typing `@` | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+| Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 
 [^argcount]: Verified by tests that fail if it breaks, and it does fire —
     but every one of the 14 reports it produces over Ruby's standard

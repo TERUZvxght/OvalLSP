@@ -88,11 +88,7 @@ module Ovallsp
     # there (name String => Types value) and the type of `self`, or nil
     # for `self` at the top level of a file, where there is no useful
     # enclosing type to offer members from.
-    Scope = Data.define(:locals, :ivars, :self_type) do
-      def initialize(ivars: {}, **rest)
-        super(ivars: ivars, **rest)
-      end
-    end
+    Scope = Data.define(:locals, :self_type)
 
     # The environment `locate` builds on its way to `offset`, rather than
     # the type it arrives at. Completion from a bare prefix needs the
@@ -108,8 +104,7 @@ module Ovallsp
     # to everything that reads a scope -- which is why completion after
     # `@` answered nothing in a view while hovering the same name in the
     # same view answered its type.
-    def scope_at(document, position, initial_env: {}, max_steps: nil)
-      @seeded_ivars = ivars_from(initial_env)
+    def scope_at(document, position, max_steps: nil)
       offset = document.position_to_byte_offset(position)
       result = parse_cached(document)
       @steps = 0
@@ -118,19 +113,16 @@ module Ovallsp
       @scope_capture = nil
       @capturing_scope = true
 
-      locate(result.value.statements, offset, initial_env.dup)
-      @scope_capture || Scope.new(locals: {}, ivars: {}, self_type: nil)
+      locate(result.value.statements, offset, {})
+      @scope_capture || Scope.new(locals: {}, self_type: nil)
     rescue BudgetExceeded, StandardError
-      @scope_capture || Scope.new(locals: {}, ivars: {}, self_type: nil)
+      @scope_capture || Scope.new(locals: {}, self_type: nil)
     ensure
       @capturing_scope = false
       @scope_capture = nil
     end
 
-    def seeded_ivars = @seeded_ivars || {}
-
     def infer_at(document, position, initial_env: {}, max_steps: nil)
-      @seeded_ivars = ivars_from(initial_env)
       # Prism node locations are UTF-8 byte offsets, not Ruby character
       # offsets — using #position_to_char_offset here would select the
       # wrong node whenever a multibyte character appears anywhere before
@@ -284,13 +276,11 @@ module Ovallsp
     end
 
     def capture_scope(env)
-      locals = {}
-      ivars = {}
-      env.each do |key, value|
+      locals = env.each_with_object({}) do |(key, value), acc|
         name = key.to_s
-        (name.start_with?("@") ? ivars : locals)[name] = value
+        acc[name] = value unless name.start_with?("@")
       end
-      @scope_capture = Scope.new(locals: locals, ivars: ivars, self_type: @self_type_stack.last)
+      @scope_capture = Scope.new(locals: locals, self_type: @self_type_stack.last)
     end
 
     # Inclusive of `end_offset`, which is one past the node's last
@@ -441,13 +431,7 @@ module Ovallsp
       singleton = node.receiver.is_a?(Prism::SelfNode)
       enclosing_self = @self_type_stack.last
       @self_type_stack.push(singleton ? Types::Generic.new(name: "ClassOf", type_arg: enclosing_self) : enclosing_self)
-      # Locals do not cross a `def` and instance variables do: `@article`
-      # assigned by a `before_action` callback is visible from every
-      # action of that controller, which is how Rails is written. Only
-      # what was *seeded* carries in -- an ivar the walk itself assigned
-      # in an earlier sibling method is not in scope here, because the
-      # walk only ever descends towards the cursor.
-      locate(node.body, offset, seeded_ivars.merge(parameter_env(node)))
+      locate(node.body, offset, parameter_env(node))
     ensure
       @self_type_stack.pop
     end

@@ -29,10 +29,12 @@ and the capability tables promised something the build did not do.
   class's own methods as `base.methods - Object.methods`, and `Object` is
   itself a class object — so everything `Module` defines was subtracted
   away. Five wrong reports on a scaffolded application; none now.
-- Fixed: a workspace class sharing a name with a core one no longer
-  answers for the core one. Your own `Serializer::Elements::String` stood
-  in for the `String` a literal produces, so `"hello".upcase` was reported
-  unknown while hover at the same position said `upcase() -> String`.
+- Fixed: `"hello".upcase` is no longer reported as unknown when your
+  workspace happens to contain a class whose last name segment is
+  `String`. The engine stops asserting about a receiver it substituted;
+  completion still offers that class's members, as it did in 0.2.0, and
+  making all three readers agree is a design question rather than a patch
+  (024.47).
 - Fixed: a file that does not parse gets its syntax errors and nothing
   else. Typing `.` at the end of a method made `a.end` a call, and the
   engine reported that your class has no method named `end` — on the
@@ -50,10 +52,6 @@ and the capability tables promised something the build did not do.
 - Added: hover answers a call written with no receiver. `article_params`
   in your own controller showed an empty popup; go to definition and
   signature help were given that reading in 0.2.0 and hover was not.
-- Added: signature help marks the parameter the cursor is on. The popup
-  listed the parameters and said nothing about which one you were
-  writing, so the editor bolded the first for the whole call — pointing
-  at the wrong parameter rather than at none, from the first comma on.
 - Fixed: **upgrading now actually delivers the fixes above.** The parse
   cache was keyed on your workspace, Ruby, Prism, `Gemfile.lock` and RBS
   — but not on OvalLSP's own version, and a cached entry is the output of
@@ -73,22 +71,10 @@ and the capability tables promised something the build did not do.
   contains an unpaired parenthesis inside a string or a comment —
   `raise ArgumentError, "bad )"` — and no longer answers with an inner
   call because of one.
-- Fixed: `activeParameter` now works for stdlib and gem methods too.
-  Only methods you wrote carried the parameter list an editor needs to
-  highlight one, so `"abc".sub(` marked nothing however the cursor moved.
-  A route helper's trailing `options = {}` is a parameter now as well.
 - Fixed: a workspace class sharing a core class's last segment
   (`Serializer::Elements::String`) no longer answers for the core one in
   **completion**. 0.2.1 fixed the diagnostic and left this half, so
   `"hello".` still offered that class's methods and no String methods.
-- Added: occurrence highlighting. Resting on an identifier marks its
-  other uses in the file. Without it the editor matched the word as text,
-  so `@articles` lit up the word `articles` inside `# GET /articles`
-  comments, and a local named `article` lit up every `@article`.
-- Added: completion after `@`. Typing it offered nothing, so the editor
-  proposed words from the buffer instead — the instance variable's name
-  without its sigil. The instance variables in scope are offered now,
-  with their inferred types.
 - Fixed: `->() {}`, `!x`, `a && b` and `a || b` have a type. A default
   written `name || "anonymous"` is a String rather than nothing.
 - Fixed: **a method whose name ends in `!` or `?` gets answers.** Hover,
@@ -97,9 +83,6 @@ and the capability tables promised something the build did not do.
   definition found", and typing `(` after it showed no parameters — on
   `save!`, `valid?`, `update!`, the names a Rails controller is mostly
   made of. Completion offered them the whole time.
-- Fixed: the signature popup no longer bolds the wrong parameter after an
-  array literal, a block, a lambda or a parenthesised argument, and no
-  longer disappears after `%w(...)` or `puts (1)`.
 - Fixed: signature help on a large file. Answering "there is no
   signature here" walked the file one character at a time, which on a few
   hundred KB with any non-ASCII character in it took seconds — and the
@@ -112,22 +95,12 @@ and the capability tables promised something the build did not do.
 - Fixed: no signature popup inside the parameter list of a `def` whose
   name ends in `!` or `?`, or a `def self.` — it was answering with the
   method being declared.
-- Fixed: an `@ivar` no longer takes its type from a different class in
-  the same file. A nested `Row` or a second class assigning the same name
-  overwrote the one you are in, so hover answered with a type from a
-  class the cursor is not in — 0.2.0 said nothing there, which was better.
 - Fixed: hover and go to definition work with the caret at the *end* of a
   `save!` or `valid?`, which is where it lands after you type the name.
 - Fixed: a comment whose last word is `def` no longer silences signature
   help and completion on the identifier below it.
 - Fixed: `1 || "b"` is an `Integer`. An instance is always truthy, so
   `||` never reaches its right-hand side.
-- Fixed: `self.method(...)` resolves. Go to definition, hover and
-  signature help all answered nothing on the explicit-receiver form of a
-  call to your own class, because the engine had no type for `self`.
-- Fixed: `@ivar` features work inside a namespaced class — `module Admin`
-  / `class Importer`, which is what `rails g controller Admin::Articles`
-  writes. They had gone silent there.
 - Fixed: clicking the first character of a negated name (`!ready`) no
   longer says "No definition found".
 - Fixed: `items || []` is an `Array[Integer]`, not a union of that array

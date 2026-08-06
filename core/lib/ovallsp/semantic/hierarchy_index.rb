@@ -184,8 +184,20 @@ module Ovallsp
 
       private
 
+      # Plain resolution. 0.2.1 applied `Index::TypeNameResolution` here so
+      # that a literal's `String` would not be answered by a workspace
+      # `Serializer::Elements::String`, and that broke a bare name the
+      # user *wrote*: `Range.new` inside `module Billing` is how Ruby
+      # refers to a class from its own namespace, and hover, go to
+      # definition and completion all stopped answering for it.
+      #
+      # The two cases differ in whether the name was written or inferred,
+      # and this method is handed a name with no lexical context to tell
+      # them apart -- so the rule stays where it can be applied safely,
+      # in the diagnostics engine, which is refusing to *report* rather
+      # than refusing to resolve. 024.47 records what a real fix needs.
       def canonical_name(type_name)
-        Index::TypeNameResolution.canonical(type_name, workspace_index: @workspace_index, signatures: @signatures)
+        @workspace_index.resolve_type_name(type_name) || type_name.to_s
       end
 
       def remove_file_locked(uri)

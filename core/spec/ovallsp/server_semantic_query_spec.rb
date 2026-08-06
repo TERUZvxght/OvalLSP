@@ -93,15 +93,12 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
     expect(signature[:label]).to eq("build(name, count)")
   end
 
-  # A signature help popup that lists parameters but never says which one
-  # you are typing bolds the first one for the whole call, which is
-  # actively misleading past the first comma -- the editor is asserting
-  # something, and after `,` the assertion is wrong. The index is the
-  # count of top-level commas between the call's `(` and the cursor:
-  # commas nested inside another call's arguments, inside an array or
-  # hash literal, or inside a string are not argument separators of this
-  # call.
-  describe "which parameter the cursor is on" do
+  # The scan that finds which call the cursor is inside. `activeParameter`
+  # -- which parameter within it -- was built on the same tokens during
+  # 0.2.1's review loop and is deferred to 0.3.0 with its capability row;
+  # what stays is the scan itself, which fixes a 0.2.0 regression where a
+  # call that had already closed before the cursor won.
+  describe "which call the cursor is inside" do
     # The cursor is at the end of the written text, wherever that lands --
     # `argument_text` may span lines, and a call left open across a line
     # break is the ordinary case for signature help.
@@ -122,34 +119,8 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
       sent_messages.first[:result]
     end
 
-    def active_parameter_for(argument_text) = signature_help_for(argument_text)[:activeParameter]
-
     def signature_labels_for(argument_text)
       signature_help_for(argument_text).fetch(:signatures).map { |signature| signature[:label] }
-    end
-
-    it "is the first before any comma" do
-      expect(active_parameter_for("")).to eq(0)
-    end
-
-    it "advances with each argument written" do
-      expect(active_parameter_for('"a", ')).to eq(1)
-    end
-
-    it "ignores a comma belonging to a nested call" do
-      expect(active_parameter_for("compute(1, 2)")).to eq(0)
-    end
-
-    it "ignores a comma inside an array literal" do
-      expect(active_parameter_for("[1, 2], ")).to eq(1)
-    end
-
-    it "ignores a comma inside a hash literal" do
-      expect(active_parameter_for("{ a: 1, b: 2 }")).to eq(0)
-    end
-
-    it "ignores a comma inside a string" do
-      expect(active_parameter_for('"a, b"')).to eq(0)
     end
 
     # The scan that *finds* the call and the scan that counts commas
@@ -174,38 +145,6 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
 
     it "ignores a paren in a trailing comment" do
       expect(signature_labels_for("1, # (not a call\n    2")).to include("build(name, count)")
-    end
-
-    # The hand-written scanner these replaced knew about `"` and `#` and
-    # nothing else, which is not a lexer -- it was wrong about string
-    # interpolation (everything between quotes was "not code", so a call
-    # written inside `#{}` was invisible) and about a `#` that opens no
-    # comment (`/a#b/`, `"%d#%d"`). Round 24 introduced it and round 25
-    # found two defects in it, so it is Prism's own lexer now rather than
-    # a third approximation.
-    # Written out rather than through the helper above, because the cursor
-    # has to sit *inside* the interpolation rather than at the end of the
-    # line, and because the string is closed -- which is how anyone
-    # actually writes one, `"#{}"` first and the call after.
-    it "finds a call written inside a string interpolation, and counts its commas" do
-      source = "class Widget\n  def build(name, count)\n  end\nend\n\nx = \"v \#{Widget.new.build(1, 2)}\"\n"
-      input =
-        did_open("file:///widget.rb", source) +
-        frame(
-          jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
-          params: { textDocument: { uri: "file:///widget.rb" }, position: { line: 5, character: 29 } }
-        ) +
-        frame(jsonrpc: "2.0", method: "exit", params: nil)
-
-      build_server(input).run
-
-      result = sent_messages.first[:result]
-      expect(result[:signatures].map { |signature| signature[:label] }).to include("build(name, count)")
-      expect(result[:activeParameter]).to eq(1)
-    end
-
-    it "does not treat a `#` inside a regular expression as opening a comment" do
-      expect(active_parameter_for("/a#b/, 2")).to eq(1)
     end
 
     it "does not treat a `(` inside a `%w` literal as opening a call" do
@@ -261,52 +200,6 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
       expect(elapsed).to be < 2.0, "#{(elapsed * 1000).round} ms to index a #{source.bytesize / 1024} KB file once"
     end
 
-    # `activeParameter` is an index into *one* signature, and a client
-    # that is told nothing takes the first. RBS overloads are ordered
-    # shortest-first, so `h.fetch(:a, ` sent index 1 against an overload
-    # declaring one parameter -- outside it, which LSP says means no
-    # highlight at all. The popup bolded `_Key` while the cursor was on
-    # the second argument: the exact failure S4 was added to remove.
-    it "picks the overload that has the parameter the cursor is on" do
-      source = "h = {}\nh.fetch(:a, 2\n"
-      input =
-        did_open("file:///f.rb", source) +
-        frame(
-          jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
-          params: { textDocument: { uri: "file:///f.rb" }, position: { line: 1, character: 13 } }
-        ) +
-        frame(jsonrpc: "2.0", method: "exit", params: nil)
-
-      build_server(input).run
-
-      result = sent_messages.first[:result]
-      active = result[:signatures][result[:activeSignature]]
-      expect(result[:activeParameter]).to eq(1)
-      expect(active[:parameters].length).to be > result[:activeParameter],
-                                            "activeParameter #{result[:activeParameter]} is outside #{active[:label]}"
-    end
-
-    # Prism has more than one token for the same character, and the map
-    # this reads paired only the plainest: an array *literal* opens with
-    # `BRACKET_LEFT_ARRAY`, a block's brace with `BRACE_LEFT` but a
-    # lambda's with `LAMBDA_BEGIN`, and `puts (1)` with
-    # `PARENTHESIS_LEFT_PARENTHESES`. Each unmapped opener met a mapped
-    # closer, so the depth went negative and the commas after it were
-    # counted as this call's -- the popup bolding a parameter two along,
-    # which is the wrong claim this whole feature exists to stop making.
-    # Both S4 examples pass scalars only, so nothing failed.
-    {
-      "an array literal" => ["[1, 2, 3], ", 1],
-      "two array literals" => ["[1, 2], [3, 4], ", 2],
-      "a block" => ["[1].map { |x| x }, ", 1],
-      "a lambda" => ["->(x) { x }, ", 1],
-      "a parenthesised expression" => ["(1 + 2), ", 1]
-    }.each do |description, (argument, expected)|
-      it "counts the arguments after #{description} correctly" do
-        expect(active_parameter_for(argument)).to eq(expected)
-      end
-    end
-
     it "still finds the call after a parenthesised argument" do
       expect(signature_labels_for("(1 + 2), ")).to include("build(name, count)")
     end
@@ -317,10 +210,6 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
     # and the popup vanished for the rest of the line.
     it "still finds the call after an argument written with a space before its parenthesis" do
       expect(signature_labels_for("puts (1), ")).to include("build(name, count)")
-    end
-
-    it "counts the arguments after a space-before-parenthesis argument correctly" do
-      expect(active_parameter_for("puts (1), ")).to eq(1)
     end
 
     # An *unmatched* opener -- the cursor inside a literal whose call is
@@ -337,10 +226,6 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
 
     it "finds the call when the cursor is inside an unclosed hash argument" do
       expect(signature_labels_for("{ a: 1, ")).to include("build(name, count)")
-    end
-
-    it "counts no comma written inside a comment" do
-      expect(active_parameter_for("1, # a, comment\n    2")).to eq(1)
     end
   end
 
