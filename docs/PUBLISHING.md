@@ -42,7 +42,7 @@ meaning of both.
 
 | Position | Changes when | Examples |
 |---|---|---|
-| patch (`0.1.**7**`) | Nothing new is announced — the release makes the extension do what the previous one already claimed | Bug fixes, performance, refactoring, documentation. **A capability row may be added or turned ✅** when it names something the previous release was already understood to do and did not: 0.2.1 added `S4`, `G17`, `C14` and `W5` this way. What it must not do is announce a capability nobody was promised |
+| patch (`0.1.**7**`) | Nothing new is announced — the release makes the extension do what the previous one already claimed | Bug fixes, performance, refactoring, documentation. **A capability row may be added or turned ✅** when it names something the previous release was already understood to do and did not: 0.2.1 added `G17` this way, for a capability 0.2.0 shipped without a row. What it must not do is announce a capability nobody was promised — 0.2.1 added three such rows during its review loop and moved all three back to the roadmap before shipping |
 | minor (`0.**1**.5`) | A capability is added | A new row in the capability matrix, a `NOT YET` becoming ✅, a new setting or command |
 | major (`**0**.1.5`) | Something a user already relies on stops working | A setting or command removed or renamed, a supported environment tier dropped, an older protocol version no longer accepted, a ✅ row removed |
 

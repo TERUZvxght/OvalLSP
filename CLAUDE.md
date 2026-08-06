@@ -15,6 +15,10 @@ This was established after Task 008.5 shipped without this gate and failed a lat
 
 The same clean-review gate applies whenever an independent review is explicitly requested, including release preparation and broad defect audits: run one or more independent subagents, fix every actionable finding, and repeat with a fresh independent review until a full round reports no findings. A single review pass is not sufficient when it finds defects.
 
+**During a review loop, fix; do not add.** A capability a reviewer asks for is a finding to record, not work to do before the next round. 0.2.1 ran nine rounds and seven of them found a defect in code the *previous* round had written — not because the loop was failing but because it was being asked to review a change set that kept growing. Three capabilities were added mid-loop and all three went back to the roadmap before shipping; the machinery they justified produced most of rounds 25–31's findings. A round reviews a fixed thing, and every addition between rounds resets it.
+
+**Waiving the gate is the maintainer's call and must be written down.** 0.2.1 shipped after nine rounds without a clean one. What made that defensible was cutting the change set back first and leaving every open finding in the register with a user-facing paragraph — not the number of rounds. Record the waiver where the release is recorded; a rule broken in silence stops being a rule.
+
 ## Test-first discipline (mandatory)
 
 Write the test before the implementation, in this order:
