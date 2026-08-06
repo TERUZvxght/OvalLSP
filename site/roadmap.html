@@ -182,6 +182,14 @@
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Call hierarchy</strong> — callers and callees, navigable, instead of a flat list of references.</span>
             </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Highlight the other occurrences</strong> of the symbol under the cursor, within the file.</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Completion of <code>@ivar</code> names</strong> the moment you type the sigil.</span>
+            </li>
           </ul>
         </article>
 
@@ -196,6 +204,14 @@
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Auto-<code>require</code> insertion.</strong></span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Signature help highlights the argument the cursor is in.</strong></span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>No diagnostics about the line you are still typing on.</strong> Typing <code>a.</code> above a line like <code>b = "str"</code> makes a program that <em>means</em> <code>a.b = "str"</code> — Ruby agrees — so the report is correct about text you have not finished writing. Removing it needs the edit position, and costs hiding a genuine error on the line under the cursor.</span>
             </li>
           </ul>
         </article>

@@ -177,6 +177,14 @@
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>コール階層</strong> — 参照の平坦なリストではなく、呼び出し元と呼び出し先をたどれる形で。</span>
             </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>カーソル下のシンボルの他の出現箇所をハイライトします。</strong> ファイル内が対象です。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>@ivar</code> の名前を、記号を打った瞬間に補完します。</strong></span>
+            </li>
           </ul>
         </article>
 
@@ -191,6 +199,14 @@
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong><code>require</code> の自動挿入。</strong></span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>シグネチャヘルプが、カーソルのある引数をハイライトします。</strong></span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>まだ打っている途中の行について診断を出しません。</strong> <code>b = "str"</code> の上で <code>a.</code> と打つと、それは <code>a.b = "str"</code> を<em>意味する</em>プログラムになります — Ruby もそう読みます。つまり報告は、書き終えていないテキストについて正しいのです。無くすには編集位置が必要で、カーソルのある行の本物のエラーも隠れます。</span>
             </li>
           </ul>
         </article>

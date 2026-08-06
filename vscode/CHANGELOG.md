@@ -34,11 +34,16 @@ the disproved approaches are kept below it under **Details**.
   still see the character you just typed: the index is applied
   immediately and only the report waits.
 
-  This does **not** fix the report on the next line. `a.` followed by
-  `b = "str"` is valid Ruby meaning `a.b = "str"`; nothing in the text
-  marks it as mid-edit, and waiting only delays it. Pause to read the
-  completion popup and you still get it, 300 ms later. An earlier draft
-  of this entry claimed otherwise.
+  This does **not** remove the report on the next line, and that turns
+  out not to be a bug to remove. `a.` followed by `b = "str"` is valid
+  Ruby meaning `a.b = "str"` — `ruby -c` says `Syntax OK` and running it
+  raises `undefined method 'b='`, on the line OvalLSP marks. The report
+  is correct about text you have not finished writing, so waiting is all
+  a debounce can do; pause to read the completion popup and you still get
+  it, 300 ms later. Suppressing it needs the edit position and costs
+  hiding real errors on the line under your cursor, which makes it a
+  deliberate refinement — it is on the roadmap for 0.4.0. An earlier
+  draft of this entry claimed the debounce had fixed it.
 - Fixed: diagnostics can no longer be left behind in the Problems panel
   for a file you have closed. Analysis now finishes on a background
   thread, so on a large file it could land after the panel was cleared.

@@ -204,11 +204,27 @@ a.
 b = "str"        # → Article has no method named `b=`
 ```
 
-A next line of `value`, `if true` or `return 1` does the same; `puts 1`
-and `other_thing(1)` do not. The report goes away as soon as you finish
-the name. It cannot be told apart from the same code written on purpose,
-so the fix is to stop publishing while you are still typing rather than
-to add another check, and that is not in this release (024.41). <!-- documents: 024.41 -->
+A next line of `value`, `return 1` or `other_thing(1)` does the same. The
+report goes away as soon as you finish the name.
+
+**This is Ruby's reading of your text, not OvalLSP's guess about it.** A
+trailing `.` continues the line. `ruby -c` calls the snippet above
+`Syntax OK`, running it raises `undefined method 'b=' for an instance of
+Article`, and a real `b=` setter really is called — OvalLSP reports the
+same method name on the same line the interpreter points at. Nothing is
+being misread; the text simply means something else for as long as you
+have not finished typing.
+
+So the answer is not another check — there is nothing in the text to
+check, and a rule about "receiver and message on different lines" would
+suppress the trailing-dot chain style, which people write on purpose.
+0.2.2 made diagnostics wait 300 ms after you stop typing, which removes
+this while you are still going. Removing it altogether needs the edit
+position, so that a report about the line under your cursor can be
+withheld — and that hides genuine errors on that line too, which is why
+it is a deliberate refinement scheduled for
+[0.4.0](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/ROADMAP.md)
+rather than a defect to fix on the way to 0.3.0 (024.41). <!-- documents: 024.41 -->
 
 Two are gone since the last release. **A `*_path`/`*_url` call is no
 longer reported as a missing route when no routes have been loaded**

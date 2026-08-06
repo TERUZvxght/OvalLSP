@@ -2428,14 +2428,12 @@ what makes the answer available without an Agent too.
 status: open
 kind: defect
 user-visible: yes
+target: 0.4.0
 ```
 
-**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`analyze`'s parse
-gate), `core/lib/ovallsp/server.rb` (`did_change`, which publishes with
-no debounce)
-
-Half of this is fixed and half is not, and the half that is not is the
-commonest editing action there is: `.` is the completion trigger.
+**Area:** `core/lib/ovallsp/server.rb` (`#did_change`, and the edit
+position it discards). **Not** `diagnostics/engine.rb`, which earlier
+revisions of this entry named: the engine is right.
 
 ```ruby
 a = Article.new
@@ -2443,30 +2441,45 @@ a.
 b = "str"
 ```
 
-→ ``Article has no method named `b=` ``. Also reported for a next line
-of `value`, `if true` and `return 1`; not for `puts 1` or
-`other_thing(1)`.
+→ ``Article has no method named `b=` ``.
 
-The `end` half -- `a.` at the end of a method, where recovery invents
-`a.end` -- was fixed in 0.2.1 by gating semantic checks on a clean parse.
-This shape defeats that gate because **there is no syntax error at all**:
-`a.\nb = "str"` is valid Ruby that means `a.b = "str"`, and it is
-reported correctly. Nothing in the text says the user is mid-edit.
+**Ruby reads it the same way.** Measured under 3.4.7 rather than reasoned
+about, which is what this entry was missing for four rounds:
 
-**Direction:** not another check. The engine cannot tell this apart from
-the same code written deliberately, so the answer is to stop publishing
-*while the user is still typing* -- a debounce on `didChange`, and
-ideally the edit position, which the notification already carries and the
-Server discards. Recorded rather than patched, because a heuristic that
-suppresses "a call whose message is on a different line from its
-receiver" would also suppress the leading-dot chain style, which is
-ordinary Ruby.
+| | says | at |
+|---|---|---|
+| `ruby -c` | `Syntax OK` | — |
+| `ruby` | `undefined method 'b=' for an instance of Article (NoMethodError)` | the `b = "str"` line |
+| Prism | `CallNode name=b=` | — |
+| OvalLSP | ``Article has no method named `b=` `` | the same line, column 0 |
 
-Round 23 found it, round 24 found it again and widened it, and it existed
-only in `026-0.2.1-review-loop.md` until now -- which is why it is an
-entry: a finding parked in a round's handover is invisible to
-`deferred_findings_spec.rb`, and `DOCUMENTATION_MAP`'s "A known
-limitation" row was therefore unenforced for it.
+A trailing `.` is Ruby's line continuation. This is not error recovery and
+not an ambiguity: it is the language's own reading, `b` is never assigned
+as a local, and a real `b=` setter is really called. The same holds for
+every other next line this entry used to list — `value`, `return 1`,
+`other_thing(1)` all parse as calls on `a`, and OvalLSP reports each of
+them exactly where Ruby raises.
+
+(`puts 1` is the one shape OvalLSP stays silent on, because it knows
+`Article` inherits `Kernel#puts`. Ruby would raise `private method 'puts'
+called`. That is a small *under*-report about method visibility and has
+nothing to do with this entry.)
+
+**So there is no defect in what is reported.** What remains is a question
+about *when*: the text is only transiently that program, because the user
+is mid-edit and about to type a method name. That is a product decision,
+not a correctness one — and it is the LSP's to make rather than Ruby's,
+because a language server has one piece of information the interpreter
+never does: the edit event. It knows a `.` was just typed at that
+position. `didChange` carries it and `Server` discards it.
+
+**Out of scope for 0.x.** Detecting a misreading that the language itself
+cannot flag — that `ruby -c` calls `Syntax OK` and `ruby` runs — is not
+something the 0.x line promises. What 0.x promises is on `ROADMAP.md`, and
+this belongs with the refinements at **0.4.0**, where it is listed. It
+stays recorded here, and stays in `KNOWN_LIMITATIONS` in both languages,
+because users do see the squiggle and deserve to be told why; it is
+simply not a thing to fix on the way to 0.3.0.
 
 **0.2.2: reduced by debouncing, not fixed.** `didChange` no longer
 publishes in the turn that receives it -- a document has to stay still for
@@ -2493,13 +2506,33 @@ it asserted the report was absent -- which it would have been on a build
 with diagnostics broken outright. `CLAUDE.md`'s rule names that shape: a
 fixture that cannot distinguish the two candidate behaviours is unpinned
 even though it passes. It has been replaced by one that asserts the
-report *is* there once the wait is over, so this entry cannot be closed
-without something failing.
+report *is* there once the wait is over.
 
-**Direction, unchanged.** Not another check. Debouncing was always only
-the cheap half; the rest needs the edit position, which the notification
-already carries and `Server` discards -- a report about the line being
-edited is the one to withhold, and a report elsewhere in the file is not.
+**Rejected: detecting the newline.** Treating "receiver and message on
+different lines" as mid-edit would suppress the trailing-dot chain style,
+
+```ruby
+result = collection.
+  map { |x| x.id }.
+  select(&:odd?)
+```
+
+which is ordinary Ruby that a person writes deliberately. There is
+nothing in the *text* that separates the two cases, which is the whole
+reason this entry exists.
+
+**Direction.** The edit position, at 0.4.0: withhold a report about the
+line being edited, and nothing else. The cost is explicit and is why it
+is a refinement rather than a fix — a genuine error on the line you are
+typing on is hidden until you move away from it.
+
+**History.** The `end` half of this -- `a.` at the end of a method, where
+recovery invents `a.end` -- was a real defect and was fixed in 0.2.1 by
+gating semantic checks on a clean parse. This half was filed alongside it
+and inherited its classification without anyone running the two lines
+through Ruby. Round 23 found it, round 24 widened it, round 32 found the
+false "fixed" claim, and the maintainer asked the question that settled
+it: what does Ruby actually do?
 
 ## 024.42 An RBS signature label says `Unknown` where RBS says `self`, and leaks method type variables
 

@@ -316,6 +316,58 @@ else
   end
 end
 
+# --- The roadmap pages, against ROADMAP.md -----------------------------
+#
+# By item count per version, in both languages. Not by name: the site's
+# Japanese is translated independently of `ROADMAP.ja.md` and never
+# matches it verbatim, which is the mistake the index-excerpt check above
+# records making once already.
+#
+# `core/spec/meta/roadmap_parity_spec.rb` pairs README's matrix with
+# `ROADMAP.md`, and nothing paired either with the site. So when 0.2.1
+# moved `activeParameter` to 0.4.0, the Markdown and README were updated
+# and `site/roadmap.html` was not -- for a whole release, on the page a
+# reader is most likely to be sent to when they ask what is coming.
+#
+# The site drifting from a Markdown document it mirrors is now the second
+# occurrence of one shape: 0.2.1's was `capabilities.html`, and the row
+# count above is the countermeasure that came out of it. It was aimed at
+# capabilities alone. This is the same countermeasure aimed at the pair it
+# missed.
+def roadmap_items(markdown)
+  return {} unless File.exist?(markdown)
+
+  File.read(markdown, encoding: "UTF-8").split(/^## /).drop(1).to_h do |section|
+    version = section[/\A(\d+\.\d+\.\d+)/, 1]
+    [version, section.lines.count { |line| line.start_with?("- ") }]
+  end.compact
+end
+
+def site_roadmap_items(html)
+  html.scan(%r{<span class="v">(\d+\.\d+\.\d+)</span>(.*?)</ul>}m).to_h do |version, body|
+    [version, body.scan("<li>").length]
+  end
+end
+
+[["roadmap.html", "docs/ROADMAP.md"], [File.join("ja", "roadmap.html"), "docs/ROADMAP.ja.md"]]
+  .each do |page_rel, markdown_rel|
+  page = File.join(SITE, page_rel)
+  next problems << "#{page_rel}: missing" unless File.exist?(page)
+
+  expected = roadmap_items(File.join(REPO, markdown_rel))
+  actual = site_roadmap_items(read_page(page))
+  next problems << "#{page_rel}: no roadmap items found -- the markup changed shape" if actual.empty?
+
+  expected.each do |version, count|
+    listed = actual[version]
+    if listed.nil?
+      problems << "#{page_rel}: #{markdown_rel} plans #{version} and the page has no section for it"
+    elsif listed != count
+      problems << "#{page_rel}: #{version} lists #{listed} item(s) and #{markdown_rel} has #{count}"
+    end
+  end
+end
+
 # --- The version the site advertises, against package.json -------------
 #
 # `Preview 0.1.10` was hard-coded into both index pages and stayed there

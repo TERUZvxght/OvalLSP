@@ -13,18 +13,24 @@ require "stringio"
 #   and completion queue behind every keystroke. Waiting removes most of
 #   that work outright.
 # - **024.41.** Typing `.` reports a method on the *next* line. `a.`
-#   followed by `b = "str"` is valid Ruby meaning `a.b = "str"`, so no
-#   syntax error marks it as mid-edit and the report is correct about a
-#   program nobody is writing.
+#   followed by `b = "str"` is valid Ruby meaning `a.b = "str"`.
 #
-# **The debounce does not fix 024.41, and this file used to claim it
-# did.** It delays that report by the debounce and no more; a user who
-# pauses to read the completion popup — which is exactly what one does
-# after typing `.` — waits out the debounce and gets it. The example that
-# was here asserted the report never came, and passed only because it ran
-# with a 30-second debounce and then exited, so *nothing at all* was
-# published. It would have passed identically with diagnostics broken
-# outright. 024.41 stays open.
+# **The debounce does not remove 024.41's report, and this file used to
+# claim it did.** It delays it and no more; a user who pauses to read the
+# completion popup — which is exactly what one does after typing `.` —
+# waits out the debounce and gets it. The example that was here asserted
+# the report never came, and passed only because it ran with a 30-second
+# debounce and then exited, so *nothing at all* was published. It would
+# have passed identically with diagnostics broken outright.
+#
+# It also asserted the wrong thing. Ruby reads those two lines the same
+# way OvalLSP does: `ruby -c` says `Syntax OK`, running it raises
+# `undefined method 'b='` on the line OvalLSP marks, and a real `b=`
+# setter is really called. The report is *correct* about text the user
+# has not finished writing, which is a question about when to publish and
+# not about what to report — retargeted to 0.4.0, where withholding it
+# means using the edit position and accepting that real errors on that
+# line are hidden too.
 #
 # What is *not* deferred is the index. `apply_file_summary` still runs in
 # the same turn, because completion and hover read it and must see the
@@ -108,8 +114,11 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
   end
 
   # 024.41, stated as what it actually is. Nobody has to believe the
-  # comment at the top of this file: the report the debounce is described
-  # as removing is right here, once the wait is over.
+  # comment at the top of this file: the report the debounce was
+  # described as removing is right here, once the wait is over — and it
+  # agrees with `ruby`, which raises `undefined method 'b='` on the same
+  # line. Whoever withholds it at 0.4.0 will have to change this example,
+  # which is the point of writing it down.
   it "still reports the next line's assignment as a method once the wait is over" do
     open_and_change(MID_EDIT, debounce: 0)
 

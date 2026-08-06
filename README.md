@@ -90,6 +90,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
+| No diagnostics about the line being edited | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 
 [^argcount]: Verified by tests that fail if it breaks, and it does fire —
     but every one of the 14 reports it produces over Ruby's standard

@@ -47,6 +47,13 @@ planned, are in
   hint rather than a warning, or off.
 - **Auto-`require` insertion.**
 - **Signature help highlights the argument the cursor is in.**
+- **No diagnostics about the line you are still typing on.** Typing `a.`
+  above a line like `b = "str"` makes a program that *means*
+  `a.b = "str"` — Ruby agrees, `ruby -c` says `Syntax OK` and running it
+  raises `undefined method 'b='` — so the report is correct about text
+  you have not finished writing. 0.2.2's debounce delays it; removing it
+  needs the edit position, and costs hiding a genuine error on the line
+  under the cursor until you move away (024.41).
 
 ## 1.0.0 — Guarantees, not features
 
