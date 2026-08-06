@@ -76,7 +76,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
 | Find references, rename [^rename], workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: wrong argument *type* | ⚠️ [^argtype] | ⚠️ | ⚠️ 1.0.0 |
-| Diagnostics across the whole project, not just open files | ⚠️ [^ws] | ⚠️ | ⚠️ 1.0.0 |
+| Diagnostics across the whole project, not just open files | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Documentation (RDoc/YARD) in hover and completion [^doc] | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion: Active Record `Relation` API (`where`, `order`, `limit`) | 0.3.0 | — (no Runtime Agent) | — |
@@ -84,17 +84,18 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Inlay hints (inferred types, parameter names) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Code actions / quick fixes for each diagnostic | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Go to type definition | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Document highlight (occurrences within a file) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Call hierarchy (callers and callees) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Document highlight (occurrences within a file) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Completion of `@ivar` names after typing `@` | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 
 [^argcount]: Verified by tests that fail if it breaks, and it does fire —
-    but every one of the 15 reports it produces over Ruby's standard
+    but every one of the 14 reports it produces over Ruby's standard
     library, five Rails gems and minitest is wrong. Each has a recorded
     cause: `def Const.method` recorded as an instance method (10 of the
-    15), a block's `self` read as the enclosing class, and a receiver
+    14), a block's `self` read as the enclosing class, and a receiver
     resolved by name collision. A corpus of gems is close to the worst
     case — their dependencies are absent, so names resolve by
     substitution — and the check's precision on a real application is
@@ -123,26 +124,22 @@ verified per platform, is what 1.0.0 requires (024.R4).
     would leave the declaration behind and the file would not run
     (024.28).
 
-[^ws]: More than ⚠️ promises and less than ✅ requires. The workspace-wide
-    pass is covered by Server-level and unit specs, but it has no
-    end-to-end row in `docs/EXTENSION_CAPABILITIES.md`: the example
-    written for one — a never-opened probe file in the real Rails fixture
-    — produced no diagnostic in 45 seconds. Recorded as 024.14, open.
-
-[^doc]: Only where a receiver was written. In hover, that means
-    `widget.charge`; hovering the `def` itself, a call on implicit self,
-    or anything inside an ERB template shows the type without the
-    documentation. In completion it means the list a `.` produces —
+[^doc]: In hover, everywhere the popup names a method: `widget.charge`,
+    a call written with no receiver, and the `def` itself. Inside an ERB
+    template the type is shown without the documentation. In completion it
+    is only the list a `.` produces —
     the bare-prefix list this release added carries no documentation,
     because only the receiver path attaches what `completionItem/resolve`
     needs to find the comment.
 
 Rows carrying a version are not built anywhere yet; the version is the
 release they are planned for, ordered by what a user notices soonest.
-Each names a **minor** release exactly, never a `0.2.x`-style range,
-because a capability can only ever arrive in a minor one — that is what
-minor means here. A patch never adds a row. Several rows sharing a
-version ship together in that release, the way 0.1.6 shipped five.
+Each names a **minor** release exactly, never a `0.2.x`-style range: a
+minor release is where something *newly announced* arrives. A patch may
+still turn a row ✅, when the row names something the previous release
+was already understood to do and did not — 0.2.1 did that four times.
+Several rows sharing a version ship together in that release, the way
+0.1.6 shipped five.
 
 Three of the rows above were measured against Pylance, the closest
 well-known reference point for a language server in a dynamically typed
@@ -211,8 +208,9 @@ non-Rails project should expect (`docs/design/tasks/024-deferred-review-findings
 publishing and verifying the remaining platforms. Until then, nothing in
 that column is promised.
 
-Versions in this table are read as: patch means nothing a user sees
-changed, minor means a capability was added, major means something a user
+Versions in this table are read as: patch means nothing new was
+announced — a user may well see something change, and usually does —
+minor means a capability was announced, major means something a user
 relied on stopped working. The full statement is in
 [`docs/PUBLISHING.md`](docs/PUBLISHING.md).
 

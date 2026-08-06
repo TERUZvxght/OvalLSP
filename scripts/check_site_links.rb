@@ -200,10 +200,89 @@ end
 # All three environment columns, not just the first. Restricting it to
 # column one is how `⚠️ 1.0.0` went unnoticed in thirty rows: the column a
 # reader acts on was right and the two beside it were not.
+#
+# Matched on the *cells*, not on `<tr data-status>`. Keying on that
+# attribute meant this only ever saw `capabilities.html`, because it is
+# the only page that carries it -- so the excerpt table on both index
+# pages went unchecked and marked two of 0.2.0's shipped capabilities
+# `0.2.0`, which the page's own legend defines as "not built yet", under
+# a header badge reading "Preview 0.2.0". Verified by mutation: flipping
+# a status on `index.html` left this green.
 def site_matrix(html)
-  html.scan(%r{<tr data-status="[^"]*"><td>(.*?)</td>((?:<td class="col-status">.*?</td>){3})</tr>}m).filter_map do |feature, cells|
+  html.scan(%r{<tr[^>]*>\s*<td>(.*?)</td>\s*((?:<td class="col-status">.*?</td>\s*){3})</tr>}m).filter_map do |feature, cells|
     statuses = cells.scan(%r{<td class="col-status">(.*?)</td>}m).flatten.map { |cell| normalise_status(cell) }
     statuses.compact.empty? ? nil : [normalise_feature(feature), statuses]
+  end
+end
+
+# The index pages carry an *excerpt* of the matrix -- a subset, in the
+# same order -- so every row they do have must agree, and rows they omit
+# are not an error.
+# The row *count* the index pages advertise, against the matrix they link
+# to. Round 23 corrected it from 39 to 41 by hand and round 25 found it
+# saying 41 against 42 — the same sentence, one release later, on the same
+# two pages. Counting is the one thing a check does better than a reader.
+#
+# The capability pages ship a static count of their own inside
+# `result-count`, which the page's JavaScript overwrites on load; it is
+# only visible with JavaScript off, and it was a third number again.
+[["index.html", "capabilities.html"], [File.join("ja", "index.html"), File.join("ja", "capabilities.html")]]
+  .each do |page_rel, matrix_rel|
+  page = read_page(File.join(SITE, page_rel))
+  total = read_page(File.join(SITE, matrix_rel)).scan(/<tr[^>]*data-status/).length
+  advertised = page.scan(/(\d+)(?:\s*(?:rows|項目))/).flatten.map(&:to_i)
+  next problems << "#{page_rel}: advertises no matrix row count" if advertised.empty?
+
+  advertised.reject { |count| count == total }.each do |count|
+    problems << "#{page_rel}: advertises #{count} matrix rows and #{matrix_rel} has #{total}"
+  end
+end
+
+[["capabilities.html", nil], [File.join("ja", "capabilities.html"), nil]].each do |page_rel, _|
+  page = read_page(File.join(SITE, page_rel))
+  total = page.scan(/<tr[^>]*data-status/).length
+  page.scan(%r{<p class="result-count"[^>]*>([^<]*)</p>}).flatten.each do |text|
+    text.scan(/(\d+)/).flatten.map(&:to_i).reject { |count| count == total }.each do |count|
+      problems << "#{page_rel}: its no-JavaScript row count says #{count} and the table has #{total}"
+    end
+  end
+end
+
+english_excerpt = site_matrix(read_page(File.join(SITE, "index.html")))
+expected = readme_matrix(File.join(REPO, "README.md")).to_h
+problems << "index.html: no capability rows found -- the excerpt markup changed shape" if english_excerpt.empty?
+english_excerpt.each do |feature, statuses|
+  reference = expected[feature]
+  if reference.nil?
+    problems << "index.html: has a row for #{feature.inspect} that README.md does not"
+  elsif statuses != reference
+    problems << "index.html: #{feature.inspect} is #{statuses.inspect} and README.md says #{reference.inspect}"
+  end
+end
+
+# The Japanese excerpt is compared against the *English excerpt*,
+# positionally, rather than against `README.ja.md` by name.
+#
+# By name it was compared to nothing at all: the site's Japanese was
+# translated independently of `README.ja.md` and no row name matches
+# ("ホバー: リテラル…" against "Hover: リテラル…"), so every row fell into
+# the "not in the README" branch, which was skipped for `ja/`. Eight rows,
+# none checked, on the Japanese landing page -- the second of the two
+# pages this check was added to cover, and the mutation test that caught
+# it the first time was only ever run against the English one.
+#
+# Positionally against English works because both are excerpts of the same
+# matrix in the same order, and the English one is checked by name above.
+# `ja/capabilities.html` is compared the same way and for the same reason.
+japanese_excerpt = site_matrix(read_page(File.join(SITE, "ja", "index.html")))
+if japanese_excerpt.length != english_excerpt.length
+  problems << "ja/index.html: has #{japanese_excerpt.length} matrix rows and index.html has #{english_excerpt.length}"
+else
+  japanese_excerpt.zip(english_excerpt).each_with_index do |((ja_feature, ja_statuses), (_, en_statuses)), row|
+    next if ja_statuses == en_statuses
+
+    problems << "ja/index.html: row #{row + 1} (#{ja_feature.inspect}) is #{ja_statuses.inspect} " \
+                "and index.html's row #{row + 1} is #{en_statuses.inspect}"
   end
 end
 

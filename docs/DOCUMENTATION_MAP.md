@@ -27,12 +27,14 @@ updated in the same change, not "later".
 | **A capability** (anything a user can now do, or can no longer do) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md` (add/alter the row **and** its E2E example), README's matrix in `README.md` + `README.ja.md`, `site/capabilities.html` + `site/ja/capabilities.html`, both changelogs | `core/spec/e2e/capability_coverage_spec.rb` (row ⇔ E2E example), `core/spec/meta/*_parity_spec.rb` (EN ⇔ JA). README's own pair is **not** among them — see 024.25 |
 | **A version number** | `core/lib/ovallsp/version.rb`, `core/Gemfile.lock`, `vscode/package.json`, `vscode/package-lock.json` (two places), both changelogs — and, once it is published, `docs/RELEASE_ARTIFACTS.md` | `core/spec/meta/changelog_parity_spec.rb`, `vscode/src/test/unit/versionPairing.test.ts`, `core/spec/meta/release_artifacts_spec.rb` (every `v*` tag is accounted for) |
 | **A roadmap item** (shipped, dropped, moved) | `docs/ROADMAP.md` + `.ja.md`, README's matrix, `site/roadmap.html` + `site/ja/roadmap.html`, the matching `024.R*` entry in `docs/design/tasks/024-deferred-review-findings.md` | `core/spec/meta/roadmap_parity_spec.rb` (README ⇔ roadmap) |
-| **A change reverted mid-release** (see CLAUDE.md's two-rounds rule) | a `024.*` entry naming the root cause and the direction actually needed, both changelogs if a bullet was already written for it, and the section of `CLAUDE.md` the episode informs | — |
+| **A change reverted mid-release** (see CLAUDE.md's same-place rule) | a `024.*` entry naming the root cause and the direction actually needed, both changelogs if a bullet was already written for it, and the section of `CLAUDE.md` the episode informs | — |
+| **A review round finding the same place the previous round did** | a mechanical countermeasure — a shared implementation, a rule moved to where the value is produced, a guard given the input it could not see — *not* a regression test for the one instance, and not a third hand fix | — |
 | **A deferred finding** (`024.*`) | its `yaml` metadata block in `docs/design/tasks/024-deferred-review-findings.md` — `status`, and `released-in` once it is resolved; delete the entry once nothing in the tree still cites it by number — grep first, do not go by the calendar (see that file's own legend) | — |
 | **Install steps, prerequisites, or the extension id** | `README.md` + `.ja.md`, `docs/PUBLISHING.md` + `.ja.md`, `site/getting-started.html` + `site/ja/getting-started.html` | — |
 | **What the extension records, keeps, or writes to disk** | `vscode/PRIVACY.md` + `.ja.md` — the single source of truth for this; `site/security.html` + `site/ja/security.html`; and every place 0.1.12 found restating the list or the cache path, each of which must point at PRIVACY rather than copy it (this list has been short three times; add to it rather than trusting it): `docs/design/docs/12-release-and-support.md`, `docs/design/tasks/019-runtime-observation.md`, `019-runtime-observation-notes.md`, `021-persistent-cache-notes.md`, the cache paragraph in `vscode/README.md` + `.ja.md`, `docs/SECURITY_CHECKLIST.md`'s observation and cache-deserialisation sections, `core/lib/ovallsp/observation/store.rb`'s `#invalidate_changed` doc, `core/lib/ovallsp/observation/observed_signature.rb`'s `code_fingerprint` doc, and **both changelogs**, which restate the disk claim in prose and went stale against PRIVACY for a whole round because this row did not name them | `core/spec/meta/privacy_parity_spec.rb` (EN ⇔ JA: section count, cross-links, three named claims, and the length of the recorded-items list) |
 | **Anything about the Runtime Agent, workspace trust, or what the extension executes** | `SECURITY.md` + `.ja.md`, `site/security.html` + `site/ja/security.html`, `docs/EXTENSION_CAPABILITIES.md`'s "does not promise" section | — |
-| **A known limitation** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`, and the site page that claims the opposite, if any | `core/spec/meta/deferred_findings_spec.rb` (an open `024.*` defect declaring `user-visible: yes` is cited in both languages; one declaring `no` states why) |
+| **A known limitation** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`, and the site page that claims the opposite, if any | `core/spec/meta/deferred_findings_spec.rb` (an open `024.*` defect declaring `user-visible: yes` carries one `<!-- documents: 024.N -->` marker, at the end of the line that documents it, in each language; one declaring `no` states why) |
+| **Which Ruby, Rails or platform the product accepts** — including anything in `vscode/src/platformCompatibility.ts` or `rubyResolver.ts` | `docs/SUPPORT_MATRIX.md` + `.ja.md` (every affected row, not only the one you came for), `docs/KNOWN_LIMITATIONS.md` + `.ja.md`, `site/getting-started.html` + `site/ja/`, `core/ovallsp.gemspec`'s `required_ruby_version` if the floor moved | — |
 | **A working agreement** (how this project is built, reviewed or released) | `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md` + `.ja.md` | — |
 
 ## The site is documentation
@@ -41,13 +43,14 @@ updated in the same change, not "later".
 is *not* generated from the Markdown docs, so nothing propagates on its
 own. Treat every page as another row above.
 
-**It is not in this tree.** `site/` lives on
-`claude/github-pages-official-site-fef0f5` and has not been merged, so
-the site rows in the trigger table cannot be followed from here — they
-have to be *carried*, and the list two sections down is where they are
-carried to. Anything a change makes stale on the site goes in that list
-until the branch lands. A trigger you cannot follow is a trigger nobody
-follows.
+**It is in this tree**, as of 0.2.0, and the trigger table's site rows
+are followable directly — `git ls-files site` lists seventeen files.
+This paragraph said the opposite until 0.2.1, because the sentence was
+written while the site was still on a branch and the section two below
+was rewritten when it landed without anyone re-reading this one. A
+mandatory checklist that contradicts itself is worse than one that is
+merely stale: a contributor who believes this paragraph skips five rows
+and defers them to a list that no longer exists.
 
 | Page | Mirrors |
 |---|---|
@@ -78,18 +81,30 @@ eleven discrepancies found by an independent read of the branch -- is
 gone because every item on it is fixed, and the two that were about the
 capability matrix are now *machine*-checked rather than remembered:
 `scripts/check_site_links.rb` compares the site's matrix against
-README's, all three columns, and the version the index pages advertise
-against `vscode/package.json`. The deploy gates on it.
+README's, all three columns, on `capabilities.html` and on both index
+pages, and the version the index pages advertise against
+`vscode/package.json`. The deploy gates on it.
 
-English is compared by feature name; Japanese positionally, row for row.
-The site's Japanese was translated independently of `README.ja.md` and
-the two disagree about wording that means the same thing (`Coreが起動し`
-against `Core が起動し`), so demanding identical prose would buy a
-stricter check by making the prose worse. What both copies really share
-is the order of the table.
+English is compared by feature name, against the README. Japanese is
+compared *positionally* — `ja/capabilities.html` against `README.ja.md`,
+and `ja/index.html` against `index.html`, which is itself checked by
+name. The site's Japanese was translated independently of `README.ja.md`
+and the two disagree about wording that means the same thing
+(`Coreが起動し` against `Core が起動し`), so demanding identical prose
+would buy a stricter check by making the prose worse. What both copies
+really share is the order of the table.
+
+That `ja/index.html` clause is 0.2.1's correction and worth the sentence
+it costs: comparing it by name meant comparing it to nothing at all,
+because no row name matches (`ホバー: リテラル…` against
+`Hover: リテラル…`), and every row fell into a branch that was skipped
+for Japanese pages. Eight rows, none checked, on the Japanese landing
+page — while this document said the matrix was machine-checked. The
+mutation test that caught the English half was never run against the
+Japanese one; it is now, in both directions.
 
 What that check does *not* cover, and what therefore still has to be
-read: every page that is not `capabilities.html`. The security page's
+read: every page that is not `capabilities.html` or an index page. The security page's
 two retracted claims, the roadmap's mis-numbered sentence, the version
 badge, the requirements list, the patch definition and the 404 page's
 issue-tracker line were each found by a person reading, and nothing

@@ -235,6 +235,32 @@ RSpec.describe Ovallsp::Server do
     expect(result).to eq([{ uri: "file:///user.rb", range: { start: { line: 0, character: 0 }, end: { line: 1, character: 3 } } }])
   end
 
+  # The receiverless path answers "where does a call with no receiver
+  # go", and the thing that tells it a call has no receiver is the text
+  # to the left of the word. Without that check the path also runs for
+  # `something.article_params`, where it asks the *enclosing* class for a
+  # method of that name -- so a call on a receiver whose type is unknown
+  # jumps into the file you are already in, at a method that has nothing
+  # to do with it. Silence is the correct answer here; a confident wrong
+  # jump is worse than none.
+  it "does not answer textDocument/definition from the enclosing class for a call on an untyped receiver" do
+    source = "class ArticlesController\n  def create\n    thing.article_params\n  end\n\n  def article_params\n  end\nend\n"
+    input =
+      frame(
+        jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: { textDocument: { uri: "file:///articles_controller.rb", text: source, version: 1, languageId: "ruby" } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/definition",
+        params: { textDocument: { uri: "file:///articles_controller.rb" }, position: { line: 2, character: 12 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.first[:result]).to eq([])
+  end
+
   it "returns [] for textDocument/definition when no word is under the cursor" do
     input =
       frame(

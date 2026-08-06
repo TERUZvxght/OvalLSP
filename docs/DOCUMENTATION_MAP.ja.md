@@ -28,12 +28,14 @@
 | **ケイパビリティ**(ユーザーにできることが増えた・減った) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md`(行**と**そのE2E例の両方)、`README.md` + `README.ja.md` のマトリクス、`site/capabilities.html` + `site/ja/capabilities.html`、両CHANGELOG | `core/spec/e2e/capability_coverage_spec.rb`(行⇔E2E例)、`core/spec/meta/*_parity_spec.rb`(EN⇔JA)。READMEの日英対はこの中に**ありません**(理由は024.25) |
 | **バージョン番号** | `core/lib/ovallsp/version.rb`、`core/Gemfile.lock`、`vscode/package.json`、`vscode/package-lock.json`(2箇所)、両CHANGELOG。公開した後は `docs/RELEASE_ARTIFACTS.md` も | `core/spec/meta/changelog_parity_spec.rb`、`vscode/src/test/unit/versionPairing.test.ts`、`core/spec/meta/release_artifacts_spec.rb`(`v*` タグがすべて記載されていること) |
 | **ロードマップ項目**(提供開始・取り下げ・移動) | `docs/ROADMAP.md` + `.ja.md`、READMEのマトリクス、`site/roadmap.html` + `site/ja/roadmap.html`、`docs/design/tasks/024-deferred-review-findings.md` の対応する `024.R*` | `core/spec/meta/roadmap_parity_spec.rb`(README⇔ロードマップ) |
-| **リリース途中で巻き戻した変更**(CLAUDE.md の2ラウンド規則を参照) | 根本原因と本来必要な方向を明記した `024.*` エントリ、既に箇条書きを書いていた場合は両CHANGELOG、その経験が示す `CLAUDE.md` の該当節 | — |
+| **リリース途中で巻き戻した変更**(CLAUDE.md の同一箇所規則を参照) | 根本原因と本来必要な方向を明記した `024.*` エントリ、既に箇条書きを書いていた場合は両CHANGELOG、その経験が示す `CLAUDE.md` の該当節 | — |
+| **前ラウンドと同じ箇所を指摘したレビューラウンド** | 機械的な対策 — 実装の共有、値を作る場所へのルールの移動、見えていなかった入力をガードに与えること。その1件に対する回帰テストは対策ではなく、3度目の手当ても対策ではない | — |
 | **先送り項目**(`024.*`) | `docs/design/tasks/024-deferred-review-findings.md` の `yaml` メタデータブロック(`status`、解決したら `released-in`)。エントリの削除は、その番号を引用している箇所がツリーに1つも無くなってから——暦ではなく grep で判断する(同ファイルの凡例を参照) | — |
 | **導入手順・前提条件・拡張機能ID** | `README.md` + `.ja.md`、`docs/PUBLISHING.md` + `.ja.md`、`site/getting-started.html` + `site/ja/getting-started.html` | — |
 | **拡張機能が記録する・保持する・ディスクに書くもの** | `vscode/PRIVACY.md` + `.ja.md`(これが唯一の正)。`site/security.html` + `site/ja/security.html`。加えて、0.1.12 が「一覧またはキャッシュパスを書き写している」と特定した箇所すべて(この一覧は3度不足していた。信用せず、見つけたら追加すること)——`docs/design/docs/12-release-and-support.md`、`docs/design/tasks/019-runtime-observation.md`、`019-runtime-observation-notes.md`、`021-persistent-cache-notes.md`、`vscode/README.md` + `.ja.md` のキャッシュ段落、`docs/SECURITY_CHECKLIST.md` の観測節とキャッシュのデシリアライズ節、`core/lib/ovallsp/observation/store.rb` の `#invalidate_changed` の説明、`core/lib/ovallsp/observation/observed_signature.rb` の `code_fingerprint` の説明、そして**両CHANGELOG**(散文でディスクに関する記述を書き写しており、この行が名指ししていなかったために1ラウンド丸ごと PRIVACY と食い違ったまま残った)——は書き直さず PRIVACY を指すこと | `core/spec/meta/privacy_parity_spec.rb`(EN⇔JA: 節数・相互リンク・名指しした3つの主張・記録項目一覧の項目数) |
 | **Runtime Agent・ワークスペースの信頼・拡張機能が実行するものに関すること** | `SECURITY.md` + `.ja.md`、`site/security.html` + `site/ja/security.html`、`docs/EXTENSION_CAPABILITIES.md` の「約束しないこと」節 | — |
 | **既知の制限** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`、およびそれと反することを書いているサイトのページ | `core/spec/meta/deferred_findings_spec.rb`(`user-visible: yes` の未解決 `024.*` 欠陥は両言語から参照されていること。`no` の場合は理由を書くこと) |
+| **どのRuby・Rails・プラットフォームを受け入れるか**(`vscode/src/platformCompatibility.ts` や `rubyResolver.ts` の変更を含む) | `docs/SUPPORT_MATRIX.md` + `.ja.md`(用のあった行だけでなく影響する全行)、`docs/KNOWN_LIMITATIONS.md` + `.ja.md`、`site/getting-started.html` + `site/ja/`、下限が動いたなら `core/ovallsp.gemspec` の `required_ruby_version` | — |
 | **進め方の取り決め**(構築・レビュー・リリースの方法) | `CLAUDE.md`、`AGENTS.md`、`CONTRIBUTING.md` + `.ja.md` | — |
 
 ## サイトもドキュメントです
@@ -42,12 +44,12 @@
 から生成しているわけでは**ない**ため、自動で反映されるものは何もありません。
 各ページを上の表の1行として扱ってください。
 
-**このツリーには入っていません。** `site/` は
-`claude/github-pages-official-site-fef0f5` にあり、まだ取り込んでいません。
-そのため引き金の表のサイト関連の行は、ここからは辿れません。辿るのではなく
-*持ち越す*必要があり、2つ下の節の一覧がその持ち越し先です。変更によって
-サイトが古くなる箇所は、ブランチが取り込まれるまでその一覧に書いてください。
-辿れない引き金は、誰も辿りません。
+**このツリーに入っています。** 0.2.0 で取り込みました。引き金の表のサイト
+関連の行はそのまま辿れます(`git ls-files site` に17ファイル)。0.2.1 まで、
+この段落は逆のことを書いていました。サイトがまだブランチにあった時期に書かれ、
+取り込んだときに2つ下の節だけを書き直して、この段落を読み返さなかったためです。
+必読のチェックリストが自己矛盾しているのは、単に古いよりも悪いことです。この
+段落を信じた人は5行を飛ばし、もう存在しない一覧へ持ち越そうとします。
 
 | ページ | 対応する文書 |
 |---|---|

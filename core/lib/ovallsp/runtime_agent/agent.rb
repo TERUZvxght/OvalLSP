@@ -227,7 +227,25 @@ module Ovallsp
 
         base = ::ActiveRecord::Base
         instance = callable_names(base.instance_methods - Object.instance_methods)
-        singleton = callable_names(base.methods - Object.methods)
+        # Not `- Object.methods`. `Object` is itself a class object, so
+        # subtracting its singleton list removes every public `Module`
+        # instance method -- and that is where ActiveSupport puts
+        # `delegate`, `class_attribute`, `mattr_accessor`,
+        # `thread_mattr_accessor`, `concerning` and `deprecate`. All six
+        # were reported as unknown methods on every model that used them,
+        # `delegate` being one of the commonest lines in a Rails model,
+        # because `Diagnostics::Engine` reads this list as the model's
+        # *complete* class-level method set rather than as an addition to
+        # a known baseline.
+        #
+        # The instance side keeps its subtraction: `Object.instance_methods`
+        # is what a plain object has, which is a real baseline. There is
+        # no equivalent for the class side -- a class object genuinely
+        # responds to everything `Class`, `Module`, `Object` and `Kernel`
+        # give it, and the engine has no other source that knows what
+        # ActiveSupport added to them at runtime. 783 names rather than
+        # 620, once.
+        singleton = callable_names(base.methods)
         {
           instance: instance,
           singleton: singleton,

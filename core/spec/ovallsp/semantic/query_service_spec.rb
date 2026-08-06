@@ -2,7 +2,7 @@
 
 RSpec.describe Ovallsp::Semantic::QueryService do
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
+  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index, signatures: signatures) }
   let(:method_resolver) { Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index) }
   let(:model_registry) { Ovallsp::Models::ModelRegistry.new }
   let(:local_inferencer) { Ovallsp::LocalInferencer.new(model_registry: model_registry) }
@@ -102,6 +102,52 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       name = service.members_of(receiver, prefix: "name").find { |member| member.name == "name" }
 
       expect(name.conditional).to be(true)
+    end
+
+    # `conditional` asks how many *branches* of the Union have the name,
+    # which is not the same question as how many owners declare it: `Bag`
+    # reaches RBS twice and both `Array` and `Enumerable` declare `map`
+    # themselves, while nothing in `Symbol`'s chain does. Anything that
+    # counts declarations rather than branches calls this member
+    # unconditional on the strength of one branch's ancestors alone.
+    it "marks a signature member only one Union branch has conditional, however many of that branch's ancestors declare it" do
+      index_source("class Bag < Array\n  include Enumerable\nend\n")
+
+      union = Ovallsp::Types.normalize_union([nominal("Bag"), nominal("Symbol")])
+
+      member = service.members_of(union, prefix: "map").find { |candidate| candidate.name == "map" }
+
+      expect(member.conditional).to be(true)
+    end
+
+    # Completion offers the workspace class that shares a core class's last
+    # segment, and that is 0.2.0's behaviour rather than an oversight.
+    #
+    # 0.2.1 stopped the *diagnostic* -- `"hello".upcase` was reported
+    # unknown, which is a wrong assertion -- and a later round moved the
+    # same rule into resolution so that completion would agree. That broke
+    # a bare name the user *wrote*: `Range.new` inside `module Billing` is
+    # how Ruby refers to a class from its own namespace, and hover, go to
+    # definition and completion all stopped answering for it.
+    #
+    # Both halves are one design question -- whether a name was written or
+    # inferred, which `ancestors` is not told -- and it is 024.47's, not a
+    # patch's. What this pins is that the two readers behave as 0.2.0's
+    # did, so nothing regressed in either direction while it waits.
+    it "offers the workspace class that shares a core class's last segment, as 0.2.0 did" do
+      index_source("module Serializer\n  module Elements\n    class String\n      def emit\n      end\n    end\n  end\nend\n")
+
+      expect(service.members_of(nominal("String"), prefix: "").map(&:name)).to include("emit")
+    end
+
+    # The boundary: a workspace that genuinely reopens `String` at the top
+    # level is the same name, not a substitution, and must keep answering.
+    it "still answers with a workspace class that reopens the core one under its own name" do
+      index_source("class String\n  def shout\n  end\nend\n")
+
+      names = service.members_of(nominal("String"), prefix: "").map(&:name)
+
+      expect(names).to include("shout", "upcase")
     end
 
     it "treats a same-named member from different origins as available across the Union" do
@@ -286,6 +332,28 @@ RSpec.describe Ovallsp::Semantic::QueryService do
       end
     end
   end
+
+
+    # 0.2.1 populated `parameters` for RBS signatures, which made these
+    # labels the thing `activeParameter` points into rather than only
+    # something to read. Two of the four things wrong with them are fixed
+    # here: the block a caller is actually writing was dropped entirely,
+    # so `each` read as taking nothing, and two overloads spelling the
+    # same part list printed twice. The other two -- `-> self`/`-> void`
+    # rendering as `Unknown`, and a method type variable leaking as
+    # `Array[U]` -- are the *type model* rather than the label, and are
+    # recorded as 024.42 rather than changed days before a release.
+    it "names the block a method takes, which is what the caller is writing" do
+      labels = service.signatures_of(nominal("Array"), "each").map { |signature| signature[:label] }
+
+      expect(labels.any? { |label| label.include?("{ |Elem| ... }") }).to be(true), labels.inspect
+    end
+
+    it "does not print the same overload twice" do
+      labels = service.signatures_of(nominal("String"), "upcase").map { |signature| signature[:label] }
+
+      expect(labels).to eq(labels.uniq)
+    end
 
   describe "#explain" do
     it "reports high confidence for a resolved type" do

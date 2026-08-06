@@ -63,11 +63,14 @@ module Ovallsp
       @document_store = DocumentStore.new
       @parser_service = ParserService.new
       @workspace_index = WorkspaceIndex.new
-      @hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: @workspace_index)
+      # Before the hierarchy index, which needs it: resolving a bare name
+      # that signatures declare is the one case where the workspace's own
+      # answer must be refused (Index::TypeNameResolution).
+      @signatures = load_signatures_environment
+      @hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: @workspace_index, signatures: @signatures)
       @method_resolver = Semantic::MethodResolver.new(workspace_index: @workspace_index, hierarchy_index: @hierarchy_index)
       @method_summary_store = Semantic::MethodSummaryStore.new
       @generated_method_index = Semantic::GeneratedMethodIndex.new
-      @signatures = load_signatures_environment
       @observation_store = Observation::Store.new
       @method_analyzer = Semantic::MethodAnalyzer.new(
         workspace_index: @workspace_index, method_resolver: @method_resolver, summary_store: @method_summary_store,
@@ -1285,7 +1288,22 @@ module Ovallsp
         workspace_root: @workspace_root, gemfile_lock_digest: gemfile_lock_digest, rbs_digest: rbs_digest,
         settings_digest: nil
       )
-      Cache::Store.new(cache_dir: File.join(root, "ovallsp", digest))
+      cache_root = File.join(root, "ovallsp")
+      # `<root>/<workspace>/<generation>`: pruning has to be able to tell
+      # this project's abandoned generations from *another project's live
+      # cache*, and a flat root cannot -- every workspace was a sibling of
+      # every generation, so opening a ninth project evicted one of the
+      # other eight.
+      scope_dir = File.join(cache_root, Cache::Key.workspace_scope(workspace_root: @workspace_root))
+      cache_dir = File.join(scope_dir, digest)
+      store = Cache::Store.new(cache_dir: cache_dir)
+      Cache::Store.mark_workspace(scope_dir, Cache::Key.canonical_root(@workspace_root))
+      # After the directory exists, so the current generation is never the
+      # one swept. Once per start: a generation is only minted when the
+      # key changes, which is a Ruby upgrade, a `bundle install` or a
+      # release, not something that happens mid-session.
+      Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir)
+      store
     rescue StandardError => e
       @logger.error("failed to initialize persistent cache; continuing without one: #{e.class}: #{e.message}")
       Cache::Store.new(cache_dir: nil)
@@ -2021,6 +2039,15 @@ module Ovallsp
       on_self = receiverless_definitions(document, position, word)
       return on_self unless on_self.empty?
 
+      # The cursor on a declaration's own name answers with that
+      # declaration. Jumping there is a no-op, which is the point:
+      # answering nothing makes the editor say "No definition found",
+      # which reads as a failure rather than as "you are already there".
+      # 0.2.1 lost this by tightening the receiverless path, and recorded
+      # nothing about it.
+      here = declaration_at_cursor(document, position)
+      return here unless here.empty?
+
       lexical = @workspace_index.find_by_simple_name(word).map { |match| { uri: match[:uri], range: match[:range] } }
       (lexical + route_helper_definitions(word)).uniq
     end
@@ -2040,8 +2067,18 @@ module Ovallsp
     # here", asked the same way -- through the type engine rather than by
     # name, so this cannot jump to an unrelated method that happens to
     # share the word.
+    def declaration_at_cursor(document, position)
+      summary = @file_summaries[document.uri] || @parser_service.summarize(document)
+      declaration = declaration_named_at(summary, position)
+      return [] unless declaration
+
+      [{ uri: document.uri, range: declaration.location }]
+    rescue StandardError
+      []
+    end
+
     def receiverless_definitions(document, position, word)
-      return [] if receiver_dot_before?(document, position)
+      return [] unless receiverless_call_at?(document, position)
 
       self_type = @query_service.scope_at(document, position)&.self_type
       return [] unless self_type
@@ -2106,6 +2143,14 @@ module Ovallsp
       @reference_index.references(symbol_id, minimum_confidence: :high).map { |r| { uri: r.uri, range: r.location } }
     end
 
+    # `textDocument/documentHighlight` was implemented during 0.2.1's
+    # review loop and is deferred to 0.3.0 with the capability row that
+    # named it -- it is on the roadmap, not a correction to something this
+    # release already claimed. Note when it returns: it calls
+    # `ensure_reference_index_current`, which the comment on that method
+    # says to defer until Find References or Rename needs it, because
+    # rebuilding is O(workspace) and the editor asks for highlights on
+    # every cursor move.
     def reference_symbol_id_at(document, summary, uri, position)
       candidate = summary.reference_candidates.find { |c| position_within?(c.location, position) }
       return nil unless candidate
@@ -2188,10 +2233,31 @@ module Ovallsp
         return [resolved.symbol_id, candidate.location] if resolved
       end
 
-      declaration = summary.declarations.select { |d| position_within?(d.location, position) }.min_by { |d| range_span(d.location) }
+      declaration = declaration_named_at(summary, position)
       return [nil, nil] unless declaration
 
       [declaration.symbol_id, declaration.name_location || declaration.location]
+    end
+
+    # The declaration whose *name* the cursor is on, not the innermost one
+    # whose range contains it.
+    #
+    # A `def`'s recorded range spans its whole body, so "contains the
+    # position" was true of every position inside the method -- a word in
+    # a comment, the contents of a string, a bare number, the `def` and
+    # the `end`. Find References and Rename both read it, and both are
+    # asked for deliberately, so a wrong answer was rare enough to
+    # survive. Occurrence highlighting is asked on every cursor move, and
+    # made it continuous: a box on the enclosing method's name almost
+    # anywhere the caret went.
+    #
+    # `name_location` is the name; a declaration without one (a class
+    # reopened by a dynamic form) falls back to its whole range, which for
+    # those shapes is the name.
+    def declaration_named_at(summary, position)
+      summary.declarations
+             .select { |d| position_within?(d.name_location || d.location, position) }
+             .min_by { |d| range_span(d.name_location || d.location) }
     end
 
     def position_within?(range, position)
@@ -2232,12 +2298,13 @@ module Ovallsp
       if receiver_dot_before?(document, position)
         return { isIncomplete: false, items: member_completion_items(document, position, prefix) }
       end
+      # Completion after `@` -- the instance variables in scope -- was
+      # built during 0.2.1's review loop and is deferred to 0.3.0 with the
+      # capability row that named it.
       # A bare identifier is what the workspace and Kernel sources answer
-      # about. `@user`, `$stdout`, `:symbol` and the name in a `def` are
-      # not bare identifiers, and each was answered with every constant
-      # starting with the same letters -- accepting one of which writes
-      # `@UserProfile`. `@` is the one that matters: typing it is about
-      # the most common thing anyone does in a Rails controller or view.
+      # about. `$stdout`, `:symbol` and the name in a `def` are not bare
+      # identifiers, and each was answered with every constant starting
+      # with the same letters.
       return { isIncomplete: false, items: [] } if bound_prefix_before?(document, position)
 
       route_items =
@@ -2320,10 +2387,22 @@ module Ovallsp
       method_name = enclosing_call_name(document, position)
       return { signatures: [] } unless method_name
 
-      route_signature = route_signature_help(method_name)
-      return route_signature if route_signature
+      # The guard belongs here rather than inside `#method_signature_help`:
+      # a route helper answered first and never reached it, so writing
+      # `def post_path(record)` -- overriding a route helper is ordinary
+      # Rails -- popped the *helper's* signature with `id` bolded.
+      name_range = enclosing_call_name_range(document, position)
+      return { signatures: [] } if name_range &&
+                                   bound_prefix_before?(document, document.char_offset_to_position(name_range.end))
 
-      method_signature_help(document, position, method_name)
+      help = route_signature_help(method_name) || method_signature_help(document, position, method_name)
+      return help if help.fetch(:signatures).empty?
+
+      # `activeParameter` -- which parameter the cursor is on -- was built
+      # here during 0.2.1's review loop and is deferred to 0.3.0 with the
+      # capability row that named it. It is on the roadmap, not a
+      # correction to something this release already claimed.
+      help
     end
 
     def route_signature_help(method_name)
@@ -2336,21 +2415,31 @@ module Ovallsp
       # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
       required_labels = helper.required_parts
       optional_labels = helper.optional_parts.map { |part| "#{part} = nil" }
-      params_label = (required_labels + optional_labels + ["options = {}"]).join(", ")
+      # `options = {}` is a parameter like the others: it was in the label
+      # and not in `parameters`, so a cursor on the last argument indexed
+      # past the end and highlighted nothing.
+      all_labels = required_labels + optional_labels + ["options = {}"]
       {
         signatures: [
           {
-            label: "#{method_name}(#{params_label})",
-            parameters: required_labels.map { |part| { label: part } } +
-              optional_labels.map { |label| { label: label } }
+            label: "#{method_name}(#{all_labels.join(', ')})",
+            parameters: all_labels.map { |label| { label: label } }
           }
         ]
       }
     end
 
     def method_signature_help(document, position, method_name)
-      call_start = call_name_position(document, position)
-      return { signatures: [] } unless call_start
+      name_range = enclosing_call_name_range(document, position)
+      return { signatures: [] } unless name_range
+
+      call_start = document.char_offset_to_position(name_range.begin)
+      # A `def`'s own parentheses look exactly like a call's to a scan
+      # that counts them, so the cursor between them answered with the
+      # method being *declared*. Hover and go to definition were taught
+      # this in 0.2.1 and signature help was not, while the changelog
+      # named all three.
+      return { signatures: [] } if bound_prefix_before?(document, document.char_offset_to_position(name_range.end))
 
       # With no receiver the call is on the enclosing `self`, the same
       # reading go-to-definition and bare-prefix completion take. Without
@@ -2380,21 +2469,211 @@ module Ovallsp
     def enclosing_call_name_range(document, position)
       text = document.text
       idx = document.position_to_char_offset(position) - 1
-      idx -= 1 while idx >= 0 && text[idx] != "("
+      # *Unmatched*, which this claimed and did not do: it stopped at the
+      # first `(` going back, so a call that had already closed before the
+      # cursor won. `takes(compute(1), 2)` answered with `compute`'s
+      # signature from the closing paren onward, and on scaffolded Rails
+      # `link_to "Edit", edit_article_path(@article), class: "btn"` showed
+      # `edit_article_path`'s parameters for the rest of the line.
+      #
+      # Harmless while the receiverless path did not resolve -- every such
+      # position has `(` rather than `.` before the name, so signature help
+      # answered nothing. 0.2.0 gave that path a receiver (the enclosing
+      # `self`) and turned silence into a wrong answer, which is the trade
+      # this project takes the other way round.
+      #
+      # Over *code* only. Counting raw characters made `takes("smile :(",`
+      # walk past the real call and answer nothing, and
+      # `takes(label("x("), ` answer with `label` -- silence turned into a
+      # wrong answer by the same depth count that was added to remove one.
+      tokens = structural_tokens(document)
+      cursor = idx + 1
+      index = last_token_index_before(tokens, cursor)
+      depth = 0
+      idx = -1
+      while index >= 0
+        offset, kind = tokens[index]
+        case kind
+        # Everything that closes counts, and everything that opens
+        # cancels one -- including a bracket or brace, because Prism
+        # closes `puts (1)`'s parenthesis with the same token it closes a
+        # call's, and an opener this scan ignored would leave that pair
+        # unbalanced.
+        when :paren_close, :nest_close then depth += 1
+        # Never below zero: an *unmatched* opener -- the cursor inside a
+        # literal whose call is still open -- drove the count negative,
+        # so the scan walked past the real call and out into earlier
+        # lines. `alpha([1, |2], 3)` answered nothing where 0.2.0
+        # answered, and a cursor in a literal with no enclosing call at
+        # all re-balanced against an earlier statement and answered with
+        # a call it is nowhere near. There is no being more closed than
+        # closed.
+        when :nest_open then depth -= 1 unless depth.zero?
+        when :paren_open
+          if depth.zero?
+            idx = offset
+            break
+          end
+          depth -= 1
+        end
+        index -= 1
+      end
       return nil if idx.negative?
 
+      # The same `!`/`?` rule, read the other way: the character before a
+      # call's `(` is the last of its *name*, so `refresh!(` has to give
+      # up its `!` before the word scan starts or the name comes back
+      # empty and signature help answers nothing.
       name_end = idx
+      name_end -= 1 if name_end.positive? && METHOD_NAME_SUFFIXES.include?(text[name_end - 1])
       name_start = name_end
       name_start -= 1 while name_start.positive? && word_char?(text[name_start - 1])
       return nil if name_start == name_end
 
-      name_start...name_end
+      name_start...(idx)
     end
 
     def call_name_position(document, position)
       range = enclosing_call_name_range(document, position)
       range && document.char_offset_to_position(range.begin)
     end
+
+    # The character offsets of this document that are *code* — outside any
+    # string or character literal and outside any `#` comment.
+    #
+    # One answer, shared by the two scans signature help runs, because
+    # they are two questions about the same text and 0.2.1 shipped them
+    # disagreeing: the comma count skipped strings, the scan that finds
+    # the call did not, so `takes("a, b(", ` counted right and looked in
+    # the wrong place. A single `#` in a string, or a single quote in a
+    # comment, is enough to make two scanners diverge, so there is one.
+    #
+    # Line by line, and each line read forwards, because a quote cannot be
+    # classified backwards: whether `"` opens or closes depends on how
+    # many came before it. A string that spans lines (a heredoc, a `%w[]`
+    # across lines) is therefore read as ending at its line — wrong, but
+    # wrong in the direction the old code was already wrong in, and
+    # signature help does not reach across one.
+    #
+    # The structural tokens of this document -- the parentheses, brackets,
+    # braces and commas that are *code* -- as a sorted array of
+    # `[offset, symbol]`, cached per document version.
+    #
+    # Both of signature help's scans used to walk the text one character
+    # at a time, asking a per-character mask whether each was code. That
+    # was correct and unusably slow: with the parens before the cursor
+    # balanced there is no early exit, so the loop ran to offset 0, and
+    # `text[idx]` on a string Ruby has classed as multibyte is not a
+    # constant-time operation. Measured on a 603 KB file with one Japanese
+    # comment in it: **8.0 s** to answer that there is no signature at
+    # all, on a single-threaded server, with completion and diagnostics
+    # queued behind it.
+    #
+    # Prism already told us which tokens these are while building the
+    # mask, so keeping *them* instead of a set of every code offset makes
+    # both scans walk parentheses rather than characters -- and the
+    # multibyte cost disappears with the character indexing. `%w(`'s
+    # parenthesis never appears here because Prism lexes it as a string
+    # delimiter, which is the same reason the mask existed.
+    #
+    # `#{` and `}` are kept as a brace pair: they nest and balance like
+    # any other, and what is written between them is real Ruby.
+    # Prism gives the *same character* different token types depending on
+    # what it opens, and every one of them has to be here or the depth
+    # count goes wrong in one direction only: an unmapped opener still
+    # meets a mapped closer. An array literal opens `BRACKET_LEFT_ARRAY`,
+    # a block's brace is `BRACE_LEFT` but a lambda's is `LAMBDA_BEGIN`,
+    # and `puts (1)` opens `PARENTHESIS_LEFT_PARENTHESES` -- so
+    # `takes([1, 2, 3], ` counted the literal's commas as this call's and
+    # bolded a parameter two along.
+    #
+    # A parenthesised *expression* is deliberately `:nest_open` rather
+    # than `:paren_open`: it is not a call's argument list, so the scan
+    # looking for the enclosing call must pass through it rather than
+    # stop at it.
+    STRUCTURAL_TOKENS = {
+      PARENTHESIS_LEFT: :paren_open, PARENTHESIS_RIGHT: :paren_close,
+      PARENTHESIS_LEFT_PARENTHESES: :nest_open,
+      BRACKET_LEFT: :nest_open, BRACKET_LEFT_ARRAY: :nest_open, BRACKET_RIGHT: :nest_close,
+      BRACE_LEFT: :nest_open, LAMBDA_BEGIN: :nest_open, BRACE_RIGHT: :nest_close,
+      EMBEXPR_BEGIN: :nest_open, EMBEXPR_END: :nest_close,
+      COMMA: :comma
+    }.freeze
+
+    def structural_tokens(document)
+      key = [document.uri, document.version, document.text.length]
+      return @structural_tokens_value if @structural_tokens_key == key
+
+      @structural_tokens_key = key
+      @structural_tokens_value = compute_structural_tokens(document.text)
+    end
+
+    def compute_structural_tokens(text)
+      found = Prism.lex(text).value.filter_map do |token, _state|
+        kind = STRUCTURAL_TOKENS[token.type]
+        kind && [token.location.start_offset, kind]
+      end
+      to_character_offsets(text, found)
+    rescue StandardError
+      []
+    end
+
+    # Prism reports byte offsets and every caller here counts characters.
+    # They are the same number until the file contains one multibyte
+    # character, and converting each offset with `byteslice(0, n).length`
+    # is O(offsets x filesize) -- which is why one Japanese comment made a
+    # 265 KB file cost 3.4 seconds per keystroke while its ASCII twin cost
+    # 150 ms, and why it got four times worse with every doubling. One
+    # pass over the string converts all of them.
+    def to_character_offsets(text, entries)
+      return entries if entries.empty? || text.bytesize == text.length
+
+      mapping = {}
+      byte = 0
+      character = 0
+      text.each_char do |char|
+        mapping[byte] = character
+        byte += char.bytesize
+        character += 1
+      end
+      mapping[byte] = character
+      entries.map { |entry| entry.map { |value| value.is_a?(Integer) ? mapping.fetch(value, value) : value } }
+    end
+    # The index of the last structural token at or before `offset`.
+    def last_token_index_before(tokens, offset)
+      (tokens.bsearch_index { |token| token.first >= offset } || tokens.length) - 1
+    end
+
+    # Whether `offset` falls inside a string, a regexp, a heredoc or a
+    # comment. Only the `@` completion asks this -- a YARD `@param` tag or
+    # an `@` inside a string is nobody typing an instance variable -- and
+    # it asks about one offset per request, so the spans are kept rather
+    # than a per-character mask.
+    NON_CODE_TOKEN_PREFIXES = %w[STRING_ REGEXP_ HEREDOC_ EMBDOC_ PERCENT_ SYMBOL_ WORDS_SEP].freeze
+    NON_CODE_TOKEN_TYPES = %i[COMMENT CHARACTER_LITERAL].freeze
+
+    def inside_string_or_comment?(document, offset)
+      key = [document.uri, document.version, document.text.length]
+      unless @non_code_spans_key == key
+        @non_code_spans_key = key
+        @non_code_spans_value = compute_non_code_spans(document.text)
+      end
+      @non_code_spans_value.any? { |start, finish| offset >= start && offset < finish }
+    end
+
+    def compute_non_code_spans(text)
+      found = Prism.lex(text).value.filter_map do |token, _state|
+        name = token.type.to_s
+        next unless NON_CODE_TOKEN_TYPES.include?(token.type) ||
+                    NON_CODE_TOKEN_PREFIXES.any? { |prefix| name.start_with?(prefix) }
+
+        [token.location.start_offset, token.location.end_offset]
+      end
+      to_character_offsets(text, found)
+    rescue StandardError
+      []
+    end
+
 
     # If `position` sits on an identifier immediately preceded by `.`
     # (`receiver.|method`, cursor anywhere in "method"), returns the
@@ -2415,6 +2694,11 @@ module Ovallsp
       offset = document.position_to_char_offset(position)
 
       left = offset
+      # A Ruby method name can end in `!` or `?`, and stopping at one left
+      # the scan looking at the sigil rather than at what precedes the
+      # name -- so `def save!(a|)` answered with the method being
+      # *declared*.
+      left -= 1 if left.positive? && METHOD_NAME_SUFFIXES.include?(text[left - 1])
       left -= 1 while left.positive? && word_char?(text[left - 1])
       return false unless left.positive?
 
@@ -2426,15 +2710,25 @@ module Ovallsp
       # declared or removed, not one to resolve. The boundary is `def`
       # the keyword rather than the three letters: `predef use` is an
       # ordinary call and still gets the workspace's answer.
-      text[...left].match?(/(?:\A|[^\w.])(?:un)?def\s+\z/)
+      #
+      # `def self.` and `def Foo.` are the same declaration with a
+      # receiver written between, which the anchor below cannot see past.
+      keyword = text[...left].rindex(/(?:\A|[^\w.])(?:un)?def\s+(?:[A-Za-z_][\w:]*\.)?\z/)
+      return false unless keyword
+
+      # Over *code* only. `\s+` spans newlines, so a comment whose last
+      # word happens to be `def` -- "# a def", "# undef this later" --
+      # silenced signature help and completion on the identifier below it,
+      # with nothing to tell the user why. The same mistake the call scan
+      # made until it was given this mask.
+      !inside_string_or_comment?(document, text[...left].rindex(/(?:un)?def/) || keyword)
     end
 
     def receiver_dot_before?(document, position)
       text = document.text
       offset = document.position_to_char_offset(position)
 
-      left = offset
-      left -= 1 while left > 0 && word_char?(text[left - 1])
+      left = name_start_offset(text, offset)
       left.positive? && text[left - 1] == "."
     end
 
@@ -2442,8 +2736,7 @@ module Ovallsp
       text = document.text
       offset = document.position_to_char_offset(position)
 
-      left = offset
-      left -= 1 while left > 0 && word_char?(text[left - 1])
+      left = name_start_offset(text, offset)
       return nil if left.zero? || text[left - 1] != "."
 
       dot_position = document.char_offset_to_position(left - 1)
@@ -2459,6 +2752,14 @@ module Ovallsp
       # `#analyzable_document`, so the ERB is extracted. Extracting again
       # -- which is what borrowing `#explain_type_in_view` wholesale does
       # -- breaks the local case this row was written for.
+      # The same environment the `@` list is built from, for the same
+      # reason: a scaffolded controller assigns `@article` in a
+      # `before_action` and uses it in `edit`, `update` and `destroy`, so
+      # a walk that only sees the current method body finds nothing. 0.2.1
+      # gave the `@` list that environment and left this one behind, which
+      # produced the disagreement it had just spent the release removing
+      # elsewhere: the `@` popup said `Article` and `@article.` a
+      # keystroke later offered nothing.
       initial_env = erb_view?(document.uri) ? ivars_for_view(document.uri) : {}
       type = @query_service.type_at(document, dot_position, initial_env: initial_env)
       type == Types::UNKNOWN ? nil : type
@@ -2468,15 +2769,43 @@ module Ovallsp
       text = document.text
       offset = document.position_to_char_offset(position)
 
-      left = offset
-      left -= 1 while left > 0 && word_char?(text[left - 1])
+      left = name_start_offset(text, offset)
       right = offset
       right += 1 while right < text.length && word_char?(text[right])
+      # A Ruby method name can end in `!` or `?`, and stopping at them
+      # looked up `destroy` for `destroy!`: hover opened an empty popup
+      # and F12 said "No definition found", on the names a Rails
+      # controller is mostly made of. Only one, only at the end -- that is
+      # all Ruby allows, and `a ? b : c` must not be swallowed, which is
+      # why the scan does not start here.
+      right += 1 if right > left && METHOD_NAME_SUFFIXES.include?(text[right])
 
       return nil if left == right
 
       text[left...right]
     end
+
+    METHOD_NAME_SUFFIXES = ["!", "?"].freeze
+
+    # Where the name containing -- or ending at -- `offset` starts.
+    #
+    # Every scan in this file that walks left off a name needs the same
+    # two rules, and four consecutive rounds of review found them missing
+    # from one place at a time: a Ruby name may end in `!` or `?`, and
+    # such a character belongs to the name only when a word character
+    # precedes it, because the `!` of `!ready` is negation. Written once
+    # so that the next caller cannot get a different answer, which is how
+    # each of those four rounds happened.
+    def name_start_offset(text, offset)
+      left = offset
+      left -= 1 if left > 1 && METHOD_NAME_SUFFIXES.include?(text[left - 1]) && word_char?(text[left - 2])
+      left -= 1 while left.positive? && word_char?(text[left - 1])
+      left
+    end
+
+
+
+
 
     def word_prefix_at_position(document, position)
       text = document.text
@@ -3181,6 +3510,46 @@ module Ovallsp
     # doesn't chase a source method's own body to infer its return type),
     # so this only omits the "-> Type" line for Unknown, rather than
     # discarding a hover that otherwise has real content to show.
+    # The type of `self` where the cursor is, for a word that is not
+    # receiver-qualified. Nil when the position has a receiver in front of
+    # it: a receiver whose own type is Unknown must stay unanswered rather
+    # than fall back to the enclosing class, or `thing.article_params`
+    # would be answered from the file it is written in.
+    def enclosing_self_type(document, position)
+      return nil unless receiverless_call_at?(document, position)
+
+      @query_service.scope_at(document, position)&.self_type
+    end
+
+    # Whether the cursor is on the *message* of a call that was written
+    # with no receiver -- `article_params`, not `thing.article_params` and
+    # not the word `article_params` occurring in a comment.
+    #
+    # The question used to be "is there a `.` immediately before this
+    # word", which every word in the file answers no to. Hover, go to
+    # definition and signature help each took that as licence to look the
+    # word up as a method on the enclosing `self`, so resting on prose
+    # inside a comment, on the contents of a string, on a parameter name
+    # in a `def`, or on a local variable sharing a name with a method
+    # opened a popup asserting a call that is not there. Ruby's own rule
+    # settles the last of those outright: a local in scope always wins
+    # over a same-named method.
+    #
+    # `ParserService` already records every call site with its message
+    # range and whether it had a receiver -- the same records Find
+    # References resolves -- so this reads the answer instead of guessing
+    # at it. A local read is a `LocalVariableReadNode` and produces no
+    # call candidate at all; so do a comment, a string's contents and a
+    # parameter name.
+    def receiverless_call_at?(document, position)
+      summary = @file_summaries[document.uri] || @parser_service.summarize(document)
+      summary.reference_candidates.any? do |candidate|
+        candidate.kind == :method_call && candidate.receiver.nil? && position_within?(candidate.location, position)
+      end
+    rescue StandardError
+      false
+    end
+
     def hover_lines(document, position, type)
       lines = type == Types::UNKNOWN ? [] : [type.to_s]
       documentation = nil
@@ -3190,7 +3559,14 @@ module Ovallsp
       # directly against `document`, which only works for a plain Ruby
       # buffer -- an .erb view needs the synthetic-source/ivar-seeded path
       # #explain_type_in_view already used just above for `type` itself.
-      receiver_type = word && !erb_view?(document.uri) && receiver_type_before_dot(document, position)
+      # With no receiver the call is on the enclosing `self`, which is how
+      # most Ruby calls a method of its own class -- `article_params` in a
+      # controller. Go to definition and signature help were given this
+      # reading in 0.2.0 and hover was not, so hovering such a call
+      # answered an empty popup while H5 promises its parameter list with
+      # no qualifier about receivers.
+      receiver_type = word && !erb_view?(document.uri) &&
+                      (receiver_type_before_dot(document, position) || enclosing_self_type(document, position))
       if receiver_type
         # The call's own shape, first: hovering `value.documented(1)` is
         # most often a question about what to pass, and the answer was

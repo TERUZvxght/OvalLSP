@@ -48,7 +48,11 @@ reopening the output channel.
 The only thing OvalLSP itself writes to disk during ordinary use is its
 own [persistent parse cache](README.md#troubleshooting) under
 `$XDG_CACHE_HOME/ovallsp/`, or `~/.cache/ovallsp/` when that variable is
-unset or empty, keyed by workspace and toolchain version. **It
+unset or empty, keyed by workspace, toolchain version and OvalLSP's own
+version. Directories for combinations no longer in use are removed at
+startup rather than accumulating for as long as the extension is
+installed, which is what happened until 0.2.1; the eight most recently
+used are kept. **It
 contains parts of your source code.** Alongside the parsed
 declarations and types it stores each method's body text and each
 parameter's default expression, verbatim — the body so a method's return

@@ -21,6 +21,13 @@ export interface PlatformManifest {
 export interface CompatibilityResult {
   compatible: boolean;
   reason?: string;
+  /**
+   * Set when the combination works but not the way the VSIX intended --
+   * the bundled payload does not apply and the user's own Ruby is
+   * carrying `prism` and `rbs` instead. Worth an Output line and not
+   * worth an error toast.
+   */
+  note?: string;
 }
 
 function readManifest(extensionRoot: string): PlatformManifest | undefined {
@@ -175,11 +182,31 @@ export function queryRubyConfigPaths(rubyCommand: string, cwd?: string): Promise
  * basic version query isn't something that should be treated as a match by
  * default.
  */
+/**
+ * Whether this Ruby can `require` the two gems the Core actually needs.
+ *
+ * Injectable for the same reason `queryRubyIdentity` is: a unit test must
+ * not spawn a process.
+ */
+export type RuntimeDependencyProbe = (rubyCommand: string, cwd?: string) => Promise<boolean>;
+
+export function probeRuntimeDependencies(rubyCommand: string, cwd?: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    execFile(
+      rubyCommand,
+      ['-e', "require 'prism'; require 'rbs'"],
+      { timeout: 15000, cwd },
+      (err) => resolve(!err)
+    );
+  });
+}
+
 export async function checkBundledCoreCompatibility(
   extensionRoot: string,
   rubyCommand: string,
   queryIdentity: RubyIdentityQuery = queryRubyIdentity,
-  cwd?: string
+  cwd?: string,
+  probeDependencies: RuntimeDependencyProbe = probeRuntimeDependencies
 ): Promise<CompatibilityResult> {
   const manifest = readManifest(extensionRoot);
   if (!manifest) {
@@ -211,6 +238,29 @@ export async function checkBundledCoreCompatibility(
 
   const expected = `${manifest.rubyEngine} ${manifest.rubyVersionMajorMinor} (${manifest.rubyPlatform})`;
   const actual = `${identity.engine} ${actualMajorMinor} (${identity.platform})`;
+
+  // The payload not applying is not the same fact as OvalLSP not working.
+  // What the Core needs is `prism` and `rbs`; the bundled copies are a
+  // convenience for the one combination they were built for, and a Ruby
+  // carrying its own is the case `SUPPORT_MATRIX` has always described as
+  // "may still work". 0.2.1 made that worth distinguishing rather than
+  // merely true: the suite is green under Ruby 4.0.6, and telling that
+  // user their interpreter is "incompatible" -- in a red toast, on every
+  // window -- describes the payload rather than their situation.
+  //
+  // Asked only when the payload does *not* match, so the ordinary case
+  // still spends no process on it.
+  if (await probeDependencies(rubyCommand, cwd)) {
+    return {
+      compatible: true,
+      note:
+        `This VSIX's bundled native dependencies were built for ${expected} and "${rubyCommand}" is ${actual}, ` +
+        'so they are not being used. That Ruby has prism and rbs of its own, which is what the Core needs, ' +
+        'so OvalLSP is running against those instead. This combination is not one this release verifies ' +
+        '(see docs/SUPPORT_MATRIX.md).'
+    };
+  }
+
   return {
     compatible: false,
     reason:

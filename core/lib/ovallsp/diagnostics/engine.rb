@@ -7,6 +7,7 @@ require_relative "../semantic/reference_resolver"
 require_relative "../semantic/receiver_resolution"
 require_relative "../types"
 require_relative "../index/symbol_id"
+require_relative "../index/type_name_resolution"
 
 module Ovallsp
   module Diagnostics
@@ -48,8 +49,18 @@ module Ovallsp
                                                                              generation: semantic_context.generation)
         resolved_locations = resolved.each_with_object({}) { |r, h| h[r.location] = true }
 
-        findings = []
-        findings.concat(syntax_findings(summary, semantic_context.generation))
+        findings = syntax_findings(summary, semantic_context.generation)
+        # A file that does not parse gets its syntax errors and nothing
+        # else. Prism is error-tolerant, so there is still a tree -- one
+        # error recovery invented parts of, and every semantic answer
+        # below is computed from it. Typing a `.` at the end of a method
+        # made `a.end` a call, and the engine reported that the class has
+        # no method named `end`, on the commonest editing action there is.
+        #
+        # Gated here rather than in each check, so a check added later
+        # cannot assert about a node nobody wrote.
+        return budget ? findings.first(budget) : findings unless findings.empty?
+
         findings.concat(unknown_method_findings(document, summary, resolved_locations, semantic_context))
         if MODE_RANK.fetch(mode) >= MODE_RANK.fetch(:standard)
           findings.concat(unresolved_constant_findings(summary, semantic_context))
@@ -676,8 +687,23 @@ module Ovallsp
         resolved = Semantic::ReceiverResolution.receiver_type_for(context.workspace_index, document, candidate,
                                                                   context.local_inferencer)
         return Types::UNKNOWN if resolved.is_a?(Types::Nominal) && context.workspace_index.guessed_type_name?(resolved.name)
+        return Types::UNKNOWN if resolved.is_a?(Types::Nominal) && shadowed_declared_type?(resolved.name, context)
 
         resolved
+      end
+
+      # Whether the index would answer a *bare* name that signatures
+      # already declare with a workspace class that merely shares its last
+      # segment. `Index::TypeNameResolution` owns the rule; resolution
+      # itself now refuses the substitution, so what this guards is the
+      # one reader that must decline even to *ask* -- a diagnostic about a
+      # receiver the engine has not identified is an assertion, not a
+      # missing answer.
+      def shadowed_declared_type?(name, context)
+        bare = Index::SymbolId.bare_name(name)
+        Index::TypeNameResolution.substitution?(
+          bare, context.workspace_index.resolve_type_name(bare), context.signatures
+        )
       end
 
       # "closed" means every ancestor is either a workspace-declared type

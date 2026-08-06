@@ -80,7 +80,7 @@
       <h1>各リリースで何ができるようになるか</h1>
       <p class="lede">
         ユーザーが気づく順に並べています。ここでのバージョン番号は
-        <em>何が同時に届くか</em> の約束であって、日付ではありません。パッチリリースは設計上ここに現れません — 何も追加しないので、列挙するものがないからです。
+        <em>何が同時に届くか</em> の約束であって、日付ではありません。パッチリリースは設計上ここに現れません — 新しく告知するものがないからです。すでにした約束が実際に果たされるのはパッチです。
       </p>
     </div>
   </section>
@@ -117,23 +117,23 @@
           <ul class="feature-list">
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong><code>A</code> と打つだけで候補が出る。</strong> 現在の補完は先に <code>.</code> が必要です。裸のプレフィックスに一致するのはルートヘルパだけで、ワークスペースのクラス、スコープ内のローカル変数、その場で呼べるメソッド — つまり実際に打鍵する内容のほとんど — は名前を最後まで打つまで何も出ません。あらゆるエディタで最もよく使われる補完です。</span>
+              <span><strong>先に <code>.</code> を打たなくても補完が答えます。</strong>ワークスペースのクラス、スコープ内のローカル変数、その場で呼べるメソッドです。0.2.0 ではワークスペースが加わるまでに2文字必要で、0.2.1 でその下限を外したため1文字で足ります。</span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>開いていないファイルの誤りも報告される。</strong> 現在、診断はエディタで開いているファイルにしか存在しないため、3 階層離れたディレクトリのエラーは、たまたま開くまで見えません。</span>
+              <span><strong>開いていないファイルの誤りも報告されます。以前は、診断はエディタで開いているファイルにしか存在しませんでした。</strong></span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>型の違う引数を渡すと報告される。</strong> 現在チェックしているのは引数の<em>個数</em>だけです。</span>
+              <span><strong>型の違う引数を渡すと報告されます。RBS/RBI が型を宣言している場合に限ります。以前は引数の個数しか見ていませんでした。</strong></span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>一度も代入されない <code>@ivar</code> の読み出しが報告される。</strong> Ruby は例外を投げず <code>nil</code> を返すため、現在は何も教えてくれず、ビューがただ空で描画されます。</span>
+              <span><strong>一度も代入されない <code>@ivar</code> の読み出しが、ERBビューで報告されます。Ruby は例外を出さず <code>nil</code> を返すため、以前は何も知らせるものがなく、ビューがただ空で描画されていました。</strong></span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>ホバーと補完にドキュメントが表示される。</strong> 現在のホバーはそれが<em>何であるか</em>を言うだけで、<em>何のためのものか</em>は決して言いません。RDoc/YARD のコメントは <code>def</code> のすぐ上にあるにもかかわらず。</span>
+              <span><strong>ホバーと補完に RDoc/YARD のドキュメントが表示されます。レシーバを書いた場合に限ります。</strong></span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
@@ -175,10 +175,6 @@
             </li>
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>同じシンボルの他の出現箇所をハイライト</strong>（ファイル内）。</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>コール階層</strong> — 参照の平坦なリストではなく、呼び出し元と呼び出し先をたどれる形で。</span>
             </li>
           </ul>
@@ -195,10 +191,6 @@
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong><code>require</code> の自動挿入。</strong></span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>シグネチャヘルプが、カーソルのある引数をハイライトする。</strong></span>
             </li>
           </ul>
         </article>

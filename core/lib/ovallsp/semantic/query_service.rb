@@ -151,10 +151,19 @@ module Ovallsp
 
       private
 
-      # A name can be supplied by different origins on different Union
-      # members (for example, a model column on one member and RBS on
-      # another). Per-origin occurrence counts incorrectly label that
-      # common name conditional, so recompute availability by receiver.
+      # The one place that decides `conditional`, and the reason the
+      # sources above can all report `false`: a receiver that is not a
+      # Union has exactly one branch, so nothing it offers is conditional
+      # on which branch was taken, and `ClassOf` is only ever built over a
+      # single Nominal.
+      #
+      # Each source used to count for itself how many branches had a name,
+      # which was both dead (its answer was overwritten here for the only
+      # receiver shape where it could be anything but `false`) and wrong
+      # where it was read: a name can be supplied by different origins on
+      # different Union members -- a model column on one and RBS on the
+      # other -- and a per-origin count labels that common name
+      # conditional. Availability is recomputed here per receiver instead.
       def normalize_union_conditionals(candidates, receiver_type, context)
         return unless receiver_type.is_a?(Types::Union)
 
@@ -253,10 +262,8 @@ module Ovallsp
       def add_model_members(candidates, receiver_type, prefix)
         return unless @model_registry
 
-        nominals = each_nominal(receiver_type).to_a
-        occurrences = Hash.new(0)
         details = {}
-        nominals.each do |nominal|
+        each_nominal(receiver_type).each do |nominal|
           next unless @model_registry.known_model?(nominal.name)
 
           model = @model_registry.model(nominal.name)
@@ -265,21 +272,18 @@ module Ovallsp
           model.columns.each do |column|
             next unless column.name.start_with?(prefix)
 
-            occurrences[[:model_column, column.name]] += 1
             details[[:model_column, column.name]] = column.ruby_type
           end
           model.associations.each do |association|
             next unless association.name.start_with?(prefix)
 
-            occurrences[[:model_association, association.name]] += 1
             details[[:model_association, association.name]] = association.class_name
           end
         end
 
-        occurrences.each do |(origin, name), count|
+        details.each do |(origin, name), detail|
           candidates[name] ||= Member.new(
-            name: name, origin: origin, conditional: count < nominals.length, visibility: :public,
-            detail: details[[origin, name]]
+            name: name, origin: origin, conditional: false, visibility: :public, detail: detail
           )
         end
       end
@@ -296,21 +300,14 @@ module Ovallsp
         class_object = receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
         singleton = class_object || context[:singleton] == true
         subject = class_object ? receiver_type.type_arg : receiver_type
-        nominals = each_nominal(subject).to_a
-        occurrences = Hash.new(0)
-        nominals.each do |nominal|
-          # Once per *nominal*, not once per ancestor: the count decides
-          # whether a member is conditional on which branch of a Union the
-          # receiver took, and a name declared by three ancestors of one
-          # nominal is not three receivers agreeing.
-          names = signature_owners(nominal, singleton).flat_map do |owner, owner_singleton|
+        names = each_nominal(subject).flat_map do |nominal|
+          signature_owners(nominal, singleton).flat_map do |owner, owner_singleton|
             @signatures.member_names(qualify(owner), prefix: prefix, singleton: owner_singleton)
           end
-          names.uniq.each { |name| occurrences[name] += 1 }
         end
-        occurrences.each do |name, count|
+        names.each do |name|
           candidates[name] ||= Member.new(
-            name: name, origin: :signature, conditional: count < nominals.length, visibility: nil, detail: nil
+            name: name, origin: :signature, conditional: false, visibility: nil, detail: nil
           )
         end
       end
@@ -332,11 +329,15 @@ module Ovallsp
       # even though the walk is a singleton one. `MethodResolver` and
       # `Diagnostics::Engine` were taught this in 0.1.15; completion is
       # the third reader and was not.
+      # Only the no-resolver case needs a fallback. `#lookup_owners` opens
+      # every chain with the receiver's own name -- including for a name
+      # the workspace has never heard of, which is the case a fallback
+      # would have been for -- so an empty result here means the argument
+      # was not a Nominal, and `#each_nominal` only ever yields Nominals.
       def signature_owners(nominal, singleton)
         return [[nominal.name, singleton]] unless @method_resolver
 
-        owners = @method_resolver.lookup_owners(nominal, singleton: singleton)
-        owners.empty? ? [[nominal.name, singleton]] : owners
+        @method_resolver.lookup_owners(nominal, singleton: singleton)
       end
 
       def signature_definition_locations(receiver_type, method_name, context)
@@ -396,7 +397,10 @@ module Ovallsp
           next unless sm
           next unless direct.nil? || sm.direct == direct
 
-          sm.overloads.map { |overload| { label: rbs_signature_label(method_name, overload), parameters: [] } }
+          # Two RBS overloads can spell the same part list -- `upcase` has
+          # two that both read `(Symbol, Symbol) -> String` -- and an
+          # editor showing the same line twice is showing noise.
+          sm.overloads.map { |overload| rbs_signature(method_name, overload) }.uniq { |signature| signature[:label] }
         end.flatten.tap { |result| return nil if result.empty? }
       end
 
@@ -422,7 +426,32 @@ module Ovallsp
       # Before 0.1.12 the `(?)` ones failed to build at all so
       # nothing was shown; making them build has to not make them lie, and
       # the keyword case was already lying.
-      def rbs_signature_label(method_name, overload)
+      # Label and parameters together, because they are the same list read
+      # twice and an editor needs both: `activeParameter` is an index into
+      # `parameters`, so a signature carrying none can never highlight
+      # anything however well the index is computed. Only source
+      # declarations carried them, so the promise held for a method you
+      # wrote and quietly did not for `"abc".sub(` or `where(`.
+      #
+      # Each parameter is an [start, end) offset pair into the label
+      # rather than the substring: two positionals of the same type spell
+      # the same string, and a client matching by substring highlights the
+      # first of them for both.
+      def rbs_signature(method_name, overload)
+        parts = rbs_signature_parts(overload)
+        label = +"#{method_name}("
+        parameters = parts.map do |part|
+          start = label.length
+          label << part
+          offsets = [start, label.length]
+          label << ", "
+          { label: offsets }
+        end
+        label.delete_suffix!(", ") unless parts.empty?
+        { label: "#{label})#{rbs_block_suffix(overload)} -> #{overload.return_type}", parameters: parameters }
+      end
+
+      def rbs_signature_parts(overload)
         parts = overload.required_positionals.map(&:to_s) +
                 overload.optional_positionals.map { |t| "?#{t}" } +
                 overload.trailing_positionals.map(&:to_s)
@@ -432,7 +461,19 @@ module Ovallsp
         # more than it names, and which slot that came from is not
         # something a reader of the label can act on.
         parts << "..." if overload.rest_positional || overload.rest_keyword
-        "#{method_name}(#{parts.join(', ')}) -> #{overload.return_type}"
+        parts
+      end
+
+      # The block, written where a caller writes it: after the closing
+      # parenthesis, not as an argument. Dropped entirely until 0.2.1, so
+      # `each` and `map` -- whose whole point is the block -- read as
+      # taking nothing at all.
+      def rbs_block_suffix(overload)
+        return "" unless overload.block_type || overload.block_required
+
+        parameters = overload.block_type.to_s[/\A\((.*?)\)/, 1].to_s
+        body = parameters.empty? ? "..." : "|#{parameters}| ..."
+        overload.block_required ? " { #{body} }" : " [{ #{body} }]"
       end
 
       def each_nominal(type)

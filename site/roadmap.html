@@ -81,7 +81,7 @@
       <p class="lede">
         In the order a user notices it. A version number here is a promise about
         <em>what arrives together</em>, not a date. Patch releases are absent by design:
-        they add nothing, so there is nothing to list.
+        they announce nothing new — though they are where a promise already made gets kept.
       </p>
     </div>
   </section>
@@ -118,23 +118,23 @@
           <ul class="feature-list">
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Typing <code>A</code> offers candidates.</strong> Today completion needs a <code>.</code> first: a bare prefix matches route helpers and nothing else, so the workspace classes, the locals in scope and the methods callable right there — which is most of what you type — offer nothing until you have typed the whole name. This is the single most-used completion in any editor.</span>
+              <span><strong>Completion answers without a leading <code>.</code> — workspace classes, the locals in scope, and the methods callable right there.</strong> 0.2.0 needed two characters before the workspace joined in; 0.2.1 removed that floor, so one is enough.</span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Mistakes in files you have not opened are reported.</strong> Today a diagnostic only exists for a file currently open in an editor, so an error three directories away is invisible until you happen to look at it.</span>
+              <span><strong>Mistakes in files you have not opened are reported. A diagnostic used to exist only for a file open in an editor.</strong></span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Passing an argument of the wrong type is reported.</strong> Today only the <em>number</em> of arguments is checked.</span>
+              <span><strong>Passing an argument of the wrong type is reported, where an RBS/RBI declaration states it. Only the number of arguments was checked before.</strong></span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Reading an <code>@ivar</code> that is never assigned is reported.</strong> Ruby returns <code>nil</code> rather than raising, so today nothing tells you — the view simply renders empty.</span>
+              <span><strong>Reading an <code>@ivar</code> that is never assigned is reported, in ERB views. Ruby returns <code>nil</code> rather than raising, so nothing used to tell you — the view simply rendered empty.</strong></span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Hover and completion show the documentation.</strong> Today hover says what a thing <em>is</em> and never what it is <em>for</em>, though the RDoc/YARD comment is right above the <code>def</code>.</span>
+              <span><strong>Hover and completion show the RDoc/YARD documentation, where a receiver was written.</strong></span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
@@ -180,10 +180,6 @@
             </li>
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Highlight the other occurrences</strong> of the symbol under the cursor, within the file.</span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Call hierarchy</strong> — callers and callees, navigable, instead of a flat list of references.</span>
             </li>
           </ul>
@@ -200,10 +196,6 @@
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>Auto-<code>require</code> insertion.</strong></span>
-            </li>
-            <li>
-              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Signature help highlights the argument the cursor is in.</strong></span>
             </li>
           </ul>
         </article>

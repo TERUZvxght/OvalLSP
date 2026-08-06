@@ -99,7 +99,7 @@
           <p class="mt-2">May well work — much of the engine is environment-independent — but nothing verifies it, so nothing is promised.</p>
         </div>
         <div class="card card--flat">
-          <span class="mark mark--plan">0.2.0</span>
+          <span class="mark mark--plan">0.3.0</span>
           <p class="mt-2">Not built yet; the release it is planned for. Alongside “unverified” it means planned for that release but still unverified there.</p>
         </div>
         <div class="card card--flat">
@@ -172,7 +172,7 @@
             <tr data-status="verified"><td>Signature help: workspace, stdlib, route helpers</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span><br><small class="text-mute">route helpers: n/a</small></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="verified"><td>Find references, rename, workspace symbols<br><small class="text-mute">A method a macro declared (<code>attr_accessor</code>, <code>delegate</code>) is refused rather than renamed: there is no identifier token to rewrite.</small></td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="verified"><td>Diagnostics: wrong argument <em>type</em></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
-            <tr data-status="verified"><td>Diagnostics across the whole project, not just open files</td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
+            <tr data-status="verified"><td>Diagnostics across the whole project, not just open files</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="verified"><td>Documentation (RDoc / YARD) in hover and completion</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="verified"><td>Semantic highlighting (local variable vs. method call), in <code>.rb</code> and in an ERB template's Ruby regions</td><td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="planned"><td>Completion: Active Record <code>Relation</code> API (<code>where</code>, <code>order</code>, <code>limit</code>)</td><td class="col-status"><span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--none">no Runtime Agent</span></td><td class="col-status"><span class="mark mark--none">n/a</span></td></tr>
@@ -180,15 +180,16 @@
             <tr data-status="planned"><td>Inlay hints (inferred types, parameter names)</td><td class="col-status"><span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="planned"><td>Code actions / quick fixes for each diagnostic</td><td class="col-status"><span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="planned"><td>Go to type definition</td><td class="col-status"><span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
-            <tr data-status="planned"><td>Document highlight (occurrences within a file)</td><td class="col-status"><span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="planned"><td>Call hierarchy (callers and callees)</td><td class="col-status"><span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
+            <tr data-status="planned"><td>Document highlight (occurrences within a file)</td><td class="col-status"><span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
+            <tr data-status="planned"><td>Completion of <code>@ivar</code> names after typing <code>@</code></td><td class="col-status"><span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="planned"><td>Per-check diagnostic severity settings</td><td class="col-status"><span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="planned"><td>Auto-<code>require</code> insertion</td><td class="col-status"><span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr data-status="planned"><td>Signature help: active parameter highlighting</td><td class="col-status"><span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.4.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
           </tbody>
         </table>
       </div>
-      <p class="result-count" data-matrix-count data-template="Showing {n} of {total} capabilities">Showing 39 of 39 capabilities</p>
+      <p class="result-count" data-matrix-count data-template="Showing {n} of {total} capabilities">Showing 42 of 42 capabilities</p>
     </div>
   </section>
 
@@ -244,14 +245,15 @@
 
       <h3>What the version numbers mean</h3>
       <p>
-        A patch means <em>the set of capabilities is unchanged</em> — not that nothing a
-        user sees changed. Patches routinely change what you see: 0.1.14 removed about
-        twelve thousand wrong reports, which every Rails project noticed, and it was still
-        a patch because it added no row here. A minor means a capability was added. A major
-        means something a user relied on stopped working. That is why every planned row
-        names a minor release exactly, never a <code>0.2.x</code>-style range: a patch
-        never adds a row, and several rows sharing a version ship together, the way 0.1.6
-        shipped five.
+        A patch means <em>nothing new was announced</em> — not that nothing a user sees
+        changed. Patches routinely change what you see: 0.1.14 removed about twelve
+        thousand wrong reports, which every Rails project noticed. A row here can still
+        appear or turn Verified in one, when it names something the previous release was
+        already understood to do and did not — 0.2.1 did that four times. A minor means a
+        capability was <em>announced</em>; a major means something a user relied on stopped
+        working. Planned rows name a minor release exactly, never a
+        <code>0.2.x</code>-style range, and several rows sharing a version ship together,
+        the way 0.1.6 shipped five.
       </p>
 
       <div class="callout mt-3">

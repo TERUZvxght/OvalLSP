@@ -98,6 +98,12 @@ module Ovallsp
     # declared in a method the cursor is not in does not appear -- the
     # descent already starts a fresh environment per `def`, which is what
     # makes that true rather than anything here.
+    # `initial_env` seeds bindings before the walk, exactly as `#infer_at`
+    # takes one: an ERB template assigns no instance variables of its own,
+    # so without it the ivars a controller action put there are invisible
+    # to everything that reads a scope -- which is why completion after
+    # `@` answered nothing in a view while hovering the same name in the
+    # same view answered its type.
     def scope_at(document, position, max_steps: nil)
       offset = document.position_to_byte_offset(position)
       result = parse_cached(document)
@@ -255,6 +261,20 @@ module Ovallsp
     # so that "an ordinary #infer_at builds no snapshots" is a fact a test
     # can state directly. The saving is real: this copies the whole
     # environment, and `locate` runs once per step of the descent.
+    # Locals and instance variables live in the same environment and are
+    # told apart by the `@` their key carries. They are handed back
+    # *separately* because no caller wants both at once: a bare prefix can
+    # never be completed by an ivar, and a prefix that opens with `@` can
+    # never be completed by a local.
+
+    ANONYMOUS_CLASS_FACTORIES = { "Struct" => %i[new], "Class" => %i[new], "Data" => %i[define] }.freeze
+
+    def anonymous_class_factory?(constant_type, node)
+      return false unless constant_type.is_a?(Types::Nominal)
+
+      ANONYMOUS_CLASS_FACTORIES.fetch(Index::SymbolId.bare_name(constant_type.name), []).include?(node.name)
+    end
+
     def capture_scope(env)
       locals = env.each_with_object({}) do |(key, value), acc|
         name = key.to_s
@@ -574,12 +594,13 @@ module Ovallsp
         env[node.name] = eval_type(node.value, env)
       when Prism::InstanceVariableReadNode
         env.fetch(node.name, Types::UNKNOWN)
-      when Prism::IntegerNode then Types::Nominal.new(name: "Integer")
-      when Prism::FloatNode then Types::Nominal.new(name: "Float")
-      when Prism::RationalNode then Types::Nominal.new(name: "Rational")
-      when Prism::StringNode, Prism::InterpolatedStringNode then Types::Nominal.new(name: "String")
-      when Prism::SymbolNode then Types::Nominal.new(name: "Symbol")
-      when Prism::TrueNode, Prism::FalseNode then Types::Nominal.new(name: "Boolean")
+      # One table, shared with `MethodAnalyzer#eval_node`. They drifted
+      # twice -- `Range`/`Regexp` added to both, then `Lambda`/`!`/`&&`/
+      # `||` added here alone -- and each time the symptom was the same
+      # expression typing correctly on one line and losing its type as
+      # the last line of a method.
+      when Prism::AndNode, Prism::OrNode
+        Types::LiteralTypes.boolean_operator(node, eval_type(node.left, env), eval_type(node.right, env))
       when Prism::NilNode then Types::NIL
       when Prism::ArrayNode then eval_array(node, env)
       # Generic, matching `[]` and `Hash.new`: one kind of value renders
@@ -587,8 +608,26 @@ module Ovallsp
       # -- the container rules have no `Hash` entry -- purely so the same
       # value does not render two ways depending on how it was written.
       when Prism::HashNode then Types::Generic.new(name: "Hash", type_arg: Types::UNKNOWN)
+      when ->(other) { Types::LiteralTypes.for_node(other) } then Types::LiteralTypes.for_node(node)
+      # No `SelfNode` case, deliberately. 0.2.1 added one -- the enclosing
+      # class, which the descent already tracks -- so that `self.target(1)`
+      # would resolve. It did, and it cost **55 new false diagnostics over
+      # Ruby's own standard library and removed none**: `self.class.foo`
+      # became `Class has no method named foo`, `def Const.method` bodies
+      # typed `self` as an *instance* rather than the class object, and
+      # `self.` calls on C-defined or singleton-`attr_accessor` methods
+      # were reported unknown. Measured by reverting this one line: the
+      # output goes byte-identical to the baseline.
+      #
+      # Recorded as 024.46 rather than patched again. Answering nothing
+      # for `self.foo` is the trade this project takes; answering wrongly
+      # on `self.class` is not.
       when Prism::ParenthesesNode then eval_type(node.body, env)
-      when Prism::CallNode then eval_call(node, env)
+      # `!x` is a CallNode whose message is `!`, and Ruby guarantees its
+      # class whatever `x` is -- one of the few calls whose return type
+      # needs no lookup at all.
+      when Prism::CallNode
+        Types::LiteralTypes.negation?(node) ? Types::LiteralTypes::NEGATION_TYPE : eval_call(node, env)
       when Prism::IfNode, Prism::UnlessNode then eval_conditional(node, env)
       when Prism::ConstantReadNode, Prism::ConstantPathNode then eval_constant(node)
       else Types::UNKNOWN
@@ -674,6 +713,18 @@ module Ovallsp
         # (TypeConverter maps untyped/void/top/bottom to it), so this is a
         # guard against a second instance appearing, not a live fix.
         return signature_method if signature_method && !signature_method.is_a?(Types::Unknown)
+
+        # `Struct.new(...)`, `Class.new` and `Data.define(...)` return a
+        # *class*, not an instance of the constant named -- so the
+        # ordinary `X.new -> X` rule answers `Struct`, and the `.new` that
+        # follows was reported as an unknown method on it. Three sites in
+        # Ruby's own standard library, on the plainest value-object idiom
+        # there is.
+        #
+        # Unknown rather than a class object over some invented name: the
+        # class is anonymous, this engine has nothing true to say about
+        # it, and Unknown is the answer no check acts on.
+        return Types::UNKNOWN if anonymous_class_factory?(constant_type, node)
 
         if node.name == :new
           singleton_method = resolve_source_method_member(constant_type, node.name, singleton: true)

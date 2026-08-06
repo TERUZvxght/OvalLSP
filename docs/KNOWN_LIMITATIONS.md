@@ -71,17 +71,28 @@ evidence-based supported/unsupported table this summarizes.
 
 ## Ruby version scope
 
-Ruby **3.3 and 3.4** are supported, which is the whole range
-`core/ovallsp.gemspec`'s `required_ruby_version >= 3.3` allows to
-install. CI runs the full Core suite on both, and development and the
-release build run 3.4 (3.4.5, 3.4.7). Ruby 3.5.x is treated as
-unsupported until it is actually exercised by this project's test suite.
+**The published extension is built for Ruby 3.4.x**, and only 3.4.5 and
+3.4.7 are actually exercised. The VSIX bundles Prism and RBS native
+extensions compiled for the exact `major.minor` it was built under, so on
+any other Ruby they are not used.
 
-That criterion is the one this section has always stated, and until
-0.2.0's round 22 it was applied backwards: the suite ran on 3.3 alone —
-the version this document called unsupported — while the two it called
-supported ran nowhere in CI. The matrix was widened rather than the claim
-narrowed.
+**On another Ruby it does not refuse — it checks.** As of 0.2.1,
+`vscode/src/platformCompatibility.ts` asks whether that interpreter can
+`require` `prism` and `rbs` itself. If it can, OvalLSP runs against
+those and says so in the Output channel; if it cannot, you get the error
+naming `gem install prism rbs`. Ruby 3.3 ships both, so a 3.3 user
+usually gets the first — **which means an unverified combination, not a
+verified one**. Nothing about 3.3 is exercised beyond `core/`'s own suite
+under CI, and prism's version there may be older than the gemspec's
+floor. Treat it as running at your own risk rather than as supported.
+
+Ruby 3.5.x is unsupported on both counts until it is exercised.
+
+0.2.0's round 22 widened the CI matrix to 3.3 and 3.4, and this section
+then said "3.3 and 3.4 are supported" without qualification — which sent
+a 3.3 user to install an extension that refuses to start. "The suite
+passes under 3.3" and "the artifact runs under 3.3" are not the same
+claim, and one does not license the other.
 
 ## Distribution and update model
 
@@ -137,7 +148,7 @@ and reopening `Array` makes its whole ancestry look accounted for —
 unknown-method check treats the receiver as closed even though gems keep
 adding to it. A connected Runtime Agent settles it by reporting the real
 ancestry; without one — an untrusted workspace, a plain Ruby project —
-there is nothing to ask.
+there is nothing to ask. <!-- documents: 024.13 -->
 
 What this reaches is narrower than it sounds, and worth stating exactly,
 because the call a user would try first is the one case that does *not*
@@ -171,7 +182,7 @@ block's body turned a latent offset mis-resolution into 230
 unknown-method reports across Ruby's own standard library. Unknown is the
 only one of the three that no check acts on. The offset rule those two
 depend on is being fixed on its own (024.20, still open), after which
-the body can be read.
+the body can be read. <!-- documents: 024.20 -->
 
 ## Reports that are wrong today
 
@@ -180,6 +191,24 @@ missed one. These are the places it currently says something untrue —
 one of them as a colour, the rest as diagnostics. Every one is recorded
 and all are visible on ordinary code, so they are listed here rather
 than left for you to find.
+
+**The one you will meet first is typing a `.`.** Half of it is fixed in
+0.2.1: `a.` at the end of a method no longer reports that your class has
+no method named `end`. The other half is not, because there is nothing
+to notice — `a.` followed by a line like `b = "str"` is valid Ruby
+meaning `a.b = "str"`, and it is reported as such:
+
+```ruby
+a = Article.new
+a.
+b = "str"        # → Article has no method named `b=`
+```
+
+A next line of `value`, `if true` or `return 1` does the same; `puts 1`
+and `other_thing(1)` do not. The report goes away as soon as you finish
+the name. It cannot be told apart from the same code written on purpose,
+so the fix is to stop publishing while you are still typing rather than
+to add another check, and that is not in this release (024.41). <!-- documents: 024.41 -->
 
 Two are gone since the last release. **A `*_path`/`*_url` call is no
 longer reported as a missing route when no routes have been loaded**
@@ -201,7 +230,7 @@ than carried into this release (024.23).
   constant** (024.21). In `Ovallsp::Server`, `Ovallsp` gets a semantic
   colour and `Server` keeps the editor's grammar colour, so the two
   halves of one name do not match. The same module is also coloured as a
-  namespace where it is declared and as a class where it is read.
+  namespace where it is declared and as a class where it is read. <!-- documents: 024.21 -->
 
 Six more are older than this release and untouched by it:
 
@@ -215,50 +244,54 @@ Six more are older than this release and untouched by it:
   not a module. Attributing
   lexically is what `def` has always done, and three attempts to be
   cleverer for `attr_*` alone each produced false reports instead
-  (024.31).
+  (024.31). <!-- documents: 024.31 -->
 - **`def Foo.bar` is recorded as an instance method**, so `Foo.bar` is
   reported as unknown while `Foo.new.bar` is accepted — both answers
   inverted. **56** of Ruby's own standard-library reports are this. The
   same declaration is also filed under a namespace that does not exist
   (`def Fetcher.start` inside `class Fetcher` lands on
-  `Fetcher::Fetcher`), which the argument-count check then reads: **9 of
-  the 17** remaining wrong-argument-count reports over the measured
-  corpus are this shape, among them `net/http.rb`'s `HTTP.get_response`
-  (024.32).
+  `Fetcher::Fetcher`), which the argument-count check then reads: **10 of
+  the 14** wrong-argument-count reports over the corpus below are this
+  shape, among them `net/http.rb`'s `HTTP.start`
+  (024.32). <!-- documents: 024.32 -->
 - **A `def self.` the workspace adds to `Object` is not reachable**, so
   `Widget.foo` is reported for a method every class really has. 0.1.14
   did not report this, by an accident of the same mis-kinded lookup that
   made it report `class Object; def blank?; end` — a far more common
   shape — on code that runs. 0.1.15 trades the accident back for the fix,
   which is why this is the one shape it makes *worse* than 0.1.14
-  (024.26).
+  (024.26). <!-- documents: 024.26 -->
 - **A class that includes a module the workspace has not read still has
   its class-level macros reported.** `include SomeGem::Model` followed by
   `validate :ensure_ok` is reported, though the Concern installs
-  `validate`. Introduced by 0.1.14 and not fixed here (024.35).
+  `validate`. Introduced by 0.1.14 and not fixed here (024.35). <!-- documents: 024.35 -->
 - **`K.instance_eval { attr_accessor :x }` is reported** where
   `K.class_eval { attr_accessor :x }` is not, though both define the same
   methods. The rule behind it is right for `object.instance_eval`, which
-  is what it was written for (024.33).
+  is what it was written for (024.33). <!-- documents: 024.33 -->
 - **A method a loop defines is reported as unknown.** `EVENTS.each { |id,
   _| alias_method "on_#{id}", :_dispatch_1 }` is idiomatic in generated
   code, and the name is not a literal, so the index records nothing and
-  every call to it is reported. This is the single largest concentration
-  the engine produces on any measured corpus: **525 reports in one file**,
-  prism's `translation/ripper.rb`. `define_method` with a computed name
-  is the same shape. It is listed here rather than only under "static
+  every call to it is reported. `define_method` with a computed name is
+  the same shape. It is listed here rather than only under "static
   analysis limitations" because the engine's own policy is that a wrong
   report is worse than a missed one, and this is a wrong report, not a
   missed one. What 0.2.0 changes is the blast radius: diagnostics now
   publish for files nobody opened, so it reaches the Problems panel
-  rather than waiting to be found.
+  rather than waiting to be found. (This bullet claimed "525 reports in
+  one file, prism's `translation/ripper.rb`" and called it the largest
+  concentration the engine produces. That was measured before the same
+  release removed those reports; the file now produces 10, none of them
+  this shape -- and the 7 written here until 0.2.1's last day was itself
+  a number taken once and not re-measured. A number recorded and not re-measured after the fix that
+  invalidated it.)
 - **`attr_accessor` written inside a `def` inside `class << self` is
   recorded as declaring class-level methods**, where Ruby defines
   instance ones — the macro runs when that method is *called*, with the
   class as `self`. Reading the attribute from an instance method is then
   reported as unknown. Real code has the shape: ActiveRecord's
   `has_and_belongs_to_many` builder, `csv/parser.rb`, `cgi/core.rb` and
-  Devise (024.34).
+  Devise (024.34). <!-- documents: 024.34 -->
 
 ## What 0.2.0's new checks deliberately do not cover
 
@@ -266,15 +299,16 @@ Both diagnostics 0.2.0 adds are held to "a wrong report is worse than a
 missed one", so each is narrow on purpose. What that costs a user:
 
 - **The number of arguments** is checked, and every report it produces
-  over the code measured so far is wrong: **15** over Ruby's standard
-  library, five Rails gems and minitest, each one working Ruby. Ten are
+  over the code measured so far is wrong: **14** over Ruby 3.4.7's
+  standard library, five Rails 8.1.3 gems and minitest 6.0.6, measured at
+  0.2.1, each one working Ruby. Ten are
   `def Const.method` being recorded as an instance method (024.32); the
   rest are a block's `self` read as the enclosing class and a receiver
   resolved by name collision. A corpus of gems is close to the worst
   case for this — their dependencies are absent, so names resolve by
   substitution — and the check's precision on a real application is
   unmeasured. What 0.2.0 changes is where you see them: diagnostics now
-  publish for files nobody opened (024.40).
+  publish for files nobody opened (024.40). <!-- documents: 024.40 -->
 - **Argument types** are checked so narrowly that on the code measured
   so far they are not reported at all. Over Ruby's standard library, five
   Rails gems and minitest — 2,042 files — this check produces
@@ -282,7 +316,7 @@ missed one", so each is narrow on purpose. What that costs a user:
   zero as well (024.37). Before 0.2.0's last round of fixes those two
   corpora produced 795 and 151, and every one was wrong. Treat it as
   something that will not contradict your code rather than something that
-  will catch a mistake in it; the shapes below say why.
+  will catch a mistake in it; the shapes below say why. <!-- documents: 024.37 -->
 
   Checked only where every input is *stated*: the
   expected type comes from an RBS/RBI declaration (Ruby source declares
@@ -301,7 +335,7 @@ missed one", so each is narrow on purpose. What that costs a user:
   constant check skips a name the same fallback resolves, so precisely
   when this misfires, the constant is *not* also reported unresolvable.
   What gives it away is the message naming a type from somewhere the
-  receiver's own namespace has nothing to do with.
+  receiver's own namespace has nothing to do with. <!-- documents: 024.19 -->
 - **Reading an `@ivar` nothing assigns** is reported in ERB views only,
   and only when the whole set of assignments can be enumerated. That is a
   high bar, and any of these silences the check for a view entirely: the
@@ -328,7 +362,7 @@ missed one", so each is narrow on purpose. What that costs a user:
   applies to the whole chain — so every view in a default Rails
   application is silenced. The G16 capability row passes against a
   hand-written empty `ApplicationController`, which is a shape `rails new`
-  does not produce.
+  does not produce. <!-- documents: 024.22 -->
 
   What that leaves reported: a controller written in plain Ruby, whose
   view renders no partial. Two shapes are still wrong rather than merely
@@ -336,18 +370,69 @@ missed one", so each is narrow on purpose. What that costs a user:
   controller's action (`render "users/show"` from elsewhere) sees only
   its own controller's ivars, and a controller three or more classes deep
   whose topmost workspace class has not been read yet is guarded only at
-  the first level.
+  the first level. <!-- documents: 024.18 -->
 - **Diagnostics for files nobody has opened** stop after 2,000 files in
   one pass, so a workspace larger than that gets no diagnostics for the
   tail. The pass walks in sorted order, so it is always the same tail
   rather than a different one after every save, and the Core logs when
   the cap bites. "Files" here means files it published for: an open file,
   a missing one and one that raised do not count against the cap.
-  Workspace-wide diagnostics also have no end-to-end verification against
-  a real Rails app: the example written for one produced nothing in 45
-  seconds. The cause is diagnosed and the
-  fix is scoped to its own task (024.14). The README matrix marks this
-  row ⚠️ rather than ✅ for that reason.
+  (Until 0.2.1 this bullet also said workspace-wide diagnostics had no
+  end-to-end verification, because an example written for one produced
+  nothing in 45 seconds. It reproduces as *working*: on a real Rails
+  application a never-opened file is answered 1.4 s from process start.
+  The G17 row and its example exist now, and 024.14 records what the
+  original measurement most likely hit.)
+
+## A class of yours named after a core class
+
+**If it lives in a namespace, it stops resolving.** `Billing::Range`,
+`Admin::File`, `Reporting::Time` — referred to the way Ruby refers to a
+class from inside its own namespace, by its bare name — get no hover, no
+go to definition and no completion as of 0.2.1, where 0.2.0 answered.
+The engine refuses to let a bare name that Ruby itself declares be
+answered by a workspace class, which is right for the `String` a literal
+produced and wrong for the `Range` you wrote (024.47). A class named
+after a core one at the *top* level is unaffected. <!-- documents: 024.47 -->
+
+## How long an edit takes to re-analyse
+
+**Seconds, on a file of a couple of thousand lines.** Measured per
+keystroke, with the one-off signature load excluded: `net/http.rb` (2,574
+lines) 2.1 s, `rubygems/specification.rb` (2,666 lines) 5.3 s, and it
+grows faster than the file does. The Core answers one request at a time,
+so hover, completion and signature help wait behind it.
+
+The design document states 300 ms for this, so it is not a matter of
+taste — it is a requirement the product misses by an order of magnitude,
+and it had no entry here until 0.2.1 (024.45). It is not new in this
+release; 0.2.0 measures the same. Files of a few hundred lines, which is
+most application code, re-analyse in well under a tenth of a second. <!-- documents: 024.45 -->
+
+## What a partial's local resolves to
+
+**Nothing.** In `_article.html.erb`, `article` is supplied by whatever
+called `render`, and the engine does not read the call site — so hovering
+it answers an empty popup and `article.` completes to nothing, while an
+`@ivar` in the same template resolves through the controller action that
+assigned it. A local the template assigns itself (`<% post = Post.new %>`)
+does resolve. This is the commonest shape in a scaffolded app's views
+(024.44). <!-- documents: 024.44 -->
+
+## What the signature popup shows for a stdlib or gem method
+
+Two things, both about the *label* rather than about which method was
+found:
+
+- **A return type RBS writes as `self`, `void` or `untyped` reads
+  `Unknown`**, and a method's own type variable leaks (`map() ->
+  Array[U]`). The engine has one word for "nothing can be concluded from
+  this" and uses it in a place meant to be read by a person, where the
+  word RBS actually wrote would be better (024.42). <!-- documents: 024.42 -->
+- **A call written the way Ruby writes Kernel — `puts(`, `raise(`, with
+  no receiver — gets no popup at all**, while completion offers those
+  same methods. The receiverless path asks what the enclosing class's
+  ancestors declare, and Kernel is not among them (024.43). <!-- documents: 024.43 -->
 
 ## What an editor feature does with a macro-declared method
 
@@ -360,11 +445,11 @@ features show it:
   a declaration would have to rewrite every call site and could not
   rewrite the declaration, leaving a file that does not run — 0.1.14 did
   exactly that, and 0.1.15 refuses instead. VS Code shows its own
-  "cannot be renamed" message; the reason reaches the Core log only.
+  "cannot be renamed" message; the reason reaches the Core log only. <!-- documents: 024.28 -->
 - **The outline lists one entry per declared name** (024.27).
   `attr_accessor :a, :b, :c` declares six methods on one line, so the
   outline shows six children with identical ranges. Every name is right
-  and each is genuinely a method, but six identical ranges read as a bug.
+  and each is genuinely a method, but six identical ranges read as a bug. <!-- documents: 024.27 -->
 
 ## Conflicts with other extensions
 

@@ -93,6 +93,142 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
     expect(signature[:label]).to eq("build(name, count)")
   end
 
+  # The scan that finds which call the cursor is inside. `activeParameter`
+  # -- which parameter within it -- was built on the same tokens during
+  # 0.2.1's review loop and is deferred to 0.3.0 with its capability row;
+  # what stays is the scan itself, which fixes a 0.2.0 regression where a
+  # call that had already closed before the cursor won.
+  describe "which call the cursor is inside" do
+    # The cursor is at the end of the written text, wherever that lands --
+    # `argument_text` may span lines, and a call left open across a line
+    # break is the ordinary case for signature help.
+    def signature_help_for(argument_text)
+      source = "class Widget\n  def build(name, count)\n  end\nend\n\nWidget.new.build(#{argument_text}\n"
+      lines = source.lines
+      line = lines.length - 1
+      input =
+        did_open("file:///widget.rb", source) +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
+          params: { textDocument: { uri: "file:///widget.rb" },
+                    position: { line: line, character: lines[line].chomp.length } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+      sent_messages.first[:result]
+    end
+
+    def signature_labels_for(argument_text)
+      signature_help_for(argument_text).fetch(:signatures).map { |signature| signature[:label] }
+    end
+
+    # The scan that *finds* the call and the scan that counts commas
+    # inside it are two questions about the same text, and 0.2.1 shipped
+    # them as two scanners that disagreed about what a paren is: the
+    # comma count skipped string literals, the call scan did not. So an
+    # unpaired paren in a string -- `"smile :("`, `sprintf("%d)", x)`, a
+    # half-typed one -- made the popup vanish, and an unpaired `(` inside
+    # a nested call's argument made it answer with the *inner* call, which
+    # is the wrong answer where 0.2.0 had silence.
+    it "finds the call when an earlier argument holds an unpaired paren in a string" do
+      expect(signature_labels_for('"Destroy (permanently", 2')).to include("build(name, count)")
+    end
+
+    it "finds the call when an earlier argument holds an unpaired close paren in a string" do
+      expect(signature_labels_for('"a)b", 2')).to include("build(name, count)")
+    end
+
+    it "does not answer with an inner call because of a paren inside its string argument" do
+      expect(signature_labels_for('label("x(") , 2')).to include("build(name, count)")
+    end
+
+    it "ignores a paren in a trailing comment" do
+      expect(signature_labels_for("1, # (not a call\n    2")).to include("build(name, count)")
+    end
+
+    it "does not treat a `(` inside a `%w` literal as opening a call" do
+      expect(signature_labels_for("%w[a (b], 2")).to include("build(name, count)")
+    end
+
+    # A budget rather than a benchmark: the number below is three orders
+    # of magnitude above what this costs and still catches the regression
+    # it exists for.
+    #
+    # 0.2.1 made the backward scan stop at the first *unmatched* `(`,
+    # which is correct and removed the early exit -- with the parens
+    # before the cursor balanced there is nothing to stop at, so the loop
+    # ran to offset 0. It asked a per-character mask about each character
+    # on the way, and `text[idx]` on a string Ruby has classed as
+    # multibyte is not constant time. Measured on a 603 KB file with one
+    # Japanese comment in it: **8.0 seconds** to answer that there is no
+    # signature, on a single-threaded server, with completion and
+    # diagnostics queued behind it. Reachable by pressing the signature
+    # help shortcut anywhere the parens happen to balance.
+    it "answers a position with no enclosing call quickly, on a large file with a multibyte character in it" do
+      body = (1..8000).map { |i| "  def m#{i}(a, b)\n    x = a + b\n    x\n  end\n" }.join
+      source = "class Big\n  # 日本語のコメント\n#{body}end\n"
+      document = Ovallsp::TextDocument.new(uri: "file:///big.rb", text: source, version: 1, language_id: "ruby")
+      server = Ovallsp::Server.allocate
+      position = { line: source.lines.length - 2, character: 4 }
+      server.send(:enclosing_call_name_range, document, position)
+
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      3.times { server.send(:enclosing_call_name_range, document, position) }
+      elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - elapsed) / 3
+
+      expect(elapsed).to be < 1.0, "#{(elapsed * 1000).round} ms per call to answer that there is no enclosing call"
+    end
+
+    # The *cold* half of the same cost, which the example above cannot
+    # see: its cache is keyed on the document version, so an editor pays
+    # this on every keystroke. Prism reports byte offsets and these scans
+    # count characters, and converting each with `byteslice(0, n).length`
+    # is O(offsets x filesize) -- 13 seconds on a 530 KB file with one
+    # Japanese comment in it, four times worse with every doubling, while
+    # its ASCII twin cost 21 ms.
+    it "converts a multibyte file's token offsets in one pass, not one pass per token" do
+      body = (1..3000).map { |i| "  def m#{i}(a, b)\n    x = a + b\n    x\n  end\n" }.join
+      source = "class Big\n  # 日本語のコメント\n#{body}end\n"
+      server = Ovallsp::Server.allocate
+
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      server.send(:compute_structural_tokens, source)
+      server.send(:compute_non_code_spans, source)
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - elapsed
+
+      expect(elapsed).to be < 2.0, "#{(elapsed * 1000).round} ms to index a #{source.bytesize / 1024} KB file once"
+    end
+
+    it "still finds the call after a parenthesised argument" do
+      expect(signature_labels_for("(1 + 2), ")).to include("build(name, count)")
+    end
+
+    # `puts (1)` -- a space before the parenthesis -- opens with a token
+    # of its own and closes with the same one a call's argument list
+    # does, so an opener the call scan ignored left that pair unbalanced
+    # and the popup vanished for the rest of the line.
+    it "still finds the call after an argument written with a space before its parenthesis" do
+      expect(signature_labels_for("puts (1), ")).to include("build(name, count)")
+    end
+
+    # An *unmatched* opener -- the cursor inside a literal whose call is
+    # still open -- drove the depth negative, so the scan kept walking
+    # past the real call and out into earlier lines. Two things came of
+    # it: `alpha([1, |2], 3)` answered nothing where 0.2.0 answered, and
+    # a cursor inside a literal with no enclosing call at all re-balanced
+    # against an earlier statement and answered with a call it is nowhere
+    # near. Depth cannot go below zero: there is no such thing as being
+    # more closed than closed.
+    it "finds the call when the cursor is inside an unclosed argument literal" do
+      expect(signature_labels_for("[1, ")).to include("build(name, count)")
+    end
+
+    it "finds the call when the cursor is inside an unclosed hash argument" do
+      expect(signature_labels_for("{ a: 1, ")).to include("build(name, count)")
+    end
+  end
+
   # Wiring MethodAnalyzer's return-type inference into LocalInferencer
   # (the Finding-1 fix above) needs its own cache invalidation: without
   # it, editing a method's body would keep hovering its *stale* return

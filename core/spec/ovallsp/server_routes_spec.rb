@@ -76,7 +76,10 @@ RSpec.describe "Ovallsp::Server route helper support" do
 
     signature = sent_messages.first[:result][:signatures].first
     expect(signature[:label]).to eq("post_path(id, format = nil, options = {})")
-    expect(signature[:parameters]).to eq([{ label: "id" }, { label: "format = nil" }])
+    # `options = {}` included: it is in the label, so a cursor on it has to
+    # have somewhere to point. Without it the last argument highlighted
+    # nothing.
+    expect(signature[:parameters]).to eq([{ label: "id" }, { label: "format = nil" }, { label: "options = {}" }])
   end
 
   it "shows post_url (not post_path) in the signature label when that's what was actually called (Task 008.5)" do

@@ -15,6 +15,10 @@ This was established after Task 008.5 shipped without this gate and failed a lat
 
 The same clean-review gate applies whenever an independent review is explicitly requested, including release preparation and broad defect audits: run one or more independent subagents, fix every actionable finding, and repeat with a fresh independent review until a full round reports no findings. A single review pass is not sufficient when it finds defects.
 
+**During a review loop, fix; do not add.** A capability a reviewer asks for is a finding to record, not work to do before the next round. 0.2.1 ran nine rounds and seven of them found a defect in code the *previous* round had written — not because the loop was failing but because it was being asked to review a change set that kept growing. Three capabilities were added mid-loop and all three went back to the roadmap before shipping; the machinery they justified produced most of rounds 25–31's findings. A round reviews a fixed thing, and every addition between rounds resets it.
+
+**Waiving the gate is the maintainer's call and must be written down.** 0.2.1 shipped after nine rounds without a clean one. What made that defensible was cutting the change set back first and leaving every open finding in the register with a user-facing paragraph — not the number of rounds. Record the waiver where the release is recorded; a rule broken in silence stops being a rule.
+
 ## Test-first discipline (mandatory)
 
 Write the test before the implementation, in this order:
@@ -47,26 +51,52 @@ Two further rules follow from that experience:
 - Every fix needs a regression test that fails without the fix — see "Test-first discipline" above for the order to write them in and for why passing that check alone is not enough.
 - When you discover a bug, flaky test, or other fixable issue while working on something else in this repo, fix it in place, in the same session, immediately — do not spawn it off as a separate/background/recommended task. Established after a flaky mtime race in `core/spec/ovallsp/cache/store_spec.rb` was found mid-session during Task 022.2's verification loop and initially deferred via a spawned task instead of being fixed directly; the user explicitly redirected that this must not happen going forward. This applies regardless of whether the issue is related to the task currently in progress.
 
-## Two rounds in a row on the same code: stop and roll back (mandatory)
+## Two rounds in a row on the same place: mechanise, then roll back (mandatory)
 
-If a review round's findings are mostly about **the previous round's own
-changes**, and that happens **twice in a row**, stop the loop. Do not run
-another round. Instead:
+**A finding about the previous round's changes is not a problem.** A
+round that repairs what the last one got wrong is the loop working. Keep
+going.
 
-1. **Roll back** the whole thread of changes those rounds produced — not
-   the last one, the whole thread back to where it started.
-2. **Write down the root cause and the direction that was actually
-   needed**, as an entry in `docs/design/tasks/024-deferred-review-findings.md`.
-   Name the attempts and say why each was the wrong shape. That entry is
-   the deliverable; the code change is not.
-3. **Re-scope**: the problem goes to its own release or its own task, and
-   the current change set returns to what it was about.
-4. Only then resume the loop.
+What matters is **the same place** twice. Track, per round, *which code*
+each finding is about — not merely whether it postdates the last round.
+Then:
 
-Two consecutive self-referential rounds is the signal that the fix is
-aimed at a symptom. A correct fix does not need the next round to repair
-it; if it does, the round after that will need repairing too, and the
-change set drifts while every individual round looks productive.
+- **First time a place is found twice in a row:** do not hand-fix it a
+  third time. Put in a **mechanical countermeasure** — something that
+  makes that class of defect fail a check rather than wait for a
+  reviewer. Then continue the loop normally. Examples of the right shape,
+  from rounds that needed one:
+  - two scanners that had to agree about the same text, replaced by one
+    both read (0.2.1's `#code_offsets`);
+  - a rule copied into a second reader, moved to where the value is
+    produced so there is nothing to copy (`Index::TypeNameResolution`);
+  - a guard that could not see a finding parked outside its input, given
+    the finding as input (`024.41`'s entry, so `deferred_findings_spec`
+    enforces it).
+  A regression test for the specific instance is *not* a countermeasure.
+  It pins the one case and leaves the next one to a reviewer.
+
+- **If the same place is found again after that**, the countermeasure was
+  aimed at the symptom too. Stop the loop and roll back:
+
+  1. **Roll back** the whole thread of changes those rounds produced —
+     not the last one, the whole thread back to where it started.
+  2. **Write down the root cause and the direction that was actually
+     needed**, as an entry in
+     `docs/design/tasks/024-deferred-review-findings.md`. Name the
+     attempts and say why each was the wrong shape. That entry is the
+     deliverable; the code change is not.
+  3. **Re-scope**: the problem goes to its own release or its own task,
+     and the current change set returns to what it was about.
+  4. Only then resume the loop.
+
+A correct fix does not need the next round to repair it; if it does, the
+round after that will need repairing too, and the change set drifts while
+every individual round looks productive. The counting rule is about
+*place* rather than *recency* because a round whose findings are all new
+ground is healthy however recently the code was written — 0.2.1's round
+24 had four of ten about round 23's changes, and every one was a
+different place.
 
 Established after 0.1.12, where the index's ordering instability was
 "fixed" in rounds 8, 9, 10 and 11 — each attempt bolting a sort onto one
@@ -128,6 +158,43 @@ finds more than the narrowed one, the decline was the instructions.
 impact: rounds 1–7 each found something that changed what the engine
 answers; round 8 found five things and none of them did. That is the
 signal worth acting on, and it is a different question from the count.
+
+## A measurement is a claim, and it needs the same care as a test
+
+Three corpus comparisons during the 0.2.x work produced confident false
+results. None was subtle, each would have changed a decision, and the
+count of findings each invented is recorded in
+`docs/design/tasks/026-0.2.1-review-loop.md`:
+
+- a diff computed from a file **still being written** — 79 invented;
+- a diff between two runs over **different corpora**, one of which
+  included this repository's own `core/lib` — 10 invented;
+- a `cd` in a compound command that **persisted**, so both "before" and
+  "after" ran from the same worktree — reported the fix as doing nothing.
+
+Before reading any diff: confirm both sides finished, confirm both sides
+were given the identical corpus, and confirm each side ran the code you
+think it ran. Print the thing you are asserting rather than assuming it.
+
+**Run one measurement at a time, in the foreground.** 0.2.1's last day
+added two more to the list, and both came from backgrounding: a second
+run started while the first was still alive, so two processes wrote the
+same output files; and a rewritten script left both sides `cd`-ed into
+the baseline tree, which is the third entry above happening again. Each
+was caught before its numbers were read — the first because the totals
+were implausibly low, the second because the two sides came out
+*identical*, which contradicts a spec already watched failing. Neither
+would have been caught by re-reading the numbers.
+
+The cheap form of all of this: before starting, check no process of the
+same kind is running; have each side print its own working directory and
+version *before* it runs; and put a control in the diff — a category the
+change cannot affect, which must come out equal. 0.2.1's control was
+`unresolved-constant`, identical at 9,550 on both sides.
+
+**And when a measurement disagrees with a spec you have already watched
+fail, the measurement is wrong until proven otherwise.** That is what
+caught the third one; nothing about re-reading the numbers would have.
 
 ## Documentation is part of the change (mandatory)
 

@@ -69,12 +69,18 @@ end
 paths = ARGV.flat_map { |arg| File.directory?(arg) ? Dir.glob(File.join(arg, "**", "*.rb")) : [arg] }.sort
 
 workspace_index = Ovallsp::WorkspaceIndex.new
-hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
-method_resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
-                                                        hierarchy_index: hierarchy_index)
 model_registry = Ovallsp::Models::ModelRegistry.new
 signature_root = ENV.fetch("OVALLSP_SIGNATURE_ROOT", Dir.pwd)
 signatures = Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace_root: signature_root) }
+# Built the way `Server#initialize` builds it -- `signatures:` included.
+# Without it the shadow rule in `HierarchyIndex#canonical_name` is inert,
+# so every number this script produced described a configuration no user
+# runs. That is not a smaller measurement, it is a measurement of
+# something else, and it is why a 55-report regression reached a release
+# whose headline figure came from here.
+hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index, signatures: signatures)
+method_resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
+                                                        hierarchy_index: hierarchy_index)
 local_inferencer = Ovallsp::LocalInferencer.new(
   model_registry: model_registry, method_resolver: method_resolver, signatures: signatures,
   method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(

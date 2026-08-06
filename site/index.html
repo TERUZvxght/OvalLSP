@@ -83,7 +83,7 @@
     <div class="wrap">
       <div class="hero-copy">
         <div class="badge-row">
-          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.2.0</span>
+          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.2.1</span>
           <span class="badge">VS Code extension</span>
           <span class="badge">MIT</span>
         </div>
@@ -365,52 +365,30 @@
           <tbody>
             <tr>
               <td>Hover: literals, constructors, locals</td>
-              <td class="col-status"><span class="mark mark--yes">Verified</span></td>
-              <td class="col-status"><span class="mark mark--warn">Unverified</span></td>
-              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
-            </tr>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr>
               <td>Completion: model columns and associations</td>
-              <td class="col-status"><span class="mark mark--yes">Verified</span></td>
-              <td class="col-status"><span class="mark mark--none">n/a</span></td>
-              <td class="col-status"><span class="mark mark--none">n/a</span></td>
-            </tr>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--none">n/a</span></td><td class="col-status"><span class="mark mark--none">n/a</span></td></tr>
             <tr>
               <td>Go to definition: workspace methods</td>
-              <td class="col-status"><span class="mark mark--yes">Verified</span></td>
-              <td class="col-status"><span class="mark mark--warn">Unverified</span></td>
-              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
-            </tr>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr>
               <td>Diagnostics: unknown route helper</td>
-              <td class="col-status"><span class="mark mark--yes">Verified</span></td>
-              <td class="col-status"><span class="mark mark--none">n/a</span></td>
-              <td class="col-status"><span class="mark mark--none">n/a</span></td>
-            </tr>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--none">n/a</span></td><td class="col-status"><span class="mark mark--none">n/a</span></td></tr>
             <tr>
               <td>Find references, rename, workspace symbols</td>
-              <td class="col-status"><span class="mark mark--yes">Verified</span></td>
-              <td class="col-status"><span class="mark mark--warn">Unverified</span></td>
-              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
-            </tr>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
             <tr>
-              <td>Completion at the start of an identifier</td>
-              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
-              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
-              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+              <td>Completion at the start of an identifier — workspace classes, locals in scope, methods callable here</td>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td>
             </tr>
             <tr>
               <td>Diagnostics across the whole project, not just open files</td>
-              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
-              <td class="col-status"><span class="mark mark--plan">0.2.0</span></td>
-              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
+              <td class="col-status"><span class="mark mark--yes">Verified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td>
             </tr>
             <tr>
               <td>Inlay hints (inferred types, parameter names)</td>
-              <td class="col-status"><span class="mark mark--plan">0.3.0</span></td>
-              <td class="col-status"><span class="mark mark--plan">0.3.0</span></td>
-              <td class="col-status"><span class="mark mark--plan">1.0.0</span></td>
-            </tr>
+              <td class="col-status"><span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">0.3.0</span></td><td class="col-status"><span class="mark mark--warn">Unverified</span> <span class="mark mark--plan">1.0.0</span></td></tr>
           </tbody>
         </table>
       </div>
@@ -418,12 +396,12 @@
       <div class="legend">
         <div><span class="mark mark--yes">Verified</span> a test fails if it breaks</div>
         <div><span class="mark mark--warn">Unverified</span> may well work; nothing promises it</div>
-        <div><span class="mark mark--plan">0.2.0</span> not built yet — the release it is planned for</div>
+        <div><span class="mark mark--plan">0.3.0</span> not built yet — the release it is planned for</div>
         <div><span class="mark mark--none">n/a</span> needs Rails data no agent can supply here</div>
       </div>
 
       <div class="btn-row mt-3">
-        <a class="btn btn--ghost btn--sm" href="capabilities.html">Full capability matrix — 39 rows</a>
+        <a class="btn btn--ghost btn--sm" href="capabilities.html">Full capability matrix — 42 rows</a>
       </div>
     </div>
   </section>
@@ -642,8 +620,8 @@
         <span class="eyebrow">Roadmap</span>
         <h2>A version number is a promise about what arrives together</h2>
         <p>
-          Not a date. Patch releases add nothing a user sees, so they never appear here;
-          a capability can only ever arrive in a minor release.
+          Not a date. Patch releases announce nothing new, so they never appear here — but
+          they are where a promise already made gets kept, and a capability row can turn ✅ in one.
         </p>
       </div>
 
@@ -654,11 +632,11 @@
         </a>
         <a class="card card--hover reveal" href="roadmap.html#v030" style="text-decoration:none">
           <h3 class="mono">0.3.0</h3>
-          <p><strong>Knowing what the gems define</strong> — plus inlay hints, quick fixes, go to type definition, document highlight and call hierarchy.</p>
+          <p><strong>Knowing what the gems define</strong> — plus inlay hints, quick fixes, go to type definition and call hierarchy.</p>
         </a>
         <a class="card card--hover reveal" href="roadmap.html#v040" style="text-decoration:none">
           <h3 class="mono">0.4.0</h3>
-          <p><strong>Refinements</strong> — per-check severity settings, auto-<code>require</code> insertion, active-parameter highlighting in signature help.</p>
+          <p><strong>Refinements</strong> — per-check severity settings and auto-<code>require</code> insertion.</p>
         </a>
         <a class="card card--hover reveal" href="roadmap.html#v100" style="text-decoration:none">
           <h3 class="mono">1.0.0</h3>

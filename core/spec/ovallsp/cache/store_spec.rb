@@ -141,4 +141,133 @@ RSpec.describe Ovallsp::Cache::Store do
       end
     end
   end
+  # Every component of the workspace digest -- a Ruby upgrade, a `bundle
+  # install`, an RBS change, and now an OvalLSP release -- mints a *new*
+  # generation directory and abandons the old one. Nothing ever removed
+  # the abandoned ones: `DEFAULT_MAX_ENTRIES` prunes entries within one
+  # directory and knows nothing about its siblings. Measured on a
+  # developer machine before this: 28,643 directories, 2.8 GB.
+  #
+  # Adding the version to the key makes that unbounded growth a *release
+  # cadence*, which is why the sweep lands with it rather than after it.
+  # Pruning has to know a *generation* from a *workspace*, and the flat
+  # layout could not: `Cache::Key.workspace_digest` folds the workspace
+  # into the same digest as Ruby, Prism, `Gemfile.lock` and the OvalLSP
+  # version, so every project was a sibling directory in one root,
+  # indistinguishable from an abandoned generation of this one. Keeping
+  # the eight most recently *written* siblings therefore deleted the warm
+  # cache of the ninth project -- possibly one open in another window,
+  # since a directory's mtime advances on write and not on read.
+  #
+  # So the layout nests: `<root>/<workspace>/<generation>`. Everything
+  # pruned within a workspace belongs to that workspace, and the only
+  # thing removed at the root is a workspace that no longer exists on
+  # disk, which is a fact rather than a guess.
+  describe ".prune_generations" do
+    def generation(scope, name, age_days)
+      dir = File.join(scope, name)
+      FileUtils.mkdir_p(dir)
+      File.write(File.join(dir, "e.cache"), "x")
+      time = Time.now - (age_days * 24 * 60 * 60)
+      File.utime(time, time, dir)
+      dir
+    end
+
+    def scope_for(root, name, workspace_path)
+      dir = File.join(root, name)
+      FileUtils.mkdir_p(dir)
+      described_class.mark_workspace(dir, workspace_path)
+      dir
+    end
+
+    it "keeps the current generation however old it looks" do
+      Dir.mktmpdir do |root|
+        scope = scope_for(root, "w1", root)
+        current = generation(scope, "current", 400)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 1)
+
+        expect(Dir.exist?(current)).to be(true)
+      end
+    end
+
+    it "removes the least recently used generations of this workspace beyond the bound" do
+      Dir.mktmpdir do |root|
+        scope = scope_for(root, "w1", root)
+        current = generation(scope, "current", 0)
+        recent = generation(scope, "recent", 1)
+        old = generation(scope, "old", 30)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 2)
+
+        expect(Dir.exist?(current)).to be(true)
+        expect(Dir.exist?(recent)).to be(true)
+        expect(Dir.exist?(old)).to be(false)
+      end
+    end
+
+    # The finding this layout exists for.
+    it "never removes another workspace's cache, however many there are" do
+      Dir.mktmpdir do |root|
+        Dir.mktmpdir do |other_workspace|
+          mine = scope_for(root, "mine", root)
+          theirs = scope_for(root, "theirs", other_workspace)
+          generation(theirs, "warm", 90)
+          current = generation(mine, "current", 0)
+
+          described_class.prune_generations(cache_root: root, current: current, keep: 1)
+
+          expect(Dir.exist?(File.join(theirs, "warm"))).to be(true)
+        end
+      end
+    end
+
+    it "removes a workspace whose directory no longer exists" do
+      Dir.mktmpdir do |root|
+        gone = File.join(root, "..", "ovallsp-vanished-#{Process.pid}")
+        FileUtils.mkdir_p(gone)
+        vanished = scope_for(root, "vanished", gone)
+        generation(vanished, "g", 1)
+        FileUtils.remove_entry(gone)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(vanished)).to be(false)
+      end
+    end
+
+    # Pre-0.2.1 generations sat directly in the root and can never be read
+    # again -- the version in the key guarantees a miss -- so they are the
+    # 2.8 GB that was measured and nothing else will ever reclaim them.
+    it "removes a flat pre-0.2.1 generation directory" do
+      Dir.mktmpdir do |root|
+        legacy = File.join(root, "0123abc")
+        FileUtils.mkdir_p(legacy)
+        File.write(File.join(legacy, "e.cache"), "x")
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(legacy)).to be(false)
+      end
+    end
+
+    it "leaves a root it cannot read alone rather than raising" do
+      expect { described_class.prune_generations(cache_root: "/nonexistent-cache-root", current: "/x", keep: 2) }
+        .not_to raise_error
+    end
+
+    it "removes nothing when the bound is not reached" do
+      Dir.mktmpdir do |root|
+        scope = scope_for(root, "mine", root)
+        current = generation(scope, "current", 0)
+        other = generation(scope, "other", 5)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(other)).to be(true)
+      end
+    end
+  end
 end

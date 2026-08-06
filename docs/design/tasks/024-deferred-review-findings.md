@@ -184,8 +184,11 @@ user-visible: yes
 `sole_source_declaration`)
 
 G5 has been a ✅ row since 0.1.6. A reviewer read all 17 reports it
-produced at `6f5e86a`; after round 22's fixes there are 15, and all 15
-were read again. Every one is working Ruby:
+produced at `6f5e86a`; after round 22's fixes there were 15, and all 15
+were read again. At 0.2.1 the count is **14**, re-measured over Ruby
+3.4.7's standard library, five Rails 8.1.3 gems and minitest 6.0.6, and
+**10** of them are the `def Const.method` shape. The table below is the
+0.1.6 reading and is kept for the shapes rather than the counts:
 
 | shape | count | cause |
 |---|---|---|
@@ -1214,7 +1217,48 @@ kind: defect
 user-visible: yes
 ```
 
-and it blocks a correct answer 0.2.0 had to settle for approximating.
+**The half that reached users is fixed in 0.2.1**, and it was the
+largest single source of wrong diagnostics this engine produced. The
+receiver position a candidate records is the receiver's *exclusive* end
+now, which works with the inclusive `contains?` rather than against it:
+no inner element's range reaches that offset and the receiver's does, so
+the walk answers with the receiver.
+
+Measured over Ruby 3.4.7's standard library, five Rails 8.1.3 gems and
+minitest, both revisions over one corpus, diffed by position:
+**`unknown-method` 3,747 -> 2,095 — 1,656 removed, 4 introduced.** (Re-measured at 0.2.1's last commit, both sides printing their own tree and version first, with `unresolved-constant` identical at 9,550 on both as the control. The first reading of this — 3,362 -> 1,810, 1,556 removed — was taken four commits earlier and against minitest 5.26.0 rather than 6.0.6.)
+`[w].each` reported that a workspace class has no `each`;
+`listeners[:on_x]&.each` that a Symbol has none, 604 times in prism's
+`dispatcher.rb` alone.
+
+The 4 introduced are all `OpenSSL::Cipher.new(x).key_len` and its
+neighbours, and they are 024.13's family rather than this one: the
+receiver now resolves *correctly* to `OpenSSL::Cipher`, which the
+standard library reopens in Ruby while implementing it in C, so it looks
+closed and its C methods look missing. Verified against the interpreter
+-- `key_len`, `iv_len` and `digest_length` all exist. Over the real
+Rails application at `ovaldev` the change introduces nothing: the two
+revisions are byte-identical there, because an ordinary project does not
+reopen `OpenSSL::Cipher`.
+
+`contains?` itself is still inclusive, and the entry stays open for it.
+What is fixed is one caller that had been compensating for it wrongly.
+
+`docs/design/tasks/026-0.2.1-review-loop.md` carries what round 23 found
+and has not fixed, including several entries that overlap this one.
+
+Two things about how this survived twenty-two rounds are worth keeping:
+
+- **The document's own user-facing half described a different
+  consequence.** `KNOWN_LIMITATIONS` cited 024.20 only in the paragraph
+  about blocks having no type. Nothing told a reader that the engine's
+  largest false-positive family was this, so no round went looking.
+- **Every round measured the total and not the shape.** 3,362 is a
+  number that moves for many reasons; "1,545 of them have a receiver
+  ending in `]` or `)`" is one grep, and it names the cause.
+
+`contains?` itself is still inclusive, and that is what keeps this entry
+open: it blocks a correct answer 0.2.0 had to settle for approximating.
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`contains?`,
 `locate_in_block`), `core/lib/ovallsp/parser_service.rb` (the receiver
@@ -1382,10 +1426,37 @@ release, not a defect to patch in the current change set.
 ## 024.14 Workspace-wide diagnostics do not fire against the real Rails fixture
 
 ```yaml
-status: open
+status: fixed
 kind: defect
+released-in: 0.2.1
 user-visible: yes
 ```
+
+**It does not reproduce, and did not need fixing.** A reviewer ran the
+procedure this entry describes and got the diagnostic; so did I, on a
+real Rails 8.1.3 application: a never-opened file is answered **1.35 s
+from process start**, with 42 URIs published. `EXTENSION_CAPABILITIES`'s
+**G17** row and its example exist now, and the example fails when the
+workspace pass is removed.
+
+What the original measurement most likely hit is a path, not a defect.
+`Dir.tmpdir` is `/var/folders/…` on macOS and the server publishes
+`/private/var/folders/…`; a test that builds the expected uri from the
+un-resolved path waits forever for a notification that has already
+arrived under another name. The G17 example calls `File.realpath` and
+gives the property its own Core, because the file has to be on disk
+*before* the server starts -- which the shared client, started in
+`before(:all)`, cannot be given. A first draft of the example wrote the
+file afterwards and failed, which is a different property.
+
+Five documents carried consequences of the non-reproducing claim and are
+corrected: the missing capability row, README's ⚠️ and its `[^ws]`
+footnote, `KNOWN_LIMITATIONS` in both languages, and both changelogs.
+
+**The lesson is not "close entries faster".** It is that an entry
+recording a *measurement* should record how the measurement was taken
+precisely enough to re-run, and this one did not -- so for two releases
+nobody could tell the defect from the harness.
 
 **Area:** `core/lib/ovallsp/workspace_diagnostics.rb`, `core/lib/ovallsp/server.rb`
 
@@ -2350,3 +2421,307 @@ but the true positives are lost with the false ones.
 distinct from "the workspace owns this class", which is what the Agent
 already answers for 024.R5. Scheduled with 024.R7, since a gem index is
 what makes the answer available without an Agent too.
+
+## 024.41 Typing a `.` reports a method on the *next* line
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`analyze`'s parse
+gate), `core/lib/ovallsp/server.rb` (`did_change`, which publishes with
+no debounce)
+
+Half of this is fixed and half is not, and the half that is not is the
+commonest editing action there is: `.` is the completion trigger.
+
+```ruby
+a = Article.new
+a.
+b = "str"
+```
+
+→ ``Article has no method named `b=` ``. Also reported for a next line
+of `value`, `if true` and `return 1`; not for `puts 1` or
+`other_thing(1)`.
+
+The `end` half -- `a.` at the end of a method, where recovery invents
+`a.end` -- was fixed in 0.2.1 by gating semantic checks on a clean parse.
+This shape defeats that gate because **there is no syntax error at all**:
+`a.\nb = "str"` is valid Ruby that means `a.b = "str"`, and it is
+reported correctly. Nothing in the text says the user is mid-edit.
+
+**Direction:** not another check. The engine cannot tell this apart from
+the same code written deliberately, so the answer is to stop publishing
+*while the user is still typing* -- a debounce on `didChange`, and
+ideally the edit position, which the notification already carries and the
+Server discards. Recorded rather than patched, because a heuristic that
+suppresses "a call whose message is on a different line from its
+receiver" would also suppress the leading-dot chain style, which is
+ordinary Ruby.
+
+Round 23 found it, round 24 found it again and widened it, and it existed
+only in `026-0.2.1-review-loop.md` until now -- which is why it is an
+entry: a finding parked in a round's handover is invisible to
+`deferred_findings_spec.rb`, and `DOCUMENTATION_MAP`'s "A known
+limitation" row was therefore unenforced for it.
+
+## 024.42 An RBS signature label says `Unknown` where RBS says `self`, and leaks method type variables
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/signatures/type_converter.rb` (`convert`),
+`core/lib/ovallsp/semantic/query_service.rb` (`rbs_signature`)
+
+Signature help shows `push(...) -> Unknown` for `Array#push`, which RBS
+declares as `-> self`, and `map() -> Array[U]`, where `U` is the method's
+own type variable and means nothing to a reader.
+
+`TypeConverter` maps `self`, `void`, `untyped`, `top` and `bottom` all to
+`Types::UNKNOWN`, which is right for the *type model* — nothing
+downstream can act on any of them — but a signature *label* is prose for
+a human, and "Unknown" is a worse answer than the word RBS actually
+wrote. The label is built from the converted type, so it inherits a
+decision made for a different purpose.
+
+It became visible in 0.2.1 rather than new: populating `parameters` for
+RBS signatures made these labels the thing `activeParameter` points into,
+so people read them.
+
+**Direction:** keep the raw declared return alongside the converted one
+on `Signatures::Overload`, and render the label from the raw. Not the
+converter — every other reader of it is right to get Unknown. Deferred
+rather than done because it touches the shape a signature is stored in,
+and 0.2.1 was days from release; the two label defects that needed no
+model change (a dropped block, duplicate overloads) are fixed.
+
+## 024.43 Signature help answers nothing for a receiverless stdlib call
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`method_signature_help`),
+`core/lib/ovallsp/semantic/query_service.rb` (`signature_owners`)
+
+`puts(` answers `{signatures: []}` while bare-prefix completion offers
+`puts` from its own Kernel source. The receiverless path resolves the
+enclosing `self` and asks its ancestor chain; `lookup_owners` walks what
+the workspace declares, and Kernel is not in it — so every Kernel method
+called the way Ruby actually calls them has no signature help.
+
+Round 22 found S1's receiverless half, round 23 fixed it, and this is
+S2's: the same row shape, one release later, for the stdlib source
+instead of the workspace one.
+
+**Direction:** the receiverless chain should end in `Kernel` the way
+`PrefixCompletion#kernel_methods` already does — one source of "what a
+receiverless call can reach", read by both, rather than each deciding.
+
+## 024.44 A partial's local is not resolved, and C11's stated basis names it
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`ivars_for_view`,
+`analyzable_document`), `core/lib/ovallsp/local_inferencer.rb`
+
+In a scaffolded application, `app/views/articles/_article.html.erb` uses
+`article` — a local the *`render` call site* supplies. Hovering it
+answers `""` and `article.` completes to nothing, while the same file's
+`@article` (were there one) resolves through the controller action.
+
+C11 reads PASS, and its example writes `<% post = Post.new %>` into the
+template first — a local the template assigns itself, which is a
+different thing. The example's own comment gives the row's justification
+as "a local in a template is what a partial receives", which is exactly
+the case it does not cover. The row now says so; this entry is what it
+points at.
+
+**Direction:** the type comes from the `render` call site
+(`render @article`, `render partial: "article", locals: {article: a}`),
+so it needs the same propagation `ivars_for_view` already does for
+instance variables, keyed by partial name instead of by action. Deferred
+rather than done: it is a new inference path, not a correction, and 0.2.1
+is a patch.
+
+## 024.45 Re-analysis after a keystroke is seconds on a large file, against a stated 300 ms
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#reindex`, `#publish_diagnostics`,
+called synchronously from `#handle_did_change`),
+`core/lib/ovallsp/workspace_index.rb`, `core/lib/ovallsp/diagnostics/engine.rb`
+
+Measured as the difference between a run with five `didChange`
+notifications and one with none, so the one-off RBS load cancels:
+
+| file | lines | per-edit re-analysis |
+|---|---|---|
+| `uri/generic.rb` | 1,592 | 4.31 s |
+| `net/http.rb` | 2,574 | 2.06 s |
+| `rubygems/specification.rb` | 2,666 | 5.25 s |
+
+Super-linear: a synthetic file at 506 lines costs 0.10 s and at 16,006
+lines 23.7 s. `ParserService#summarize` is about 19 ms of it; the rest is
+reference resolution and the diagnostics engine.
+
+`docs/design/docs/01-product-requirements.md` states `p95 <= 300ms` for
+single-file re-analysis, so this is seven to seventeen times over on
+files an ordinary Rails application contains. The Core answers one
+request at a time, so hover, completion and signature help queue behind
+every keystroke.
+
+**Not a 0.2.1 regression** -- `main` measures 4.86 s on
+`specification.rb` against 0.2.1's 5.17 s. It is recorded now because
+nothing recorded it: `KNOWN_LIMITATIONS` had no mention of latency or
+file size in either language, so the product shipped a numeric
+requirement it misses by an order of magnitude with no limitation row.
+
+**Direction:** the requirement is about *re-analysis*, and the Server
+does it on the dispatch thread inside `didChange`. The two halves are
+debouncing (which `024.41` also wants, for a different reason) and
+incremental re-analysis of the edited region rather than the file. Both
+are their own task; neither belongs in a patch.
+
+## 024.46 Typing `self` cost 55 false diagnostics and was rolled back
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.1
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`#eval_type`)
+
+0.2.1's round-30 countermeasure spec surfaced that `self.target(1)`
+resolved to nothing -- `LocalInferencer` had no `SelfNode` case while
+`MethodAnalyzer` did -- so one was added: `self` is the enclosing class,
+which the descent already tracks.
+
+Round 31 measured it. Over Ruby 3.4.7's standard library, three runs one
+at a time with `unresolved-constant` identical at 7,561 as the control:
+
+| side | `unknown-method` | `argument-type` |
+|---|---|---|
+| before | 1,034 | 0 |
+| with the `SelfNode` case | **1,086** | **3** |
+| with that one line reverted | 1,034 | 0 -- byte-identical to before |
+
+**55 new false reports, none removed.** Three families:
+
+- `self.class.foo` -- `self` becomes a Nominal, `.class` resolves through
+  RBS to `Class`, and every call on it is reported unknown.
+  `unless self.class.correct?(v)` is everyday Ruby.
+- `def Const.method` and `class << self` bodies type `self` as an
+  *instance* rather than the class object, because `#locate_def` only
+  pushes `ClassOf` when the receiver is literally `self`.
+  `Class.new(self)` inside `def HTTP.Proxy` was reported as a wrong
+  argument type.
+- `self.foo` where `foo` is C-defined or declared by a singleton
+  `attr_accessor`.
+
+Reverted. Answering nothing for `self.foo` is the trade this project
+takes; answering wrongly on `self.class` is not.
+
+**What this cost, and the rule it belongs to.** The case was added
+*during a review round*, to satisfy a spec written as a countermeasure
+for something else. The loop widened the change set instead of closing
+it, which is what `CLAUDE.md`'s same-place rule exists to catch -- and
+what caught it here was a measurement, not a reviewer's reading. Giving
+`self` a type is a real improvement and belongs in a release that can
+measure it properly, with `ClassOf` handled for singleton bodies and
+`.class` resolving to the class object rather than to `Class`.
+
+## 024.47 A namespaced class named after a core class stops resolving
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/index/type_name_resolution.rb`
+(`#substitution?`), applied by `Semantic::HierarchyIndex#canonical_name`
+
+The rule refuses to resolve a *bare* name that signatures declare to a
+workspace class in a different namespace. That is right for a type an
+expression produced -- a literal's `String` must not be answered by
+`Serializer::Elements::String` -- and wrong for a name the user *wrote*,
+because a bare name is exactly how Ruby refers to a class from inside its
+own namespace:
+
+```ruby
+module Billing
+  class Range
+    def tag(name) = name
+  end
+  class Invoice
+    def run
+      r = Range.new
+      r.tag("x")     # 0.2.0: hover, definition and completion all answer
+    end              # 0.2.1: all three answer nothing
+  end
+end
+```
+
+Reproduces for `Data`, `Set`, `Method`, `File`, `Time`, `Struct`,
+`Comparable`, `IO` and `Random` -- any core name a namespaced class
+shares. `Billing::Logger` survives only because `logger`'s RBS is not
+loaded by default.
+
+**Direction:** the two cases differ in whether the name was *written* or
+*inferred*, and `HierarchyIndex#ancestors` knows neither -- it is handed
+a name with no lexical context. Two shapes are plausible and neither is a
+patch: carry that distinction into the type (an inferred Nominal is not
+the same thing as a written constant reference), or stop choosing and let
+the chain hold both the workspace class and the RBS type, so a member
+lookup finds whichever declares it. The second is cheaper and costs one
+spurious completion candidate on a literal.
+
+**Not caught for seven rounds** because `scripts/corpus_diagnostics.rb`
+built its `HierarchyIndex` without `signatures:`, so this rule was inert
+in every corpus measurement the release quoted (024.48).
+
+## 024.48 The measurement tool ran an engine the server never runs
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.1
+user-visible: no
+user-visible-note: >
+  A tooling defect. Its consequence reached users only through the
+  regressions it failed to catch, which have their own entries
+  (024.46, 024.47).
+```
+
+**Area:** `scripts/corpus_diagnostics.rb`
+
+It built `HierarchyIndex.new(workspace_index:)` while `Server#initialize`
+builds `HierarchyIndex.new(workspace_index:, signatures:)`. The shadow
+rule lives in `#canonical_name` and reads `@signatures`, so it did
+nothing in any corpus run -- and every figure this release quoted came
+from those runs. A measurement of a configuration no user gets is not a
+smaller measurement; it is a measurement of something else.
+
+Fixed by building it the way the server does. The lesson is the one
+`CLAUDE.md` already carries, one level up: *confirm each side ran the
+code you think it ran* has to include "and in the configuration a user
+would run it in".

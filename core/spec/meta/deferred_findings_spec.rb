@@ -13,7 +13,7 @@
 # delimiters, so there is one shape to parse instead of however many
 # prose can take.
 #
-# Two rules follow from that history and are load-bearing:
+# Three rules follow from that history and are load-bearing:
 #
 # - **An entry with no block is a failure, not a skip.** The old guard
 #   silently dropped a heading it did not recognise, so an entry could be
@@ -21,6 +21,9 @@
 #   to the heading count for exactly that reason.
 # - **The opt-out must say why.** The old guard documented that
 #   requirement in three places and enforced it nowhere.
+# - **The other end of the check needs a grammar too.** Until 0.2.1 this
+#   half was a bare-number search, which is prose-parsing wearing a
+#   different hat -- see `#documents?`.
 #
 # Read with an explicit encoding, never the locale's: the Japanese file is
 # almost entirely non-ASCII, and under a C/POSIX locale `File.read` hands
@@ -57,14 +60,41 @@ module DeferredFindings
   def undocumented(markdown, *documents)
     open_defects(markdown).reject { |_, fields| fields["user-visible"] == "no" }
                           .keys
-                          .reject { |number| documents.all? { |doc| cited?(doc, number) } }
+                          .reject { |number| documents.all? { |doc| documents?(doc, number) } }
   end
 
-  # A citation ends where the number ends: `include?("024.1")` is true of
-  # a document that only ever mentions `024.13`. The optional dot keeps
-  # `024.21.1` from citing `024.21` while still allowing a sentence to end
-  # "...recorded as 024.13."
-  def cited?(document, number) = document.match?(/#{Regexp.escape(number)}(?!\.?\d)/)
+  # What counts as documenting a finding, as opposed to mentioning it.
+  #
+  # The bare number was the whole test until 0.2.1, and it cannot tell the
+  # two apart: 024.20's user-facing half -- the largest false-positive
+  # family the engine had -- appeared nowhere in `KNOWN_LIMITATIONS`,
+  # while its number appeared in a paragraph about a *different*
+  # consequence, and the guard was green for twenty-two rounds.
+  #
+  # No regex reads prose well enough to judge that, and 024.25 records
+  # what happens when one tries. So the writer says it instead: an
+  # `<!-- documents: 024.N -->` marker at the end of the line that
+  # documents the finding. A machine cannot check that the paragraph is
+  # *adequate*, but it can insist the claim was made deliberately, which
+  # a number occurring in a sentence never is. Written inline rather than
+  # on its own line because a comment between two list items ends the
+  # list in most Markdown renderers.
+  #
+  # Exactly once per document: two markers for one number mean two
+  # paragraphs each claiming to be the place, and no way to tell which
+  # one a later edit should keep.
+  ANCHOR_PREFIX = "documents:"
+
+  def anchors(document, number)
+    document.scan(/^([^\n]*?)<!-- #{ANCHOR_PREFIX} #{Regexp.escape(number)}(?!\.?\d) *-->/)
+  end
+
+  # The capture is whatever the marker's own line holds in front of it: a
+  # marker alone on a line, or opening one, anchors nothing.
+  def documents?(document, number)
+    found = anchors(document, number)
+    found.length == 1 && found.first.first.match?(/\S/)
+  end
 end
 
 RSpec.describe "deferred findings metadata" do
@@ -118,15 +148,32 @@ RSpec.describe "deferred findings metadata" do
       expect(DeferredFindings.headings(markdown)).to eq(["024.30.1"])
     end
 
-    it "requires the citation to end where the number ends" do
-      expect(DeferredFindings.cited?("recorded as 024.13 and 024.14", "024.1")).to be(false)
-      expect(DeferredFindings.cited?("see 024.21.1", "024.21")).to be(false)
-      expect(DeferredFindings.cited?("recorded as 024.13.", "024.13")).to be(true)
+    it "requires the marker to end where the number ends" do
+      expect(DeferredFindings.documents?("a limitation <!-- documents: 024.13 -->", "024.1")).to be(false)
+      expect(DeferredFindings.documents?("a limitation <!-- documents: 024.21.1 -->", "024.21")).to be(false)
+      expect(DeferredFindings.documents?("a limitation <!-- documents: 024.13 -->", "024.13")).to be(true)
     end
 
     # `.` is a regex metacharacter: unescaped, `024.13` matches `024x13`.
-    it "matches a citation literally rather than as a pattern" do
-      expect(DeferredFindings.cited?("see 024x13 here", "024.13")).to be(false)
+    it "matches the number literally rather than as a pattern" do
+      expect(DeferredFindings.documents?("a limitation <!-- documents: 024x13 -->", "024.13")).to be(false)
+    end
+
+    # The distinction the whole guard turns on, and the one its previous
+    # form could not make.
+    it "does not accept the number occurring in prose" do
+      expect(DeferredFindings.documents?("blocked by 024.13, still open", "024.13")).to be(false)
+    end
+
+    it "does not accept a marker with no prose in front of it" do
+      expect(DeferredFindings.documents?("<!-- documents: 024.13 -->\n\nsomething else", "024.13")).to be(false)
+      expect(DeferredFindings.documents?("  <!-- documents: 024.13 -->", "024.13")).to be(false)
+    end
+
+    it "does not accept two markers for one number" do
+      markdown = "one place <!-- documents: 024.13 -->\n\nand another <!-- documents: 024.13 -->\n"
+
+      expect(DeferredFindings.documents?(markdown, "024.13")).to be(false)
     end
 
     it "excludes an entry that declares no user-visible half" do
@@ -139,8 +186,8 @@ RSpec.describe "deferred findings metadata" do
     it "requires every named document to cite the entry, not just one" do
       markdown = entry("024.30", status: "open", kind: "defect")
 
-      expect(DeferredFindings.undocumented(markdown, "024.30", "024.30")).to be_empty
-      expect(DeferredFindings.undocumented(markdown, "024.30", "nothing")).to eq(["024.30"])
+      expect(DeferredFindings.undocumented(markdown, "x <!-- documents: 024.30 -->", "y <!-- documents: 024.30 -->")).to be_empty
+      expect(DeferredFindings.undocumented(markdown, "x <!-- documents: 024.30 -->", "nothing")).to eq(["024.30"])
     end
   end
 

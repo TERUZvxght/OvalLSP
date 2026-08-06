@@ -59,6 +59,29 @@ RSpec.describe Ovallsp::Cache::Key do
     end
   end
 
+  # The cache stores what a *parser* produced, so the parser's own version
+  # belongs in the key. Without it, 0.2.1's headline fix -- the receiver
+  # position a call site records -- did not reach any file already in an
+  # upgrading user's cache, because the file's bytes had not changed and
+  # nothing else in the key had either. Found by driving a real Rails
+  # application: one wrong diagnostic survived every restart and every
+  # `Re-index Workspace`, and vanished with an empty cache directory.
+  it "produces a different digest for a different OvalLSP version" do
+    Dir.mktmpdir do |root|
+      a = described_class.workspace_digest(workspace_root: root, ovallsp_version: "0.2.0")
+      b = described_class.workspace_digest(workspace_root: root, ovallsp_version: "0.2.1")
+
+      expect(a).not_to eq(b)
+    end
+  end
+
+  it "keys on this build's version by default, so a release never has to remember to bump anything" do
+    Dir.mktmpdir do |root|
+      expect(described_class.workspace_digest(workspace_root: root))
+        .to eq(described_class.workspace_digest(workspace_root: root, ovallsp_version: Ovallsp::VERSION))
+    end
+  end
+
   it "produces a different digest for a different workspace root" do
     Dir.mktmpdir do |root1|
       Dir.mktmpdir do |root2|

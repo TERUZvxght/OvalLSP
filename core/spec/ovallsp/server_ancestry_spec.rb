@@ -689,7 +689,12 @@ RSpec.describe "Ovallsp::Server ancestry questions for the Runtime Agent" do
     ancestry_registry.request("Widget")
     server.send(:answer_pending_ancestry_questions)
 
-    expect(tasks).to have_received(:track_thread).with(an_instance_of(Thread))
+    # `at_least(:once)`, because this example is about the *ancestry*
+    # thread and the server may legitimately start others while it runs --
+    # a workspace-diagnostics pass, most often. The default "exactly once"
+    # made this pass on darwin and fail on both CI jobs, which is a red
+    # gate that says nothing about the behaviour it names.
+    expect(tasks).to have_received(:track_thread).with(an_instance_of(Thread)).at_least(:once)
   end
 
   # A worker that raises leaves its drained names answered by nothing, and

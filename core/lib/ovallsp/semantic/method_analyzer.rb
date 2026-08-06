@@ -225,13 +225,31 @@ module Ovallsp
         when Prism::IfNode, Prism::UnlessNode then eval_conditional(node, ctx)
         when Prism::ParenthesesNode then eval_node(node.body, ctx)
         when Prism::SelfNode then flow(ctx[:self_type], false)
-        when Prism::CallNode then eval_call(node, ctx)
-        when Prism::IntegerNode then literal(Types::Nominal.new(name: "Integer"))
-        when Prism::FloatNode then literal(Types::Nominal.new(name: "Float"))
-        when Prism::RationalNode then literal(Types::Nominal.new(name: "Rational"))
-        when Prism::StringNode, Prism::InterpolatedStringNode then literal(Types::Nominal.new(name: "String"))
-        when Prism::SymbolNode then literal(Types::Nominal.new(name: "Symbol"))
-        when Prism::TrueNode, Prism::FalseNode then literal(Types::Nominal.new(name: "Boolean"))
+        when Prism::CallNode
+          Types::LiteralTypes.negation?(node) ? literal(Types::LiteralTypes::NEGATION_TYPE) : eval_call(node, ctx)
+        # `LiteralTypes` is one table read by this walk and by
+        # `LocalInferencer#eval_type`, because they kept drifting: a
+        # literal added to the other alone made a method *ending* in one
+        # return Unknown to every caller, while the same expression
+        # assigned to a local typed correctly. It has happened twice.
+        when Prism::AndNode, Prism::OrNode
+          left = eval_node(node.left, ctx)
+          right = eval_node(node.right, ctx)
+          literal(Types::LiteralTypes.boolean_operator(node, left.type, right.type))
+        else literal_or_other(node, ctx)
+        end
+      end
+
+      # The table first, then the shapes this walk models itself.
+      def literal_or_other(node, ctx)
+        known = Types::LiteralTypes.for_node(node)
+        return literal(known) if known
+
+        eval_other(node, ctx)
+      end
+
+      def eval_other(node, ctx)
+        case node
         when Prism::NilNode then flow(Types::NIL, false)
         # Generic with an unknown element type: otherwise hovering `{}`
         # and hovering a method that returns `{}` disagree, which is 024.12

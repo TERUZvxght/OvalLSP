@@ -38,8 +38,9 @@ experience is roadmap item 024.R1, for 1.0.0.
 
 Untrusted workspaces stay as described at the end of this document: the
 Runtime Agent does not start, and every Rails-derived capability degrades
-to its static-only answer by design — with one exception, which is a
-defect rather than a degradation and is named there.
+to its static-only answer by design. Until 0.2.0 there was one exception
+that was a defect rather than a degradation; it is fixed, and the closing
+section says which.
 
 ## How these are verified
 
@@ -118,11 +119,11 @@ suite in step: every row must have an example, every example a row.
 | C4 | Types `article.` where `article` is an Active Record instance | Active Record's own instance API (`save`, `update`, `destroy`, `valid?`, …) | PASS |
 | C5 | Types `Article.` (a constant) | Active Record's class API (`all`, `find`, `where`, `create`, `new`, …) | PASS |
 | C6 | Types `Widget.` where Widget is a workspace class | that class's own singleton methods (`def self.build`) | PASS |
-| C7 | Types `article_p` in a view | route helpers (`article_path`, `article_url`) | PASS |
+| C7 | Types `article_` in a view | both route-helper forms that match it (`article_path`, `article_url`) | PASS |
 | C8 | Accepts a completion for a method whose parameters are known | the call is written out with each parameter as a tab stop (`takes_two(first, second)`) | PASS |
 | C9 | Accepts a completion for a method that takes nothing | the bare name, no parentheses | PASS |
 | C10 | Accepts a completion for a method that takes arguments of unknown shape | `where($1)` — parentheses opened, cursor inside | PASS |
-| C11 | Types `post.` or `@post.` inside an ERB template | the model's members, resolved from the template's Ruby regions rather than its HTML — the `@ivar` from the controller action that assigned it, as hover already did | PASS |
+| C11 | Types `post.` or `@post.` inside an ERB template, where the template itself assigns `post` or a controller action assigns `@post` | the model's members, resolved from the template's Ruby regions rather than its HTML — the `@ivar` from the controller action that assigned it, as hover already did. **A partial's local** (`article` in `_article.html.erb`) is not resolved: its type comes from the `render` call site, which nothing reads (024.44) | PASS |
 | C12 | Types `Art` with no receiver in front of it | workspace classes, the locals in scope, and the methods callable at that position | PASS |
 | C13 | Highlights a completion candidate declared with an RDoc/YARD comment, *in the list a receiver produced* | the comment appears as the item's documentation | PASS |
 
@@ -161,6 +162,7 @@ which is what it is for.
 | G14 | Writes a test that inherits from a reopened gem class (`class FooTest < ActiveSupport::TestCase`) | nothing — the reopen is in the chain, not just at the receiver | PASS |
 | G15 | Passes an argument whose type cannot be the one an RBS/RBI signature declares | it is reported, on the argument rather than on the whole call | PASS |
 | G16 | Reads an `@ivar` in a view that no controller action or callback assigns | it is reported | PASS |
+| G17 | Has a mistake in a file present before the server started and never opened | it is reported anyway | PASS |
 
 G4 used to follow from the same missing-ancestor problem as C4 and is now
 closed: the Runtime Agent reports what each model actually responds to,

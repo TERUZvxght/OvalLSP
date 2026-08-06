@@ -778,6 +778,147 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
     end
   end
 
+  # The receiver of a call is looked up by *position*, and the position
+  # recorded was one character inside the receiver rather than one past
+  # it. `contains?` treats a node's exclusive end offset as inclusive, so
+  # the receiver's last character belongs to its own last *element* too --
+  # and the walk answers with the innermost node, which is that element.
+  #
+  # Any receiver whose text ends in `]` or `)` is therefore judged as its
+  # own last inner expression. `[w].each` is the plainest case there is,
+  # and it reported that a class the workspace wrote has no `each`.
+  # Measured over Ruby's standard library, five Rails gems and minitest:
+  # 1,545 of 3,362 `unknown-method` reports have a receiver of that shape,
+  # 604 of them in prism's `dispatcher.rb` alone (024.20).
+  describe "a receiver whose text ends in a bracket" do
+    it "says nothing about a method called on an array literal of workspace objects" do
+      index("class Widget\n  def known; end\nend\n", uri: "file:///widget.rb")
+      document = index(<<~RUBY, uri: "file:///caller.rb")
+        class Caller
+          def run
+            w = Widget.new
+            [w].each { |x| x }
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:message)).to be_empty
+    end
+
+    # The control: the check is still on for the receiver the call really
+    # has. Without this the example above passes for an engine that has
+    # stopped looking at bracketed receivers altogether.
+    it "still reports an unknown method on the object inside the brackets" do
+      index("class Widget\n  def known; end\nend\n", uri: "file:///widget.rb")
+      document = index(<<~RUBY, uri: "file:///caller2.rb")
+        class Caller2
+          def run
+            w = Widget.new
+            w.definitely_not_here
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:message)).to include(a_string_matching(/definitely_not_here/))
+    end
+  end
+
+  # Prism is error-tolerant, so a file that does not parse still produces
+  # a tree -- one error recovery invented parts of. Running the semantic
+  # checks over it reports things nobody wrote: typing a `.` at the end
+  # of a method gives `a.end`, and the engine said the class has no
+  # method named `end`.
+  #
+  # A file with a syntax error gets its syntax errors and nothing else.
+  # The first thing to fix is the syntax error, and a report derived from
+  # a guessed tree is not evidence about anything.
+  describe "a document that does not parse" do
+    it "reports the syntax error and nothing derived from the recovered tree" do
+      document = index(<<~RUBY, uri: "file:///typing.rb")
+        class Typing
+          def go
+            a = Typing.new
+            a.
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code).uniq).to eq(["syntax-error"])
+    end
+
+    # The control: the same file once it parses. Without this the example
+    # above passes for an engine that has stopped checking anything.
+    it "still reports on a document that parses" do
+      document = index(<<~RUBY, uri: "file:///parses.rb")
+        class Parses
+          def go
+            a = Parses.new
+            a.definitely_not_here
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).to include("unknown-method")
+    end
+  end
+
+  # A workspace class whose simple name is a core class's -- however
+  # deeply namespaced -- was answered for the core class itself, because
+  # the index resolves a bare name by its last segment and one candidate
+  # is not a "guess" by `guessed_type_name?`'s rule.
+  #
+  # The receiver here comes from a *literal*, so the name reaching the
+  # index is bare `String` with nothing to disambiguate it. Hover still
+  # answered `upcase() -> String` at the same position, so hover,
+  # completion and diagnostics disagreed with each other.
+  describe "a workspace class that shares a core class's simple name" do
+    it "says nothing about a method called on the core class" do
+      index(<<~RUBY, uri: "file:///serializer.rb")
+        module Serializer
+          module Elements
+            class Element; end
+            class String < Element; end
+          end
+        end
+      RUBY
+      document = index("class Use\n  def run\n    title = \"hello\"\n    title.upcase\n  end\nend\n",
+                       uri: "file:///use.rb")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:message)).to be_empty
+    end
+
+    # The control: the refusal is about a name the workspace answered for
+    # a *core* class, not about the shadowing class itself. With the same
+    # file indexed, a call on a workspace class is still checked.
+    it "still reports on a workspace class while the shadow is indexed" do
+      index(<<~RUBY, uri: "file:///serializer.rb")
+        module Serializer
+          module Elements
+            class Element; end
+            class String < Element; end
+          end
+        end
+      RUBY
+      index("class Widget\n  def known; end\nend\n", uri: "file:///widget.rb")
+      document = index("class Use2\n  def run\n    Widget.new.definitely_not_here\n  end\nend\n",
+                       uri: "file:///use2.rb")
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:message)).to include(a_string_matching(/definitely_not_here/))
+    end
+  end
+
   describe "unknown-route-helper" do
     def load_routes
       route_registry.replace([

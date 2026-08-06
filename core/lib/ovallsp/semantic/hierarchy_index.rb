@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "set"
+require_relative "../index/type_name_resolution"
 
 module Ovallsp
   module Semantic
@@ -105,8 +106,16 @@ module Ovallsp
       ROOT_SUPERCLASS_NAMES = %w[Object ::Object].freeze
       private_constant :ROOT_SUPERCLASS_NAMES
 
-      def initialize(workspace_index:)
+      # `signatures` is optional and nil-safe, like every other collaborator
+      # in this codebase: without it the index resolves exactly as before.
+      # With it, a bare name signatures already declare is not answered by
+      # a workspace class that merely shares its last segment -- see
+      # `Index::TypeNameResolution`, which is where that rule lives so
+      # that completion, hover, definition and diagnostics cannot each
+      # decide it differently.
+      def initialize(workspace_index:, signatures: nil)
         @workspace_index = workspace_index
+        @signatures = signatures
         @mutex = Mutex.new
         @facts_by_uri = {}
         @superclass_by_owner = {}
@@ -169,11 +178,27 @@ module Ovallsp
       # exact class/module, not looked up again through the ancestor
       # chain at call time).
       def aliases(type_name)
-        canonical = @workspace_index.resolve_type_name(type_name) || type_name
+        canonical = canonical_name(type_name)
         @mutex.synchronize { @aliases_by_owner.fetch(canonical, []).dup }
       end
 
       private
+
+      # Plain resolution. 0.2.1 applied `Index::TypeNameResolution` here so
+      # that a literal's `String` would not be answered by a workspace
+      # `Serializer::Elements::String`, and that broke a bare name the
+      # user *wrote*: `Range.new` inside `module Billing` is how Ruby
+      # refers to a class from its own namespace, and hover, go to
+      # definition and completion all stopped answering for it.
+      #
+      # The two cases differ in whether the name was written or inferred,
+      # and this method is handed a name with no lexical context to tell
+      # them apart -- so the rule stays where it can be applied safely,
+      # in the diagnostics engine, which is refusing to *report* rather
+      # than refusing to resolve. 024.47 records what a real fix needs.
+      def canonical_name(type_name)
+        @workspace_index.resolve_type_name(type_name) || type_name.to_s
+      end
 
       def remove_file_locked(uri)
         facts = @facts_by_uri.delete(uri)
@@ -204,7 +229,7 @@ module Ovallsp
       end
 
       def compute_ancestors_locked(type_name, singleton:, visited:, origin_for_self: :self)
-        canonical = @workspace_index.resolve_type_name(type_name) || type_name.to_s
+        canonical = canonical_name(type_name)
         return [] if visited.include?([canonical, singleton])
 
         visited << [canonical, singleton]
@@ -278,7 +303,7 @@ module Ovallsp
       def singleton_tail_for(type_name, entries)
         return [] if entries.any? { |entry| entry.name.nil? }
 
-        canonical = @workspace_index.resolve_type_name(type_name) || type_name.to_s
+        canonical = canonical_name(type_name)
         case kind_of(canonical)
         when :class then DEFAULT_CLASS_SINGLETON_CHAIN
         when :module then DEFAULT_MODULE_SINGLETON_CHAIN

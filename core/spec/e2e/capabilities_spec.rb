@@ -174,6 +174,26 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # The same row, for the call shape Ruby uses most. H5 carries no
+    # receiver qualifier in either language and its example writes one --
+    # the fourth capability row found this way. Go to definition and
+    # signature help were both given the receiverless path in 0.2.0;
+    # hover was not, and answered an empty popup.
+    it "H5: shows a method's parameters when hovering a call with no receiver" do
+      with_file("app/models/receiverless_hover_probe.rb", <<~RUBY) do |uri|
+        class ReceiverlessHoverProbe
+          def documented(first, second = 1)
+          end
+
+          def run
+            documented(1)
+          end
+        end
+      RUBY
+        expect(@client.hover_text(uri, 5, 6)).to include("documented(first, second)")
+      end
+    end
+
     it "H3: reports an ivar's type in a view from the action that assigned it" do
       with_file("app/controllers/hover_view_controller.rb", <<~RUBY) do |_uri|
         class HoverViewController < ApplicationController
@@ -227,16 +247,30 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # The row promises `"s"`, `1` and `[1]`, and this hovered a *local*
+    # assigned from one of them -- not a literal at all, and only the
+    # first of the three. Every literal the engine settles outright is
+    # asserted now, on the literal itself.
     it "H4: reports literal types" do
       with_file("app/models/literal_probe.rb", <<~RUBY) do |uri|
         class LiteralProbe
           def run
-            text = "s"
-            text
+            ["s", 1, [1], 1.5, :sym, (1..5), /re/, ->(n) { n }, true]
           end
         end
       RUBY
-        expect(@client.hover_text(uri, 3, 6)).to eq("String")
+        # Columns computed from the source rather than counted by hand:
+        # an off-by-one probe tests nothing and says so in neither
+        # direction, which this project has been caught by three times.
+        line_text = '    ["s", 1, [1], 1.5, :sym, (1..5), /re/, ->(n) { n }, true]'
+        {
+          '"s"' => "String", " 1," => "Integer", "[1]" => "Array[Integer]", "1.5" => "Float",
+          ":sym" => "Symbol", "(1..5)" => "Range", "/re/" => "Regexp", "->(n)" => "Proc", "true" => "Boolean"
+        }.each do |snippet, expected|
+          character = line_text.index(snippet) + (snippet.start_with?(" ") ? 1 : 0)
+          actual = @client.hover_text(uri, 2, character)
+          expect(actual).to eq(expected), "#{snippet.inspect} at #{character} answered #{actual.inspect}"
+        end
       end
     end
   end
@@ -280,7 +314,12 @@ RSpec.describe "Extension capabilities", :e2e do
           end
         end
       RUBY
-        expect(@client.completion_labels(uri, 3, 9)).to include("posts")
+        labels = @client.completion_labels(uri, 3, 9)
+
+        # The row says columns *and* associations; only the association
+        # was asserted.
+        expect(labels).to include("posts")
+        expect(labels).to include("email")
       end
     end
 
@@ -422,18 +461,40 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
-    it "C12: offers workspace classes and locals with no receiver in front" do
+    it "C12: offers workspace classes, locals and methods on self with no receiver in front" do
       with_file("app/models/prefix_probe.rb", <<~RUBY) do |uri|
         class PrefixProbe
+          def prefixed_method; end
+
           def run
             prefix_local = 1
             pre
           end
         end
       RUBY
-        labels = @client.completion_labels(uri, 3, 7)
+        labels = @client.completion_labels(uri, 5, 7)
+
+        # All three sources the row names. The method on self was the one
+        # nothing asserted, so nothing failed if that source broke.
         expect(labels).to include("prefix_local")
         expect(labels).to include("PrefixProbe")
+        expect(labels).to include("prefixed_method")
+      end
+    end
+
+    # The public site promises "Typing `A` offers candidates" -- one
+    # character, a capital, i.e. a class. It offered locals and methods on
+    # self at that length and skipped workspace classes entirely, so the
+    # example the site chose was the one that did not work.
+    it "C12: offers a workspace class at a single character" do
+      with_file("app/models/single_char_probe.rb", <<~RUBY) do |uri|
+        class SingleCharProbe
+          def run
+            S
+          end
+        end
+      RUBY
+        expect(@client.completion_labels(uri, 2, 5)).to include("SingleCharProbe")
       end
     end
 
@@ -460,11 +521,17 @@ RSpec.describe "Extension capabilities", :e2e do
       with_file("app/controllers/route_probe_controller.rb", <<~RUBY) do |uri|
         class RouteProbeController < ApplicationController
           def index
-            posts_p
+            posts_
           end
         end
       RUBY
-        expect(@client.completion_labels(uri, 2, 11)).to include("posts_path")
+        labels = @client.completion_labels(uri, 2, 10)
+
+        # The row names both forms and its own example prefix (`article_p`)
+        # could only ever match one of them. Both the row and this fixture
+        # use a prefix that matches both.
+        expect(labels).to include("posts_path")
+        expect(labels).to include("posts_url")
       end
     end
   end
@@ -485,6 +552,8 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(locations.map { |l| l[:uri] }).to include(uri)
       end
     end
+
+
 
     # The same row, for the call shape Ruby actually uses most. The
     # example above writes a receiver; without one, `definition_result`
@@ -517,6 +586,22 @@ RSpec.describe "Extension capabilities", :e2e do
           def run
             user = User.find(1)
             user.email
+          end
+        end
+      RUBY
+        targets = @client.definitions(uri, 3, 12).map { |location| location[:uri] }
+        expect(targets).to include(a_string_ending_with("app/models/user.rb"))
+      end
+    end
+
+    # The same row, for its other half. `posts` is an association rather
+    # than a column, and only the column was asserted.
+    it "D2: jumps to the owning model for an Active Record association" do
+      with_file("app/models/association_definition_probe.rb", <<~RUBY) do |uri|
+        class AssociationDefinitionProbe
+          def run
+            user = User.find(1)
+            user.posts
           end
         end
       RUBY
@@ -824,7 +909,57 @@ RSpec.describe "Extension capabilities", :e2e do
     end
   end
 
+  # G17. The row 0.2.0 shipped without, on 024.14's strength -- which
+  # said a never-opened probe produced no diagnostic in 45 seconds.
+  #
+  # It reproduces as *working*: on a real Rails application the file is
+  # answered 1.4s from process start. What the original measurement most
+  # likely hit is the line below: `Dir.tmpdir` is `/var/folders/…` on
+  # macOS and the server publishes `/private/var/folders/…`, so a test
+  # that builds the expected uri from the un-resolved path waits for a
+  # notification that has already arrived under another name.
+  describe "workspace-wide diagnostics" do
+    # Its own Core, because the property is about a file that is on disk
+    # *before* the server starts -- which is what 024.14 described and
+    # what the shared client, started in `before(:all)`, cannot be given.
+    it "G17: reports a mistake in a file nobody opened" do
+      path = File.join(self.class.workspace, "app/models/unopened_capability_probe.rb")
+      File.write(path, <<~RUBY)
+        class UnopenedCapabilityProbe
+          def run
+            UnopenedCapabilityProbe.new.definitely_not_here
+          end
+        end
+      RUBY
+      uri = "file://#{File.realpath(path)}"
+
+      client = E2E::LspClient.new(self.class.workspace)
+      begin
+        client.initialize!
+        client.wait_until_ready
+        # One unrelated file opened, the way an editor restores a session.
+        client.open(File.join(self.class.workspace, "app/controllers/posts_controller.rb"))
+
+        deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60
+        found = nil
+        while Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+          found = client.diagnostics_by_uri[uri]
+          break if found && !found.empty?
+
+          sleep 0.5
+        end
+
+        expect(Array(found).map { |d| d[:message] }.join(" ")).to match(/no method named/i)
+      ensure
+        client.stop
+        File.delete(path) if File.exist?(path)
+      end
+    end
+  end
+
+
   describe "signature help" do
+
     it "S1: reports a workspace method's parameters" do
       with_file("app/models/signature_probe.rb", <<~RUBY) do |uri|
         class SignatureProbe
@@ -859,6 +994,34 @@ RSpec.describe "Extension capabilities", :e2e do
   end
 
   describe "signature help (continued)" do
+    # Every other example here ends the source at an *unclosed* `(`,
+    # which is the one input for which "scan back for any `(`" and "scan
+    # back for an unmatched one" agree. With a call that has already
+    # closed before the cursor they disagree, and the scan answered with
+    # the inner call's signature for the rest of the line -- on
+    # scaffolded Rails code, `link_to "Edit", edit_article_path(@article),
+    # class: "btn"` showed `edit_article_path`'s parameters from the
+    # closing paren onward.
+    it "S1: reports the enclosing call's parameters, not an inner call that has already closed" do
+      with_file("app/models/nested_signature_probe.rb", <<~RUBY) do |uri|
+        class NestedSignatureProbe
+          def takes(first, second); end
+          def compute(a); a; end
+
+          def run
+            takes(compute(1), 2)
+          end
+        end
+      RUBY
+        # `    takes(compute(1), 2)` -- column 22 is the `2`, `takes`'s
+        # second argument, with `compute(1)` closed behind it.
+        labels = @client.signature_labels(uri, 5, 22).join(" ")
+
+        expect(labels).to include("first")
+        expect(labels).not_to include("compute")
+      end
+    end
+
     it "S2: reports an RBS overload label for a stdlib method" do
       with_file("app/models/stdlib_signature_probe.rb", <<~RUBY) do |uri|
         class StdlibSignatureProbe
@@ -897,7 +1060,20 @@ RSpec.describe "Extension capabilities", :e2e do
           end
         end
       RUBY
-        expect(@client.references(uri, 1, 8)).not_to be_empty
+        with_file("app/models/reference_caller_probe.rb", <<~RUBY) do |caller_uri|
+          class ReferenceCallerProbe
+            def run
+              ReferenceProbe.new.referenced_method
+            end
+          end
+        RUBY
+          targets = @client.references(uri, 1, 8).map { |location| location[:uri] }
+
+          # The row says "across files", and `not_to be_empty` was true of
+          # an answer carrying the declaration and nothing else.
+          expect(targets).to include(uri)
+          expect(targets).to include(caller_uri)
+        end
       end
     end
 
@@ -941,9 +1117,11 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
-    it "W3: finds a workspace class by symbol search" do
-      with_file("app/models/symbol_probe.rb", "class SymbolProbe\nend\n") do |_uri|
+    it "W3: finds a workspace class and a workspace method by symbol search" do
+      with_file("app/models/symbol_probe.rb", "class SymbolProbe\n  def symbol_probe_method; end\nend\n") do |_uri|
         expect(@client.workspace_symbols("SymbolProbe")).to include("SymbolProbe")
+        # The row says "classes and methods"; only the class was asserted.
+        expect(@client.workspace_symbols("symbol_probe_method")).to include("symbol_probe_method")
       end
     end
   end

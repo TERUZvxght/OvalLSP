@@ -834,4 +834,36 @@ RSpec.describe Ovallsp::RuntimeAgent::Agent do
     expect(messages[0][:error][:code]).to eq(-32601)
     expect(messages[1]).to include(id: 2)
   end
+  # `delegate` is one of the commonest lines in a Rails model, and it was
+  # reported as an unknown method on every one -- with `class_attribute`,
+  # `mattr_accessor`, `thread_mattr_accessor`, `concerning` and
+  # `deprecate`.
+  #
+  # All six are ActiveSupport's additions to `Module`, and the class-level
+  # list was `base.methods - Object.methods`. `Object` is itself a class
+  # object, so that subtraction removes every public `Module` instance
+  # method -- exactly where those six live -- and `Diagnostics::Engine`
+  # treats what arrives as the model's *complete* class-level method set.
+  it "keeps a class-level method that lives on Module, which Object also carries" do
+    active_record = Class.new do
+      define_singleton_method(:descendants) { [] }
+      define_singleton_method(:delegate) { |*| nil }
+      define_singleton_method(:find) { |*| nil }
+    end
+    stub_const("ActiveRecord", Module.new)
+    stub_const("ActiveRecord::Base", active_record)
+    stub_const("Rails", Class.new do
+      define_singleton_method(:version) { "8.1.3-fixture" }
+    end)
+
+    agent = Ovallsp::RuntimeAgent::Agent.new(input: StringIO.new(""), output: StringIO.new,
+                                             logger: ->(_) {}, root: "/app")
+    api = agent.send(:active_record_api)
+
+    expect(api[:singleton]).to include("find")
+    # `delegate` is defined on this fixture's singleton, so it survives any
+    # subtraction. The real regression is a name Object also answers to:
+    # pick one every class object has and assert it is still listed.
+    expect(api[:singleton]).to include("name")
+  end
 end

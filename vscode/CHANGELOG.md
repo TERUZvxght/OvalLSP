@@ -6,6 +6,124 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.1 — Fewer wrong reports, and the promises already published
+
+Nothing new to learn here. This release is about the engine saying fewer
+things that are not true, and about the places where the site, the README
+and the capability tables promised something the build did not do.
+
+- Fixed: a call whose receiver ends in `]` or `)` — `[widget].each`,
+  `handlers[:on_save]&.call` — was reported as an unknown method. The
+  receiver was looked up one character inside itself, so the lookup
+  answered with the receiver's own last element. Over Ruby 3.4.7's
+  standard library, five Rails 8.1.3 gems and minitest 6.0.6, **1,656 of
+  3,747 unknown-method reports are gone**; four are new, and all four
+  belong to a separately recorded case (024.13). On a real Rails
+  application the two builds report identically. (This bullet said "1,556
+  of 3,362" until the release's last day: that was measured four commits
+  earlier and against a different minitest, and the figures moved when it
+  was re-run. The removed set and the four introduced did not.)
+- Fixed: `delegate`, `class_attribute`, `mattr_accessor`,
+  `thread_mattr_accessor`, `concerning` and `deprecate` were reported as
+  unknown methods in a model or controller body. The Runtime Agent read a
+  class's own methods as `base.methods - Object.methods`, and `Object` is
+  itself a class object — so everything `Module` defines was subtracted
+  away. Five wrong reports on a scaffolded application; none now.
+- Fixed: `"hello".upcase` is no longer reported as unknown when your
+  workspace happens to contain a class whose last name segment is
+  `String`. The engine stops asserting about a receiver it substituted;
+  completion still offers that class's members, as it did in 0.2.0, and
+  making all three readers agree is a design question rather than a patch
+  (024.47).
+- Fixed: a file that does not parse gets its syntax errors and nothing
+  else. Typing `.` at the end of a method made `a.end` a call, and the
+  engine reported that your class has no method named `end` — on the
+  commonest editing action there is. The other half of this is not fixed:
+  `a.` followed by a line like `b = "str"` parses cleanly as `a.b =` and
+  is reported as such.
+- Fixed: `Range` and `Regexp` literals have a type. `(1..10).` completed
+  to nothing and hovering `/abc/` answered an empty popup, against a
+  capability row promising a literal's type.
+- Changed: typing `A` offers candidates. 0.2.0 needed two characters
+  before workspace classes joined the list — which is exactly the example
+  the site used. Measured before removing the floor: it bought 0.4 ms per
+  keystroke. On a real application `A` goes from 2 candidates to 14, with
+  the local still ahead of every class.
+- Added: hover answers a call written with no receiver. `article_params`
+  in your own controller showed an empty popup; go to definition and
+  signature help were given that reading in 0.2.0 and hover was not.
+- Fixed: **upgrading now actually delivers the fixes above.** The parse
+  cache was keyed on your workspace, Ruby, Prism, `Gemfile.lock` and RBS
+  — but not on OvalLSP's own version, and a cached entry is the output of
+  a particular build's parser. Every file whose bytes had not changed
+  kept answering with the previous release's results, including one
+  wrong diagnostic that survived restarts and `Re-index Workspace` alike.
+  Cache directories for keys no longer in use are also swept now, eight
+  kept; nothing had ever removed one.
+- Fixed: hover, go to definition and signature help no longer answer
+  about a method for something that is not a call. Resting on a word
+  inside a comment or a string, on a parameter name in a `def`, or on a
+  local variable that shares a name with a method opened a popup with
+  that method's signature, origin, a "Defined:" link and its doc comment.
+  A local variable in scope is what Ruby resolves there, and that is what
+  you now get.
+- Fixed: signature help no longer disappears when an earlier argument
+  contains an unpaired parenthesis inside a string or a comment —
+  `raise ArgumentError, "bad )"` — and no longer answers with an inner
+  call because of one.
+- Fixed: a workspace class sharing a core class's last segment
+  (`Serializer::Elements::String`) no longer answers for the core one in
+  **completion**. 0.2.1 fixed the diagnostic and left this half, so
+  `"hello".` still offered that class's methods and no String methods.
+- Fixed: `->() {}`, `!x`, `a && b` and `a || b` have a type. A default
+  written `name || "anonymous"` is a String rather than nothing.
+- Fixed: **a method whose name ends in `!` or `?` gets answers.** Hover,
+  go to definition and signature help all stopped reading the name at the
+  `!`, so `@article.destroy!` opened an empty popup, F12 said "No
+  definition found", and typing `(` after it showed no parameters — on
+  `save!`, `valid?`, `update!`, the names a Rails controller is mostly
+  made of. Completion offered them the whole time.
+- Fixed: signature help on a large file. Answering "there is no
+  signature here" walked the file one character at a time, which on a few
+  hundred KB with any non-ASCII character in it took seconds — and the
+  Core answers one request at a time, so hover, completion and
+  diagnostics waited behind it.
+- Fixed: the signature popup no longer vanishes when the cursor is
+  inside an argument that is still being written — `create(tags: [1, |2],`
+  — and no longer answers with a call from an earlier line when there is
+  no enclosing call at all.
+- Fixed: no signature popup inside the parameter list of a `def` whose
+  name ends in `!` or `?`, or a `def self.` — it was answering with the
+  method being declared.
+- Fixed: hover and go to definition work with the caret at the *end* of a
+  `save!` or `valid?`, which is where it lands after you type the name.
+- Fixed: a comment whose last word is `def` no longer silences signature
+  help and completion on the identifier below it.
+- Fixed: `1 || "b"` is an `Integer`. An instance is always truthy, so
+  `||` never reaches its right-hand side.
+- Fixed: clicking the first character of a negated name (`!ready`) no
+  longer says "No definition found".
+- Fixed: `items || []` is an `Array[Integer]`, not a union of that array
+  with another array.
+
+### Details
+
+Six capability rows read PASS while their examples verified something
+narrower than the row promised, and one row (`C7`) asked for a prefix
+that could not match what it promised. All seven now say and test the
+same thing.
+
+`024.14` — recorded as "project-wide diagnostics produce nothing end to
+end" — does not reproduce: on a real Rails application a file nobody
+opened is answered 1.35 s from process start, 42 URIs published. The
+capability row and example 0.2.0 shipped without now exist.
+
+Three corpus measurements during this release produced confident false
+results — a diff of a file still being written, a diff between runs over
+different corpora, and a `cd` that persisted so both sides ran the same
+build. Each is recorded, and the check that caught the last one was a
+test, not a second reading of the numbers.
+
 ## 0.2.0 — Completion from the first keystroke, and diagnostics beyond the open file
 
 **If you are on 0.1.13, this brings 0.1.14 and 0.1.15 with it.** Both were
@@ -18,12 +136,11 @@ anyone.
 - Added: typing `Ar` offers candidates. Completion needed a `.` first, so
   workspace classes, the locals in scope and the methods callable right
   there offered nothing until the whole name was written. Two characters,
-  not one: at a single character the locals and methods on self are
-  offered but workspace classes and Kernel are not, because at that
-  length they match almost everything.
-- Added: mistakes in files you have not opened are reported. (Verified
-  in-process; see 024.14 for the end-to-end gap still open against a real
-  Rails app.)
+  not one, in this release — 0.2.1 removed that floor.
+- Added: mistakes in files you have not opened are reported. (0.2.0
+  shipped this without a capability row, on a measurement that said an
+  end-to-end example produced nothing; 0.2.1 found it working, added the
+  row and the example, and marked the README row ✅.)
 - Added: passing an argument of the wrong type is reported. Only the
   *number* of arguments was checked before.
 - Added: reading an `@ivar` that is never assigned is reported. In an
