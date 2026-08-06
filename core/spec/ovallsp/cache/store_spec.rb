@@ -173,6 +173,21 @@ RSpec.describe Ovallsp::Cache::Store do
       dir
     end
 
+    # `.mark_workspace` now runs *before* the generation directory is
+    # created, so on a first launch there is nothing to write into. It
+    # makes the directory itself; without that the write fails ENOENT into
+    # the method's own rescue, the scope stays unmarked, and any other
+    # window's sweep reads it as a pre-0.2.1 generation and removes it.
+    it "creates the scope directory it is marking" do
+      Dir.mktmpdir do |root|
+        scope = File.join(root, "never-created")
+
+        described_class.mark_workspace(scope, "/some/workspace")
+
+        expect(File.file?(File.join(scope, described_class::WORKSPACE_MARKER))).to be(true)
+      end
+    end
+
     def scope_for(root, name, workspace_path)
       dir = File.join(root, name)
       FileUtils.mkdir_p(dir)
@@ -254,6 +269,27 @@ RSpec.describe Ovallsp::Cache::Store do
       end
     end
 
+    # A scope another window created a moment ago and has not marked yet
+    # looks exactly like a pre-0.2.1 flat generation. Removing it costs
+    # that window its whole cache for the session, and its own marker
+    # write then fails into a directory that is gone.
+    #
+    # Aged in opposite directions, like the absent-workspace pair: this
+    # one is brand new and must survive, the one below is old and must
+    # not. A fixture where both are the same age cannot tell a grace from
+    # no grace.
+    it "keeps an unmarked directory that was created moments ago" do
+      Dir.mktmpdir do |root|
+        racing = File.join(root, "another-window")
+        FileUtils.mkdir_p(racing)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(racing)).to be(true)
+      end
+    end
+
     # Pre-0.2.1 generations sat directly in the root and can never be read
     # again -- the version in the key guarantees a miss -- so they are the
     # 2.8 GB that was measured and nothing else will ever reclaim them.
@@ -262,6 +298,11 @@ RSpec.describe Ovallsp::Cache::Store do
         legacy = File.join(root, "0123abc")
         FileUtils.mkdir_p(legacy)
         File.write(File.join(legacy, "e.cache"), "x")
+        # Older than `UNMARKED_SCOPE_GRACE`, which is what distinguishes a
+        # generation nothing has written since 0.2.1 from a scope another
+        # window created a moment ago.
+        aged = Time.now - (Ovallsp::Cache::Store::UNMARKED_SCOPE_GRACE + 60)
+        File.utime(aged, aged, legacy)
         current = generation(scope_for(root, "mine", root), "current", 0)
 
         described_class.prune_generations(cache_root: root, current: current, keep: 8)

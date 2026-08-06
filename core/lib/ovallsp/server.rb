@@ -493,7 +493,7 @@ module Ovallsp
       # diagnostics stop for the rest of the session.
       begin
         thread = Thread.new { await_and_publish(uri) }
-      rescue StandardError, ThreadError => e
+      rescue StandardError => e
         @logger.error("failed to start the diagnostics waiter for #{uri}: #{e.class}: #{e.message}")
         @pending_publish_mutex.synchronize { @pending_publish.delete(uri) }
         return
@@ -1504,7 +1504,8 @@ module Ovallsp
       #
       # It was a narrow window while the sweep ran on the `initialize`
       # dispatch. 0.2.2 moved it to a background thread, where it can now
-      # overlap another window's cold index.
+      # overlap another window's cold index. The reorder narrows it;
+      # `Cache::Store::UNMARKED_SCOPE_GRACE` is what closes it.
       Cache::Store.mark_workspace(scope_dir, Cache::Key.canonical_root(@workspace_root))
       store = Cache::Store.new(cache_dir: cache_dir)
       # After the directory exists, so the current generation is never the
@@ -1539,7 +1540,7 @@ module Ovallsp
         @background_tasks.track_thread(
           Thread.new { Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir) }
         )
-      rescue StandardError, ThreadError => e
+      rescue StandardError => e
         @logger.error("failed to start the cache sweep; leaving abandoned generations in place: #{e.class}: #{e.message}")
       end
       store

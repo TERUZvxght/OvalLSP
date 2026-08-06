@@ -25,17 +25,41 @@
 RSpec.describe "spec file constants" do
   ROOT = File.expand_path("../..", __dir__)
 
-  # Assignments at the file's own indentation *or* one level in, which is
-  # where an `RSpec.describe` block puts them. Deeper nesting is inside a
-  # `class`/`module` and is genuinely scoped.
-  ASSIGNMENT = /^ {0,2}([A-Z][A-Za-z0-9_]*)\s*=[^=~]/
+  # Any indentation. The first version of this allowed 0--2 spaces on the
+  # reasoning that deeper nesting means a `class` or `module` and is
+  # genuinely scoped -- which is false, and was checked rather than
+  # reasoned about the second time: a constant assigned inside a *nested*
+  # `describe` is still `Object::NAME`, because constant assignment
+  # resolves lexically and a block is not a lexical scope. The guard was
+  # blind to `UNCLOSED` at indent 4 in the very file it was written for.
+  #
+  # A `class`/`module` body genuinely is scoped, so those are excluded by
+  # tracking the nesting rather than by counting spaces.
+  ASSIGNMENT = /^\s*([A-Z][A-Za-z0-9_]*)\s*=[^=~]/
+  OPENS_SCOPE = /^\s*(?:class|module)\s+[A-Z]/
+  CLOSES = /^(\s*)end\b/
+
+  # Constant assignments in `source` that land on `Object`.
+  def self.object_constants(source)
+    depth = 0
+    source.lines.filter_map do |line|
+      if line.match?(OPENS_SCOPE)
+        depth += 1
+        next
+      end
+      depth -= 1 if depth.positive? && line.match?(CLOSES)
+      next unless depth.zero?
+
+      line[ASSIGNMENT, 1]
+    end
+  end
 
   it "defines each one in only one file" do
     owners = Hash.new { |hash, key| hash[key] = [] }
 
     Dir.glob(File.join(ROOT, "spec", "**", "*_spec.rb")).sort.each do |path|
       relative = path.delete_prefix("#{ROOT}/")
-      File.read(path, encoding: "UTF-8").scan(ASSIGNMENT) do |(name)|
+      self.class.object_constants(File.read(path, encoding: "UTF-8")).each do |name|
         owners[name] << relative
       end
     end

@@ -432,8 +432,7 @@ this paragraph wrongly said was broken (024.47). <!-- documents: 024.47 -->
 disagree about version, protocol, build identity or payload hash, you get
 an error notification and the detail in the Output channel — and the
 session keeps running. It does not stop before answering, which is what
-this document, both READMEs and the getting-started pages said until
-0.2.2.
+both READMEs and both getting-started pages said until 0.2.2.
 
 That matters most for the two reasons you cannot see: a payload hash
 mismatch means the bundled Core is not the one this build shipped, and a

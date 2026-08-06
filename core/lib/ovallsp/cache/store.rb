@@ -74,10 +74,13 @@ module Ovallsp
 
       # Creates the scope directory if it is not there yet, because this
       # now runs *before* the generation directory is made and there would
-      # otherwise be nothing to write into on a first run. Marking first is
-      # what closes the window in which a scope exists with no marker and
-      # another process's sweep reads that as a pre-0.2.1 flat generation
-      # and removes it.
+      # otherwise be nothing to write into on a first run.
+      #
+      # Marking first *narrows* the window in which a scope exists with no
+      # marker and another process's sweep reads it as a pre-0.2.1 flat
+      # generation -- it does not close it, since `mkdir_p` and
+      # `File.write` are two syscalls. `UNMARKED_SCOPE_GRACE` is what
+      # closes it.
       def self.mark_workspace(scope_dir, workspace_path)
         FileUtils.mkdir_p(scope_dir)
         File.write(File.join(scope_dir, WORKSPACE_MARKER), "#{workspace_path}\n")
@@ -133,8 +136,24 @@ module Ovallsp
           next if File.expand_path(path) == current_scope
 
           marker = File.join(path, WORKSPACE_MARKER)
-          # No marker: a pre-0.2.1 generation, unreadable by this build.
-          next FileUtils.remove_entry(path) unless File.file?(marker)
+          # No marker: a pre-0.2.1 generation, unreadable by this build --
+          # *or* a scope another process created moments ago and has not
+          # marked yet. `.mark_workspace` is `mkdir_p` then `File.write`,
+          # two syscalls, and reordering it ahead of the generation
+          # directory narrowed that window rather than closing it, which
+          # the comment there claimed. Removing the other window's scope
+          # costs it the whole session's cache and a cold index on the
+          # next launch.
+          #
+          # A pre-0.2.1 generation is by definition old -- nothing has
+          # written one since 0.2.1 shipped -- so the same grace that
+          # protects an absent workspace tells the two apart with no new
+          # state and no lock.
+          if !File.file?(marker)
+            next if seconds_since_write(path) < UNMARKED_SCOPE_GRACE
+
+            next FileUtils.remove_entry(path)
+          end
 
           # A missing directory is not proof the project is gone: an
           # unmounted volume and a network share that is briefly away both
@@ -163,6 +182,12 @@ module Ovallsp
       # laptop left closed over a holiday loses a warm cache, short enough
       # that a genuinely deleted project does not keep one for ever.
       ABSENT_WORKSPACE_GRACE = 30 * 24 * 60 * 60
+
+      # An hour: longer than any window between another process's
+      # `mkdir_p` and its `File.write` by many orders of magnitude, and
+      # short enough that a genuine pre-0.2.1 generation is reclaimed on
+      # the first launch after this build has been installed for an hour.
+      UNMARKED_SCOPE_GRACE = 60 * 60
 
       # Wall clock, deliberately. A monotonic clock does not survive the
       # reboot this measures across; the cost is that changing the system
