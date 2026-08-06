@@ -384,6 +384,17 @@ missed one", so each is narrow on purpose. What that costs a user:
   The G17 row and its example exist now, and 024.14 records what the
   original measurement most likely hit.)
 
+## A class of yours named after a core class
+
+**If it lives in a namespace, it stops resolving.** `Billing::Range`,
+`Admin::File`, `Reporting::Time` — referred to the way Ruby refers to a
+class from inside its own namespace, by its bare name — get no hover, no
+go to definition and no completion as of 0.2.1, where 0.2.0 answered.
+The engine refuses to let a bare name that Ruby itself declares be
+answered by a workspace class, which is right for the `String` a literal
+produced and wrong for the `Range` you wrote (024.47). A class named
+after a core one at the *top* level is unaffected. <!-- documents: 024.47 -->
+
 ## How long an edit takes to re-analyse
 
 **Seconds, on a file of a couple of thousand lines.** Measured per

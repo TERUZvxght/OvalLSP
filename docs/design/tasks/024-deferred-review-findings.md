@@ -2598,3 +2598,130 @@ does it on the dispatch thread inside `didChange`. The two halves are
 debouncing (which `024.41` also wants, for a different reason) and
 incremental re-analysis of the edited region rather than the file. Both
 are their own task; neither belongs in a patch.
+
+## 024.46 Typing `self` cost 55 false diagnostics and was rolled back
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.1
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`#eval_type`)
+
+0.2.1's round-30 countermeasure spec surfaced that `self.target(1)`
+resolved to nothing -- `LocalInferencer` had no `SelfNode` case while
+`MethodAnalyzer` did -- so one was added: `self` is the enclosing class,
+which the descent already tracks.
+
+Round 31 measured it. Over Ruby 3.4.7's standard library, three runs one
+at a time with `unresolved-constant` identical at 7,561 as the control:
+
+| side | `unknown-method` | `argument-type` |
+|---|---|---|
+| before | 1,034 | 0 |
+| with the `SelfNode` case | **1,086** | **3** |
+| with that one line reverted | 1,034 | 0 -- byte-identical to before |
+
+**55 new false reports, none removed.** Three families:
+
+- `self.class.foo` -- `self` becomes a Nominal, `.class` resolves through
+  RBS to `Class`, and every call on it is reported unknown.
+  `unless self.class.correct?(v)` is everyday Ruby.
+- `def Const.method` and `class << self` bodies type `self` as an
+  *instance* rather than the class object, because `#locate_def` only
+  pushes `ClassOf` when the receiver is literally `self`.
+  `Class.new(self)` inside `def HTTP.Proxy` was reported as a wrong
+  argument type.
+- `self.foo` where `foo` is C-defined or declared by a singleton
+  `attr_accessor`.
+
+Reverted. Answering nothing for `self.foo` is the trade this project
+takes; answering wrongly on `self.class` is not.
+
+**What this cost, and the rule it belongs to.** The case was added
+*during a review round*, to satisfy a spec written as a countermeasure
+for something else. The loop widened the change set instead of closing
+it, which is what `CLAUDE.md`'s same-place rule exists to catch -- and
+what caught it here was a measurement, not a reviewer's reading. Giving
+`self` a type is a real improvement and belongs in a release that can
+measure it properly, with `ClassOf` handled for singleton bodies and
+`.class` resolving to the class object rather than to `Class`.
+
+## 024.47 A namespaced class named after a core class stops resolving
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/index/type_name_resolution.rb`
+(`#substitution?`), applied by `Semantic::HierarchyIndex#canonical_name`
+
+The rule refuses to resolve a *bare* name that signatures declare to a
+workspace class in a different namespace. That is right for a type an
+expression produced -- a literal's `String` must not be answered by
+`Serializer::Elements::String` -- and wrong for a name the user *wrote*,
+because a bare name is exactly how Ruby refers to a class from inside its
+own namespace:
+
+```ruby
+module Billing
+  class Range
+    def tag(name) = name
+  end
+  class Invoice
+    def run
+      r = Range.new
+      r.tag("x")     # 0.2.0: hover, definition and completion all answer
+    end              # 0.2.1: all three answer nothing
+  end
+end
+```
+
+Reproduces for `Data`, `Set`, `Method`, `File`, `Time`, `Struct`,
+`Comparable`, `IO` and `Random` -- any core name a namespaced class
+shares. `Billing::Logger` survives only because `logger`'s RBS is not
+loaded by default.
+
+**Direction:** the two cases differ in whether the name was *written* or
+*inferred*, and `HierarchyIndex#ancestors` knows neither -- it is handed
+a name with no lexical context. Two shapes are plausible and neither is a
+patch: carry that distinction into the type (an inferred Nominal is not
+the same thing as a written constant reference), or stop choosing and let
+the chain hold both the workspace class and the RBS type, so a member
+lookup finds whichever declares it. The second is cheaper and costs one
+spurious completion candidate on a literal.
+
+**Not caught for seven rounds** because `scripts/corpus_diagnostics.rb`
+built its `HierarchyIndex` without `signatures:`, so this rule was inert
+in every corpus measurement the release quoted (024.48).
+
+## 024.48 The measurement tool ran an engine the server never runs
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.1
+user-visible: no
+user-visible-note: >
+  A tooling defect. Its consequence reached users only through the
+  regressions it failed to catch, which have their own entries
+  (024.46, 024.47).
+```
+
+**Area:** `scripts/corpus_diagnostics.rb`
+
+It built `HierarchyIndex.new(workspace_index:)` while `Server#initialize`
+builds `HierarchyIndex.new(workspace_index:, signatures:)`. The shadow
+rule lives in `#canonical_name` and reads `@signatures`, so it did
+nothing in any corpus run -- and every figure this release quoted came
+from those runs. A measurement of a configuration no user gets is not a
+smaller measurement; it is a measurement of something else.
+
+Fixed by building it the way the server does. The lesson is the one
+`CLAUDE.md` already carries, one level up: *confirm each side ran the
+code you think it ran* has to include "and in the configuration a user
+would run it in".

@@ -625,12 +625,19 @@ module Ovallsp
       # value does not render two ways depending on how it was written.
       when Prism::HashNode then Types::Generic.new(name: "Hash", type_arg: Types::UNKNOWN)
       when ->(other) { Types::LiteralTypes.for_node(other) } then Types::LiteralTypes.for_node(node)
-      # `self` is the enclosing class, which the descent already tracks --
-      # `MethodAnalyzer` had this case and this walk did not, so
-      # `self.target(1)` resolved its receiver to Unknown and go to
-      # definition, hover and signature help all answered nothing on the
-      # explicit-receiver form of a call to your own class.
-      when Prism::SelfNode then @self_type_stack.last || Types::UNKNOWN
+      # No `SelfNode` case, deliberately. 0.2.1 added one -- the enclosing
+      # class, which the descent already tracks -- so that `self.target(1)`
+      # would resolve. It did, and it cost **55 new false diagnostics over
+      # Ruby's own standard library and removed none**: `self.class.foo`
+      # became `Class has no method named foo`, `def Const.method` bodies
+      # typed `self` as an *instance* rather than the class object, and
+      # `self.` calls on C-defined or singleton-`attr_accessor` methods
+      # were reported unknown. Measured by reverting this one line: the
+      # output goes byte-identical to the baseline.
+      #
+      # Recorded as 024.46 rather than patched again. Answering nothing
+      # for `self.foo` is the trade this project takes; answering wrongly
+      # on `self.class` is not.
       when Prism::ParenthesesNode then eval_type(node.body, env)
       # `!x` is a CallNode whose message is `!`, and Ruby guarantees its
       # class whatever `x` is -- one of the few calls whose return type

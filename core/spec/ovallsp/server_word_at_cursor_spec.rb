@@ -58,7 +58,7 @@ RSpec.describe "Ovallsp::Server the word under the cursor" do
     "a name ending in `?`" => ["def target?; true; end", "target?", "target?"],
     "a name being negated" => ["def target?; true; end", "return 0 if !target?", "target?"],
     "a name doubly negated" => ["def target?; true; end", "return 0 if !!target?", "target?"],
-    "a name with a receiver" => ["def target!(a); a; end", "self.target!(1)", "target!"]
+    "a name after a receiver" => ["def target!(a); a; end", "W.new.target!(1)", "target!"]
   }.each do |description, (declaration, use, name)|
     source = "class W\n  #{declaration}\n\n  def run\n    #{use}\n  end\nend\n"
     line = 4
@@ -73,6 +73,12 @@ RSpec.describe "Ovallsp::Server the word under the cursor" do
       end
     end
   end
+
+  # `self.target!` is deliberately absent: `self` has no type (024.46 --
+  # giving it one cost 55 false diagnostics over the standard library),
+  # so the receiver resolves to Unknown and the answer is silence. This
+  # file is about which characters make up the *name*, and that question
+  # is answered correctly there; what happens next is the receiver's.
 
   # The boundary: the characters around a name are not part of it.
   it "resolves nothing from the `!` that negates a name" do
