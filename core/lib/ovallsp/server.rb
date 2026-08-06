@@ -155,7 +155,6 @@ module Ovallsp
       @background_tasks = BackgroundTasks.new(shutdown_timeout: background_task_shutdown_timeout)
       @diagnostics_debounce = diagnostics_debounce
       @pending_publish = {}
-      @publish_threads = {}
       @stopping_publishes = false
       @pending_publish_mutex = Mutex.new
     end
@@ -451,7 +450,7 @@ module Ovallsp
 
     # Task 015: computed and published synchronously, in the same dispatch
     # turn that already owns `document`'s current version. That is still
-    # true of `didOpen` and of the `didSave`/disk paths, and it is what
+    # true of `didOpen` and of the disk paths, and it is what
     # made "stale document versionのdiagnosticをpublishしない" hold by
     # construction for them.
     #
@@ -500,13 +499,17 @@ module Ovallsp
         return
       end
 
+      # Tracked and then forgotten. `BackgroundTasks` is what joins it on
+      # the way out, and nothing here needs a handle: a waiter is reached
+      # through `@pending_publish[uri]`, which is the entry it consumes,
+      # and it removes that itself.
+      #
+      # There was a `@publish_threads` hash beside it until round 34 --
+      # written, deleted from in three places, cleared at shutdown, and
+      # read by nothing, with three comments describing a consumer that
+      # did not exist. It was left behind when the shutdown join moved to
+      # `BackgroundTasks` in round 33.
       @background_tasks.track_thread(thread)
-      # Only if the entry is still there. The thread was started before
-      # this line, so a fast waiter can already have published and removed
-      # itself, and storing it unconditionally would leave a dead `Thread`
-      # under that uri until the next edit or close -- making
-      # `@publish_threads` something other than the live set it reads as.
-      @pending_publish_mutex.synchronize { @publish_threads[uri] = thread if @pending_publish.key?(uri) }
     end
 
     def await_and_publish(uri)
@@ -519,7 +522,6 @@ module Ovallsp
           # with it, or `#schedule_diagnostics` will never start another.
           if entry.nil? || (@stopping_publishes && entry[:deadline] > monotonic_now)
             @pending_publish.delete(uri)
-            @publish_threads.delete(uri)
             next :abandon
           end
 
@@ -527,7 +529,6 @@ module Ovallsp
           next [:sleep, remaining] if remaining.positive?
 
           @pending_publish.delete(uri)
-          @publish_threads.delete(uri)
           :publish
         end
         break if done == :publish
@@ -575,10 +576,7 @@ module Ovallsp
     # waiter being started. Also the ordering point described at the call
     # site: the mutex is the whole point, not the deletions.
     def cancel_pending_diagnostics(uri)
-      @pending_publish_mutex.synchronize do
-        @pending_publish.delete(uri)
-        @publish_threads.delete(uri)
-      end
+      @pending_publish_mutex.synchronize { @pending_publish.delete(uri) }
     end
 
     # Releases the waiters; joins nothing.
@@ -600,7 +598,6 @@ module Ovallsp
     def stop_waiting_for_debounces
       @pending_publish_mutex.synchronize do
         @stopping_publishes = true
-        @publish_threads.clear
       end
     rescue StandardError => e
       @logger.error("failed to release pending diagnostics: #{e.class}: #{e.message}")
@@ -1495,8 +1492,21 @@ module Ovallsp
       # other eight.
       scope_dir = File.join(cache_root, Cache::Key.workspace_scope(workspace_root: @workspace_root))
       cache_dir = File.join(scope_dir, digest)
-      store = Cache::Store.new(cache_dir: cache_dir)
+      # The marker before the generation, not after. `.prune_workspaces`
+      # removes any child of the cache root that has no marker -- a
+      # pre-0.2.1 flat generation, which cannot be read again -- and
+      # `Store.new` creates the scope directory on its way to the
+      # generation. Marking second leaves a window in which the scope
+      # exists and the marker does not, and a second window's sweep
+      # landing inside it deletes this window's entire scope, after which
+      # this process writes cache entries into a removed directory and
+      # every `save` silently rescues.
+      #
+      # It was a narrow window while the sweep ran on the `initialize`
+      # dispatch. 0.2.2 moved it to a background thread, where it can now
+      # overlap another window's cold index.
       Cache::Store.mark_workspace(scope_dir, Cache::Key.canonical_root(@workspace_root))
+      store = Cache::Store.new(cache_dir: cache_dir)
       # After the directory exists, so the current generation is never the
       # one swept. Once per start: a generation is only minted when the
       # key changes, which is a Ruby upgrade, a `bundle install` or a
@@ -1981,9 +1991,10 @@ module Ovallsp
 
         # The index's own content hash, which costs neither a read nor a
         # parse and tracks an open buffer as well as a file on disk --
-        # `didOpen` and `didChange` both re-index. This runs on the
-        # dispatch thread once per `didChange`, per keystroke in a view,
-        # and once per view in the workspace pass, inside the lock every
+        # `didOpen` and `didChange` both re-index. This runs once per
+        # `didChange` -- on the dispatch thread, per keystroke in a view,
+        # because indexing is the half 0.2.2 did *not* defer -- and once
+        # per view in the workspace pass, inside the lock every
         # hover needs: reading and parsing every helper each time measured
         # 17ms on sixty of them, loading and hashing the text 5.8ms, this
         # 0.22ms.

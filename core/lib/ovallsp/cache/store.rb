@@ -72,7 +72,14 @@ module Ovallsp
       # pre-0.2.1 *generation* directory, which sat at the same level.
       WORKSPACE_MARKER = ".workspace"
 
+      # Creates the scope directory if it is not there yet, because this
+      # now runs *before* the generation directory is made and there would
+      # otherwise be nothing to write into on a first run. Marking first is
+      # what closes the window in which a scope exists with no marker and
+      # another process's sweep reads that as a pre-0.2.1 flat generation
+      # and removes it.
       def self.mark_workspace(scope_dir, workspace_path)
+        FileUtils.mkdir_p(scope_dir)
         File.write(File.join(scope_dir, WORKSPACE_MARKER), "#{workspace_path}\n")
       rescue StandardError
         nil

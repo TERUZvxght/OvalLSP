@@ -426,19 +426,53 @@ are simply about the wrong class. Your own class *is* found correctly
 from inside its own namespace, which is the case an earlier version of
 this paragraph wrongly said was broken (024.47). <!-- documents: 024.47 -->
 
+## What a version mismatch actually does
+
+**It tells you, and then carries on.** When the Extension and the Core
+disagree about version, protocol, build identity or payload hash, you get
+an error notification and the detail in the Output channel — and the
+session keeps running. It does not stop before answering, which is what
+this document, both READMEs and the getting-started pages said until
+0.2.2.
+
+That matters most for the two reasons you cannot see: a payload hash
+mismatch means the bundled Core is not the one this build shipped, and a
+protocol mismatch means the two sides disagree about the wire. In both
+cases OvalLSP goes on answering hover, completion and go to definition.
+Treat those answers as unreliable until the mismatch is resolved, and run
+`OvalLSP: Show Version Information` to see what was detected (024.55). <!-- documents: 024.55 -->
+
+## A route diagnostic that clears and comes back
+
+**Rarely, and only on a large file.** When the Runtime Agent supplies
+routes, every open file is re-analysed and the `*_path` reports that were
+made without them disappear. If you had paused on a file big enough to
+take seconds to analyse at the moment routes arrived, the analysis that
+was already running finishes last and writes its own — pre-routes —
+findings over them. The next edit clears it (024.56). <!-- documents: 024.56 -->
+
 ## How long an edit takes to re-analyse
 
-**Seconds, on a file of a couple of thousand lines.** Measured per
-keystroke, with the one-off signature load excluded: `net/http.rb` (2,574
-lines) 2.1 s, `rubygems/specification.rb` (2,666 lines) 5.3 s, and it
-grows faster than the file does. The Core answers one request at a time,
-so hover, completion and signature help wait behind it.
+**Seconds, on a file of a couple of thousand lines.** Measured with the
+one-off signature load excluded: `net/http.rb` (2,574 lines) 2.1 s,
+`rubygems/specification.rb` (2,666 lines) 5.3 s, and it grows faster than
+the file does. The Core answers one request at a time, so hover,
+completion and signature help wait behind it.
 
-The design document states 300 ms for this, so it is not a matter of
-taste — it is a requirement the product misses by an order of magnitude,
-and it had no entry here until 0.2.1 (024.45). It is not new in this
-release; 0.2.0 measures the same. Files of a few hundred lines, which is
-most application code, re-analyse in well under a tenth of a second. <!-- documents: 024.45 -->
+**0.2.2 changed how often you pay it, not how much it costs.**
+Diagnostics now wait for a 300 ms pause, and a version arriving during
+that wait replaces the one waiting — so a burst of typing costs one
+re-analysis rather than one per keystroke, and typing at speed costs
+none at all. What you still pay is the pause: stop for a moment on a file
+of that size and hover, completion and signature help queue behind those
+seconds. The figures above are per analysis, and were per keystroke
+before 0.2.2.
+
+The design document states 300 ms for the analysis itself, so it is not a
+matter of taste — it is a requirement the product misses by an order of
+magnitude, and it had no entry here until 0.2.1 (024.45). Files of a few
+hundred lines, which is most application code, re-analyse in well under a
+tenth of a second. <!-- documents: 024.45 -->
 
 ## What a partial's local resolves to
 

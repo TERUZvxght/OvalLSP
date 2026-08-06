@@ -294,9 +294,10 @@
           <div class="qa-body">
             <p>
               At startup the Extension and Core Server exchange version, protocol, build and
-              Ruby/platform information. On a mismatch OvalLSP stops <em>before</em> sending
-              any feature request, and shows a diagnostic instead of a degraded session.
-              Common causes: a stale process left by a previous Extension version, a payload
+              Ruby/platform information. On a mismatch OvalLSP reports it — an error notification
+              and the detail in the Output channel — and <em>keeps running</em>. It does not stop
+              the session, so treat the answers you get afterwards as unreliable until the
+              mismatch is resolved. Common causes: a stale process left by a previous Extension version, a payload
               that did not install correctly, or an incompatible custom
               <code>ovallsp.server.path</code>. Run <strong>OvalLSP: Show Version
               Information</strong> to see exactly what was detected.

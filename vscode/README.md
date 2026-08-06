@@ -153,9 +153,11 @@ At startup, the Extension and Core Server exchange version, protocol,
 build, and Ruby/platform information. If they don't match (a stale
 process from a previous Extension version, a payload that didn't install
 correctly, an incompatible custom `ovallsp.server.path`, ...), OvalLSP
-stops before sending any feature requests and shows a diagnostic instead
-of a broken/degraded session. Run `OvalLSP: Show Version Information` to
-see exactly what was detected and what to do about it.
+reports it — an error notification, with the detail in the Output channel
+— and keeps running. It does **not** stop the session, so until the
+mismatch is resolved the answers you get should be treated as unreliable.
+Run `OvalLSP: Show Version Information` to see exactly what was detected
+and what to do about it.
 
 ## Ruby resolution
 

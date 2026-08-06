@@ -239,6 +239,24 @@ export async function checkBundledCoreCompatibility(
   const expected = `${manifest.rubyEngine} ${manifest.rubyVersionMajorMinor} (${manifest.rubyPlatform})`;
   const actual = `${identity.engine} ${actualMajorMinor} (${identity.platform})`;
 
+  // A different *engine* is not probed for, and is fatal.
+  //
+  // `versionInfo.compareVersionInfo` has always treated it that way, and
+  // this function did not: it probed on any difference at all, so a Core
+  // under JRuby carrying prism and rbs started with a friendly Output
+  // line and then got a red "not version compatible" toast on every
+  // window from the other decider. That is 024.49's own diagnosis --
+  // "two functions were deciding this and only one was changed" -- one
+  // dimension over, and 0.2.2 moved the split rather than closing it.
+  //
+  // Engine is the dimension where nothing here is verified and nothing
+  // is claimed: `SUPPORT_MATRIX.md` and both changelogs say a Core under
+  // a different engine is an incompatibility. Version and platform are
+  // the ones 0.2.1 deliberately softened.
+  if (manifest.rubyEngine !== identity.engine) {
+    return { compatible: false, reason: incompatibilityReason(expected, actual, rubyCommand) };
+  }
+
   // The payload not applying is not the same fact as OvalLSP not working.
   // What the Core needs is `prism` and `rbs`; the bundled copies are a
   // convenience for the one combination they were built for, and a Ruby
@@ -261,14 +279,16 @@ export async function checkBundledCoreCompatibility(
     };
   }
 
-  return {
-    compatible: false,
-    reason:
-      `This VSIX's bundled native dependencies were built for ${expected}, but "${rubyCommand}" is ${actual}. ` +
-      'These are incompatible.\n\n' +
-      'To use OvalLSP, either:\n' +
-      '  - install ovallsp\'s own runtime dependencies for this Ruby yourself (gem install prism rbs), or\n' +
-      `  - set "ovallsp.rubyExecutablePath" to a ${expected} interpreter matching this VSIX build.\n\n` +
-      'See docs/design/adrs/0005-platform-scoped-vsix-with-runtime-compatibility-check.md for details.'
-  };
+  return { compatible: false, reason: incompatibilityReason(expected, actual, rubyCommand) };
+}
+
+function incompatibilityReason(expected: string, actual: string, rubyCommand: string): string {
+  return (
+    `This VSIX's bundled native dependencies were built for ${expected}, but "${rubyCommand}" is ${actual}. ` +
+    'These are incompatible.\n\n' +
+    'To use OvalLSP, either:\n' +
+    '  - install ovallsp\'s own runtime dependencies for this Ruby yourself (gem install prism rbs), or\n' +
+    `  - set "ovallsp.rubyExecutablePath" to a ${expected} interpreter matching this VSIX build.\n\n` +
+    'See docs/design/adrs/0005-platform-scoped-vsix-with-runtime-compatibility-check.md for details.'
+  );
 }

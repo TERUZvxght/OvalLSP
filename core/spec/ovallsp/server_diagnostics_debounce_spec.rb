@@ -61,10 +61,21 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
     messages.select { |m| m[:method] == "textDocument/publishDiagnostics" && m[:params][:uri] == uri }
   end
 
-  SOURCE = "class Widget\n  def run\n    1\n  end\nend\n"
-  MID_EDIT = "class Widget\n  def run\n    a = Widget.new\n    a.\n    b = \"str\"\n  end\nend\n"
+  # Named for this file. A bare `SOURCE` inside `RSpec.describe` lands on
+  # `Object`, and `server_receiverless_spec.rb` already had one -- files
+  # load in sorted order, so *that* file's heredoc silently became this
+  # file's fixture, and editing it would have changed what these examples
+  # test. The suite printed `warning: already initialized constant SOURCE`
+  # on every run and nothing failed.
+  #
+  # `spec/meta/spec_constants_spec.rb` now fails on any such pair, because
+  # this is the second time: the first was 0.2.2's own
+  # `server_declaration_position_spec.rb`, caught only because that one
+  # happened to break an example rather than quietly replace a fixture.
+  DEBOUNCE_SOURCE = "class Widget\n  def run\n    1\n  end\nend\n"
+  DEBOUNCE_MID_EDIT = "class Widget\n  def run\n    a = Widget.new\n    a.\n    b = \"str\"\n  end\nend\n"
 
-  def did_open(text = SOURCE)
+  def did_open(text = DEBOUNCE_SOURCE)
     frame(
       jsonrpc: "2.0", method: "textDocument/didOpen",
       params: { textDocument: { uri: "file:///w.rb", text: text, version: 1, languageId: "ruby" } }
@@ -90,13 +101,13 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
   # `didOpen` is not typing: the file just appeared and there is nothing to
   # wait for.
   it "publishes for a file the moment it is opened" do
-    open_and_change(SOURCE, debounce: 30)
+    open_and_change(DEBOUNCE_SOURCE, debounce: 30)
 
     expect(diagnostics_for("file:///w.rb")).not_to be_empty
   end
 
   it "does not publish again for an edit while the debounce is still running" do
-    open_and_change(MID_EDIT, debounce: 30)
+    open_and_change(DEBOUNCE_MID_EDIT, debounce: 30)
 
     published = diagnostics_for("file:///w.rb")
     expect(published.length).to eq(1)
@@ -107,7 +118,7 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
   # debounce is what every existing example in this suite relies on, so
   # this also states why they still pass.
   it "publishes the edit once the debounce elapses" do
-    open_and_change(MID_EDIT, debounce: 0)
+    open_and_change(DEBOUNCE_MID_EDIT, debounce: 0)
 
     published = diagnostics_for("file:///w.rb")
     expect(published.map { |m| m[:params][:version] }).to include(2)
@@ -120,7 +131,7 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
   # line. Whoever withholds it at 0.4.0 will have to change this example,
   # which is the point of writing it down.
   it "still reports the next line's assignment as a method once the wait is over" do
-    open_and_change(MID_EDIT, debounce: 0)
+    open_and_change(DEBOUNCE_MID_EDIT, debounce: 0)
 
     messages_for = diagnostics_for("file:///w.rb").flat_map { |m| m[:params][:diagnostics] }.map { |d| d[:message] }
     expect(messages_for.join(" ")).to include("b=")
@@ -174,7 +185,7 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
   # 30, which switches diagnostics off -- with the suite still green.
   describe "the default" do
     it "is what a server built without the keyword waits" do
-      run_server(did_open + did_change(MID_EDIT, version: 2))
+      run_server(did_open + did_change(DEBOUNCE_MID_EDIT, version: 2))
 
       # Reached `exit` well inside 300 ms, so the edit is still waiting
       # and shutdown drops it. A default of 0 would have published it.
@@ -234,9 +245,9 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
       input = (1..5).map do |n|
         uri = "file:///w#{n}.rb"
         frame(jsonrpc: "2.0", method: "textDocument/didOpen",
-              params: { textDocument: { uri: uri, text: SOURCE, version: 1, languageId: "ruby" } }) +
+              params: { textDocument: { uri: uri, text: DEBOUNCE_SOURCE, version: 1, languageId: "ruby" } }) +
           frame(jsonrpc: "2.0", method: "textDocument/didChange",
-                params: { textDocument: { uri: uri, version: 2 }, contentChanges: [{ text: MID_EDIT }] })
+                params: { textDocument: { uri: uri, version: 2 }, contentChanges: [{ text: DEBOUNCE_MID_EDIT }] })
       end.join
 
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -254,9 +265,9 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
       input = (1..5).map do |n|
         uri = "file:///w#{n}.rb"
         frame(jsonrpc: "2.0", method: "textDocument/didOpen",
-              params: { textDocument: { uri: uri, text: SOURCE, version: 1, languageId: "ruby" } }) +
+              params: { textDocument: { uri: uri, text: DEBOUNCE_SOURCE, version: 1, languageId: "ruby" } }) +
           frame(jsonrpc: "2.0", method: "textDocument/didChange",
-                params: { textDocument: { uri: uri, version: 2 }, contentChanges: [{ text: MID_EDIT }] })
+                params: { textDocument: { uri: uri, version: 2 }, contentChanges: [{ text: DEBOUNCE_MID_EDIT }] })
       end.join
 
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC)
@@ -265,6 +276,55 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
 
       expect(elapsed).to be < 1.5
     end
+  end
+
+  # A waiter notices a close without being killed for it.
+  #
+  # Nothing wakes a sleeping waiter: `didClose` drops its entry and
+  # shutdown sets the stop flag, and neither signals the thread. The 50 ms
+  # cap on `sleep` is how soon it looks again — the entire mechanism, and
+  # round 34 found `sleep(done.last)` in its place left all 1,945 examples
+  # green.
+  #
+  # Observable as the difference between returning and being killed. With
+  # a 30-second debounce and a close, a capped waiter is gone before
+  # shutdown starts; an uncapped one is still asleep, so
+  # `BackgroundTasks#shutdown` spends its whole graceful budget on it and
+  # then `Thread#kill`s it — which `io/framed_writer.rb` identifies as the
+  # window that can tear a frame on the wire.
+  # A rendezvous again, and for the same reason as everywhere else in this
+  # file: the whole input drains in microseconds, so without one the
+  # dispatch thread reaches `didClose` before the waiter has taken the
+  # mutex even once, the entry is already gone when it looks, and it
+  # returns without ever sleeping. The example then passes on a build with
+  # no cap at all — which is exactly how the cap went unpinned.
+  it "returns after a close rather than sleeping until it is killed" do
+    waiting_in_the_loop = Class.new(Ovallsp::Server) do
+      def initialize(**kwargs)
+        @waiting = Queue.new
+        super
+      end
+
+      def await_and_publish(uri)
+        @waiting << :started
+        super
+      end
+
+      def handle_did_close(params)
+        @waiting.pop(timeout: 2)
+        # Long enough for the waiter to get past its first check and into
+        # `sleep`, which is the state being tested.
+        sleep(0.1)
+        super
+      end
+    end
+
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    run_server(did_open + did_change(DEBOUNCE_MID_EDIT, version: 2) + did_close,
+               server_class: waiting_in_the_loop, diagnostics_debounce: 30)
+    elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - elapsed
+
+    expect(elapsed).to be < 2
   end
 
   # Closing a document has to beat a publish that is already computing.

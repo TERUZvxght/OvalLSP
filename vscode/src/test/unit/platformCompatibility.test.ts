@@ -69,6 +69,31 @@ describe('checkBundledCoreCompatibility', () => {
     assert.ok(result.note && result.note.includes('4.0'), `expected a note naming the Ruby, got ${result.note}`);
   });
 
+  // The engine is where the two deciders used to disagree. This one
+  // probed on *any* difference, so a Core under JRuby carrying prism and
+  // rbs started with a friendly Output line — and then
+  // `compareVersionInfo`, which has always called an engine difference an
+  // incompatibility, produced a red toast on every window. That is
+  // 024.49's own diagnosis one dimension over.
+  //
+  // Both halves asserted, because "compatible: false" alone would pass on
+  // a build that probes and then ignores the answer.
+  it('is incompatible on a different engine, and does not spend a process asking', async () => {
+    writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
+    let asked = false;
+
+    const result = await checkBundledCoreCompatibility(
+      extensionRoot, 'jruby',
+      stubIdentity({ engine: 'jruby', version: '3.4.7', platform: 'universal-java-21' }),
+      undefined,
+      async () => { asked = true; return true; }
+    );
+
+    assert.strictEqual(result.compatible, false);
+    assert.strictEqual(asked, false, 'an engine difference is decided without a probe');
+    assert.ok(result.reason && result.reason.includes('jruby'));
+  });
+
   it('is incompatible on a Ruby that has neither the payload nor its own prism and rbs', async () => {
     writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
 

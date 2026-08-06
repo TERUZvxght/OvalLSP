@@ -3064,3 +3064,94 @@ version, and a closed document's are empty* -- over a table of
 notification sequences. Three of its rows failed when it was written. A
 regression test pins the sequence someone thought of; this pins the
 property, and whoever finds the next one adds a row.
+
+## 024.55 A version mismatch is reported and then ignored
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `vscode/src/extension.ts` (`runVersionHandshake`, and the
+pre-start branch on `checkBundledCoreCompatibility`)
+
+Four documents said OvalLSP "stops before sending any feature request" on
+a version, protocol, build or platform mismatch and shows a diagnostic
+"instead of a degraded session". It does not stop. Both deciders log to
+the Output channel, raise an error notification, and fall through:
+`.stop(` appears once in `extension.ts` and it is inside a comment.
+
+So a Core whose **payload hash does not match** -- a corrupted or
+tampered build -- serves hover, completion and go to definition while the
+user is told they were protected from exactly that. Same for a protocol
+mismatch, where the two sides disagree about the wire.
+
+**0.2.2 corrected the documents only.** `site/getting-started.html` and
+`site/ja/`, `vscode/README.md` and `.ja.md` now say what happens: it is
+reported, it keeps running, and the answers should be treated as
+unreliable until the mismatch is resolved. That is honest and it is not a
+fix.
+
+**Why not fixed here.** Stopping is a behaviour change with a real
+failure mode of its own -- a false positive locks the user out of the
+extension entirely, and this project has shipped a version check that was
+wrong about a working combination twice (024.49, and the engine half of
+it in round 34). It wants its own change, with the two paths separated:
+
+1. **Pre-start** (`checkBundledCoreCompatibility` returning
+   `compatible: false`) genuinely can refuse before any request, and by
+   that point it has already established the Ruby can load neither the
+   bundled payload nor its own `prism`/`rbs` -- the Core will fail on
+   `require` anyway. Refusing there costs nothing and is what ADR-0005
+   describes.
+2. **Post-start** (`compareVersionInfo`) cannot honestly claim "before any
+   feature request" -- the client has started. It would have to stop the
+   client, and the reasons differ in severity: a payload hash mismatch is
+   a integrity failure, a core-version mismatch after a Marketplace update
+   is usually a stale process that a restart fixes.
+
+## 024.56 A debounced publish can overwrite the Runtime Agent's republish
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#await_and_publish`,
+`#republish_open_diagnostics`, `#publish_findings`)
+
+`#await_and_publish` re-reads the document store and compares the
+*document version* before writing, under `@pending_publish_mutex`. That
+orders it against `didClose` and against a newer edit, and against
+nothing else.
+
+`#republish_open_diagnostics` publishes on a background thread when
+routes or models land or the Agent becomes ready. If a waiter computed
+findings for version V before routes arrived, and the republish for the
+same V lands during the 2--5 s analysis, the waiter writes last and puts
+the pre-routes findings back. `docs/EXTENSION_CAPABILITIES.md`'s G12 row
+promises "the route diagnostic clears once routes arrive, without
+touching the file"; in that interleaving it clears and comes back.
+
+**The shape is older than 0.2.2** -- `publish_diagnostics` has always
+computed and then published -- but it needed a background republish to
+land inside one dispatch turn. Now both sides are background threads and
+the losing side is the routine path for every edit.
+
+**The real fix is one writer, not another comparison.** There are four
+publishers to one stream (the dispatch thread, the workspace pass, the
+debounce waiters, the republish) and only some pairs are ordered. What
+they all lack is a record of *what has already been published for this
+uri*: `#publish_findings` could hold it, refuse a write whose version is
+older than the last one written for that uri, and let a clear always
+win. That is a small piece of state in one place, and it subsumes the
+version re-check the waiter does by hand.
+
+Recorded rather than done because 0.2.2's rule is fix, don't add, and
+because a rule about which publish wins wants its own change set and its
+own corpus run -- it can silence a publish, which is the direction that
+does not announce itself.
