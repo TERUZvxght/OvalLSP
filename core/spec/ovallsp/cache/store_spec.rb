@@ -285,6 +285,28 @@ RSpec.describe Ovallsp::Cache::Store do
       end
     end
 
+    # The grace itself, not just its two boundaries. Both examples around
+    # this one write the marker at *now*, so any positive value satisfies
+    # them — round 33 set the constant to one second, which is the
+    # pre-0.2.2 behaviour this release exists to change, and the file's
+    # eighteen examples stayed green. Twenty-nine days is a length no
+    # accidental value reaches.
+    it "keeps a workspace that has been unreachable for four weeks" do
+      Dir.mktmpdir do |root|
+        gone = File.join(root, "..", "ovallsp-fourweeks-#{Process.pid}")
+        FileUtils.mkdir_p(gone)
+        away = scope_for(root, "away", gone)
+        generation(away, "g", 1)
+        last_opened(away, 29)
+        FileUtils.remove_entry(gone)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(away)).to be(true)
+      end
+    end
+
     # The case the grace was written for, and the one it did not cover
     # until 0.2.2: a project on an external drive, opened this morning, on
     # a toolchain that has not changed in three months. The scope

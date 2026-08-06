@@ -19,9 +19,9 @@ the disproved approaches are kept below it under **Details**.
 - Fixed: the first launch after upgrading no longer waits while the old
   cache is swept. Putting the build's version into the cache key in 0.2.1
   abandons every directory the previous version wrote, and removing them
-  ran on the thread that answers requests — the better part of a minute
-  on a long-accumulated cache, once, at exactly the moment you have just
-  updated. It runs in the background now.
+  ran on the thread that answers requests — around 26 seconds on a
+  long-accumulated cache (28,643 directories, measured), once, at exactly
+  the moment you have just updated. It runs in the background now.
 - Fixed: a project on an unmounted volume or a network share that is
   briefly away no longer loses its warm cache. A missing directory was
   taken as proof the project was gone; it is held for thirty days now.
@@ -44,9 +44,13 @@ the disproved approaches are kept below it under **Details**.
   hiding real errors on the line under your cursor, which makes it a
   deliberate refinement — it is on the roadmap for 0.4.0. An earlier
   draft of this entry claimed the debounce had fixed it.
-- Fixed: diagnostics can no longer be left behind in the Problems panel
-  for a file you have closed. Analysis now finishes on a background
-  thread, so on a large file it could land after the panel was cleared.
+
+  Closing a file while its analysis is in flight is handled: the
+  analysis now finishes on a background thread, so on a large file it
+  could otherwise land after the panel was cleared and leave errors on a
+  file nobody has open. Nothing you could have hit before 0.2.2 — there
+  was no background analysis to lose the race with — but new here, and
+  worth knowing it was considered.
 - **Ruby 4.0 is best effort**, which `docs/SUPPORT_MATRIX.md` has said
   since 0.2.1 and no changelog did. The whole story in one place, because
   a version table is not where anyone looks: 0.2.1 measured the Core's

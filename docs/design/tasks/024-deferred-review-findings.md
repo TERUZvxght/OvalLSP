@@ -3008,3 +3008,59 @@ they happen to coincide.
 It was `Time.now - File.mtime(path)`, which is not monotonic, and a name
 asserting a property the code does not have is how the next reader gets
 it wrong.
+
+## 024.54 An edit that changed nothing discarded the edit before it
+
+```yaml
+status: fixed
+released-in: 0.2.2
+kind: defect
+user-visible: yes
+user-visible-note: >
+  Fixed in the same release that introduced it. Recorded because it is
+  the second defect the debounce produced by the same mechanism, and
+  because the countermeasure it forced is the durable part.
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#reindex`, `#schedule_diagnostics`)
+
+`#reindex` reached `#schedule_diagnostics` only from inside
+`if apply_file_summary(summary)`, and `WorkspaceIndex#replace_file`
+returns false for content it already holds. So a `didChange` whose text is
+byte-identical to the indexed text did not refresh
+`@pending_publish[uri]`, which went on carrying the *previous* edit's
+version. The waiter fired, found `document.version` no longer matched,
+and published nothing. Nothing rescheduled.
+
+Round 33 measured it over a real pipe, against 0.2.1 as a control:
+
+| | publishes `(version, count)` |
+|---|---|
+| 0.2.2, no no-op edit | `[[1, 0], [2, 2]]` |
+| 0.2.2, with a no-op edit 50 ms later | `[[1, 0]]` |
+| 0.2.1, same script | `[[1, 0], [2, 2]]` |
+
+**What a user saw:** a file with a syntax error and an empty Problems
+panel, indefinitely — there is no `didSave` handler, so saving does not
+republish and it recovers only on the next edit that changes bytes.
+Reachable whenever an edit whose result is byte-identical lands within
+300 ms of a real one: a formatter or code action applying a full-range
+replace, another extension writing the buffer, a client re-sending.
+
+**Fixed** by moving the publish out of that `if`. The index is right to do
+nothing for content it already has; the publish is not, because the client
+asked for this version. Republishing an unchanged document costs one
+analysis.
+
+**The countermeasure matters more than the fix.** This is the second
+round in a row to find a defect in the debounce, and both were the same
+three pieces of state disagreeing: `@pending_publish`'s captured version,
+`@document_store`'s current one, and whether a waiter is alive to
+reconcile them. 024.52 was the first. `CLAUDE.md`'s same-place rule asks
+for something mechanical at that point, and
+`spec/ovallsp/server_publish_invariant_spec.rb` is it: one property --
+*an open document's last published diagnostics are for its current
+version, and a closed document's are empty* -- over a table of
+notification sequences. Three of its rows failed when it was written. A
+regression test pins the sequence someone thought of; this pins the
+property, and whoever finds the next one adds a row.

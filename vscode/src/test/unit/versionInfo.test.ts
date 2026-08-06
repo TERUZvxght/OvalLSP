@@ -8,7 +8,9 @@ import {
   OvallspServerInfo,
   compareVersionInfo,
   computeBundledPayloadSha256,
-  gatherClientVersionInfo
+  gatherClientVersionInfo,
+  versionInformationLines,
+  versionNoteLines
 } from '../../versionInfo';
 
 function baseServer(overrides: Partial<OvallspServerInfo> = {}): OvallspServerInfo {
@@ -360,5 +362,69 @@ describe('gatherClientVersionInfo', () => {
     const staleResult = compareVersionInfo(afterUpdate, serverStillReportingOldCore);
     assert.strictEqual(staleResult.compatible, false, 'a leftover C1 process running after an E2 update must be flagged');
     assert.ok(staleResult.reasons.some((r) => r.includes('Core version mismatch')));
+  });
+});
+
+// The lines the user actually reads.
+//
+// Round 33 deleted both note-printing loops from `extension.ts` and all
+// 176 tests still passed, because nothing in this suite reaches
+// `extension.ts` at all -- and those loops are the user-visible half of
+// 024.49: the Output-channel line that replaced the red toast 0.2.1 was
+// supposed to have removed. The formatting moved into `versionInfo.ts`
+// so that it can be tested; these are what pin it.
+describe('what the user reads', () => {
+  function noteworthy() {
+    return compareVersionInfo(
+      bundledClient(),
+      baseServer({ ruby: { engine: 'ruby', version: '3.3.9', platform: 'arm64-darwin25' } })
+    );
+  }
+
+  it('shows a Ruby-difference note in Show Version Information', () => {
+    const lines = versionInformationLines(noteworthy());
+
+    assert.ok(lines.some((l) => l.includes('Compatible: yes')));
+    assert.ok(
+      lines.some((l) => l.includes('Ruby version differs')),
+      'a user reading Compatible: yes beside two different Ruby versions needs the reason in the same block'
+    );
+  });
+
+  // Order, not just presence. The note explains why `Compatible: yes` can
+  // sit beside two Ruby versions; a reason explains why it is not. Read
+  // top to bottom, a reason before its note is a different message.
+  it('puts notes before reasons', () => {
+    const diagnostic = compareVersionInfo(
+      bundledClient({ currentTarget: 'darwin-x64' }),
+      baseServer({ ruby: { engine: 'ruby', version: '3.3.9', platform: 'arm64-darwin25' } })
+    );
+    const lines = versionInformationLines(diagnostic);
+    const note = lines.findIndex((l) => l.includes('Ruby version differs'));
+    const reason = lines.findIndex((l) => l.includes('Platform mismatch'));
+
+    assert.ok(note >= 0 && reason >= 0, 'both a note and a reason are expected in this fixture');
+    assert.ok(note < reason);
+  });
+
+  it('says nothing extra when there is nothing to say', () => {
+    const lines = versionInformationLines(compareVersionInfo(bundledClient(), baseServer()));
+
+    assert.ok(!lines.some((l) => l.startsWith('  ·')));
+    assert.ok(!lines.some((l) => l.startsWith('  ✗')));
+  });
+
+  // In a multi-root workspace every folder gets its own Core, and a bare
+  // `OvalLSP:` prefix does not say which one the line is about.
+  it('names the folder in a start-up note', () => {
+    const lines = versionNoteLines(noteworthy(), 'billing-api');
+
+    assert.strictEqual(lines.length, 1);
+    assert.ok(lines[0].startsWith('OvalLSP (billing-api): '));
+    assert.ok(lines[0].includes('Ruby version differs'));
+  });
+
+  it('emits no start-up line when there is no note', () => {
+    assert.deepStrictEqual(versionNoteLines(compareVersionInfo(bundledClient(), baseServer()), 'x'), []);
   });
 });

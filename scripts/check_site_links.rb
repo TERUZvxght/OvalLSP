@@ -335,12 +335,19 @@ end
 # capabilities alone. This is the same countermeasure aimed at the pair it
 # missed.
 def roadmap_items(markdown)
-  return {} unless File.exist?(markdown)
+  return nil unless File.exist?(markdown)
 
-  File.read(markdown, encoding: "UTF-8").split(/^## /).drop(1).to_h do |section|
+  # `filter_map` on the *sections*, not `compact` on the Hash. `Hash#compact`
+  # drops nil values and a count is never nil, so a `## ` heading that is
+  # not a version -- the first prose section anyone adds -- survived as a
+  # nil key and was reported as `plans  and the page has no section for
+  # it`, a blank-version false failure at release time.
+  File.read(markdown, encoding: "UTF-8").split(/^## /).drop(1).filter_map do |section|
     version = section[/\A(\d+\.\d+\.\d+)/, 1]
+    next unless version
+
     [version, section.lines.count { |line| line.start_with?("- ") }]
-  end.compact
+  end.to_h
 end
 
 def site_roadmap_items(html)
@@ -355,8 +362,14 @@ end
   next problems << "#{page_rel}: missing" unless File.exist?(page)
 
   expected = roadmap_items(File.join(REPO, markdown_rel))
+  # A missing source is a problem, not a pass. `{}` compared against a
+  # populated page reports nothing at all, which is the quietest way for a
+  # check to stop checking.
+  next problems << "#{markdown_rel}: missing, so #{page_rel} is unchecked" if expected.nil?
+
   actual = site_roadmap_items(read_page(page))
   next problems << "#{page_rel}: no roadmap items found -- the markup changed shape" if actual.empty?
+  next problems << "#{markdown_rel}: no version sections found -- the heading shape changed" if expected.empty?
 
   expected.each do |version, count|
     listed = actual[version]

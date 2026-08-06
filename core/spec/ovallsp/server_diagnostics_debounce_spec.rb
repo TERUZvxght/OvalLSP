@@ -126,21 +126,46 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
     expect(messages_for.join(" ")).to include("b=")
   end
 
-  # Three keystrokes, one report. Without supersession each `didChange`
-  # would start its own waiter and publish its own version; the versions
-  # are what distinguish the two, so they are what is asserted.
-  it "publishes once for a burst of edits rather than once per keystroke" do
-    run_server(
-      did_open +
-      did_change("class Widget\n  def run\n    1\n  end\nend\n# a\n", version: 2) +
-      did_change("class Widget\n  def run\n    1\n  end\nend\n# ab\n", version: 3) +
-      did_change("class Widget\n  def run\n    1\n  end\nend\n# abc\n", version: 4),
-      diagnostics_debounce: 0
-    )
+  # Three keystrokes, one report.
+  #
+  # Asserted twice, because the two halves have different mechanisms and
+  # round 33 found only one of them pinned. What the client is *left with*
+  # is guaranteed by the version re-check inside the waiter, and that
+  # holds even if every keystroke starts its own waiter. What the burst
+  # actually costs -- one analysis rather than three -- is the
+  # supersession latch in `#schedule_diagnostics`, and nothing observed it:
+  # replacing `first = !@pending_publish.key?(uri)` with `first = true`
+  # left this example green while tripling the work.
+  BURST = (1..3).map { |n| "class Widget\n  def run\n    1\n  end\nend\n# #{"a" * n}\n" }.freeze
+
+  def burst_input
+    did_open +
+      did_change(BURST[0], version: 2) +
+      did_change(BURST[1], version: 3) +
+      did_change(BURST[2], version: 4)
+  end
+
+  it "leaves the client holding only the last version of a burst" do
+    run_server(burst_input, diagnostics_debounce: 0)
 
     versions = diagnostics_for("file:///w.rb").map { |m| m[:params][:version] }
     expect(versions.count { |v| [2, 3].include?(v) }).to eq(0)
     expect(versions).to include(4)
+  end
+
+  it "analyses a burst once rather than once per keystroke" do
+    counting = Class.new(Ovallsp::Server) do
+      def self.waiters = @waiters ||= []
+
+      def await_and_publish(uri)
+        self.class.waiters << uri
+        super
+      end
+    end
+
+    run_server(burst_input, server_class: counting, diagnostics_debounce: 0)
+
+    expect(counting.waiters.length).to eq(1)
   end
 
   # The debounce a user gets. Every other example here passes an explicit
@@ -156,25 +181,47 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
       expect(diagnostics_for("file:///w.rb").map { |m| m[:params][:version] }).not_to include(2)
     end
 
-    # `docs/design/docs/01-product-requirements.md` states 300 ms for
-    # single-file re-analysis. A user who has stopped typing must not wait
-    # longer than the document they were sold.
-    it "does not exceed the re-analysis budget the requirements state" do
-      expect(Ovallsp::Server::DEFAULT_DIAGNOSTICS_DEBOUNCE).to be <= 0.3
+    # Bounded at both ends, because only one end is a promise and the
+    # other is the whole feature.
+    #
+    # Above: `docs/design/docs/01-product-requirements.md` states 300 ms
+    # for single-file re-analysis, and a user who has stopped typing must
+    # not wait longer than the document they were sold.
+    #
+    # Below: the point is to coalesce a burst of typing, and ordinary
+    # typing puts 100--200 ms between keystrokes. A debounce shorter than
+    # that coalesces nothing and is 024.45 unfixed — round 33 set the
+    # constant to 0.002 and every one of 1,929 examples stayed green,
+    # because the only value the examples excluded was exactly zero.
+    it "waits long enough to coalesce typing and no longer than the requirements promise" do
+      expect(Ovallsp::Server::DEFAULT_DIAGNOSTICS_DEBOUNCE).to be_between(0.1, 0.3)
     end
   end
 
-  # Shutting down joins the waiters, and the whole batch shares one
-  # deadline. `BackgroundTasks#reclaim_batch` carries the same rule
-  # because an independent review found an earlier version giving each
-  # task its own full timeout, making shutdown
-  # O(task_count * timeout) -- and this join runs *before* that budget
-  # starts, so a per-thread deadline here puts the shape straight back.
+  # Shutting down costs one budget, however many files are being analysed
+  # and however many things join them on the way out.
   #
-  # Timing, unavoidably: "one deadline or several" is a statement about
-  # elapsed time and nothing else observes it. The margin is what keeps it
-  # honest -- three waiters at 0.5 s each is 1.5 s against a shared 0.5 s,
-  # and the assertion sits at 1.0 s.
+  # Written as a bound on the *whole* of `#run` rather than on any one
+  # join, because the join is where two rounds in a row found a defect and
+  # neither was the same mistake twice at that level of detail. Round 32
+  # found each waiter given its own full timeout —
+  # O(task_count * timeout), the shape `BackgroundTasks#reclaim_batch`'s
+  # comment already records an earlier review removing. Round 33 found the
+  # shared deadline that replaced it *additive* with
+  # `BackgroundTasks#shutdown`'s own, which joins the same threads because
+  # they are tracked. Both are invisible to an assertion about one
+  # deadline, and both are caught by this.
+  #
+  # `CLAUDE.md`'s same-place rule asks for a countermeasure rather than a
+  # third hand fix. Whatever the next thing to join on the way out turns
+  # out to be, it has to fit inside this.
+  #
+  # Timing, unavoidably: elapsed time is the only observer of "how long
+  # shutdown takes". The margin carries it — five waiters, each of which
+  # would take 3 s to finish, against a 0.2 s background budget, asserted
+  # under 1.5 s. A per-waiter budget is 1 s+ and an additive second one is
+  # more; the correct answer is a fifth of a second plus the overhead of
+  # starting a server.
   describe "shutting down with several files still being analysed" do
     never_finishes = Class.new(Ovallsp::Server) do
       def with_index_snapshot(&block)
@@ -183,9 +230,8 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
       end
     end
 
-    it "spends one timeout in total, not one per file" do
-      stub_const("Ovallsp::Server::FLUSH_JOIN_TIMEOUT", 0.5)
-      input = (1..3).map do |n|
+    it "costs one budget in total, whatever joins the waiters" do
+      input = (1..5).map do |n|
         uri = "file:///w#{n}.rb"
         frame(jsonrpc: "2.0", method: "textDocument/didOpen",
               params: { textDocument: { uri: uri, text: SOURCE, version: 1, languageId: "ruby" } }) +
@@ -195,10 +241,29 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
 
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       run_server(input, server_class: never_finishes, diagnostics_debounce: 0,
-                        background_task_shutdown_timeout: 0.05)
+                        background_task_shutdown_timeout: 0.2)
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - elapsed
 
-      expect(elapsed).to be < 1.0
+      expect(elapsed).to be < 1.5
+    end
+
+    # And the waiters that have *not* earned their publish do not spend
+    # that budget asleep: with a debounce longer than the run, shutdown
+    # must not wait for it to elapse.
+    it "does not wait out a debounce nobody earned" do
+      input = (1..5).map do |n|
+        uri = "file:///w#{n}.rb"
+        frame(jsonrpc: "2.0", method: "textDocument/didOpen",
+              params: { textDocument: { uri: uri, text: SOURCE, version: 1, languageId: "ruby" } }) +
+          frame(jsonrpc: "2.0", method: "textDocument/didChange",
+                params: { textDocument: { uri: uri, version: 2 }, contentChanges: [{ text: MID_EDIT }] })
+      end.join
+
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      run_server(input, diagnostics_debounce: 30, background_task_shutdown_timeout: 0.2)
+      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - elapsed
+
+      expect(elapsed).to be < 1.5
     end
   end
 
@@ -248,15 +313,64 @@ RSpec.describe "Ovallsp::Server diagnostics debounce" do
 
     it "publishes nothing after the panel has been cleared" do
       run_server(
-        did_open + did_change(UNCLOSED, version: 2) +
-        frame(jsonrpc: "2.0", method: "textDocument/didClose",
-              params: { textDocument: { uri: "file:///w.rb" } }),
+        did_open + did_change(UNCLOSED, version: 2) + did_close,
         server_class: slow_publish, diagnostics_debounce: 0
       )
 
       published = diagnostics_for("file:///w.rb")
       expect(published.map { |m| m[:params][:version] }).not_to include(2)
       expect(published.last[:params][:diagnostics]).to be_empty
+    end
+  end
+
+  def did_close
+    frame(jsonrpc: "2.0", method: "textDocument/didClose",
+          params: { textDocument: { uri: "file:///w.rb" } })
+  end
+
+  # The *other* half of the same guarantee, and the half the example above
+  # cannot reach.
+  #
+  # Above, the waiter is held before it re-reads the document store, so
+  # what stops the publish is the store already being closed — which works
+  # whether or not `#handle_did_close` takes `@pending_publish_mutex`.
+  # Round 33 removed that call and the whole suite stayed green: a fixture
+  # that cannot distinguish the two candidate behaviours, which is the
+  # shape this very file's header calls out about the example it replaced.
+  #
+  # So hold the waiter *after* the re-read instead, inside the write. Now
+  # the store is still open when it checks, and only the mutex decides
+  # what the client is left holding: taken, `didClose` waits and its clear
+  # is the last word; not taken, the clear lands first and the findings
+  # after it, on a file nobody has open.
+  describe "a document closed while its diagnostics are being written" do
+    slow_write = Class.new(Ovallsp::Server) do
+      def initialize(**kwargs)
+        @writing = Queue.new
+        super
+      end
+
+      def publish_findings(uri, findings, version: nil)
+        unless Thread.current == Thread.main
+          @writing << :reached
+          sleep(0.3)
+        end
+        super
+      end
+
+      def handle_did_close(params)
+        @writing.pop(timeout: 2)
+        super
+      end
+    end
+
+    it "leaves the panel clear rather than the findings" do
+      run_server(
+        did_open + did_change(UNCLOSED, version: 2) + did_close,
+        server_class: slow_write, diagnostics_debounce: 0
+      )
+
+      expect(diagnostics_for("file:///w.rb").last[:params][:diagnostics]).to be_empty
     end
   end
 end

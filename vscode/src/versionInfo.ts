@@ -324,3 +324,52 @@ export function compareVersionInfo(client: ClientVersionInfo, server: OvallspSer
         : 'Reinstall or update the OvalLSP extension from the Marketplace so its bundled Core matches this build.'
   };
 }
+
+/**
+ * The lines `OvalLSP: Show Version Information` writes to the Output
+ * channel, in order.
+ *
+ * A pure function so that it can be tested at all. Until 0.2.2 the
+ * command built these lines inline in `extension.ts`, where nothing in
+ * `vscode/src/test` reaches — round 33 deleted both note-printing loops
+ * and all 176 tests still passed, while the deleted lines were the
+ * user-visible half of 024.49: the Output-channel line that replaced the
+ * red toast 0.2.1 was supposed to have removed.
+ *
+ * Notes come before reasons. A note explains why two Ruby versions can
+ * differ and the answer still be `Compatible: yes`, which is the thing a
+ * reader of that block is confused by; a reason explains why it is not.
+ */
+export function versionInformationLines(diagnostic: VersionDiagnostic): string[] {
+  const d = diagnostic.details;
+  const lines = [
+    `Compatible: ${diagnostic.compatible ? 'yes' : 'NO'}`,
+    `Extension version: ${d.extensionVersion}`,
+    `Core version: ${d.coreVersion ?? '(unknown)'}`,
+    `Client protocol version: ${d.clientProtocolVersion}`,
+    `Server protocol version: ${d.serverProtocolCurrent ?? '(unknown)'}`,
+    `Ruby running: ${d.rubyRunning ?? '(unknown)'}`,
+    `Ruby expected: ${d.rubyExpected ?? '(no bundled manifest -- monorepo/custom Core)'}`,
+    `Core selection: ${d.classification}`,
+    `Selected Core path: ${d.selectedCorePath}`
+  ];
+  for (const note of diagnostic.notes) {
+    lines.push(`  · ${note}`);
+  }
+  for (const reason of diagnostic.reasons) {
+    lines.push(`  ✗ ${reason}`);
+  }
+  if (diagnostic.action) {
+    lines.push(`Action: ${diagnostic.action}`);
+  }
+  return lines;
+}
+
+/**
+ * The start-up lines for a folder's handshake: the notes, each named by
+ * the folder it is about, because in a multi-root workspace every folder
+ * gets its own Core and a bare `OvalLSP:` prefix does not say which.
+ */
+export function versionNoteLines(diagnostic: VersionDiagnostic, folderName: string): string[] {
+  return diagnostic.notes.map((note) => `OvalLSP (${folderName}): ${note}`);
+}

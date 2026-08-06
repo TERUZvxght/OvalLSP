@@ -203,11 +203,13 @@ module Ovallsp
       # thread, which could otherwise begin a fresh, valid one after this
       # point and be killed by the join instead of returning (0.2.0).
       @workspace_diagnostics&.close
-      # A publish waiting on the debounce is a report the user has already
-      # earned by stopping typing; the bounded join below would kill its
-      # thread. Flushed here, in this turn, so shutting down cannot be the
-      # reason a file's diagnostics never arrived.
-      flush_pending_diagnostics
+      # Same idea, for the debounce waiters: tell them to stop *waiting*
+      # before the join, so a waiter still counting down 300 ms returns
+      # instead of spending the join's budget asleep. It does not join
+      # them -- they are tracked, so the line below joins them, once, on
+      # one budget. An earlier version joined them here as well, which
+      # made shutdown's worst case the sum of two budgets rather than one.
+      stop_waiting_for_debounces
       @background_tasks.shutdown
     rescue StandardError => e
       begin
@@ -424,10 +426,23 @@ module Ovallsp
     # must see the character just typed -- only the publish waits.
     def reindex(document, publish: :now)
       summary = @parser_service.summarize(document)
-      if apply_file_summary(summary)
-        invalidate_stale_observations
-        publish == :debounced ? schedule_diagnostics(document) : publish_diagnostics(document)
-      end
+      invalidate_stale_observations if apply_file_summary(summary)
+      # *Not* inside that `if`. `WorkspaceIndex#replace_file` returns false
+      # for content it already holds, which is a `didChange` whose text is
+      # byte-identical to the indexed text -- a formatter applying a
+      # full-range replace that changes nothing, another extension writing
+      # the buffer, a client re-sending. The index is right to do nothing
+      # there. The publish is not.
+      #
+      # While it was inside, such an edit landing during the debounce
+      # abandoned the *previous* edit's pending report: the pending entry
+      # kept the older version, the waiter woke, found `document.version`
+      # no longer matched and published nothing, and nothing rescheduled.
+      # A file with a syntax error and an empty Problems panel until the
+      # next edit that changes bytes (round 33). Republishing an unchanged
+      # document costs one analysis and is what the client asked for by
+      # sending a new version.
+      publish == :debounced ? schedule_diagnostics(document) : publish_diagnostics(document)
     rescue StandardError => e
       # Parsing must never take the server down: keep the previous summary
       # (if any) and let static features degrade gracefully for this file.
@@ -486,7 +501,12 @@ module Ovallsp
       end
 
       @background_tasks.track_thread(thread)
-      @pending_publish_mutex.synchronize { @publish_threads[uri] = thread }
+      # Only if the entry is still there. The thread was started before
+      # this line, so a fast waiter can already have published and removed
+      # itself, and storing it unconditionally would leave a dead `Thread`
+      # under that uri until the next edit or close -- making
+      # `@publish_threads` something other than the live set it reads as.
+      @pending_publish_mutex.synchronize { @publish_threads[uri] = thread if @pending_publish.key?(uri) }
     end
 
     def await_and_publish(uri)
@@ -513,8 +533,12 @@ module Ovallsp
         break if done == :publish
         return if done == :abandon
 
-        # Capped, so that an edit arriving during the wait -- which moves
-        # the deadline rather than waking anyone -- is noticed promptly.
+        # Capped for the things that do *not* move the deadline: a
+        # `didClose` dropping the entry, and shutdown setting
+        # `@stopping_publishes`. Neither wakes this thread, so the cap is
+        # how soon it notices. (An edit only ever moves the deadline
+        # later, and an uncapped sleep would observe that correctly on the
+        # next pass -- it is not what the cap is for.)
         sleep([done.last, 0.05].min)
       end
 
@@ -557,38 +581,30 @@ module Ovallsp
       end
     end
 
-    # Waits for the waiters rather than publishing itself, so a report
-    # cannot arrive twice: the thread already owns the decision about
-    # whether its version is still current.
+    # Releases the waiters; joins nothing.
     #
     # A publish whose debounce has *not* elapsed is dropped rather than
     # forced. The user was still typing when the server was asked to stop,
     # and a report they never stopped long enough to earn is the thing the
     # debounce exists to withhold -- firing it on the way out would put it
-    # back exactly where it is least useful.
-    def flush_pending_diagnostics
-      threads = @pending_publish_mutex.synchronize do
-        @stopping_publishes = true
-        @publish_threads.values.dup.tap { @publish_threads.clear }
-      end
-      deadline = monotonic_now + FLUSH_JOIN_TIMEOUT
-      threads.each { |thread| thread.join([deadline - monotonic_now, 0].max) }
-    rescue StandardError => e
-      @logger.error("failed to flush pending diagnostics: #{e.class}: #{e.message}")
-    end
-
-    # Bounded, like every other join on the way out: a publish that cannot
-    # finish in this long is one the client is about to stop listening for
-    # anyway.
+    # back exactly where it is least useful. A waiter whose deadline *has*
+    # passed goes on to publish, and `BackgroundTasks#shutdown` gives it
+    # the time to.
     #
-    # *One* deadline for the whole batch, not one per thread.
-    # `BackgroundTasks#reclaim_batch` carries the same rule and the reason
-    # it carries it: an independent review found an earlier version giving
-    # each task its own full timeout, making shutdown
-    # O(task_count * timeout). A window with eight dirty buffers has eight
-    # waiters, and this join runs *before* `BackgroundTasks#shutdown`'s own
-    # budget starts.
-    FLUSH_JOIN_TIMEOUT = 2
+    # This joined the waiters itself until round 33. Two rounds in a row
+    # found a defect in that join -- first a per-thread deadline making it
+    # O(task_count * timeout), then a shared one that was still additive
+    # with the budget that follows it. Both were the same mistake: these
+    # threads are *tracked*, so something already joins them correctly,
+    # and the second joiner had nothing to add but its own budget.
+    def stop_waiting_for_debounces
+      @pending_publish_mutex.synchronize do
+        @stopping_publishes = true
+        @publish_threads.clear
+      end
+    rescue StandardError => e
+      @logger.error("failed to release pending diagnostics: #{e.class}: #{e.message}")
+    end
 
     def publish_diagnostics(document)
       # Whether there is a running application to ask has to be known
@@ -1490,8 +1506,8 @@ module Ovallsp
       # dispatch and every request the editor sends afterwards queues
       # behind it. 0.9 s to remove 1,000 abandoned directories, measured
       # -- and the machine this sweep exists for had 28,643 of them and
-      # 2.8 GB, which is the better part of a minute of a server that
-      # answers nothing. The first launch after an upgrade is exactly when
+      # 2.8 GB -- around 26 seconds of a server that answers nothing. The
+      # first launch after an upgrade is exactly when
       # that bill comes due, because putting the build's version in the
       # key is what abandoned them (024.51).
       #
@@ -1501,9 +1517,21 @@ module Ovallsp
       # joins it for up to the background budget and may kill it
       # mid-`remove_entry`, leaving a directory partly removed -- which
       # the next sweep finishes, because a partial directory is still an
-      # abandoned one. Untracked would leak the thread instead.
-      sweep = Thread.new { Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir) }
-      @background_tasks.track_thread(sweep)
+      # abandoned one. Untracked would leak the thread instead -- which is
+      # the leak `BackgroundTasks`' own header was written about.
+      #
+      # Rescued separately from the store. Failing to *start* the sweep is
+      # a housekeeping failure and costs nothing this session; letting it
+      # reach the method's own rescue would return a disabled cache and
+      # make every file cold, which is a far worse answer to a
+      # `ThreadError` than skipping a cleanup.
+      begin
+        @background_tasks.track_thread(
+          Thread.new { Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir) }
+        )
+      rescue StandardError, ThreadError => e
+        @logger.error("failed to start the cache sweep; leaving abandoned generations in place: #{e.class}: #{e.message}")
+      end
       store
     rescue StandardError => e
       @logger.error("failed to initialize persistent cache; continuing without one: #{e.class}: #{e.message}")

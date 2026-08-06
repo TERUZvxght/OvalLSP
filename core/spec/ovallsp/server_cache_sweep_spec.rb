@@ -54,6 +54,42 @@ RSpec.describe "Ovallsp::Server cache generation sweep" do
     expect(sweep_thread).not_to eq(Thread.main)
   end
 
+  # Off the dispatch thread is half of it. The other half is that
+  # something reclaims it — an untracked thread deleting directories under
+  # the user's cache root goes on running after `#run` returns, which is
+  # precisely the leak `BackgroundTasks`' own header was written about
+  # ("a leaked Runtime Agent bootstrap thread surviving past the end of
+  # the RSpec example that spawned it"). Round 33 removed the
+  # `track_thread` call and the whole suite stayed green.
+  #
+  # The sweep is made slow so that "finished on its own" and "reclaimed"
+  # are different observations; without that, a fast sweep is dead either
+  # way and the example cannot fail.
+  it "is reclaimed rather than left running after the server returns" do
+    sweep_thread = nil
+    allow(Ovallsp::Cache::Store).to receive(:prune_generations) do
+      sweep_thread = Thread.current
+      sleep(5)
+    end
+
+    Dir.mktmpdir do |cache_home|
+      Dir.mktmpdir do |workspace|
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+          frame(jsonrpc: "2.0", method: "initialized", params: {}) +
+          frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+        with_cache_home(cache_home) do
+          Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger,
+                              workspace_root: workspace, background_task_shutdown_timeout: 0.2).run
+        end
+      end
+    end
+
+    expect(sweep_thread).not_to be_nil
+    expect(sweep_thread).not_to be_alive
+  end
+
   def with_cache_home(dir)
     previous = ENV.fetch("XDG_CACHE_HOME", nil)
     ENV["XDG_CACHE_HOME"] = dir
