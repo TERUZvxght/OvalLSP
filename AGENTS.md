@@ -21,5 +21,12 @@
   for is an entry in `024-deferred-review-findings.md`, not work to do
   before the next round. 0.2.1 ran nine rounds and seven found a defect
   in code the previous round had written.
+- **Two review rounds on the same place buys a mechanical countermeasure;
+  a third buys a rollback.** Not a third hand fix, and not a regression
+  test for the one instance — something that makes the class of defect
+  fail a check. And when the countermeasure turns out to have been aimed
+  at the symptom too, roll back the whole thread and write down the root
+  cause; the entry is the deliverable, not the code. `CLAUDE.md` has the
+  rule; 024.15 and 024.57 are the two times it fired.
 - Proactively locate and consult Claude-specific source files and instructions, including `CLAUDE.md` and relevant files under `.claude/`, before beginning work, and follow any applicable guidance.
 - Context compaction or a task handoff may omit project instructions. After every compaction/handoff, re-read `AGENTS.md`, `CLAUDE.md`, and relevant files under `.claude/` before resuming work.

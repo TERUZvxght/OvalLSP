@@ -107,6 +107,35 @@ zero net progress, and the release grew to 47 files and 2,463 added lines
 — larger than 0.1.9, 0.1.10 and 0.1.11 combined. The thread was rolled
 back and recorded as 024.15.
 
+**0.2.2 is the second instance, and the first where the rule was
+followed as written.** The debounce — deferring `didChange`'s publish to
+a waiter thread — was found defective by rounds 32, 33, 34 and 35. Round
+33's countermeasure was a *property* spec rather than a regression test,
+which is the right shape, and it still was not enough: round 35 found the
+same property being violated by a publisher the property's table did not
+cover. **A property is only as wide as its table**, and a countermeasure
+aimed at the path the last defect was on is still aimed at the symptom.
+
+The root cause was the same shape as 0.1.12's, one level up: four
+publishers wrote to one stream and ordering was added *pairwise, at call
+sites*, one round at a time. Each fix was correct about the pair it named
+and silent about the rest. Recorded as 024.57; the direction needed was
+one writer that remembers what it last published, which is again "put the
+rule where the value is produced".
+
+Two things worth carrying forward from how it ended:
+
+- **Roll back the thread, not the round's work.** Three of round 35's
+  seven findings and every finding from rounds 32–34 that was not about
+  the debounce survived the rollback, along with a property spec that
+  holds for the code the change was reverted *to*. Identifying what
+  belongs to the thread is part of the work, and "everything those rounds
+  touched" is the wrong answer.
+- **Keep the measurements.** The debounce did coalesce a burst into one
+  analysis, measured. 024.57 carries those numbers, because the next
+  attempt should not have to re-establish that the idea works — only that
+  the design does.
+
 Two supporting rules follow from the same episode:
 
 - **Do not tell a reviewer to assume the previous round broke something.**
