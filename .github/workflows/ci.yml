@@ -108,6 +108,40 @@ jobs:
             end
           '
 
+  core-ruby-4:
+    name: Core Server (Ruby 4.0, informational)
+    runs-on: ubuntu-latest
+    # Reports; never gates. `docs/SUPPORT_MATRIX.md` calls 4.0 "best
+    # effort", and the standing decision for the 0.2.x line is that a
+    # 4.0-specific failure gets recorded rather than fixed -- a required
+    # job would turn the first one into work nobody agreed to do. What
+    # this buys is that the 4.0 row stops being a claim measured once by
+    # hand on one machine: that row used to end "nothing continuously
+    # verifies 4.0", and it was right.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+          bundler-cache: true
+          working-directory: core
+
+      - name: Ruby syntax check
+        working-directory: core
+        run: find lib spec -name '*.rb' -print0 | xargs -0 -n1 ruby -c
+
+      # No real Rails installed here, deliberately. The real-Rails and
+      # capability suites skip themselves when rails/sqlite3 cannot be
+      # resolved, and installing them under 4.0 would make this job's
+      # failures a report on Rails' own 4.0 readiness rather than on
+      # OvalLSP's. The `core` job above is the one where such a skip is a
+      # hard failure; this job is about the engine's own suite.
+      - name: Run the suite that does not need a real Rails
+        working-directory: core
+        run: bundle exec rspec
+
   vscode:
     name: VS Code extension (TypeScript)
     runs-on: ubuntu-latest

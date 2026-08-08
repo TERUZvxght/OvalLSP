@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { checkBundledCoreCompatibility, queryRubyConfigPaths, RubyIdentity } from '../../platformCompatibility';
+import { installExecutableFixture } from '../support/executableFixture';
 
 describe('checkBundledCoreCompatibility', () => {
   let extensionRoot: string;
@@ -250,7 +251,12 @@ describe('queryRubyConfigPaths', () => {
     await assert.rejects(queryRubyConfigPaths('nonexistent-ruby-command'));
   });
 
-  it('actually runs the query in the given cwd, not the caller\'s own ambient working directory', async () => {
+  it('actually runs the query in the given cwd, not the caller\'s own ambient working directory', async function () {
+    // See `installExecutableFixture`: the fixture below is a file this
+    // machine has never executed, and the first run of one is the slow
+    // one. This test timed out at mocha's 2 s default while passing in
+    // 186 ms when run alone.
+    this.timeout(30000);
     // Task 023.8 (second re-review round): this is the regression the
     // previous version of this test suite couldn't have caught -- it
     // only asserted on stdout parsing, never on *which directory* the
@@ -261,9 +267,10 @@ describe('queryRubyConfigPaths', () => {
     // its own actual working directory -- no real Ruby version manager
     // needed for this assertion to be meaningful or portable to CI.
     const fakeRubyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ovallsp-fake-ruby-'));
-    const fakeRubyPath = path.join(fakeRubyDir, 'fake-ruby.sh');
-    fs.writeFileSync(fakeRubyPath, '#!/bin/sh\necho "$(pwd)|$(pwd)"\n');
-    fs.chmodSync(fakeRubyPath, 0o755);
+    const fakeRubyPath = installExecutableFixture(
+      path.join(fakeRubyDir, 'fake-ruby.sh'),
+      '#!/bin/sh\necho "$(pwd)|$(pwd)"\n'
+    );
 
     const targetCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'ovallsp-target-cwd-'));
     try {

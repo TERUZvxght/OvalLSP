@@ -3312,3 +3312,121 @@ Not everything from those rounds was part of the thread:
   stands on its own; the debounce only made it visible.
 - Everything from rounds 32--35 about the cache, the version checks, the
   documents and the other five countermeasures.
+
+## 024.58 `bin/ovallsp` loaded every ABI's vendored gems, not the running one's
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.2
+user-visible: no
+user-visible-note: >
+  A packaged VSIX vendors for one Ruby, so it has one ABI directory and
+  the glob was right by accident. What it broke is the development
+  configuration `docs/SUPPORT_MATRIX.md` asks for by name.
+```
+
+**Area:** `core/bin/ovallsp`, `core/lib/ovallsp/vendor_bootstrap.rb`
+
+The bootstrap globbed `vendor/bundle/**/gems/*/lib` and unshifted every
+match. Bundler lays a payload out one directory per ABI --
+`vendor/bundle/ruby/3.4.0`, `vendor/bundle/ruby/4.0.0` -- so a checkout
+that has run `bundle install` under two Rubies has both, and a 3.4
+interpreter loaded 4.0's native `prism`:
+
+```
+LoadError: linked to incompatible /opt/homebrew/Cellar/ruby/4.0.6/lib/libruby.4.0.dylib
+  - core/vendor/bundle/ruby/4.0.0/gems/prism-1.9.0/lib/prism/prism.bundle
+```
+
+`spec/integration/stdio_spec.rb` caught it the first time the suite ran
+under 3.4 with 4.0 also bundled. That is precisely the configuration the
+4.0 row of `SUPPORT_MATRIX` describes a contributor creating, and the
+second `bundle install` is what creates it.
+
+**ADR-0005's own words were stronger than its code.** `VendorCompatibility`
+exists so the bootstrap "can refuse to add an incompatible vendor
+directory to `$LOAD_PATH` at all" -- and it answers *whether* a payload
+may be loaded, while nothing answered *which directories that permission
+covers*. The manifest check cannot help: a dev checkout has no manifest,
+which the module deliberately treats as permitted.
+
+Fixed by scoping the glob to `Gem.ruby_engine`/`RbConfig ruby_version`,
+in a new `Ovallsp::VendorBootstrap` so the decision has a unit spec at
+all -- `bin/ovallsp` runs only as a subprocess, and the one integration
+spec that drives it cannot construct the layouts that matter. A payload
+with no ABI-matching directory now contributes nothing, which is the same
+answer as no payload; falling back to the unscoped glob would reinstate
+the crash for exactly the case the manifest cannot catch.
+
+## 024.59 The guard against a stale example count could not run
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.2
+user-visible: no
+user-visible-note: >
+  A guard defect. Its consequence is that `SUPPORT_MATRIX` and
+  `RELEASE_CHECKLIST` shipped a suite size that was wrong again, which is
+  the thing the guard was written to stop.
+```
+
+**Area:** `core/spec/meta/documented_counts_spec.rb`
+
+Added in 0.2.1's round 26 because the figure had gone stale three times
+(895 for six releases, then 1,776, then 1,833). It skips unless the run
+is the whole suite, and decided that by comparing a glob of spec files on
+disk against `files_to_run`. The glob was rooted one level too high:
+
+```ruby
+File.expand_path("../**/*_spec.rb", __dir__.sub(%r{/meta\z}, ""))  # => core/**/*_spec.rb
+```
+
+`core/**` includes `core/vendor/bundle`, so once gems are vendored there
+the glob matched twenty spec files belonging to `diff-lcs` and the counts
+never agreed. **CI vendors them**: `ruby/setup-ruby`'s `bundler-cache: true`
+sets `BUNDLE_PATH` to `vendor/bundle`. So the guard has skipped on every
+full run since it was written, in CI included, and the documents drifted
+to 1,934 against a suite of 1,941 with nothing to say so.
+
+Fixed by rooting the glob at `spec/`. The countermeasure is separate and
+matters more: **a check that decides it is not applicable reports the
+same green as one that passed**, so the new example asserting the root
+runs unconditionally -- filtered or not -- and fails if anything under
+`core/` that is not this suite's is ever counted again.
+
+## 024.60 Four test fixtures raced macOS' first-execution scan
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.2
+user-visible: no
+user-visible-note: >
+  A test-suite defect. It cost confidence rather than behaviour: four of
+  six consecutive local runs of the extension's unit suite failed, in
+  three different combinations, on code that was correct.
+```
+
+**Area:** `vscode/src/test/unit/coreProcess.test.ts`,
+`vscode/src/test/unit/platformCompatibility.test.ts`,
+`vscode/src/test/support/executableFixture.ts`
+
+Three `ps` tests and one Ruby-query test write a stand-in executable into
+a fresh temporary directory and immediately run it. macOS charges the
+first execution of a newly written executable a one-off scan: measured on
+this repository's own fixture, **2.62 s the first time and 0.04 s on
+every run after**. `SystemProcessTreeInspector`'s snapshot timeout is 1 s
+and mocha's default is 2 s, so the cold file was killed mid-query and the
+assertion reported a product defect that was not there.
+
+Load-dependent, so it flaked rather than failed, and each of the three
+`ps` tests failed with a *different* message -- one timeout, one "command
+failed", one "expected unparseable output to be rejected" -- which reads
+as three unrelated defects rather than one cold file.
+
+Fixed by running each fixture once before the measurement, in a single
+shared `installExecutableFixture` rather than copied into both suites.
+Ten consecutive runs green afterwards, and faster, because the failing
+paths had been spending their time in timeouts.

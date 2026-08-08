@@ -21,14 +21,38 @@
 RSpec.describe "documented example counts" do
   def read(name) = File.read(File.expand_path("../../../#{name}", __dir__), encoding: "UTF-8")
 
+  # Every spec file this suite owns. Rooted at `spec/` itself, not at
+  # `core/`: `bundle config path vendor/bundle` -- which is what CI's own
+  # `bundler-cache: true` sets -- puts `diff-lcs`' twenty spec files
+  # inside `core/`, and counting those made the comparison below never
+  # match. The guard then skipped on every full run, in CI included, and
+  # the number it exists to hold went stale exactly as before: it said
+  # 1,934 while the suite had grown past it, which is the third time this
+  # figure has drifted and the first time with a guard watching.
+  def spec_files_on_disk = Dir.glob(File.expand_path("../**/*_spec.rb", __dir__))
+
+  def spec_root = File.expand_path("..", __dir__)
+
   # Only when the runner was given no files and no filters -- `rspec` with
   # nothing after it. Anything narrower is a subset, and `example_count`
   # would be the subset's size, which is not what the documents claim.
   def whole_suite?
     return false unless RSpec.configuration.filter_manager.inclusions.empty?
 
-    Dir.glob(File.expand_path("../**/*_spec.rb", __dir__.sub(%r{/meta\z}, ""))).length ==
-      RSpec.configuration.files_to_run.length
+    spec_files_on_disk.length == RSpec.configuration.files_to_run.length
+  end
+
+  # Runs on every invocation, filtered or not, because the defect above
+  # was invisible precisely where the checks below are: a guard that
+  # decides it is not applicable reports the same green as one that
+  # passed. This one cannot skip, so the next thing that drops a
+  # `*_spec.rb` inside `core/` fails here rather than silently switching
+  # the count off.
+  it "decides what the whole suite is from spec/ alone, not from anything installed beside it" do
+    stray = spec_files_on_disk.reject { |file| file.start_with?("#{spec_root}/") }
+
+    expect(stray).to be_empty,
+                     "these are not this suite's specs, and counting them makes the checks below skip: #{stray.first(3).join(', ')}"
   end
 
   # `1,833` and `1833` are the same claim; the documents use the first and
