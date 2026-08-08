@@ -150,6 +150,33 @@
           </div>
         </article>
 
+        <article class="tl-item" id="v021">
+          <div class="tl-version">
+            <span class="v">0.2.1</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>Fewer wrong reports, and the promises already published</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A call whose receiver ends in <code>]</code> or <code>)</code> is no longer reported as an unknown method.</strong> Over Ruby 3.4.7&rsquo;s standard library, five Rails 8.1.3 gems and minitest, 1,656 of 3,747 unknown-method reports are gone.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Upgrading delivers the fixes.</strong> The parse cache was not keyed on OvalLSP&rsquo;s own version, so every file whose bytes had not changed kept answering with the previous release&rsquo;s results.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Hover, definition and signature help stop answering about a method for something that is not a call</strong> &mdash; a word in a comment, a parameter name, a local that shares a name with a method.</span>
+            </li>
+          </ul>
+          <p class="text-mute">
+            The full list is in the
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.md">changelog</a>,
+            which is where every release is recorded in full.
+          </p>
+        </article>
+
         <article class="tl-item tl-item--future" id="v030">
           <div class="tl-version"><span class="v">0.3.0</span></div>
           <h3>Knowing what the gems define</h3>

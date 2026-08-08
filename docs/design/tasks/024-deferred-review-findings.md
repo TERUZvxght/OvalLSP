@@ -2904,9 +2904,10 @@ released-in: reverted
 kind: defect
 user-visible: yes
 user-visible-note: >
-  The change this was a defect in was rolled back before shipping
-  (024.57), so no build ever had it. Kept because the next attempt at
-  deferring a publish will meet it again.
+  The *waiter* path this was found on was rolled back before shipping
+  (024.57). The symptom is not gone: `#republish_open_diagnostics` has
+  the same race and every build has it -- that half is 024.56, which is
+  open and documented.
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#await_and_publish`,
@@ -3016,9 +3017,11 @@ released-in: reverted
 kind: defect
 user-visible: yes
 user-visible-note: >
-  The change this was a defect in was rolled back before shipping
-  (024.57). The `#reindex` correction it produced was kept, because it
-  is a fix to the synchronous path and stands on its own.
+  Both the defect and the correction it produced were rolled back. The
+  correction was kept at first, on the reasoning that it fixed the
+  synchronous path too; round 36 measured what it cost there -- 0.015 s
+  to 2.098 s on a byte-identical `didChange` -- and it went with the
+  rest. See the note at the end of this entry.
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#reindex`, `#schedule_diagnostics`)
@@ -3063,6 +3066,29 @@ version, and a closed document's are empty* -- over a table of
 notification sequences. Three of its rows failed when it was written. A
 regression test pins the sequence someone thought of; this pins the
 property, and whoever finds the next one adds a row.
+
+**Round 36: the correction was rolled back too.** Publishing outside
+`if apply_file_summary(...)` was kept when the debounce went, on the
+reasoning that it is a fix to the synchronous path. Measured, it is not:
+
+| | control (text changed) | byte-identical edit |
+|---|---|---|
+| 0.2.1, `net/http.rb` 2,574 lines | 2.049 s | **0.015 s** |
+| with the correction | 2.031 s | **2.098 s** |
+
+The control agrees to 1% and the measured category moves 140x, under
+`@index_mutation_mutex` -- the lock hover, completion and the next
+`didChange` all need. On the synchronous path there was nothing to fix:
+with no publish, the panel keeps the previous version's diagnostics,
+which are correct for byte-identical text. The only difference is the
+`version` field, and VS Code does not discard diagnostics on version. So
+it bought a field nobody reads and cost up to 5.3 s of a frozen server
+per format-on-save of an already-formatted large file.
+
+`server_publish_invariant_spec` was restated about the *text* rather than
+the version at the same time, which is the claim the server actually
+needs to make -- and still fails on round 33's defect, because that left
+the panel showing a clean file whose text had a syntax error.
 
 ## 024.55 A version mismatch is reported and then ignored
 
@@ -3111,7 +3137,7 @@ it in round 34). It wants its own change, with the two paths separated:
    a integrity failure, a core-version mismatch after a Marketplace update
    is usually a stale process that a restart fixes.
 
-## 024.56 A debounced publish can overwrite the Runtime Agent's republish
+## 024.56 A publish can land after the panel has been cleared, and after a newer one
 
 ```yaml
 status: open
@@ -3120,13 +3146,20 @@ user-visible: yes
 target: 0.3.0
 ```
 
-**Area:** `core/lib/ovallsp/server.rb` (`#await_and_publish`,
-`#republish_open_diagnostics`, `#publish_findings`)
+**Area:** `core/lib/ovallsp/server.rb` (`#republish_open_diagnostics`,
+`#handle_did_close`, `#publish_findings`)
 
-`#await_and_publish` re-reads the document store and compares the
-*document version* before writing, under `@pending_publish_mutex`. That
-orders it against `didClose` and against a newer edit, and against
-nothing else.
+`#republish_open_diagnostics` snapshots `@document_store.open_documents`
+and then computes and publishes for each, on a background thread, from
+six call sites -- without re-reading the store. `#handle_did_close`
+clears the panel on the dispatch thread. Nothing orders the two.
+
+Reproduced identically by rounds 35 and 36: publishes for the closed file
+came out `[2, 0, 2]` -- findings, the clear, the findings again. **Every
+build has this**, 0.2.1 included; it is not a 0.2.2 regression. What
+0.2.2 changed is that its own waiter path had the same race, was fixed
+there, and the fix did not reach here -- which is how the shape came to
+be understood at all.
 
 `#republish_open_diagnostics` publishes on a background thread when
 routes or models land or the Agent becomes ready. If a waiter computed
@@ -3136,10 +3169,10 @@ the pre-routes findings back. `docs/EXTENSION_CAPABILITIES.md`'s G12 row
 promises "the route diagnostic clears once routes arrive, without
 touching the file"; in that interleaving it clears and comes back.
 
-**The shape is older than 0.2.2** -- `publish_diagnostics` has always
-computed and then published -- but it needed a background republish to
-land inside one dispatch turn. Now both sides are background threads and
-the losing side is the routine path for every edit.
+**What a user sees:** close a tab a second or two after routes or models
+land, or after the Runtime Agent becomes ready, and the Problems panel
+keeps that file's errors for the rest of the session. Nothing republishes
+an unsaved buffer or a deleted file.
 
 **The real fix is one writer, not another comparison.** There are four
 publishers to one stream (the dispatch thread, the workspace pass, the

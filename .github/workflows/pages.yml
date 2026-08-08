@@ -14,6 +14,14 @@ name: Site
 # never fetched -- this job must not go red because someone else's host
 # is down.
 #
+# The same script also runs in `ci.yml`, unfiltered, and that is the copy
+# that catches drift. The `paths:` filter below is right for a *deploy*
+# -- there is nothing to publish when `site/` has not changed -- and
+# wrong for the cross-document checks, whose other end is `README.md`,
+# `docs/ROADMAP.md` or `vscode/package.json`. A commit that updates the
+# Markdown and forgets the site does not match this filter, which is the
+# commit shape those checks exist for.
+#
 # One-time setup outside this file: Settings -> Pages -> Build and
 # deployment -> Source must be set to "GitHub Actions". Without it the
 # deploy step fails with a "Pages site not configured" error.

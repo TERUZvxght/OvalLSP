@@ -218,10 +218,10 @@ have not finished typing.
 So the answer is not another check — there is nothing in the text to
 check, and a rule about "receiver and message on different lines" would
 suppress the trailing-dot chain style, which people write on purpose.
-0.2.2 made diagnostics wait 300 ms after you stop typing, which removes
-this while you are still going. Removing it altogether needs the edit
-position, so that a report about the line under your cursor can be
-withheld — and that hides genuine errors on that line too, which is why
+0.2.2 tried deferring the report until you stop typing, which would have
+removed this while you are still going; that change was rolled back for
+unrelated reasons (024.57). Removing it needs the edit position, so that
+a report about the line under your cursor can be withheld — and that hides genuine errors on that line too, which is why
 it is a deliberate refinement scheduled for
 [0.4.0](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/ROADMAP.md)
 rather than a defect to fix on the way to 0.3.0 (024.41). <!-- documents: 024.41 -->
@@ -441,14 +441,19 @@ cases OvalLSP goes on answering hover, completion and go to definition.
 Treat those answers as unreliable until the mismatch is resolved, and run
 `OvalLSP: Show Version Information` to see what was detected (024.55). <!-- documents: 024.55 -->
 
-## A route diagnostic that clears and comes back
+## Diagnostics that come back after you clear or close a file
 
 **Rarely, and only on a large file.** When the Runtime Agent supplies
-routes, every open file is re-analysed and the `*_path` reports that were
-made without them disappear. If you had paused on a file big enough to
-take seconds to analyse at the moment routes arrived, the analysis that
-was already running finishes last and writes its own — pre-routes —
-findings over them. The next edit clears it (024.56). <!-- documents: 024.56 -->
+routes or models, or becomes ready, every open file is re-analysed on a
+background thread — and that pass decides which files to analyse before
+it starts, not while it runs.
+
+Two things follow. If you had paused on a file big enough to take seconds
+to analyse, the `*_path` reports made without routes can be written back
+over the corrected ones; the next edit clears that. And **if you close a
+file while another one is being analysed in that pass, its errors stay in
+the Problems panel** — for the rest of the session, since nothing
+republishes a file nobody has open. Reopening it clears them (024.56). <!-- documents: 024.56 -->
 
 ## How long an edit takes to re-analyse
 
@@ -462,7 +467,7 @@ completion and signature help wait behind it.
 Deferring the report until you stop typing coalesces a burst into one
 analysis, and it was measured doing that — but it also produced two
 races and could not bound how many analyses of one file run at once, and
-each of three review rounds found another defect in it. It is recorded in
+each of four review rounds found another defect in it. It is recorded in
 full at `024.57` and will be tried again with a different design. Today
 the cost is what it was: per keystroke.
 

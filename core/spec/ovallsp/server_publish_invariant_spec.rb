@@ -5,31 +5,36 @@ require "stringio"
 # What the client is holding when the dust settles.
 #
 # One invariant, over sequences of the notifications a client actually
-# sends: **an open document's last published diagnostics are for its
-# current version, and a closed document's are empty.** Nothing else here
-# is about a particular bug.
+# sends: **the last diagnostics published for an open document describe
+# its current text, and a closed document's are empty.**
 #
-# It was written as the countermeasure for 0.2.2's debounce, which two
-# review rounds in a row found a defect in, and it **outlived the change
-# it was written for**: the debounce was rolled back (024.57) and this
-# holds for the synchronous path unchanged. That is the argument for
-# writing a property rather than a regression test — the property was
-# true before the change, true during it, and true after it was removed.
+# Stated about the *text*, not about the version number, and that is the
+# correction round 36 forced. The first version asserted that the last
+# publish carried the document's current `version`, which is a stronger
+# claim than the server needs to make -- a `didChange` whose text is
+# byte-identical to what is indexed has nothing new to say, and the
+# report already on the client is still right about the text. Making that
+# assertion true cost a full re-analysis of the file: measured 0.015 s
+# before and 2.098 s after on a 2,574-line file, under the lock hover and
+# completion need. VS Code does not discard diagnostics on version, so
+# the price bought a field nobody reads.
 #
-# The two defects it was written against are worth keeping in view,
-# because the next attempt at deferring a publish will meet both:
+# What the property is *for* survives the correction. Round 33's defect
+# -- a byte-identical `didChange` discarding the previous edit's pending
+# report under the debounce -- left the panel showing a clean file whose
+# text had a syntax error, which is a text mismatch and fails here.
 #
-# - **Round 32.** `didClose` raced a publish that was already computing,
-#   so findings landed after the panel was cleared.
-# - **Round 33.** A `didChange` whose text was byte-identical to the
-#   indexed text discarded the *previous* edit's pending report, because
-#   `#reindex` reached the scheduler only when `apply_file_summary`
-#   returned true and `WorkspaceIndex#replace_file` returns false for
-#   identical content.
+# It was written as the countermeasure for 0.2.2's debounce, and it
+# **outlived the change it was written for**: the debounce was rolled
+# back (024.57) and this holds for the synchronous path. That is the
+# argument for writing a property rather than a regression test.
 #
-# And what it does *not* reach, which round 35 found and 024.56 records:
-# `#republish_open_diagnostics` is a third publisher, and no row here
-# involves one. A property is only as wide as its table.
+# What it does *not* reach, which rounds 35 and 36 both found and 024.56
+# records: `#republish_open_diagnostics` is another publisher, and no row
+# here involves one -- so the tree violates the closed-document half of
+# this property today, by that path. **A property is only as wide as its
+# table**, and the header above it must not claim more than the table
+# covers.
 
 RSpec.describe "Ovallsp::Server publish invariant" do
   let(:output) { StringIO.new }
@@ -81,39 +86,43 @@ RSpec.describe "Ovallsp::Server publish invariant" do
     Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger).run
   end
 
-  # `[description, notifications, final version]`. A `nil` final version
-  # means the document ends closed.
+  # `[description, notifications, ends_broken]`. `nil` means the document
+  # ends closed; `true`/`false` is whether its final text has a syntax
+  # error, which is what the last publish has to agree with.
   [
     ["one edit",
-     -> { [did_open(CLEAN), did_change(BROKEN, version: 2)] }, 2],
+     -> { [did_open(CLEAN), did_change(BROKEN, version: 2)] }, true],
     ["two edits",
-     -> { [did_open(CLEAN), did_change(CLEAN_AGAIN, version: 2), did_change(BROKEN, version: 3)] }, 3],
+     -> { [did_open(CLEAN), did_change(CLEAN_AGAIN, version: 2), did_change(BROKEN, version: 3)] }, true],
+    ["an edit that repairs the file",
+     -> { [did_open(BROKEN), did_change(CLEAN, version: 2)] }, false],
     ["an edit whose text is identical to the one before it",
-     -> { [did_open(CLEAN), did_change(BROKEN, version: 2), did_change(BROKEN, version: 3)] }, 3],
+     -> { [did_open(CLEAN), did_change(BROKEN, version: 2), did_change(BROKEN, version: 3)] }, true],
     ["an edit whose text is identical to what was opened",
-     -> { [did_open(BROKEN), did_change(BROKEN, version: 2)] }, 2],
+     -> { [did_open(BROKEN), did_change(BROKEN, version: 2)] }, true],
     ["an identical edit followed by a real one",
-     -> { [did_open(CLEAN), did_change(CLEAN, version: 2), did_change(BROKEN, version: 3)] }, 3],
+     -> { [did_open(CLEAN), did_change(CLEAN, version: 2), did_change(BROKEN, version: 3)] }, true],
     ["an edit and then a close",
      -> { [did_open(CLEAN), did_change(BROKEN, version: 2), did_close] }, nil]
-  ].each do |description, notifications, final_version|
+  ].each do |description, notifications, ends_broken|
     context "after #{description}" do
       before { run_sequence(*instance_exec(&notifications)) }
 
-      if final_version
-        it "leaves the client holding diagnostics for version #{final_version}" do
-          expect(published).not_to be_empty
-          expect(published.last[:version]).to eq(final_version)
+      if ends_broken.nil?
+        it "leaves the client holding nothing" do
+          expect(published.last[:diagnostics]).to be_empty
         end
-
-        # The half that makes the version assertion mean something: a
-        # server that published an empty report for the right version
-        # would satisfy it, and the panel would still be wrong.
+      elsif ends_broken
         it "leaves the syntax error visible" do
+          expect(published).not_to be_empty
           expect(published.last[:diagnostics]).not_to be_empty
         end
       else
-        it "leaves the client holding nothing" do
+        # The excluding direction. Without it a server that published a
+        # syntax error and then never spoke again would satisfy every
+        # other row in this table.
+        it "leaves nothing behind once the file parses again" do
+          expect(published).not_to be_empty
           expect(published.last[:diagnostics]).to be_empty
         end
       end

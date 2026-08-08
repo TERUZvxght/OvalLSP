@@ -373,3 +373,53 @@ export function versionInformationLines(diagnostic: VersionDiagnostic): string[]
 export function versionNoteLines(diagnostic: VersionDiagnostic, folderName: string): string[] {
   return diagnostic.notes.map((note) => `OvalLSP (${folderName}): ${note}`);
 }
+
+/**
+ * The minimum of `vscode.OutputChannel` these writers need. Taking a sink
+ * rather than the channel is what lets a test observe them at all —
+ * nothing in `vscode/src/test` can import `extension.ts`, which is why
+ * rounds 33 and 36 both found this code unpinned.
+ */
+export interface LineSink {
+  appendLine(line: string): void;
+}
+
+/**
+ * Writes the start-up handshake's Output-channel lines for one folder.
+ *
+ * The *condition* lives here, not at the call site, and that is the point.
+ * Round 33 found both note loops deletable with every test still green;
+ * 0.2.2 moved the formatting here and round 36 found the call sites still
+ * unpinned — moving the loop inside `if (!compatible)` restored 024.49's
+ * symptom exactly, and 182 tests passed. A note is for a Core that *is*
+ * running, so it belongs on the compatible path; with the branch in here,
+ * that mutation cannot be expressed in `extension.ts` at all.
+ */
+export function writeHandshakeLines(
+  sink: LineSink,
+  diagnostic: VersionDiagnostic,
+  folderName: string
+): void {
+  for (const line of versionNoteLines(diagnostic, folderName)) {
+    sink.appendLine(line);
+  }
+
+  if (diagnostic.compatible) {
+    return;
+  }
+
+  sink.appendLine(`--- OvalLSP version compatibility (${folderName}) ---`);
+  for (const reason of diagnostic.reasons) {
+    sink.appendLine(`  ✗ ${reason}`);
+  }
+  if (diagnostic.action) {
+    sink.appendLine(`  Action: ${diagnostic.action}`);
+  }
+}
+
+/** Writes the `OvalLSP: Show Version Information` block. */
+export function writeVersionInformation(sink: LineSink, diagnostic: VersionDiagnostic): void {
+  for (const line of versionInformationLines(diagnostic)) {
+    sink.appendLine(line);
+  }
+}

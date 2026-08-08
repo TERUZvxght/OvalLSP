@@ -25,32 +25,45 @@
 RSpec.describe "spec file constants" do
   ROOT = File.expand_path("../..", __dir__)
 
-  # Any indentation. The first version of this allowed 0--2 spaces on the
-  # reasoning that deeper nesting means a `class` or `module` and is
-  # genuinely scoped -- which is false, and was checked rather than
-  # reasoned about the second time: a constant assigned inside a *nested*
-  # `describe` is still `Object::NAME`, because constant assignment
-  # resolves lexically and a block is not a lexical scope. The guard was
-  # blind to `UNCLOSED` at indent 4 in the very file it was written for.
+  # Parsed, not scanned. This guard has now been wrong twice in its own
+  # right, and both times for the same reason: a regex over lines cannot
+  # tell which constants land on `Object`.
   #
-  # A `class`/`module` body genuinely is scoped, so those are excluded by
-  # tracking the nesting rather than by counting spaces.
-  ASSIGNMENT = /^\s*([A-Z][A-Za-z0-9_]*)\s*=[^=~]/
-  OPENS_SCOPE = /^\s*(?:class|module)\s+[A-Z]/
-  CLOSES = /^(\s*)end\b/
-
-  # Constant assignments in `source` that land on `Object`.
+  # The first version matched indent 0--2, on the reasoning that anything
+  # deeper is inside a `class` or `module` and genuinely scoped. False --
+  # a constant inside a nested `describe` is still `Object::NAME`,
+  # because assignment resolves lexically and a block is not a lexical
+  # scope. The second counted `class`/`module` openings against `end`s,
+  # which a `class Widget; end` inside a fixture string raises for ever
+  # (round 36 demonstrated both: a heredoc containing that line hid every
+  # constant below it, and `ANCHOR_PREFIX` inside `module DeferredFindings`
+  # was reported as a top-level one).
+  #
+  # Prism already answers the question exactly, and this suite depends on
+  # it anyway. A `ClassNode` or `ModuleNode` body is a lexical scope and
+  # nothing else is, so the walk simply does not descend into those.
   def self.object_constants(source)
-    depth = 0
-    source.lines.filter_map do |line|
-      if line.match?(OPENS_SCOPE)
-        depth += 1
-        next
-      end
-      depth -= 1 if depth.positive? && line.match?(CLOSES)
-      next unless depth.zero?
+    parsed = Prism.parse(source)
+    return [] unless parsed.success?
 
-      line[ASSIGNMENT, 1]
+    names = []
+    collect_object_constants(parsed.value, names)
+    names
+  end
+
+  def self.collect_object_constants(node, names)
+    node.compact_child_nodes.each do |child|
+      case child
+      when Prism::ClassNode, Prism::ModuleNode
+        # Its *name* is still written at this scope -- `class Foo` inside
+        # a spec file does define `Object::Foo` -- but its body is not.
+        names << child.constant_path.slice if child.constant_path.is_a?(Prism::ConstantReadNode)
+      when Prism::ConstantWriteNode
+        names << child.name.to_s
+        collect_object_constants(child, names)
+      else
+        collect_object_constants(child, names)
+      end
     end
   end
 

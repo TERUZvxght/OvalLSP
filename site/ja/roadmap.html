@@ -145,6 +145,33 @@
           </div>
         </article>
 
+        <article class="tl-item" id="v021">
+          <div class="tl-version">
+            <span class="v">0.2.1</span>
+            <span class="mark mark--yes">公開済み</span>
+          </div>
+          <h3>誤った報告を減らし、すでに公開していた約束に追いつく</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>レシーバが <code>]</code> や <code>)</code> で終わる呼び出しを、未定義メソッドとして報告しなくなりました。</strong> Ruby 3.4.7 の標準ライブラリ・Rails 8.1.3 の5つの gem・minitest に対して、3,747件中1,656件の誤報が消えました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>アップグレードが修正を届けるようになりました。</strong> 解析キャッシュの鍵に OvalLSP 自身のバージョンが入っておらず、バイトが変わっていないファイルには前のリリースの結果が返り続けていました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>呼び出しではないものについて、ホバー・定義・シグネチャヘルプがメソッドの説明を返さなくなりました</strong> — コメント内の単語、<code>def</code> の引数名、メソッドと同名のローカル変数など。</span>
+            </li>
+          </ul>
+          <p class="text-mute">
+            全項目は
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a>
+            にあります。すべてのリリースはそちらに記録しています。
+          </p>
+        </article>
+
         <article class="tl-item tl-item--future" id="v030">
           <div class="tl-version"><span class="v">0.3.0</span></div>
           <h3>gem が定義しているものを知る</h3>

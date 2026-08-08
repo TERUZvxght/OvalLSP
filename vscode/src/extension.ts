@@ -18,8 +18,8 @@ import {
   VersionDiagnostic,
   compareVersionInfo,
   gatherClientVersionInfo,
-  versionInformationLines,
-  versionNoteLines
+  writeHandshakeLines,
+  writeVersionInformation
 } from './versionInfo';
 import {
   canSpawnCoreProcess,
@@ -450,18 +450,9 @@ function runVersionHandshake(
   // True of the combination but not wrong with it -- a Ruby the bundled
   // payload was not built for, which the Core is nonetheless running
   // under. Worth a line; not worth a toast.
-  for (const line of versionNoteLines(diagnostic, folder.name)) {
-    outputChannel.appendLine(line);
-  }
+  writeHandshakeLines(outputChannel, diagnostic, folder.name);
 
   if (!diagnostic.compatible) {
-    outputChannel.appendLine(`--- OvalLSP version compatibility (${folder.name}) ---`);
-    for (const reason of diagnostic.reasons) {
-      outputChannel.appendLine(`  ✗ ${reason}`);
-    }
-    if (diagnostic.action) {
-      outputChannel.appendLine(`  Action: ${diagnostic.action}`);
-    }
     void vscode.window.showErrorMessage(
       `OvalLSP: the Core Server for ${folder.name} is not version-compatible with this Extension. ` +
         'See the OvalLSP output channel for details.'
@@ -684,9 +675,7 @@ function registerEnvironmentCommands(
       }
 
       const d = diagnostic.details;
-      for (const line of versionInformationLines(diagnostic)) {
-        outputChannel.appendLine(line);
-      }
+      writeVersionInformation(outputChannel, diagnostic);
       outputChannel.show();
 
       void vscode.window.showInformationMessage(

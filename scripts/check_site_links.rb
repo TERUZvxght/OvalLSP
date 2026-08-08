@@ -350,6 +350,18 @@ def roadmap_items(markdown)
   end.to_h
 end
 
+# Released versions from the changelog, newest first. A section headed
+# `## 0.2.2 — unreleased` is not one of them, which is what keeps this
+# from demanding a panel for a release that has not happened.
+def released_versions(changelog)
+  return [] unless File.exist?(changelog)
+
+  File.read(changelog, encoding: "UTF-8")
+      .scan(/^## (\d+\.\d+\.\d+)\s+[-—]\s*(.+)$/)
+      .reject { |(_, title)| title.strip.match?(/\Aunreleased\z/i) }
+      .map(&:first)
+end
+
 def site_roadmap_items(html)
   html.scan(%r{<span class="v">(\d+\.\d+\.\d+)</span>(.*?)</ul>}m).to_h do |version, body|
     [version, body.scan("<li>").length]
@@ -378,6 +390,26 @@ end
     elsif listed != count
       problems << "#{page_rel}: #{version} lists #{listed} item(s) and #{markdown_rel} has #{count}"
     end
+  end
+
+  # The other direction, which iterating the Markdown alone cannot see.
+  # `ROADMAP.md` lists only what is *planned*, so the site's shipped
+  # panels answer to nothing in it -- and nothing kept them current: 0.2.1
+  # shipped eight user-visible fixes and the newest panel still said
+  # 0.2.0.
+  #
+  # A shipped panel is a reasonable thing for a roadmap page to carry, so
+  # the rule is not "must be planned" but "must have actually shipped",
+  # which the changelog knows.
+  released = released_versions(File.join(REPO, "vscode", "CHANGELOG.md"))
+  (actual.keys - expected.keys).sort.each do |version|
+    next if released.include?(version)
+
+    problems << "#{page_rel}: has a #{version} section that is neither planned in #{markdown_rel} " \
+                "nor released in vscode/CHANGELOG.md"
+  end
+  if released.first && !actual.key?(released.first)
+    problems << "#{page_rel}: #{released.first} has shipped and the page has no section for it"
   end
 end
 

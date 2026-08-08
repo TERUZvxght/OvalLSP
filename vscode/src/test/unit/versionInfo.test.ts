@@ -10,7 +10,9 @@ import {
   computeBundledPayloadSha256,
   gatherClientVersionInfo,
   versionInformationLines,
-  versionNoteLines
+  versionNoteLines,
+  writeHandshakeLines,
+  writeVersionInformation
 } from '../../versionInfo';
 
 function baseServer(overrides: Partial<OvallspServerInfo> = {}): OvallspServerInfo {
@@ -426,5 +428,68 @@ describe('what the user reads', () => {
 
   it('emits no start-up line when there is no note', () => {
     assert.deepStrictEqual(versionNoteLines(compareVersionInfo(bundledClient(), baseServer()), 'x'), []);
+  });
+});
+
+// The writers, not just the formatters.
+//
+// Rounds 33 and 36 both found this code unpinned, for the same reason:
+// nothing in this suite can import `extension.ts`. 0.2.2 moved the
+// formatting into `versionInfo.ts` and round 36 showed that was only half
+// -- the *condition* stayed at the call site, and moving the note loop
+// inside `if (!compatible)` restored 024.49's symptom with 182 tests
+// green. The condition lives in `writeHandshakeLines` now, so that
+// mutation cannot be written in `extension.ts` at all.
+describe('what reaches the Output channel', () => {
+  function record() {
+    const lines: string[] = [];
+    return { sink: { appendLine: (line: string) => lines.push(line) }, lines };
+  }
+
+  function noteworthy() {
+    return compareVersionInfo(
+      bundledClient(),
+      baseServer({ ruby: { engine: 'ruby', version: '3.3.9', platform: 'arm64-darwin25' } })
+    );
+  }
+
+  it('writes the note at start-up on a Ruby the payload was not built for', () => {
+    const { sink, lines } = record();
+
+    writeHandshakeLines(sink, noteworthy(), 'billing-api');
+
+    assert.strictEqual(lines.length, 1);
+    assert.ok(lines[0].startsWith('OvalLSP (billing-api): '));
+    assert.ok(lines[0].includes('Ruby version differs'));
+  });
+
+  // The excluding case for the branch: a compatible Core with nothing to
+  // note writes nothing at all, so a build that logged on every start-up
+  // would fail here.
+  it('writes nothing at start-up when everything matches', () => {
+    const { sink, lines } = record();
+
+    writeHandshakeLines(sink, compareVersionInfo(bundledClient(), baseServer()), 'billing-api');
+
+    assert.deepStrictEqual(lines, []);
+  });
+
+  it('writes the incompatibility block, headed by the folder, when they do not match', () => {
+    const { sink, lines } = record();
+    const diagnostic = compareVersionInfo(bundledClient({ currentTarget: 'darwin-x64' }), baseServer());
+
+    writeHandshakeLines(sink, diagnostic, 'billing-api');
+
+    assert.ok(lines.some((l) => l.includes('OvalLSP version compatibility (billing-api)')));
+    assert.ok(lines.some((l) => l.includes('Platform mismatch')));
+  });
+
+  it('writes the note in Show Version Information as well', () => {
+    const { sink, lines } = record();
+
+    writeVersionInformation(sink, noteworthy());
+
+    assert.ok(lines.some((l) => l.includes('Compatible: yes')));
+    assert.ok(lines.some((l) => l.includes('Ruby version differs')));
   });
 });

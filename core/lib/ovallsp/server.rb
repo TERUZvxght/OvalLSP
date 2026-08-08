@@ -384,22 +384,10 @@ module Ovallsp
 
     def reindex(document)
       summary = @parser_service.summarize(document)
-      invalidate_stale_observations if apply_file_summary(summary)
-      # *Not* inside that `if`. `WorkspaceIndex#replace_file` returns false
-      # for content it already holds, which is a `didChange` whose text is
-      # byte-identical to the indexed text -- a formatter applying a
-      # full-range replace that changes nothing, another extension writing
-      # the buffer, a client re-sending. The index is right to do nothing
-      # there; the publish is not, because the client asked for this
-      # version and `publishDiagnostics` carries one.
-      #
-      # Found while the 0.2.2 debounce was in place, where it was
-      # user-visible: such an edit abandoned the *previous* edit's pending
-      # report and left a syntax error with an empty Problems panel
-      # (024.54). The debounce was rolled back and this was not -- it is a
-      # correction to the synchronous path, which stands on its own, and
-      # `server_publish_invariant_spec` pins it.
-      publish_diagnostics(document)
+      if apply_file_summary(summary)
+        invalidate_stale_observations
+        publish_diagnostics(document)
+      end
     rescue StandardError => e
       # Parsing must never take the server down: keep the previous summary
       # (if any) and let static features degrade gracefully for this file.
@@ -1330,9 +1318,12 @@ module Ovallsp
       Cache::Store.mark_workspace(scope_dir, Cache::Key.canonical_root(@workspace_root))
       store = Cache::Store.new(cache_dir: cache_dir)
       # After the directory exists, so the current generation is never the
-      # one swept. Once per start: a generation is only minted when the
-      # key changes, which is a Ruby upgrade, a `bundle install` or a
-      # release, not something that happens mid-session.
+      # one swept. A generation is only minted when the key changes --
+      # a Ruby upgrade, a `bundle install`, a release -- so there is
+      # normally nothing to sweep after the first start. `Re-index
+      # Workspace` reaches this again and starts another sweep; harmless,
+      # since removing what is already removed is a no-op and the thread
+      # is tracked either way.
       #
       # On a background thread, because this runs on the `initialize`
       # dispatch and every request the editor sends afterwards queues

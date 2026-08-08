@@ -290,6 +290,25 @@ RSpec.describe Ovallsp::Cache::Store do
       end
     end
 
+    # And half an hour later it is still kept, which is what stops the
+    # constant being set to anything positive. The window it covers is two
+    # syscalls wide; the value is an hour because a *pre-0.2.1* generation
+    # is the other thing this branch removes, and nothing has written one
+    # since 0.2.1 shipped.
+    it "keeps an unmarked directory half an hour old" do
+      Dir.mktmpdir do |root|
+        racing = File.join(root, "another-window")
+        FileUtils.mkdir_p(racing)
+        aged = Time.now - (30 * 60)
+        File.utime(aged, aged, racing)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(racing)).to be(true)
+      end
+    end
+
     # Pre-0.2.1 generations sat directly in the root and can never be read
     # again -- the version in the key guarantees a miss -- so they are the
     # 2.8 GB that was measured and nothing else will ever reclaim them.
@@ -298,10 +317,12 @@ RSpec.describe Ovallsp::Cache::Store do
         legacy = File.join(root, "0123abc")
         FileUtils.mkdir_p(legacy)
         File.write(File.join(legacy, "e.cache"), "x")
-        # Older than `UNMARKED_SCOPE_GRACE`, which is what distinguishes a
-        # generation nothing has written since 0.2.1 from a scope another
-        # window created a moment ago.
-        aged = Time.now - (Ovallsp::Cache::Store::UNMARKED_SCOPE_GRACE + 60)
+        # Two days, an absolute figure rather than
+        # `UNMARKED_SCOPE_GRACE + 60`. Aging relative to the constant makes
+        # *any* positive value pass, which is the defect round 33 found for
+        # `ABSENT_WORKSPACE_GRACE` and round 36 found here: setting this one
+        # to one second left all 1,936 examples green.
+        aged = Time.now - (2 * 24 * 60 * 60)
         File.utime(aged, aged, legacy)
         current = generation(scope_for(root, "mine", root), "current", 0)
 

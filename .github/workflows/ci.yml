@@ -169,6 +169,29 @@ jobs:
   # hygiene, not about producing a release-quality Apple Silicon binary --
   # see the separate apple-silicon-release workflow for the real,
   # native-arm64 build.
+  site-parity:
+    name: Site parity (links, matrix, roadmap, version)
+    runs-on: ubuntu-latest
+    # Here rather than only in `pages.yml`, which has a `paths:` filter of
+    # `site/**` plus the script itself. Every pairing this script checks
+    # has its *other* end outside that filter -- `README.md` for the
+    # capability matrix, `docs/ROADMAP.md` for the roadmap items,
+    # `vscode/package.json` for the advertised version -- so the commit
+    # shape the checks exist to catch is exactly the one that did not
+    # trigger them. 0.2.1 updated the Markdown and the README and not the
+    # site, twice, and neither touched `site/`.
+    #
+    # `ci.yml` has no paths filter, so this runs on everything.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Verify every internal link, asset, anchor and cross-document count
+        run: ruby scripts/check_site_links.rb
+
   package-contents-inspection:
     name: Package contents inspection
     runs-on: ubuntu-latest

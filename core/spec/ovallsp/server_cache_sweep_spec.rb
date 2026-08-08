@@ -90,6 +90,47 @@ RSpec.describe "Ovallsp::Server cache generation sweep" do
     expect(sweep_thread).not_to be_alive
   end
 
+  # The scope directory is marked before the generation is created.
+  #
+  # `Store.new` makes the scope on its way to the generation, so marking
+  # after it leaves a window in which the scope exists unmarked -- and
+  # `prune_workspaces` removes an unmarked child of the cache root. The
+  # ordering is what narrows that window (`UNMARKED_SCOPE_GRACE` is what
+  # closes it), and round 36 found it unpinned: swapping the two lines
+  # back left all 1,936 examples green.
+  #
+  # Observed as the order of the two calls. What matters is that the
+  # marker is on disk before anything else in that scope is, and these
+  # are the only two things that write there.
+  it "marks the scope before it creates the generation inside it" do
+    order = []
+    allow(Ovallsp::Cache::Store).to receive(:mark_workspace).and_wrap_original do |original, *args|
+      order << :marked
+      original.call(*args)
+    end
+    allow(Ovallsp::Cache::Store).to receive(:new).and_wrap_original do |original, **kwargs|
+      order << :generation
+      original.call(**kwargs)
+    end
+    allow(Ovallsp::Cache::Store).to receive(:prune_generations)
+
+    Dir.mktmpdir do |cache_home|
+      Dir.mktmpdir do |workspace|
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+          frame(jsonrpc: "2.0", method: "initialized", params: {}) +
+          frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+        with_cache_home(cache_home) do
+          Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger,
+                              workspace_root: workspace).run
+        end
+      end
+    end
+
+    expect(order.first(2)).to eq(%i[marked generation])
+  end
+
   def with_cache_home(dir)
     previous = ENV.fetch("XDG_CACHE_HOME", nil)
     ENV["XDG_CACHE_HOME"] = dir
