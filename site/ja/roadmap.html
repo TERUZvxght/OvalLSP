@@ -172,6 +172,29 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v022">
+          <div class="tl-version">
+            <span class="v">0.2.2</span>
+            <span class="mark mark--yes">公開済み</span>
+          </div>
+          <h3>ファイルを削除していたテストと、必要だった封じ込め</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>気づくような変化はありません。</strong>このリリースは、このリポジトリ自身のテストスイートにあった欠陥が実行マシンのファイルを破壊したために存在します。公開済みの拡張機能は影響を受けておらず、受けようがありませんでした。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>キャッシュが行う削除はすべて1つの関数を通るようになりました。</strong>キャッシュrootの外のパスを拒否します。各呼び出し側が自分で対象を計算する形をやめました。</span>
+            </li>
+          </ul>
+          <p class="text-mute">
+            全容は
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a>
+            にあります。すべてのリリースはそこに完全な形で記録されています。
+          </p>
+        </article>
+
         <article class="tl-item tl-item--future" id="v030">
           <div class="tl-version"><span class="v">0.3.0</span></div>
           <h3>gem が定義しているものを知る</h3>

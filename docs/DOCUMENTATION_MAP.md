@@ -26,7 +26,7 @@ updated in the same change, not "later".
 |---|---|---|
 | **A capability** (anything a user can now do, or can no longer do) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md` (add/alter the row **and** its E2E example), README's matrix in `README.md` + `README.ja.md`, `site/capabilities.html` + `site/ja/capabilities.html`, both changelogs | `core/spec/e2e/capability_coverage_spec.rb` (row ⇔ E2E example), `core/spec/meta/*_parity_spec.rb` (EN ⇔ JA). README's own pair is **not** among them — see 024.25 |
 | **A version number** | `core/lib/ovallsp/version.rb`, `core/Gemfile.lock`, `vscode/package.json`, `vscode/package-lock.json` (two places), both changelogs — and, once it is published, `docs/RELEASE_ARTIFACTS.md` | `core/spec/meta/changelog_parity_spec.rb`, `vscode/src/test/unit/versionPairing.test.ts`, `core/spec/meta/release_artifacts_spec.rb` (every `v*` tag is accounted for) |
-| **A roadmap item** (shipped, dropped, moved) | `docs/ROADMAP.md` + `.ja.md`, README's matrix, `site/roadmap.html` + `site/ja/roadmap.html`, the matching `024.R*` entry in `docs/design/tasks/024-deferred-review-findings.md` | `core/spec/meta/roadmap_parity_spec.rb` (README ⇔ roadmap) and `scripts/check_site_links.rb` (roadmap ⇔ `site/roadmap.html` + `site/ja/roadmap.html`, by item count per version — added in 0.2.2 after the site sat a whole release behind on two of them) |
+| **A roadmap item** (shipped, dropped, moved) | `docs/ROADMAP.md` + `.ja.md`, README's matrix, `site/roadmap.html` + `site/ja/roadmap.html`, the matching `024.R*` entry in `docs/design/tasks/024-deferred-review-findings.md` | `core/spec/meta/roadmap_parity_spec.rb` (README ⇔ roadmap) and `scripts/check_site_links.rb` (roadmap ⇔ `site/roadmap.html` + `site/ja/roadmap.html`, by item count per version — added in 0.2.3 after the site sat a whole release behind on two of them) |
 | **A change reverted mid-release** (see CLAUDE.md's same-place rule) | a `024.*` entry naming the root cause and the direction actually needed, both changelogs if a bullet was already written for it, and the section of `CLAUDE.md` the episode informs | — |
 | **A review round finding the same place the previous round did** | a mechanical countermeasure — a shared implementation, a rule moved to where the value is produced, a guard given the input it could not see — *not* a regression test for the one instance, and not a third hand fix | — |
 | **A deferred finding** (`024.*`) | its `yaml` metadata block in `docs/design/tasks/024-deferred-review-findings.md` — `status`, and `released-in` once it is resolved; delete the entry once nothing in the tree still cites it by number — grep first, do not go by the calendar (see that file's own legend) | — |
@@ -103,7 +103,7 @@ page — while this document said the matrix was machine-checked. The
 mutation test that caught the English half was never run against the
 Japanese one; it is now, in both directions.
 
-The roadmap pages joined that list in 0.2.2, by item count per version
+The roadmap pages joined that list in 0.2.3, by item count per version
 against `ROADMAP.md` and `ROADMAP.ja.md`. It was added because the site
 had been a whole release behind on *two* separate moves — 0.2.1 sent
 `activeParameter` to 0.4.0 and brought `documentHighlight` and `@ivar`

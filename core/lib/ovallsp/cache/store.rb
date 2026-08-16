@@ -202,6 +202,18 @@ module Ovallsp
           # -- the containment is already here rather than needing to be
           # remembered.
           remove_within(cache_root, path)
+        rescue StandardError
+          # Per entry, not per sweep. `.prune_generations`' single outer
+          # rescue meant anything raised while walking *another
+          # workspace's* directory abandoned the rest of the walk --
+          # including `prune_generations_of`, which prunes the workspace
+          # being opened. One unreadable, half-removed or concurrently
+          # removed sibling therefore switched cache tidying off
+          # permanently, on exactly the machines the feature exists for.
+          #
+          # The asymmetry was already visible here: `seconds_since_write`
+          # rescues per call while the loop around it did not.
+          next
         end
       end
 
@@ -255,10 +267,18 @@ module Ovallsp
       # an unpinned line is a defect in this repository whichever direction
       # it errs in. What it would have saved is a wasted enumeration of a
       # directory nothing will be removed from.
+      # `Errno::ENOENT` is swallowed here rather than left to a caller's
+      # rescue, because "removing what is already removed is a no-op" is a
+      # claim `Server#build_cache_store` makes about re-entering the sweep
+      # and `FileUtils.remove_entry` does not honour -- it raises. Two
+      # windows sweeping one cache root, or `Re-index Workspace` starting
+      # a second sweep, are the ordinary ways to reach it.
       def self.remove_within(root, path)
         return unless inside?(root, path)
 
         FileUtils.remove_entry(path)
+      rescue Errno::ENOENT
+        nil
       end
 
       # Strict containment: `root` itself is never removable, and a sibling

@@ -42,17 +42,33 @@ RSpec.describe "documented example counts" do
     spec_files_on_disk.length == RSpec.configuration.files_to_run.length
   end
 
+  # Every `*_spec.rb` under `core/` that is not one of ours -- a vendored
+  # gem's own suite under `vendor/bundle`, most likely. These are allowed
+  # to exist; what is not allowed is for the runner to have picked one up,
+  # because then `files_to_run` outgrows `spec_files_on_disk`,
+  # `whole_suite?` answers false, and the three count checks below skip
+  # while reporting the same green as a run that passed.
+  def foreign_spec_files
+    Dir.glob(File.expand_path("../../**/*_spec.rb", __dir__)) - spec_files_on_disk
+  end
+
   # Runs on every invocation, filtered or not, because the defect above
   # was invisible precisely where the checks below are: a guard that
   # decides it is not applicable reports the same green as one that
-  # passed. This one cannot skip, so the next thing that drops a
-  # `*_spec.rb` inside `core/` fails here rather than silently switching
-  # the count off.
-  it "decides what the whole suite is from spec/ alone, not from anything installed beside it" do
-    stray = spec_files_on_disk.reject { |file| file.start_with?("#{spec_root}/") }
+  # passed.
+  #
+  # It asks the question at the end that can actually be answered wrongly.
+  # Until round 37 it compared `spec_files_on_disk` against `spec_root`,
+  # which is where that glob is rooted -- so every path it could return
+  # started with the prefix it was tested against and `stray` was `[]` by
+  # construction. It could not fail, which is the one property this file's
+  # whole subject says a guard must not have.
+  it "does not let a spec from outside spec/ into the run the counts are taken from" do
+    picked_up = foreign_spec_files & RSpec.configuration.files_to_run
 
-    expect(stray).to be_empty,
-                     "these are not this suite's specs, and counting them makes the checks below skip: #{stray.first(3).join(', ')}"
+    expect(picked_up).to be_empty,
+                         "these are not this suite's specs, and counting them makes the checks below skip: " \
+                         "#{picked_up.first(3).join(', ')}"
   end
 
   # `1,833` and `1833` are the same claim; the documents use the first and

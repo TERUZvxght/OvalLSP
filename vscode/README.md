@@ -223,7 +223,7 @@ server extensions for that workspace.
    the previous release's parse results for every file whose bytes had
    not changed, so its fixes did not reach them. Directories for keys no
    longer in use are swept at startup, the eight most recent kept — in
-   the background as of 0.2.2, so the first launch after an upgrade does
+   the background as of 0.2.3, so the first launch after an upgrade does
    not wait for it. A workspace that has vanished from disk is kept for
    thirty days after it was last opened, since an unmounted volume looks
    the same from here; see [PRIVACY.md](PRIVACY.md).

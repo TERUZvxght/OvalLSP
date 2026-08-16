@@ -218,7 +218,7 @@ have not finished typing.
 So the answer is not another check — there is nothing in the text to
 check, and a rule about "receiver and message on different lines" would
 suppress the trailing-dot chain style, which people write on purpose.
-0.2.2 tried deferring the report until you stop typing, which would have
+0.2.3 tried deferring the report until you stop typing, which would have
 removed this while you are still going; that change was rolled back for
 unrelated reasons (024.57). Removing it needs the edit position, so that
 a report about the line under your cursor can be withheld — and that hides genuine errors on that line too, which is why
@@ -410,7 +410,7 @@ not a toast, and `OvalLSP: Show Version Information` repeats it.
 (0.2.1 shipped this with a red error toast still attached, from a second
 version check that had not been changed with the first, and with a
 Marketplace description promising the opposite behaviour. Both were fixed
-in 0.2.2.)
+in 0.2.3.)
 
 ## A class of yours named after a core class
 
@@ -432,7 +432,7 @@ this paragraph wrongly said was broken (024.47). <!-- documents: 024.47 -->
 disagree about version, protocol, build identity or payload hash, you get
 an error notification and the detail in the Output channel — and the
 session keeps running. It does not stop before answering, which is what
-both READMEs and both getting-started pages said until 0.2.2.
+both READMEs and both getting-started pages said until 0.2.3.
 
 That matters most for the two reasons you cannot see: a payload hash
 mismatch means the bundled Core is not the one this build shipped, and a
@@ -463,7 +463,7 @@ one-off signature load excluded: `net/http.rb` (2,574 lines) 2.1 s,
 the file does. The Core answers one request at a time, so hover,
 completion and signature help wait behind it.
 
-**0.2.2 attempted to change this and the attempt was rolled back.**
+**0.2.3 attempted to change this and the attempt was rolled back.**
 Deferring the report until you stop typing coalesces a burst into one
 analysis, and it was measured doing that — but it also produced two
 races and could not bound how many analyses of one file run at once, and
@@ -479,7 +479,7 @@ tenth of a second. <!-- documents: 024.45 -->
 
 ## Diagnostics still arrive on every keystroke
 
-**They are not debounced, and 0.2.2 tried to make them so.** Deferring a
+**They are not debounced, and 0.2.3 tried to make them so.** Deferring a
 file's report until you stop typing coalesces a burst into one analysis,
 and it did measurably do that — but the same change produced two ways for
 a report to land after the panel had been cleared, and it could not bound
@@ -535,6 +535,18 @@ features show it:
   `attr_accessor :a, :b, :c` declares six methods on one line, so the
   outline shows six children with identical ranges. Every name is right
   and each is genuinely a method, but six identical ranges read as a bug. <!-- documents: 024.27 -->
+
+## Two error notifications on a non-CRuby engine
+
+**If you point `ovallsp.rubyExecutablePath` at JRuby or TruffleRuby, each
+window shows two red notifications instead of one.** They report the same
+fact — the bundled native payload was built for CRuby and does not apply
+to your engine — once from the check that runs before the Core starts and
+once from the Extension/Core handshake afterwards. The first one's text
+also suggests `gem install prism rbs`, which is not the problem when the
+engine is the mismatch and may be advice you have already followed. The
+extension still starts and the Core still runs; the duplication is in the
+reporting only (024.65). <!-- documents: 024.65 -->
 
 ## Conflicts with other extensions
 

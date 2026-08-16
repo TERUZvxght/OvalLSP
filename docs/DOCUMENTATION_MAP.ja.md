@@ -27,7 +27,7 @@
 |---|---|---|
 | **ケイパビリティ**(ユーザーにできることが増えた・減った) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md`(行**と**そのE2E例の両方)、`README.md` + `README.ja.md` のマトリクス、`site/capabilities.html` + `site/ja/capabilities.html`、両CHANGELOG | `core/spec/e2e/capability_coverage_spec.rb`(行⇔E2E例)、`core/spec/meta/*_parity_spec.rb`(EN⇔JA)。READMEの日英対はこの中に**ありません**(理由は024.25) |
 | **バージョン番号** | `core/lib/ovallsp/version.rb`、`core/Gemfile.lock`、`vscode/package.json`、`vscode/package-lock.json`(2箇所)、両CHANGELOG。公開した後は `docs/RELEASE_ARTIFACTS.md` も | `core/spec/meta/changelog_parity_spec.rb`、`vscode/src/test/unit/versionPairing.test.ts`、`core/spec/meta/release_artifacts_spec.rb`(`v*` タグがすべて記載されていること) |
-| **ロードマップ項目**(提供開始・取り下げ・移動) | `docs/ROADMAP.md` + `.ja.md`、READMEのマトリクス、`site/roadmap.html` + `site/ja/roadmap.html`、`docs/design/tasks/024-deferred-review-findings.md` の対応する `024.R*` | `core/spec/meta/roadmap_parity_spec.rb`(README⇔ロードマップ)と `scripts/check_site_links.rb`(ロードマップ⇔`site/roadmap.html` + `site/ja/roadmap.html`、バージョンごとの項目数で照合。0.2.2 で追加 — サイトが2項目について丸1リリース遅れていたため) |
+| **ロードマップ項目**(提供開始・取り下げ・移動) | `docs/ROADMAP.md` + `.ja.md`、READMEのマトリクス、`site/roadmap.html` + `site/ja/roadmap.html`、`docs/design/tasks/024-deferred-review-findings.md` の対応する `024.R*` | `core/spec/meta/roadmap_parity_spec.rb`(README⇔ロードマップ)と `scripts/check_site_links.rb`(ロードマップ⇔`site/roadmap.html` + `site/ja/roadmap.html`、バージョンごとの項目数で照合。0.2.3 で追加 — サイトが2項目について丸1リリース遅れていたため) |
 | **リリース途中で巻き戻した変更**(CLAUDE.md の同一箇所規則を参照) | 根本原因と本来必要な方向を明記した `024.*` エントリ、既に箇条書きを書いていた場合は両CHANGELOG、その経験が示す `CLAUDE.md` の該当節 | — |
 | **前ラウンドと同じ箇所を指摘したレビューラウンド** | 機械的な対策 — 実装の共有、値を作る場所へのルールの移動、見えていなかった入力をガードに与えること。その1件に対する回帰テストは対策ではなく、3度目の手当ても対策ではない | — |
 | **先送り項目**(`024.*`) | `docs/design/tasks/024-deferred-review-findings.md` の `yaml` メタデータブロック(`status`、解決したら `released-in`)。エントリの削除は、その番号を引用している箇所がツリーに1つも無くなってから——暦ではなく grep で判断する(同ファイルの凡例を参照) | — |
@@ -87,7 +87,7 @@
 と `Core が起動し` など)。同一の文面を要求すれば、検査は厳しくなりますが
 文章は悪くなります。2つの写しが本当に共有しているのは表の順序です。
 
-0.2.2 でロードマップのページも加わりました。`ROADMAP.md`・`ROADMAP.ja.md`
+0.2.3 でロードマップのページも加わりました。`ROADMAP.md`・`ROADMAP.ja.md`
 に対し、バージョンごとの項目数で照合します。追加したのは、サイトが**2件**の
 移動について丸1リリース遅れていたからです。0.2.1 は `activeParameter` を
 0.4.0 へ送り、`documentHighlight` と `@ivar` 補完を 0.3.0 へ戻しました。

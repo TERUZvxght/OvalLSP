@@ -245,7 +245,7 @@ RSpec.describe "Ovallsp::Server controller-to-view instance variable propagation
     expect(sent_messages.first[:result]).to eq(type: "User")
   end
 
-  # 024.61. `QueryService#type_at` unifies *resolution*, so two readers
+  # 024.63. `QueryService#type_at` unifies *resolution*, so two readers
   # asking it the same question get the same answer -- but a template's
   # `@ivar` has no assignment in the template, so its type comes entirely
   # from the environment the caller passes in, and that environment is
@@ -265,8 +265,8 @@ RSpec.describe "Ovallsp::Server controller-to-view instance variable propagation
   #
   # The real fix is structural and is not here: the environment should be
   # obtained where it is produced, so that no caller can omit it. That
-  # moves ~425 lines out of `Server` and is its own task (024.61).
-  it "answers a template's `@user.` from the same type hover names for `@user` (024.61)" do
+  # moves ~425 lines out of `Server` and is its own task (024.63).
+  it "answers a template's `@user.` from the same type hover names for `@user` (024.63)" do
     view_uri = "file:///app/views/users/show.html.erb"
     input =
       open("file:///app/models/user.rb", "class User\n  def full_name\n  end\nend\n") +

@@ -237,6 +237,25 @@ RSpec.describe "deferred findings metadata" do
                          "Every `## 024.N` heading needs one, directly beneath it."
     end
 
+    # `entries` builds a Hash, so a reused number keeps the *last* entry
+    # and discards the first silently -- and `parses every entry` cannot
+    # see it either, because subtracting the parsed keys from the headings
+    # leaves nothing when the duplicate is the same string twice. The
+    # discarded entry's `status`/`user-visible` are then checked by
+    # nothing, and the day either number is cited in `KNOWN_LIMITATIONS`
+    # the citation guards answer from the wrong entry.
+    #
+    # Round 37, after two entries were appended as 024.60 by a renumber
+    # that read the register's highest number before a merge added
+    # another. Reading the file is what failed; a check is what does not.
+    it "gives every entry a number of its own" do
+      duplicated = DeferredFindings.headings(deferred).tally.select { |_, count| count > 1 }
+
+      expect(duplicated.keys).to be_empty,
+                                 "reused entry numbers: #{duplicated.keys.join(", ")}. " \
+                                 "A number keyed twice means one entry's metadata is never read."
+    end
+
     it "finds the open defects it is meant to guard" do
       expect(DeferredFindings.open_defects(deferred)).not_to be_empty
     end

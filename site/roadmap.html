@@ -177,6 +177,29 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v022">
+          <div class="tl-version">
+            <span class="v">0.2.2</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>A test that deleted things, and the containment it needed</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Nothing you can notice changes.</strong> This release exists because a defect in this repository&rsquo;s own test suite destroyed files on the machine running it. The published extension was never affected and could not have been.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Every deletion the cache performs now goes through one function</strong> that refuses a path outside the cache root, instead of each call site computing its own target.</span>
+            </li>
+          </ul>
+          <p class="text-mute">
+            The full account is in the
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.md">changelog</a>,
+            which is where every release is recorded in full.
+          </p>
+        </article>
+
         <article class="tl-item tl-item--future" id="v030">
           <div class="tl-version"><span class="v">0.3.0</span></div>
           <h3>Knowing what the gems define</h3>

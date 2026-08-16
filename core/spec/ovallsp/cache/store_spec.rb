@@ -194,6 +194,45 @@ RSpec.describe Ovallsp::Cache::Store do
       dir
     end
 
+    # One bad sibling must not cost the caller its own tidying.
+    #
+    # `.prune_generations` has a single outer rescue covering both halves,
+    # so anything raised while walking *another workspace's* directory
+    # abandoned the rest of the sweep -- including `prune_generations_of`,
+    # the half that prunes the workspace being opened. The machine this
+    # feature exists for (28,643 abandoned directories, 2.8 GB) is exactly
+    # the one likely to hold a half-removed or unreadable entry, and one
+    # of those switched cache tidying off permanently and silently.
+    #
+    # Round 37 found it; 0.2.3 moves the sweep to a background thread and
+    # a second window sweeping the same root concurrently makes the racing
+    # form ordinary rather than exotic.
+    #
+    # The obstacle has to be a scope the walk actually *reads*. A marker
+    # that is a directory does not work: `File.file?` is false for it, so
+    # the scope takes the unmarked branch and `UNMARKED_SCOPE_GRACE`
+    # short-circuits before anything raises -- a fixture that cannot
+    # distinguish the two behaviours, which this file has been caught on
+    # before. An unreadable marker file is read and raises `EACCES`.
+    it "prunes this workspace's generations even when another scope raises mid-walk" do
+      Dir.mktmpdir do |root|
+        obstacle = File.join(root, "obstacle")
+        described_class.mark_workspace(obstacle, root)
+        File.chmod(0o000, File.join(obstacle, Ovallsp::Cache::Store::WORKSPACE_MARKER))
+        skip "running as a user that can read a 000 file" if File.readable?(File.join(obstacle, ".workspace"))
+
+        mine = scope_for(root, "mine", root)
+        10.times { |i| generation(mine, "g#{i}", i + 1) }
+        current = generation(mine, "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 3)
+
+        generations = Dir.children(mine).map { |name| File.join(mine, name) }.select { |path| File.directory?(path) }
+
+        expect(generations.length).to eq(3)
+      end
+    end
+
     # How long ago this workspace was last *opened*. `.mark_workspace`
     # rewrites the marker on every launch, so its mtime is that; the scope
     # directory's own mtime is something else entirely (it advances when a

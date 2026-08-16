@@ -3461,7 +3461,7 @@ shared `installExecutableFixture` rather than copied into both suites.
 Ten consecutive runs green afterwards, and faster, because the failing
 paths had been spending their time in timeouts.
 
-## 024.60 Two per-file stores are separated by nothing but their payload
+## 024.62 Two per-file stores are separated by nothing but their payload
 
 ```yaml
 status: open
@@ -3551,7 +3551,7 @@ produced this entry. Worth noting as a method: describing the design to
 someone who has not read it is a different probe from reviewing a diff,
 and it found something eight rounds of review over this layer had not.
 
-## 024.61 The dispatch layer owns view inference, and it has broken the query layer's one guarantee twice
+## 024.63 The dispatch layer owns view inference, and it has broken the query layer's one guarantee twice
 
 ```yaml
 status: open
@@ -3729,3 +3729,100 @@ than after. Doing it inside a review loop is what `CLAUDE.md`'s "during a
 review loop, fix; do not add" exists to prevent — the move touches a
 guard spec, and a change set that grows a guard mid-loop resets the round
 that was reviewing it.
+
+## 024.64 Three rounds on `extension.ts`'s wiring, and the countermeasure was aimed at the symptom
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  The tree is correct today; round 37 confirmed the behaviour, not a
+  regression. What is recorded is that two countermeasures in a row
+  failed to pin it, so the next edit to this wiring is as unprotected as
+  it was before round 33.
+```
+
+**Area:** `vscode/src/extension.ts` (the handshake note call site),
+`vscode/src/versionInfo.ts` (`writeHandshakeLines`),
+`vscode/src/test/`, `.github/workflows/ci.yml`
+
+Three rounds, same place:
+
+| round | finding | what was done |
+|---|---|---|
+| 33 | Both `extension.ts` note loops unpinned — nothing in `vscode/src/test` reaches that file | formatting moved into `versionInfo.ts`, five tests added |
+| 36 | The note loops *still* unpinned — round 33's finding one level out | the *condition* moved into `writeHandshakeLines`, so "the mutation cannot be expressed at the call site" |
+| 37 | It can. Moving the call inside `if (!diagnostic.compatible)` leaves `npm run test:unit` at 186 passing | — |
+
+Round 37 restored 024.49's symptom exactly — a Ruby the payload was not
+built for gets no Output-channel note at start-up — and no test noticed.
+
+`CLAUDE.md`'s rule is explicit about what a third hit buys: not a fourth
+fix. This entry is the deliverable.
+
+**The root cause, which neither countermeasure addressed.** Both moved
+code *out of* `extension.ts`. That pins the code and never the wiring,
+because the thing being got wrong is which line calls what, and no test
+in `vscode/src/test/unit` executes `extension.ts` at all — 024.17 records
+that, and it is still true. `activate()` runs only under
+`test:integration`, and CI runs `test:unit`. So every countermeasure of
+the "extract it somewhere testable" shape will pass while the call site
+stays free.
+
+**The direction that was actually needed.** Something that runs
+`activate()` in CI. That is one of:
+
+1. `test:integration` in the CI workflow, which needs a VS Code download
+   and a display; the reason it was never added is cost, not principle.
+2. A seam that lets the wiring be driven without `vscode` — `activate()`
+   split so the per-folder start path is a pure function of injected
+   collaborators, with `extension.ts` reduced to the part that only wires
+   VS Code objects together. That is a refactor of the file, not another
+   extraction from it.
+
+Neither belongs in a review loop. **Re-scoped: this is its own task**, and
+the change set returns to what it was about.
+
+**What this entry does not ask for.** Reverting rounds 33 and 36. Their
+output — `writeHandshakeLines`, its five tests, the note named by folder
+— is correct and tested; what failed is the claim that it made the call
+site unmutable. The claim is what is being rolled back, and the comment
+in `versionInfo.ts` asserting it should be corrected rather than left to
+mislead the next reader.
+
+## 024.65 A different Ruby engine produces two error toasts where it produced one
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `vscode/src/platformCompatibility.ts` (the engine branch),
+`vscode/src/extension.ts` (the start-time notification and the handshake
+notification)
+
+On JRuby or TruffleRuby — reachable only by setting
+`ovallsp.rubyExecutablePath` — the start-time compatibility check now
+returns `compatible: false` for an engine mismatch, which raises an error
+toast; the handshake then reports the same engine mismatch and raises a
+second. Neither call site returns, so the client starts either way. The
+user gets two stacked red notifications per window for one fact.
+
+The reason text on the first is also `incompatibilityReason`, which
+advises `gem install prism rbs` — produced without probing, and wrong for
+a JRuby user who already has them.
+
+**Why it is recorded rather than fixed in this loop.** The obvious
+one-line fixes are both wrong. Suppressing the start-time toast loses the
+only notification in the case where the Core never starts, so there is no
+handshake to report anything. Suppressing the handshake toast makes the
+authority that actually talked to the Core silent. Deciding which of two
+deciders owns the notification is a design question, and the neighbouring
+code (024.64) is a three-round record of what happens when a call-site
+condition is added to settle one.
+
+**Direction:** one decider for the *notification*, not just for the
+verdict — most likely the handshake, with the start-time path escalating
+only when it can establish that no handshake will follow.
