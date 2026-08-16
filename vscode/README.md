@@ -47,7 +47,7 @@ implemented and tested today, not a roadmap.
 | macOS, Intel / Rosetta | Not supported in this Preview |
 | Linux, Windows | Not supported in this Preview |
 | Ruby 3.4.x | **Supported** (tested: 3.4.5, 3.4.7) |
-| Ruby 4.0.x | Best effort — the Core's suite is green under 4.0.6, and a non-gating CI job runs it on every push; a 4.0-only failure is recorded rather than fixed |
+| Ruby 4.0.x | Best effort — a non-gating CI job runs the Core suite under 4.0 on every push and reports how many examples ran; a 4.0-only failure is recorded rather than fixed |
 | Ruby 3.3.x, 3.5.x | Not verified |
 | Rails 8.1 | **Supported** (tested against the real integration suite) |
 | Rails ≤ 7.x | Not verified |

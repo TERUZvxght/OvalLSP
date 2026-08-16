@@ -3810,6 +3810,27 @@ site unmutable. The claim is what is being rolled back, and the comment
 in `versionInfo.ts` asserting it should be corrected rather than left to
 mislead the next reader.
 
+### Round 40: the same root, one file over
+
+`core/bin/ovallsp`'s call into `VendorBootstrap` is unpinned by the same
+absence. Reverting the script wholesale to `main`'s unscoped
+`vendor/bundle/**/gems/*/lib` leaves the Core suite at 1,953 examples, 0
+failures — nothing in `core/spec` builds a vendor payload and runs the
+script, and the only suites that drive a packaged Core are `vscode`'s two
+integration suites, which `ci.yml` does not run.
+
+So this release's headline ABI fix has a spec for the module and none for
+the call, exactly as `extension.ts` has tests for the formatting and none
+for the wiring. A regression there is either the `LoadError: linked to
+incompatible libruby` this release exists to remove, or — if the
+`activate!` call is dropped rather than reverted — a packaged Core that
+does not start at all.
+
+The direction is unchanged and is still option 1 above: something in CI
+that executes the packaged path. Two files now wait on it, which is worth
+knowing when it is scheduled.
+
+
 ## 024.65 A different Ruby engine produces two error toasts where it produced one
 
 ```yaml

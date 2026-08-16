@@ -325,14 +325,13 @@ function startClientForFolder(
           `OvalLSP: the Ruby interpreter selected for ${folder.name} is incompatible with this VSIX's bundled ` +
             'native dependencies. See the OvalLSP output channel for details.'
         );
-      } else if (compatibility.note) {
-        // Working, but not the way the VSIX packaged it: the bundled
-        // payload does not apply and this Ruby's own prism/rbs are being
-        // used. That is a fact for the Output channel, not an error --
-        // the previous arrangement showed a red toast on every window for
-        // a combination the Core runs green on.
-        outputChannel.appendLine(`OvalLSP: ${compatibility.note}`);
       }
+      // `compatibility.note` is deliberately *not* written here. The
+      // handshake writes the same fact, with this folder's name on it and
+      // a home in `Show Version Information`, and round 40 found both
+      // paragraphs arriving at every launch on exactly the 3.3/4.0
+      // population this release is for. One decider owns the
+      // notification; the verdict split is 024.65 and is still open.
 
       if (configPaths) {
         // Spawn the real binary directly -- bypassing `resolvedRubyCommand`

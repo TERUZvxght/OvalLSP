@@ -322,7 +322,7 @@ function removeNativeBuildArtifacts(vendorRoot) {
 // Bundler keeps the original downloaded `.gem` archives under
 // `vendor/bundle/ruby/<abi>/cache/` after extracting them into `gems/`.
 // Nothing ever loads them: `bin/ovallsp` only ever adds
-// `**/gems/*/lib` to `$LOAD_PATH`, never `cache/`.
+// `<engine>/<abi>/gems/*/lib` to `$LOAD_PATH`, never `cache/`.
 //
 // They must be deleted *here*, from the staged tree, rather than merely
 // excluded from the VSIX by `.vscodeignore` -- which is exactly what the

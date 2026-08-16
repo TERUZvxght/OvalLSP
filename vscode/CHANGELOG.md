@@ -14,8 +14,12 @@ the disproved approaches are kept below it under **Details**.
   version check calling the same situation incompatible, so the toast
   that change removed was still shown, on every window, worded
   differently. The Core is running under that Ruby, which is what makes
-  it a note rather than a fault; it goes to the Output channel now. A
-  different *engine* — a Core under JRuby — is still an incompatibility.
+  it a note rather than a fault; it goes to the Output channel now, once,
+  from the handshake. A different *engine* — a Core under JRuby — is
+  still reported as an incompatibility, and honestly this is the messier
+  half: you get the note *and* the incompatibility, because two checks
+  reach that verdict independently and only one of them was ever meant
+  to speak (024.65).
 - Fixed: the first launch after upgrading no longer waits while the old
   cache is swept. Putting the build's version into the cache key in 0.2.1
   abandons every directory the previous version wrote, and removing them

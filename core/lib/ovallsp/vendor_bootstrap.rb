@@ -32,7 +32,6 @@ module Ovallsp
     # Returns the directories added, in the order they were added.
     def activate!(vendor_root:, manifest_path:, load_path: $LOAD_PATH, warner: method(:warn),
                   abi: RbConfig::CONFIG["ruby_version"], engine_scope: RUBY_ENGINE)
-      return [] unless Dir.exist?(vendor_root)
 
       compatibility = VendorCompatibility.check(manifest_path: manifest_path, vendor_root: vendor_root)
       unless compatibility.compatible?

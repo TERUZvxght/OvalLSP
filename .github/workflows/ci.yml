@@ -57,22 +57,6 @@ jobs:
         working-directory: core
         run: bundle exec rspec --format documentation --format json --out tmp/rspec.json
 
-      - name: Fail if a documented-count check skipped
-        working-directory: core
-        run: |
-          ruby -rjson -e '
-            result = JSON.parse(File.read("tmp/rspec.json", encoding: "UTF-8"))
-            skipped = result.fetch("examples").select do |ex|
-              ex.fetch("file_path").include?("spec/meta/documented_counts_spec.rb") &&
-                ex.fetch("status") == "pending"
-            end
-            unless skipped.empty?
-              warn "the documented example-count checks skipped on a full run:"
-              skipped.each { |ex| warn "  #{ex.fetch("full_description")} -- #{ex["pending_message"]}" }
-              exit 1
-            end
-          '
-
       # `bundle exec rspec` exits 0 as long as nothing *failed* -- a
       # skipped example (RSpec's `pending`) doesn't fail the run on its
       # own, which is exactly how both real-Rails-backed suites behave
@@ -97,6 +81,22 @@ jobs:
       # is legitimate. Here it can: this step runs the whole suite by
       # construction, so a pending from that file means the number nobody
       # re-measures went unchecked again.
+      - name: Fail if a documented-count check skipped
+        working-directory: core
+        run: |
+          ruby -rjson -e '
+            result = JSON.parse(File.read("tmp/rspec.json", encoding: "UTF-8"))
+            skipped = result.fetch("examples").select do |ex|
+              ex.fetch("file_path").include?("spec/meta/documented_counts_spec.rb") &&
+                ex.fetch("status") == "pending"
+            end
+            unless skipped.empty?
+              warn "the documented example-count checks skipped on a full run:"
+              skipped.each { |ex| warn "  #{ex.fetch("full_description")} -- #{ex["pending_message"]}" }
+              exit 1
+            end
+          '
+
       - name: Fail if the real-Rails or capability suites were skipped instead of run
         working-directory: core
         run: |
@@ -164,7 +164,32 @@ jobs:
       # hard failure; this job is about the engine's own suite.
       - name: Run the suite that does not need a real Rails
         working-directory: core
-        run: bundle exec rspec
+        run: bundle exec rspec --format progress --format json --out tmp/rspec-4.json
+
+      # Non-gating is a decision about *failures*; it was never a decision
+      # to accept "nothing ran" as a pass. `continue-on-error` makes this
+      # job green whatever happens, so without a count nobody can tell a
+      # 4.0 run that passed from a 4.0 that never started -- which is
+      # exactly `CLAUDE.md`'s "a green suite is a measurement too" arriving
+      # in the one job whose whole purpose is to answer "is 4.0 green".
+      # Three published documents cite this job as continuous
+      # verification, so the count is what makes that claim mean
+      # something.
+      - name: Report the 4.0 example count, and fail this job if nothing ran
+        working-directory: core
+        run: |
+          ruby -rjson -e '
+            result = JSON.parse(File.read("tmp/rspec-4.json", encoding: "UTF-8"))
+            summary = result.fetch("summary")
+            count = summary.fetch("example_count")
+            line = "Ruby 4.0: #{count} examples, #{summary.fetch("failure_count")} failures"
+            File.write(ENV.fetch("GITHUB_STEP_SUMMARY", "/dev/null"), "#{line}\n", mode: "a")
+            warn line
+            if count.zero?
+              warn "the 4.0 suite contributed zero examples -- it did not run"
+              exit 1
+            end
+          '
 
   vscode:
     name: VS Code extension (TypeScript)
