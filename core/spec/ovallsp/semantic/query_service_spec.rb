@@ -2,7 +2,7 @@
 
 RSpec.describe Ovallsp::Semantic::QueryService do
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index, signatures: signatures) }
+  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
   let(:method_resolver) { Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index) }
   let(:model_registry) { Ovallsp::Models::ModelRegistry.new }
   let(:local_inferencer) { Ovallsp::LocalInferencer.new(model_registry: model_registry) }

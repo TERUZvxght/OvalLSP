@@ -2801,10 +2801,13 @@ rather than left to be noticed:
   gets blamed for a defect that predates it by two releases.
 - **The proxy should not be extended.** Adding inlay hints to the list of
   readers that "may decline" repeats the choice a third time and leaves
-  the predicate still unmodelled. `HierarchyIndex#initialize`'s
-  `signatures:` was kept for precisely this — it is the resolution-time
-  access the real predicate needs — and it is still unread. Reading it is
-  the fix; growing the list of exempt readers is not.
+  the predicate still unmodelled. What the fix needs is the signature
+  environment at *resolution* time, inside `HierarchyIndex`. A
+  `signatures:` keyword sat there unread from 0.2.1 until 0.2.3 waiting
+  for it and was deleted in 0.2.3 — an unpinned assignment is a defect
+  here however right the intention, and holding a parameter open for a
+  fix nobody has written is not the same as writing the fix. Whichever
+  shape it takes will pass the environment in with a reader attached.
 
 ## 024.48 The measurement tool ran an engine the server never runs
 

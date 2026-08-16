@@ -194,6 +194,21 @@ RSpec.describe Ovallsp::Cache::Store do
       dir
     end
 
+    # The fail-safe both grace periods rest on. `seconds_since_write`
+    # answering 0 means "written just now", so an unreadable mtime keeps a
+    # scope rather than removing it -- the conservative direction, and the
+    # only one that is safe when the question is whether to delete
+    # somebody's cache. Round 37 found it covered in neither direction.
+    #
+    # A path inside a tmpdir that was never created, never a fabricated
+    # absolute one: this method does not delete, but it is one call away
+    # from code that does, and that is the habit this file exists to keep.
+    it "treats a path whose mtime cannot be read as just written, rather than raising" do
+      Dir.mktmpdir do |dir|
+        expect(described_class.seconds_since_write(File.join(dir, "never-created"))).to eq(0)
+      end
+    end
+
     # One bad sibling must not cost the caller its own tidying.
     #
     # `.prune_generations` has a single outer rescue covering both halves,

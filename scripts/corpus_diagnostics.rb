@@ -72,13 +72,17 @@ workspace_index = Ovallsp::WorkspaceIndex.new
 model_registry = Ovallsp::Models::ModelRegistry.new
 signature_root = ENV.fetch("OVALLSP_SIGNATURE_ROOT", Dir.pwd)
 signatures = Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace_root: signature_root) }
-# Built the way `Server#initialize` builds it -- `signatures:` included.
+# Built the way `Server#initialize` builds it. The `signatures:` this
+# used to pass went with the parameter in 0.2.3: it was assigned and
+# never read. The rule that needed it lives in the diagnostics engine,
+# which takes its signatures from `SemanticContext` below -- 024.48's
+# fix therefore still holds, on a different basis than it was written on.
 # Without it the shadow rule in `HierarchyIndex#canonical_name` is inert,
 # so every number this script produced described a configuration no user
 # runs. That is not a smaller measurement, it is a measurement of
 # something else, and it is why a 55-report regression reached a release
 # whose headline figure came from here.
-hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index, signatures: signatures)
+hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
 method_resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
                                                         hierarchy_index: hierarchy_index)
 local_inferencer = Ovallsp::LocalInferencer.new(

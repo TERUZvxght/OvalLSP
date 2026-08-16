@@ -131,6 +131,39 @@ RSpec.describe "Ovallsp::Server cache generation sweep" do
     expect(order.first(2)).to eq(%i[marked generation])
   end
 
+  # Round 33 added a `begin/rescue` around the sweep's *start* so that a
+  # `ThreadError` costs a cleanup rather than the session's whole cache:
+  # letting it reach `#build_cache_store`'s own rescue returns a disabled
+  # store and makes every file cold. Round 37 reverse-applied that rescue
+  # and the entire suite stayed green, which by this repository's rule
+  # makes the line a defect however right the behaviour is.
+  #
+  # The two branches have to be told apart by *which* error is logged,
+  # because both leave a running server: with the rescue the sweep is
+  # skipped and the cache survives; without it the outer rescue fires and
+  # the cache is switched off for the session.
+  it "keeps the cache when the sweep thread cannot even be started" do
+    allow(Thread).to receive(:new).and_raise(ThreadError, "cannot create thread")
+
+    Dir.mktmpdir do |cache_home|
+      Dir.mktmpdir do |workspace|
+        input =
+          frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+          frame(jsonrpc: "2.0", method: "initialized", params: {}) +
+          frame(jsonrpc: "2.0", id: 2, method: "shutdown", params: nil) +
+          frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+        with_cache_home(cache_home) do
+          Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger,
+                              workspace_root: workspace).run
+        end
+      end
+    end
+
+    expect(logger).to have_received(:error).with(/failed to start the cache sweep/)
+    expect(logger).not_to have_received(:error).with(/continuing without one/)
+  end
+
   def with_cache_home(dir)
     previous = ENV.fetch("XDG_CACHE_HOME", nil)
     ENV["XDG_CACHE_HOME"] = dir
