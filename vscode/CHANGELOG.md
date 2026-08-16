@@ -108,7 +108,11 @@ and the capability tables promised something the build did not do.
   `String`. The engine stops asserting about a receiver it substituted;
   completion still offers that class's members, as it did in 0.2.0, and
   making all three readers agree is a design question rather than a patch
-  (024.47).
+  (024.47). (This section also carried a bullet claiming the completion
+  half was fixed. It was written while that change existed and was not
+  removed when the change was reverted three days later, so 0.2.1 shipped
+  a changelog contradicting itself about one behaviour — 0.2.3 deletes
+  it. What the release actually does is this bullet.)
 - Fixed: a file that does not parse gets its syntax errors and nothing
   else. Typing `.` at the end of a method made `a.end` a call, and the
   engine reported that your class has no method named `end` — on the
@@ -145,10 +149,6 @@ and the capability tables promised something the build did not do.
   contains an unpaired parenthesis inside a string or a comment —
   `raise ArgumentError, "bad )"` — and no longer answers with an inner
   call because of one.
-- Fixed: a workspace class sharing a core class's last segment
-  (`Serializer::Elements::String`) no longer answers for the core one in
-  **completion**. 0.2.1 fixed the diagnostic and left this half, so
-  `"hello".` still offered that class's methods and no String methods.
 - Fixed: `->() {}`, `!x`, `a && b` and `a || b` have a type. A default
   written `name || "anonymous"` is a String rather than nothing.
 - Fixed: **a method whose name ends in `!` or `?` gets answers.** Hover,
