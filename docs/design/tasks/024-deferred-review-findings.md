@@ -3842,15 +3842,21 @@ rounds of exactly that.
 notification)
 
 On JRuby or TruffleRuby — reachable only by setting
-`ovallsp.rubyExecutablePath` — the start-time compatibility check now
-returns `compatible: false` for an engine mismatch, which raises an error
-toast; the handshake then reports the same engine mismatch and raises a
-second. Neither call site returns, so the client starts either way. The
-user gets two stacked red notifications per window for one fact.
+`ovallsp.rubyExecutablePath` — the start-time compatibility check
+*briefly* returned `compatible: false` for an engine mismatch, raising an
+error toast, and the handshake then reported the same mismatch and raised
+a second. Neither call site returned, so the client started either way,
+and the user got two stacked red notifications per window for one fact.
 
-The reason text on the first is also `incompatibilityReason`, which
-advises `gem install prism rbs` — produced without probing, and wrong for
-a JRuby user who already has them.
+The reason text on the first was `incompatibilityReason`, which advised
+`gem install prism rbs` — produced without probing, and wrong for a JRuby
+user who already has them.
+
+**Past tense throughout: this describes code that no longer exists.**
+Round 39 found the paragraphs above written in the present, inside an
+entry whose own opening says the gate is reverted — 024.47's failure mode
+recurring in the entry that records a revert, which is the one CLAUDE.md
+keeps as a standing lesson.
 
 **Why it is recorded rather than fixed in this loop.** The obvious
 one-line fixes are both wrong. Suppressing the start-time toast loses the

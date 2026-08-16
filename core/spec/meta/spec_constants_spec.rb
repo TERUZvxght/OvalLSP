@@ -67,6 +67,47 @@ RSpec.describe "spec file constants" do
     end
   end
 
+  # The walker itself, stated with the cases that must *fail*. Round 39
+  # blinded `object_constants` to return `[]` for every file and this
+  # file stayed green: a guard that sees nothing passes exactly as
+  # happily as one that sees everything, and this is the third
+  # implementation of a walk whose first two were both wrong in that
+  # direction. Each example below is one of those two bugs.
+  describe ".object_constants" do
+    it "finds a constant inside a nested describe, which is still Object's" do
+      source = <<~RUBY
+        RSpec.describe "outer" do
+          describe "inner" do
+            DEEP = "x"
+          end
+        end
+      RUBY
+
+      expect(self.class.object_constants(source)).to eq(["DEEP"])
+    end
+
+    it "does not find one inside a class or module, which is not" do
+      source = <<~RUBY
+        module Wrapper
+          SCOPED = "x"
+        end
+
+        class Holder
+          ALSO_SCOPED = "x"
+        end
+      RUBY
+
+      # `Wrapper` and `Holder` themselves *are* Object's constants -- a
+      # top-level class or module name is exactly that, and the walker is
+      # right to report them. What must not appear is what is assigned
+      # *inside* them, which is the second implementation's bug.
+      found = self.class.object_constants(source)
+
+      expect(found).not_to include("SCOPED", "ALSO_SCOPED")
+      expect(found).to eq(%w[Wrapper Holder])
+    end
+  end
+
   it "defines each one in only one file" do
     owners = Hash.new { |hash, key| hash[key] = [] }
 

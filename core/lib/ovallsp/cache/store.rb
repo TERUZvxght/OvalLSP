@@ -285,17 +285,33 @@ module Ovallsp
       # an unpinned line is a defect in this repository whichever direction
       # it errs in. What it would have saved is a wasted enumeration of a
       # directory nothing will be removed from.
-      # `Errno::ENOENT` is swallowed here rather than left to a caller's
-      # rescue, because "removing what is already removed is a no-op" is a
-      # claim `Server#build_cache_store` makes about re-entering the sweep
-      # and `FileUtils.remove_entry` does not honour -- it raises. Two
-      # windows sweeping one cache root, or `Re-index Workspace` starting
-      # a second sweep, are the ordinary ways to reach it.
+      # Tolerance lives here for the same reason containment does: one
+      # place, so no call site can get it wrong.
+      #
+      # Rounds 37, 38 and 39 each found a different way for one bad entry
+      # to abandon the whole sweep -- an unreadable sibling scope, a
+      # generation vanishing between listing and sorting, and now a
+      # generation that cannot be removed at all (`EACCES`/`EPERM` from
+      # changed ownership, a restored backup, a read-only parent). The
+      # first two were fixed where they were found, which is what made a
+      # third one possible: `#prune_generations` has a single outer rescue,
+      # so anything reaching it discards every removal not yet made, and
+      # the sort is newest-first, so a blocker shields the entire older
+      # tail. On the machine 024.51 exists for -- 28,643 directories,
+      # 2.8 GB -- that is the accumulation resuming silently and for good.
+      #
+      # `SystemCallError` rather than `StandardError`: a failed *syscall*
+      # is the sweep's business to survive, and a `TypeError` or a bug in
+      # this class is not something to swallow on the way past. ENOENT is
+      # the ordinary member of that family -- two windows sweeping one
+      # root, or `Re-index Workspace` starting a second sweep -- and is
+      # what makes `Server#build_cache_store`'s "removing what is already
+      # removed is a no-op" true rather than merely stated.
       def self.remove_within(root, path)
         return unless inside?(root, path)
 
         FileUtils.remove_entry(path)
-      rescue Errno::ENOENT
+      rescue SystemCallError
         nil
       end
 

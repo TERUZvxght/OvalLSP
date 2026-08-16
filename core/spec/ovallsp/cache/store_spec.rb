@@ -240,7 +240,45 @@ RSpec.describe Ovallsp::Cache::Store do
         described_class.prune_generations(cache_root: root, current: current, keep: 3)
 
         remaining = Dir.children(mine).map { |n| File.join(mine, n) }.select { |p| File.directory?(p) }
+
+        # *Which* survives, not how many. `age_for_sort` answering 0.0
+        # sorts an unreadable entry to the oldest end, making it a removal
+        # candidate; `Float::INFINITY` would sort it to the newest end and
+        # keep it, evicting a readable generation in its place. A count
+        # assertion is satisfied by both -- the fixture problem round 39
+        # found, and the blind spot CLAUDE.md names: the method arrived
+        # whole, so reverse-applying its hunk only tested that it exists.
         expect(remaining.length).to eq(3)
+        expect(remaining).not_to include(vanishing)
+      end
+    end
+
+    # The third way one entry stopped the whole sweep, and the reason
+    # tolerance moved into `remove_within` rather than into a third loop.
+    # A generation that cannot be removed at all -- changed ownership, a
+    # restored backup, a read-only parent -- propagated out of
+    # `prune_generations_of` into `prune_generations`' single outer
+    # rescue, discarding every removal not yet made. The sort is
+    # newest-first, so a blocker shielded the entire older tail, on every
+    # launch, for good.
+    #
+    # Asserted against `remove_within` directly rather than through a
+    # sweep. Two attempts at an end-to-end fixture passed with the fix
+    # reverse-applied -- the first because the blocked directory ended up
+    # newest and so never became a removal candidate at all -- and a
+    # fixture that cannot distinguish the two behaviours is not a pin
+    # however green it is. This one was watched raising `Errno::EACCES`
+    # with the rescue narrowed back to `ENOENT`.
+    it "tolerates a removal it is not permitted to make" do
+      Dir.mktmpdir do |root|
+        victim = File.join(root, "victim")
+        FileUtils.mkdir_p(File.join(victim, "sub"))
+        File.chmod(0o500, victim)
+        skip "this user can write a 0500 directory" if File.writable?(victim)
+
+        expect { described_class.remove_within(root, victim) }.not_to raise_error
+      ensure
+        File.chmod(0o700, victim) if victim && Dir.exist?(victim)
       end
     end
 

@@ -279,6 +279,13 @@ export async function checkBundledCoreCompatibility(
   return { compatible: false, reason: incompatibilityReason(expected, actual, rubyCommand) };
 }
 
+// One caller since 0.2.3 reverted the engine gate that was the second.
+// Kept rather than inlined: it is eight lines of user-facing prose with
+// two interpolations, and folding that into the middle of a decision
+// function makes the decision harder to read for no gain. Round 39
+// flagged it as revert residue, which is the right question to ask --
+// 0.2.1 left an unreferenced `canonical` wrapper exactly that way. The
+// difference is that this one still has a caller.
 function incompatibilityReason(expected: string, actual: string, rubyCommand: string): string {
   return (
     `This VSIX's bundled native dependencies were built for ${expected}, but "${rubyCommand}" is ${actual}. ` +
