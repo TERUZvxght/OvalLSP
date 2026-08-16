@@ -44,6 +44,53 @@ Two further rules follow from that experience:
 - Never run this hunk-by-hunk sweep while another agent is mutating the same working tree. Concurrent mutation invalidates both results. Sequence them.
 - A spec whose fixture cannot distinguish the two candidate behaviours is unpinned even though it passes. Prefer fixtures where each branch of the decision yields a *different* observable answer (e.g. a block whose return type differs from the seed type, or two same-named classes in different namespaces), and assert the distinguishing value.
 
+## A test that deletes things, and an assertion that could not fail (mandatory)
+
+For six days, `bundle exec rspec` deleted the maintainer's installed
+applications. `store_spec.rb` called
+
+```ruby
+described_class.prune_generations(cache_root: "/nonexistent-cache-root", current: "/x", keep: 2)
+```
+
+to check that an unreadable cache root does not raise. The unreadable
+root was handled exactly as intended — and then the *second* half of the
+same method aimed itself at `File.dirname("/x")`, enumerated `/`, found
+more entries than it was told to keep, and removed all but the newest:
+`/Applications` first. It stopped only because a protected path made
+`remove_entry` raise. Identified by an Endpoint Security trace naming
+`rspec` as the process unlinking `/Applications/*.app`; reinstalling
+macOS had not helped, because re-cloning restores the cause.
+
+Three rules, each of which alone would have prevented it:
+
+- **An assertion that cannot fail is not a test.** `prune_generations`
+  swallows every error by design, so `.not_to raise_error` against it was
+  true before the method was written and would be true if it deleted the
+  disk. Before writing an example, ask what would have to happen for it
+  to fail; if the answer is "nothing", it is asserting nothing. This is
+  the same defect as an unpinned behavioural line, arriving from the
+  other direction — see "Test-first discipline" above.
+- **Contain a destructive operation where the deletion happens, not at
+  each caller.** Every call site here computed its own target and was
+  individually plausible; containment was an emergent property of all of
+  them being right at once, which is not a property. One function now
+  performs every removal in that class and refuses a path outside the
+  cache root, so no present or future caller can aim it elsewhere. An
+  entry-point guard is the symptom's fix; this is the class's.
+- **Never pass a fabricated absolute path to code that deletes.** The
+  spec's `"/nonexistent-cache-root"` and `"/x"` were chosen to be
+  obviously fake, which is what made them dangerous: `/x` does not exist,
+  but `File.dirname("/x")` does, and it is the machine. Destructive code
+  gets `Dir.mktmpdir`, always, including in the examples that assert it
+  does nothing.
+
+The wider lesson is about what "this test is safe" rests on. Nothing in
+the example named a directory anyone cared about; the path from it to
+`/Applications` ran through a `dirname` in another method. Reading the
+test could not reveal that, and reading the method it called could not
+either — only the two together.
+
 ## General implementation discipline (reaffirmed by Task 008.6)
 
 - Fix the underlying design, not the symptom. A local `if` patch that suppresses a symptom without addressing the structural cause is not an acceptable fix in this codebase.
@@ -196,6 +243,19 @@ change cannot affect, which must come out equal. 0.2.1's control was
 fail, the measurement is wrong until proven otherwise.** That is what
 caught the third one; nothing about re-reading the numbers would have.
 
+**A green suite is a measurement too, and it can be green because it did
+not run.** `spec/e2e/capabilities_spec.rb` and
+`spec/integration/real_rails_spec.rb` drive a real Rails application, and
+without `rails ~> 8.1` and `sqlite3` installed as **local** gems they
+skip in full while `rspec` still exits 0 — so a local run reports success
+while the suite that decides whether a capability row is true never
+executed. CI catches it ("Fail if the real-Rails or capability suites
+were skipped instead of run"), which means it bites locally and nowhere
+else. Before believing a green run, print the thing you are asserting:
+run those two files and check the example count is non-zero, exactly as
+the rule above says to do for a corpus diff. `CONTRIBUTING.md` carries
+the install command.
+
 ## Documentation is part of the change (mandatory)
 
 Before finishing any change a user could notice, open
@@ -214,6 +274,18 @@ Established after 0.2.0 shipped six capabilities without adding a single
 row to `docs/EXTENSION_CAPABILITIES.md` — the document `docs/PUBLISHING.md`
 defines a "capability" by — leaving the release's own version number
 unjustifiable on the project's own terms until a reviewer caught it.
+
+**A revert is the change most likely to leave documentation behind**, and
+it is the one least likely to look like it needs a pass: the prose was
+correct when it was written, and nothing about undoing a change announces
+that it also undid the reason for a paragraph. 0.2.1 reverted its
+resolution-side shadowing rule and left an unreferenced method, three
+comments describing the reverted arrangement as current, and a published
+changelog bullet claiming the reverted change as a fix — so the release
+shipped two bullets under one heading contradicting each other about one
+behaviour. All of it was found by re-measuring rather than by reading.
+The cheap check is to **grep the tree for the thing being reverted before
+committing the revert**, not after. 024.47 records the full list.
 
 ## Public repository privacy and secret handling
 
