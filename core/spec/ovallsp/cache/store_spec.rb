@@ -129,18 +129,17 @@ RSpec.describe Ovallsp::Cache::Store do
     end
   end
 
-  describe "#clear" do
-    it "removes every previously saved entry" do
-      Dir.mktmpdir do |cache_dir|
-        store = described_class.new(cache_dir: cache_dir)
-        store.save("/a.rb", summary)
-
-        store.clear
-
-        expect(store.load("/a.rb")).to be_nil
-      end
-    end
-  end
+  # `#clear` was removed in 0.2.2 and this is the example that covered it.
+  # It had no caller in `lib/` or `scripts/` -- only this block -- and what
+  # it did was `FileUtils.rm_rf` a path handed to the constructor, with
+  # every error swallowed: the same shape as the sweep that emptied
+  # `/Applications`, differing only in that nobody had yet aimed it wrong.
+  # Keeping it would also have meant carving an exception into
+  # `spec/meta/cache_removal_containment_spec.rb` for dead code, which
+  # weakens that guard for the live code it exists to protect.
+  #
+  # If a "clear this workspace's cache" command is ever wanted, it wants a
+  # method written for that caller, not this one re-attached.
   # Every component of the workspace digest -- a Ruby upgrade, a `bundle
   # install`, an RBS change, and now an OvalLSP release -- mints a *new*
   # generation directory and abandons the old one. Nothing ever removed
@@ -395,9 +394,45 @@ RSpec.describe Ovallsp::Cache::Store do
       end
     end
 
+    # `current` names a generation *inside* the unreadable root, which is
+    # the only shape a caller can actually produce: Server#build_cache_store
+    # derives `cache_dir` from `cache_root`. It used to read
+    # `cache_root: "/nonexistent-cache-root", current: "/x"`, and that pair
+    # cannot occur -- but it did reach `prune_generations_of("/", ...)`,
+    # which is the sweep the example below now pins.
     it "leaves a root it cannot read alone rather than raising" do
-      expect { described_class.prune_generations(cache_root: "/nonexistent-cache-root", current: "/x", keep: 2) }
-        .not_to raise_error
+      Dir.mktmpdir do |outside|
+        root = File.join(outside, "nonexistent-cache-root")
+
+        expect { described_class.prune_generations(cache_root: root, current: File.join(root, "w", "gen"), keep: 2) }
+          .not_to raise_error
+      end
+    end
+
+    # The defect this containment exists for, and the reason it is checked
+    # where the removal happens rather than only at the entry point.
+    #
+    # `prune_generations_of` sweeps whatever directory it is handed, and it
+    # was handed `File.dirname(current)`. A `current` outside `cache_root`
+    # therefore aimed the sweep at a directory that has nothing to do with
+    # this cache: with the old `current: "/x"` above, that directory was
+    # `/`, and the sweep removed every top-level directory on the machine
+    # except the most recently modified one -- `/Applications` first, and
+    # `/Users` next had `remove_entry` not raised on a protected path
+    # partway through. Nothing raised out of `.prune_generations`, because
+    # it swallows every error, so this suite stayed green across a week of
+    # deleting the developer's installed applications.
+    it "sweeps nothing outside cache_root, whatever `current` points at" do
+      Dir.mktmpdir do |outside|
+        bystanders = (1..5).map do |i|
+          File.join(outside, "bystander#{i}").tap { |dir| FileUtils.mkdir_p(dir) }
+        end
+
+        described_class.prune_generations(cache_root: File.join(outside, "cache-root"), current: File.join(outside, "x"),
+                                          keep: 2)
+
+        expect(bystanders.reject { |dir| Dir.exist?(dir) }).to be_empty
+      end
     end
 
     it "removes nothing when the bound is not reached" do

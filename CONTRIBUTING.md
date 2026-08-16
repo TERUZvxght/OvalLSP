@@ -39,7 +39,47 @@ cd core && bundle install
 cd ../vscode && npm install
 ```
 
+Two Core suites drive a real Rails application rather than a fake, and
+they need `rails ~> 8.1` and `sqlite3` resolvable as **local** gems —
+`core/spec/fixtures/rails_real` is bundled with `--local`, so a network
+that could fetch them is not enough:
+
+```bash
+gem install rails -v "~> 8.1" && gem install sqlite3
+```
+
+Without them, `spec/e2e/capabilities_spec.rb` and
+`spec/integration/real_rails_spec.rb` skip **in full** and `rspec` still
+exits 0 — so a local run reports green while the suite that decides
+whether a capability row is true did not run at all. CI's "Fail if the
+real-Rails or capability suites were skipped instead of run" step is
+what catches this, which means it bites locally and nowhere else. If
+your run reports any pending example whose message does not say
+`NOT YET`, that is this.
+
 ## Running tests
+
+> **If you cloned or checked out this repository between 2026-08-05 and
+> 2026-08-11 and ran the Core test suite, it deleted directories outside
+> the repository.**
+>
+> A cache-pruning example passed a fabricated absolute path
+> (`current: "/x"`) to code that removes directories. The sweep resolved
+> to the filesystem root, kept the most recently modified entry and
+> removed the rest, so on macOS `/Applications` was emptied of anything
+> not protected by SIP. It stopped when a protected path raised, which is
+> why some applications survived. Every error was swallowed by the method
+> under test, so the run reported success.
+>
+> Affected commits are `28a041c` (2026-08-05) through the fix; tag
+> `v0.2.1` contains them. Reinstall from Time Machine or from the
+> applications' own installers — nothing here can recover them.
+>
+> **The published extension was never affected.** `core/spec/**` is
+> excluded from the VSIX, and the one production caller derives both
+> paths from the same cache root, so the sweep could not leave it. Only
+> running this repository's test suite from a source checkout could
+> reach it.
 
 ```bash
 # Core Server (Ruby)

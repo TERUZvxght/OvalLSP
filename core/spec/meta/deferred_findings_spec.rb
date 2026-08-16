@@ -74,7 +74,7 @@ module DeferredFindings
   # behaviour the release had just removed. Worse than no limitation at
   # all: it sends them looking for something that is not there.
   #
-  # `027-0.2.2-review-loop.md` states the lesson as "a revert has the same
+  # `028-0.2.3-review-loop.md` states the lesson as "a revert has the same
   # documentation trigger as a change". This is that lesson mechanised, so
   # it does not depend on anyone remembering it.
   def wrongly_documented(markdown, *documents)

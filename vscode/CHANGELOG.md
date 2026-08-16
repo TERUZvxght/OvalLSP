@@ -6,7 +6,7 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
-## 0.2.2 — unreleased
+## 0.2.3 — unreleased
 
 - Fixed: no red error toast on a Ruby the bundled dependencies were not
   built for. 0.2.1 made the extension check whether that Ruby carries
@@ -31,9 +31,54 @@ the disproved approaches are kept below it under **Details**.
   suite green under 4.0.6 and stopped refusing a Ruby the bundled
   dependencies were not built for — it checks for `prism` and `rbs` and
   runs against yours instead. But the toast above meant a 4.0 user still
-  got "not version compatible" on every window while it worked. 0.2.2 is
+  got "not version compatible" on every window while it worked. 0.2.3 is
   the release where that combination is quiet. Nothing verifies 4.0
   continuously: CI runs 3.3 and 3.4.
+
+## 0.2.2 — A test that deleted things, and the containment it needed
+
+Nothing you can notice changes. This release exists because a defect in
+this repository's own test suite destroyed files on the machine running
+it, and the fix needs a version number to point at.
+
+- **The published extension was never affected, and could not have
+  been.** The defect lived in a test file, which the VSIX does not
+  contain, and the single code path that tidies the cache derives every
+  path it touches from the same cache root, so it cannot reach outside
+  it.
+- Changed: every deletion the cache performs now goes through one
+  function that refuses a path outside the cache root. Until now each
+  call site computed its own target, and staying inside the cache was a
+  property of all of them being right at once rather than a property of
+  deleting.
+- Removed: an unused `clear` method that erased a directory handed to it
+  by its caller, with every error suppressed. Nothing in the product
+  called it.
+
+### Details
+
+**If you cloned this repository between 2026-08-05 and 2026-08-11 and
+ran the Core test suite, it deleted directories outside the repository.**
+`CONTRIBUTING.md` carries the disclosure, the affected commit range and
+what to do about it. In short: an example passed a fabricated absolute
+path to code that removes directories, the sweep resolved to the
+filesystem root, and it removed all but the most recently modified
+top-level entry. On macOS that meant `/Applications`, until a
+SIP-protected path raised and stopped it.
+
+The method under test swallows every error by design — a cache that
+cannot be tidied is still a correct cache — so the example's
+"does not raise" assertion was satisfied on every run while this
+happened. An assertion that cannot fail is not a test, and that is the
+first of the three rules this incident wrote into `CLAUDE.md`.
+
+The fix is deliberately not a guard at the entry point. That would have
+stopped this one caller and left the next one free to compute a target
+some other way. Containment belongs to the deletion, so that is where it
+now lives, and a check in `spec/meta/` pins that the cache continues to
+delete in exactly one place — the containment cannot be pinned by an
+ordinary example, because the surviving call sites cannot produce a path
+outside the root for it to refuse.
 
 ## 0.2.1 — Fewer wrong reports, and the promises already published
 

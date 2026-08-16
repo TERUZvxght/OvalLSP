@@ -2776,6 +2776,36 @@ context, and the two cases are the same string there:
 The second is the one to try first: nothing is lost by it, and an extra
 candidate is a smaller wrong than a missing method.
 
+### This has a deadline, and it is 0.3.0
+
+The predicate a real fix needs is *was this name written or inferred*.
+Neither is modelled anywhere, so what the code actually tests is **is the
+reader a diagnostic** — a proxy, and one that holds only while
+diagnostics are the only reader that acts on an inferred type. That is
+true today.
+
+It stops being true in 0.3.0, which plans **inlay hints**: "the inferred
+types and parameter names appear in the code itself, not only when you
+hover." That is by definition a reader displaying inferred types, and it
+would reach them through the hover/completion path, which substitutes.
+The defect does not change; its volume does. Today a user meets it by
+hovering a string; with inlay hints the wrong class is printed inline on
+every line that has one, in a workspace that declares a single
+`Serializer::Elements::String`.
+
+Two consequences for scheduling, and they are why this is written here
+rather than left to be noticed:
+
+- **Fix this before inlay hints, not after.** Afterwards, the proxy's
+  failure arrives as a bug report about a new feature, and the feature
+  gets blamed for a defect that predates it by two releases.
+- **The proxy should not be extended.** Adding inlay hints to the list of
+  readers that "may decline" repeats the choice a third time and leaves
+  the predicate still unmodelled. `HierarchyIndex#initialize`'s
+  `signatures:` was kept for precisely this — it is the resolution-time
+  access the real predicate needs — and it is still unread. Reading it is
+  the fix; growing the list of exempt readers is not.
+
 ## 024.48 The measurement tool ran an engine the server never runs
 
 ```yaml
@@ -3430,3 +3460,272 @@ Fixed by running each fixture once before the measurement, in a single
 shared `installExecutableFixture` rather than copied into both suites.
 Ten consecutive runs green afterwards, and faster, because the failing
 paths had been spending their time in timeouts.
+
+## 024.60 Two per-file stores are separated by nothing but their payload
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing is wrong in the tree today. Every call site was checked and
+  each one is currently correct, so no answer the engine gives is
+  affected. What is recorded is that the correctness rests on four
+  call sites each remembering a different subset, rather than on the
+  structure — a hazard for the fifth, not a fault in the fourth.
+```
+
+**Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
+`core/lib/ovallsp/semantic/generated_method_index.rb`,
+`core/lib/ovallsp/server.rb`, `core/lib/ovallsp/cold_indexer.rb`
+
+`HierarchyIndex` and `GeneratedMethodIndex` are updated by the same
+trigger, inside the same mutex block (`Server#apply_file_summary`), keyed
+by the same thing, and built from the same `FileSummary`. They differ in
+the type of fact they hold and in nothing else. No reason for the
+boundary is stated anywhere, and none is apparent.
+
+The comparison is what makes it visible: the other stores in this layer
+are separated by something that *forces* it.
+
+- `ReferenceIndex` cannot be written when a file arrives at all — a
+  reference resolves only once every file's declarations are known, so it
+  is rebuilt asynchronously behind a dirty token, and the token is checked
+  against the semantic generation before the result is installed.
+- `MethodSummaryStore` is keyed by symbol and invalidated by walking a
+  dependency graph, because a method's return type depends on methods in
+  other files. Per-file eviction would discard the wrong entries.
+- `GenericRuleRegistry` is not shared state at all: `LocalInferencer`
+  builds one in its own constructor and nothing writes to it afterwards.
+  It has no mutex and needs none. (Plugin-contributed generic rules are
+  collected by `Plugins::StaticContext` and never installed — its own doc
+  says so.)
+
+So three of the four separations in this layer are load-bearing and one
+is not.
+
+The mechanism itself is also copied. Four stores implement "map keyed by
+uri, one writer, mutex, wholesale replace, bump a generation"
+(`WorkspaceIndex`, `HierarchyIndex`, `ReferenceIndex`,
+`GeneratedMethodIndex`), and the mutex-plus-generation half of it recurs
+in at least three more (`Observation::Store`, `Routes::RouteRegistry`,
+`Signatures::Environment`) keyed by something other than a uri. Each
+copy's own doc comment points at the others as precedent, which is how
+seven of them came to exist without the shape ever being extracted.
+
+**Why it is not a defect today.** The update calls are spread across four
+sites, each touching a different subset, and each is currently right for
+its own reason rather than by construction:
+
+| site | touches | why it is safe |
+|---|---|---|
+| `ColdIndexer#index_file`'s direct path | workspace + hierarchy only | unreachable from `Server`, which always supplies `on_summary` and routes to `#apply_file_summary` |
+| `Server#apply_file_summary` | all four (references via a dirty mark) | the complete path |
+| `Server#apply_plugin_context` | three, and skips the generated-method write when the fact list is empty | a plugin uri is written once at boot and never re-indexed, so there is never a previous entry to clear |
+| `Server#remove_indexed_file` | all four | the complete path |
+
+Two of those four are safe because of a fact about their *caller*, not
+because of anything the stores enforce. A fifth writer added without
+noticing would be the failure.
+
+**Direction.** Not "merge the two" by default — the question is which of
+the two shapes below is right, and that is the work:
+
+1. one per-uri store holding several kinds of fact, which the layer's
+   readers ask for what they need; or
+2. one aggregation type the existing stores are built from, leaving the
+   four separate but removing the seven hand-written copies of the
+   mechanism.
+
+(2) is the smaller change and does not answer the boundary question; (1)
+answers it and touches every reader. Whichever is chosen, `CLAUDE.md`'s
+caution from 0.1.12 applies: moving rules into a type's `initialize` is
+not free, and a module function the callers invoke is usually the cheaper
+form of "one place that knows the rule".
+
+**How it was found:** not by a review round. It surfaced while writing an
+architectural walkthrough of the codebase, in which all five stores in
+this layer were described as sharing one update discipline. That
+description was wrong — two of the five do not — and checking why
+produced this entry. Worth noting as a method: describing the design to
+someone who has not read it is a different probe from reviewing a diff,
+and it found something eight rounds of review over this layer had not.
+
+## 024.61 The dispatch layer owns view inference, and it has broken the query layer's one guarantee twice
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Both times this structure produced a user-visible symptom the symptom
+  was fixed, and no disagreement is known to be live today. What is
+  recorded is that the guarantee is upheld by four call sites each
+  remembering to do the same thing, and that the last release broke it
+  while fixing it. The entry is about the second occurrence, not about a
+  present fault.
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (roughly 1580–2004, and
+`#receiver_type_before_dot` at 2735–2766),
+`core/lib/ovallsp/semantic/query_service.rb`
+
+Around 425 lines of `Server` answer a semantic question: *which instance
+variables does this view receive.* It walks the controller's ancestors,
+builds the effective callback chain, evaluates each callback and then the
+action, and merges the alternatives when several actions can render the
+same template. Nothing about that is dispatch; it is the same kind of
+work `MethodAnalyzer` and `LocalInferencer` do, in the layer that is
+supposed to route requests to them.
+
+Placement alone would be a tidiness argument. What makes it a finding is
+what the placement costs.
+
+**The guarantee.** Task 013 states it: hover and completion use the same
+receiver type for the same expression. `QueryService` delivers it by
+construction — every reader calls `#type_at`, so no reader can invent its
+own answer.
+
+**Where it leaks.** `#type_at` takes an `initial_env`, and for a template
+that environment *is* the answer: nothing in the ERB assigns `@article`,
+so the type comes entirely from what the caller passes in. That value is
+assembled by `Server` and fetched independently at four places —
+`#explain_type_in_view` (1584), the `@`-name list inside
+`#assigned_ivars_for` (1666), `#receiver_type_before_dot` (2763), and the
+diagnostics context (417, 456). The resolution is unified; its input is
+not.
+
+**It broke twice, and the code says so.** `#receiver_type_before_dot`
+carries the record, in its own comment:
+
+> 0.2.1 gave the `@` list that environment and left this one behind,
+> which produced the disagreement it had just spent the release removing
+> elsewhere: the `@` popup said `Article` and `@article.` a keystroke
+> later offered nothing.
+
+So the release that fixed a hover/completion disagreement introduced
+another one, in a second reader of the same value, and shipped both
+halves. The earlier occurrence is the one the comment says the release
+"spent" itself removing.
+
+There is precedent immediately next to it. 024.1 — now fixed — was a
+second copy of the controller callback-chain rule, and the cost was not
+the duplication itself but that the regression spec written against one
+copy pinned nothing about the copy that runs. Same layer, same subject,
+same shape.
+
+**Direction.** `CLAUDE.md`'s rule applies literally here: a place found
+twice does not get hand-fixed a third time, it gets a mechanical
+countermeasure. Two candidates, and they are not equivalent:
+
+1. **Move the environment to where it is produced.** `#type_at` obtains
+   the view environment itself from the uri, so no caller can forget to
+   pass it. This is the real fix and it is large: it means the 425-line
+   cluster moves into the semantic layer, because that is what would have
+   to compute the environment. Bigger than the disagreement it prevents,
+   and correspondingly its own task.
+2. **Pin the property rather than the instance**, as an interim. No spec
+   currently asserts that two readers *agree*; every existing example
+   asks one reader one question. A spec that asks hover and completion
+   for the same position in a template and requires the same type would
+   have failed on 0.2.1's intermediate state. It is weaker than (1) — it
+   catches a divergence rather than preventing one — but it is not an
+   instance test, and it is available now.
+
+Deliberately not attempted while 0.2.2 is in flight: (1) is an
+architectural move, and `CLAUDE.md`'s "during a review loop, fix; do not
+add" covers exactly this — a change set that grows an architecture while
+being reviewed resets the round reviewing it.
+
+**How it was found:** while describing the layering in conversation, not
+by a review round, and it was the fourth reader that gave it away — the
+architecture as described has one path, and the code has four.
+
+## 024.R9 This register outgrew its file, and 0.3.0 moves it
+
+```yaml
+status: open
+kind: roadmap
+```
+
+**Area:** `docs/design/tasks/024-deferred-review-findings.md`,
+`core/spec/meta/deferred_findings_spec.rb`,
+`docs/DOCUMENTATION_MAP.md`, `CLAUDE.md`
+
+This file is roughly 2,800 lines across fifty entries, and it lives in
+`docs/design/tasks/` — a directory of per-task implementation notes,
+numbered by the task that produced them. Everything else in there is a
+record of one finished piece of work. This one is a live register that
+every release appends to, and it is the only document in the repository
+that is never done.
+
+The consequence is that an entry is *recorded* and still not *found*. A
+finding lands in the middle of a document nobody reads front to back,
+under a number whose only advertisement is the `<!-- documents: -->`
+marker in `KNOWN_LIMITATIONS` and whatever source comments happen to cite
+it. The legend's "one place" rule is still right; the file it names is no
+longer the right place for it.
+
+**What the move must preserve** — each of these is currently load-bearing,
+and a move that drops one is worse than no move:
+
+- **The numbers.** Source and spec comments cite `024.N` as the only
+  route to the reason a piece of code is the way it is; the legend
+  already forbids deleting a resolved entry while such a citation
+  survives. So this is a move plus an index, never a renumber. Entries
+  keep the `024.` prefix precisely because it is quoted in the tree.
+- **The `yaml` grammar and its guard.** `deferred_findings_spec.rb` reads
+  those blocks, and 024.25 records what happened the last time this data
+  was parsed as prose. The guard gets re-aimed at the new location; it
+  does not get relaxed for the duration of the move.
+- **The `<!-- documents: 024.N -->` anchors in both languages**, and the
+  same-count rule behind them.
+- **One place to look.** The reason for the rule, as distinct from the
+  file it currently names. A split by *state* (open defects / roadmap /
+  resolved-but-still-cited) keeps that; a split by release or by
+  subsystem does not, because a reader with a number in hand would have
+  to know which file it went to.
+
+**Proposed shape:** a dedicated register at the top of `docs/`, not under
+`design/tasks/`, with this file reduced to a stub pointing at it, a row
+added to `DOCUMENTATION_MAP.md`, and the guard spec re-pointed.
+
+**What a move breaks, measured rather than guessed.** Nineteen files
+outside this one cite the path `docs/design/tasks/024-deferred-review-findings.md`
+directly, and all of them go stale on the day it moves:
+
+- `CLAUDE.md` — the rollback rule names this path as where a rolled-back
+  thread's root cause is written. That rule stops being followable the
+  moment the path is a stub.
+- `README.md` + `.ja.md`, `docs/PUBLISHING.md` + `.ja.md`,
+  `docs/ROADMAP.md` + `.ja.md`, `docs/KNOWN_LIMITATIONS.md` + `.ja.md`,
+  `docs/DOCUMENTATION_MAP.md` + `.ja.md`, both changelogs,
+  `site/roadmap.html` + `site/ja/roadmap.html`.
+- `core/spec/meta/deferred_findings_spec.rb`, and two source files
+  (`runtime/ancestry_registry.rb`, `runtime_agent/agent.rb`).
+
+The stub is what makes this survivable rather than a nineteen-file
+flag-day: the path keeps resolving, and the citations are corrected as
+they are next touched. The exceptions are `CLAUDE.md` and the guard spec,
+which must move with the file — a working agreement pointing at a
+forwarding address is not a working agreement.
+
+**Why this is not in `docs/ROADMAP.md`.** That document and README's
+matrix describe what a user can do; this changes nothing a user can
+observe. A row there would misdescribe the release, and
+`roadmap_parity_spec.rb` requires README and the roadmap to agree row for
+row, so it would also have to be invented in a second place. An internal
+reorganisation belongs in the register, which is where this entry is.
+
+This makes it the first `024.R*` entry with no roadmap row: R1, R3, R4
+and R7 — every other open one — are cited from `docs/ROADMAP.md`. The
+absence here is deliberate, not an omission, which is why the paragraph
+above exists rather than a silent gap. `DOCUMENTATION_MAP.md`'s roadmap
+row reads in one direction only — a *product* roadmap item needs a
+matching `R` entry — and nothing requires the reverse.
+
+**When:** 0.3.0, and before the entries it will hold are written rather
+than after. Doing it inside a review loop is what `CLAUDE.md`'s "during a
+review loop, fix; do not add" exists to prevent — the move touches a
+guard spec, and a change set that grows a guard mid-loop resets the round
+that was reviewing it.

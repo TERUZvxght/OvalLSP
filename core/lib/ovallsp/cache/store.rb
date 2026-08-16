@@ -111,22 +111,34 @@ module Ovallsp
       # Every failure is swallowed, for the same reason every other
       # failure in this class is: a cache that cannot be tidied is still a
       # correct cache, and a Core that will not start because of one is
-      # not.
+      # not. That is also why nothing here may decide *what* to delete on
+      # its own: an error that would have announced a wrong target is
+      # discarded on the way out, so the target has to be right by
+      # construction. #remove_within is where that is enforced, and what
+      # it cost to learn.
+      #
+      # `prune_generations_of` is aimed by `File.dirname(current)`, which
+      # is only a directory of this cache's while `current` is one of its
+      # generations. It is passed `root` for that reason rather than
+      # trusting its caller's arithmetic.
       def self.prune_generations(cache_root:, current:, keep: DEFAULT_MAX_GENERATIONS)
-        prune_workspaces(cache_root, File.expand_path(current))
-        prune_generations_of(File.dirname(File.expand_path(current)), File.expand_path(current), keep)
+        root = File.expand_path(cache_root)
+        current = File.expand_path(current)
+
+        prune_workspaces(root, current)
+        prune_generations_of(root, File.dirname(current), current, keep)
       rescue StandardError
         nil
       end
 
-      def self.prune_generations_of(scope_dir, current, keep)
+      def self.prune_generations_of(root, scope_dir, current, keep)
         generations = children_of(scope_dir).select { |path| File.directory?(path) }
         return if generations.length <= keep
 
         generations.sort_by { |path| -File.mtime(path).to_f }
                    .reject { |path| File.expand_path(path) == current }
                    .drop(keep - 1)
-                   .each { |path| FileUtils.remove_entry(path) }
+                   .each { |path| remove_within(root, path) }
       end
 
       def self.prune_workspaces(cache_root, current)
@@ -152,7 +164,7 @@ module Ovallsp
           if !File.file?(marker)
             next if seconds_since_write(path) < UNMARKED_SCOPE_GRACE
 
-            next FileUtils.remove_entry(path)
+            next remove_within(cache_root, path)
           end
 
           # A missing directory is not proof the project is gone: an
@@ -174,7 +186,22 @@ module Ovallsp
           # opens this workspace, so its mtime answers the second one.
           next if seconds_since_write(marker) < ABSENT_WORKSPACE_GRACE
 
-          FileUtils.remove_entry(path)
+          # These two #remove_within calls cannot currently refuse
+          # anything: `path` comes from `children_of(cache_root)`, so it is
+          # always `cache_root/<name>` and always inside. Reverse-applying
+          # either one therefore leaves the whole suite green, and no
+          # fixture can pin them -- which by this repository's own rule
+          # would make them defects.
+          #
+          # They are kept, and the rule is answered a level up:
+          # `spec/meta/cache_removal_containment_spec.rb` pins that this
+          # class removes a directory in exactly one place. That is the
+          # property worth holding. What it buys is that the day this loop
+          # is changed to enumerate something other than the root's own
+          # children -- which is precisely how the sweep escaped last time
+          # -- the containment is already here rather than needing to be
+          # remembered.
+          remove_within(cache_root, path)
         end
       end
 
@@ -197,6 +224,48 @@ module Ovallsp
         Time.now - File.mtime(path)
       rescue StandardError
         0
+      end
+
+      # The one place this class removes a directory, so that containment
+      # is a property of *removal* rather than of each caller's arithmetic.
+      #
+      # Until 0.2.2 each call site called `FileUtils.remove_entry` directly
+      # and the only thing keeping the sweep inside the cache was that
+      # every caller happened to hand it a path from inside. One did not:
+      # a spec called `.prune_generations(cache_root: "/nonexistent-cache-root",
+      # current: "/x")` to check that an unreadable root does not raise.
+      # `prune_workspaces` returned immediately, as intended -- and then
+      # `prune_generations_of(File.dirname("/x") = "/", ...)` enumerated
+      # the machine's root directory, found more entries than `keep`, and
+      # removed all but the most recently modified: `/Applications` first,
+      # `/Users` next had `remove_entry` not raised on a protected path
+      # partway through. #prune_generations swallows every error, so the
+      # example asserting `.not_to raise_error` passed on every run while
+      # doing it -- for a week, on the maintainer's own machine, until an
+      # Endpoint Security trace named `rspec` as the process unlinking
+      # `/Applications/*.app`.
+      #
+      # An entry-point guard alone would have been the symptom's fix: it
+      # would stop that one spec and leave the next caller free to compute
+      # a target some other way. Checking here means no call site can.
+      #
+      # One was written as well, rejecting a `current` from outside the
+      # root in #prune_generations, and then removed: with containment
+      # already enforced here it changed nothing a spec could observe, and
+      # an unpinned line is a defect in this repository whichever direction
+      # it errs in. What it would have saved is a wasted enumeration of a
+      # directory nothing will be removed from.
+      def self.remove_within(root, path)
+        return unless inside?(root, path)
+
+        FileUtils.remove_entry(path)
+      end
+
+      # Strict containment: `root` itself is never removable, and a sibling
+      # whose name merely starts with the root's (`/a/bc` against `/a/b`)
+      # is not inside it.
+      def self.inside?(root, path)
+        File.expand_path(path).start_with?("#{File.expand_path(root)}#{File::SEPARATOR}")
       end
 
       def self.children_of(dir)
@@ -253,15 +322,6 @@ module Ovallsp
         rescue StandardError
           nil
         end
-      end
-
-      def clear
-        return unless @cache_dir
-
-        FileUtils.rm_rf(@cache_dir)
-        FileUtils.mkdir_p(@cache_dir)
-      rescue StandardError
-        nil
       end
 
       private

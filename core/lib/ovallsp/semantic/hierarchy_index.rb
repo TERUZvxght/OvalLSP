@@ -107,12 +107,19 @@ module Ovallsp
       private_constant :ROOT_SUPERCLASS_NAMES
 
       # `signatures` is optional and nil-safe, like every other collaborator
-      # in this codebase: without it the index resolves exactly as before.
-      # With it, a bare name signatures already declare is not answered by
-      # a workspace class that merely shares its last segment -- see
-      # `Index::TypeNameResolution`, which is where that rule lives so
-      # that completion, hover, definition and diagnostics cannot each
-      # decide it differently.
+      # in this codebase -- but be aware that as of 0.2.2 it is **stored
+      # and never read**. It was added in 0.2.1 for a shadow rule applied
+      # in `#canonical_name`, and `ea6cc80` moved that rule to the
+      # diagnostics engine without removing the parameter, so passing it
+      # or omitting it makes no difference to any answer this index gives.
+      #
+      # Kept rather than deleted because whichever shape 024.47's fix
+      # takes, telling a *written* name from an *inferred* one needs the
+      # signature environment at resolution time, which is here. Callers
+      # (`Server#initialize`, `scripts/corpus_diagnostics.rb`) pass it so
+      # that they keep matching each other; nothing downstream depends on
+      # it today. Recorded in 024.47 so the next reader decides rather
+      # than discovers.
       def initialize(workspace_index:, signatures: nil)
         @workspace_index = workspace_index
         @signatures = signatures

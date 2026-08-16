@@ -28,5 +28,18 @@
   at the symptom too, roll back the whole thread and write down the root
   cause; the entry is the deliverable, not the code. `CLAUDE.md` has the
   rule; 024.15 and 024.57 are the two times it fired.
+- **A green `rspec` run can be green because the decisive suites did not
+  run.** Without `rails ~> 8.1` and `sqlite3` as local gems,
+  `spec/e2e/capabilities_spec.rb` and `spec/integration/real_rails_spec.rb`
+  skip in full and the run still exits 0. Run those two files and check
+  the example count before reporting a suite as passing. See `CLAUDE.md`
+  and `CONTRIBUTING.md`.
+- **A test that deletes must be given a temporary directory, never a
+  fabricated absolute path.** `bundle exec rspec` emptied
+  `/Applications` for six days because one example passed `current: "/x"`
+  to cache pruning and `File.dirname("/x")` is `/`. The assertion was
+  `.not_to raise_error` against a method that swallows every error, so it
+  could not have failed. `CLAUDE.md` has the three rules; 027 records the
+  incident.
 - Proactively locate and consult Claude-specific source files and instructions, including `CLAUDE.md` and relevant files under `.claude/`, before beginning work, and follow any applicable guidance.
 - Context compaction or a task handoff may omit project instructions. After every compaction/handoff, re-read `AGENTS.md`, `CLAUDE.md`, and relevant files under `.claude/` before resuming work.

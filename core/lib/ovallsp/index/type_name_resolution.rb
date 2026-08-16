@@ -4,8 +4,8 @@ require_relative "symbol_id"
 
 module Ovallsp
   module Index
-    # Turning a written type name into the declaration it means, and the
-    # one case where the index's answer is worse than no answer.
+    # Recognising the one case where the index's answer is worse than no
+    # answer, for the one reader that can act on it.
     #
     # `WorkspaceIndex#resolve_type_name` matches on the *last segment*, and
     # should: for completion and go-to-definition a plausible class beats
@@ -13,28 +13,27 @@ module Ovallsp
     # Ruby is read. The exception is a bare name that signatures already
     # declare. A workspace `Serializer::Elements::String` then stands in
     # for the `String` a literal produced, and every reader downstream
-    # inherits it: `"hello".upcase` was reported as an unknown method,
-    # completion after `title.` offered `emit` and omitted every String
-    # method, and hover said `String` throughout -- three answers to one
-    # question.
+    # inherits it: completion after `title.` offers `emit` and omits every
+    # String method, and hover says `String` throughout.
     #
     # A module function rather than a method on either collaborator: the
     # rule needs the workspace index *and* the signature environment, and
-    # neither owns the other. 0.2.1 first put it inside the diagnostics
-    # engine, which silenced the diagnostic and left completion wrong --
-    # the rule belongs where the name is resolved, so that every reader
-    # gets one answer.
+    # neither owns the other.
+    #
+    # **Only the diagnostics engine applies it, and that is deliberate.**
+    # 0.2.1 tried the other arrangement -- refusing the substitution in
+    # resolution itself, so that every reader would get one answer -- and
+    # it broke a bare name the user *wrote*: `Range.new` inside `module
+    # Billing` is how Ruby refers to a class from its own namespace, and
+    # hover, definition and completion all stopped answering it. The two
+    # cases are told apart by whether the name was written or inferred,
+    # which resolution is not given. So the refusal lives where declining
+    # is safe -- a diagnostic -- and 024.47 holds what a real fix needs.
+    # A `canonical` wrapper for the resolution-side arrangement was left
+    # behind unreferenced by that rollback and is gone with it; wiring one
+    # back in is the regression, not the fix.
     module TypeNameResolution
       module_function
-
-      # The declared name `name` resolves to, or `name` itself when the
-      # index has no answer or its answer would be a substitution.
-      def canonical(name, workspace_index:, signatures: nil)
-        resolved = workspace_index.resolve_type_name(name)
-        return name.to_s if resolved.nil? || substitution?(name, resolved, signatures)
-
-        resolved
-      end
 
       # Whether resolving `name` to `resolved` swapped in a differently
       # namespaced class for a name signatures already declare.
