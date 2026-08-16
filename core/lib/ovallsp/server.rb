@@ -63,9 +63,12 @@ module Ovallsp
       @document_store = DocumentStore.new
       @parser_service = ParserService.new
       @workspace_index = WorkspaceIndex.new
-      # Before the hierarchy index, which needs it: resolving a bare name
-      # that signatures declare is the one case where the workspace's own
-      # answer must be refused (Index::TypeNameResolution).
+      # The hierarchy index no longer takes this -- the `signatures:`
+      # keyword it carried was assigned and never read, and went in 0.2.3.
+      # Resolution deliberately does *not* refuse a bare name signatures
+      # declare; only the diagnostics engine does, and it gets its
+      # signatures from `SemanticContext`. `Index::TypeNameResolution`
+      # states why, and 024.47 states what a real fix would need.
       @signatures = load_signatures_environment
       @hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: @workspace_index)
       @method_resolver = Semantic::MethodResolver.new(workspace_index: @workspace_index, hierarchy_index: @hierarchy_index)

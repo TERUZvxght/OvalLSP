@@ -77,11 +77,14 @@ signatures = Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace
 # never read. The rule that needed it lives in the diagnostics engine,
 # which takes its signatures from `SemanticContext` below -- 024.48's
 # fix therefore still holds, on a different basis than it was written on.
-# Without it the shadow rule in `HierarchyIndex#canonical_name` is inert,
-# so every number this script produced described a configuration no user
-# runs. That is not a smaller measurement, it is a measurement of
-# something else, and it is why a 55-report regression reached a release
-# whose headline figure came from here.
+# What 024.48 was about survives the rename: this script once built the
+# index differently from the server, so a rule that only the server's
+# configuration reached was inert here and every number described a
+# configuration no user runs. That is not a smaller measurement, it is a
+# measurement of something else, and it is why a 55-report regression
+# reached a release whose headline figure came from here. The difference
+# to keep out is with `Server#initialize` as it stands today, whatever
+# its arguments happen to be.
 hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
 method_resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
                                                         hierarchy_index: hierarchy_index)

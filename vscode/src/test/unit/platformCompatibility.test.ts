@@ -70,16 +70,16 @@ describe('checkBundledCoreCompatibility', () => {
     assert.ok(result.note && result.note.includes('4.0'), `expected a note naming the Ruby, got ${result.note}`);
   });
 
-  // The engine is where the two deciders used to disagree. This one
-  // probed on *any* difference, so a Core under JRuby carrying prism and
-  // rbs started with a friendly Output line — and then
-  // `compareVersionInfo`, which has always called an engine difference an
-  // incompatibility, produced a red toast on every window. That is
-  // 024.49's own diagnosis one dimension over.
+  // Engine is not gated here, and the direction matters: 0.2.3 briefly
+  // gated it to make this function agree with `compareVersionInfo`, and
+  // that turned one red toast into two -- this one advising
+  // `gem install prism rbs` without having asked, on a Core that already
+  // has them. Reverted; the split is 024.65 and belongs to whichever
+  // decider owns the *notification*.
   //
-  // Both halves asserted, because "compatible: false" alone would pass on
-  // a build that probes and then ignores the answer.
-  it('is incompatible on a different engine, and does not spend a process asking', async () => {
+  // Both halves asserted, because `compatible: true` alone would pass on
+  // a build that skips the probe and assumes.
+  it('probes a different engine rather than refusing it unasked', async () => {
     writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
     let asked = false;
 
@@ -90,9 +90,8 @@ describe('checkBundledCoreCompatibility', () => {
       async () => { asked = true; return true; }
     );
 
-    assert.strictEqual(result.compatible, false);
-    assert.strictEqual(asked, false, 'an engine difference is decided without a probe');
-    assert.ok(result.reason && result.reason.includes('jruby'));
+    assert.strictEqual(result.compatible, true);
+    assert.strictEqual(asked, true, 'an engine difference is asked about, not assumed');
   });
 
   it('is incompatible on a Ruby that has neither the payload nor its own prism and rbs', async () => {

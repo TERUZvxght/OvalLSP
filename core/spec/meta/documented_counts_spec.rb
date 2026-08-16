@@ -31,8 +31,6 @@ RSpec.describe "documented example counts" do
   # figure has drifted and the first time with a guard watching.
   def spec_files_on_disk = Dir.glob(File.expand_path("../**/*_spec.rb", __dir__))
 
-  def spec_root = File.expand_path("..", __dir__)
-
   # Only when the runner was given no files and no filters -- `rspec` with
   # nothing after it. Anything narrower is a subset, and `example_count`
   # would be the subset's size, which is not what the documents claim.
@@ -42,34 +40,25 @@ RSpec.describe "documented example counts" do
     spec_files_on_disk.length == RSpec.configuration.files_to_run.length
   end
 
-  # Every `*_spec.rb` under `core/` that is not one of ours -- a vendored
-  # gem's own suite under `vendor/bundle`, most likely. These are allowed
-  # to exist; what is not allowed is for the runner to have picked one up,
-  # because then `files_to_run` outgrows `spec_files_on_disk`,
-  # `whole_suite?` answers false, and the three count checks below skip
-  # while reporting the same green as a run that passed.
-  def foreign_spec_files
-    Dir.glob(File.expand_path("../../**/*_spec.rb", __dir__)) - spec_files_on_disk
-  end
-
-  # Runs on every invocation, filtered or not, because the defect above
-  # was invisible precisely where the checks below are: a guard that
-  # decides it is not applicable reports the same green as one that
-  # passed.
+  # Why this is a `skip` and not another in-suite predicate.
   #
-  # It asks the question at the end that can actually be answered wrongly.
-  # Until round 37 it compared `spec_files_on_disk` against `spec_root`,
-  # which is where that glob is rooted -- so every path it could return
-  # started with the prefix it was tested against and `stray` was `[]` by
-  # construction. It could not fail, which is the one property this file's
-  # whole subject says a guard must not have.
-  it "does not let a spec from outside spec/ into the run the counts are taken from" do
-    picked_up = foreign_spec_files & RSpec.configuration.files_to_run
-
-    expect(picked_up).to be_empty,
-                         "these are not this suite's specs, and counting them makes the checks below skip: " \
-                         "#{picked_up.first(3).join(', ')}"
-  end
+  # Two rounds running put a defect in this file's own body: round 37
+  # replaced a check that compared a glob's results against the glob's own
+  # root, and round 38 found the replacement comparing "everything under
+  # core/ that is not under spec/" against a `files_to_run` that `.rspec`
+  # confines to `spec/`. Both were empty by construction. A third
+  # predicate over the same two sets would be the same mistake a third
+  # time -- and asserting the two file counts match, which was tried, is
+  # *legitimately* false whenever anyone runs a single file, so it turns a
+  # correct subset run red.
+  #
+  # The property worth holding cannot be stated from inside a run that may
+  # legitimately be a subset. It is that **the run CI performs did not
+  # skip**, and it is enforced where the whole suite is guaranteed:
+  # `.github/workflows/ci.yml`'s "Fail if a documented-count check
+  # skipped" step reads the JSON formatter's output and fails on a pending
+  # from this file. `skip` rather than an early return so that step has
+  # something to see.
 
   # `1,833` and `1833` are the same claim; the documents use the first and
   # a future one may use the second.

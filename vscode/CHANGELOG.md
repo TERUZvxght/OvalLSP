@@ -32,8 +32,9 @@ the disproved approaches are kept below it under **Details**.
   dependencies were not built for — it checks for `prism` and `rbs` and
   runs against yours instead. But the toast above meant a 4.0 user still
   got "not version compatible" on every window while it worked. 0.2.3 is
-  the release where that combination is quiet. Nothing verifies 4.0
-  continuously: CI runs 3.3 and 3.4.
+  the release where that combination is quiet. A non-gating CI job runs
+  the Core suite under 4.0 on every push from this release on; a
+  4.0-only failure is recorded rather than fixed.
 
 ## 0.2.2 — A test that deleted things, and the containment it needed
 

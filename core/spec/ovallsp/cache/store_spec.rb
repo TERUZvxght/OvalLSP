@@ -209,6 +209,41 @@ RSpec.describe Ovallsp::Cache::Store do
       end
     end
 
+    # `remove_within`'s ENOENT rescue, asserted where it can be told
+    # apart. Both call paths swallow, so round 38 found the rescue
+    # unpinned -- true, and the fix is to ask this method directly rather
+    # than to delete a rescue that makes `Server#build_cache_store`'s
+    # "removing what is already removed is a no-op" an honest claim.
+    it "treats removing an already-removed path inside the root as a no-op" do
+      Dir.mktmpdir do |root|
+        expect { described_class.remove_within(root, File.join(root, "already-gone")) }.not_to raise_error
+      end
+    end
+
+    # The other half of the same method. A generation removed between
+    # `children_of` and the sort -- a second window sweeping the same
+    # root, or `Re-index Workspace` re-entering -- used to raise out of
+    # `File.mtime` and abandon every removal after it.
+    it "prunes the rest when a generation vanishes between listing and sorting" do
+      Dir.mktmpdir do |root|
+        mine = scope_for(root, "mine", root)
+        10.times { |i| generation(mine, "g#{i}", i + 1) }
+        current = generation(mine, "current", 0)
+        vanishing = generation(mine, "vanishing", 5)
+
+        allow(File).to receive(:mtime).and_wrap_original do |original, path|
+          raise Errno::ENOENT, path if path == vanishing
+
+          original.call(path)
+        end
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 3)
+
+        remaining = Dir.children(mine).map { |n| File.join(mine, n) }.select { |p| File.directory?(p) }
+        expect(remaining.length).to eq(3)
+      end
+    end
+
     # One bad sibling must not cost the caller its own tidying.
     #
     # `.prune_generations` has a single outer rescue covering both halves,

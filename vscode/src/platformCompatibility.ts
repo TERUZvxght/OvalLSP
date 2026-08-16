@@ -239,24 +239,21 @@ export async function checkBundledCoreCompatibility(
   const expected = `${manifest.rubyEngine} ${manifest.rubyVersionMajorMinor} (${manifest.rubyPlatform})`;
   const actual = `${identity.engine} ${actualMajorMinor} (${identity.platform})`;
 
-  // A different *engine* is not probed for, and is fatal.
+  // Engine is *not* gated here, and 0.2.3 tried it and reverted it.
   //
-  // `versionInfo.compareVersionInfo` has always treated it that way, and
-  // this function did not: it probed on any difference at all, so a Core
-  // under JRuby carrying prism and rbs started with a friendly Output
-  // line and then got a red "not version compatible" toast on every
-  // window from the other decider. That is 024.49's own diagnosis --
-  // "two functions were deciding this and only one was changed" -- one
-  // dimension over, and 0.2.2 moved the split rather than closing it.
+  // The argument for gating was 024.49's: `compareVersionInfo` calls an
+  // engine difference an incompatibility and this function did not, so
+  // two deciders disagreed. Making them agree turned one correct red
+  // toast into two -- this function's, whose text advises
+  // `gem install prism rbs` without having asked, and the handshake's.
+  // Neither call site returns, so the client starts either way and the
+  // user is told twice, once wrongly.
   //
-  // Engine is the dimension where nothing here is verified and nothing
-  // is claimed: `SUPPORT_MATRIX.md` and both changelogs say a Core under
-  // a different engine is an incompatibility. Version and platform are
-  // the ones 0.2.1 deliberately softened.
-  if (manifest.rubyEngine !== identity.engine) {
-    return { compatible: false, reason: incompatibilityReason(expected, actual, rubyCommand) };
-  }
-
+  // The split is real and is 024.65; what round 38 established is that
+  // closing it *here* costs more than it buys, because the disagreement
+  // was never visible to a user and the duplicate notification is. The
+  // remaining question is which decider owns the *notification*, not
+  // which owns the verdict.
   // The payload not applying is not the same fact as OvalLSP not working.
   // What the Core needs is `prism` and `rbs`; the bundled copies are a
   // convenience for the one combination they were built for, and a Ruby

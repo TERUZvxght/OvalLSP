@@ -55,6 +55,13 @@ would have broken live references. Round 5 of the
 0.1.12 review reported the entries as stale; the deadline was the part
 that was wrong. Run the grep before deleting, not the calendar.
 
+**`024.61` does not exist.** Round 37 renumbered two entries that had both
+landed as `024.60`, and the number it vacated was never reused. The guard
+below rejects a duplicate and says nothing about a gap, deliberately:
+numbers are cited from source and specs, so reusing a vacated one is the
+dangerous move and leaving a hole is the safe one. Take the next number
+after the highest, never the first free one.
+
 Entries numbered `024.R*` are roadmap items rather than defects: work
 that is understood, deliberately not scheduled for the current release,
 and too large to fold into one. They live here rather than in a separate
@@ -2836,6 +2843,15 @@ Fixed by building it the way the server does. The lesson is the one
 code you think it ran* has to include "and in the configuration a user
 would run it in".
 
+**Do not restore the literal argument this entry names.** 0.2.3 deleted
+`HierarchyIndex`'s `signatures:` keyword -- it was assigned and never
+read -- so `HierarchyIndex.new(workspace_index:, signatures:)` now raises
+`ArgumentError`. The rule that needed it lives in `Diagnostics::Engine`,
+which takes its signatures from `SemanticContext`, and the script passes
+them there. The fix holds; only its stated basis moved. What the entry
+asks for is that the script build the index *the way the server does*,
+whatever that is at the time of reading.
+
 ## 024.49 The red toast 0.2.1 removed is still shown, from the other code path
 
 ```yaml
@@ -3797,10 +3813,29 @@ mislead the next reader.
 ## 024.65 A different Ruby engine produces two error toasts where it produced one
 
 ```yaml
-status: open
+status: fixed
 kind: defect
-user-visible: yes
+released-in: 0.2.3
+user-visible: no
+user-visible-note: >
+  It never reached a user. The duplicate was created by an engine gate
+  added during 0.2.3's own review loop and reverted inside the same loop
+  after round 38, so no released build has it.
 ```
+
+**Reverted rather than resolved, and the distinction matters.** Round 38
+established that the two toasts did not exist on 0.2.1 or 0.2.2 -- the
+change set under review created them, by gating the engine dimension in
+`checkBundledCoreCompatibility` so that it agreed with
+`compareVersionInfo`. The agreement is real and the split it closed is
+real; what it cost was a second red notification whose text advises
+`gem install prism rbs` without having asked, on a Core that has them.
+
+The gate is reverted. **The underlying split is not fixed**: two deciders
+still reach the engine verdict independently, and the open question is
+which of them owns the *notification*. That question is worth answering
+and is not worth answering inside a review loop -- see 024.64, three
+rounds of exactly that.
 
 **Area:** `vscode/src/platformCompatibility.ts` (the engine branch),
 `vscode/src/extension.ts` (the start-time notification and the handshake

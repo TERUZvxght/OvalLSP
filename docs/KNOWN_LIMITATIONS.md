@@ -536,18 +536,6 @@ features show it:
   outline shows six children with identical ranges. Every name is right
   and each is genuinely a method, but six identical ranges read as a bug. <!-- documents: 024.27 -->
 
-## Two error notifications on a non-CRuby engine
-
-**If you point `ovallsp.rubyExecutablePath` at JRuby or TruffleRuby, each
-window shows two red notifications instead of one.** They report the same
-fact — the bundled native payload was built for CRuby and does not apply
-to your engine — once from the check that runs before the Core starts and
-once from the Extension/Core handshake afterwards. The first one's text
-also suggests `gem install prism rbs`, which is not the problem when the
-engine is the mismatch and may be advice you have already followed. The
-extension still starts and the Core still runs; the duplication is in the
-reporting only (024.65). <!-- documents: 024.65 -->
-
 ## Conflicts with other extensions
 
 See [vscode/README.md](../vscode/README.md#known-conflicts-with-other-extensions)

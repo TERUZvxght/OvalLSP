@@ -135,10 +135,28 @@ module Ovallsp
         generations = children_of(scope_dir).select { |path| File.directory?(path) }
         return if generations.length <= keep
 
-        generations.sort_by { |path| -File.mtime(path).to_f }
+        # `File.mtime` rather than `seconds_since_write` would raise here
+        # when a generation is removed between `children_of` and the sort
+        # -- another window's sweep, or `Re-index Workspace` re-entering
+        # this one -- and that reaches `prune_generations`' single outer
+        # rescue and abandons the removals. Round 38: the argument for
+        # `prune_workspaces`' per-entry rescue applies to this half of the
+        # same method, and this release is what makes the race ordinary by
+        # moving the sweep to a background thread.
+        #
+        # Sorting an unreadable entry to the *oldest* end is the safe
+        # direction: it is a candidate for removal, and `remove_within`
+        # then declines a path that is already gone.
+        generations.sort_by { |path| -age_for_sort(path) }
                    .reject { |path| File.expand_path(path) == current }
                    .drop(keep - 1)
                    .each { |path| remove_within(root, path) }
+      end
+
+      def self.age_for_sort(path)
+        File.mtime(path).to_f
+      rescue StandardError
+        0.0
       end
 
       def self.prune_workspaces(cache_root, current)

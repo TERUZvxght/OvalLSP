@@ -73,6 +73,30 @@ jobs:
       # failures, 41 pending" and exit status 0, which is exactly what
       # EXTENSION_CAPABILITIES.md's "a capability whose row is skipped is
       # not shipped" exists to prevent (024.16).
+      # The documented-count checks skip when the run is not the whole
+      # suite, which is correct for a subset run and wrong here: this is
+      # the run those figures are measured from. Two review rounds put a
+      # vacuous predicate in that file trying to state the same thing from
+      # inside the suite; it cannot be stated there, because a subset run
+      # is legitimate. Here it can: this step runs the whole suite by
+      # construction, so a pending from that file means the number nobody
+      # re-measures went unchecked again.
+      - name: Fail if a documented-count check skipped
+        working-directory: core
+        run: |
+          ruby -rjson -e '
+            result = JSON.parse(File.read("tmp/rspec.json", encoding: "UTF-8"))
+            skipped = result.fetch("examples").select do |ex|
+              ex.fetch("file_path").include?("spec/meta/documented_counts_spec.rb") &&
+                ex.fetch("status") == "pending"
+            end
+            unless skipped.empty?
+              warn "the documented example-count checks skipped on a full run:"
+              skipped.each { |ex| warn "  #{ex.fetch("full_description")} -- #{ex["pending_message"]}" }
+              exit 1
+            end
+          '
+
       - name: Fail if the real-Rails or capability suites were skipped instead of run
         working-directory: core
         run: |
@@ -194,15 +218,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Task 023.7: verifies a freshly-packaged VSIX never contains this
-  # build machine's own absolute paths -- a regression guard for the
-  # native-extension-build-log leak found and fixed in Task 023.6
-  # (mkmf.log/gem_make.out/Makefile embedding the packaging machine's
-  # username/home directory verbatim). Runs on ubuntu-latest (not
-  # darwin-arm64) deliberately: this check is about package *contents*
-  # hygiene, not about producing a release-quality Apple Silicon binary --
-  # see the separate apple-silicon-release workflow for the real,
-  # native-arm64 build.
   site-parity:
     name: Site parity (links, matrix, roadmap, version)
     runs-on: ubuntu-latest
@@ -226,6 +241,15 @@ jobs:
       - name: Verify every internal link, asset, anchor and cross-document count
         run: ruby scripts/check_site_links.rb
 
+  # Task 023.7: verifies a freshly-packaged VSIX never contains this
+  # build machine's own absolute paths -- a regression guard for the
+  # native-extension-build-log leak found and fixed in Task 023.6
+  # (mkmf.log/gem_make.out/Makefile embedding the packaging machine's
+  # username/home directory verbatim). Runs on ubuntu-latest (not
+  # darwin-arm64) deliberately: this check is about package *contents*
+  # hygiene, not about producing a release-quality Apple Silicon binary --
+  # see the separate apple-silicon-release workflow for the real,
+  # native-arm64 build.
   package-contents-inspection:
     name: Package contents inspection
     runs-on: ubuntu-latest
