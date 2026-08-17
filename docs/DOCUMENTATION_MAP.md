@@ -108,7 +108,7 @@ read: every page that is not `capabilities.html` or an index page. The
 security page's two retracted claims, the roadmap's mis-numbered
 sentence, the requirements list, the patch definition and the 404
 page's issue-tracker line were each found by a person reading, and
-nothing would have caught them. The version badge used to head this
+nothing would have caught them. The version badge used to be on this
 list; it is machine-checked now, and 0.2.2 still shipped a stale one,
 because the check ran only when a site file changed — the wiring that
 lets it fire on a version bump arrived in 0.2.3, pinned by
