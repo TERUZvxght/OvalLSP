@@ -6,10 +6,11 @@ require "yaml"
 # check compares the version the index pages advertise against
 # vscode/package.json, but it ran only from pages.yml, which fires only
 # on site/ changes -- so a version bump alone could turn the check red
-# with nothing to run it, and did, for five days on main. The fix is
-# wiring: the check runs in ci.yml too, and pages.yml also triggers on
-# the version file. Both halves are workflow text that nothing executes
-# locally, so -- exactly as `ci_skip_guard_spec.rb` puts it for the other
+# with nothing to run it, and 0.2.2's did. The fix is wiring: the check
+# runs in ci.yml too, and pages.yml also triggers on the version file
+# (the measured timeline is 028's "A guard that could not see its
+# input"). Both halves are workflow text that nothing executes locally,
+# so -- exactly as `ci_skip_guard_spec.rb` puts it for the other
 # CI-only guard -- nothing would notice either being deleted again. The
 # guard needs a guard.
 #

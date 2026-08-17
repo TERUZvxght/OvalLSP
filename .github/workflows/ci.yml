@@ -132,13 +132,14 @@ jobs:
         working-directory: vscode
         run: npm run test:unit
 
-  # The site check's version comparison reads vscode/package.json, but
-  # the deploy workflow that runs it triggers only on site/ changes -- so
-  # a version bump alone could turn the check red with nothing to fire
-  # it, which is how 0.2.2's badge drift went unnoticed on main for five
-  # days. Running the check here gives the guard the input it could not
-  # see: it now runs on every pull request and every push to main,
-  # whichever side of the comparison moved.
+  # The site check compares the version the index pages advertise
+  # against vscode/package.json, and it must run when *either* side of
+  # that comparison moves. The deploy workflow that also runs it
+  # triggers only on site/ changes, so without this job a version bump
+  # alone could turn the check red with nothing to fire it -- which is
+  # what 0.2.2 did. Here it runs on every pull request and every push
+  # to main. History and the measured timeline:
+  # docs/design/tasks/028-0.2.3-review-loop.md.
   site-consistency:
     name: Site consistency (check_site_links)
     runs-on: ubuntu-latest
