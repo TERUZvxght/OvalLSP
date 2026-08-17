@@ -217,9 +217,10 @@ the name. It cannot be told apart from the same code written on purpose,
 so the fix is to stop publishing while you are still typing rather than
 to add another check, and that is not in this release (024.41). <!-- documents: 024.41 -->
 
-Two are gone since the last release. **A `*_path`/`*_url` call is no
-longer reported as a missing route when no routes have been loaded**
-(024.24) — the case in an untrusted workspace and in any project that is
+Two that this list used to carry are gone — fixed in earlier releases,
+not this one. **A `*_path`/`*_url` call is no longer reported as a
+missing route when no routes have been loaded**
+(024.24, fixed in 0.2.0) — the case in an untrusted workspace and in any project that is
 not Rails, where an empty route table used to answer "no such route"
 rather than "I do not know". That was 8 reports across Ruby's own
 standard library, every one false; it is now none, and 0.2.0's
@@ -239,7 +240,7 @@ than carried into this release (024.23).
   halves of one name do not match. The same module is also coloured as a
   namespace where it is declared and as a class where it is read. <!-- documents: 024.21 -->
 
-Six more are older than this release and untouched by it:
+Seven more are older than this release and untouched by it:
 
 - **A declaration written inside a block belongs to the class the block is
   written in**, whatever the block's real receiver is. `Struct.new(:x) do

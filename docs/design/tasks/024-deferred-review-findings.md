@@ -3168,8 +3168,10 @@ File.expand_path("../**/*_spec.rb", __dir__.sub(%r{/meta\z}, ""))  # => core/**/
 ```
 
 `core/**` includes `core/vendor/bundle`, so once gems are vendored there
-the glob matched twenty spec files belonging to `diff-lcs` and the counts
-never agreed. **CI vendors them**: `ruby/setup-ruby`'s `bundler-cache: true`
+the glob matched the vendored gems' own spec files — ten, all
+`diff-lcs`', measured by a real vendored install at 0.2.3; this entry
+arrived saying "twenty", which no measurement of the layout it
+describes reproduces — and the counts never agreed. **CI vendors them**: `ruby/setup-ruby`'s `bundler-cache: true`
 sets `BUNDLE_PATH` to `vendor/bundle`. So the guard skipped on every
 full run in that layout — CI's included, and the 0.2.4-bound branch's
 machine, whose documents drifted to 1,934 against a suite of 1,941

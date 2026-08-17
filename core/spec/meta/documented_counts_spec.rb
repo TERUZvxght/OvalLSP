@@ -23,7 +23,7 @@ RSpec.describe "documented example counts" do
 
   # Every spec file this suite owns. Rooted at `spec/` itself, not at
   # `core/`: `bundle config path vendor/bundle` -- which is what CI's own
-  # `bundler-cache: true` sets -- puts `diff-lcs`' twenty spec files
+  # `bundler-cache: true` sets -- puts `diff-lcs`' ten spec files
   # inside `core/`, and counting those made the comparison below never
   # match. The guard then skipped on every full run in that layout --
   # CI's included; a checkout with nothing vendored under `core/` still
