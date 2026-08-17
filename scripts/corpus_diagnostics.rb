@@ -97,7 +97,8 @@ local_inferencer = Ovallsp::LocalInferencer.new(
 context = Ovallsp::Diagnostics::SemanticContext.new(
   workspace_index: workspace_index, hierarchy_index: hierarchy_index, method_resolver: method_resolver,
   local_inferencer: local_inferencer, model_registry: model_registry,
-  route_registry: Ovallsp::Routes::RouteRegistry.new, signatures: signatures, generation: 1
+  route_registry: Ovallsp::Routes::RouteRegistry.new, signatures: signatures, generation: 1,
+  ancestry_registry: Ovallsp::Runtime::AncestryRegistry.new
 )
 
 parser = Ovallsp::ParserService.new

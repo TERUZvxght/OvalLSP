@@ -53,4 +53,18 @@ RSpec.describe "the CI wiring that keeps the site's version badge honest" do
     expect(on.dig("push", "paths")).to include("site/**")
     expect(on.dig("pull_request", "paths")).to include("site/**")
   end
+
+  # "Gating the deploy" is the half of this guard that predates 0.2.3,
+  # and round 3 showed it was just as deletable: replace the check job's
+  # run line with an echo and every spec stays green while the deploy
+  # publishes unchecked. Both links of the gate, pinned: the check job
+  # actually runs the script, and the deploy job actually needs the
+  # check.
+  it "keeps the deploy gated on the check actually running the script" do
+    jobs = workflow("pages.yml").fetch("jobs")
+    check_runs = jobs.fetch("check").fetch("steps").filter_map { |step| step["run"] }
+
+    expect(check_runs).to include(a_string_including("scripts/check_site_links.rb"))
+    expect(Array(jobs.fetch("deploy")["needs"])).to include("check")
+  end
 end

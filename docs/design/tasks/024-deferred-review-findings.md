@@ -2828,3 +2828,58 @@ Fixed by building it the way the server did. The lesson is the one
 `CLAUDE.md` already carries, one level up: *confirm each side ran the
 code you think it ran* has to include "and in the configuration a user
 would run it in".
+
+## 024.49 A release record kept asserting durations it could not witness ending
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.3
+user-visible: no
+user-visible-note: >
+  Release-record prose (028's guard narrative and the workflow/spec
+  comments that copied it); nothing an editor user sees. Entered
+  because the same place failed three consecutive review rounds, which
+  is the roll-back rule's threshold, and the rule says the entry is
+  the deliverable.
+```
+
+**Area:** `docs/design/tasks/028-0.2.3-review-loop.md` ("A guard that
+could not see its input"), and the ci.yml/pages.yml/guard-spec comments
+that carried copies of it
+
+Three consecutive rounds of 0.2.3's review loop found the same
+narrative wrong, each time about its relationship to time:
+
+1. **Round 1**: "the check now runs on every push" — false of the
+   trigger (`push: branches: [main]` plus pull requests). Hand-fixed,
+   in four places at once.
+2. **Round 2**: "the check was red on `main` for five days" — a
+   duration attached to the wrong fact. The redness began with 0.2.2's
+   push (2026-08-16); five days is the publish-before-push gap
+   (Marketplace 2026-08-11, repository 2026-08-16), which no in-repo
+   check can see. The round's countermeasure — deduplicate the dated
+   narrative into 028 and leave only ageless mechanism sentences in
+   shipped files — was real and held. But its own restatement
+   introduced "lasted under 21 hours".
+3. **Round 3**: "lasted under 21 hours" asserts a *completed* duration
+   for a condition that had not ended — `main` stays red until the
+   release lands on it, and a fixed record cannot date that. (It was
+   also arithmetically stale by commit time: the fix existed on the
+   branch twenty hours in, but a fix on an unmerged branch bounds
+   nothing about `main`.)
+
+**Root cause:** the narrative kept asserting facts whose truth depends
+on time and on systems outside the tree — trigger shorthand, deploy
+state, the Marketplace, wall clocks. Such claims can silently stop
+being true after the commit that states them. Each round fixed the
+number; none changed the claim's *shape*, so the next round inherited
+a fresh instance of the same class.
+
+**Direction actually needed, applied in 0.2.3:** a fixed record states
+witnessed, timestamped events — never durations or completions of
+conditions it cannot watch end. An interval may be stated only when
+both endpoints are witnessed (publish 2026-08-11 → push 2026-08-16).
+Dated narrative does not go into shipped files at all; mechanisms,
+which do not age, do — with a pointer to the record that holds the
+dates.
