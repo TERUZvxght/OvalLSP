@@ -35,7 +35,12 @@ module E2E
       @stdin.binmode
       @stdout.binmode
       @reader = Thread.new { read_loop }
-      @stderr_thread = Thread.new { @stderr_output = @stderr.read }
+      # Drain the child's stderr so it can never block on a full pipe.
+      # Deliberately no state: round 5 removed this drain's unused
+      # reader and left `@stderr_output` assigned-never-read, which is
+      # the debris class this release removes elsewhere -- so the drain
+      # now keeps nothing there is to leave behind.
+      Thread.new { @stderr.read }
     end
 
     def initialize!(trusted: true)

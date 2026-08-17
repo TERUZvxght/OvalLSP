@@ -394,13 +394,15 @@ diagnostic about such a receiver is silently withheld: a typo like
 `r.tagg` on your `Billing::Range` is never flagged, while the same typo
 on a class with an unshared name is. The engine cannot tell the `Range`
 you wrote from the `String` a literal produced, so the refusal that
-protects the literal silences your class too. And while your workspace
-contains such a class, the literal side has its own cost: `"hello".`
-completes to that class's members rather than String's, while hover on
-`"hello".upcase` answers from the core class — the readers disagree,
-and which is right depends on information the engine does not have
-(024.47). A class named after a core one at the *top* level is
-unaffected. <!-- documents: 024.47 -->
+protects the literal silences your class too. And a literal of that
+same name pays the other half of the cost: with `Billing::Range`
+indexed, `(1..5).` completes to `Billing::Range`'s members — `tag`,
+not `each` — while hover on `(1..5).each` answers from the real Range.
+The readers disagree, and which is right depends on information the
+engine does not have (024.47). A literal of an *unshared* name is
+untouched (`"hello".` completes String as usual unless some class of
+yours is named `…::String`), and a class named after a core one at the
+*top* level is unaffected. <!-- documents: 024.47 -->
 
 (Until 0.2.3 this section claimed the opposite — that hover, definition
 and completion stopped answering for such a class as of 0.2.1. That

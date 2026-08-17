@@ -2707,11 +2707,14 @@ the shipped build does not have -- while saying nothing about the
 diagnostics silence it does have. Both corrected in 0.2.3; believe the
 measurement above, not this file's history.)
 
-The literal side, meanwhile, still disagrees with itself while such a
-class is indexed: `"hello".` completes to the workspace class's members
-and none of String's (0.2.0's behaviour, kept deliberately), hover and
-signature help on `"hello".upcase` answer from RBS, and diagnostics
-decline. Three readers, three sources.
+The literal side, meanwhile, still disagrees with itself while a class
+sharing the *literal's* name is indexed — a workspace
+`Serializer::Elements::String` for a string literal, `Billing::Range`
+for `(1..5)`: the literal's `.` completes to the workspace class's
+members and none of the core class's (0.2.0's behaviour, kept
+deliberately), hover and signature help on the same receiver's calls
+answer from RBS, and diagnostics decline. Three readers, three
+sources. A literal whose name no workspace class shares is untouched.
 
 Applies to `Data`, `Set`, `Method`, `File`, `Time`, `Struct`,
 `Comparable`, `IO` and `Random` -- any core name a namespaced class

@@ -20,8 +20,9 @@ not from what an earlier document remembered.
   the arrangement that broke them was rolled back before 0.2.1 ever
   shipped. What the shipped build actually does, and the entry now
   says: **mistakes on such a receiver are silently never reported**,
-  and while such a class is indexed a literal's completion offers that
-  class's members while hover answers from the core class (024.47).
+  and a literal of the same name completes to that class's members
+  while hover answers from the core class — `(1..5).` offers
+  `Billing::Range`'s methods (024.47).
 - Fixed: 0.2.1's own notes carried **two bullets contradicting each
   other** about completion on a shadowed literal, under one heading, in
   both languages. The one claiming the completion half was fixed
