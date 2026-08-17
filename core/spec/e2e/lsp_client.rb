@@ -144,10 +144,6 @@ module E2E
       Process.kill("KILL", @wait.pid) rescue nil
     end
 
-    def stderr_output
-      @stderr_output.to_s
-    end
-
     private
 
     def monotonic = Process.clock_gettime(Process::CLOCK_MONOTONIC)

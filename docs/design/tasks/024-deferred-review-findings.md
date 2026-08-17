@@ -2735,7 +2735,10 @@ reverting the resolution-side placement stranded:
   `scripts/corpus_diagnostics.rb` (naming a shadow rule in
   `canonical_name` that is not there), and `CLAUDE.md`'s countermeasure
   exemplar list (holding up the rolled-back placement as the right
-  shape) -- all rewritten;
+  shape) -- four rewritten against the shipped arrangement, and the
+  two whose subjects were themselves the dead code above
+  (`hierarchy_index.rb`'s `initialize` note, `server.rb`'s ordering
+  note) deleted with them;
 - a published changelog bullet claiming the reverted completion fix as
   shipped, contradicting its sibling bullet under the same 0.2.1
   heading in both languages (deleted; 0.2.3's entry carries the

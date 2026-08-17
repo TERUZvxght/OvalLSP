@@ -59,9 +59,10 @@ open and the limitation stays documented, in both languages.
 
 The rest of the cleanup: an unreferenced method and an inert
 constructor parameter left by the rollback are gone, six comments
-describing the rolled-back arrangement as current are rewritten against
-the shipped one, and a deferral comment that named the wrong release
-(0.3.0 for `activeParameter`; the roadmap says 0.4.0) is corrected.
+described the rolled-back arrangement as current — four are rewritten
+against the shipped one and two went with the dead code they described
+— and a deferral comment that named the wrong release (0.3.0 for
+`activeParameter`; the roadmap says 0.4.0) is corrected.
 
 ## 0.2.2 — A test that deleted things, and the containment it needed
 
