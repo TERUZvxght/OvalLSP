@@ -299,6 +299,30 @@ re-grepped. The cheap check is to **grep the tree for the thing being
 reverted before committing the revert**, not after. 024.47 records the
 full list.
 
+## Where a release's work lives (mandatory)
+
+A release's work in progress lives on a pushed branch, and the task
+file on `main` that names the release also names that branch. A
+pointer to a file that exists only on an unnamed branch is a pointer
+to nothing for every session that cannot see the branch.
+
+Starting or resuming release work begins with `git fetch --all
+--prune`, listing the remote branches, and reading the
+highest-numbered `NNN-*.md` on every branch whose name or record
+claims the release — not only on `main`. When work moves between
+branches, or a branch is renamed or renumbered, the record on `main`
+moves in the same change.
+
+Established by 0.2.3, which was prepared twice in parallel: 027 on
+`main` said the work "continues in `028-0.2.3-review-loop.md`", that
+file existed only on `fix/0.2.3`, nothing on `main` named that branch,
+and a session starting from `main` rebuilt the release from the
+pointer. The two preparations converged independently on several
+identical corrections — worth something as evidence the corrections
+were load-bearing, but bought with days of duplicated work. 028's "Two
+preparations, one release" section records the merge and the
+dispositions.
+
 ## Public repository privacy and secret handling
 
 - This repository is public. Never commit or push secrets, credentials, tokens, private keys, private URLs, personal information, or personal email addresses.

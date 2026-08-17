@@ -63,6 +63,25 @@ module DeferredFindings
                           .reject { |number| documents.all? { |doc| documents?(doc, number) } }
   end
 
+  def resolved(markdown)
+    entries(markdown).select { |_, fields| RESOLVED.include?(fields["status"]) }
+  end
+
+  # The other direction, and the one the 0.2.x work found missing. This
+  # guard only ever asked whether an *open* finding is cited, so retiring
+  # one left its paragraph in `KNOWN_LIMITATIONS` with nothing to
+  # complain -- and the 0.2.4-bound branch's loop found three such
+  # paragraphs standing at once, each telling a reader to expect
+  # behaviour that had just been removed. Worse than no limitation at
+  # all: it sends them looking for something that is not there.
+  #
+  # `CLAUDE.md` states the lesson as "a revert is the change most likely
+  # to leave documentation behind". This is that lesson mechanised, so
+  # it does not depend on anyone remembering it.
+  def wrongly_documented(markdown, *documents)
+    resolved(markdown).keys.select { |number| documents.any? { |doc| anchors(doc, number).any? } }
+  end
+
   # What counts as documenting a finding, as opposed to mentioning it.
   #
   # The bare number was the whole test until 0.2.1, and it cannot tell the
@@ -183,6 +202,21 @@ RSpec.describe "deferred findings metadata" do
       expect(DeferredFindings.undocumented(entry("024.30", status: "open", kind: "defect"), "none")).to eq(["024.30"])
     end
 
+    # Each half stated with the case that must *fail*, or it cannot tell a
+    # working rule from one that answers the same either way.
+    it "reports a resolved entry that is still cited as a limitation" do
+      markdown = entry("024.30", status: "fixed", kind: "defect")
+
+      expect(DeferredFindings.wrongly_documented(markdown, "still broken <!-- documents: 024.30 -->")).to eq(["024.30"])
+      expect(DeferredFindings.wrongly_documented(markdown, "no mention")).to be_empty
+    end
+
+    it "does not report an open entry as wrongly cited" do
+      markdown = entry("024.30", status: "open", kind: "defect")
+
+      expect(DeferredFindings.wrongly_documented(markdown, "a limitation <!-- documents: 024.30 -->")).to be_empty
+    end
+
     it "requires every named document to cite the entry, not just one" do
       markdown = entry("024.30", status: "open", kind: "defect")
 
@@ -202,6 +236,25 @@ RSpec.describe "deferred findings metadata" do
       expect(missing).to be_empty,
                          "entries with no `yaml` metadata block: #{missing.join(", ")}. " \
                          "Every `## 024.N` heading needs one, directly beneath it."
+    end
+
+    # `entries` builds a Hash, so a reused number keeps the *last* entry
+    # and discards the first silently -- and `parses every entry` cannot
+    # see it either, because subtracting the parsed keys from the headings
+    # leaves nothing when the duplicate is the same string twice. The
+    # discarded entry's `status`/`user-visible` are then checked by
+    # nothing, and the day either number is cited in `KNOWN_LIMITATIONS`
+    # the citation guards answer from the wrong entry.
+    #
+    # Round 37, after two entries were appended as 024.60 by a renumber
+    # that read the register's highest number before a merge added
+    # another. Reading the file is what failed; a check is what does not.
+    it "gives every entry a number of its own" do
+      duplicated = DeferredFindings.headings(deferred).tally.select { |_, count| count > 1 }
+
+      expect(duplicated.keys).to be_empty,
+                                 "reused entry numbers: #{duplicated.keys.join(", ")}. " \
+                                 "A number keyed twice means one entry's metadata is never read."
     end
 
     it "finds the open defects it is meant to guard" do
@@ -232,6 +285,15 @@ RSpec.describe "deferred findings metadata" do
                          "open findings absent from KNOWN_LIMITATIONS: #{missing.join(", ")}. " \
                          "Document the user-visible half in both languages, or declare " \
                          "`user-visible: no` with a `user-visible-note` saying why."
+    end
+
+    it "stops documenting a finding once it is fixed" do
+      stale = DeferredFindings.wrongly_documented(deferred, english, japanese)
+
+      expect(stale).to be_empty,
+                       "findings recorded as fixed but still published as current limitations: " \
+                       "#{stale.join(", ")}. Remove the paragraph, in both languages -- a limitation " \
+                       "naming a defect the release does not have is worse than none."
     end
   end
 end

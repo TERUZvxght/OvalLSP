@@ -73,6 +73,30 @@ jobs:
       # failures, 41 pending" and exit status 0, which is exactly what
       # EXTENSION_CAPABILITIES.md's "a capability whose row is skipped is
       # not shipped" exists to prevent (024.16).
+      # The documented-count checks skip when the run is not the whole
+      # suite, which is correct for a subset run and wrong here: this is
+      # the run those figures are measured from. Two review rounds put a
+      # vacuous predicate in that file trying to state the same thing from
+      # inside the suite; it cannot be stated there, because a subset run
+      # is legitimate. Here it can: this step runs the whole suite by
+      # construction, so a pending from that file means the number nobody
+      # re-measures went unchecked again.
+      - name: Fail if a documented-count check skipped
+        working-directory: core
+        run: |
+          ruby -rjson -e '
+            result = JSON.parse(File.read("tmp/rspec.json", encoding: "UTF-8"))
+            skipped = result.fetch("examples").select do |ex|
+              ex.fetch("file_path").include?("spec/meta/documented_counts_spec.rb") &&
+                ex.fetch("status") == "pending"
+            end
+            unless skipped.empty?
+              warn "the documented example-count checks skipped on a full run:"
+              skipped.each { |ex| warn "  #{ex.fetch("full_description")} -- #{ex["pending_message"]}" }
+              exit 1
+            end
+          '
+
       - name: Fail if the real-Rails or capability suites were skipped instead of run
         working-directory: core
         run: |
@@ -105,6 +129,64 @@ jobs:
                 exit 1
               end
               puts "All #{examples.size} #{label} examples ran (none skipped for want of an environment)."
+            end
+          '
+
+  core-ruby-4:
+    name: Core Server (Ruby 4.0, informational)
+    runs-on: ubuntu-latest
+    # Reports; never gates. `docs/SUPPORT_MATRIX.md` calls 4.0 "best
+    # effort", and the standing decision for the 0.2.x line is that a
+    # 4.0-specific failure gets recorded rather than fixed -- a required
+    # job would turn the first one into work nobody agreed to do. What
+    # this buys is that the 4.0 row stops being a claim measured once by
+    # hand on one machine: that row used to end "nothing continuously
+    # verifies 4.0", and it was right.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "4.0"
+          bundler-cache: true
+          working-directory: core
+
+      - name: Ruby syntax check
+        working-directory: core
+        run: find lib spec -name '*.rb' -print0 | xargs -0 -n1 ruby -c
+
+      # No real Rails installed here, deliberately. The real-Rails and
+      # capability suites skip themselves when rails/sqlite3 cannot be
+      # resolved, and installing them under 4.0 would make this job's
+      # failures a report on Rails' own 4.0 readiness rather than on
+      # OvalLSP's. The `core` job above is the one where such a skip is a
+      # hard failure; this job is about the engine's own suite.
+      - name: Run the suite that does not need a real Rails
+        working-directory: core
+        run: bundle exec rspec --format progress --format json --out tmp/rspec-4.json
+
+      # Non-gating is a decision about *failures*; it was never a decision
+      # to accept "nothing ran" as a pass. `continue-on-error` makes this
+      # job green whatever happens, so without a count nobody can tell a
+      # 4.0 run that passed from a 4.0 that never started -- which is
+      # exactly `CLAUDE.md`'s "a green suite is a measurement too" arriving
+      # in the one job whose whole purpose is to answer "is 4.0 green".
+      # The documents that cite this job as continuous verification are
+      # citing this count.
+      - name: Report the 4.0 example count, and fail this job if nothing ran
+        working-directory: core
+        run: |
+          ruby -rjson -e '
+            result = JSON.parse(File.read("tmp/rspec-4.json", encoding: "UTF-8"))
+            summary = result.fetch("summary")
+            count = summary.fetch("example_count")
+            line = "Ruby 4.0: #{count} examples, #{summary.fetch("failure_count")} failures"
+            File.write(ENV.fetch("GITHUB_STEP_SUMMARY", "/dev/null"), "#{line}\n", mode: "a")
+            warn line
+            if count.zero?
+              warn "the 4.0 suite contributed zero examples -- it did not run"
+              exit 1
             end
           '
 

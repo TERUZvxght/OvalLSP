@@ -21,15 +21,45 @@
 RSpec.describe "documented example counts" do
   def read(name) = File.read(File.expand_path("../../../#{name}", __dir__), encoding: "UTF-8")
 
+  # Every spec file this suite owns. Rooted at `spec/` itself, not at
+  # `core/`: `bundle config path vendor/bundle` -- which is what CI's own
+  # `bundler-cache: true` sets -- puts `diff-lcs`' twenty spec files
+  # inside `core/`, and counting those made the comparison below never
+  # match. The guard then skipped on every full run, in CI included, and
+  # the number it exists to hold went stale exactly as before: it said
+  # 1,934 while the suite had grown past it, which is the third time this
+  # figure has drifted and the first time with a guard watching.
+  def spec_files_on_disk = Dir.glob(File.expand_path("../**/*_spec.rb", __dir__))
+
   # Only when the runner was given no files and no filters -- `rspec` with
   # nothing after it. Anything narrower is a subset, and `example_count`
   # would be the subset's size, which is not what the documents claim.
   def whole_suite?
     return false unless RSpec.configuration.filter_manager.inclusions.empty?
 
-    Dir.glob(File.expand_path("../**/*_spec.rb", __dir__.sub(%r{/meta\z}, ""))).length ==
-      RSpec.configuration.files_to_run.length
+    spec_files_on_disk.length == RSpec.configuration.files_to_run.length
   end
+
+  # Why this is a `skip` and not another in-suite predicate.
+  #
+  # Two rounds running put a defect in this file's own body (the
+  # 0.2.4-bound branch's rounds): round 37
+  # replaced a check that compared a glob's results against the glob's own
+  # root, and round 38 found the replacement comparing "everything under
+  # core/ that is not under spec/" against a `files_to_run` that `.rspec`
+  # confines to `spec/`. Both were empty by construction. A third
+  # predicate over the same two sets would be the same mistake a third
+  # time -- and asserting the two file counts match, which was tried, is
+  # *legitimately* false whenever anyone runs a single file, so it turns a
+  # correct subset run red.
+  #
+  # The property worth holding cannot be stated from inside a run that may
+  # legitimately be a subset. It is that **the run CI performs did not
+  # skip**, and it is enforced where the whole suite is guaranteed:
+  # `.github/workflows/ci.yml`'s "Fail if a documented-count check
+  # skipped" step reads the JSON formatter's output and fails on a pending
+  # from this file. `skip` rather than an early return so that step has
+  # something to see.
 
   # `1,833` and `1833` are the same claim; the documents use the first and
   # a future one may use the second.

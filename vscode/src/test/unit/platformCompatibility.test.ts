@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { checkBundledCoreCompatibility, queryRubyConfigPaths, RubyIdentity } from '../../platformCompatibility';
+import { installExecutableFixture } from '../support/executableFixture';
 
 describe('checkBundledCoreCompatibility', () => {
   let extensionRoot: string;
@@ -67,6 +68,31 @@ describe('checkBundledCoreCompatibility', () => {
 
     assert.strictEqual(result.compatible, true);
     assert.ok(result.note && result.note.includes('4.0'), `expected a note naming the Ruby, got ${result.note}`);
+  });
+
+  // Engine is not gated here, and the direction matters: the
+  // 0.2.4-bound branch briefly gated it to make this function agree
+  // with `compareVersionInfo`, and that turned one red toast into two
+  // -- this one advising `gem install prism rbs` without having asked,
+  // on a Core that already has them. Reverted there; which decider owns
+  // the *notification* is that branch's open question, recorded in its
+  // register entries.
+  //
+  // Both halves asserted, because `compatible: true` alone would pass on
+  // a build that skips the probe and assumes.
+  it('probes a different engine rather than refusing it unasked', async () => {
+    writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
+    let asked = false;
+
+    const result = await checkBundledCoreCompatibility(
+      extensionRoot, 'jruby',
+      stubIdentity({ engine: 'jruby', version: '3.4.7', platform: 'universal-java-21' }),
+      undefined,
+      async () => { asked = true; return true; }
+    );
+
+    assert.strictEqual(result.compatible, true);
+    assert.strictEqual(asked, true, 'an engine difference is asked about, not assumed');
   });
 
   it('is incompatible on a Ruby that has neither the payload nor its own prism and rbs', async () => {
@@ -225,7 +251,12 @@ describe('queryRubyConfigPaths', () => {
     await assert.rejects(queryRubyConfigPaths('nonexistent-ruby-command'));
   });
 
-  it('actually runs the query in the given cwd, not the caller\'s own ambient working directory', async () => {
+  it('actually runs the query in the given cwd, not the caller\'s own ambient working directory', async function () {
+    // See `installExecutableFixture`: the fixture below is a file this
+    // machine has never executed, and the first run of one is the slow
+    // one. This test timed out at mocha's 2 s default while passing in
+    // 186 ms when run alone.
+    this.timeout(30000);
     // Task 023.8 (second re-review round): this is the regression the
     // previous version of this test suite couldn't have caught -- it
     // only asserted on stdout parsing, never on *which directory* the
@@ -236,9 +267,10 @@ describe('queryRubyConfigPaths', () => {
     // its own actual working directory -- no real Ruby version manager
     // needed for this assertion to be meaningful or portable to CI.
     const fakeRubyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ovallsp-fake-ruby-'));
-    const fakeRubyPath = path.join(fakeRubyDir, 'fake-ruby.sh');
-    fs.writeFileSync(fakeRubyPath, '#!/bin/sh\necho "$(pwd)|$(pwd)"\n');
-    fs.chmodSync(fakeRubyPath, 0o755);
+    const fakeRubyPath = installExecutableFixture(
+      path.join(fakeRubyDir, 'fake-ruby.sh'),
+      '#!/bin/sh\necho "$(pwd)|$(pwd)"\n'
+    );
 
     const targetCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'ovallsp-target-cwd-'));
     try {

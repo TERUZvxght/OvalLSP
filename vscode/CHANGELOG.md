@@ -40,6 +40,23 @@ not from what an earlier document remembered.
   against correct code. The unusable directory is now constructed
   inside the example's own temporary directory, and is unusable for
   every uid.
+- Fixed: this README and the site promised behaviour the build does
+  not have — a refusal to run on a Ruby the bundled payload was not
+  built for, and a hard stop on an Extension/Core version mismatch.
+  What actually happens: the extension probes whether that Ruby can
+  load `prism`/`rbs` itself and uses them when it can, and a version
+  mismatch is reported and the session keeps running. The documents
+  now say so, and the mismatch follow-through and a
+  publish-after-close race are pinned as limitation entries (024.50,
+  024.55, 024.56).
+- Added, from the parallel 0.2.3 preparation (see Details): the guards
+  it built that this tree verifies — the documented-example-count
+  check **actually runs now** (its glob made it skip on every CI run
+  to date), no two spec files may share a top-level constant, a
+  publish-invariant property over the notifications a client really
+  sends, hover/completion agreement on a template's `@ivar`, a
+  fail-on-zero informational Ruby 4.0 CI job, and a roadmap⇔site
+  parity check with the site's roadmap page brought current.
 
 ### Details
 
@@ -64,6 +81,20 @@ described the rolled-back arrangement as current — four are rewritten
 against the shipped one and two went with the dead code they described
 — and a deferral comment that named the wrong release (0.3.0 for
 `activeParameter`; the roadmap says 0.4.0) is corrected.
+
+**Two preparations, one release.** This 0.2.3 was prepared twice, in
+parallel and unknowingly: once on the branch that shipped it, and once
+on `fix/0.2.3` — the original, paused mid-loop by the incident 0.2.2
+records and resumed after it. The two converged independently on
+several of the same corrections, which is worth something as evidence;
+where they overlapped, the version verified on this tree was kept, and
+what the original's own record does not yet call demonstrated — its
+engine work: a background cache sweep, `VendorBootstrap`, a handshake
+rework — continues on that branch as **0.2.4**, with its register
+entries. `docs/design/tasks/028-0.2.3-review-loop.md` carries the full
+merge record, and the rule that prevents the double preparation (the
+record on `main` names the branch the work lives on) is codified in
+the working agreements.
 
 ## 0.2.2 — A test that deleted things, and the containment it needed
 
