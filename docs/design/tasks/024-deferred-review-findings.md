@@ -2135,7 +2135,10 @@ kind: roadmap
 `core/spec/meta/deferred_findings_spec.rb`,
 `docs/DOCUMENTATION_MAP.md`, `CLAUDE.md`
 
-This file is roughly 2,800 lines across fifty entries, and it lives in
+This file runs to thousands of lines across dozens of entries — `wc -l`
+and `grep -c '^## 024\.'` give the current figures; the precise count
+this sentence once carried went stale within the release that imported
+it — and it lives in
 `docs/design/tasks/` — a directory of per-task implementation notes,
 numbered by the task that produced them. Everything else in there is a
 record of one finished piece of work. This one is a live register that
@@ -3086,7 +3089,7 @@ change, with the two paths separated:
 2. **Post-start** (`compareVersionInfo`) cannot honestly claim "before any
    feature request" -- the client has started. It would have to stop the
    client, and the reasons differ in severity: a payload hash mismatch is
-   a integrity failure, a core-version mismatch after a Marketplace update
+   an integrity failure, a core-version mismatch after a Marketplace update
    is usually a stale process that a restart fixes.
 
 ## 024.56 A publish can land after the panel has been cleared, and after a newer one
@@ -3401,3 +3404,65 @@ architecture while being reviewed resets the round reviewing it.
 **How it was found:** while describing the layering in conversation, not
 by a review round, and it was the fourth reader that gave it away — the
 architecture as described has one path, and the code has four.
+
+## 024.66 A marketing card kept carrying claims about what an error's text says
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.3
+user-visible: yes
+```
+
+**Area:** `site/index.html` and `site/ja/index.html` (the startup
+handshake cards, then the platform callout), with the same claim-shape
+in `docs/KNOWN_LIMITATIONS.md`/`.ja.md`, `docs/SUPPORT_MATRIX.md`/
+`.ja.md` and `vscode/README.md`/`.ja.md`
+
+Entered under the roll-back rule — the same place failed three
+consecutive rounds of 0.2.3's unification loop, and the rule says the
+entry is the deliverable. Three attempts, each the wrong shape:
+
+1. **Merge round 1** fixed the index pages' platform callout, which
+   claimed refusal of a combination the 0.2.1 probe path runs.
+   Hand-fixed, card by card.
+2. **Merge round 2** found the handshake card claiming the extension
+   "stops and explains" on a version mismatch — the build reports and
+   keeps running. Fixed, with a countermeasure: a verb-level sweep
+   (`reject|refus|stop|拒否|停止|縮退`) across every published page,
+   classifying every hit as true or false of the build.
+3. **Merge round 3** found round 2's own replacement text claiming the
+   mismatch error "names both versions" — the notification names
+   neither; the versions are Output-channel reason lines. No refusal
+   verb in it, so the sweep could not see it: the countermeasure was
+   aimed at the symptom's vocabulary, not the class.
+
+**Root cause:** a published card carried micro-claims about what error
+text *says*, and such a claim must be re-verified against the build on
+every edit — including the edits made to fix the previous claim. Three
+rounds each produced a new false sentence while correcting the old one.
+
+**The rollback (merge round 3):** the cards now state only what does
+not need per-edit verification — the exchange happens, a mismatch is
+reported, the session keeps running, the specifics are in the Output
+channel, 024.55 tracks the follow-through. No error-text claims remain
+on either card.
+
+**Merge round 4 extended the same adjudication to the survivors.** Ten
+published sentences — the platform callout in both languages, and
+`gem install prism rbs` sentences in `KNOWN_LIMITATIONS`,
+`SUPPORT_MATRIX` and the READMEs, both languages — attributed that
+line to "the error", meaning the notification. The build's
+notification names no gems; it points at the Output channel, whose
+detail does name them (`platformCompatibility.ts`, the half
+`platformCompatibility.test.ts` pins). Four of the ten predate 0.2.3
+on `main` (both `KNOWN_LIMITATIONS` Ruby-scope instances, both
+`SUPPORT_MATRIX` rows); six were introduced by 0.2.3's own honesty
+pass and caught before release. The fix follows the split the
+rollback drew: marketing cards carry no error-content claims at all,
+and documentation states the notification → Output-channel split,
+whose Output-channel half is the test-pinned part. The READMEs'
+no-Ruby sentence — "explains what's wrong and what to do rather than
+half-starting", published since before 0.2.3 — fell in the same pass:
+that path's reason carries no remedy, and the session still attempts
+to start (024.55).

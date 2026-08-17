@@ -20,8 +20,8 @@ evidence-based supported/unsupported table this summarizes.
   whether the selected Ruby can load `prism` and `rbs` itself. When it
   can (a stock Ruby 3.3+ install carries both), the session runs against
   those with an Output-channel note — an **unverified** configuration,
-  not a refused one. When it cannot, an error names
-  `gem install prism rbs`.
+  not a refused one. When it cannot, an error notification points at the
+  Output channel, whose detail names `gem install prism rbs`.
 - **Intel Macs, including under Rosetta 2 translation, are not
   supported in this Preview** — unsupported, not refused. An x86_64
   Ruby (even one installed natively on an Apple Silicon Mac via Intel
@@ -86,8 +86,9 @@ any other Ruby they are not used.
 **On another Ruby it does not refuse — it checks.** As of 0.2.1,
 `vscode/src/platformCompatibility.ts` asks whether that interpreter can
 `require` `prism` and `rbs` itself. If it can, OvalLSP runs against
-those and says so in the Output channel; if it cannot, you get the error
-naming `gem install prism rbs`. Ruby 3.3 ships both, so a 3.3 user
+those and says so in the Output channel; if it cannot, you get an error
+notification, and the Output-channel detail names
+`gem install prism rbs`. Ruby 3.3 ships both, so a 3.3 user
 usually gets the first — **which means an unverified combination, not a
 verified one**. Nothing about 3.3 is exercised beyond `core/`'s own suite
 under CI, and prism's version there may be older than the gemspec's
@@ -433,10 +434,11 @@ Treat those answers as unreliable until the mismatch is resolved, and run
 
 ## Diagnostics that come back after you clear or close a file
 
-**Rarely, and only on a large file.** When the Runtime Agent supplies
-routes or models, or becomes ready, every open file is re-analysed on a
-background thread — and that pass decides which files to analyse before
-it starts, not while it runs.
+**Rarely, and only while one of these re-analysis passes is running — a
+window that grows with the number of open files, not just the size of
+one.** When the Runtime Agent supplies routes or models, or becomes
+ready, every open file is re-analysed on a background thread — and that
+pass decides which files to analyse before it starts, not while it runs.
 
 Two things follow. If you had paused on a file big enough to take seconds
 to analyse, the `*_path` reports made without routes can be written back

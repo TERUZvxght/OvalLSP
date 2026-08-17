@@ -61,8 +61,8 @@ bundled native dependencies and says so. On a *Ruby* it was not built
 for, it asks whether that Ruby carries `prism` and `rbs` of its own: if
 it does, OvalLSP runs against those and notes it in the Output channel,
 which is a combination nothing here verifies rather than one that is
-supported; if it does not, you get a clear diagnostic naming
-`gem install prism rbs` (see
+supported; if it does not, you get an error notification whose
+Output-channel detail names `gem install prism rbs` (see
 [Version and compatibility errors](#version-and-compatibility-errors)).
 
 ## Requirements
@@ -88,8 +88,10 @@ else needed to run — the Core Server itself and its own runtime
 dependencies (Prism, RBS) — ships inside the VSIX; there is no second
 download, no `bundle install`, and no repository checkout involved.
 
-If no Ruby can be found at all, OvalLSP shows a clear diagnostic
-explaining what's wrong and what to do rather than half-starting. If the
+If no Ruby can be found at all, the search falls back to plain `ruby`
+from `PATH`; when even that cannot be identified, you get an error
+notification with the detail in the Output channel — though the session
+still attempts to start rather than refusing up front. If the
 Ruby found simply differs from the one this build's native dependencies
 were compiled for, see the paragraph above: it runs against that Ruby's
 own `prism`/`rbs` when they are there, and tells you in the Output
