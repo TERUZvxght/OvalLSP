@@ -46,9 +46,9 @@ not from what an earlier document remembered.
   What actually happens: the extension probes whether that Ruby can
   load `prism`/`rbs` itself and uses them when it can, and a version
   mismatch is reported and the session keeps running. The documents
-  now say so, and the mismatch follow-through and a
-  publish-after-close race are pinned as limitation entries (024.50,
-  024.55, 024.56).
+  now say so; the README-promise defect is recorded as fixed (024.50),
+  and the mismatch follow-through and a publish-after-close race are
+  pinned as limitation entries (024.55, 024.56).
 - Added, from the parallel 0.2.3 preparation (see Details): the guards
   it built that this tree verifies — the documented-example-count
   check **actually runs now** (its glob made it skip on every CI run

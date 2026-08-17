@@ -57,30 +57,14 @@ jobs:
         working-directory: core
         run: bundle exec rspec --format documentation --format json --out tmp/rspec.json
 
-      # `bundle exec rspec` exits 0 as long as nothing *failed* -- a
-      # skipped example (RSpec's `pending`) doesn't fail the run on its
-      # own, which is exactly how both real-Rails-backed suites behave
-      # when they can't find rails/sqlite3 locally. This step turns that
-      # into a hard CI failure, so a broken/missing real-Rails setup can
-      # never masquerade as "tests passed".
-      #
-      # Both suites, not just the integration one. `capabilities_spec.rb`
-      # uses the identical skip-when-unavailable mechanism, and
-      # `capability_coverage_spec.rb` cannot catch it -- that guard scans
-      # the spec file's *source text* for `it "C5: ..."`, so it cannot
-      # tell a row that ran from a row that was skipped. Measured: with
-      # the fixture unavailable, the e2e suite gives "45 examples, 0
-      # failures, 41 pending" and exit status 0, which is exactly what
-      # EXTENSION_CAPABILITIES.md's "a capability whose row is skipped is
-      # not shipped" exists to prevent (024.16).
       # The documented-count checks skip when the run is not the whole
       # suite, which is correct for a subset run and wrong here: this is
       # the run those figures are measured from. Two review rounds put a
       # vacuous predicate in that file trying to state the same thing from
       # inside the suite; it cannot be stated there, because a subset run
-      # is legitimate. Here it can: this step runs the whole suite by
-      # construction, so a pending from that file means the number nobody
-      # re-measures went unchecked again.
+      # is legitimate. Here it can: this step runs after the whole suite
+      # by construction, so a pending from that file means the number
+      # nobody re-measures went unchecked again.
       - name: Fail if a documented-count check skipped
         working-directory: core
         run: |
@@ -97,6 +81,22 @@ jobs:
             end
           '
 
+      # `bundle exec rspec` exits 0 as long as nothing *failed* -- a
+      # skipped example (RSpec's `pending`) doesn't fail the run on its
+      # own, which is exactly how both real-Rails-backed suites behave
+      # when they can't find rails/sqlite3 locally. This step turns that
+      # into a hard CI failure, so a broken/missing real-Rails setup can
+      # never masquerade as "tests passed".
+      #
+      # Both suites, not just the integration one. `capabilities_spec.rb`
+      # uses the identical skip-when-unavailable mechanism, and
+      # `capability_coverage_spec.rb` cannot catch it -- that guard scans
+      # the spec file's *source text* for `it "C5: ..."`, so it cannot
+      # tell a row that ran from a row that was skipped. Measured: with
+      # the fixture unavailable, the e2e suite gives "45 examples, 0
+      # failures, 41 pending" and exit status 0, which is exactly what
+      # EXTENSION_CAPABILITIES.md's "a capability whose row is skipped is
+      # not shipped" exists to prevent (024.16).
       - name: Fail if the real-Rails or capability suites were skipped instead of run
         working-directory: core
         run: |

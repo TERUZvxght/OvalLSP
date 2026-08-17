@@ -2173,23 +2173,28 @@ and a move that drops one is worse than no move:
 `design/tasks/`, with this file reduced to a stub pointing at it, a row
 added to `DOCUMENTATION_MAP.md`, and the guard spec re-pointed.
 
-**What a move breaks, measured rather than guessed.** Nineteen files
-outside this one cite the path `docs/design/tasks/024-deferred-review-findings.md`
-directly, and all of them go stale on the day it moves:
+**What a move breaks: measure it with a grep at the revision that
+moves it, not from this paragraph.** The count here was wrong on
+arrival — this entry said "nineteen files" over an itemized list of
+eighteen, and the unified 0.2.3's merge round re-counted and got a
+different membership besides (`docs/ROADMAP.md` + `.ja.md` cite the
+relative link rather than the full path; sibling task files cite the
+full path; `AGENTS.md` cites the bare filename and goes stale on a
+move too). The shape of the blast radius, which is what matters:
 
 - `CLAUDE.md` — the rollback rule names this path as where a rolled-back
   thread's root cause is written. That rule stops being followable the
   moment the path is a stub.
-- `README.md` + `.ja.md`, `docs/PUBLISHING.md` + `.ja.md`,
-  `docs/ROADMAP.md` + `.ja.md`, `docs/KNOWN_LIMITATIONS.md` + `.ja.md`,
-  `docs/DOCUMENTATION_MAP.md` + `.ja.md`, both changelogs,
-  `site/roadmap.html` + `site/ja/roadmap.html`.
+- the READMEs, `docs/PUBLISHING.md`, `docs/ROADMAP.md`,
+  `docs/KNOWN_LIMITATIONS.md`, `docs/DOCUMENTATION_MAP.md` and their
+  `.ja.md` pairs, both changelogs, the roadmap site pages, sibling
+  task files.
 - `core/spec/meta/deferred_findings_spec.rb`, and two source files
   (`runtime/ancestry_registry.rb`, `runtime_agent/agent.rb`).
 
-The stub is what makes this survivable rather than a nineteen-file
-flag-day: the path keeps resolving, and the citations are corrected as
-they are next touched. The exceptions are `CLAUDE.md` and the guard spec,
+The stub is what makes this survivable rather than a flag-day across
+every citing file: the path keeps resolving, and the citations are
+corrected as they are next touched. The exceptions are `CLAUDE.md` and the guard spec,
 which must move with the file — a working agreement pointing at a
 forwarding address is not a working agreement.
 

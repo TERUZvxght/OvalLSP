@@ -14,10 +14,10 @@ supported/unsupportedの一覧は
   platform向けにコンパイルされたnative extension(Prism、RBS)を
   同梱しています([ADR-0005](design/adrs/0005-platform-scoped-vsix-with-runtime-compatibility-check.md)参照)。
   それ以外のOS/CPUでは、同梱されたnative依存は単純にロードされません。
-  代わりに起きること — 0.2.1 から、後述「Rubyバージョンの範囲」節と
+  代わりに起きること — 0.2.1 から、後述「Rubyバージョンのscope」節と
   同じ経路です: 拡張機能は選ばれたRuby自身が `prism` と `rbs` を
-  読めるかを確認します。読める場合(Ruby 3.3+ は両方をdefault gemとして
-  同梱)、セッションはそちらで動き、Outputチャンネルにその旨が出ます —
+  読めるかを確認します。読める場合(素の Ruby 3.3+ には両方が入って
+  います)、セッションはそちらで動き、Outputチャンネルにその旨が出ます —
   **未検証**の構成であって、拒否された構成ではありません。読めない
   場合は `gem install prism rbs` を示すエラーになります。
 - **Rosetta 2変換下も含め、Intel Macはこのpreviewでは非対応です** —

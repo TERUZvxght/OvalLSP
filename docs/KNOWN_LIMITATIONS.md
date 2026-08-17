@@ -18,7 +18,7 @@ evidence-based supported/unsupported table this summarizes.
   loaded. What happens instead — since 0.2.1, and the same path the
   "Ruby version scope" section below describes: the extension checks
   whether the selected Ruby can load `prism` and `rbs` itself. When it
-  can (Ruby 3.3+ ships both as default gems), the session runs against
+  can (a stock Ruby 3.3+ install carries both), the session runs against
   those with an Output-channel note — an **unverified** configuration,
   not a refused one. When it cannot, an error names
   `gem install prism rbs`.
