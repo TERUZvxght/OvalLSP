@@ -6,6 +6,63 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.3 — What the record says is what ships
+
+Nothing an editor does changes in this release. It exists because three
+published documents said things the shipped build does not do, and
+because 0.2.1's rollback left debris behind it in the tree. Every
+correction below was written from a measurement of the current build,
+not from what an earlier document remembered.
+
+- Fixed: the known-limitations entry for **a namespaced class named
+  after a core class** (`Billing::Range`) claimed hover, go to
+  definition and completion stopped answering in 0.2.1. They answer —
+  the arrangement that broke them was rolled back before 0.2.1 ever
+  shipped. What the shipped build actually does, and the entry now
+  says: **mistakes on such a receiver are silently never reported**,
+  and while such a class is indexed a literal's completion offers that
+  class's members while hover answers from the core class (024.47).
+- Fixed: 0.2.1's own notes carried **two bullets contradicting each
+  other** about completion on a shadowed literal, under one heading, in
+  both languages. The one claiming the completion half was fixed
+  described a change that was reverted before release; it is removed,
+  and the surviving bullet — completion behaves as 0.2.0's did — is the
+  true one.
+- Fixed: the site's front-page badge advertised **0.2.1** against a
+  published 0.2.2. The check that compares the badge against the build
+  ran only when a site file changed, so a version bump alone could
+  never fire it; the badge is current again, and the check now runs on
+  every push.
+- Fixed: an example in the Core test suite handed the cache a
+  fabricated absolute path and assumed creating it would fail. **Run as
+  root, it created directories at the filesystem root** and failed
+  against correct code. The unusable directory is now constructed
+  inside the example's own temporary directory, and is unusable for
+  every uid.
+
+### Details
+
+0.2.2 deferred three things to this release: the 0.2.1 documentation
+cleanup, the register entries, and the hover/completion countermeasure.
+The first two are this release. The third — making completion, hover
+and diagnostics answer a shadowed name from one decision — was
+evaluated concretely against this tree and declined for a patch: the
+candidate design's recorded cost ("one spurious completion candidate on
+a literal") turned out to understate an `argument-count` false-positive
+family (`"hello".upcase(:ascii)` reported against a shadow class's own
+`upcase()`), a hover popup mixing two classes' identities, the entire
+core API arriving as completion noise on the written-name side, and a
+corpus measurement that is structurally blind to all of it. The
+evaluation and the re-scoping are recorded in 024.47 and
+`docs/design/tasks/028-0.2.3-review-loop.md`; the register entry stays
+open and the limitation stays documented, in both languages.
+
+The rest of the cleanup: an unreferenced method and an inert
+constructor parameter left by the rollback are gone, six comments
+describing the rolled-back arrangement as current are rewritten against
+the shipped one, and a deferral comment that named the wrong release
+(0.3.0 for `activeParameter`; the roadmap says 0.4.0) is corrected.
+
 ## 0.2.2 — A test that deleted things, and the containment it needed
 
 Nothing you can notice changes. This release exists because a defect in
@@ -116,10 +173,6 @@ and the capability tables promised something the build did not do.
   contains an unpaired parenthesis inside a string or a comment —
   `raise ArgumentError, "bad )"` — and no longer answers with an inner
   call because of one.
-- Fixed: a workspace class sharing a core class's last segment
-  (`Serializer::Elements::String`) no longer answers for the core one in
-  **completion**. 0.2.1 fixed the diagnostic and left this half, so
-  `"hello".` still offered that class's methods and no String methods.
 - Fixed: `->() {}`, `!x`, `a && b` and `a || b` have a type. A default
   written `name || "anonymous"` is a String rather than nothing.
 - Fixed: **a method whose name ends in `!` or `?` gets answers.** Hover,

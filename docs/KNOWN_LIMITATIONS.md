@@ -386,14 +386,26 @@ missed one", so each is narrow on purpose. What that costs a user:
 
 ## A class of yours named after a core class
 
-**If it lives in a namespace, it stops resolving.** `Billing::Range`,
-`Admin::File`, `Reporting::Time` — referred to the way Ruby refers to a
-class from inside its own namespace, by its bare name — get no hover, no
-go to definition and no completion as of 0.2.1, where 0.2.0 answered.
-The engine refuses to let a bare name that Ruby itself declares be
-answered by a workspace class, which is right for the `String` a literal
-produced and wrong for the `Range` you wrote (024.47). A class named
-after a core one at the *top* level is unaffected. <!-- documents: 024.47 -->
+**If it lives in a namespace, mistakes on it are not reported.**
+`Billing::Range`, `Admin::File`, `Reporting::Time` — used the way Ruby
+refers to a class from inside its own namespace, by bare name — hover,
+go to definition, completion and signature help all answer, but every
+diagnostic about such a receiver is silently withheld: a typo like
+`r.tagg` on your `Billing::Range` is never flagged, while the same typo
+on a class with an unshared name is. The engine cannot tell the `Range`
+you wrote from the `String` a literal produced, so the refusal that
+protects the literal silences your class too. And while your workspace
+contains such a class, the literal side has its own cost: `"hello".`
+completes to that class's members rather than String's, while hover on
+`"hello".upcase` answers from the core class — the readers disagree,
+and which is right depends on information the engine does not have
+(024.47). A class named after a core one at the *top* level is
+unaffected. <!-- documents: 024.47 -->
+
+(Until 0.2.3 this section claimed the opposite — that hover, definition
+and completion stopped answering for such a class as of 0.2.1. That
+described an arrangement built and rolled back *inside* 0.2.1's review
+loop; what 0.2.1 actually shipped is the silence described above.)
 
 ## How long an edit takes to re-analyse
 

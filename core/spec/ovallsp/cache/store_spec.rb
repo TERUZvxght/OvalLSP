@@ -53,11 +53,25 @@ RSpec.describe Ovallsp::Cache::Store do
     end
   end
 
+  # The unusable directory is *constructed* -- a regular file where a
+  # parent directory would have to be, which `mkdir_p` refuses for every
+  # uid -- rather than assumed. The previous fixture passed
+  # `/nonexistent-parent-dir-<pid>/ovallsp-cache` and relied on `mkdir_p`
+  # failing at `/`, which is a fact about the runner's privileges, not
+  # about the path: under root it succeeded, created both directories at
+  # the filesystem root, and the example failed against correct code.
+  # Same rule as the prune examples below: no fabricated absolute paths
+  # into code that touches the filesystem, `Dir.mktmpdir` always.
   it "returns nil rather than raising when the cache directory itself is unusable" do
-    store = described_class.new(cache_dir: "/nonexistent-parent-dir-#{Process.pid}/ovallsp-cache")
+    Dir.mktmpdir do |tmp|
+      not_a_dir = File.join(tmp, "not-a-dir")
+      File.write(not_a_dir, "")
+      store = described_class.new(cache_dir: File.join(not_a_dir, "ovallsp-cache"))
 
-    expect { store.save("/a.rb", summary) }.not_to raise_error
-    expect(store.load("/a.rb")).to be_nil
+      expect(store.enabled?).to be(false)
+      expect { store.save("/a.rb", summary) }.not_to raise_error
+      expect(store.load("/a.rb")).to be_nil
+    end
   end
 
   it "writes atomically -- no partial/temp file is left behind after a successful save" do

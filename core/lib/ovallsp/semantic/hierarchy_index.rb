@@ -106,16 +106,8 @@ module Ovallsp
       ROOT_SUPERCLASS_NAMES = %w[Object ::Object].freeze
       private_constant :ROOT_SUPERCLASS_NAMES
 
-      # `signatures` is optional and nil-safe, like every other collaborator
-      # in this codebase: without it the index resolves exactly as before.
-      # With it, a bare name signatures already declare is not answered by
-      # a workspace class that merely shares its last segment -- see
-      # `Index::TypeNameResolution`, which is where that rule lives so
-      # that completion, hover, definition and diagnostics cannot each
-      # decide it differently.
-      def initialize(workspace_index:, signatures: nil)
+      def initialize(workspace_index:)
         @workspace_index = workspace_index
-        @signatures = signatures
         @mutex = Mutex.new
         @facts_by_uri = {}
         @superclass_by_owner = {}

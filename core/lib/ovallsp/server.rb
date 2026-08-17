@@ -63,11 +63,8 @@ module Ovallsp
       @document_store = DocumentStore.new
       @parser_service = ParserService.new
       @workspace_index = WorkspaceIndex.new
-      # Before the hierarchy index, which needs it: resolving a bare name
-      # that signatures declare is the one case where the workspace's own
-      # answer must be refused (Index::TypeNameResolution).
       @signatures = load_signatures_environment
-      @hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: @workspace_index, signatures: @signatures)
+      @hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: @workspace_index)
       @method_resolver = Semantic::MethodResolver.new(workspace_index: @workspace_index, hierarchy_index: @hierarchy_index)
       @method_summary_store = Semantic::MethodSummaryStore.new
       @generated_method_index = Semantic::GeneratedMethodIndex.new
@@ -2399,9 +2396,10 @@ module Ovallsp
       return help if help.fetch(:signatures).empty?
 
       # `activeParameter` -- which parameter the cursor is on -- was built
-      # here during 0.2.1's review loop and is deferred to 0.3.0 with the
-      # capability row that named it. It is on the roadmap, not a
-      # correction to something this release already claimed.
+      # here during 0.2.1's review loop and is deferred to 0.4.0 with the
+      # capability row that named it (S4; the roadmap's "Signature help
+      # highlights the argument the cursor is in"). It is on the roadmap,
+      # not a correction to something this release already claimed.
       help
     end
 

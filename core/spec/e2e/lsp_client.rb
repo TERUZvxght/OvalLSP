@@ -81,11 +81,6 @@ module E2E
       completion_items(uri, line, character).find { |item| item[:label] == label }
     end
 
-    def document_highlights(uri, line, character)
-      Array(request("textDocument/documentHighlight",
-                    { textDocument: { uri: uri }, position: { line: line, character: character } }))
-    end
-
     def hover_text(uri, line, character)
       result = request("textDocument/hover", { textDocument: { uri: uri }, position: { line: line, character: character } })
       result && result.dig(:contents, :value)

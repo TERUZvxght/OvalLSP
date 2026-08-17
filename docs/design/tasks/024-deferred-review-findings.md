@@ -2649,7 +2649,7 @@ what caught it here was a measurement, not a reviewer's reading. Giving
 measure it properly, with `ClassOf` handled for singleton bodies and
 `.class` resolving to the class object rather than to `Class`.
 
-## 024.47 A namespaced class named after a core class stops resolving
+## 024.47 A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal
 
 ```yaml
 status: open
@@ -2658,14 +2658,31 @@ user-visible: yes
 ```
 
 **Area:** `core/lib/ovallsp/index/type_name_resolution.rb`
-(`#substitution?`), applied by `Semantic::HierarchyIndex#canonical_name`
+(`#substitution?`), applied by
+`Diagnostics::Engine#shadowed_declared_type?` inside
+`#receiver_type_for`
 
-The rule refuses to resolve a *bare* name that signatures declare to a
-workspace class in a different namespace. That is right for a type an
-expression produced -- a literal's `String` must not be answered by
-`Serializer::Elements::String` -- and wrong for a name the user *wrote*,
-because a bare name is exactly how Ruby refers to a class from inside its
-own namespace:
+The substitution test recognises a *bare* name that signatures declare
+being answered by a workspace class in a different namespace. It cannot
+tell a name the user *wrote* -- a bare name is exactly how Ruby refers
+to a class from inside its own namespace -- from a name inference
+produced, so wherever the rule is applied, it is applied to both
+populations at once. 0.2.1 tried both placements, and each was wrong for
+one population:
+
+- **Applied at resolution** (`HierarchyIndex#canonical_name`, built
+  mid-loop): the literal case was right and every written bare name
+  broke -- hover, definition and completion all stopped answering for
+  `Range.new` inside `module Billing`. Rolled back before 0.2.1
+  shipped.
+- **Applied at the diagnostics engine** (what 0.2.1 shipped, and what
+  ships today): hover, definition, completion and signature help all
+  answer for the written name, and the engine declines to report about
+  *any* receiver the test matches. Measured on this tree (0.2.3's
+  scope-confirmation pass, controls included): `r.tagg` -- a genuine
+  typo -- on a `Billing::Range` receiver is never reported, while the
+  identical typo on a `Pricing::Tariff` receiver is. The check is
+  silently off for exactly the classes this entry is about.
 
 ```ruby
 module Billing
@@ -2675,29 +2692,96 @@ module Billing
   class Invoice
     def run
       r = Range.new
-      r.tag("x")     # 0.2.0: hover, definition and completion all answer
-    end              # 0.2.1: all three answer nothing
+      r.tag("x")     # 0.2.0: hover, definition and completion answer
+      r.tagg("x")    # 0.2.1-0.2.3: they still answer -- and this typo
+    end              # is never reported (a Tariff's identical typo is)
   end
 end
 ```
 
-Reproduces for `Data`, `Set`, `Method`, `File`, `Time`, `Struct`,
+(This entry's first version annotated the example "0.2.1: all three
+answer nothing". That described the mid-loop resolution-side
+arrangement, which was rolled back before 0.2.1 shipped, and the
+`KNOWN_LIMITATIONS` paragraph written from it told users a limitation
+the shipped build does not have -- while saying nothing about the
+diagnostics silence it does have. Both corrected in 0.2.3; believe the
+measurement above, not this file's history.)
+
+The literal side, meanwhile, still disagrees with itself while such a
+class is indexed: `"hello".` completes to the workspace class's members
+and none of String's (0.2.0's behaviour, kept deliberately), hover and
+signature help on `"hello".upcase` answer from RBS, and diagnostics
+decline. Three readers, three sources.
+
+Applies to `Data`, `Set`, `Method`, `File`, `Time`, `Struct`,
 `Comparable`, `IO` and `Random` -- any core name a namespaced class
 shares. `Billing::Logger` survives only because `logger`'s RBS is not
 loaded by default.
 
-**Direction:** the two cases differ in whether the name was *written* or
-*inferred*, and `HierarchyIndex#ancestors` knows neither -- it is handed
-a name with no lexical context. Two shapes are plausible and neither is a
-patch: carry that distinction into the type (an inferred Nominal is not
-the same thing as a written constant reference), or stop choosing and let
-the chain hold both the workspace class and the RBS type, so a member
-lookup finds whichever declares it. The second is cheaper and costs one
-spurious completion candidate on a literal.
+**What the 0.2.1 revert left behind, cleaned up in 0.2.3.** `CLAUDE.md`'s
+revert rule ("grep the tree for the thing being reverted before
+committing the revert") points here for the full inventory of what
+reverting the resolution-side placement stranded:
+
+- an unreferenced method: `Index::TypeNameResolution.canonical`, whose
+  only caller was the reverted `canonical_name` (removed);
+- an inert constructor parameter: `signatures:`/`@signatures` on
+  `Semantic::HierarchyIndex`, assigned and never read (removed, with its
+  three construction sites);
+- stale comments describing the reverted arrangement as current, in
+  `index/type_name_resolution.rb` (header), `semantic/hierarchy_index.rb`
+  (`initialize`), `server.rb` (the `@signatures` ordering note),
+  `diagnostics/engine.rb` ("resolution itself now refuses"),
+  `scripts/corpus_diagnostics.rb` (naming a shadow rule in
+  `canonical_name` that is not there), and `CLAUDE.md`'s countermeasure
+  exemplar list (holding up the rolled-back placement as the right
+  shape) -- all rewritten;
+- a published changelog bullet claiming the reverted completion fix as
+  shipped, contradicting its sibling bullet under the same 0.2.1
+  heading in both languages (deleted; 0.2.3's entry carries the
+  notice);
+- the `KNOWN_LIMITATIONS` sections in both languages described above
+  (rewritten from measurement);
+- a dead e2e client helper (`lsp_client.rb#document_highlights`) from
+  the same rollback commit's capability removal (removed).
+
+**Direction, re-costed in 0.2.3.** The two shapes stand, and the second
+was evaluated concretely against this tree before being declined for a
+patch release:
+
+1. Carry the written/inferred distinction into the type -- an inferred
+   Nominal is not the same thing as a written constant reference. Still
+   the shape that addresses the cause.
+2. Stop choosing: let the ancestor chain hold both the workspace class
+   and the RBS type, so member lookup finds whichever declares it. A
+   simulation (0.2.3's review record, `028-0.2.3-review-loop.md`) showed
+   the real bill, and the entry's earlier costing -- "one spurious
+   completion candidate on a literal" -- understated every line of it:
+   `"hello".upcase(:ascii)`, legal Ruby, becomes an `argument-count`
+   false positive whenever the shadow class declares its own `upcase()`
+   (`sole_source_declaration` keeps each source's answer singular while
+   the receiver's identity is not, and `sole_declared_overload` has the
+   symmetric RBS-side family); a written `Billing::Range` gains the
+   whole core `Range` API as spurious completion candidates; one hover
+   popup mixes an RBS label with a workspace `Defined:`; and making
+   literal receivers closed re-opens 024.13's family -- `"".squish`
+   under ActiveSupport-style direct additions -- for any workspace
+   containing a shadow class. A corpus diff cannot arbitrate any of
+   this: the gems that reopen core classes do it at the *top level*,
+   where `substitution?` never fires, so the measurement is blind
+   exactly where collisions live. Fixtures watched failing, not corpus
+   deltas, are the gate if this shape is ever built.
+
+Per the roll-back rule's own step 3 -- the problem goes to its own
+release or its own task -- the fix is re-scoped out of 0.2.3, which
+carries the documentation and this record instead. 027 deferred "the
+hover/completion countermeasure" here; this entry is where that item
+landed, and why it is not a code change in a patch.
 
 **Not caught for seven rounds** because `scripts/corpus_diagnostics.rb`
-built its `HierarchyIndex` without `signatures:`, so this rule was inert
-in every corpus measurement the release quoted (024.48).
+built a `HierarchyIndex` without the `signatures:` the then-current
+shadow rule read, so the rule was inert in every corpus measurement the
+release quoted (024.48).
 
 ## 024.48 The measurement tool ran an engine the server never runs
 

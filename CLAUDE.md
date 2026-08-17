@@ -115,11 +115,17 @@ Then:
   from rounds that needed one:
   - two scanners that had to agree about the same text, replaced by one
     both read (0.2.1's `#code_offsets`);
-  - a rule copied into a second reader, moved to where the value is
-    produced so there is nothing to copy (`Index::TypeNameResolution`);
+  - a literal-type table two inferencers kept diverging on, replaced by
+    one table both read, with the spec driven from the table
+    (`Types::LiteralTypes`);
   - a guard that could not see a finding parked outside its input, given
     the finding as input (`024.41`'s entry, so `deferred_findings_spec`
     enforces it).
+  A countermeasure can also *fail*: 0.2.1 moved the type-name shadowing
+  rule into resolution so its readers could not diverge, and that broke
+  every bare name written from inside its own namespace — rolled back,
+  024.47. Moving a rule to where the value is produced is only the right
+  shape when every reader really does want the same answer.
   A regression test for the specific instance is *not* a countermeasure.
   It pins the one case and leaves the next one to a reviewer.
 
@@ -279,13 +285,19 @@ unjustifiable on the project's own terms until a reviewer caught it.
 it is the one least likely to look like it needs a pass: the prose was
 correct when it was written, and nothing about undoing a change announces
 that it also undid the reason for a paragraph. 0.2.1 reverted its
-resolution-side shadowing rule and left an unreferenced method, three
-comments describing the reverted arrangement as current, and a published
-changelog bullet claiming the reverted change as a fix — so the release
-shipped two bullets under one heading contradicting each other about one
-behaviour. All of it was found by re-measuring rather than by reading.
-The cheap check is to **grep the tree for the thing being reverted before
-committing the revert**, not after. 024.47 records the full list.
+resolution-side shadowing rule and left an unreferenced method, an inert
+constructor parameter, stale comments in six places describing the
+reverted arrangement as current, a published changelog bullet claiming
+the reverted change as a fix — so the release shipped two bullets under
+one heading contradicting each other about one behaviour — and a
+`KNOWN_LIMITATIONS` section in both languages describing the rolled-back
+arrangement instead of the shipped one, so users were told a limitation
+that did not exist while the one that did went unmentioned. All of it was
+found by re-measuring rather than by reading, across two releases; the
+first inventory itself undercounted ("three comments") until 0.2.3
+re-grepped. The cheap check is to **grep the tree for the thing being
+reverted before committing the revert**, not after. 024.47 records the
+full list.
 
 ## Public repository privacy and secret handling
 
