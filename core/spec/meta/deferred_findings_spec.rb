@@ -58,9 +58,22 @@ module DeferredFindings
   # nothing -- and routing is the target key's whole job.
   KNOWN_KEYS = %w[status kind released-in user-visible user-visible-note target].freeze
 
+  # Flags whole lines rather than filtering parsed fields: the field
+  # parser's own grammar is `[a-z-]+`, so a key with a capital or an
+  # underscore (`Target:`, `user_visible:`) never parses as a field at
+  # all -- round 11 demonstrated `Target: 0.2.4` leaving the whole
+  # suite green while the entry went silently un-routed. Any
+  # non-blank, non-indented line in the block that is not a known
+  # field is a stray, whatever characters the typo used; indented
+  # lines are the folded note's continuation.
   def unknown_keys(markdown)
-    entries(markdown).transform_values { |fields| fields.keys - KNOWN_KEYS }
-                     .reject { |_, extra| extra.empty? }
+    markdown.scan(METADATA_BLOCK).to_h do |number, block|
+      strays = block.each_line
+                    .map(&:chomp)
+                    .reject { |line| line.strip.empty? || line.start_with?(" ") }
+                    .reject { |line| line.match?(/\A(#{Regexp.union(KNOWN_KEYS)}):/) }
+      [number, strays]
+    end.reject { |_, strays| strays.empty? }
   end
 
   def open_defects(markdown)
@@ -210,7 +223,27 @@ RSpec.describe "deferred findings metadata" do
     it "rejects a key the grammar does not define" do
       typoed = DeferredFindings.unknown_keys(entry("024.30.1", status: "open", kind: "defect", taget: "0.2.4"))
 
-      expect(typoed).to eq("024.30.1" => ["taget"])
+      expect(typoed).to eq("024.30.1" => ["taget: 0.2.4"])
+    end
+
+    # Round 11: the first version of this guard filtered the *parsed*
+    # fields against KNOWN_KEYS, and the field parser's own grammar is
+    # `[a-z-]+` -- so `Target:` or `user_visible:` never parsed as a
+    # field at all and the guard was blind to exactly the typo family
+    # it exists to catch. The guard now flags any non-indented line in
+    # the block that is not a known field, whatever characters the
+    # typo used.
+    it "rejects a mis-cased or underscored key, which the field parser cannot even see" do
+      cased = DeferredFindings.unknown_keys(entry("024.30.1", status: "open", kind: "defect", Target: "0.2.4"))
+
+      expect(cased).to eq("024.30.1" => ["Target: 0.2.4"])
+
+      # Built by hand: the `entry` helper itself tr's underscores to
+      # hyphens, which is exactly why an underscored key is a likely
+      # slip in real editing.
+      underscored = "## 024.30.1 A finding\n\n```yaml\nstatus: open\nkind: defect\nuser_visible: no\n```\n\nprose\n\n"
+
+      expect(DeferredFindings.unknown_keys(underscored)).to eq("024.30.1" => ["user_visible: no"])
     end
 
     it "excludes an entry that declares no user-visible half" do
