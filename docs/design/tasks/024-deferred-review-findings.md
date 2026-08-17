@@ -3050,7 +3050,7 @@ getting-started pages, and not these two.
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.0
+target: 0.2.4
 ```
 
 **Area:** `vscode/src/extension.ts` (`runVersionHandshake`, and the
@@ -3098,7 +3098,7 @@ change, with the two paths separated:
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.0
+target: 0.2.4
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#republish_open_diagnostics`,
@@ -3235,6 +3235,7 @@ user-visible-note: >
   affected. What is recorded is that the correctness rests on four
   call sites each remembering a different subset, rather than on the
   structure — a hazard for the fifth, not a fault in the fourth.
+target: 0.2.4
 ```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
@@ -3326,6 +3327,7 @@ user-visible-note: >
   remembering to do the same thing, and that the last release broke it
   while fixing it. The entry is about the second occurrence, not about a
   present fault.
+target: 0.2.4
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (roughly 1580–2004, and
@@ -3500,10 +3502,16 @@ from source and specs this violates the legend's letter; the changelog
 pair is the same class through a document the legend does not name.
 
 Found by merge round 5 of 0.2.3's loop, by full cross-reference at
-626d652: 58 entries against 72 distinct cited numbers, where the other
+626d652: 58 entries against 74 distinct number-shaped citations, two
+of which (`024.21.1`, `024.30.1`) are synthetic fixture strings inside
+`deferred_findings_spec.rb`'s own format examples — not citations of
+entries, and excluded as such. Of the remaining 72, the other
 unmatched citations (`024.51`, `024.54`, `024.57`, `024.58`, `024.61`,
 `024.64`, `024.65`) are the legend's own documented cross-branch
-reservations and gap, not defects. Pre-existing at 0.2.3's base.
+reservations and gap, not defects. (Re-run the cross-reference rather
+than trusting these figures; they were measured at one revision, and
+merge round 6 caught this paragraph's first draft omitting the
+exclusion it was measured under.) Pre-existing at 0.2.3's base.
 
 Recorded rather than fixed because the fix is not small and the loop
 runs under fix-don't-add: seven entries would need resurrecting from

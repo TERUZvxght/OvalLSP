@@ -117,8 +117,7 @@ claim, and one does not license the other.
   but is never automatically updated, and is never compared against the
   bundled Core's own version/build/payload expectations.
 
-## Static analysis limitations (not Apple-Silicon-specific, but worth
-restating for a Preview)
+## Static analysis limitations (not Apple-Silicon-specific, but worth restating for a Preview)
 
 OvalLSP is a confidence-aware heuristic engine for LSP features, not a
 Ruby type checker. By design, it does not track:
