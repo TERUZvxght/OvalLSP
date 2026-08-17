@@ -25,7 +25,7 @@ updated in the same change, not "later".
 | If you changed… | Update | Checked by |
 |---|---|---|
 | **A capability** (anything a user can now do, or can no longer do) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md` (add/alter the row **and** its E2E example), README's matrix in `README.md` + `README.ja.md`, `site/capabilities.html` + `site/ja/capabilities.html`, both changelogs | `core/spec/e2e/capability_coverage_spec.rb` (row ⇔ E2E example), `core/spec/meta/*_parity_spec.rb` (EN ⇔ JA). README's own pair is **not** among them — see 024.25 |
-| **A version number** | `core/lib/ovallsp/version.rb`, `core/Gemfile.lock`, `vscode/package.json`, `vscode/package-lock.json` (two places), both changelogs — and, once it is published, `docs/RELEASE_ARTIFACTS.md` | `core/spec/meta/changelog_parity_spec.rb`, `vscode/src/test/unit/versionPairing.test.ts`, `core/spec/meta/release_artifacts_spec.rb` (every `v*` tag is accounted for) |
+| **A version number** | `core/lib/ovallsp/version.rb`, `core/Gemfile.lock`, `vscode/package.json`, `vscode/package-lock.json` (two places), the version badge on `site/index.html` + `site/ja/index.html`, both changelogs — and, once it is published, `docs/RELEASE_ARTIFACTS.md` | `core/spec/meta/changelog_parity_spec.rb`, `vscode/src/test/unit/versionPairing.test.ts`, `scripts/check_site_links.rb` (badge ⇔ `package.json`; run by ci.yml's site-consistency job and gating the deploy — this row omitted the badge until 0.2.3, which is how 0.2.2's drift happened), `core/spec/meta/site_version_guard_spec.rb` (that wiring itself), `core/spec/meta/release_artifacts_spec.rb` (every `v*` tag is accounted for) |
 | **A roadmap item** (shipped, dropped, moved) | `docs/ROADMAP.md` + `.ja.md`, README's matrix, `site/roadmap.html` + `site/ja/roadmap.html`, the matching `024.R*` entry in `docs/design/tasks/024-deferred-review-findings.md` | `core/spec/meta/roadmap_parity_spec.rb` (README ⇔ roadmap) |
 | **A change reverted mid-release** (see CLAUDE.md's same-place rule) | a `024.*` entry naming the root cause and the direction actually needed, both changelogs if a bullet was already written for it, and the section of `CLAUDE.md` the episode informs | — |
 | **A review round finding the same place the previous round did** | a mechanical countermeasure — a shared implementation, a rule moved to where the value is produced, a guard given the input it could not see — *not* a regression test for the one instance, and not a third hand fix | — |
@@ -104,11 +104,15 @@ mutation test that caught the English half was never run against the
 Japanese one; it is now, in both directions.
 
 What that check does *not* cover, and what therefore still has to be
-read: every page that is not `capabilities.html` or an index page. The security page's
-two retracted claims, the roadmap's mis-numbered sentence, the version
-badge, the requirements list, the patch definition and the 404 page's
-issue-tracker line were each found by a person reading, and nothing
-would have caught them.
+read: every page that is not `capabilities.html` or an index page. The
+security page's two retracted claims, the roadmap's mis-numbered
+sentence, the requirements list, the patch definition and the 404
+page's issue-tracker line were each found by a person reading, and
+nothing would have caught them. The version badge used to head this
+list; it is machine-checked now, and 0.2.2 still shipped a stale one,
+because the check ran only when a site file changed — the wiring that
+lets it fire on a version bump arrived in 0.2.3, pinned by
+`site_version_guard_spec.rb`.
 
 ## Where a check is missing
 

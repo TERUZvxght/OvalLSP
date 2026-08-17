@@ -2743,7 +2743,17 @@ reverting the resolution-side placement stranded:
 - the `KNOWN_LIMITATIONS` sections in both languages described above
   (rewritten from measurement);
 - a dead e2e client helper (`lsp_client.rb#document_highlights`) from
-  the same rollback commit's capability removal (removed).
+  the same rollback commit's capability removal (removed);
+- a contract line nothing could observe: `substitution?`'s refusal of a
+  qualified name was exercised only through the reverted resolution-side
+  caller -- its one surviving caller blanks qualified receivers a line
+  earlier (`WorkspaceIndex#guessed_type_name?`), and a full-suite sweep
+  ran green with the line deleted. Pinned in 0.2.3 by a direct unit spec
+  (`spec/ovallsp/index/type_name_resolution_spec.rb`, watched failing
+  against the deleted line) rather than removed: the module states the
+  bare-name precondition as its own contract, and a refusal that holds
+  only because the sole caller pre-filters is 0.2.2's
+  emergent-containment lesson over again.
 
 **Direction, re-costed in 0.2.3.** The two shapes stand, and the second
 was evaluated concretely against this tree before being declined for a
@@ -2798,14 +2808,23 @@ user-visible-note: >
 
 **Area:** `scripts/corpus_diagnostics.rb`
 
-It built `HierarchyIndex.new(workspace_index:)` while `Server#initialize`
-builds `HierarchyIndex.new(workspace_index:, signatures:)`. The shadow
-rule lives in `#canonical_name` and reads `@signatures`, so it did
-nothing in any corpus run -- and every figure this release quoted came
-from those runs. A measurement of a configuration no user gets is not a
-smaller measurement; it is a measurement of something else.
+(The constructions below are the mid-0.2.1-loop arrangement this entry
+was written against. The resolution-side shadow rule they describe was
+rolled back before 0.2.1 shipped, and 0.2.3 removed the then-inert
+`signatures:` parameter from `HierarchyIndex` everywhere -- so on
+today's tree the "defective" construction and the correct one read the
+same, the rule lives in the diagnostics engine, and the script matches
+the server again by *not* passing what no longer exists. 024.47 records
+that rollback; the lesson here is unchanged.)
 
-Fixed by building it the way the server does. The lesson is the one
+It built `HierarchyIndex.new(workspace_index:)` while `Server#initialize`
+built `HierarchyIndex.new(workspace_index:, signatures:)`. The shadow
+rule of the day lived in `#canonical_name` and read `@signatures`, so it
+did nothing in any corpus run -- and every figure this release quoted
+came from those runs. A measurement of a configuration no user gets is
+not a smaller measurement; it is a measurement of something else.
+
+Fixed by building it the way the server did. The lesson is the one
 `CLAUDE.md` already carries, one level up: *confirm each side ran the
 code you think it ran* has to include "and in the configuration a user
 would run it in".

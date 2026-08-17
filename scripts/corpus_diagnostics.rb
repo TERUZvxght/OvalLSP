@@ -89,8 +89,10 @@ local_inferencer = Ovallsp::LocalInferencer.new(
   model_registry: model_registry, method_resolver: method_resolver, signatures: signatures,
   method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(
     workspace_index: workspace_index, method_resolver: method_resolver,
-    summary_store: Ovallsp::Semantic::MethodSummaryStore.new
-  )
+    summary_store: Ovallsp::Semantic::MethodSummaryStore.new,
+    model_registry: model_registry, generated_method_index: Ovallsp::Semantic::GeneratedMethodIndex.new
+  ),
+  observation_store: Ovallsp::Observation::Store.new
 )
 context = Ovallsp::Diagnostics::SemanticContext.new(
   workspace_index: workspace_index, hierarchy_index: hierarchy_index, method_resolver: method_resolver,

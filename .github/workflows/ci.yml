@@ -132,16 +132,13 @@ jobs:
         working-directory: vscode
         run: npm run test:unit
 
-  # Task 023.7: full git history secret scan, on every PR/push -- not
-  # merely a one-time pre-release check. `fetch-depth: 0` is required so
-  # gitleaks actually walks the repo's full history rather than the
-  # single shallow commit `actions/checkout` fetches by default.
   # The site check's version comparison reads vscode/package.json, but
   # the deploy workflow that runs it triggers only on site/ changes -- so
   # a version bump alone could turn the check red with nothing to fire
   # it, which is how 0.2.2's badge drift went unnoticed on main for five
   # days. Running the check here gives the guard the input it could not
-  # see: every push exercises it, whichever side of the comparison moved.
+  # see: it now runs on every pull request and every push to main,
+  # whichever side of the comparison moved.
   site-consistency:
     name: Site consistency (check_site_links)
     runs-on: ubuntu-latest
@@ -155,6 +152,10 @@ jobs:
       - name: Site matrix, links and version badge against the tree
         run: ruby scripts/check_site_links.rb
 
+  # Task 023.7: full git history secret scan, on every PR/push -- not
+  # merely a one-time pre-release check. `fetch-depth: 0` is required so
+  # gitleaks actually walks the repo's full history rather than the
+  # single shallow commit `actions/checkout` fetches by default.
   secret-scan:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest

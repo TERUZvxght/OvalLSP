@@ -5,7 +5,7 @@
 - When asking another agent for an independent review, do not tell it what not to count, where to concentrate, or that finding nothing is fine. Each of those narrows what it can report, and a falling defect count then measures the instructions rather than the code. See `CLAUDE.md` for the rule and 024.36 for the control run that established it.
 - **Work in progress lives in `docs/design/tasks/`, not in a transcript.**
   The open findings of the current review loop are in the highest-numbered
-  `NNN-*.md` there — 026 for 0.2.1. Anything a reviewer reported and
+  `NNN-*.md` there — 028 for 0.2.3. Anything a reviewer reported and
   nobody has fixed exists only in that file; agent reports are not kept.
   Read it before deciding what to do next, and add to it before a long
   session ends.

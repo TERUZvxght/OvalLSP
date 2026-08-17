@@ -32,7 +32,7 @@ not from what an earlier document remembered.
   published 0.2.2. The check that compares the badge against the build
   ran only when a site file changed, so a version bump alone could
   never fire it; the badge is current again, and the check now runs on
-  every push.
+  every pull request and every push to `main`.
 - Fixed: an example in the Core test suite handed the cache a
   fabricated absolute path and assumed creating it would fail. **Run as
   root, it created directories at the filesystem root** and failed

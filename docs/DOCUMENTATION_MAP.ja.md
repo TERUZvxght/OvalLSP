@@ -26,7 +26,7 @@
 | 変更したもの | 更新するもの | 照合するテスト |
 |---|---|---|
 | **ケイパビリティ**(ユーザーにできることが増えた・減った) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md`(行**と**そのE2E例の両方)、`README.md` + `README.ja.md` のマトリクス、`site/capabilities.html` + `site/ja/capabilities.html`、両CHANGELOG | `core/spec/e2e/capability_coverage_spec.rb`(行⇔E2E例)、`core/spec/meta/*_parity_spec.rb`(EN⇔JA)。READMEの日英対はこの中に**ありません**(理由は024.25) |
-| **バージョン番号** | `core/lib/ovallsp/version.rb`、`core/Gemfile.lock`、`vscode/package.json`、`vscode/package-lock.json`(2箇所)、両CHANGELOG。公開した後は `docs/RELEASE_ARTIFACTS.md` も | `core/spec/meta/changelog_parity_spec.rb`、`vscode/src/test/unit/versionPairing.test.ts`、`core/spec/meta/release_artifacts_spec.rb`(`v*` タグがすべて記載されていること) |
+| **バージョン番号** | `core/lib/ovallsp/version.rb`、`core/Gemfile.lock`、`vscode/package.json`、`vscode/package-lock.json`(2箇所)、`site/index.html` + `site/ja/index.html` のバージョンバッジ、両CHANGELOG。公開した後は `docs/RELEASE_ARTIFACTS.md` も | `core/spec/meta/changelog_parity_spec.rb`、`vscode/src/test/unit/versionPairing.test.ts`、`scripts/check_site_links.rb`(バッジ⇔`package.json`。ci.yml の site-consistency ジョブが実行し、デプロイのゲートでもある — この行は 0.2.3 までバッジを載せておらず、それが 0.2.2 のバッジずれの起き方だった)、`core/spec/meta/site_version_guard_spec.rb`(その配線自体)、`core/spec/meta/release_artifacts_spec.rb`(`v*` タグがすべて記載されていること) |
 | **ロードマップ項目**(提供開始・取り下げ・移動) | `docs/ROADMAP.md` + `.ja.md`、READMEのマトリクス、`site/roadmap.html` + `site/ja/roadmap.html`、`docs/design/tasks/024-deferred-review-findings.md` の対応する `024.R*` | `core/spec/meta/roadmap_parity_spec.rb`(README⇔ロードマップ) |
 | **リリース途中で巻き戻した変更**(CLAUDE.md の同一箇所規則を参照) | 根本原因と本来必要な方向を明記した `024.*` エントリ、既に箇条書きを書いていた場合は両CHANGELOG、その経験が示す `CLAUDE.md` の該当節 | — |
 | **前ラウンドと同じ箇所を指摘したレビューラウンド** | 機械的な対策 — 実装の共有、値を作る場所へのルールの移動、見えていなかった入力をガードに与えること。その1件に対する回帰テストは対策ではなく、3度目の手当ても対策ではない | — |
@@ -88,10 +88,14 @@
 文章は悪くなります。2つの写しが本当に共有しているのは表の順序です。
 
 この検査が覆っていないもの、したがって依然として人が読む必要があるもの:
-`capabilities.html` 以外のすべてのページです。セキュリティページの撤回済み
-主張2件、ロードマップの数え違いの一文、バージョンバッジ、動作要件の一覧、
+`capabilities.html` と両 index ページ以外のすべてのページです。セキュリティ
+ページの撤回済み主張2件、ロードマップの数え違いの一文、動作要件の一覧、
 パッチの定義、404ページのイシュートラッカーへの言及——いずれも人が読んで
-見つけたもので、機械が捕まえるものは1つもありませんでした。
+見つけたもので、機械が捕まえるものは1つもありませんでした。バージョン
+バッジはかつてこの一覧の先頭にあり、いまは機械が検査します。それでも
+0.2.2 は古いバッジのまま出荷されました。検査がサイトのファイルが変わった
+ときにしか走らなかったからで、バージョンバンプで発火する配線は 0.2.3 で
+入り、`site_version_guard_spec.rb` が pin しています。
 
 ## 検査が欠けている箇所
 
