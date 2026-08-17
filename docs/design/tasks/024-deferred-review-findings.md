@@ -3466,3 +3466,51 @@ no-Ruby sentence — "explains what's wrong and what to do rather than
 half-starting", published since before 0.2.3 — fell in the same pass:
 that path's reason carries no remedy, and the session still attempts
 to start (024.55).
+
+## 024.67 Seven register numbers are cited from the tree and resolve to nothing
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  The dangling pointers live in source comments, spec comments and
+  changelog entries -- developer-facing routes to reasons, not
+  anything an editor user sees or a behaviour the extension has.
+target: 0.3.0
+```
+
+**Area:** this file's legend (the deletion rule),
+`core/lib/ovallsp/types.rb:122`,
+`core/lib/ovallsp/local_inferencer.rb` (607, 741, 878, 1043),
+`core/lib/ovallsp/semantic/method_analyzer.rb:255`,
+`vscode/src/coreProcess.ts:413`, `vscode/src/extension.ts:50`,
+`vscode/src/clientLifecycle.ts:245`,
+`vscode/src/clientErrorNotifications.ts:32` and its unit test, and
+both changelogs
+
+`024.2`, `024.3`, `024.7`, `024.9` and `024.12` are cited from live
+source and spec comments as the route to the reason a piece of code is
+the way it is, and `024.4`/`024.5` are cited from both changelogs. None
+has a `## 024.N` entry. The entries were deleted around 0.1.9–0.1.10 —
+before the legend learned its lesson about exactly this ("run the grep
+before deleting, not the calendar"), and nothing ever re-checked the
+earlier deletions against the rule once it existed. For the five cited
+from source and specs this violates the legend's letter; the changelog
+pair is the same class through a document the legend does not name.
+
+Found by merge round 5 of 0.2.3's loop, by full cross-reference at
+626d652: 58 entries against 72 distinct cited numbers, where the other
+unmatched citations (`024.51`, `024.54`, `024.57`, `024.58`, `024.61`,
+`024.64`, `024.65`) are the legend's own documented cross-branch
+reservations and gap, not defects. Pre-existing at 0.2.3's base.
+
+Recorded rather than fixed because the fix is not small and the loop
+runs under fix-don't-add: seven entries would need resurrecting from
+history accurately, and the durable form wants the project's own
+countermeasure shape — a `deferred_findings_spec` example that every
+`024.N` cited from source or spec resolves to an entry, plus a
+tombstone convention (a stub entry pointing into history) so historical
+citations can stay without forbidding deletion forever. That guard
+belongs with 024.R9's register move, which re-points the guard spec
+anyway; hence the target.

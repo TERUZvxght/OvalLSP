@@ -216,11 +216,14 @@ jobs:
 
   # The site check compares the version the index pages advertise
   # against vscode/package.json, and it must run when *either* side of
-  # that comparison moves. The deploy workflow that also runs it
-  # triggers only on site/ changes, so without this job a version bump
-  # alone could turn the check red with nothing to fire it -- which is
-  # what 0.2.2 did. Here it runs on every pull request and every push
-  # to main. History and the measured timeline:
+  # that comparison moves. Until 0.2.3 the deploy workflow that also
+  # runs it triggered only on site/ changes, so a version bump alone
+  # could turn the check red with nothing to fire it -- which is what
+  # 0.2.2 did. The deploy now watches the version file too; this job is
+  # path-unfiltered, so it also catches drift introduced from outside
+  # that watch list (a roadmap or changelog edit, say -- both inputs of
+  # the check's parity half). Here it runs on every pull request and
+  # every push to main. History and the measured timeline:
   # docs/design/tasks/028-0.2.3-review-loop.md.
   site-consistency:
     name: Site consistency (check_site_links)

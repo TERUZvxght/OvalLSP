@@ -103,3 +103,44 @@ RSpec.describe "the CI guard against a silently skipped suite" do
     end
   end
 end
+
+# The two guards 0.2.3 imported are CI-only text too, and deleting
+# either -- the documented-count step whole, the `core-ruby-4` job
+# whole -- left every check in the repository green while the published
+# sentences resting on them stayed put: `SUPPORT_MATRIX`'s 4.0 row and
+# both READMEs cite the job as what runs now, and the changelog says the
+# count check "actually runs now". Same defect class as above, same fix
+# shape: pin the text nothing executes locally.
+RSpec.describe "the CI-only guards the published documents cite" do
+  let(:workflow_text) do
+    File.read(File.expand_path("../../../.github/workflows/ci.yml", __dir__), encoding: "UTF-8")
+  end
+
+  it "fails a full run whose documented-count checks skipped" do
+    step = workflow_text[/Fail if a documented-count check skipped.*?(?=- name: )/m]
+
+    expect(step).not_to be_nil, "the documented-count guard step is no longer in ci.yml"
+    expect(step).to include("documented_counts_spec.rb")
+    expect(step).to include('ex.fetch("status") == "pending"')
+    expect(step).to include("exit 1")
+  end
+
+  it "keeps the 4.0 job reporting its example count, and failing when nothing ran" do
+    require "yaml"
+    job = YAML.safe_load(workflow_text).fetch("jobs")["core-ruby-4"]
+
+    expect(job).not_to be_nil, "the core-ruby-4 job is no longer in ci.yml"
+    # Non-gating is the recorded decision -- a 4.0-specific failure is
+    # recorded, not fixed, in the 0.2.x line -- and the count is what
+    # the documents cite. Both halves pinned.
+    expect(job.fetch("continue-on-error")).to be(true)
+
+    run_lines = job.fetch("steps").filter_map { |step| step["run"] }
+    expect(run_lines).to include(a_string_including("bundle exec rspec"))
+
+    count_step = run_lines.find { |line| line.include?("example_count") }
+    expect(count_step).not_to be_nil, "the 4.0 job no longer reports its example count"
+    expect(count_step).to include("count.zero?")
+    expect(count_step).to include("exit 1")
+  end
+end
