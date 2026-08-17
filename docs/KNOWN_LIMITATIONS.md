@@ -409,6 +409,35 @@ and completion stopped answering for such a class as of 0.2.1. That
 described an arrangement built and rolled back *inside* 0.2.1's review
 loop; what 0.2.1 actually shipped is the silence described above.)
 
+## What a version mismatch actually does
+
+**It tells you, and then carries on.** When the Extension and the Core
+disagree about version, protocol, build identity or payload hash, you get
+an error notification and the detail in the Output channel — and the
+session keeps running. It does not stop before answering, which is what
+both READMEs and both getting-started pages said until 0.2.3.
+
+That matters most for the two reasons you cannot see: a payload hash
+mismatch means the bundled Core is not the one this build shipped, and a
+protocol mismatch means the two sides disagree about the wire. In both
+cases OvalLSP goes on answering hover, completion and go to definition.
+Treat those answers as unreliable until the mismatch is resolved, and run
+`OvalLSP: Show Version Information` to see what was detected (024.55). <!-- documents: 024.55 -->
+
+## Diagnostics that come back after you clear or close a file
+
+**Rarely, and only on a large file.** When the Runtime Agent supplies
+routes or models, or becomes ready, every open file is re-analysed on a
+background thread — and that pass decides which files to analyse before
+it starts, not while it runs.
+
+Two things follow. If you had paused on a file big enough to take seconds
+to analyse, the `*_path` reports made without routes can be written back
+over the corrected ones; the next edit clears that. And **if you close a
+file while another one is being analysed in that pass, its errors stay in
+the Problems panel** — for the rest of the session, since nothing
+republishes a file nobody has open. Reopening it clears them (024.56). <!-- documents: 024.56 -->
+
 ## How long an edit takes to re-analyse
 
 **Seconds, on a file of a couple of thousand lines.** Measured per
