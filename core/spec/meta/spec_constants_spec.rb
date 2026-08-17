@@ -52,6 +52,38 @@ RSpec.describe "spec file constants" do
     names
   end
 
+  # Every constant node kind Prism defines, classified -- because this
+  # walker missed a spelling twice in consecutive review rounds
+  # (`::FOO =` in the external round, `||=`/multiple assignment in the
+  # next), which is the same-place rule's threshold for a mechanical
+  # countermeasure instead of a third hand-written branch. The walk
+  # reads this table, and the classification example below reads
+  # *Prism* and fails on any constant node kind the table does not
+  # place -- so a Prism upgrade cannot add a constant-defining spelling
+  # this census silently ignores.
+  CONSTANT_NODE_KINDS = {
+    # Reads resolve constants; they define nothing.
+    reads: [Prism::ConstantReadNode, Prism::ConstantPathNode],
+    # `A &&= 1` and `A += 1` raise NameError without a prior plain
+    # write, and the prior write is what the census collects -- these
+    # cannot be a file's silent first definition.
+    non_defining_writes: [
+      Prism::ConstantAndWriteNode, Prism::ConstantOperatorWriteNode,
+      Prism::ConstantPathAndWriteNode, Prism::ConstantPathOperatorWriteNode
+    ],
+    # Plain names written at this lexical scope: `FOO = ...`,
+    # `FOO ||= ...` (defines when undefined), and a multiple
+    # assignment's targets.
+    defining_plain: [Prism::ConstantWriteNode, Prism::ConstantOrWriteNode, Prism::ConstantTargetNode],
+    # Path writes whose `target` is a ConstantPathNode: `::FOO = ...`,
+    # `Object::FOO = ...`, and their `||=` forms. Collected only when
+    # the path lands on Object.
+    defining_path: [Prism::ConstantPathWriteNode, Prism::ConstantPathOrWriteNode],
+    # A path target inside a multiple assignment (`::A, x = ...`) is
+    # itself the path -- it carries parent/name directly.
+    defining_path_target: [Prism::ConstantPathTargetNode]
+  }.freeze
+
   def self.collect_object_constants(node, names)
     node.compact_child_nodes.each do |child|
       case child
@@ -67,16 +99,15 @@ RSpec.describe "spec file constants" do
         elsif path.is_a?(Prism::ConstantPathNode) && object_scoped_path?(path)
           names << path.name.to_s
         end
-      when Prism::ConstantWriteNode
+      when *CONSTANT_NODE_KINDS.fetch(:defining_plain)
         names << child.name.to_s
         collect_object_constants(child, names)
-      when Prism::ConstantPathWriteNode
-        # `::FOO = ...` and `Object::FOO = ...` -- Prism parses both as a
-        # path write, so the plain `ConstantWriteNode` branch above never
-        # sees them, and the external review of the 0.2.3 release PR
-        # showed two files could collide in that spelling unseen.
+      when *CONSTANT_NODE_KINDS.fetch(:defining_path)
         target = child.target
         names << target.name.to_s if target.is_a?(Prism::ConstantPathNode) && object_scoped_path?(target)
+        collect_object_constants(child, names)
+      when *CONSTANT_NODE_KINDS.fetch(:defining_path_target)
+        names << child.name.to_s if object_scoped_path?(child)
         collect_object_constants(child, names)
       else
         collect_object_constants(child, names)
@@ -171,6 +202,59 @@ RSpec.describe "spec file constants" do
 
       expect(found).to include("RootedHolder", "Namespace")
       expect(found).not_to include("Inner")
+    end
+
+    # Round 10 of the release loop, one round after the rooted-write fix:
+    # three more spellings that define an Object constant and were not
+    # collected -- `MEMO ||= {}` (ConstantOrWriteNode), multiple
+    # assignment (ConstantTargetNode / ConstantPathTargetNode), and the
+    # rooted `||=` (ConstantPathOrWriteNode). Two rounds on the same
+    # walker is the same-place rule's threshold, so the fix is the
+    # classification table below rather than a third set of branches;
+    # these fixtures pin the defining spellings, and the exclusions pin
+    # that `&&=`/`+=` -- which cannot create a constant -- stay out.
+    it "finds an or-write and multiple-assignment targets, which also define" do
+      source = <<~RUBY
+        RSpec.describe "outer" do
+          MEMO ||= {}
+          FIRST, SECOND = 1, 2
+          ::ROOTED_OR ||= {}
+          ::ROOT_T, Namespace::SCOPED_T = 1, 2
+        end
+      RUBY
+
+      found = self.class.object_constants(source)
+
+      expect(found).to include("MEMO", "FIRST", "SECOND", "ROOTED_OR", "ROOT_T")
+      expect(found).not_to include("SCOPED_T")
+    end
+
+    it "does not collect the write forms that cannot create a constant" do
+      source = <<~RUBY
+        RSpec.describe "outer" do
+          CANNOT_AND &&= 1
+          CANNOT_OP += 1
+        end
+      RUBY
+
+      expect(self.class.object_constants(source)).to eq([])
+    end
+
+    # The countermeasure itself: the table must place every constant
+    # node kind Prism ships. When a Prism upgrade adds one, this fails
+    # and forces a classification decision, instead of the new spelling
+    # passing the census silently -- the direction both prior walker
+    # bugs failed in.
+    it "classifies every constant node kind Prism defines" do
+      shipped = Prism.constants.map(&:to_s).grep(/\AConstant.*Node\z/).sort
+                     .map { |name| Prism.const_get(name) }
+      classified = CONSTANT_NODE_KINDS.values.flatten
+
+      expect(shipped - classified).to be_empty,
+                                      "Prism constant node kinds the census does not classify: " +
+                                      (shipped - classified).map(&:name).join(", ") +
+                                      ". Place each in CONSTANT_NODE_KINDS -- collected if it can " \
+                                      "define an Object constant, excluded with a reason if not."
     end
   end
 

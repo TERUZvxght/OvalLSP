@@ -23,6 +23,7 @@ status: open        # open | fixed | done. Anything else reads as open.
 kind: defect        # defect | roadmap. Roadmap items are plans, not faults.
 released-in: 0.1.14 # only on a resolved entry
 user-visible: yes   # on an open defect: does a user see this?
+target: 0.2.4       # optional on an open entry: the release its fix is routed to
 ```
 
 An open defect with `user-visible: yes` must be cited by number in

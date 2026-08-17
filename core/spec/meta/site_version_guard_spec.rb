@@ -137,7 +137,7 @@ RSpec.describe "the site check's own teeth" do
     end
   end
 
-  it "fails a roadmap panel that loses an item the markdown still plans" do
+  it "fails a roadmap panel that gains an item the markdown does not plan" do
     # The first *planned* version, read from the same source the script
     # compares against -- shipped panels answer to the changelog instead,
     # so mutating one of those would test the wrong branch.

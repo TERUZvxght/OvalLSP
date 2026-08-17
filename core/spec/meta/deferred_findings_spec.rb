@@ -51,6 +51,18 @@ module DeferredFindings
     end
   end
 
+  # Every key the grammar defines. `status` defends against its own
+  # value typos ("Anything else reads as open" -- deliberately safe);
+  # a typo'd *key* had no counterpart until round 10 of the 0.2.3
+  # release loop pointed out that `taget: 0.2.4` would silently route
+  # nothing -- and routing is the target key's whole job.
+  KNOWN_KEYS = %w[status kind released-in user-visible user-visible-note target].freeze
+
+  def unknown_keys(markdown)
+    entries(markdown).transform_values { |fields| fields.keys - KNOWN_KEYS }
+                     .reject { |_, extra| extra.empty? }
+  end
+
   def open_defects(markdown)
     entries(markdown).select do |_, fields|
       fields["kind"] == "defect" && !RESOLVED.include?(fields["status"])
@@ -195,6 +207,12 @@ RSpec.describe "deferred findings metadata" do
       expect(DeferredFindings.documents?(markdown, "024.13")).to be(false)
     end
 
+    it "rejects a key the grammar does not define" do
+      typoed = DeferredFindings.unknown_keys(entry("024.30.1", status: "open", kind: "defect", taget: "0.2.4"))
+
+      expect(typoed).to eq("024.30.1" => ["taget"])
+    end
+
     it "excludes an entry that declares no user-visible half" do
       opted_out = entry("024.30", status: "open", kind: "defect", user_visible: "no")
 
@@ -268,6 +286,16 @@ RSpec.describe "deferred findings metadata" do
       end
 
       expect(incomplete.keys).to be_empty
+    end
+
+    it "uses only keys the grammar defines" do
+      unknown = DeferredFindings.unknown_keys(deferred)
+
+      expect(unknown).to be_empty,
+                         "entries with keys the grammar does not define: " +
+                         unknown.map { |number, extra| "#{number} (#{extra.join(", ")})" }.join("; ") +
+                         ". A misspelled key is silently ignored by every guard -- " \
+                         "fix the spelling or add the key to KNOWN_KEYS with its rule."
     end
 
     it "gives a reason with every `user-visible: no`" do

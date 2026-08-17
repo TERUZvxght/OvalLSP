@@ -240,7 +240,7 @@ MIT — [LICENSE](LICENSE)参照。サードパーティ依存のライセンス
 ## 既知の制限事項
 
 このPreviewの対応範囲については
-[docs/KNOWN_LIMITATIONS.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md)
+[docs/KNOWN_LIMITATIONS.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md)
 を、静的解析自体の原理的な限界(既知のRails DSL以外の
 `method_missing`/`define_method`、文字列引数による`class_eval`/
 `instance_eval`、実行時にしか決まらないconstant解決は設計上scope外)に
