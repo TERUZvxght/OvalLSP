@@ -13,13 +13,19 @@ supported/unsupportedの一覧は
   VSIXは`vsce package --target darwin-arm64`でビルドされ、その
   platform向けにコンパイルされたnative extension(Prism、RBS)を
   同梱しています([ADR-0005](design/adrs/0005-platform-scoped-vsix-with-runtime-compatibility-check.md)参照)。
-  それ以外のOS/CPUでは、同梱されたnative依存は単純にロードされず、
-  劣化動作や推測での実行を試みる代わりに、OvalLSPはその理由を説明する
-  診断を表示します。
-- **Rosetta 2変換下も含め、Intel Macはこのpreviewでは非対応です。**
-  x86_64のRuby(Apple Silicon Mac上にIntel Homebrew経由でnativeに
-  インストールされたものも含む)は、同じ理由で同じplatform互換性
-  チェックによって拒否されます。
+  それ以外のOS/CPUでは、同梱されたnative依存は単純にロードされません。
+  代わりに起きること — 0.2.1 から、後述「Rubyバージョンの範囲」節と
+  同じ経路です: 拡張機能は選ばれたRuby自身が `prism` と `rbs` を
+  読めるかを確認します。読める場合(Ruby 3.3+ は両方をdefault gemとして
+  同梱)、セッションはそちらで動き、Outputチャンネルにその旨が出ます —
+  **未検証**の構成であって、拒否された構成ではありません。読めない
+  場合は `gem install prism rbs` を示すエラーになります。
+- **Rosetta 2変換下も含め、Intel Macはこのpreviewでは非対応です** —
+  非対応であって、拒否ではありません。x86_64のRuby(Apple Silicon
+  Mac上にIntel Homebrew経由でnativeにインストールされたものも含む)は
+  他の不一致と同じ確認経路をたどります。`prism`/`rbs` が読めれば
+  未検証の構成として動き、その組み合わせについて何もテストされて
+  いません。
 - **同梱されたnative extensionには、packagingを行ったマシン自身の
   絶対Rubyインストールパスが埋め込まれており、Extension側の起動時
   対応で緩和しています。** packageされた`prism.bundle`/

@@ -25,10 +25,12 @@ RSpec.describe "documented example counts" do
   # `core/`: `bundle config path vendor/bundle` -- which is what CI's own
   # `bundler-cache: true` sets -- puts `diff-lcs`' twenty spec files
   # inside `core/`, and counting those made the comparison below never
-  # match. The guard then skipped on every full run, in CI included, and
-  # the number it exists to hold went stale exactly as before: it said
-  # 1,934 while the suite had grown past it, which is the third time this
-  # figure has drifted and the first time with a guard watching.
+  # match. The guard then skipped on every full run in that layout --
+  # CI's included; a checkout with nothing vendored under `core/` still
+  # compared -- and the number it exists to hold went stale exactly as
+  # before: the 0.2.4-bound branch's documents said 1,934 while its
+  # suite had grown past it, the fourth drift of this figure and the
+  # first inside a layout where the guard could not see it.
   def spec_files_on_disk = Dir.glob(File.expand_path("../**/*_spec.rb", __dir__))
 
   # Only when the runner was given no files and no filters -- `rspec` with

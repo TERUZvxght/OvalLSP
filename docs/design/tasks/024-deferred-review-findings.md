@@ -3162,9 +3162,13 @@ File.expand_path("../**/*_spec.rb", __dir__.sub(%r{/meta\z}, ""))  # => core/**/
 `core/**` includes `core/vendor/bundle`, so once gems are vendored there
 the glob matched twenty spec files belonging to `diff-lcs` and the counts
 never agreed. **CI vendors them**: `ruby/setup-ruby`'s `bundler-cache: true`
-sets `BUNDLE_PATH` to `vendor/bundle`. So the guard has skipped on every
-full run since it was written, in CI included, and the documents drifted
-to 1,934 against a suite of 1,941 with nothing to say so.
+sets `BUNDLE_PATH` to `vendor/bundle`. So the guard skipped on every
+full run in that layout — CI's included, and the 0.2.4-bound branch's
+machine, whose documents drifted to 1,934 against a suite of 1,941
+with nothing to say so. A checkout with nothing vendored under `core/`
+— the layout the unified 0.2.3 was prepared in — still compared, which
+is why this branch's own audited figures stayed true while CI's guard
+was blind.
 
 Fixed by rooting the glob at `spec/`. The countermeasure is separate and
 matters more: **a check that decides it is not applicable reports the

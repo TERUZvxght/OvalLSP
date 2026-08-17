@@ -114,7 +114,7 @@ Then:
   reviewer. Then continue the loop normally. Examples of the right shape,
   from rounds that needed one:
   - two scanners that had to agree about the same text, replaced by one
-    both read (0.2.1's `#code_offsets`);
+    both read (0.2.1's `#structural_tokens`);
   - a literal-type table two inferencers kept diverging on, replaced by
     one table both read, with the spec driven from the table
     (`Types::LiteralTypes`);

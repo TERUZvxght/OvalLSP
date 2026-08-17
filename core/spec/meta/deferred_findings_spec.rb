@@ -246,9 +246,10 @@ RSpec.describe "deferred findings metadata" do
     # nothing, and the day either number is cited in `KNOWN_LIMITATIONS`
     # the citation guards answer from the wrong entry.
     #
-    # Round 37, after two entries were appended as 024.60 by a renumber
-    # that read the register's highest number before a merge added
-    # another. Reading the file is what failed; a check is what does not.
+    # The 0.2.4-bound branch's round 37, after two entries were appended
+    # as 024.60 by a renumber that read the register's highest number
+    # before a merge added another. Reading the file is what failed; a
+    # check is what does not.
     it "gives every entry a number of its own" do
       duplicated = DeferredFindings.headings(deferred).tally.select { |_, count| count > 1 }
 

@@ -537,10 +537,12 @@
           <h4>One platform, for now</h4>
           <p>
             The published VSIX is built for <code>darwin-arm64</code> and bundles native
-            extensions compiled for it. On anything else the payload is not loaded and you
-            get a clear diagnostic instead of a degraded session. Intel Macs, including
-            under Rosetta 2, are not supported in this Preview; nor are WSL, Dev Containers
-            or Remote SSH.
+            extensions compiled for it. On anything else the payload is not loaded: the
+            extension checks whether your Ruby can load <code>prism</code> and
+            <code>rbs</code> itself, runs against those with an Output-channel note when it
+            can — an unverified configuration — and shows an error naming the gems when it
+            cannot. Intel Macs, including under Rosetta 2, are not supported in this
+            Preview; nor are WSL, Dev Containers or Remote SSH.
           </p>
         </div>
         <div class="callout callout--warn reveal">

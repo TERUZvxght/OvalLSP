@@ -494,7 +494,7 @@
         <div class="callout callout--warn reveal">
           <h4>当面は 1 プラットフォームのみ</h4>
           <p>
-            公開されている VSIX は <code>darwin-arm64</code> 向けにビルドされ、そのためにコンパイルされたネイティブ拡張を同梱しています。それ以外の環境ではペイロードを読み込まず、縮退したセッションの代わりに明確な診断を出します。Rosetta 2 経由を含む Intel Mac、
+            公開されている VSIX は <code>darwin-arm64</code> 向けにビルドされ、そのためにコンパイルされたネイティブ拡張を同梱しています。それ以外の環境ではペイロードを読み込みません。代わりに、あなたの Ruby 自身が <code>prism</code> と <code>rbs</code> を読めるかを確認し、読めればそちらで動いて Output チャンネルにその旨を出し(未検証の構成です)、読めなければ必要な gem を示すエラーを出します。Rosetta 2 経由を含む Intel Mac、
             WSL、Dev Container、Remote SSH はこの Preview では非対応です。
           </p>
         </div>

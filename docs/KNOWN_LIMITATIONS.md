@@ -15,12 +15,19 @@ evidence-based supported/unsupported table this summarizes.
   [ADR-0005](design/adrs/0005-platform-scoped-vsix-with-runtime-compatibility-check.md),
   Japanese).
   On any other OS/CPU, the bundled native dependencies simply aren't
-  loaded, and OvalLSP shows a diagnostic explaining why rather than
-  attempting to run in a degraded or guessed configuration.
+  loaded. What happens instead — since 0.2.1, and the same path the
+  "Ruby version scope" section below describes: the extension checks
+  whether the selected Ruby can load `prism` and `rbs` itself. When it
+  can (Ruby 3.3+ ships both as default gems), the session runs against
+  those with an Output-channel note — an **unverified** configuration,
+  not a refused one. When it cannot, an error names
+  `gem install prism rbs`.
 - **Intel Macs, including under Rosetta 2 translation, are not
-  supported in this Preview.** An x86_64 Ruby (even one installed
-  natively on an Apple Silicon Mac via Intel Homebrew) is rejected by the
-  same platform-compatibility check for the same reason.
+  supported in this Preview** — unsupported, not refused. An x86_64
+  Ruby (even one installed natively on an Apple Silicon Mac via Intel
+  Homebrew) takes the same probe path as any other mismatch: with
+  `prism`/`rbs` loadable it runs as an unverified configuration, and
+  nothing about that combination is tested.
 - **The bundled native extensions embed the packaging machine's own
   absolute Ruby install path, mitigated by the Extension at launch
   time.** `otool -L` on the packaged `prism.bundle`/`rbs_extension.bundle`
