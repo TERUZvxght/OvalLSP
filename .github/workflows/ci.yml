@@ -174,11 +174,29 @@ jobs:
       # in the one job whose whole purpose is to answer "is 4.0 green".
       # The documents that cite this job as continuous verification are
       # citing this count.
+      #
+      # `if: !cancelled()` because the default `success()` would skip
+      # this step exactly when the count matters most -- a red 4.0
+      # suite, or RSpec dying before it wrote the JSON -- and then
+      # "failed" and "never started" stop being distinguishable. Found
+      # by the external review of the 0.2.3 release PR. Not `always()`:
+      # a cancelled workflow should not fabricate a report.
       - name: Report the 4.0 example count, and fail this job if nothing ran
+        if: ${{ !cancelled() }}
         working-directory: core
         run: |
           ruby -rjson -e '
-            result = JSON.parse(File.read("tmp/rspec-4.json", encoding: "UTF-8"))
+            path = "tmp/rspec-4.json"
+            unless File.exist?(path)
+              warn "the 4.0 suite wrote no JSON -- it did not run, or died before reporting"
+              exit 1
+            end
+            begin
+              result = JSON.parse(File.read(path, encoding: "UTF-8"))
+            rescue JSON::ParserError => e
+              warn "the 4.0 suite left unreadable JSON (#{e.message}) -- treating as not run"
+              exit 1
+            end
             summary = result.fetch("summary")
             count = summary.fetch("example_count")
             line = "Ruby 4.0: #{count} examples, #{summary.fetch("failure_count")} failures"

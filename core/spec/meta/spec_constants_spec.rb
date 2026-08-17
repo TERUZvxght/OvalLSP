@@ -58,14 +58,37 @@ RSpec.describe "spec file constants" do
       when Prism::ClassNode, Prism::ModuleNode
         # Its *name* is still written at this scope -- `class Foo` inside
         # a spec file does define `Object::Foo` -- but its body is not.
-        names << child.constant_path.slice if child.constant_path.is_a?(Prism::ConstantReadNode)
+        # A path form counts only when it is rooted (`class ::Foo`) or
+        # explicitly `Object::`-prefixed; `class Ns::In` writes onto
+        # `Ns`, which is not this guard's business.
+        path = child.constant_path
+        if path.is_a?(Prism::ConstantReadNode)
+          names << path.slice
+        elsif path.is_a?(Prism::ConstantPathNode) && object_scoped_path?(path)
+          names << path.name.to_s
+        end
       when Prism::ConstantWriteNode
         names << child.name.to_s
+        collect_object_constants(child, names)
+      when Prism::ConstantPathWriteNode
+        # `::FOO = ...` and `Object::FOO = ...` -- Prism parses both as a
+        # path write, so the plain `ConstantWriteNode` branch above never
+        # sees them, and the external review of the 0.2.3 release PR
+        # showed two files could collide in that spelling unseen.
+        target = child.target
+        names << target.name.to_s if target.is_a?(Prism::ConstantPathNode) && object_scoped_path?(target)
         collect_object_constants(child, names)
       else
         collect_object_constants(child, names)
       end
     end
+  end
+
+  # `::FOO` (parent nil) and `Object::FOO` both land on `Object`;
+  # `Ns::FOO` lands on `Ns`.
+  def self.object_scoped_path?(path)
+    parent = path.parent
+    parent.nil? || (parent.is_a?(Prism::ConstantReadNode) && parent.slice == "Object")
   end
 
   # The walker itself, stated with the cases that must *fail*. Round 39
@@ -106,6 +129,48 @@ RSpec.describe "spec file constants" do
 
       expect(found).not_to include("SCOPED", "ALSO_SCOPED")
       expect(found).to eq(%w[Wrapper Holder])
+    end
+
+    # The external review of the 0.2.3 release PR found the third
+    # implementation blind in a fourth direction: Prism parses
+    # `::FOO = ...` and `Object::FOO = ...` as `ConstantPathWriteNode`,
+    # not `ConstantWriteNode`, so two files defining the same constant
+    # in that spelling never met the census. Same for `class ::Foo`,
+    # whose `constant_path` is a `ConstantPathNode` the class branch's
+    # `ConstantReadNode` guard skipped. All of these land on `Object`;
+    # `Ns::BAR = ...` and `class Ns::In` land on `Ns` and must not be
+    # collected -- the fixture distinguishes the two.
+    it "finds a rooted or Object-prefixed assignment, which is also Object's" do
+      source = <<~RUBY
+        RSpec.describe "outer" do
+          ::ROOTED = "x"
+          Object::PREFIXED = "x"
+          Namespace::SCOPED_PATH = "x"
+        end
+      RUBY
+
+      found = self.class.object_constants(source)
+
+      expect(found).to include("ROOTED", "PREFIXED")
+      expect(found).not_to include("SCOPED_PATH")
+    end
+
+    it "finds a rooted class name, and still not a scoped path's" do
+      source = <<~RUBY
+        class ::RootedHolder
+        end
+
+        module Namespace
+        end
+
+        class Namespace::Inner
+        end
+      RUBY
+
+      found = self.class.object_constants(source)
+
+      expect(found).to include("RootedHolder", "Namespace")
+      expect(found).not_to include("Inner")
     end
   end
 

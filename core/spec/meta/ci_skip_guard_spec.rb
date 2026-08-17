@@ -161,10 +161,19 @@ RSpec.describe "the CI guard against a silently skipped suite" do
       run_lines = job.fetch("steps").filter_map { |step| step["run"] }
       expect(run_lines).to include(a_string_including("bundle exec rspec"))
 
-      count_step = run_lines.find { |line| line.include?("example_count") }
+      count_step = job.fetch("steps").find { |step| step["run"]&.include?("example_count") }
       expect(count_step).not_to be_nil, "the 4.0 job no longer reports its example count"
-      expect(count_step).to include("count.zero?")
-      expect(count_step).to include("exit 1")
+      expect(count_step.fetch("run")).to include("count.zero?")
+      expect(count_step.fetch("run")).to include("exit 1")
+
+      # The external review of the release PR: without an `if`, GitHub
+      # applies the default `success()` and skips this step exactly when
+      # the count matters most -- a red 4.0 suite, or RSpec dying before
+      # it wrote the JSON -- so "passed" and "never started" stop being
+      # distinguishable by count. The step must run on failure too, and
+      # say so when the JSON is missing.
+      expect(count_step["if"].to_s).to include("!cancelled()")
+      expect(count_step.fetch("run")).to include("File.exist?")
     end
   end
 end
