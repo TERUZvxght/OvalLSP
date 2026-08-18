@@ -4234,7 +4234,8 @@ needs the vendoring step, whose native gems are built per platform,
 so the packaged variant is honest only on macOS and wants a
 `macos-14` runner. Deferred rather than done here because adding two
 CI jobs during a release gate is an addition, not a fix, and the
-`macos-14` half is a billing decision that belongs to the maintainer.
+`macos-14` half costs paid runner minutes on every run, which is a
+trade-off this entry does not get to make on its own.
 
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 
