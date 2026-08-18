@@ -27,20 +27,35 @@ voice; that is the failure this paragraph exists to prevent.
 
 ## Review cadence (mandatory)
 
-After every 5 completed implementation tasks (docs/design/tasks/NNN-*.md, including sub-tasks like 008.5/008.6), before moving on to the next task:
+**A round closes when a reviewer that has not seen this change set,
+using a method the previous round did not use, reports nothing.** Method
+is one of `diff` (read the change set), `drive` (run the product and
+compare answers), `attack` (take one guarantee and try to break it),
+`reproduce` (re-derive the round's own claims). Each round records which
+it used; a closing round whose method repeats the previous round's closes
+nothing.
 
-1. Launch an independent subagent to do a full, critical review of the deliverables produced in that batch of 5 tasks.
-2. Fix whatever the review finds.
-3. Repeat step 1–2 until the independent review comes back clean (no findings).
-4. Only then proceed to the next task.
+**After three rounds that find defects, ship with the open findings
+recorded** — register entry plus a user-facing paragraph in
+`KNOWN_LIMITATIONS`. Section 0.4: letting 1.0.0 recede in pursuit of
+accuracy is worse than the defects being pursued, and an unbounded loop
+has no other outcome. The bound of three is this project's operational
+choice, not a maintainer ruling.
 
-This was established after Task 008.5 shipped without this gate and failed a later review (see Task 008.6, which was a corrective pass). Do not skip this cadence even under time pressure — it is the reason 008.6 was needed at all. Track progress against this cadence explicitly (e.g. via TaskCreate/TaskUpdate) so it isn't silently dropped across a long session or context compaction.
+**During a review loop, fix; do not add.** A capability a reviewer asks
+for is a finding to record. A round reviews a fixed thing, and every
+addition between rounds resets it.
 
-The same clean-review gate applies whenever an independent review is explicitly requested, including release preparation and broad defect audits: run one or more independent subagents, fix every actionable finding, and repeat with a fresh independent review until a full round reports no findings. A single review pass is not sufficient when it finds defects.
+**Departing from this rule is written down**, where the release is
+recorded. Shipping under the bound above is the rule, not a departure.
 
-**During a review loop, fix; do not add.** A capability a reviewer asks for is a finding to record, not work to do before the next round. 0.2.1 ran nine rounds and seven of them found a defect in code the *previous* round had written — not because the loop was failing but because it was being asked to review a change set that kept growing. Three capabilities were added mid-loop and all three went back to the roadmap before shipping; the machinery they justified produced most of rounds 25–31's findings. A round reviews a fixed thing, and every addition between rounds resets it.
-
-**Waiving the gate is the maintainer's call and must be written down.** 0.2.1 shipped after nine rounds without a clean one. What made that defensible was cutting the change set back first and leaving every open finding in the register with a user-facing paragraph — not the number of rounds. Record the waiver where the release is recorded; a rule broken in silence stops being a rule.
+*Why it is this and not "repeat until a round is clean": that form
+measured reviewer exhaustion. 028 declares merge round 8 clean and the
+next entry is an external reviewer finding two defects; eight rounds
+followed, one a rollback. Around sixty rounds are recorded across 0.2.x.
+Rewritten in 0.2.5 under section 0.6. The per-five-implementation-tasks
+trigger is also gone: the last implementation task was 023.8, so it has
+not been able to fire in over two hundred commits.*
 
 ## Test-first discipline (mandatory)
 
