@@ -63,9 +63,10 @@ about a gap, deliberately: numbers are cited from source and specs, so
 reusing a vacated one is the dangerous move and leaving a hole is the
 safe one. Take the next number after the highest, never the first free
 one. In this unified register the gap exists for the same reason, and the
-numbering continues after the highest number *either* line has used —
-`024.64` and `024.65` stay reserved to the 0.2.4-bound branch's entries;
-do not renumber them, and do not fill the hole.
+numbering continues after the highest number *either* line has used.
+`024.64` and `024.65` were the reserved pair while the two lines were
+apart; they are here now, with the rest of that branch's entries, and
+the hole at `024.61` stays a hole.
 
 **`024.70` does not exist either**, for a different reason and under
 the same rule. It was written during 0.2.3's pre-publish gate,
@@ -79,12 +80,17 @@ measurement, not the tree" records it, because a withdrawn finding is
 worth as much as a kept one when the thing it caught was the method.
 The number stays vacant.
 
-Entries `024.51`–`024.54`, `024.57`, `024.58`, `024.64`, `024.65` — and
-that branch's own `024.49` — live on the 0.2.4-bound branch
-(`fix/0.2.3`), with the engine thread they describe; the numbers
-`024.50`–`024.63` as used here must not be reused there with different
-content, and that branch's `024.49` collides with this register's, so it
-will be renumbered on rebase.
+**The two lines are one register again.** Entries `024.51`–`024.54`,
+`024.57`, `024.58`, `024.64` and `024.65` were written on the branch
+that carried 0.2.4's engine thread and are merged in here unchanged,
+with that thread, by 0.2.4's `M-1`. That branch's own `024.49` — the red
+toast 0.2.1 removed still being shown from `compareVersionInfo` — held a
+number this register had already spent on something else, so it is
+**`024.72`** here, per the rule three paragraphs up: the next number
+after the highest, never a free or vacated one. Five source and spec
+comments in `vscode/src` cite it and were renumbered with it — found by
+grepping rather than assumed, which is the point of the rule that says an
+entry is not deleted or renumbered while the tree still names it.
 
 Entries numbered `024.R*` are roadmap items rather than defects: work
 that is understood, deliberately not scheduled for the current release,
@@ -1551,6 +1557,576 @@ configuration.
 **Direction:** fix the restart-without-resume above, then reproduce
 against `spec/fixtures/rails_real` directly to see whether anything is
 left, and restore the row with an E2E example behind it.
+
+## 024.51 The first launch after an upgrade blocks while it sweeps the old cache
+
+```yaml
+status: fixed
+released-in: 0.2.2
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/cache/store.rb` (`.prune_generations`,
+`.prune_workspaces`), called from `Server#build_cache_store`, which runs
+synchronously on the `initialize` dispatch
+
+Measured: 0.9 s to remove 1,000 legacy generation directories of 20 files
+each. The comment in that file cites a real machine at 28,643 directories
+and 2.8 GB, which extrapolates to roughly half a minute of a server that
+answers nothing -- once, on the first start after upgrading to 0.2.1,
+because that is the release that put the version in the cache key. Every
+request VS Code sends after `initialize` queues behind it.
+
+**Direction:** do the sweep on a background thread, or after the first
+cold-index batch. The current generation directory already exists before
+pruning runs, so nothing depends on it finishing first.
+
+**Secondary, same file:** `prune_workspaces` removes a scope directory
+whenever `File.directory?` of the recorded workspace path is false, so a
+project on an unmounted volume or a temporarily unavailable network share
+loses its warm cache. The method's comment calls each removal "a fact
+rather than a guess", and this one is a guess.
+
+## 024.52 A publish could outlive the document it was about
+
+```yaml
+status: fixed
+released-in: reverted
+kind: defect
+user-visible: yes
+user-visible-note: >
+  The *waiter* path this was found on was rolled back before shipping
+  (024.57). The symptom is not gone: `#republish_open_diagnostics` has
+  the same race and every build has it -- that half is 024.56, which is
+  open and documented.
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#await_and_publish`,
+`#handle_did_close`)
+
+Debouncing moved `didChange`'s publish onto a waiter thread. `didClose`
+stayed on the dispatch thread, where it clears the file's diagnostics.
+Nothing ordered the two, and the gap is the analysis itself -- 2--5 s on a
+large file by 024.45's own measurement. Close a tab a second or two after
+pausing, and the clear lands first and the findings after it: errors in
+the Problems panel for a file nobody has open, for the rest of the
+session. Nothing republishes an unsaved buffer or a deleted file.
+
+Round 32 reproduced it by widening the window and reading the order:
+
+```
+publish 0: version=1 count=0
+publish 1: version=nil count=0        <- didClose's clear
+publish 2: version=2 count=1          <- the debounced publish, after
+```
+
+**What made it possible** is stated one line above the code that
+introduced it. `#publish_diagnostics`' comment says the buffer path is
+"computed and published synchronously, in the same dispatch turn ... so
+[never publish a stale version] holds by construction". That was true and
+0.2.2 stopped it being true, and appended a paragraph about the debounce
+to the same comment block without correcting the sentence above it.
+
+**Fixed** by making the property checked rather than structural: the
+analysis runs outside the lock, and the re-read of the document store and
+the write happen together under `@pending_publish_mutex`, which
+`#handle_did_close` also takes -- after closing the store, before
+clearing. Both orders are then right. Publish-then-clear ends clear;
+close-then-publish sees the closed store and writes nothing.
+
+Pinned by `server_diagnostics_debounce_spec.rb`. The example needed two
+tries and both failures are worth knowing:
+
+- **A rendezvous, not two sleeps.** The waiter has to have read the
+  document *before* `didClose` runs. Started near each other, the
+  dispatch thread wins every time and the example passes without
+  exercising anything.
+- **A syntax error, not an unknown-method report.** `didClose` removes the
+  file's index contribution, so a *semantic* finding computed after it
+  comes back empty -- the stale publish still happens, carrying nothing,
+  and an assertion about counts passes. A syntax error needs no index.
+
+## 024.53 The absent-workspace grace measured the wrong clock
+
+```yaml
+status: fixed
+released-in: 0.2.2
+kind: defect
+user-visible: yes
+user-visible-note: >
+  Fixed in the same release that introduced it. Recorded for the mistake
+  rather than the outcome: a plausible mtime that answers a different
+  question than the one being asked.
+```
+
+**Area:** `core/lib/ovallsp/cache/store.rb` (`.prune_workspaces`)
+
+024.51's fix held an absent workspace's cache for thirty days rather than
+removing it the moment its directory could not be found. The age it read
+was the *scope directory's* mtime -- and a directory's mtime advances
+when an entry is created or removed inside it, which for a scope
+directory happens only when a generation is minted: a Ruby upgrade, a
+`bundle install`, a release. That is "how long since the cache key
+changed". The question is "how long since anyone opened this project".
+
+Measured by round 32, driving the real `Cache::Store`:
+
+```
+workspace unreachable for: 0 seconds
+scope directory mtime age: 90.0 days
+cache survived the sweep:  false
+```
+
+So the retention was inverted against its own purpose. A project on an
+external drive, opened daily on a stable toolchain, still lost its cache
+the first time the volume was away -- the exact scenario the grace was
+written for -- while a project deleted the day after a `bundle install`
+kept a verbatim copy of its source for thirty days.
+
+**Fixed** by reading the `.workspace` marker's mtime instead.
+`.mark_workspace` rewrites it on every launch that opens the workspace,
+so it is already the answer; nothing new had to be recorded.
+
+**The spec could not have caught it.** It created the scope directory
+inside the example, so its mtime was *now* -- the one configuration in
+which the wrong clock gives the right answer. The replacement ages the
+two in opposite directions: a scope directory 90 days old, a marker
+written today. That is the general form worth keeping — a fixture where
+both candidate readings are present and disagree, rather than one where
+they happen to coincide.
+
+`.monotonic_age` was renamed `.seconds_since_write` in the same change.
+It was `Time.now - File.mtime(path)`, which is not monotonic, and a name
+asserting a property the code does not have is how the next reader gets
+it wrong.
+
+## 024.54 An edit that changed nothing discarded the edit before it
+
+```yaml
+status: fixed
+released-in: reverted
+kind: defect
+user-visible: yes
+user-visible-note: >
+  Both the defect and the correction it produced were rolled back. The
+  correction was kept at first, on the reasoning that it fixed the
+  synchronous path too; round 36 measured what it cost there -- 0.015 s
+  to 2.098 s on a byte-identical `didChange` -- and it went with the
+  rest. See the note at the end of this entry.
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#reindex`, `#schedule_diagnostics`)
+
+`#reindex` reached `#schedule_diagnostics` only from inside
+`if apply_file_summary(summary)`, and `WorkspaceIndex#replace_file`
+returns false for content it already holds. So a `didChange` whose text is
+byte-identical to the indexed text did not refresh
+`@pending_publish[uri]`, which went on carrying the *previous* edit's
+version. The waiter fired, found `document.version` no longer matched,
+and published nothing. Nothing rescheduled.
+
+Round 33 measured it over a real pipe, against 0.2.1 as a control:
+
+| | publishes `(version, count)` |
+|---|---|
+| 0.2.2, no no-op edit | `[[1, 0], [2, 2]]` |
+| 0.2.2, with a no-op edit 50 ms later | `[[1, 0]]` |
+| 0.2.1, same script | `[[1, 0], [2, 2]]` |
+
+**What a user saw:** a file with a syntax error and an empty Problems
+panel, indefinitely — there is no `didSave` handler, so saving does not
+republish and it recovers only on the next edit that changes bytes.
+Reachable whenever an edit whose result is byte-identical lands within
+300 ms of a real one: a formatter or code action applying a full-range
+replace, another extension writing the buffer, a client re-sending.
+
+**Fixed** by moving the publish out of that `if`. The index is right to do
+nothing for content it already has; the publish is not, because the client
+asked for this version. Republishing an unchanged document costs one
+analysis.
+
+**The countermeasure matters more than the fix.** This is the second
+round in a row to find a defect in the debounce, and both were the same
+three pieces of state disagreeing: `@pending_publish`'s captured version,
+`@document_store`'s current one, and whether a waiter is alive to
+reconcile them. 024.52 was the first. `CLAUDE.md`'s same-place rule asks
+for something mechanical at that point, and
+`spec/ovallsp/server_publish_invariant_spec.rb` is it: one property --
+*an open document's last published diagnostics are for its current
+version, and a closed document's are empty* -- over a table of
+notification sequences. Three of its rows failed when it was written. A
+regression test pins the sequence someone thought of; this pins the
+property, and whoever finds the next one adds a row.
+
+**Round 36: the correction was rolled back too.** Publishing outside
+`if apply_file_summary(...)` was kept when the debounce went, on the
+reasoning that it is a fix to the synchronous path. Measured, it is not:
+
+| | control (text changed) | byte-identical edit |
+|---|---|---|
+| 0.2.1, `net/http.rb` 2,574 lines | 2.049 s | **0.015 s** |
+| with the correction | 2.031 s | **2.098 s** |
+
+The control agrees to 1% and the measured category moves 140x, under
+`@index_mutation_mutex` -- the lock hover, completion and the next
+`didChange` all need. On the synchronous path there was nothing to fix:
+with no publish, the panel keeps the previous version's diagnostics,
+which are correct for byte-identical text. The only difference is the
+`version` field, and VS Code does not discard diagnostics on version. So
+it bought a field nobody reads and cost up to 5.3 s of a frozen server
+per format-on-save of an already-formatted large file.
+
+`server_publish_invariant_spec` was restated about the *text* rather than
+the version at the same time, which is the claim the server actually
+needs to make -- and still fails on round 33's defect, because that left
+the panel showing a clean file whose text had a syntax error.
+
+## 024.57 The debounce, and why it was rolled back
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#publish_diagnostics`,
+`#republish_open_diagnostics`, `#publish_findings`), and whatever
+replaces the deferral.
+
+0.2.2 made `didChange` publish diagnostics from a waiter thread after a
+300 ms pause, to answer 024.45. **Rounds 32, 33, 34 and 35 each found a
+defect in it**, and `CLAUDE.md`'s same-place rule fired: the whole thread
+was rolled back on 2026-08-07, at the maintainer's direction, and this
+entry is the deliverable rather than the code.
+
+The measurements are worth keeping, because the change did work at what
+it was for. Round 35, on this machine:
+
+| what | result |
+|---|---|
+| the per-keystroke half it did *not* defer (summarize + index apply), `net/http.rb` | 0.017 s |
+| the per-analysis half it did | 1.72 s |
+| 32 edits 0.15 s apart (faster than the debounce) | **1 analysis** |
+| 12 edits 0.4 s apart, 1.72 s analysis | **12 analyses, 5 concurrent** |
+| 32 edits 0.4 s apart, 5.25 s analysis | **32 analyses, 13 concurrent** |
+
+### What went wrong, in the order it was found
+
+- **Round 32.** `didClose` clears the panel on the dispatch thread; a
+  waiter already computing wrote its findings after the clear. Errors in
+  the Problems panel for a file nobody has open, permanently for an
+  unsaved buffer. Fixed by taking a mutex across the store re-read and
+  the write, and taking the same mutex in `#handle_did_close`.
+- **Round 33.** A `didChange` whose text is byte-identical to the indexed
+  text did not refresh the pending entry, because `#reindex` reached the
+  scheduler only inside `if apply_file_summary(...)` and
+  `WorkspaceIndex#replace_file` returns false for identical content. The
+  waiter woke, found a version mismatch, published nothing, and nothing
+  rescheduled (024.54). Countermeasure:
+  `spec/ovallsp/server_publish_invariant_spec.rb`.
+- **Round 34.** `@publish_threads` written in four places and read in
+  none; the 50 ms sleep cap -- the entire mechanism by which a waiter
+  notices a close -- unpinned.
+- **Round 35.** Two findings, and they are the ones that ended it.
+
+### The two that ended it
+
+1. **`#republish_open_diagnostics` has the same race, and the fix did not
+   reach it.** It snapshots the open documents, then computes and
+   publishes for each without re-reading the store, on a background
+   thread, from six call sites. Close one file while another is being
+   analysed and the clear lands first, the findings second. Reproduced
+   three times identically: publishes for the closed file came out
+   `[2, 0, 2]`. Round 32 fixed this symptom on the waiter path and left
+   the older path alone, and the invariant spec written as the
+   countermeasure has no row containing a republish -- **a property is
+   only as wide as its table.**
+2. **The debounce cannot bound concurrent analyses.**
+   `#await_and_publish` releases `@pending_publish[uri]` at the moment it
+   decides to publish, *before* the 2--5 s analysis. The next `didChange`
+   therefore finds the slot empty and starts a second waiter while the
+   first is still computing. Every one but the last is discarded by the
+   version re-check, and each holds `@index_mutation_mutex` for its whole
+   duration -- the lock hover, completion and `didChange` itself need. The
+   coalescing window is 0.3 s against a 1.7--5.3 s cycle, so it coalesces
+   edits arriving while a waiter *waits* and never while one *analyses*.
+   Pausing just over 300 ms -- which is 024.41's own scenario, reading the
+   completion popup -- is the common case, not the corner.
+
+### The root cause
+
+**Four publishers write to one stream and nothing owns the order.** The
+dispatch thread, the workspace pass, the debounce waiters and
+`#republish_open_diagnostics` all reach `#publish_findings`, and ordering
+was added pairwise, at call sites, one round at a time: a mutex between
+the waiter and `didClose`, a version re-check inside the waiter, nothing
+at all between the republish and either. Each fix was correct about the
+pair it named and silent about the rest, which is why every round found
+another pair.
+
+That is the same shape `CLAUDE.md` records from 0.1.12 -- bolting a sort
+onto one more *reader* of a collection whose storage has no order. The
+sort belongs where the value is produced.
+
+### The direction that was actually needed
+
+**One writer that remembers what it last published.**
+`#publish_findings` is already the single funnel; it just has no memory.
+Give it `@published_version[uri]`, and:
+
+- refuse a write whose version is older than the last written for that
+  uri;
+- let a clear (`#clear_diagnostics`) always win and reset the record;
+- delete the record on `didClose`.
+
+That subsumes the version re-check the waiter does by hand, covers the
+republish and the workspace pass without either knowing about the other,
+and is the one place a future publisher would have to be wrong on
+purpose to bypass. It is the same move as `Index::TypeNameResolution` and
+`#code_offsets`: put the rule where the value is produced so there is
+nothing to copy.
+
+**And the deferral itself needs a different shape.** Keep the pending
+slot until the publish *completes*, and re-loop rather than return if a
+newer version arrived while computing. That is one analysis in flight per
+uri, the last version always published, and it is what makes the
+coalescing claim true rather than true-only-between-analyses.
+
+### What was kept
+
+Not everything from those rounds was part of the thread:
+
+- `server_publish_invariant_spec.rb`, which holds for the synchronous
+  path unchanged -- the argument for writing a property rather than a
+  regression test.
+- The `#reindex` correction that publishes outside
+  `if apply_file_summary(...)`. It is a fix to the synchronous path and
+  stands on its own; the debounce only made it visible.
+- Everything from rounds 32--35 about the cache, the version checks, the
+  documents and the other five countermeasures.
+
+## 024.58 `bin/ovallsp` loaded every ABI's vendored gems, not the running one's
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.2
+user-visible: no
+user-visible-note: >
+  A packaged VSIX vendors for one Ruby, so it has one ABI directory and
+  the glob was right by accident. What it broke is the development
+  configuration `docs/SUPPORT_MATRIX.md` asks for by name.
+```
+
+**Area:** `core/bin/ovallsp`, `core/lib/ovallsp/vendor_bootstrap.rb`
+
+The bootstrap globbed `vendor/bundle/**/gems/*/lib` and unshifted every
+match. Bundler lays a payload out one directory per ABI --
+`vendor/bundle/ruby/3.4.0`, `vendor/bundle/ruby/4.0.0` -- so a checkout
+that has run `bundle install` under two Rubies has both, and a 3.4
+interpreter loaded 4.0's native `prism`:
+
+```
+LoadError: linked to incompatible /opt/homebrew/Cellar/ruby/4.0.6/lib/libruby.4.0.dylib
+  - core/vendor/bundle/ruby/4.0.0/gems/prism-1.9.0/lib/prism/prism.bundle
+```
+
+`spec/integration/stdio_spec.rb` caught it the first time the suite ran
+under 3.4 with 4.0 also bundled. That is precisely the configuration the
+4.0 row of `SUPPORT_MATRIX` describes a contributor creating, and the
+second `bundle install` is what creates it.
+
+**ADR-0005's own words were stronger than its code.** `VendorCompatibility`
+exists so the bootstrap "can refuse to add an incompatible vendor
+directory to `$LOAD_PATH` at all" -- and it answers *whether* a payload
+may be loaded, while nothing answered *which directories that permission
+covers*. The manifest check cannot help: a dev checkout has no manifest,
+which the module deliberately treats as permitted.
+
+Fixed by scoping the glob to `Gem.ruby_engine`/`RbConfig ruby_version`,
+in a new `Ovallsp::VendorBootstrap` so the decision has a unit spec at
+all -- `bin/ovallsp` runs only as a subprocess, and the one integration
+spec that drives it cannot construct the layouts that matter. A payload
+with no ABI-matching directory now contributes nothing, which is the same
+answer as no payload; falling back to the unscoped glob would reinstate
+the crash for exactly the case the manifest cannot catch.
+
+## 024.64 Three rounds on `extension.ts`'s wiring, and the countermeasure was aimed at the symptom
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  The tree is correct today; round 37 confirmed the behaviour, not a
+  regression. What is recorded is that two countermeasures in a row
+  failed to pin it, so the next edit to this wiring is as unprotected as
+  it was before round 33.
+```
+
+**Area:** `vscode/src/extension.ts` (the handshake note call site),
+`vscode/src/versionInfo.ts` (`writeHandshakeLines`),
+`vscode/src/test/`, `.github/workflows/ci.yml`
+
+Three rounds, same place:
+
+| round | finding | what was done |
+|---|---|---|
+| 33 | Both `extension.ts` note loops unpinned — nothing in `vscode/src/test` reaches that file | formatting moved into `versionInfo.ts`, five tests added |
+| 36 | The note loops *still* unpinned — round 33's finding one level out | the *condition* moved into `writeHandshakeLines`, so "the mutation cannot be expressed at the call site" |
+| 37 | It can. Moving the call inside `if (!diagnostic.compatible)` leaves `npm run test:unit` at 186 passing | — |
+
+Round 37 restored 024.49's symptom exactly — a Ruby the payload was not
+built for gets no Output-channel note at start-up — and no test noticed.
+
+`CLAUDE.md`'s rule is explicit about what a third hit buys: not a fourth
+fix. This entry is the deliverable.
+
+**The root cause, which neither countermeasure addressed.** Both moved
+code *out of* `extension.ts`. That pins the code and never the wiring,
+because the thing being got wrong is which line calls what, and no test
+in `vscode/src/test/unit` executes `extension.ts` at all — 024.17 records
+that, and it is still true. `activate()` runs only under
+`test:integration`, and CI runs `test:unit`. So every countermeasure of
+the "extract it somewhere testable" shape will pass while the call site
+stays free.
+
+**The direction that was actually needed.** Something that runs
+`activate()` in CI. That is one of:
+
+1. `test:integration` in the CI workflow, which needs a VS Code download
+   and a display; the reason it was never added is cost, not principle.
+2. A seam that lets the wiring be driven without `vscode` — `activate()`
+   split so the per-folder start path is a pure function of injected
+   collaborators, with `extension.ts` reduced to the part that only wires
+   VS Code objects together. That is a refactor of the file, not another
+   extraction from it.
+
+Neither belongs in a review loop. **Re-scoped: this is its own task**, and
+the change set returns to what it was about.
+
+**What this entry does not ask for.** Reverting rounds 33 and 36. Their
+output — `writeHandshakeLines`, its five tests, the note named by folder
+— is correct and tested; what failed is the claim that it made the call
+site unmutable. The claim is what is being rolled back, and the comment
+in `versionInfo.ts` asserting it should be corrected rather than left to
+mislead the next reader.
+
+### Round 40: the same root, one file over
+
+`core/bin/ovallsp`'s call into `VendorBootstrap` is unpinned by the same
+absence. Reverting the script wholesale to `main`'s unscoped
+`vendor/bundle/**/gems/*/lib` leaves the Core suite at 1,953 examples, 0
+failures — nothing in `core/spec` builds a vendor payload and runs the
+script, and the only suites that drive a packaged Core are `vscode`'s two
+integration suites, which `ci.yml` does not run.
+
+So this release's headline ABI fix has a spec for the module and none for
+the call, exactly as `extension.ts` has tests for the formatting and none
+for the wiring. A regression there is either the `LoadError: linked to
+incompatible libruby` this release exists to remove, or — if the
+`activate!` call is dropped rather than reverted — a packaged Core that
+does not start at all.
+
+The direction is unchanged and is still option 1 above: something in CI
+that executes the packaged path. Two files now wait on it, which is worth
+knowing when it is scheduled.
+
+## 024.65 A different Ruby engine produces two error toasts where it produced one
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.3
+user-visible: no
+user-visible-note: >
+  It never reached a user. The duplicate was created by an engine gate
+  added during 0.2.3's own review loop and reverted inside the same loop
+  after round 38, so no released build has it.
+```
+
+**Reverted rather than resolved, and the distinction matters.** Round 38
+established that the two toasts did not exist on 0.2.1 or 0.2.2 -- the
+change set under review created them, by gating the engine dimension in
+`checkBundledCoreCompatibility` so that it agreed with
+`compareVersionInfo`. The agreement is real and the split it closed is
+real; what it cost was a second red notification whose text advises
+`gem install prism rbs` without having asked, on a Core that has them.
+
+The gate is reverted. **The underlying split is not fixed**: two deciders
+still reach the engine verdict independently, and the open question is
+which of them owns the *notification*. That question is worth answering
+and is not worth answering inside a review loop -- see 024.64, three
+rounds of exactly that.
+
+**Area:** `vscode/src/platformCompatibility.ts` (the engine branch),
+`vscode/src/extension.ts` (the start-time notification and the handshake
+notification)
+
+On JRuby or TruffleRuby — reachable only by setting
+`ovallsp.rubyExecutablePath` — the start-time compatibility check
+*briefly* returned `compatible: false` for an engine mismatch, raising an
+error toast, and the handshake then reported the same mismatch and raised
+a second. Neither call site returned, so the client started either way,
+and the user got two stacked red notifications per window for one fact.
+
+The reason text on the first was `incompatibilityReason`, which advised
+`gem install prism rbs` — produced without probing, and wrong for a JRuby
+user who already has them.
+
+**Past tense throughout: this describes code that no longer exists.**
+Round 39 found the paragraphs above written in the present, inside an
+entry whose own opening says the gate is reverted — 024.47's failure mode
+recurring in the entry that records a revert, which is the one CLAUDE.md
+keeps as a standing lesson.
+
+**Why it is recorded rather than fixed in this loop.** The obvious
+one-line fixes are both wrong. Suppressing the start-time toast loses the
+only notification in the case where the Core never starts, so there is no
+handshake to report anything. Suppressing the handshake toast makes the
+authority that actually talked to the Core silent. Deciding which of two
+deciders owns the notification is a design question, and the neighbouring
+code (024.64) is a three-round record of what happens when a call-site
+condition is added to settle one.
+
+**Direction:** one decider for the *notification*, not just for the
+verdict — most likely the handshake, with the start-time path escalating
+only when it can establish that no handshake will follow.
+
+## 024.72 The red toast 0.2.1 removed is still shown, from the other code path
+
+```yaml
+status: fixed
+released-in: 0.2.2
+kind: defect
+user-visible: yes
+```
+
+**Area:** `vscode/src/versionInfo.ts` (`compareVersionInfo`, the Ruby
+mismatch branch), `vscode/src/extension.ts` (the `showErrorMessage` for a
+version-incompatible Core)
+
+0.2.1 changed `platformCompatibility.ts` so that a Ruby the bundled
+payload was not built for is checked rather than refused: if it carries
+`prism` and `rbs`, OvalLSP runs against those and says so in the Output
+channel. `versionInfo.ts` still compares the manifest's
+`rubyVersionMajorMinor` against the running Core's Ruby and reports
+incompatible, and `extension.ts` shows an error toast for that
+unconditionally.
+
+Measured against the compiled `out/versionInfo.js` with a 3.4 manifest:
+`3.4.7` compatible, `4.0.6` and `3.3.9` incompatible with "Ruby version
+mismatch".
+
+**What a user sees:** on Ruby 3.3 or 4.0 with the gems present, a red
+error toast on every window -- the thing 0.2.1's change was for --
+worded differently. `docs/SUPPORT_MATRIX.md`'s 3.3 and 4.0 rows and both
+getting-started pages say it is an Output-channel line.
+
+**Direction:** one function decides whether a Ruby is usable, and both
+call sites read it. Today two functions decide and only one was changed.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

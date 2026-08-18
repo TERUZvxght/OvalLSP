@@ -18,19 +18,16 @@
 # interpreter matches -- an unconditional add here previously let a
 # cross-ABI mismatch surface as an undiagnosable crash deep inside the
 # process instead of a clear message.
-require_relative "../lib/ovallsp/vendor_compatibility"
+# The bootstrap itself lives in VendorBootstrap so it can be tested: this
+# script only ever runs as a subprocess, and which directories a payload
+# contributes is a decision with more than one wrong answer -- see that
+# file for the ABI one that a two-Ruby dev checkout used to hit.
+require_relative "../lib/ovallsp/vendor_bootstrap"
 
-vendor_gems_root = File.expand_path("../vendor/bundle", __dir__)
-platform_manifest_path = File.expand_path("../PLATFORM_MANIFEST.json", __dir__)
-vendor_compatibility = Ovallsp::VendorCompatibility.check(manifest_path: platform_manifest_path, vendor_root: vendor_gems_root)
-
-if Dir.exist?(vendor_gems_root)
-  if vendor_compatibility.compatible?
-    Dir.glob(File.join(vendor_gems_root, "**", "gems", "*", "lib")).each { |lib| $LOAD_PATH.unshift(lib) }
-  else
-    warn "ovallsp: #{vendor_compatibility.reason}"
-  end
-end
+Ovallsp::VendorBootstrap.activate!(
+  vendor_root: File.expand_path("../vendor/bundle", __dir__),
+  manifest_path: File.expand_path("../PLATFORM_MANIFEST.json", __dir__)
+)
 
 require "optparse"
 require_relative "../lib/ovallsp"

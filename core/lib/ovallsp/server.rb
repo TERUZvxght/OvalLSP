@@ -1293,13 +1293,60 @@ module Ovallsp
       # other eight.
       scope_dir = File.join(cache_root, Cache::Key.workspace_scope(workspace_root: @workspace_root))
       cache_dir = File.join(scope_dir, digest)
-      store = Cache::Store.new(cache_dir: cache_dir)
+      # The marker before the generation, not after. `.prune_workspaces`
+      # removes any child of the cache root that has no marker -- a
+      # pre-0.2.1 flat generation, which cannot be read again -- and
+      # `Store.new` creates the scope directory on its way to the
+      # generation. Marking second leaves a window in which the scope
+      # exists and the marker does not, and a second window's sweep
+      # landing inside it deletes this window's entire scope, after which
+      # this process writes cache entries into a removed directory and
+      # every `save` silently rescues.
+      #
+      # It was a narrow window while the sweep ran on the `initialize`
+      # dispatch. Moving it to a background thread below lets it overlap
+      # another window's cold index, so the reorder narrows it and
+      # `Cache::Store::UNMARKED_SCOPE_GRACE` is what closes it.
       Cache::Store.mark_workspace(scope_dir, Cache::Key.canonical_root(@workspace_root))
+      store = Cache::Store.new(cache_dir: cache_dir)
       # After the directory exists, so the current generation is never the
-      # one swept. Once per start: a generation is only minted when the
-      # key changes, which is a Ruby upgrade, a `bundle install` or a
-      # release, not something that happens mid-session.
-      Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir)
+      # one swept. A generation is only minted when the key changes -- a
+      # Ruby upgrade, a `bundle install`, a release -- so there is
+      # normally nothing to sweep after the first start. `Re-index
+      # Workspace` reaches this again and starts another sweep; harmless,
+      # since removing what is already removed is a no-op and the thread
+      # is tracked either way.
+      #
+      # On a background thread, because this runs on the `initialize`
+      # dispatch and every request the editor sends afterwards queues
+      # behind it. 0.9 s to remove 1,000 abandoned directories, measured
+      # -- and the machine this sweep exists for had 28,643 of them and
+      # 2.8 GB -- around 26 seconds of a server that answers nothing. The
+      # first launch after an upgrade is exactly when that bill comes
+      # due, because putting the build's version in the key is what
+      # abandoned them (024.51).
+      #
+      # Nothing waits on it for an *answer*: the current generation's
+      # directory already exists, and removing *other* directories cannot
+      # change what this one reads. It is tracked, though, so shutdown
+      # joins it for up to the background budget and may kill it
+      # mid-`remove_entry`, leaving a directory partly removed -- which
+      # the next sweep finishes, because a partial directory is still an
+      # abandoned one. Untracked would leak the thread instead -- which is
+      # the leak `BackgroundTasks`' own header was written about.
+      #
+      # Rescued separately from the store. Failing to *start* the sweep is
+      # a housekeeping failure and costs nothing this session; letting it
+      # reach the method's own rescue would return a disabled cache and
+      # make every file cold, which is a far worse answer to a
+      # `ThreadError` than skipping a cleanup.
+      begin
+        @background_tasks.track_thread(
+          Thread.new { Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir) }
+        )
+      rescue StandardError => e
+        @logger.error("failed to start the cache sweep; leaving abandoned generations in place: #{e.class}: #{e.message}")
+      end
       store
     rescue StandardError => e
       @logger.error("failed to initialize persistent cache; continuing without one: #{e.class}: #{e.message}")

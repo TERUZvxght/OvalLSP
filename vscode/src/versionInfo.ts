@@ -80,6 +80,16 @@ export interface VersionDiagnostic {
   reasons: string[];
   /** Always populated, so the diagnostic is useful even when compatible. */
   details: VersionDiagnosticDetails;
+  /**
+   * True of the combination but not wrong with it. A Ruby the payload was
+   * not built for is the case this exists for: 0.2.1 made
+   * `platformCompatibility` check whether that Ruby carries prism and rbs
+   * rather than refuse it, and this function was left calling the same
+   * situation incompatible -- so the red toast that change removed was
+   * still shown, from here, on every window. A note goes to the Output
+   * channel; only `reasons` produces a toast.
+   */
+  notes: string[];
   /** Only set when incompatible -- what the user should actually do. */
   action?: string;
 }
@@ -205,6 +215,7 @@ function majorMinor(version: string): string {
  */
 export function compareVersionInfo(client: ClientVersionInfo, server: OvallspServerInfo | undefined): VersionDiagnostic {
   const reasons: string[] = [];
+  const notes: string[] = [];
   const details: VersionDiagnosticDetails = {
     extensionVersion: client.extensionVersion,
     coreVersion: server?.coreVersion ?? null,
@@ -222,6 +233,7 @@ export function compareVersionInfo(client: ClientVersionInfo, server: OvallspSer
     return {
       compatible: false,
       reasons: ['Core did not report version information in its initialize response (ovallspInfo missing or malformed).'],
+      notes: [],
       details,
       action:
         'Restart the Core Server (OvalLSP: Restart Server) and check the OvalLSP output channel. If this persists, ' +
@@ -282,20 +294,28 @@ export function compareVersionInfo(client: ClientVersionInfo, server: OvallspSer
           `is ${server.ruby.engine}.`
       );
     } else if (manifest.rubyVersionMajorMinor !== majorMinor(server.ruby.version)) {
-      reasons.push(
-        `Ruby version mismatch: this Extension's bundled Core expects Ruby ${manifest.rubyVersionMajorMinor}, but ` +
-          `the running Core is Ruby ${majorMinor(server.ruby.version)}.`
+      // A note, not a reason. The Core is *running* under that Ruby, so it
+      // is by definition one it can run under -- the bundled native
+      // extensions are simply not the ones being used, which
+      // `platformCompatibility` has already established and said so in the
+      // Output channel. Two functions were deciding this and only one was
+      // changed in 0.2.1.
+      notes.push(
+        `Ruby version differs: this Extension's bundled native dependencies were built for Ruby ` +
+          `${manifest.rubyVersionMajorMinor} and the running Core is Ruby ${majorMinor(server.ruby.version)}, ` +
+          `so they are not being used. See docs/SUPPORT_MATRIX.md for which combinations are verified.`
       );
     }
   }
 
   if (reasons.length === 0) {
-    return { compatible: true, reasons: [], details };
+    return { compatible: true, reasons: [], notes, details };
   }
 
   return {
     compatible: false,
     reasons,
+    notes,
     details,
     action:
       client.classification === 'custom'
@@ -303,4 +323,103 @@ export function compareVersionInfo(client: ClientVersionInfo, server: OvallspSer
           'unset it to use the Extension\'s own bundled Core.'
         : 'Reinstall or update the OvalLSP extension from the Marketplace so its bundled Core matches this build.'
   };
+}
+
+/**
+ * The lines `OvalLSP: Show Version Information` writes to the Output
+ * channel, in order.
+ *
+ * A pure function so that it can be tested at all. Until 0.2.2 the
+ * command built these lines inline in `extension.ts`, where nothing in
+ * `vscode/src/test` reaches — round 33 deleted both note-printing loops
+ * and all 176 tests still passed, while the deleted lines were the
+ * user-visible half of 024.72: the Output-channel line that replaced the
+ * red toast 0.2.1 was supposed to have removed.
+ *
+ * Notes come before reasons. A note explains why two Ruby versions can
+ * differ and the answer still be `Compatible: yes`, which is the thing a
+ * reader of that block is confused by; a reason explains why it is not.
+ */
+export function versionInformationLines(diagnostic: VersionDiagnostic): string[] {
+  const d = diagnostic.details;
+  const lines = [
+    `Compatible: ${diagnostic.compatible ? 'yes' : 'NO'}`,
+    `Extension version: ${d.extensionVersion}`,
+    `Core version: ${d.coreVersion ?? '(unknown)'}`,
+    `Client protocol version: ${d.clientProtocolVersion}`,
+    `Server protocol version: ${d.serverProtocolCurrent ?? '(unknown)'}`,
+    `Ruby running: ${d.rubyRunning ?? '(unknown)'}`,
+    `Ruby expected: ${d.rubyExpected ?? '(no bundled manifest -- monorepo/custom Core)'}`,
+    `Core selection: ${d.classification}`,
+    `Selected Core path: ${d.selectedCorePath}`
+  ];
+  for (const note of diagnostic.notes) {
+    lines.push(`  · ${note}`);
+  }
+  for (const reason of diagnostic.reasons) {
+    lines.push(`  ✗ ${reason}`);
+  }
+  if (diagnostic.action) {
+    lines.push(`Action: ${diagnostic.action}`);
+  }
+  return lines;
+}
+
+/**
+ * The start-up lines for a folder's handshake: the notes, each named by
+ * the folder it is about, because in a multi-root workspace every folder
+ * gets its own Core and a bare `OvalLSP:` prefix does not say which.
+ */
+export function versionNoteLines(diagnostic: VersionDiagnostic, folderName: string): string[] {
+  return diagnostic.notes.map((note) => `OvalLSP (${folderName}): ${note}`);
+}
+
+/**
+ * The minimum of `vscode.OutputChannel` these writers need. Taking a sink
+ * rather than the channel is what lets a test observe them at all —
+ * nothing in `vscode/src/test` can import `extension.ts`, which is why
+ * rounds 33 and 36 both found this code unpinned.
+ */
+export interface LineSink {
+  appendLine(line: string): void;
+}
+
+/**
+ * Writes the start-up handshake's Output-channel lines for one folder.
+ *
+ * The *condition* lives here, not at the call site, and that is the point.
+ * Round 33 found both note loops deletable with every test still green;
+ * 0.2.2 moved the formatting here and round 36 found the call sites still
+ * unpinned — moving the loop inside `if (!compatible)` restored 024.72's
+ * symptom exactly, and 182 tests passed. A note is for a Core that *is*
+ * running, so it belongs on the compatible path; with the branch in here,
+ * that mutation cannot be expressed in `extension.ts` at all.
+ */
+export function writeHandshakeLines(
+  sink: LineSink,
+  diagnostic: VersionDiagnostic,
+  folderName: string
+): void {
+  for (const line of versionNoteLines(diagnostic, folderName)) {
+    sink.appendLine(line);
+  }
+
+  if (diagnostic.compatible) {
+    return;
+  }
+
+  sink.appendLine(`--- OvalLSP version compatibility (${folderName}) ---`);
+  for (const reason of diagnostic.reasons) {
+    sink.appendLine(`  ✗ ${reason}`);
+  }
+  if (diagnostic.action) {
+    sink.appendLine(`  Action: ${diagnostic.action}`);
+  }
+}
+
+/** Writes the `OvalLSP: Show Version Information` block. */
+export function writeVersionInformation(sink: LineSink, diagnostic: VersionDiagnostic): void {
+  for (const line of versionInformationLines(diagnostic)) {
+    sink.appendLine(line);
+  }
 }

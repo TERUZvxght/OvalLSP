@@ -461,6 +461,15 @@ and it had no entry here until 0.2.1 (024.45). It is not new in this
 release; 0.2.0 measures the same. Files of a few hundred lines, which is
 most application code, re-analyse in well under a tenth of a second. <!-- documents: 024.45 -->
 
+**Deferring the report until you stop typing was tried, and rolled
+back.** It coalesced a burst of keystrokes into one analysis and was
+measured doing so — but it also produced two races, could not bound how
+many analyses of one file run at once, and each of four consecutive
+review rounds found another defect in it. So the cost today is what it
+has always been: per keystroke. It will be tried again on top of a
+publish path where one writer decides what is sent, rather than each
+publisher deciding for itself. <!-- documents: 024.57 -->
+
 ## What a partial's local resolves to
 
 **Nothing.** In `_article.html.erb`, `article` is supplied by whatever

@@ -33,7 +33,19 @@ RSpec.describe "cache removal containment" do
   # Only the calls that destroy. `mkdir_p` and friends are not this
   # guard's business. `rm_rf`/`rm_r` precede `rm` in the alternation so
   # the longer name wins rather than matching its prefix.
-  let(:destructive) { /FileUtils\.(?:rm_rf|rm_r|rm|remove_entry|remove_dir|remove_file)\b/ }
+  #
+  # `File.delete`/`File.unlink` joined the alternation in 0.2.4. The guard
+  # had watched `FileUtils` only, and this class deleted *files* through
+  # `File.delete` at two sites -- a failed atomic write's leftover, and
+  # the over-bound eviction -- each joined to `@cache_dir` and so inside
+  # it by construction. That is exactly the posture the incident this
+  # file records was about: containment as an emergent property of every
+  # call site being right at once, which is not a property. The directory
+  # half was closed in 0.2.2 and the file half was left open, which no
+  # test could notice because the guard could not see the verb.
+  let(:destructive) do
+    /(?:FileUtils\.(?:rm_rf|rm_r|rm|remove_entry|remove_dir|remove_file)|File\.(?:delete|unlink))\b/
+  end
 
   # Comments in this file discuss `FileUtils.remove_entry` by name --
   # including the one explaining why this guard exists -- so prose has to
@@ -57,9 +69,9 @@ RSpec.describe "cache removal containment" do
     ((start + 1)..(finish + 1))
   end
 
-  it "removes a directory in exactly one place" do
+  it "removes anything -- directory or file -- in exactly one place" do
     expect(destructive_lines.length).to eq(1),
-                                        "expected one destructive FileUtils call in cache/store.rb, found " \
+                                        "expected one destructive call in cache/store.rb, found " \
                                         "#{destructive_lines.length} at line(s) " \
                                         "#{destructive_lines.map(&:first).join(', ')}. Every removal must go " \
                                         "through .remove_within, which refuses a path outside the cache root."

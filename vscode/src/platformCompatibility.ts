@@ -239,6 +239,21 @@ export async function checkBundledCoreCompatibility(
   const expected = `${manifest.rubyEngine} ${manifest.rubyVersionMajorMinor} (${manifest.rubyPlatform})`;
   const actual = `${identity.engine} ${actualMajorMinor} (${identity.platform})`;
 
+  // Engine is *not* gated here, and 0.2.3 tried it and reverted it.
+  //
+  // The argument for gating was 024.72's: `compareVersionInfo` calls an
+  // engine difference an incompatibility and this function did not, so
+  // two deciders disagreed. Making them agree turned one correct red
+  // toast into two -- this function's, whose text advises
+  // `gem install prism rbs` without having asked, and the handshake's.
+  // Neither call site returns, so the client starts either way and the
+  // user is told twice, once wrongly.
+  //
+  // The split is real and is 024.65; what round 38 established is that
+  // closing it *here* costs more than it buys, because the disagreement
+  // was never visible to a user and the duplicate notification is. The
+  // remaining question is which decider owns the *notification*, not
+  // which owns the verdict.
   // The payload not applying is not the same fact as OvalLSP not working.
   // What the Core needs is `prism` and `rbs`; the bundled copies are a
   // convenience for the one combination they were built for, and a Ruby
@@ -261,14 +276,23 @@ export async function checkBundledCoreCompatibility(
     };
   }
 
-  return {
-    compatible: false,
-    reason:
-      `This VSIX's bundled native dependencies were built for ${expected}, but "${rubyCommand}" is ${actual}. ` +
-      'These are incompatible.\n\n' +
-      'To use OvalLSP, either:\n' +
-      '  - install ovallsp\'s own runtime dependencies for this Ruby yourself (gem install prism rbs), or\n' +
-      `  - set "ovallsp.rubyExecutablePath" to a ${expected} interpreter matching this VSIX build.\n\n` +
-      'See docs/design/adrs/0005-platform-scoped-vsix-with-runtime-compatibility-check.md for details.'
-  };
+  return { compatible: false, reason: incompatibilityReason(expected, actual, rubyCommand) };
+}
+
+// One caller since 0.2.3 reverted the engine gate that was the second.
+// Kept rather than inlined: it is eight lines of user-facing prose with
+// two interpolations, and folding that into the middle of a decision
+// function makes the decision harder to read for no gain. Round 39
+// flagged it as revert residue, which is the right question to ask --
+// 0.2.1 left an unreferenced `canonical` wrapper exactly that way. The
+// difference is that this one still has a caller.
+function incompatibilityReason(expected: string, actual: string, rubyCommand: string): string {
+  return (
+    `This VSIX's bundled native dependencies were built for ${expected}, but "${rubyCommand}" is ${actual}. ` +
+    'These are incompatible.\n\n' +
+    'To use OvalLSP, either:\n' +
+    '  - install ovallsp\'s own runtime dependencies for this Ruby yourself (gem install prism rbs), or\n' +
+    `  - set "ovallsp.rubyExecutablePath" to a ${expected} interpreter matching this VSIX build.\n\n` +
+    'See docs/design/adrs/0005-platform-scoped-vsix-with-runtime-compatibility-check.md for details.'
+  );
 }
