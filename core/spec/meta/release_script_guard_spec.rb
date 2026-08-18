@@ -110,7 +110,6 @@ RSpec.describe "the release script's own guards" do
 
     expect(code).to include("INSPECTED=")
     expect(block_containing(/INSPECTED\" -lt/)).to include("exit 1")
-    expect(block).to be_nil.or(be_a(String))
   end
 
   it "still verifies the payload hash and runs the semantic smoke" do

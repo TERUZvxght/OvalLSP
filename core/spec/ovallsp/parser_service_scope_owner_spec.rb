@@ -7,10 +7,15 @@
 # class entirely.
 #
 # Measured before fixing, over the installed gem corpus (3,301 files):
-# 63 of 66 `scope` declarations sit inside a namespace, and 476 of 3,508
-# class basenames are shared by more than one namespace -- 13.6%. So this
-# is not the rarely-walked path section 0.4 permits shipping as a known
-# limitation; it is the ordinary one.
+# 476 of 3,508 class basenames are shared by more than one namespace --
+# 13.6%. So this is not the rarely-walked path section 0.4 permits
+# shipping as a known limitation; it is the ordinary one.
+#
+# A companion figure recorded here at first -- "63 of 66 scope
+# declarations are namespaced" -- was wrong and is removed: it counted
+# every receiverless call named `scope`, most of them the routing DSL.
+# Round 3 re-derived it; real `scope :sym` declarations in that corpus
+# number 2.
 #
 # The fixture uses two same-named classes in different namespaces
 # deliberately. Every existing spec covering this code used a top-level

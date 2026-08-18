@@ -472,8 +472,10 @@ publisher deciding for itself. <!-- documents: 024.57 -->
 
 ## What the undefined-method check gets wrong on real code
 
-**Measured, over 213 files of installed gem source: 54 reports, and all
-54 were wrong.** No correct report in that corpus at all. The check is
+**Measured, over 213 files of installed gem source: 54 reports, of which
+53 were wrong.** The 54th is arguable — an abstract template method that
+really is undefined on the class it is called on, which a Ruby developer
+would still not want reported. The check is
 built on the policy that a false report is worse than a missed one, and
 on this evidence it is not meeting it.
 
@@ -494,12 +496,12 @@ the type at that position — it will not offer the missing name — so the
 information is there and the check is not using it. `Model.scope.first`
 is an everyday idiom. <!-- documents: 024.77 -->
 
-## Completion answers a different type than hover, for one expression
+## Completion offers your class's methods where a core class is meant
 
 Where a class of yours shares a name with a nested core class — a `Stat`
 of your own, against `File::Stat` — hover and diagnostics now answer
-correctly and **completion still offers your class's methods**. One
-expression, two answers, depending on which feature you use.
+correctly and **completion still offers your class's methods**. The type
+is right in both cases; the member list is looked up under the bare name.
 
 0.2.5 fixed the first two and not the third. Without a shadowing class,
 completion after `File.stat(path).` went from offering nothing to

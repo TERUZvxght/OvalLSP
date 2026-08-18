@@ -130,12 +130,20 @@ fi
 # and reports a clean artifact that is not. 0.2.3 filed and withdrew a
 # register entry over exactly that.
 echo "-- packaged-artifact path inspection --"
-if /usr/bin/grep -rlF --exclude='*.bundle' --exclude='*.so' --exclude='*.dylib' "$HOME" "$UNPACK_DIR"; then
+# One variable for the path, used by both the count and the grep. They
+# were two expressions naming the same directory, which is not the same
+# thing: a re-derivation round pointed the *grep* at a subdirectory that
+# does not exist, and the count -- computed from `$UNPACK_DIR` -- stayed
+# plausible, so the check inspected nothing and the guard reported a
+# healthy number. A count that is not derived from what was actually
+# searched guards the variable rather than the search.
+INSPECT_ROOT="$UNPACK_DIR"
+if /usr/bin/grep -rlF --exclude='*.bundle' --exclude='*.so' --exclude='*.dylib' "$HOME" "$INSPECT_ROOT"; then
   echo "release.sh: the packaged VSIX contains this build machine's own absolute path (outside native extensions)." >&2
   echo "Refusing to publish." >&2
   exit 1
 fi
-if /usr/bin/grep -rlF "$HOME" "$UNPACK_DIR" --include='*.bundle' --include='*.so' --include='*.dylib' >/dev/null; then
+if /usr/bin/grep -rlF "$HOME" "$INSPECT_ROOT" --include='*.bundle' --include='*.so' --include='*.dylib' >/dev/null; then
   echo "note: compiled native extension(s) embed this machine's Ruby install path (expected; mitigated at spawn -- see 023.8)."
 fi
 # Prints what it looked at, not only that it passed. A text pin cannot
@@ -143,7 +151,7 @@ fi
 # at a directory that does not exist -- and an attack round demonstrated
 # both. A count turns the second into something a reader of this log
 # notices: a check aimed at nothing reports nothing inspected.
-INSPECTED="$(find "$UNPACK_DIR" -type f | wc -l | tr -d ' ')"
+INSPECTED="$(find "$INSPECT_ROOT" -type f 2>/dev/null | wc -l | tr -d ' ')"
 echo "PASS: packaged-artifact path inspection (${INSPECTED} files inspected)"
 if [ "$INSPECTED" -lt 100 ]; then
   echo "release.sh: only ${INSPECTED} files were inspected -- the artifact should have over a thousand." >&2

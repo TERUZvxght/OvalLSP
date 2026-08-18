@@ -12,9 +12,8 @@ the disproved approaches are kept below it under **Details**.
   on `Billing::Order` produced a relation named after the last part of that
   path, so wherever another namespace held an `Order`, completion after
   `Shipping::Order.recent.first.` listed the *other* model's methods and
-  go-to-definition found nothing. Measured before fixing: 63 of 66 `scope`
-  declarations in the gem corpus sit inside a namespace, and 13.6% of class
-  basenames are shared by more than one.
+  go-to-definition found nothing. Measured before fixing: 13.6% of class
+  basenames in the gem corpus are shared by more than one namespace.
 - **A nested core type keeps its namespace, so your class cannot take its
   place.** `File.stat(path)` answered as `Stat`, and a workspace class of
   that name captured it — offering its methods and denying the real ones.

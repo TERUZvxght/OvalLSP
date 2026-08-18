@@ -3922,9 +3922,24 @@ target: 0.3.0
 
 Driven over 213 files of installed gem source (rack 3.2.6, i18n 1.15.2,
 concurrent-ruby 1.3.8) by 0.2.5's round 2: **54 `unknown-method`
-findings, judged false in all 54 cases, zero true positives.** 0.25 per
-file; 17 of 213 files affected. Identical on both branches, so this is
-not a regression — it is the state of the check.
+findings, of which 53 are false.** 0.25 per file; 17 of 213 files
+affected. Identical on both branches, so this is not a regression — it is
+the state of the check.
+
+**One is arguably true, and round 3 was right to contest the original
+"all 54".** `rack/auth/abstract/handler.rb:21` calls `challenge`, which
+`Rack::Auth::AbstractHandler` genuinely does not define — it is an
+abstract template method supplied by `Rack::Auth::Basic`. Called on the
+abstract class directly it is a real `NoMethodError`, so the report is
+literally accurate. It is also the shape a Ruby developer would not want
+reported, since the pattern is deliberate and the subclass supplies it,
+which makes it the *interesting* member of the set rather than a
+counterexample to be dismissed. Recorded here rather than adjudicated
+away: 53 of 54 wrong is the same argument as 54 of 54, and pretending the
+54th does not exist would be the measurement error this entry is about.
+
+Cause breakdown, recounted in round 3 — the first pass reported 11 and 30
+and was short by three overall:
 
 That number is the release's own standard turned on itself. Section 0
 names undefined-method detection as half of what 1.0.0 is, and section
@@ -3934,19 +3949,20 @@ output on real code is wrong is worse than the check being absent.
 Verified causes, from source:
 
 - **`include` of a module defined in the same file, from a nested
-  module** (11 findings) — `Rack::Request` includes `Helpers` at
+  module** (12 findings) — `Rack::Request` includes `Helpers` at
   `request.rb:784` and `def request_method` is at `:202`; `Rack::Response`
   and `MockResponse` lose `buffered_body!` the same way; `Rack::Reloader`
   loses `rotation`. **This is the one that matters**: Rails concerns are
   exactly this shape, so the check reports confidently on ordinary
   application code.
-- **Metaprogrammed accessors** (30) — `attr_atomic`, `attr_volatile`,
+- **Metaprogrammed accessors** (31) — `attr_atomic`, `attr_volatile`,
   `singleton_class.send :alias_method`. A fair limitation of static
   analysis; it should produce silence, not a report.
 - **Platform-specific files** (8) — JRuby-only sources, unreachable on
   MRI.
 - **`::JSON.parse` inside a namespaced module** (2) — did not reproduce
   in isolation, so context-dependent and not yet characterised.
+- **One abstract template method** (1) — the arguably-true one above.
 
 **Direction:** the check's stated policy is that a false report is worse
 than a missed one (`015`), and `#closed_nominal?` is what decides a
@@ -4005,22 +4021,29 @@ target: 0.3.0
 (`File.stat(path)` says `File::Stat`) and removed a false positive. Round
 2 found completion unchanged: with a workspace class named `Stat`
 present, `File.stat(path).` returns that class's 121 labels — byte for
-byte what completing `Stat.new(x).` returns — while hover on the same
-expression says `File::Stat`.
+byte what completing `Stat.new(x).` returns.
 
-So one expression answers as two different types depending on which
-feature is asked. `024.47` records the same shape for a different
-trigger; this is a second instance, and the pair is the evidence that the
-readers disagree structurally rather than in one place.
+**Round 3 corrected the mechanism, and the correction changes the fix.**
+The two features do *not* get different types: `type_at` answers
+`File::Stat` at that position either way. The divergence is inside
+`QueryService#members_of`, which resolves the type it was given to a
+member list and picks the workspace class. So this is not two readers
+inferring differently — it is one reader losing the qualification while
+looking members up.
+
+That matters because the first diagnosis pointed at `024.47`'s subject
+(where a type's answer is produced) and this one points somewhere much
+narrower and cheaper. The original wording — "one expression answers as
+two different types depending on which feature is asked" — named a cause
+that does not exist.
 
 Remove the shadowing class and completion returns 167 correct labels
 where 0.2.4 returned 0 — so the release *is* an improvement here, just an
 incomplete one.
 
-**Direction:** with `024.47`, as one task. The register now holds two
-independent reproductions of readers disagreeing about a type, which is
-the argument for fixing where the answer is produced rather than at each
-reader.
+**Direction:** in `QueryService#members_of`, where the qualified name is
+being dropped during member lookup. Not with `024.47` — that was the
+first diagnosis and round 3 disproved it.
 
 ## 024.79 `Model.first` completes to nothing
 
