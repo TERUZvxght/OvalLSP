@@ -245,6 +245,62 @@ RSpec.describe "Ovallsp::Server controller-to-view instance variable propagation
     expect(sent_messages.first[:result]).to eq(type: "User")
   end
 
+  # 024.63. `QueryService#type_at` unifies *resolution*, so two readers
+  # asking it the same question get the same answer -- but a template's
+  # `@ivar` has no assignment in the template, so its type comes entirely
+  # from the environment the caller passes in, and that environment is
+  # assembled by `Server` and fetched independently at four call sites.
+  # 0.2.1 gave one of them the environment and left another behind: the
+  # `@` popup named the type and `@user.` a keystroke later offered
+  # nothing -- the same disagreement that release had just spent itself
+  # removing elsewhere. Twice, in one release.
+  #
+  # This is a countermeasure rather than a regression test for that
+  # instance: it asks the two readers about one expression and requires
+  # them to agree, so it fails for *any* call site that forgets the
+  # environment, which is the failure mode rather than the failure. It
+  # was watched failing by dropping `initial_env` from
+  # `Server#receiver_type_before_dot` -- hover still said `User` and
+  # completion offered nothing, which is exactly the shipped bug.
+  #
+  # The real fix is structural and is not here: the environment should be
+  # obtained where it is produced, so that no caller can omit it. That
+  # moves ~425 lines out of `Server` and is its own task (024.63).
+  it "answers a template's `@user.` from the same type hover names for `@user` (024.63)" do
+    view_uri = "file:///app/views/users/show.html.erb"
+    input =
+      open("file:///app/models/user.rb", "class User\n  def full_name\n  end\nend\n") +
+      open("file:///app/controllers/users_controller.rb", <<~RUBY) +
+        class UsersController
+          before_action :load_user
+
+          def load_user
+            @user = User.new
+          end
+
+          def show
+          end
+        end
+      RUBY
+      open(view_uri, "<%= @user.fu %>\n", language_id: "erb") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "ovallsp/explainType",
+        params: { textDocument: { uri: view_uri }, position: { line: 0, character: 4 } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/completion",
+        params: { textDocument: { uri: view_uri }, position: { line: 0, character: 12 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    hovered, completed = sent_messages
+
+    expect(hovered[:result]).to eq(type: "User")
+    expect(completed[:result][:items].map { |item| item[:label] }).to include("full_name")
+  end
+
   it "propagates inherited before_actions and honors a child skip_before_action" do
     inherited_input =
       open("file:///app/controllers/application_controller.rb", <<~RUBY) +

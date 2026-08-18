@@ -15,12 +15,19 @@ evidence-based supported/unsupported table this summarizes.
   [ADR-0005](design/adrs/0005-platform-scoped-vsix-with-runtime-compatibility-check.md),
   Japanese).
   On any other OS/CPU, the bundled native dependencies simply aren't
-  loaded, and OvalLSP shows a diagnostic explaining why rather than
-  attempting to run in a degraded or guessed configuration.
+  loaded. What happens instead — since 0.2.1, and the same path the
+  "Ruby version scope" section below describes: the extension checks
+  whether the selected Ruby can load `prism` and `rbs` itself. When it
+  can (a stock Ruby 3.3+ install carries both), the session runs against
+  those with an Output-channel note — an **unverified** configuration,
+  not a refused one. When it cannot, an error notification points at the
+  Output channel, whose detail names `gem install prism rbs`.
 - **Intel Macs, including under Rosetta 2 translation, are not
-  supported in this Preview.** An x86_64 Ruby (even one installed
-  natively on an Apple Silicon Mac via Intel Homebrew) is rejected by the
-  same platform-compatibility check for the same reason.
+  supported in this Preview** — unsupported, not refused. An x86_64
+  Ruby (even one installed natively on an Apple Silicon Mac via Intel
+  Homebrew) takes the same probe path as any other mismatch: with
+  `prism`/`rbs` loadable it runs as an unverified configuration, and
+  nothing about that combination is tested.
 - **The bundled native extensions embed the packaging machine's own
   absolute Ruby install path, mitigated by the Extension at launch
   time.** `otool -L` on the packaged `prism.bundle`/`rbs_extension.bundle`
@@ -79,8 +86,9 @@ any other Ruby they are not used.
 **On another Ruby it does not refuse — it checks.** As of 0.2.1,
 `vscode/src/platformCompatibility.ts` asks whether that interpreter can
 `require` `prism` and `rbs` itself. If it can, OvalLSP runs against
-those and says so in the Output channel; if it cannot, you get the error
-naming `gem install prism rbs`. Ruby 3.3 ships both, so a 3.3 user
+those and says so in the Output channel; if it cannot, you get an error
+notification, and the Output-channel detail names
+`gem install prism rbs`. Ruby 3.3 ships both, so a 3.3 user
 usually gets the first — **which means an unverified combination, not a
 verified one**. Nothing about 3.3 is exercised beyond `core/`'s own suite
 under CI, and prism's version there may be older than the gemspec's
@@ -109,8 +117,7 @@ claim, and one does not license the other.
   but is never automatically updated, and is never compared against the
   bundled Core's own version/build/payload expectations.
 
-## Static analysis limitations (not Apple-Silicon-specific, but worth
-restating for a Preview)
+## Static analysis limitations (not Apple-Silicon-specific, but worth restating for a Preview)
 
 OvalLSP is a confidence-aware heuristic engine for LSP features, not a
 Ruby type checker. By design, it does not track:
@@ -210,9 +217,10 @@ the name. It cannot be told apart from the same code written on purpose,
 so the fix is to stop publishing while you are still typing rather than
 to add another check, and that is not in this release (024.41). <!-- documents: 024.41 -->
 
-Two are gone since the last release. **A `*_path`/`*_url` call is no
-longer reported as a missing route when no routes have been loaded**
-(024.24) — the case in an untrusted workspace and in any project that is
+Two that this list used to carry are gone — fixed in earlier releases,
+not this one. **A `*_path`/`*_url` call is no longer reported as a
+missing route when no routes have been loaded**
+(024.24, fixed in 0.2.0) — the case in an untrusted workspace and in any project that is
 not Rails, where an empty route table used to answer "no such route"
 rather than "I do not know". That was 8 reports across Ruby's own
 standard library, every one false; it is now none, and 0.2.0's
@@ -232,7 +240,7 @@ than carried into this release (024.23).
   halves of one name do not match. The same module is also coloured as a
   namespace where it is declared and as a class where it is read. <!-- documents: 024.21 -->
 
-Six more are older than this release and untouched by it:
+Seven more are older than this release and untouched by it:
 
 - **A declaration written inside a block belongs to the class the block is
   written in**, whatever the block's real receiver is. `Struct.new(:x) do
@@ -386,14 +394,58 @@ missed one", so each is narrow on purpose. What that costs a user:
 
 ## A class of yours named after a core class
 
-**If it lives in a namespace, it stops resolving.** `Billing::Range`,
-`Admin::File`, `Reporting::Time` — referred to the way Ruby refers to a
-class from inside its own namespace, by its bare name — get no hover, no
-go to definition and no completion as of 0.2.1, where 0.2.0 answered.
-The engine refuses to let a bare name that Ruby itself declares be
-answered by a workspace class, which is right for the `String` a literal
-produced and wrong for the `Range` you wrote (024.47). A class named
-after a core one at the *top* level is unaffected. <!-- documents: 024.47 -->
+**If it lives in a namespace, mistakes on it are not reported.**
+`Billing::Range`, `Admin::File`, `Reporting::Time` — used the way Ruby
+refers to a class from inside its own namespace, by bare name — hover,
+go to definition, completion and signature help all answer, but every
+diagnostic about such a receiver is silently withheld: a typo like
+`r.tagg` on your `Billing::Range` is never flagged, while the same typo
+on a class with an unshared name is. The engine cannot tell the `Range`
+you wrote from the `String` a literal produced, so the refusal that
+protects the literal silences your class too. And a literal of that
+same name pays the other half of the cost: with `Billing::Range`
+indexed, `(1..5).` completes to `Billing::Range`'s members — `tag`,
+not `each` — while hover on `(1..5).each` answers from the real Range.
+The readers disagree, and which is right depends on information the
+engine does not have (024.47). A literal of an *unshared* name is
+untouched (`"hello".` completes String as usual unless some class of
+yours is named `…::String`), and a class named after a core one at the
+*top* level is unaffected. <!-- documents: 024.47 -->
+
+(Until 0.2.3 this section claimed the opposite — that hover, definition
+and completion stopped answering for such a class as of 0.2.1. That
+described an arrangement built and rolled back *inside* 0.2.1's review
+loop; what 0.2.1 actually shipped is the silence described above.)
+
+## What a version mismatch actually does
+
+**It tells you, and then carries on.** When the Extension and the Core
+disagree about version, protocol, build identity or payload hash, you get
+an error notification and the detail in the Output channel — and the
+session keeps running. It does not stop before answering, which is what
+both READMEs and both getting-started pages said until 0.2.3.
+
+That matters most for the two reasons you cannot see: a payload hash
+mismatch means the bundled Core is not the one this build shipped, and a
+protocol mismatch means the two sides disagree about the wire. In both
+cases OvalLSP goes on answering hover, completion and go to definition.
+Treat those answers as unreliable until the mismatch is resolved, and run
+`OvalLSP: Show Version Information` to see what was detected (024.55). <!-- documents: 024.55 -->
+
+## Diagnostics that come back after you clear or close a file
+
+**Rarely, and only while one of these re-analysis passes is running — a
+window that grows with the number of open files, not just the size of
+one.** When the Runtime Agent supplies routes or models, or becomes
+ready, every open file is re-analysed on a background thread — and that
+pass decides which files to analyse before it starts, not while it runs.
+
+Two things follow. If you had paused on a file big enough to take seconds
+to analyse, the `*_path` reports made without routes can be written back
+over the corrected ones; the next edit clears that. And **if you close a
+file while another one is being analysed in that pass, its errors stay in
+the Problems panel** — for the rest of the session, since nothing
+republishes a file nobody has open. Reopening it clears them (024.56). <!-- documents: 024.56 -->
 
 ## How long an edit takes to re-analyse
 

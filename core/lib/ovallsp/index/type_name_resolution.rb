@@ -4,37 +4,31 @@ require_relative "symbol_id"
 
 module Ovallsp
   module Index
-    # Turning a written type name into the declaration it means, and the
-    # one case where the index's answer is worse than no answer.
+    # Recognising the one case where the index's answer for a type name
+    # is worse than no answer: a *bare* name that signatures already
+    # declare, answered by a workspace class that merely shares its last
+    # segment. A workspace `Serializer::Elements::String` then stands in
+    # for the `String` a literal produced, and 0.2.0 reported
+    # `"hello".upcase` as an unknown method on the strength of it.
     #
-    # `WorkspaceIndex#resolve_type_name` matches on the *last segment*, and
-    # should: for completion and go-to-definition a plausible class beats
-    # none, and a name written without its namespace is the ordinary way
-    # Ruby is read. The exception is a bare name that signatures already
-    # declare. A workspace `Serializer::Elements::String` then stands in
-    # for the `String` a literal produced, and every reader downstream
-    # inherits it: `"hello".upcase` was reported as an unknown method,
-    # completion after `title.` offered `emit` and omitted every String
-    # method, and hover said `String` throughout -- three answers to one
-    # question.
+    # One reader applies the rule: the diagnostics engine
+    # (`Diagnostics::Engine#shadowed_declared_type?`), which declines to
+    # *report* about such a receiver -- a diagnostic about a receiver the
+    # engine has not identified is an assertion, not a missing answer.
+    # Resolution itself (`Semantic::HierarchyIndex#canonical_name`)
+    # deliberately does not refuse: 0.2.1 briefly applied the rule there
+    # so that completion would agree with the diagnostic, and that broke
+    # every bare name a user *wrote* from inside its own namespace --
+    # `Range.new` inside `module Billing` stopped resolving anywhere.
+    # The substitution test cannot tell a written name from an inferred
+    # one, so it was rolled back to the engine; 024.47 records the design
+    # question that remains, and what each attempted placement cost.
     #
     # A module function rather than a method on either collaborator: the
-    # rule needs the workspace index *and* the signature environment, and
-    # neither owns the other. 0.2.1 first put it inside the diagnostics
-    # engine, which silenced the diagnostic and left completion wrong --
-    # the rule belongs where the name is resolved, so that every reader
-    # gets one answer.
+    # rule needs the workspace index's answer *and* the signature
+    # environment, and neither owns the other.
     module TypeNameResolution
       module_function
-
-      # The declared name `name` resolves to, or `name` itself when the
-      # index has no answer or its answer would be a substitution.
-      def canonical(name, workspace_index:, signatures: nil)
-        resolved = workspace_index.resolve_type_name(name)
-        return name.to_s if resolved.nil? || substitution?(name, resolved, signatures)
-
-        resolved
-      end
 
       # Whether resolving `name` to `resolved` swapped in a differently
       # namespaced class for a name signatures already declare.

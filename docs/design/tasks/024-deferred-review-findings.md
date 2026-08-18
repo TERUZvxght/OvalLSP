@@ -23,6 +23,7 @@ status: open        # open | fixed | done. Anything else reads as open.
 kind: defect        # defect | roadmap. Roadmap items are plans, not faults.
 released-in: 0.1.14 # only on a resolved entry
 user-visible: yes   # on an open defect: does a user see this?
+target: 0.2.4       # optional on an open entry: the release its fix is routed to
 ```
 
 An open defect with `user-visible: yes` must be cited by number in
@@ -54,6 +55,36 @@ in 0.1.11 — then sat a release past that deadline because deleting them
 would have broken live references. Round 5 of the
 0.1.12 review reported the entries as stale; the deadline was the part
 that was wrong. Run the grep before deleting, not the calendar.
+
+**`024.61` does not exist.** The 0.2.4-bound branch's round 37 renumbered
+two entries that had both landed as `024.60`, and the number it vacated
+was never reused. The guard below rejects a duplicate and says nothing
+about a gap, deliberately: numbers are cited from source and specs, so
+reusing a vacated one is the dangerous move and leaving a hole is the
+safe one. Take the next number after the highest, never the first free
+one. In this unified register the gap exists for the same reason, and the
+numbering continues after the highest number *either* line has used —
+`024.64` and `024.65` stay reserved to the 0.2.4-bound branch's entries;
+do not renumber them, and do not fill the hole.
+
+**`024.70` does not exist either**, for a different reason and under
+the same rule. It was written during 0.2.3's pre-publish gate,
+claiming the packaging step's native-extension path warning could not
+see a Homebrew-built VSIX — and withdrawn the same session, because
+the warning does see it and had already said so. The claim came from
+re-running the gate's own `grep` in a shell where the name resolves to
+a `ugrep` wrapper that skips binary files without `-a`; the gate gets
+`/usr/bin/grep`, which does not. `028`'s "A second finding that was the
+measurement, not the tree" records it, because a withdrawn finding is
+worth as much as a kept one when the thing it caught was the method.
+The number stays vacant.
+
+Entries `024.51`–`024.54`, `024.57`, `024.58`, `024.64`, `024.65` — and
+that branch's own `024.49` — live on the 0.2.4-bound branch
+(`fix/0.2.3`), with the engine thread they describe; the numbers
+`024.50`–`024.63` as used here must not be reused there with different
+content, and that branch's `024.49` collides with this register's, so it
+will be renumbered on rebase.
 
 Entries numbered `024.R*` are roadmap items rather than defects: work
 that is understood, deliberately not scheduled for the current release,
@@ -2106,6 +2137,103 @@ None of that is settled, and settling it needs measurement against a real
 workspace rather than reasoning — which is why this is scoped as its own
 roadmap entry rather than folded into another release's work.
 
+## 024.R9 This register outgrew its file, and 0.3.0 moves it
+
+```yaml
+status: open
+kind: roadmap
+```
+
+**Area:** `docs/design/tasks/024-deferred-review-findings.md`,
+`core/spec/meta/deferred_findings_spec.rb`,
+`docs/DOCUMENTATION_MAP.md`, `CLAUDE.md`
+
+This file runs to thousands of lines across dozens of entries — `wc -l`
+and `grep -c '^## 024\.'` give the current figures; the precise count
+this sentence once carried went stale within the release that imported
+it — and it lives in
+`docs/design/tasks/` — a directory of per-task implementation notes,
+numbered by the task that produced them. Everything else in there is a
+record of one finished piece of work. This one is a live register that
+every release appends to, and it is the only document in the repository
+that is never done.
+
+The consequence is that an entry is *recorded* and still not *found*. A
+finding lands in the middle of a document nobody reads front to back,
+under a number whose only advertisement is the `<!-- documents: -->`
+marker in `KNOWN_LIMITATIONS` and whatever source comments happen to cite
+it. The legend's "one place" rule is still right; the file it names is no
+longer the right place for it.
+
+**What the move must preserve** — each of these is currently load-bearing,
+and a move that drops one is worse than no move:
+
+- **The numbers.** Source and spec comments cite `024.N` as the only
+  route to the reason a piece of code is the way it is; the legend
+  already forbids deleting a resolved entry while such a citation
+  survives. So this is a move plus an index, never a renumber. Entries
+  keep the `024.` prefix precisely because it is quoted in the tree.
+- **The `yaml` grammar and its guard.** `deferred_findings_spec.rb` reads
+  those blocks, and 024.25 records what happened the last time this data
+  was parsed as prose. The guard gets re-aimed at the new location; it
+  does not get relaxed for the duration of the move.
+- **The `<!-- documents: 024.N -->` anchors in both languages**, and the
+  same-count rule behind them.
+- **One place to look.** The reason for the rule, as distinct from the
+  file it currently names. A split by *state* (open defects / roadmap /
+  resolved-but-still-cited) keeps that; a split by release or by
+  subsystem does not, because a reader with a number in hand would have
+  to know which file it went to.
+
+**Proposed shape:** a dedicated register at the top of `docs/`, not under
+`design/tasks/`, with this file reduced to a stub pointing at it, a row
+added to `DOCUMENTATION_MAP.md`, and the guard spec re-pointed.
+
+**What a move breaks: measure it with a grep at the revision that
+moves it, not from this paragraph.** The count here was wrong on
+arrival — this entry said "nineteen files" over an itemized list of
+eighteen, and the unified 0.2.3's merge round re-counted and got a
+different membership besides (`docs/ROADMAP.md` + `.ja.md` cite the
+relative link rather than the full path; sibling task files cite the
+full path; `AGENTS.md` cites the bare filename and goes stale on a
+move too). The shape of the blast radius, which is what matters:
+
+- `CLAUDE.md` — the rollback rule names this path as where a rolled-back
+  thread's root cause is written. That rule stops being followable the
+  moment the path is a stub.
+- the READMEs, `docs/PUBLISHING.md`, `docs/ROADMAP.md`,
+  `docs/KNOWN_LIMITATIONS.md`, `docs/DOCUMENTATION_MAP.md` and their
+  `.ja.md` pairs, both changelogs, the roadmap site pages, sibling
+  task files.
+- `core/spec/meta/deferred_findings_spec.rb`, and two source files
+  (`runtime/ancestry_registry.rb`, `runtime_agent/agent.rb`).
+
+The stub is what makes this survivable rather than a flag-day across
+every citing file: the path keeps resolving, and the citations are
+corrected as they are next touched. The exceptions are `CLAUDE.md` and the guard spec,
+which must move with the file — a working agreement pointing at a
+forwarding address is not a working agreement.
+
+**Why this is not in `docs/ROADMAP.md`.** That document and README's
+matrix describe what a user can do; this changes nothing a user can
+observe. A row there would misdescribe the release, and
+`roadmap_parity_spec.rb` requires README and the roadmap to agree row for
+row, so it would also have to be invented in a second place. An internal
+reorganisation belongs in the register, which is where this entry is.
+
+This makes it the first `024.R*` entry with no roadmap row: R1, R3, R4
+and R7 — every other open one — are cited from `docs/ROADMAP.md`. The
+absence here is deliberate, not an omission, which is why the paragraph
+above exists rather than a silent gap. `DOCUMENTATION_MAP.md`'s roadmap
+row reads in one direction only — a *product* roadmap item needs a
+matching `R` entry — and nothing requires the reverse.
+
+**When:** 0.3.0, and before the entries it will hold are written rather
+than after. Doing it inside a review loop is what `CLAUDE.md`'s "during a
+review loop, fix; do not add" exists to prevent — the move touches a
+guard spec, and a change set that grows a guard mid-loop resets the round
+that was reviewing it.
+
 ---
 
 ## 024.16 The capability E2E suite can skip in full while CI stays green
@@ -2462,6 +2590,15 @@ suppresses "a call whose message is on a different line from its
 receiver" would also suppress the leading-dot chain style, which is
 ordinary Ruby.
 
+(0.2.3's merge note: the debounce named above was since **built and
+rolled back** on the 0.2.4-bound branch -- discarded edits, a publish
+that could outlive its document, and a measured 140x cost on the
+correction it forced; that branch's register and review record hold the
+thread, and its re-analysis reclassifies this entry as a product
+decision for 0.4.0 rather than an engine defect. The reclassification
+lands with that branch's release; until then this entry stands, with
+the direction above known to be harder than it reads.)
+
 Round 23 found it, round 24 found it again and widened it, and it existed
 only in `026-0.2.1-review-loop.md` until now -- which is why it is an
 entry: a finding parked in a round's handover is invisible to
@@ -2649,7 +2786,7 @@ what caught it here was a measurement, not a reviewer's reading. Giving
 measure it properly, with `ClassOf` handled for singleton bodies and
 `.class` resolving to the class object rather than to `Class`.
 
-## 024.47 A namespaced class named after a core class stops resolving
+## 024.47 A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal
 
 ```yaml
 status: open
@@ -2658,14 +2795,31 @@ user-visible: yes
 ```
 
 **Area:** `core/lib/ovallsp/index/type_name_resolution.rb`
-(`#substitution?`), applied by `Semantic::HierarchyIndex#canonical_name`
+(`#substitution?`), applied by
+`Diagnostics::Engine#shadowed_declared_type?` inside
+`#receiver_type_for`
 
-The rule refuses to resolve a *bare* name that signatures declare to a
-workspace class in a different namespace. That is right for a type an
-expression produced -- a literal's `String` must not be answered by
-`Serializer::Elements::String` -- and wrong for a name the user *wrote*,
-because a bare name is exactly how Ruby refers to a class from inside its
-own namespace:
+The substitution test recognises a *bare* name that signatures declare
+being answered by a workspace class in a different namespace. It cannot
+tell a name the user *wrote* -- a bare name is exactly how Ruby refers
+to a class from inside its own namespace -- from a name inference
+produced, so wherever the rule is applied, it is applied to both
+populations at once. 0.2.1 tried both placements, and each was wrong for
+one population:
+
+- **Applied at resolution** (`HierarchyIndex#canonical_name`, built
+  mid-loop): the literal case was right and every written bare name
+  broke -- hover, definition and completion all stopped answering for
+  `Range.new` inside `module Billing`. Rolled back before 0.2.1
+  shipped.
+- **Applied at the diagnostics engine** (what 0.2.1 shipped, and what
+  ships today): hover, definition, completion and signature help all
+  answer for the written name, and the engine declines to report about
+  *any* receiver the test matches. Measured on this tree (0.2.3's
+  scope-confirmation pass, controls included): `r.tagg` -- a genuine
+  typo -- on a `Billing::Range` receiver is never reported, while the
+  identical typo on a `Pricing::Tariff` receiver is. The check is
+  silently off for exactly the classes this entry is about.
 
 ```ruby
 module Billing
@@ -2675,29 +2829,112 @@ module Billing
   class Invoice
     def run
       r = Range.new
-      r.tag("x")     # 0.2.0: hover, definition and completion all answer
-    end              # 0.2.1: all three answer nothing
+      r.tag("x")     # 0.2.0: hover, definition and completion answer
+      r.tagg("x")    # 0.2.1-0.2.3: they still answer -- and this typo
+    end              # is never reported (a Tariff's identical typo is)
   end
 end
 ```
 
-Reproduces for `Data`, `Set`, `Method`, `File`, `Time`, `Struct`,
+(This entry's first version annotated the example "0.2.1: all three
+answer nothing". That described the mid-loop resolution-side
+arrangement, which was rolled back before 0.2.1 shipped, and the
+`KNOWN_LIMITATIONS` paragraph written from it told users a limitation
+the shipped build does not have -- while saying nothing about the
+diagnostics silence it does have. Both corrected in 0.2.3; believe the
+measurement above, not this file's history.)
+
+The literal side, meanwhile, still disagrees with itself while a class
+sharing the *literal's* name is indexed — a workspace
+`Serializer::Elements::String` for a string literal, `Billing::Range`
+for `(1..5)`: the literal's `.` completes to the workspace class's
+members and none of the core class's (0.2.0's behaviour, kept
+deliberately), hover and signature help on the same receiver's calls
+answer from RBS, and diagnostics decline. Three readers, three
+sources. A literal whose name no workspace class shares is untouched.
+
+Applies to `Data`, `Set`, `Method`, `File`, `Time`, `Struct`,
 `Comparable`, `IO` and `Random` -- any core name a namespaced class
 shares. `Billing::Logger` survives only because `logger`'s RBS is not
 loaded by default.
 
-**Direction:** the two cases differ in whether the name was *written* or
-*inferred*, and `HierarchyIndex#ancestors` knows neither -- it is handed
-a name with no lexical context. Two shapes are plausible and neither is a
-patch: carry that distinction into the type (an inferred Nominal is not
-the same thing as a written constant reference), or stop choosing and let
-the chain hold both the workspace class and the RBS type, so a member
-lookup finds whichever declares it. The second is cheaper and costs one
-spurious completion candidate on a literal.
+**What the 0.2.1 revert left behind, cleaned up in 0.2.3.** `CLAUDE.md`'s
+revert rule ("grep the tree for the thing being reverted before
+committing the revert") points here for the full inventory of what
+reverting the resolution-side placement stranded:
+
+- an unreferenced method: `Index::TypeNameResolution.canonical`, whose
+  only caller was the reverted `canonical_name` (removed);
+- an inert constructor parameter: `signatures:`/`@signatures` on
+  `Semantic::HierarchyIndex`, assigned and never read (removed, with its
+  three construction sites);
+- stale comments describing the reverted arrangement as current, in
+  `index/type_name_resolution.rb` (header), `semantic/hierarchy_index.rb`
+  (`initialize`), `server.rb` (the `@signatures` ordering note),
+  `diagnostics/engine.rb` ("resolution itself now refuses"),
+  `scripts/corpus_diagnostics.rb` (naming a shadow rule in
+  `canonical_name` that is not there), and `CLAUDE.md`'s countermeasure
+  exemplar list (holding up the rolled-back placement as the right
+  shape) -- four rewritten against the shipped arrangement, and the
+  two whose subjects were themselves the dead code above
+  (`hierarchy_index.rb`'s `initialize` note, `server.rb`'s ordering
+  note) deleted with them;
+- a published changelog bullet claiming the reverted completion fix as
+  shipped, contradicting its sibling bullet under the same 0.2.1
+  heading in both languages (deleted; 0.2.3's entry carries the
+  notice);
+- the `KNOWN_LIMITATIONS` sections in both languages described above
+  (rewritten from measurement);
+- a dead e2e client helper (`lsp_client.rb#document_highlights`) from
+  the same rollback commit's capability removal (removed);
+- a contract line nothing could observe: `substitution?`'s refusal of a
+  qualified name was exercised only through the reverted resolution-side
+  caller -- its one surviving caller blanks qualified receivers a line
+  earlier (`WorkspaceIndex#guessed_type_name?`), and a full-suite sweep
+  ran green with the line deleted. Pinned in 0.2.3 by a direct unit spec
+  (`spec/ovallsp/index/type_name_resolution_spec.rb`, watched failing
+  against the deleted line) rather than removed: the module states the
+  bare-name precondition as its own contract, and a refusal that holds
+  only because the sole caller pre-filters is 0.2.2's
+  emergent-containment lesson over again.
+
+**Direction, re-costed in 0.2.3.** The two shapes stand, and the second
+was evaluated concretely against this tree before being declined for a
+patch release:
+
+1. Carry the written/inferred distinction into the type -- an inferred
+   Nominal is not the same thing as a written constant reference. Still
+   the shape that addresses the cause.
+2. Stop choosing: let the ancestor chain hold both the workspace class
+   and the RBS type, so member lookup finds whichever declares it. A
+   simulation (0.2.3's review record, `028-0.2.3-review-loop.md`) showed
+   the real bill, and the entry's earlier costing -- "one spurious
+   completion candidate on a literal" -- understated every line of it:
+   `"hello".upcase(:ascii)`, legal Ruby, becomes an `argument-count`
+   false positive whenever the shadow class declares its own `upcase()`
+   (`sole_source_declaration` keeps each source's answer singular while
+   the receiver's identity is not, and `sole_declared_overload` has the
+   symmetric RBS-side family); a written `Billing::Range` gains the
+   whole core `Range` API as spurious completion candidates; one hover
+   popup mixes an RBS label with a workspace `Defined:`; and making
+   literal receivers closed re-opens 024.13's family -- `"".squish`
+   under ActiveSupport-style direct additions -- for any workspace
+   containing a shadow class. A corpus diff cannot arbitrate any of
+   this: the gems that reopen core classes do it at the *top level*,
+   where `substitution?` never fires, so the measurement is blind
+   exactly where collisions live. Fixtures watched failing, not corpus
+   deltas, are the gate if this shape is ever built.
+
+Per the roll-back rule's own step 3 -- the problem goes to its own
+release or its own task -- the fix is re-scoped out of 0.2.3, which
+carries the documentation and this record instead. 027 deferred "the
+hover/completion countermeasure" here; this entry is where that item
+landed, and why it is not a code change in a patch.
 
 **Not caught for seven rounds** because `scripts/corpus_diagnostics.rb`
-built its `HierarchyIndex` without `signatures:`, so this rule was inert
-in every corpus measurement the release quoted (024.48).
+built a `HierarchyIndex` without the `signatures:` the then-current
+shadow rule read, so the rule was inert in every corpus measurement the
+release quoted (024.48).
 
 ## 024.48 The measurement tool ran an engine the server never runs
 
@@ -2714,14 +2951,787 @@ user-visible-note: >
 
 **Area:** `scripts/corpus_diagnostics.rb`
 
-It built `HierarchyIndex.new(workspace_index:)` while `Server#initialize`
-builds `HierarchyIndex.new(workspace_index:, signatures:)`. The shadow
-rule lives in `#canonical_name` and reads `@signatures`, so it did
-nothing in any corpus run -- and every figure this release quoted came
-from those runs. A measurement of a configuration no user gets is not a
-smaller measurement; it is a measurement of something else.
+(The constructions below are the mid-0.2.1-loop arrangement this entry
+was written against. The resolution-side shadow rule they describe was
+rolled back before 0.2.1 shipped, and 0.2.3 removed the then-inert
+`signatures:` parameter from `HierarchyIndex` everywhere -- so on
+today's tree the "defective" construction and the correct one read the
+same, the rule lives in the diagnostics engine, and the script matches
+the server again by *not* passing what no longer exists. 024.47 records
+that rollback; the lesson here is unchanged.)
 
-Fixed by building it the way the server does. The lesson is the one
+It built `HierarchyIndex.new(workspace_index:)` while `Server#initialize`
+built `HierarchyIndex.new(workspace_index:, signatures:)`. The shadow
+rule of the day lived in `#canonical_name` and read `@signatures`, so it
+did nothing in any corpus run -- and every figure this release quoted
+came from those runs. A measurement of a configuration no user gets is
+not a smaller measurement; it is a measurement of something else.
+
+Fixed by building it the way the server did. The lesson is the one
 `CLAUDE.md` already carries, one level up: *confirm each side ran the
 code you think it ran* has to include "and in the configuration a user
 would run it in".
+
+## 024.49 A release record kept asserting durations it could not witness ending
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.3
+user-visible: no
+user-visible-note: >
+  Release-record prose (028's guard narrative and the workflow/spec
+  comments that copied it); nothing an editor user sees. Entered
+  because the same place failed three consecutive review rounds, which
+  is the roll-back rule's threshold, and the rule says the entry is
+  the deliverable.
+```
+
+**Area:** `docs/design/tasks/028-0.2.3-review-loop.md` ("A guard that
+could not see its input"), and the ci.yml/pages.yml/guard-spec comments
+that carried copies of it
+
+Three consecutive rounds of 0.2.3's review loop found the same
+narrative wrong, each time about its relationship to time:
+
+1. **Round 1**: "the check now runs on every push" — false of the
+   trigger (`push: branches: [main]` plus pull requests). Hand-fixed,
+   in four places at once.
+2. **Round 2**: "the check was red on `main` for five days" — a
+   duration attached to the wrong fact. The redness began with 0.2.2's
+   push (2026-08-16); five days is the publish-before-push gap
+   (Marketplace 2026-08-11, repository 2026-08-16), which no in-repo
+   check can see. The round's countermeasure — deduplicate the dated
+   narrative into 028 and leave only ageless mechanism sentences in
+   shipped files — was real and held. But its own restatement
+   introduced "lasted under 21 hours".
+3. **Round 3**: "lasted under 21 hours" asserts a *completed* duration
+   for a condition that had not ended — `main` stays red until the
+   release lands on it, and a fixed record cannot date that. (It was
+   also arithmetically stale by commit time: the fix existed on the
+   branch twenty hours in, but a fix on an unmerged branch bounds
+   nothing about `main`.)
+
+**Root cause:** the narrative kept asserting facts whose truth depends
+on time and on systems outside the tree — trigger shorthand, deploy
+state, the Marketplace, wall clocks. Such claims can silently stop
+being true after the commit that states them. Each round fixed the
+number; none changed the claim's *shape*, so the next round inherited
+a fresh instance of the same class.
+
+**Direction actually needed, applied in 0.2.3:** a fixed record states
+witnessed, timestamped events — never durations or completions of
+conditions it cannot watch end. An interval may be stated only when
+both endpoints are witnessed (publish 2026-08-11 → push 2026-08-16).
+Dated narrative does not go into shipped files at all; mechanisms,
+which do not age, do — with a pointer to the record that holds the
+dates.
+
+## 024.50 The Marketplace description promises the behaviour 0.2.1 removed
+
+```yaml
+status: fixed
+released-in: 0.2.3
+kind: defect
+user-visible: yes
+```
+
+**Area:** `vscode/README.md` and `vscode/README.ja.md` -- the paragraphs
+about unsupported platform/Ruby combinations
+
+They say OvalLSP "does not silently degrade or guess -- it refuses to
+load its bundled native dependencies and shows a clear diagnostic
+instead" and "does not silently degrade or half-start". As of 0.2.1 a
+mismatched Ruby carrying `prism`/`rbs` starts and runs an unverified
+combination, which is exactly degrading. `vscode/README.md` is the
+Marketplace description, so this is a published claim the build does not
+honour.
+
+The same file's environment table still reads "Ruby 3.3.x, 3.5.x | Not
+verified" with no 4.0 row, while `docs/SUPPORT_MATRIX.md` carries 4.0 as
+best effort.
+
+**Direction:** fix the prose, and add `vscode/README.md` +
+`vscode/README.ja.md` to `docs/DOCUMENTATION_MAP.md`'s Ruby/platform
+trigger row -- which is why it was missed: the row names
+`docs/SUPPORT_MATRIX`, `docs/KNOWN_LIMITATIONS` and the two
+getting-started pages, and not these two.
+
+## 024.55 A version mismatch is reported and then ignored
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.4
+```
+
+**Area:** `vscode/src/extension.ts` (`runVersionHandshake`, and the
+pre-start branch on `checkBundledCoreCompatibility`)
+
+Four documents said OvalLSP "stops before sending any feature request" on
+a version, protocol, build or platform mismatch and shows a diagnostic
+"instead of a degraded session". It does not stop. Both deciders log to
+the Output channel, raise an error notification, and fall through:
+`.stop(` appears once in `extension.ts` and it is inside a comment.
+
+So a Core whose **payload hash does not match** -- a corrupted or
+tampered build -- serves hover, completion and go to definition while the
+user is told they were protected from exactly that. Same for a protocol
+mismatch, where the two sides disagree about the wire.
+
+**0.2.3 corrected the documents only.** `site/getting-started.html` and
+`site/ja/`, `vscode/README.md` and `.ja.md` now say what happens: it is
+reported, it keeps running, and the answers should be treated as
+unreliable until the mismatch is resolved. That is honest and it is not a
+fix.
+
+**Why not fixed here.** Stopping is a behaviour change with a real
+failure mode of its own -- a false positive locks the user out of the
+extension entirely, and this project has shipped a version check that was
+wrong about a working combination twice (the 0.2.4-bound branch's
+register records the toast half and its round 34). It wants its own
+change, with the two paths separated:
+
+1. **Pre-start** (`checkBundledCoreCompatibility` returning
+   `compatible: false`) genuinely can refuse before any request, and by
+   that point it has already established the Ruby can load neither the
+   bundled payload nor its own `prism`/`rbs` -- the Core will fail on
+   `require` anyway. Refusing there costs nothing and is what ADR-0005
+   describes.
+2. **Post-start** (`compareVersionInfo`) cannot honestly claim "before any
+   feature request" -- the client has started. It would have to stop the
+   client, and the reasons differ in severity: a payload hash mismatch is
+   an integrity failure, a core-version mismatch after a Marketplace update
+   is usually a stale process that a restart fixes.
+
+## 024.56 A publish can land after the panel has been cleared, and after a newer one
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.4
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#republish_open_diagnostics`,
+`#handle_did_close`, `#publish_findings`)
+
+`#republish_open_diagnostics` snapshots `@document_store.open_documents`
+and then computes and publishes for each, on a background thread, from
+six call sites -- without re-reading the store. `#handle_did_close`
+clears the panel on the dispatch thread. Nothing orders the two.
+
+Reproduced identically by the 0.2.4-bound branch's rounds 35 and 36:
+publishes for the closed file came out `[2, 0, 2]` -- findings, the
+clear, the findings again. **Every build has this**, 0.2.1 included; it
+is not a regression of any release. That branch's debounce work gave its
+own waiter path the same race, fixed it there, and the fix did not reach
+here -- which is how the shape came to be understood at all.
+
+`#republish_open_diagnostics` publishes on a background thread when
+routes or models land or the Agent becomes ready. If the dispatch thread
+computed findings for version V before routes arrived, and the republish
+for the same V lands during its 2--5 s analysis, the dispatch publish
+writes last and puts the pre-routes findings back.
+`docs/EXTENSION_CAPABILITIES.md`'s G12 row promises "the route diagnostic
+clears once routes arrive, without touching the file"; in that
+interleaving it clears and comes back.
+
+**What a user sees:** close a tab a second or two after routes or models
+land, or after the Runtime Agent becomes ready, and the Problems panel
+keeps that file's errors for the rest of the session. Nothing republishes
+an unsaved buffer or a deleted file.
+
+**The real fix is one writer, not another comparison.** There are three
+publishers to one stream (the dispatch thread, the workspace pass, the
+republish) and only some pairs are ordered. What they all lack is a
+record of *what has already been published for this uri*:
+`#publish_findings` could hold it, refuse a write whose version is older
+than the last one written for that uri, and let a clear always win. That
+is a small piece of state in one place.
+
+Recorded rather than done because the 0.2.4-bound branch's loop ran
+under fix, don't add, and because a rule about which publish wins wants
+its own change set and its own corpus run -- it can silence a publish,
+which is the direction that does not announce itself.
+
+## 024.59 The guard against a stale example count could not run
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.3
+user-visible: no
+user-visible-note: >
+  A guard defect. Its consequence is that `SUPPORT_MATRIX` and
+  `RELEASE_CHECKLIST` shipped a suite size that was wrong again, which is
+  the thing the guard was written to stop.
+```
+
+**Area:** `core/spec/meta/documented_counts_spec.rb`
+
+Added in 0.2.1's round 26 because the figure had gone stale three times
+(895 for six releases, then 1,776, then 1,833). It skips unless the run
+is the whole suite, and decided that by comparing a glob of spec files on
+disk against `files_to_run`. The glob was rooted one level too high:
+
+```ruby
+File.expand_path("../**/*_spec.rb", __dir__.sub(%r{/meta\z}, ""))  # => core/**/*_spec.rb
+```
+
+`core/**` includes `core/vendor/bundle`, so once gems are vendored there
+the glob matched the vendored gems' own spec files — ten, all
+`diff-lcs`', measured by a real vendored install at 0.2.3; this entry
+arrived saying "twenty", which no measurement of the layout it
+describes reproduces — and the counts never agreed. **CI vendors them**: `ruby/setup-ruby`'s `bundler-cache: true`
+sets `BUNDLE_PATH` to `vendor/bundle`. So the guard skipped on every
+full run in that layout — CI's included, and the 0.2.4-bound branch's
+machine, whose documents drifted to 1,934 against a suite of 1,941
+with nothing to say so. A checkout with nothing vendored under `core/`
+— the layout the unified 0.2.3 was prepared in — still compared, which
+is why this branch's own audited figures stayed true while CI's guard
+was blind.
+
+Fixed by rooting the glob at `spec/`. The countermeasure is separate and
+matters more: **a check that decides it is not applicable reports the
+same green as one that passed.** The spec keeps its `skip` for a subset
+run -- a filtered run is legitimate, and the property cannot be stated
+from inside a run that may be one -- so it is enforced where the whole
+suite is guaranteed: ci.yml's core job gained a "Fail if a
+documented-count check skipped" step that reads the JSON formatter's
+output (`core/tmp/rspec.json`) and fails a full run in which these
+examples skipped.
+
+## 024.60 Four test fixtures raced macOS' first-execution scan
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.3
+user-visible: no
+user-visible-note: >
+  A test-suite defect. It cost confidence rather than behaviour: four of
+  six consecutive local runs of the extension's unit suite failed, in
+  three different combinations, on code that was correct.
+```
+
+**Area:** `vscode/src/test/unit/coreProcess.test.ts`,
+`vscode/src/test/unit/platformCompatibility.test.ts`,
+`vscode/src/test/support/executableFixture.ts`
+
+Three `ps` tests and one Ruby-query test write a stand-in executable into
+a fresh temporary directory and immediately run it. macOS charges the
+first execution of a newly written executable a one-off scan: measured on
+this repository's own fixture, **2.62 s the first time and 0.04 s on
+every run after**. `SystemProcessTreeInspector`'s snapshot timeout is 1 s
+and mocha's default is 2 s, so the cold file was killed mid-query and the
+assertion reported a product defect that was not there.
+
+Load-dependent, so it flaked rather than failed, and each of the three
+`ps` tests failed with a *different* message -- one timeout, one "command
+failed", one "expected unparseable output to be rejected" -- which reads
+as three unrelated defects rather than one cold file.
+
+Fixed by running each fixture once before the measurement, in a single
+shared `installExecutableFixture` rather than copied into both suites.
+Ten consecutive runs green afterwards, and faster, because the failing
+paths had been spending their time in timeouts.
+
+## 024.62 Two per-file stores are separated by nothing but their payload
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing is wrong in the tree today. Every call site was checked and
+  each one is currently correct, so no answer the engine gives is
+  affected. What is recorded is that the correctness rests on four
+  call sites each remembering a different subset, rather than on the
+  structure — a hazard for the fifth, not a fault in the fourth.
+target: 0.2.4
+```
+
+**Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
+`core/lib/ovallsp/semantic/generated_method_index.rb`,
+`core/lib/ovallsp/server.rb`, `core/lib/ovallsp/cold_indexer.rb`
+
+`HierarchyIndex` and `GeneratedMethodIndex` are updated by the same
+trigger, inside the same mutex block (`Server#apply_file_summary`), keyed
+by the same thing, and built from the same `FileSummary`. They differ in
+the type of fact they hold and in nothing else. No reason for the
+boundary is stated anywhere, and none is apparent.
+
+The comparison is what makes it visible: the other stores in this layer
+are separated by something that *forces* it.
+
+- `ReferenceIndex` cannot be written when a file arrives at all — a
+  reference resolves only once every file's declarations are known, so it
+  is rebuilt asynchronously behind a dirty token, and the token is checked
+  against the semantic generation before the result is installed.
+- `MethodSummaryStore` is keyed by symbol and invalidated by walking a
+  dependency graph, because a method's return type depends on methods in
+  other files. Per-file eviction would discard the wrong entries.
+- `GenericRuleRegistry` is not shared state at all: `LocalInferencer`
+  builds one in its own constructor and nothing writes to it afterwards.
+  It has no mutex and needs none. (Plugin-contributed generic rules are
+  collected by `Plugins::StaticContext` and never installed — its own doc
+  says so.)
+
+So three of the four separations in this layer are load-bearing and one
+is not.
+
+The mechanism itself is also copied. Four stores implement "map keyed by
+uri, one writer, mutex, wholesale replace, bump a generation"
+(`WorkspaceIndex`, `HierarchyIndex`, `ReferenceIndex`,
+`GeneratedMethodIndex`), and the mutex-plus-generation half of it recurs
+in at least three more (`Observation::Store`, `Routes::RouteRegistry`,
+`Signatures::Environment`) keyed by something other than a uri. Each
+copy's own doc comment points at the others as precedent, which is how
+seven of them came to exist without the shape ever being extracted.
+
+**Why it is not a defect today.** The update calls are spread across four
+sites, each touching a different subset, and each is currently right for
+its own reason rather than by construction:
+
+| site | touches | why it is safe |
+|---|---|---|
+| `ColdIndexer#index_file`'s direct path | workspace + hierarchy only | unreachable from `Server`, which always supplies `on_summary` and routes to `#apply_file_summary` |
+| `Server#apply_file_summary` | all four (references via a dirty mark) | the complete path |
+| `Server#apply_plugin_context` | three, and skips the generated-method write when the fact list is empty | a plugin uri is written once at boot and never re-indexed, so there is never a previous entry to clear |
+| `Server#remove_index_contribution` | all four | the complete path |
+
+Two of those four are safe because of a fact about their *caller*, not
+because of anything the stores enforce. A fifth writer added without
+noticing would be the failure.
+
+**Direction.** Not "merge the two" by default — the question is which of
+the two shapes below is right, and that is the work:
+
+1. one per-uri store holding several kinds of fact, which the layer's
+   readers ask for what they need; or
+2. one aggregation type the existing stores are built from, leaving the
+   four separate but removing the seven hand-written copies of the
+   mechanism.
+
+(2) is the smaller change and does not answer the boundary question; (1)
+answers it and touches every reader. Whichever is chosen, `CLAUDE.md`'s
+caution from 0.1.12 applies: moving rules into a type's `initialize` is
+not free, and a module function the callers invoke is usually the cheaper
+form of "one place that knows the rule".
+
+**How it was found:** not by a review round. It surfaced while writing an
+architectural walkthrough of the codebase, in which all five stores in
+this layer were described as sharing one update discipline. That
+description was wrong — two of the five do not — and checking why
+produced this entry. Worth noting as a method: describing the design to
+someone who has not read it is a different probe from reviewing a diff,
+and it found something eight rounds of review over this layer had not.
+
+## 024.63 The dispatch layer owns view inference, and it has broken the query layer's one guarantee twice
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Both times this structure produced a user-visible symptom the symptom
+  was fixed, and no disagreement is known to be live today. What is
+  recorded is that the guarantee is upheld by four call sites each
+  remembering to do the same thing, and that the last release broke it
+  while fixing it. The entry is about the second occurrence, not about a
+  present fault.
+target: 0.2.4
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (roughly 1580–2004, and
+`#receiver_type_before_dot` at 2735–2766),
+`core/lib/ovallsp/semantic/query_service.rb`
+
+Around 425 lines of `Server` answer a semantic question: *which instance
+variables does this view receive.* It walks the controller's ancestors,
+builds the effective callback chain, evaluates each callback and then the
+action, and merges the alternatives when several actions can render the
+same template. Nothing about that is dispatch; it is the same kind of
+work `MethodAnalyzer` and `LocalInferencer` do, in the layer that is
+supposed to route requests to them.
+
+Placement alone would be a tidiness argument. What makes it a finding is
+what the placement costs.
+
+**The guarantee.** Task 013 states it: hover and completion use the same
+receiver type for the same expression. `QueryService` delivers it by
+construction — every reader calls `#type_at`, so no reader can invent its
+own answer.
+
+**Where it leaks.** `#type_at` takes an `initial_env`, and for a template
+that environment *is* the answer: nothing in the ERB assigns `@article`,
+so the type comes entirely from what the caller passes in. That value is
+assembled by `Server` and fetched independently at four places —
+`#explain_type_in_view` (1584), the `@`-name list inside
+`#assigned_ivars_for` (1666), `#receiver_type_before_dot` (2763), and the
+diagnostics context (417, 456). The resolution is unified; its input is
+not.
+
+**It broke twice, and the code says so.** `#receiver_type_before_dot`
+carries the record, in its own comment:
+
+> 0.2.1 gave the `@` list that environment and left this one behind,
+> which produced the disagreement it had just spent the release removing
+> elsewhere: the `@` popup said `Article` and `@article.` a keystroke
+> later offered nothing.
+
+So the release that fixed a hover/completion disagreement introduced
+another one, in a second reader of the same value, and shipped both
+halves. The earlier occurrence is the one the comment says the release
+"spent" itself removing.
+
+There is precedent immediately next to it. 024.1 — now fixed — was a
+second copy of the controller callback-chain rule, and the cost was not
+the duplication itself but that the regression spec written against one
+copy pinned nothing about the copy that runs. Same layer, same subject,
+same shape.
+
+**Direction.** `CLAUDE.md`'s rule applies literally here: a place found
+twice does not get hand-fixed a third time, it gets a mechanical
+countermeasure. Two candidates, and they are not equivalent:
+
+1. **Move the environment to where it is produced.** `#type_at` obtains
+   the view environment itself from the uri, so no caller can forget to
+   pass it. This is the real fix and it is large: it means the 425-line
+   cluster moves into the semantic layer, because that is what would have
+   to compute the environment. Bigger than the disagreement it prevents,
+   and correspondingly its own task.
+2. **Pin the property rather than the instance**, as an interim. Until
+   0.2.3 no spec asserted that two readers *agree*; every existing
+   example asked one reader one question. 0.2.3 added that spec —
+   `server_views_spec.rb` asks hover and completion for the same
+   position in a template and requires the same type, watched failing by
+   dropping `initial_env` from one call site — and it would have failed
+   on 0.2.1's intermediate state. It is weaker than (1) — it catches a
+   divergence rather than preventing one — but it is not an instance
+   test, and it is in the tree.
+
+Deliberately not attempted while the 0.2.4-bound branch's release was in
+flight: (1) is an architectural move, and `CLAUDE.md`'s "during a review
+loop, fix; do not add" covers exactly this — a change set that grows an
+architecture while being reviewed resets the round reviewing it.
+
+**How it was found:** while describing the layering in conversation, not
+by a review round, and it was the fourth reader that gave it away — the
+architecture as described has one path, and the code has four.
+
+## 024.66 A marketing card kept carrying claims about what an error's text says
+
+```yaml
+status: fixed
+kind: defect
+released-in: 0.2.3
+user-visible: yes
+```
+
+**Area:** `site/index.html` and `site/ja/index.html` (the startup
+handshake cards, then the platform callout), with the same claim-shape
+in `docs/KNOWN_LIMITATIONS.md`/`.ja.md`, `docs/SUPPORT_MATRIX.md`/
+`.ja.md` and `vscode/README.md`/`.ja.md`
+
+Entered under the roll-back rule — the same place failed three
+consecutive rounds of 0.2.3's unification loop, and the rule says the
+entry is the deliverable. Three attempts, each the wrong shape:
+
+1. **Merge round 1** fixed the index pages' platform callout, which
+   claimed refusal of a combination the 0.2.1 probe path runs.
+   Hand-fixed, card by card.
+2. **Merge round 2** found the handshake card claiming the extension
+   "stops and explains" on a version mismatch — the build reports and
+   keeps running. Fixed, with a countermeasure: a verb-level sweep
+   (`reject|refus|stop|拒否|停止|縮退`) across every published page,
+   classifying every hit as true or false of the build.
+3. **Merge round 3** found round 2's own replacement text claiming the
+   mismatch error "names both versions" — the notification names
+   neither; the versions are Output-channel reason lines. No refusal
+   verb in it, so the sweep could not see it: the countermeasure was
+   aimed at the symptom's vocabulary, not the class.
+
+**Root cause:** a published card carried micro-claims about what error
+text *says*, and such a claim must be re-verified against the build on
+every edit — including the edits made to fix the previous claim. Three
+rounds each produced a new false sentence while correcting the old one.
+
+**The rollback (merge round 3):** the cards now state only what does
+not need per-edit verification — the exchange happens, a mismatch is
+reported, the session keeps running, the specifics are in the Output
+channel, 024.55 tracks the follow-through. No error-text claims remain
+on either card.
+
+**Merge round 4 extended the same adjudication to the survivors.** Ten
+published sentences — the platform callout in both languages, and
+`gem install prism rbs` sentences in `KNOWN_LIMITATIONS`,
+`SUPPORT_MATRIX` and the READMEs, both languages — attributed that
+line to "the error", meaning the notification. The build's
+notification names no gems; it points at the Output channel, whose
+detail does name them (`platformCompatibility.ts`, the half
+`platformCompatibility.test.ts` pins). Four of the ten predate 0.2.3
+on `main` (both `KNOWN_LIMITATIONS` Ruby-scope instances, both
+`SUPPORT_MATRIX` rows); six were introduced by 0.2.3's own honesty
+pass and caught before release. The fix follows the split the
+rollback drew: marketing cards carry no error-content claims at all,
+and documentation states the notification → Output-channel split,
+whose Output-channel half is the test-pinned part. The READMEs'
+no-Ruby sentence — "explains what's wrong and what to do rather than
+half-starting", published since before 0.2.3 — fell in the same pass:
+that path's reason carries no remedy, and the session still attempts
+to start (024.55).
+
+## 024.67 Seven register numbers are cited from the tree and resolve to nothing
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  The dangling pointers live in source comments, spec comments and
+  changelog entries -- developer-facing routes to reasons, not
+  anything an editor user sees or a behaviour the extension has.
+target: 0.3.0
+```
+
+**Area:** this file's legend (the deletion rule),
+`core/lib/ovallsp/types.rb:122`,
+`core/lib/ovallsp/local_inferencer.rb` (607, 741, 878, 1043),
+`core/lib/ovallsp/semantic/method_analyzer.rb:255`,
+`vscode/src/coreProcess.ts:413`, `vscode/src/extension.ts:50`,
+`vscode/src/clientLifecycle.ts:245`,
+`vscode/src/clientErrorNotifications.ts:32` and its unit test, and
+both changelogs
+
+`024.2`, `024.3`, `024.7`, `024.9` and `024.12` are cited from live
+source and spec comments as the route to the reason a piece of code is
+the way it is, and `024.4`/`024.5` are cited from both changelogs. None
+has a `## 024.N` entry. The entries were deleted around 0.1.9–0.1.10 —
+before the legend learned its lesson about exactly this ("run the grep
+before deleting, not the calendar"), and nothing ever re-checked the
+earlier deletions against the rule once it existed. For the five cited
+from source and specs this violates the legend's letter; the changelog
+pair is the same class through a document the legend does not name.
+
+Found by merge round 5 of 0.2.3's loop, by full cross-reference at
+626d652: 58 entries against 74 distinct number-shaped citations, two
+of which (`024.21.1`, `024.30.1`) are synthetic fixture strings inside
+`deferred_findings_spec.rb`'s own format examples — not citations of
+entries, and excluded as such. Of the remaining 72, the other
+unmatched citations (`024.51`, `024.54`, `024.57`, `024.58`, `024.61`,
+`024.64`, `024.65`) are the legend's own documented cross-branch
+reservations and gap, not defects. (Re-run the cross-reference rather
+than trusting these figures; they were measured at one revision, and
+merge round 6 caught this paragraph's first draft omitting the
+exclusion it was measured under.) Pre-existing at 0.2.3's base.
+
+Recorded rather than fixed because the fix is not small and the loop
+runs under fix-don't-add: seven entries would need resurrecting from
+history accurately, and the durable form wants the project's own
+countermeasure shape — a `deferred_findings_spec` example that every
+`024.N` cited from source or spec resolves to an entry, plus a
+tombstone convention (a stub entry pointing into history) so historical
+citations can stay without forbidding deletion forever. That guard
+belongs with 024.R9's register move, which re-points the guard spec
+anyway; hence the target.
+
+## 024.68 Three rounds of guards on a hand-rolled grammar, each blind one assumption deeper
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  The hole is register hygiene: a typo'd or mis-indented metadata key
+  in this file silently un-routes an entry, and nothing an editor user
+  sees is involved. It is deliberately unguarded again after three
+  guard attempts were rolled back; this entry is the record the
+  roll-back rule names as the deliverable.
+target: 0.3.0
+```
+
+**Area:** `core/spec/meta/deferred_findings_spec.rb` (the
+`entries`/`headings` readers and every guard bolted onto them), this
+file's legend
+
+The original defect, found by round 10 of 0.2.3's unification loop:
+`target:` routes entries to releases, and a typo'd key was silently
+ignored by every guard — the value-typo class `status` defends against
+("Anything else reads as open") had no key-side counterpart. Three
+consecutive rounds then shipped a guard and had it broken by the next
+round, each break one assumption deeper:
+
+1. **Round 10** filtered the *parsed* fields against a `KNOWN_KEYS`
+   list — blind outside the field parser's own `[a-z-]` class:
+   `Target:` and `user_visible:` never parsed as fields at all
+   (round 11 planted `Target: 0.2.4`; 24/0, silent).
+2. **Round 11** flagged stray lines instead — but skipped every
+   indented line as "the folded note's continuation", so one leading
+   space (` target: 0.2.4`) was invisible again (round 12; 25/0).
+3. **Round 12** made the walk stateful (indentation legitimate only
+   inside an open folded `>` value) and added a loose heading
+   pre-scan — and round 13 found both halves blind one state deeper:
+   an indented typo *after a folded note* reads as continuation, and
+   a heading indented 1–3 spaces renders as a real `h2` under
+   CommonMark while all three column-0-anchored readers miss it
+   symmetrically (28/0 both, no live instance).
+
+**Root cause:** the metadata grammar is a hand-rolled parser
+("deliberately not a YAML parser"), and every guard re-derives "what
+is a field / a heading" from it with a fresh subset of its
+assumptions — character class, indentation, anchoring. Round 13
+measured the end state: the guard was *more permissive than YAML
+itself* (Psych raises "did not find expected key" on the exact text
+the guard accepted). Patching one assumption manufactures the next
+round's finding one assumption deeper; the supply of assumptions is
+the hand-rolled parser, not any single patch.
+
+**Direction actually needed:** stop hand-parsing. Parse the blocks
+with the real YAML parser and fail on `Psych::SyntaxError` — the
+round-13 probe shows Psych already rejects the class outright — with
+one loose anything-heading-shaped scan owned beside the strict
+reader. That is grammar-formalisation work and belongs with 024.R9's
+register move, which re-points this spec anyway; hence the target.
+
+**The rollback, per the counting rule** (rounds 10 → 12 came out as
+one thread): `KNOWN_KEYS`, `unknown_keys`, `unreadable_headings` and
+their six examples are removed. **What survived:** the legend's
+`target:` documentation line — it fixes the *undocumented* half of
+round 10's finding, never failed a round, and removing it would
+recreate a recorded defect. Until the direction above lands, key
+typos in this file are once again caught by nothing; a reviewer
+reading the register should know that, which is this note's job.
+
+## 024.69 The two suites that drive a real editor are run by nobody but the maintainer
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing an editor user sees. The gap is in verification coverage:
+  the suites still pass once run, and 0.2.3's gate ran them. What is
+  missing is anything that runs them between releases.
+target: 0.2.4
+```
+
+**Area:** `.github/workflows/ci.yml` (the `vscode` job),
+`vscode/package.json`'s `test:integration` / `test:integration:packaged`
+
+CI runs `npm run test:unit` for the extension and nothing else. Both
+integration suites — the only tests that launch a real VS Code and
+drive the extension against a real Core, and the ones
+`RELEASE_CHECKLIST`'s Task 023 gate items #4 and #5 are about — run
+only when a maintainer runs `make-final-review-bundle.sh` on an Apple
+Silicon Mac. Between releases they are executed by nothing.
+
+**How it surfaced.** 0.2.3's pre-publish gate aborted at
+`test:integration` with `spawn .../Contents/MacOS/Electron ENOENT`.
+VS Code renamed the macOS bundle's main executable from `Electron` to
+`Code` in 1.110, `runTest.ts` pins no version so it always downloads
+current stable (1.133.0 on the day), and the pinned
+`@vscode/test-electron@2.5.2` still computed the old path. The
+harness had been broken for every VS Code release since 1.110 and the
+tree recorded gate #4/#5 as green throughout, because the only thing
+that could have contradicted that was the gate itself. Fixed here by
+the bump to `@vscode/test-electron@^3.1.0`, which resolves the
+executable by product name with a "sole regular file in
+`Contents/MacOS/`" fallback — but the bump is the instance, not the
+class.
+
+**Why this is the same shape as a green suite that did not run.**
+CLAUDE.md already carries that rule for the real-Rails and capability
+suites, whose failure mode is skipping to zero examples while `rspec`
+exits 0. This is the same failure with the reporting removed
+entirely: not a suite that reports nothing, a suite that no automated
+run ever reaches. The asymmetry is what made it durable — CI is green
+on every PR, so nothing prompts anyone to doubt the row.
+
+**Direction:** run both suites in CI on a schedule at minimum, and on
+release PRs at best. `test:integration` needs a display on
+`ubuntu-latest` (`xvfb-run`, the usual arrangement for
+`@vscode/test-electron`); `test:integration:packaged` additionally
+needs the vendoring step, whose native gems are built per platform,
+so the packaged variant is honest only on macOS and wants a
+`macos-14` runner. Deferred rather than done here because adding two
+CI jobs during a release gate is an addition, not a fix, and the
+`macos-14` half is a billing decision that belongs to the maintainer.
+
+## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing an editor user sees. The suite runs serially today and is
+  green that way; what the shared fixture costs is the ability to run
+  it any other way, which is a contributor and CI cost.
+target: 0.2.4
+```
+
+**Area:** `core/spec/fixtures/rails_real` (its `db/*.sqlite3`, `tmp/`
+and `.bundle`), `core/spec/integration/real_rails_spec.rb`,
+`core/spec/e2e/capabilities_spec.rb`
+
+The suite's cost is not its size. Measured at `4f19c67` on
+darwin-arm64 / Ruby 3.4.10, over a full run of 1,964 examples taking
+172s wall (example time is 99% of wall, so this is not load
+overhead):
+
+- **1,125 examples — 57% of the suite — take under 10ms each and
+  total 0.3 seconds between them.**
+- The ten slowest examples are **45%** of all example time; the
+  slowest single one is **20.9s**, 12% of the whole suite on its own.
+- By file: `e2e/capabilities_spec.rb` is **65.1s (38%)**, then
+  `agent_process_manager_spec.rb` 10.3s, `integration/real_rails_spec.rb`
+  9.5s, `server_rails_invalidation_spec.rb` 9.4s. The top entries all
+  spawn real processes and wait on them — the diagnostics examples
+  (G6–G14) wait for a Rails Runtime Agent to come up.
+
+So parallelism is the lever, and it works — measured, with the example
+count as the control on both sides:
+
+| arrangement | wall | speedup | examples | result |
+|---|---|---|---|---|
+| serial | 172s | 1.0x | 1,964 | 0 failures |
+| 3 workers, by file | 67s | 2.6x | 1,964 | 0 failures |
+| 8 workers, by example | 24s | 7.2x | 1,964 | **1 of 3 runs failed** |
+
+Two ceilings, both structural. **By file it stops at 2.6x** — a fourth
+worker buys nothing, because `capabilities_spec.rb` is one 65.1s file.
+**By example it stops near 8x**, at the 20.9s of the single slowest
+example.
+
+**The blocker is the fixture, not the harness.** One run in three at
+eight workers failed `real_rails_spec.rb:544` ("uses the fixture's own
+Gemfile, not the parent's genuine BUNDLE_GEMFILE") with
+`user_email_column` nil — the app's schema query returning nothing.
+That example passes 3 of 3 run on its own, and the full suite passed 3
+of 3 serially the same day, so it is contention rather than an
+inherently flaky example: every worker drives the same
+`core/spec/fixtures/rails_real`, whose sqlite database and `tmp/` are
+shared mutable state.
+
+The 3-worker run passed, but that is not evidence of safety — it puts
+`capabilities_spec` and `real_rails_spec` in different workers, both
+touching Rails at once, so it has the same hazard at a lower rate. One
+green run does not distinguish safe from lucky.
+
+**Direction:** isolate the fixture per worker before adding any
+parallel runner — a copy of `rails_real` per worker, or at minimum a
+worker-scoped database path and `tmp/`. With that done, no gem is
+required: distributing `file:line` locations by measured runtime is
+what produced the 24s figure above. Note when doing it that 42
+locations hold more than one example each (table-driven `it`s sharing
+a line, the largest being 47 at
+`server_word_at_cursor_spec.rb:71`), so a splitter must weight and
+assign whole locations — the first attempt here did not, ran 2,991
+examples instead of 1,964, and its timing meant nothing.
+
+Worth it because CI's Core job is 5m34s today and this is most of it;
+the same measurement says a fixture-isolated 8-way split lands near a
+minute.

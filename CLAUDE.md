@@ -114,12 +114,18 @@ Then:
   reviewer. Then continue the loop normally. Examples of the right shape,
   from rounds that needed one:
   - two scanners that had to agree about the same text, replaced by one
-    both read (0.2.1's `#code_offsets`);
-  - a rule copied into a second reader, moved to where the value is
-    produced so there is nothing to copy (`Index::TypeNameResolution`);
+    both read (0.2.1's `#structural_tokens`);
+  - a literal-type table two inferencers kept diverging on, replaced by
+    one table both read, with the spec driven from the table
+    (`Types::LiteralTypes`);
   - a guard that could not see a finding parked outside its input, given
     the finding as input (`024.41`'s entry, so `deferred_findings_spec`
     enforces it).
+  A countermeasure can also *fail*: 0.2.1 moved the type-name shadowing
+  rule into resolution so its readers could not diverge, and that broke
+  every bare name written from inside its own namespace — rolled back,
+  024.47. Moving a rule to where the value is produced is only the right
+  shape when every reader really does want the same answer.
   A regression test for the specific instance is *not* a countermeasure.
   It pins the one case and leaves the next one to a reviewer.
 
@@ -239,6 +245,18 @@ version *before* it runs; and put a control in the diff — a category the
 change cannot affect, which must come out equal. 0.2.1's control was
 `unresolved-constant`, identical at 9,550 on both sides.
 
+**A tool with the right name is not necessarily the tool under test.**
+0.2.3's pre-publish gate reported that the packaged artifact's compiled
+extensions embed the build machine's home path. The check was re-run by
+hand to confirm, came back clean, and a register entry was filed saying
+the gate's warning was blind. Both commands were the same text; the
+gate's ran under `#!/usr/bin/env bash` and got `/usr/bin/grep`, while
+the hand-run went through a shell where `grep` is a function wrapping
+`ugrep`, which does not report matches in binary files without `-a`.
+The entry was withdrawn. The general form: when you re-run a check to
+confirm it, confirm you invoked the same implementation — `type -a`, or
+just call the absolute path the script calls.
+
 **And when a measurement disagrees with a spec you have already watched
 fail, the measurement is wrong until proven otherwise.** That is what
 caught the third one; nothing about re-reading the numbers would have.
@@ -279,16 +297,70 @@ unjustifiable on the project's own terms until a reviewer caught it.
 it is the one least likely to look like it needs a pass: the prose was
 correct when it was written, and nothing about undoing a change announces
 that it also undid the reason for a paragraph. 0.2.1 reverted its
-resolution-side shadowing rule and left an unreferenced method, three
-comments describing the reverted arrangement as current, and a published
-changelog bullet claiming the reverted change as a fix — so the release
-shipped two bullets under one heading contradicting each other about one
-behaviour. All of it was found by re-measuring rather than by reading.
-The cheap check is to **grep the tree for the thing being reverted before
-committing the revert**, not after. 024.47 records the full list.
+resolution-side shadowing rule and left an unreferenced method, an inert
+constructor parameter, stale comments in six places describing the
+reverted arrangement as current, a published changelog bullet claiming
+the reverted change as a fix — so the release shipped two bullets under
+one heading contradicting each other about one behaviour — and a
+`KNOWN_LIMITATIONS` section in both languages describing the rolled-back
+arrangement instead of the shipped one, so users were told a limitation
+that did not exist while the one that did went unmentioned. All of it was
+found by re-measuring rather than by reading, across two releases; the
+first inventory itself undercounted ("three comments") until 0.2.3
+re-grepped. The cheap check is to **grep the tree for the thing being
+reverted before committing the revert**, not after. 024.47 records the
+full list.
+
+## Where a release's work lives (mandatory)
+
+A release's work in progress lives on a pushed branch, and the task
+file on `main` that names the release also names that branch. A
+pointer to a file that exists only on an unnamed branch is a pointer
+to nothing for every session that cannot see the branch.
+
+Starting or resuming release work begins with `git fetch --all
+--prune`, listing the remote branches, and reading the
+highest-numbered `NNN-*.md` on every branch whose name or record
+claims the release — not only on `main`. When work moves between
+branches, or a branch is renamed or renumbered, the record on `main`
+moves in the same change.
+
+Established by 0.2.3, which was prepared twice in parallel: 027 on
+`main` said the work "continues in `028-0.2.3-review-loop.md`", that
+file existed only on `fix/0.2.3`, nothing on `main` named that branch,
+and a session starting from `main` rebuilt the release from the
+pointer. The two preparations converged independently on several
+identical corrections — worth something as evidence the corrections
+were load-bearing, but bought with days of duplicated work. 028's "Two
+preparations, one release" section records the merge and the
+dispositions.
 
 ## Public repository privacy and secret handling
 
 - This repository is public. Never commit or push secrets, credentials, tokens, private keys, private URLs, personal information, or personal email addresses.
 - Treat Git author/committer metadata, generated artifacts, logs, fixtures, snapshots, and copied command output as possible disclosure paths, not only source files.
 - Use an established public noreply address for commit metadata. Before every push, inspect the complete outgoing diff and commit range and run the repository's secret scan; stop rather than push if any sensitive or personal data may be present.
+
+**One of these is now machine-checked, because the prose alone failed
+twice.** 0.2.1's record named a scaffolded application by its absolute
+path, and 0.2.3's pre-publish gate quoted the build machine's home
+directory into a task document *and* a commit message — the second
+channel being one the line above already names, which is the point: a
+rule that lists disclosure paths does not make anyone see them. Per the
+same-place rule, the third pass is a countermeasure.
+
+`scripts/check_home_paths.rb` is the single detector, read by both places
+that must agree about it: `core/spec/meta/home_path_guard_spec.rb` scans
+tracked content on every suite run, and ci.yml's secret-scan job runs
+`--messages` over commit messages, which no tree scan can see. Adding a
+name to its `SYNTHETIC` list is a deliberate edit with a reason; an
+unknown name fails. The script refuses a shallow clone rather than
+scanning one commit and reporting the history clean.
+
+Note what it does *not* do: it guards content arriving from here on, not
+history. The instance already published in `main` stays, because
+rewriting that history would orphan the `buildCommit` SHAs baked into the
+0.2.1 and 0.2.2 VSIXs the Marketplace still serves — an integrity loss
+for no privacy gain, since the name is the published Marketplace
+publisher id in `vscode/package.json` regardless. That is a decision, and
+`docs/design/tasks/028-0.2.3-review-loop.md` records it.

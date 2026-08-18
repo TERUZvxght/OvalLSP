@@ -72,26 +72,33 @@ workspace_index = Ovallsp::WorkspaceIndex.new
 model_registry = Ovallsp::Models::ModelRegistry.new
 signature_root = ENV.fetch("OVALLSP_SIGNATURE_ROOT", Dir.pwd)
 signatures = Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace_root: signature_root) }
-# Built the way `Server#initialize` builds it -- `signatures:` included.
-# Without it the shadow rule in `HierarchyIndex#canonical_name` is inert,
-# so every number this script produced described a configuration no user
-# runs. That is not a smaller measurement, it is a measurement of
-# something else, and it is why a 55-report regression reached a release
-# whose headline figure came from here.
-hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index, signatures: signatures)
+# Built the way `Server#initialize` builds it. Until 0.2.1 this script
+# constructed a *different* engine from the server's -- it omitted the
+# `signatures:` the shadow rule of the day read -- so every number it
+# produced described a configuration no user runs. That is not a smaller
+# measurement, it is a measurement of something else, and it is why a
+# 55-report regression reached a release whose headline figure came from
+# here (024.48). The rule now lives in the diagnostics engine alone and
+# reads the `signatures:` handed to `SemanticContext` below; keep every
+# constructor here matching `Server#initialize`, whatever each currently
+# takes.
+hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
 method_resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
                                                         hierarchy_index: hierarchy_index)
 local_inferencer = Ovallsp::LocalInferencer.new(
   model_registry: model_registry, method_resolver: method_resolver, signatures: signatures,
   method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(
     workspace_index: workspace_index, method_resolver: method_resolver,
-    summary_store: Ovallsp::Semantic::MethodSummaryStore.new
-  )
+    summary_store: Ovallsp::Semantic::MethodSummaryStore.new,
+    model_registry: model_registry, generated_method_index: Ovallsp::Semantic::GeneratedMethodIndex.new
+  ),
+  observation_store: Ovallsp::Observation::Store.new
 )
 context = Ovallsp::Diagnostics::SemanticContext.new(
   workspace_index: workspace_index, hierarchy_index: hierarchy_index, method_resolver: method_resolver,
   local_inferencer: local_inferencer, model_registry: model_registry,
-  route_registry: Ovallsp::Routes::RouteRegistry.new, signatures: signatures, generation: 1
+  route_registry: Ovallsp::Routes::RouteRegistry.new, signatures: signatures, generation: 1,
+  ancestry_registry: Ovallsp::Runtime::AncestryRegistry.new
 )
 
 parser = Ovallsp::ParserService.new

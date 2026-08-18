@@ -25,11 +25,20 @@ on:
       - "site/**"
       - "scripts/check_site_links.rb"
       - ".github/workflows/pages.yml"
+      # The check compares the version the index pages advertise against
+      # vscode/package.json, so a version bump is an input that can turn
+      # it red -- 0.2.2 moved package.json with no site/ change, and
+      # this workflow never ran. Trigger on the comparison's other side
+      # too, so the deploy re-runs (and re-gates) when the version
+      # moves. History and the measured timeline:
+      # docs/design/tasks/028-0.2.3-review-loop.md.
+      - "vscode/package.json"
   pull_request:
     paths:
       - "site/**"
       - "scripts/check_site_links.rb"
       - ".github/workflows/pages.yml"
+      - "vscode/package.json"
   workflow_dispatch: {}
 
 permissions:

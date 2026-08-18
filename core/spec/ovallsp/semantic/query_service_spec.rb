@@ -2,7 +2,7 @@
 
 RSpec.describe Ovallsp::Semantic::QueryService do
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index, signatures: signatures) }
+  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
   let(:method_resolver) { Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index) }
   let(:model_registry) { Ovallsp::Models::ModelRegistry.new }
   let(:local_inferencer) { Ovallsp::LocalInferencer.new(model_registry: model_registry) }
@@ -134,10 +134,22 @@ RSpec.describe Ovallsp::Semantic::QueryService do
     # inferred, which `ancestors` is not told -- and it is 024.47's, not a
     # patch's. What this pins is that the two readers behave as 0.2.0's
     # did, so nothing regressed in either direction while it waits.
-    it "offers the workspace class that shares a core class's last segment, as 0.2.0 did" do
+    #
+    # `include("emit")` alone was the whole assertion until 0.2.3, and it
+    # cannot tell the two candidate behaviours apart: a chain holding
+    # *both* the workspace class and the core one offers `emit` too, and
+    # would have passed. The distinguishing value is `upcase` -- the
+    # workspace class does not merely rank ahead of core String, it
+    # replaces it, so every String method is gone. That is the live half
+    # of 024.47 and the symptom `KNOWN_LIMITATIONS` describes; when it is
+    # fixed this example fails, which is the point of asserting it.
+    it "answers an inferred String with the workspace class alone, losing every core String method (024.47)" do
       index_source("module Serializer\n  module Elements\n    class String\n      def emit\n      end\n    end\n  end\nend\n")
 
-      expect(service.members_of(nominal("String"), prefix: "").map(&:name)).to include("emit")
+      names = service.members_of(nominal("String"), prefix: "").map(&:name)
+
+      expect(names).to include("emit")
+      expect(names).not_to include("upcase")
     end
 
     # The boundary: a workspace that genuinely reopens `String` at the top

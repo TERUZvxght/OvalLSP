@@ -83,7 +83,7 @@
     <div class="wrap">
       <div class="hero-copy">
         <div class="badge-row">
-          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.2.1</span>
+          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.2.3</span>
           <span class="badge">VS Code 拡張機能</span>
           <span class="badge">MIT</span>
         </div>
@@ -459,7 +459,7 @@
         <div class="card card--flat reveal">
           <h3>作業の前にハンドシェイク</h3>
           <p>
-            起動時に拡張機能と Core がバージョン・プロトコル・ビルド・Ruby/プラットフォーム情報を交換します。不一致なら、壊れかけたセッションを提供するのではなく、停止して理由を説明します。
+            起動時に拡張機能と Core がバージョン・プロトコル・ビルド・Ruby/プラットフォーム情報を交換します。不一致は報告され、あなたが判断するあいだセッションは動き続けます。詳細は Output チャンネルに出ます(その後の扱いは 024.55 が追跡しています)。
           </p>
         </div>
         <div class="card card--flat reveal">
@@ -494,7 +494,7 @@
         <div class="callout callout--warn reveal">
           <h4>当面は 1 プラットフォームのみ</h4>
           <p>
-            公開されている VSIX は <code>darwin-arm64</code> 向けにビルドされ、そのためにコンパイルされたネイティブ拡張を同梱しています。それ以外の環境ではペイロードを読み込まず、縮退したセッションの代わりに明確な診断を出します。Rosetta 2 経由を含む Intel Mac、
+            公開されている VSIX は <code>darwin-arm64</code> 向けにビルドされ、そのためにコンパイルされたネイティブ拡張を同梱しています。それ以外の環境ではペイロードを読み込みません。代わりに、あなたの Ruby 自身が <code>prism</code> と <code>rbs</code> を読めるかを確認し、読めればそちらで動いて Output チャンネルにその旨を出し(未検証の構成です)、読めなければエラーを出します(詳細は Output チャンネルに出ます)。Rosetta 2 経由を含む Intel Mac、
             WSL、Dev Container、Remote SSH はこの Preview では非対応です。
           </p>
         </div>

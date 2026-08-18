@@ -9,6 +9,13 @@ import {
   SpawnedCoreProcess,
   SystemProcessTreeInspector
 } from '../../coreProcess';
+import { installExecutableFixture } from '../support/executableFixture';
+
+// A stand-in `ps`, warmed -- see `installExecutableFixture` for why the
+// warming matters and what it cost when it was absent.
+function installFakePs(directory: string, script: string): string {
+  return installExecutableFixture(path.join(directory, 'ps'), script);
+}
 
 function processAlive(pid: number): boolean {
   try {
@@ -479,6 +486,9 @@ describe('SpawnedCoreProcess', () => {
     if (process.platform === 'win32') {
       this.skip();
     }
+    // Generous because `installFakePs` deliberately runs the fixture
+    // once first, and that first run is the slow one -- see its comment.
+    this.timeout(30000);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oval-ps-'));
     const previousPath = process.env.PATH;
     try {
@@ -493,7 +503,7 @@ describe('SpawnedCoreProcess', () => {
         '  i=$((i + 1))',
         'done'
       ].join('\n');
-      fs.writeFileSync(path.join(dir, 'ps'), script, { mode: 0o755 });
+      installFakePs(dir, script);
       process.env.PATH = `${dir}:${previousPath ?? ''}`;
 
       const rows = await new SystemProcessTreeInspector(process.platform).snapshot();
@@ -515,14 +525,11 @@ describe('SpawnedCoreProcess', () => {
     if (process.platform === 'win32') {
       this.skip();
     }
+    this.timeout(30000);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oval-ps-'));
     const previousPath = process.env.PATH;
     try {
-      fs.writeFileSync(
-        path.join(dir, 'ps'),
-        '#!/bin/sh\necho "PID PPID PGID SESS STARTED COMMAND"\necho "not a row we can read"\n',
-        { mode: 0o755 }
-      );
+      installFakePs(dir, '#!/bin/sh\necho "PID PPID PGID SESS STARTED COMMAND"\necho "not a row we can read"\n');
       process.env.PATH = `${dir}:${previousPath ?? ''}`;
 
       await assert.rejects(
@@ -545,15 +552,18 @@ describe('SpawnedCoreProcess', () => {
     if (process.platform === 'win32') {
       this.skip();
     }
+    this.timeout(30000);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oval-ps-'));
     const previousPath = process.env.PATH;
     const runs = path.join(dir, 'runs');
     try {
-      fs.writeFileSync(
-        path.join(dir, 'ps'),
-        `#!/bin/sh\necho x >> ${runs}\necho "1000 1 1000 0 Mon Jul 28 10:59:31 2026 /usr/bin/helper"\n`,
-        { mode: 0o755 }
+      installFakePs(
+        dir,
+        `#!/bin/sh\necho x >> ${runs}\necho "1000 1 1000 0 Mon Jul 28 10:59:31 2026 /usr/bin/helper"\n`
       );
+      // The warming run counts itself; this test counts runs, so start
+      // the tally from zero.
+      fs.rmSync(runs, { force: true });
       process.env.PATH = `${dir}:${previousPath ?? ''}`;
       const inspector = new SystemProcessTreeInspector(process.platform);
 

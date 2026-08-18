@@ -25,8 +25,8 @@ updated in the same change, not "later".
 | If you changed… | Update | Checked by |
 |---|---|---|
 | **A capability** (anything a user can now do, or can no longer do) | `docs/EXTENSION_CAPABILITIES.md` + `.ja.md` (add/alter the row **and** its E2E example), README's matrix in `README.md` + `README.ja.md`, `site/capabilities.html` + `site/ja/capabilities.html`, both changelogs | `core/spec/e2e/capability_coverage_spec.rb` (row ⇔ E2E example), `core/spec/meta/*_parity_spec.rb` (EN ⇔ JA). README's own pair is **not** among them — see 024.25 |
-| **A version number** | `core/lib/ovallsp/version.rb`, `core/Gemfile.lock`, `vscode/package.json`, `vscode/package-lock.json` (two places), both changelogs — and, once it is published, `docs/RELEASE_ARTIFACTS.md` | `core/spec/meta/changelog_parity_spec.rb`, `vscode/src/test/unit/versionPairing.test.ts`, `core/spec/meta/release_artifacts_spec.rb` (every `v*` tag is accounted for) |
-| **A roadmap item** (shipped, dropped, moved) | `docs/ROADMAP.md` + `.ja.md`, README's matrix, `site/roadmap.html` + `site/ja/roadmap.html`, the matching `024.R*` entry in `docs/design/tasks/024-deferred-review-findings.md` | `core/spec/meta/roadmap_parity_spec.rb` (README ⇔ roadmap) |
+| **A version number** | `core/lib/ovallsp/version.rb`, `core/Gemfile.lock`, `vscode/package.json`, `vscode/package-lock.json` (two places), the version badge on `site/index.html` + `site/ja/index.html`, both changelogs — and, once it is published, `docs/RELEASE_ARTIFACTS.md` | `core/spec/meta/changelog_parity_spec.rb`, `vscode/src/test/unit/versionPairing.test.ts`, `scripts/check_site_links.rb` (badge ⇔ `package.json`; run by ci.yml's site-consistency job and gating the deploy — this row omitted the badge until 0.2.3, which is how 0.2.2's drift happened), `core/spec/meta/site_version_guard_spec.rb` (that wiring itself), `core/spec/meta/release_artifacts_spec.rb` (every `v*` tag is accounted for) |
+| **A roadmap item** (shipped, dropped, moved) | `docs/ROADMAP.md` + `.ja.md`, README's matrix, `site/roadmap.html` + `site/ja/roadmap.html`, the matching `024.R*` entry in `docs/design/tasks/024-deferred-review-findings.md` | `core/spec/meta/roadmap_parity_spec.rb` (README ⇔ roadmap) and `scripts/check_site_links.rb` (roadmap ⇔ `site/roadmap.html` + `site/ja/roadmap.html`, by item count per version — added in 0.2.3 after the site sat a whole release behind on two of them) |
 | **A change reverted mid-release** (see CLAUDE.md's same-place rule) | a `024.*` entry naming the root cause and the direction actually needed, both changelogs if a bullet was already written for it, and the section of `CLAUDE.md` the episode informs | — |
 | **A review round finding the same place the previous round did** | a mechanical countermeasure — a shared implementation, a rule moved to where the value is produced, a guard given the input it could not see — *not* a regression test for the one instance, and not a third hand fix | — |
 | **A deferred finding** (`024.*`) | its `yaml` metadata block in `docs/design/tasks/024-deferred-review-findings.md` — `status`, and `released-in` once it is resolved; delete the entry once nothing in the tree still cites it by number — grep first, do not go by the calendar (see that file's own legend) | — |
@@ -34,7 +34,8 @@ updated in the same change, not "later".
 | **What the extension records, keeps, or writes to disk** | `vscode/PRIVACY.md` + `.ja.md` — the single source of truth for this; `site/security.html` + `site/ja/security.html`; and every place 0.1.12 found restating the list or the cache path, each of which must point at PRIVACY rather than copy it (this list has been short three times; add to it rather than trusting it): `docs/design/docs/12-release-and-support.md`, `docs/design/tasks/019-runtime-observation.md`, `019-runtime-observation-notes.md`, `021-persistent-cache-notes.md`, the cache paragraph in `vscode/README.md` + `.ja.md`, `docs/SECURITY_CHECKLIST.md`'s observation and cache-deserialisation sections, `core/lib/ovallsp/observation/store.rb`'s `#invalidate_changed` doc, `core/lib/ovallsp/observation/observed_signature.rb`'s `code_fingerprint` doc, and **both changelogs**, which restate the disk claim in prose and went stale against PRIVACY for a whole round because this row did not name them | `core/spec/meta/privacy_parity_spec.rb` (EN ⇔ JA: section count, cross-links, three named claims, and the length of the recorded-items list) |
 | **Anything about the Runtime Agent, workspace trust, or what the extension executes** | `SECURITY.md` + `.ja.md`, `site/security.html` + `site/ja/security.html`, `docs/EXTENSION_CAPABILITIES.md`'s "does not promise" section | — |
 | **A known limitation** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`, and the site page that claims the opposite, if any | `core/spec/meta/deferred_findings_spec.rb` (an open `024.*` defect declaring `user-visible: yes` carries one `<!-- documents: 024.N -->` marker, at the end of the line that documents it, in each language; one declaring `no` states why) |
-| **Which Ruby, Rails or platform the product accepts** — including anything in `vscode/src/platformCompatibility.ts` or `rubyResolver.ts` | `docs/SUPPORT_MATRIX.md` + `.ja.md` (every affected row, not only the one you came for), `docs/KNOWN_LIMITATIONS.md` + `.ja.md`, `site/getting-started.html` + `site/ja/`, `core/ovallsp.gemspec`'s `required_ruby_version` if the floor moved | — |
+| **Which Ruby, Rails or platform the product accepts** — including anything in `vscode/src/platformCompatibility.ts`, `versionInfo.ts` or `rubyResolver.ts` | `docs/SUPPORT_MATRIX.md` + `.ja.md` (every affected row, not only the one you came for), `docs/KNOWN_LIMITATIONS.md` + `.ja.md`, **`vscode/README.md` + `.ja.md` — the Marketplace description, which states this in prose *and* in an environment table**, `site/getting-started.html` + `site/ja/`, the platform callout on `site/index.html` + `site/ja/index.html` (named here in 0.2.3's merge round, after the honesty pass missed it the same way this table once missed the badge), both changelogs, `core/ovallsp.gemspec`'s `required_ruby_version` if the floor moved | — |
+| **Where a release's work lives** (a branch created, renamed, renumbered, or work moved between branches) | the release's `NNN-*.md` on `main` names the branch; `AGENTS.md`'s current-loop pointer — 0.2.3 was prepared twice in parallel because this row did not exist (CLAUDE.md "Where a release's work lives", 028) | — |
 | **A working agreement** (how this project is built, reviewed or released) | `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md` + `.ja.md` | — |
 
 ## The site is documentation
@@ -103,18 +104,40 @@ page — while this document said the matrix was machine-checked. The
 mutation test that caught the English half was never run against the
 Japanese one; it is now, in both directions.
 
-What that check does *not* cover, and what therefore still has to be
-read: every page that is not `capabilities.html` or an index page. The security page's
-two retracted claims, the roadmap's mis-numbered sentence, the version
-badge, the requirements list, the patch definition and the 404 page's
-issue-tracker line were each found by a person reading, and nothing
-would have caught them.
+The roadmap pages joined that list in 0.2.3, by item count per version
+against `ROADMAP.md` and `ROADMAP.ja.md`. It was added because the site
+had been a whole release behind on *two* separate moves — 0.2.1 sent
+`activeParameter` to 0.4.0 and brought `documentHighlight` and `@ivar`
+completion back to 0.3.0, and updated the Markdown and README each time
+and the site neither time. The check found both the moment it was
+written, which is the only endorsement it needs.
+
+Counting is deliberately all it does. The site's prose is written for the
+site and does not match the Markdown sentence for sentence, in either
+language; a count catches an item that never arrived, which is the whole
+failure mode observed so far.
+
+What these checks do *not* cover, and what therefore still has to be
+read: every page that is not `capabilities.html`, a roadmap page or an
+index page — and, on the pages they do cover, everything that is not a
+row or an item. The security page's two retracted claims, the
+requirements list, the patch definition and the 404 page's issue-tracker
+line were each found by a person reading, and nothing would have caught
+them. The version badge used to be on this list; it is machine-checked
+now, and 0.2.2 still shipped a stale one, because the check ran only when
+a site file changed — the wiring that lets it fire on a version bump
+arrived in 0.2.3, pinned by `site_version_guard_spec.rb`.
 
 ## Where a check is missing
 
-The site has no parity guard: nothing compares `site/capabilities.html`
-against `docs/EXTENSION_CAPABILITIES.md`, and nothing compares `site/` to
-`site/ja/`. That is the largest remaining hole in this map, and the
-honest reason it is a hole is that the site is HTML and the sources are
-Markdown, so a comparison needs a real extractor rather than a regex.
-Until one exists, the site rows above are enforced by reading this file.
+Nothing compares `site/capabilities.html` against
+`docs/EXTENSION_CAPABILITIES.md` — the row counts are pinned to README's
+matrix, and the *descriptions* to nothing. Nothing compares `site/` to
+`site/ja/` as documents, only within the checks above. The honest reason
+is that the site is HTML and the sources are Markdown, so a comparison of
+prose needs a real extractor rather than a regex.
+
+Until one exists, the site rows above are enforced by reading this file —
+and every check that does exist was added *after* a reviewer found the
+drift it now catches, which is the argument for adding the next one
+before that happens again.

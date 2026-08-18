@@ -198,8 +198,11 @@
         <li>
           <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
           <span>
-            <strong>Every protocol boundary requires an exact version match.</strong>
-            Agent ↔ Core and plugin ↔ Core alike: a mismatch is refused, not tolerated.
+            <strong>The Core refuses a protocol mismatch on both of its inbound
+            boundaries.</strong> Agent ↔ Core and plugin ↔ Core alike: a mismatch is
+            refused, not tolerated. The Extension ↔ Core handshake is different by
+            design — a version mismatch there is reported and the session keeps
+            running (024.55 tracks the follow-through).
           </span>
         </li>
       </ul>

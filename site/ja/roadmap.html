@@ -145,6 +145,83 @@
           </div>
         </article>
 
+        <article class="tl-item" id="v021">
+          <div class="tl-version">
+            <span class="v">0.2.1</span>
+            <span class="mark mark--yes">公開済み</span>
+          </div>
+          <h3>誤った報告を減らし、すでに公開していた約束に追いつく</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>レシーバが <code>]</code> や <code>)</code> で終わる呼び出しを、未定義メソッドとして報告しなくなりました。</strong> Ruby 3.4.7 の標準ライブラリ・Rails 8.1.3 の5つの gem・minitest に対して、3,747件中1,656件の誤報が消えました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>アップグレードが修正を届けるようになりました。</strong> 解析キャッシュの鍵に OvalLSP 自身のバージョンが入っておらず、バイトが変わっていないファイルには前のリリースの結果が返り続けていました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>呼び出しではないものについて、ホバー・定義・シグネチャヘルプがメソッドの説明を返さなくなりました</strong> — コメント内の単語、<code>def</code> の引数名、メソッドと同名のローカル変数など。</span>
+            </li>
+          </ul>
+          <p class="text-mute">
+            全項目は
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a>
+            にあります。すべてのリリースはそちらに記録しています。
+          </p>
+        </article>
+
+        <article class="tl-item" id="v022">
+          <div class="tl-version">
+            <span class="v">0.2.2</span>
+            <span class="mark mark--yes">公開済み</span>
+          </div>
+          <h3>ファイルを削除していたテストと、必要だった封じ込め</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>気づくような変化はありません。</strong>このリリースは、このリポジトリ自身のテストスイートにあった欠陥が実行マシンのファイルを破壊したために存在します。公開済みの拡張機能は影響を受けておらず、受けようがありませんでした。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>キャッシュが行う削除はすべて1つの関数を通るようになりました。</strong>キャッシュrootの外のパスを拒否します。各呼び出し側が自分で対象を計算する形をやめました。</span>
+            </li>
+          </ul>
+          <p class="text-mute">
+            全容は
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a>
+            にあります。すべてのリリースはそこに完全な形で記録されています。
+          </p>
+        </article>
+
+        <article class="tl-item" id="v023">
+          <div class="tl-version">
+            <span class="v">0.2.3</span>
+            <span class="mark mark--yes">公開済み</span>
+          </div>
+          <h3>記録に書いてあることが、出荷されているもの</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>コアクラスと同名の自作クラスについての既知の制限の記述を、実測に合わせて訂正。</strong>ホバー・定義へ移動・補完が答えなくなるという記述でしたが、実際には答えます — 出荷ビルドが実際にするのは、その receiver 上の診断を黙って抑止することです。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>0.2.1 の矛盾していたリリースノートの bullet を削除。</strong>シャドウされたリテラルの補完について、同じ見出しの下で食い違う 2 つの bullet があり、出荷前に revert された変更を説明していた方を両言語から取り除きました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>サイトのバージョンバッジが現在に戻り、</strong>すべての pull request と <code>main</code> への push で走るチェックが付きました — 以前はサイトのファイルが変わったときしか走らず、バージョンバンプ単独では決して発火しませんでした。</span>
+            </li>
+          </ul>
+          <p class="text-mute">
+            全項目は
+            <a href="https://github.com/TERUZvxght/OvalLSP/blob/main/vscode/CHANGELOG.ja.md">変更履歴</a>
+            にあります。すべてのリリースはそこに完全な形で記録されています。
+          </p>
+        </article>
+
         <article class="tl-item tl-item--future" id="v030">
           <div class="tl-version"><span class="v">0.3.0</span></div>
           <h3>gem が定義しているものを知る</h3>
@@ -177,6 +254,14 @@
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong>コール階層</strong> — 参照の平坦なリストではなく、呼び出し元と呼び出し先をたどれる形で。</span>
             </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>カーソル下のシンボルの他の出現箇所をハイライトします。</strong> ファイル内が対象です。</span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>@ivar</code> の名前を、記号を打った瞬間に補完します。</strong></span>
+            </li>
           </ul>
         </article>
 
@@ -191,6 +276,10 @@
             <li>
               <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
               <span><strong><code>require</code> の自動挿入。</strong></span>
+            </li>
+            <li>
+              <span class="tick is-plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>シグネチャヘルプが、カーソルのある引数をハイライトします。</strong></span>
             </li>
           </ul>
         </article>

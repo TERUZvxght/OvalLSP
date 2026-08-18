@@ -35,7 +35,12 @@ module E2E
       @stdin.binmode
       @stdout.binmode
       @reader = Thread.new { read_loop }
-      @stderr_thread = Thread.new { @stderr_output = @stderr.read }
+      # Drain the child's stderr so it can never block on a full pipe.
+      # Deliberately no state: round 5 removed this drain's unused
+      # reader and left `@stderr_output` assigned-never-read, which is
+      # the debris class this release removes elsewhere -- so the drain
+      # now keeps nothing there is to leave behind.
+      Thread.new { @stderr.read }
     end
 
     def initialize!(trusted: true)
@@ -79,11 +84,6 @@ module E2E
 
     def completion_item(uri, line, character, label)
       completion_items(uri, line, character).find { |item| item[:label] == label }
-    end
-
-    def document_highlights(uri, line, character)
-      Array(request("textDocument/documentHighlight",
-                    { textDocument: { uri: uri }, position: { line: line, character: character } }))
     end
 
     def hover_text(uri, line, character)
@@ -147,10 +147,6 @@ module E2E
       @reader&.kill
       [@stdin, @stdout, @stderr].each { |io| io.close rescue nil }
       Process.kill("KILL", @wait.pid) rescue nil
-    end
-
-    def stderr_output
-      @stderr_output.to_s
     end
 
     private

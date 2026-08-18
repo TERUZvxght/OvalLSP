@@ -694,11 +694,16 @@ module Ovallsp
 
       # Whether the index would answer a *bare* name that signatures
       # already declare with a workspace class that merely shares its last
-      # segment. `Index::TypeNameResolution` owns the rule; resolution
-      # itself now refuses the substitution, so what this guards is the
-      # one reader that must decline even to *ask* -- a diagnostic about a
-      # receiver the engine has not identified is an assertion, not a
-      # missing answer.
+      # segment. `Index::TypeNameResolution` owns the rule, and this is
+      # its one application site: resolution deliberately does *not*
+      # refuse the substitution (applying it there broke every bare name
+      # written from inside its own namespace -- 024.47), so completion,
+      # hover and definition keep answering while this engine declines to
+      # assert -- a diagnostic about a receiver it has not identified is
+      # an assertion, not a missing answer. The residual cost, recorded in
+      # 024.47: the test cannot tell a written name from an inferred one,
+      # so a `Billing::Range` receiver -- where the workspace's answer is
+      # the right one -- has every check here silenced too.
       def shadowed_declared_type?(name, context)
         bare = Index::SymbolId.bare_name(name)
         Index::TypeNameResolution.substitution?(

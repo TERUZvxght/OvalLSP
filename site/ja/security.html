@@ -190,8 +190,11 @@
         <li>
           <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
           <span>
-            <strong>すべてのプロトコル境界でバージョンの完全一致を要求します。</strong>
+            <strong>Core は自身への 2 つの境界でプロトコル不一致を拒否します。</strong>
             Agent ↔ Core も、プラグイン ↔ Core も同様で、不一致は許容せず拒否します。
+            Extension ↔ Core のハンドシェイクは設計上異なります — そこでのバージョン
+            不一致は報告され、セッションは動き続けます(その後の扱いは 024.55 が
+            追跡しています)。
           </span>
         </li>
       </ul>

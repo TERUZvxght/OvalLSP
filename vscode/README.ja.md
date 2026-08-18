@@ -43,7 +43,8 @@ OvalLSPはRuby実装の言語サーバー(`ovallsp`)をVS Codeと並行して起
 | macOS, Intel / Rosetta | このPreviewでは非対応 |
 | Linux, Windows | このPreviewでは非対応 |
 | Ruby 3.4.x | **対応**(3.4.5、3.4.7で動作確認済み) |
-| Ruby 3.3.x, 3.5.x | 未検証(非対応として扱う) |
+| Ruby 4.0.x | best effort(gateしないCIジョブがすべてのpull requestと`main`へのpushでCoreスイートを4.0で実行し、実行できたexample数を報告する。4.0固有の失敗は記録のみで修正しない) |
+| Ruby 3.3.x, 3.5.x | 未検証 |
 | Rails 8.1 | **対応**(実際の統合テストで確認済み) |
 | Rails 7.x以下 | 未検証 |
 | WSL / Dev Container / Remote SSH | このPreviewでは非対応 |
@@ -52,9 +53,14 @@ OvalLSPはRuby実装の言語サーバー(`ovallsp`)をVS Codeと並行して起
 と[既知の制限事項](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md)
 を参照してください。
 
-対応外のプラットフォーム/Rubyの組合せでは、OvalLSPは黙って劣化動作したり
-推測したりせず、同梱されたnative依存の読み込みを拒否し、明確な診断を
-表示します([バージョン・互換性エラー](#バージョン互換性エラー)参照)。
+このビルドが対象としていないプラットフォームでは、OvalLSPは同梱された
+native依存の読み込みを拒否し、そう伝えます。対象としていない*Ruby*では、
+その Ruby が `prism` と `rbs` を自前で持っているかを確認します。持って
+いればそちらで動かし、Outputチャンネルにその旨を出します — これは
+「対応している組み合わせ」ではなく「ここでは何も検証していない組み合わせ」
+です。持っていなければエラー通知が出て、Output チャンネルの詳細が
+`gem install prism rbs` を示します
+([バージョン・互換性エラー](#バージョン互換性エラー)参照)。
 
 ## 必要環境
 
@@ -79,10 +85,13 @@ Homebrew経由、または明示的な`ovallsp.rubyExecutablePath`で、Ruby 3.4
 Prism・RBS)はVSIX自体に同梱されており、追加のダウンロード・
 `bundle install`・リポジトリのチェックアウトは一切発生しません。
 
-互換性のあるRubyが見つからない場合、または見つかったRubyがこのビルドの
-native依存がコンパイルされた対象と一致しない場合、OvalLSPは黙って
-劣化動作したり中途半端に起動したりせず、何が問題で何をすべきかを説明する
-明確な診断を表示します([Ruby解決](#ruby解決)と
+Rubyがまったく見つからない場合、検索は `PATH` の `ruby` にフォールバック
+します。それすら特定できないときはエラー通知が出て、詳細は Output
+チャンネルに出ます — ただしセッションは前もって拒否するのではなく、
+そのまま起動を試みます。見つかったRubyが、このビルドの
+native依存がコンパイルされた対象と単に異なるだけの場合は上の段落のとおりです
+— その Ruby 自身の `prism`/`rbs` があればそちらで動かし、そうしていることを
+Outputチャンネルで伝えます([Ruby解決](#ruby解決)と
 [バージョン・互換性エラー](#バージョン互換性エラー)を参照)。
 
 ## クイックスタート
@@ -140,8 +149,9 @@ Marketplace経由でこの拡張機能が更新されると、同梱されたCor
 起動時、ExtensionとCore Serverはバージョン・protocol・build・Ruby/
 platform情報を交換します。これらが一致しない場合(以前のExtension
 バージョンの残留プロセス、正しくインストールされなかったpayload、
-互換性のないカスタム`ovallsp.server.path`等)、OvalLSPは機能リクエストを
-送る前に停止し、壊れた/劣化したセッションの代わりに診断を表示します。
+互換性のないカスタム`ovallsp.server.path`等)、OvalLSPはそれを報告します —
+エラー通知と、Outputチャンネルの詳細です。ただしセッションを**停止はしません**。
+不一致を解消するまで、その後の応答は信頼できないものとして扱ってください。
 `OvalLSP: Show Version Information`で検出内容と対処方法を確認できます。
 
 ## Ruby解決
@@ -230,7 +240,7 @@ MIT — [LICENSE](LICENSE)参照。サードパーティ依存のライセンス
 ## 既知の制限事項
 
 このPreviewの対応範囲については
-[docs/KNOWN_LIMITATIONS.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md)
+[docs/KNOWN_LIMITATIONS.ja.md](https://github.com/TERUZvxght/OvalLSP/blob/main/docs/KNOWN_LIMITATIONS.ja.md)
 を、静的解析自体の原理的な限界(既知のRails DSL以外の
 `method_missing`/`define_method`、文字列引数による`class_eval`/
 `instance_eval`、実行時にしか決まらないconstant解決は設計上scope外)に

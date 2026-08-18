@@ -83,7 +83,7 @@
     <div class="wrap">
       <div class="hero-copy">
         <div class="badge-row">
-          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.2.1</span>
+          <span class="badge badge--ruby"><span class="dot"></span>Preview 0.2.3</span>
           <span class="badge">VS Code extension</span>
           <span class="badge">MIT</span>
         </div>
@@ -495,8 +495,9 @@
           <h3>A handshake before any work</h3>
           <p>
             Extension and Core exchange version, protocol, build and Ruby/platform
-            information at startup. On a mismatch OvalLSP stops and explains, rather than
-            serving a half-broken session.
+            information at startup. A mismatch is reported, and the session keeps running
+            while you decide; the specifics are in the Output channel (024.55 tracks the
+            follow-through).
           </p>
         </div>
         <div class="card card--flat reveal">
@@ -537,10 +538,12 @@
           <h4>One platform, for now</h4>
           <p>
             The published VSIX is built for <code>darwin-arm64</code> and bundles native
-            extensions compiled for it. On anything else the payload is not loaded and you
-            get a clear diagnostic instead of a degraded session. Intel Macs, including
-            under Rosetta 2, are not supported in this Preview; nor are WSL, Dev Containers
-            or Remote SSH.
+            extensions compiled for it. On anything else the payload is not loaded: the
+            extension checks whether your Ruby can load <code>prism</code> and
+            <code>rbs</code> itself, runs against those with an Output-channel note when it
+            can — an unverified configuration — and shows an error when it cannot, with
+            the specifics in the Output channel. Intel Macs, including under Rosetta 2,
+            are not supported in this Preview; nor are WSL, Dev Containers or Remote SSH.
           </p>
         </div>
         <div class="callout callout--warn reveal">
