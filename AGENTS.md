@@ -18,8 +18,13 @@ its scope is *make the foundation solid, with Pylance as the reference*.
 Conveniences that are not load-bearing — completion candidates sorted
 most-useful-first, say — are 2.x.x.
 
-**Everything else in this file, and every release, register entry and
-review round, is instrumental to that.** A wrong answer is worse than no
+**The rest of this file, and every release, register entry and review
+round, exists to serve that** — the maintainer's stated role in a session
+is to notice when an agent has gone a long way in the wrong direction and
+correct the course toward it. (That role is theirs, verbatim. The
+stronger reading — that nothing else has value except as it serves this —
+is an inference of this file's, and a convenient one for an agent to make
+when deciding what to skip; treat it as a heuristic, not a licence.) A wrong answer is worse than no
 answer, because the foundation's value is that it can be trusted — **but
 letting 1.0.0 recede forever in pursuit of accuracy is worse than either**.
 Nothing is perfect at first. So a wrong answer on a path people walk daily
@@ -41,8 +46,13 @@ carried in a conversation.
 - When asking another agent for an independent review, do not tell it what not to count, where to concentrate, or that finding nothing is fine. Each of those narrows what it can report, and a falling defect count then measures the instructions rather than the code. See `CLAUDE.md` for the rule and 024.36 for the control run that established it.
 - **Work in progress lives in `docs/design/tasks/`, not in a transcript.**
   The open findings of the current review loop are in the highest-numbered
-  `NNN-*.md` there — `030-0.2.4-review-loop.md` for the current
-  foundation release. Anything a reviewer reported and
+  `NNN-*.md` there — and **check which branch you are on before trusting
+  a number**. On `main` the highest is `031-0.2.4-workspace-trust.md`
+  (the shipped security patch); the 0.2.5 foundation work and its
+  `030-0.2.4-review-loop.md` live on `feat/0.2.5`. This line pointed at
+  `030` from a branch that did not contain it, which is the dangling
+  pointer the residency rule below exists to prevent — created, of all
+  things, while fixing this same line. Anything a reviewer reported and
   nobody has fixed exists only in that file; agent reports are not kept.
   Read it before deciding what to do next, and add to it before a long
   session ends.

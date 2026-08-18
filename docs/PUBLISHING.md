@@ -94,8 +94,10 @@ reference — is stated in
 [`docs/design/docs/01-product-requirements.md`](design/docs/01-product-requirements.md)
 section 0, and that document is the one to read first. A 1.0.0 that met
 only the two conditions below would be an insufficient product that runs
-everywhere. Written down in 0.2.5's preparation, after a session took the
-two conditions below to *be* the definition of finished.
+everywhere. **This framing is this project's inference, not a maintainer ruling** —
+written during 0.2.4 after a session took the two conditions below to
+*be* the definition of finished. What is theirs is section 0's
+definition itself.
 
 1.0.0 is reserved for the point where the two "not yet" qualifications in
 README's capability matrix are gone:
