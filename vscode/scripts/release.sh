@@ -111,6 +111,35 @@ fi
 # false "may be corrupted" warning -- and nothing in this script noticed,
 # because everything before this point only ever inspected the staged
 # tree or the file list, never the shipped payload's own hash.
+# The $HOME check has never run against the artifact that actually
+# ships. ci.yml greps an *ubuntu-built* VSIX, where $HOME is
+# /home/runner and the vendored native extensions are different files
+# entirely; apple-silicon-release.yml has no such step. So the only
+# build a user installs was the one build nobody inspected -- and this
+# script is the last point where the real thing exists on disk.
+#
+# Compiled extensions are excluded from the hard failure for the reason
+# make-final-review-bundle.sh gives: they embed an absolute LC_LOAD_DYLIB
+# reference to the building Ruby's libruby, which is a real dynamic-linker
+# dependency rather than a removable byproduct, mitigated at spawn time.
+# They are reported instead, so a reader of this log can see what is in
+# there rather than inferring it from silence.
+#
+# /usr/bin/grep by absolute path, never bare `grep`: on a machine where
+# the name resolves to a ugrep wrapper it skips binary files without -a
+# and reports a clean artifact that is not. 0.2.3 filed and withdrew a
+# register entry over exactly that.
+echo "-- packaged-artifact path inspection --"
+if /usr/bin/grep -rlF --exclude='*.bundle' --exclude='*.so' --exclude='*.dylib' "$HOME" "$UNPACK_DIR"; then
+  echo "release.sh: the packaged VSIX contains this build machine's own absolute path (outside native extensions)." >&2
+  echo "Refusing to publish." >&2
+  exit 1
+fi
+if /usr/bin/grep -rlF "$HOME" "$UNPACK_DIR" --include='*.bundle' --include='*.so' --include='*.dylib' >/dev/null; then
+  echo "note: compiled native extension(s) embed this machine's Ruby install path (expected; mitigated at spawn -- see 023.8)."
+fi
+echo "PASS: packaged-artifact path inspection"
+
 echo "-- node scripts/verify-packaged-payload-hash.js --"
 node "$VSCODE_DIR/scripts/verify-packaged-payload-hash.js" "$UNPACK_DIR/extension"
 
