@@ -39,7 +39,12 @@ RSpec.describe "Ovallsp::Server plugin loading (Task 018)" do
     input =
       frame(
         jsonrpc: "2.0", id: 1, method: "initialize",
-        params: { initializationOptions: { pluginManifests: [manifest_path] } }
+        # `workspaceTrusted` added in 0.2.5: a plugin executes arbitrary
+        # Ruby, so loading one is gated on trust like every other
+        # execution entry point. The refusal is asserted in
+        # `server_trust_execution_gates_spec.rb`; this example is about
+        # what a loaded plugin contributes.
+        params: { initializationOptions: { workspaceTrusted: true, pluginManifests: [manifest_path] } }
       ) +
       did_open("file:///a.rb", "class ExampleModel\nend\n\nExampleModel.new.pending?\n") +
       frame(

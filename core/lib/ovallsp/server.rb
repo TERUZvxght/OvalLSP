@@ -968,6 +968,12 @@ module Ovallsp
       options = params && params[:initializationOptions]
       manifest_paths = options.is_a?(Hash) ? options[:pluginManifests] : nil
       return unless manifest_paths.is_a?(Array) && !manifest_paths.empty?
+      # A plugin executes arbitrary Ruby -- that is what a plugin is. The
+      # fork contains it; trust decides whether it runs at all. The paths
+      # come from the client's own initializationOptions, so an untrusted
+      # workspace persuading a client to name a manifest inside it would
+      # otherwise be code execution with no gate in front of it.
+      return unless trusted_for_execution?("loading static plugins")
 
       @plugin_loader.load_static(manifest_paths).each { |context| apply_plugin_context(context) }
     end

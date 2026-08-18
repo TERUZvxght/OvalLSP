@@ -4312,3 +4312,63 @@ examples instead of 1,964, and its timing meant nothing.
 Worth it because CI's Core job is 5m34s today and this is most of it;
 the same measurement says a fixture-isolated 8-way split lands near a
 minute.
+
+## 024.73 The fork boundary is undone by `Marshal.load` in the parent
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Reachable only by a client that sends `pluginManifests`, and the
+  shipped extension sends none, so no user of the published build is
+  exposed. It is recorded as a defect rather than a hazard because the
+  containment it breaks is the entire reason the fork exists.
+target: 0.2.5
+```
+
+**Area:** `core/lib/ovallsp/plugins/loader.rb:446` (`Marshal.load`),
+`:340` (`deliver_result`), `docs/SECURITY_CHECKLIST.md:42`
+
+`Loader` forks a plugin so that a broken or hostile one cannot take Core
+down, and reads the result back over a pipe with `Marshal.load`. Those
+bytes are produced by the plugin's own code. `Marshal.load` instantiates
+whatever classes the stream names, **in the parent, before any of this
+file's validation runs** — so a plugin that wants to cross the boundary
+the fork exists to create can, through an ordinary deserialisation
+gadget. `partition_plugin_facts` validates the data afterwards, which is
+too late to matter.
+
+`docs/SECURITY_CHECKLIST.md:42` already claims this channel carries
+「Marshal可能なプレーンデータのみ」. Nothing enforces it. That line should
+be read as the requirement it was meant to be, not as a description of
+what happens.
+
+This file already records two rounds of hardening against a plugin
+reaching the pipe by other means (`:360-375`: a forged payload written
+through an `ObjectSpace`-discovered `writer`, reproduced live). Both
+narrowed *who can write to the channel*. Neither addressed what the
+parent does with what arrives.
+
+**The obvious fix does not fit, and that is the finding's substance.**
+Switching the channel to JSON was the first direction, and it breaks the
+plugin contract: declarations legitimately carry real objects —
+`core/spec/fixtures/plugins/state_machine_example/lib/plugin.rb`
+returns `Ovallsp::Types::Nominal.new(name: "Boolean")` inside a
+declaration, and the SDK's contract is written around that. `Marshal`
+was chosen *because* the payload is objects.
+
+**Direction:** send plain data across the boundary and reconstruct the
+typed objects in the parent from validated fields — the parent already
+knows how to build a `Declaration`, and `partition_plugin_facts` already
+decides what is well-formed. That makes validation precede construction
+instead of following it, which is the actual invariant wanted. It is a
+protocol change (`Plugins::CURRENT_PROTOCOL_VERSION`) and a change to the
+SDK's documented contract, so it is a task rather than a patch. A
+`Marshal.load` allowlist proc is **not** an alternative: the proc runs
+after each object is constructed, which is after a gadget has fired.
+
+**Gated meanwhile.** `Server#load_static_plugins` had no trust check at
+all until 0.2.5; it has one now, so an untrusted workspace cannot reach
+this path even via a client that would otherwise pass manifests. That
+narrows exposure; it does not close the class.
