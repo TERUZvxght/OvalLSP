@@ -179,6 +179,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.77`](#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | open | 0.3.0 | A call to a method that does not exist is missed through a relation |
 | [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | open | 0.3.0 | Completion did not get the fix hover and diagnostics did |
 | [`024.79`](#02479-model-first-completes-to-nothing) | open | 0.3.0 | `Model.first` completes to nothing |
+| [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | open | 0.3.0 | An unresolved hierarchy edge is expressible as a method owner |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -4072,6 +4073,58 @@ is not, or is not carrying the element type through.
 **Direction:** whatever gives `scope` its `Relation[Model]` should give
 the finder methods their `Model | nil`. Cheap to check, and it is a
 daily path answering nothing.
+## 024.80 An unresolved hierarchy edge is expressible as a method owner
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  The live instance it caused -- completion offering the workspace's
+  top-level methods on a class with an unidentifiable parent -- is fixed
+  in 0.2.5. What is open is the representation that made it possible,
+  and there is no second live instance known today.
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb` (`AncestorEntry`),
+`core/lib/ovallsp/semantic/method_resolver.rb`,
+`core/lib/ovallsp/index/symbol_id.rb`
+
+`HierarchyIndex` records a parent it cannot identify — `class Foo <
+(expression)` — as an `AncestorEntry` with `name: nil`. That preserves
+the uncertainty, which is right. But `nil` is *also* the owner a
+top-level `def` is indexed under, so a nameless entry passed to a method
+lookup answers with every top-level method in the workspace.
+
+`MethodResolver#build_candidate` guards against it, with a comment
+recording the bug it caused. `#names_for_type` — what completion asks —
+did not, and offered exactly that. Reproduced and fixed in 0.2.5.
+
+**Found by an external review** (GPT-5.6 Sol, recorded in
+`034-diagnostics-precision-review-gpt-5.6-sol.md`) reading the two
+consumers against each other. It is the shape that review was asked to
+look for, and stated in its own words: *one consumer locally sealed an
+ambiguous representation, while a second consumer of the same
+representation did not.*
+
+**Why the guard is not the fix.** Two readers now each remember to
+refuse. A third will be written. The representation is what permits the
+mistake: `nil` means "no owner" in one index and "the top-level owner" in
+another, and nothing stops the first being passed where the second is
+expected.
+
+**Direction (the review's, and it is the right shape):** an unresolved
+edge must not be expressible as a real declaration owner. Either a
+distinct unresolved-link type that no method-lookup API accepts, or an
+`AncestorChain` result carrying `entries` plus `complete?` and its
+reasons, so a consumer must decide what to do about incompleteness rather
+than being handed a `nil` that looks like data.
+
+The second form is worth more than this entry alone: it is also what
+`024.76` needs — `closed_nominal?` cannot currently tell "no ancestor"
+from "an ancestor I could not name", and that is the same conflation one
+level up.
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml
@@ -4763,6 +4816,7 @@ guard spec, and a change set that grows a guard mid-loop resets the round
 that was reviewing it.
 
 ---
+
 
 
 

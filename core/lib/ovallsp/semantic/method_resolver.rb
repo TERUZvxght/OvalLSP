@@ -230,6 +230,20 @@ module Ovallsp
 
         seen = Set.new
         entries.each_with_object([]) do |entry, names|
+          # The same refusal `#build_candidate` makes, for the same
+          # reason, and it was missing here. A nameless entry is a parent
+          # `HierarchyIndex` could not identify; `nil` is also the owner a
+          # *top-level* `def` is indexed under, so asking it for members
+          # answered with every top-level method in the workspace --
+          # offered as completions on a class that has none of them.
+          #
+          # Found by an external review reading the two consumers against
+          # each other: one had sealed this representation locally and the
+          # other had not. The durable answer is that an unresolved
+          # hierarchy edge should not be expressible as an owner at all
+          # (`024.80`); this is the guard until it is not.
+          next if entry.name.nil?
+
           kind = symbol_kind_for(entry, singleton)
           method_names_for_owner(entry.name, kind).each do |name|
             next unless name.start_with?(prefix)
