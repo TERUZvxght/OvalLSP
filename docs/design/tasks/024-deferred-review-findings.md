@@ -67,6 +67,18 @@ numbering continues after the highest number *either* line has used —
 `024.64` and `024.65` stay reserved to the 0.2.4-bound branch's entries;
 do not renumber them, and do not fill the hole.
 
+**`024.70` does not exist either**, for a different reason and under
+the same rule. It was written during 0.2.3's pre-publish gate,
+claiming the packaging step's native-extension path warning could not
+see a Homebrew-built VSIX — and withdrawn the same session, because
+the warning does see it and had already said so. The claim came from
+re-running the gate's own `grep` in a shell where the name resolves to
+a `ugrep` wrapper that skips binary files without `-a`; the gate gets
+`/usr/bin/grep`, which does not. `028`'s "A second finding that was the
+measurement, not the tree" records it, because a withdrawn finding is
+worth as much as a kept one when the thing it caught was the method.
+The number stays vacant.
+
 Entries `024.51`–`024.54`, `024.57`, `024.58`, `024.64`, `024.65` — and
 that branch's own `024.49` — live on the 0.2.4-bound branch
 (`fix/0.2.3`), with the engine thread they describe; the numbers
@@ -3647,52 +3659,3 @@ so the packaged variant is honest only on macOS and wants a
 `macos-14` runner. Deferred rather than done here because adding two
 CI jobs during a release gate is an addition, not a fix, and the
 `macos-14` half is a billing decision that belongs to the maintainer.
-
-## 024.70 The packaged-VSIX path warning is scoped to `$HOME`, and this release was not built under it
-
-```yaml
-status: open
-kind: defect
-user-visible: no
-user-visible-note: >
-  The functional half is already mitigated at spawn time (023.8), so
-  no user sees a failure. What is lost is the gate's own report:
-  a reader of the log cannot tell whether the artifact embeds an
-  absolute Ruby path.
-target: 0.2.4
-```
-
-**Area:** `make-final-review-bundle.sh`, "Package contents
-inspection"
-
-The step has a hard-fail `grep -rlF "$HOME"` (excluding compiled
-extensions) and, beside it, a warning-level `grep -rlF "$HOME"`
-restricted to `*.bundle`/`*.so`/`*.dylib` whose job is to report that
-`prism.bundle` and `rbs_extension.bundle` embed this machine's
-absolute libruby path as `LC_LOAD_DYLIB` (023.8).
-
-Both greps are anchored on `$HOME` because 023.8 was written on a
-machine whose Ruby came from rbenv, where the path is
-`~/.rbenv/versions/<x>/lib/libruby.<x>.dylib`. 0.2.3's artifact was
-built against Homebrew Ruby 3.4.10, so the embedded path is
-`/opt/homebrew/opt/ruby@3.4/lib/libruby.3.4.dylib` — outside `$HOME`,
-and the warning printed nothing. `otool -L` on all four bundles in
-the 0.2.3 VSIX confirms the reference is present exactly as before.
-
-**Root cause:** the hard-fail check is *correctly* `$HOME`-scoped —
-it is looking for this machine's own identity leaking into shipped
-text, and a broader `/Users|/home` pattern false-positives on `rbs`'s
-bundled stdlib documentation, which the script's own comment records.
-The warning was given the same scope by proximity, but it is asking a
-different question: not "did this machine's identity leak" but "what
-absolute Ruby does this payload link against". That question has an
-exact answer that does not involve `$HOME` at all.
-
-**Direction:** ask the linker rather than grepping for a path.
-`otool -L` each compiled extension in the unpacked VSIX and report
-every non-`/usr/lib` `LC_LOAD_DYLIB` entry, which names the embedded
-libruby on any installation layout — rbenv, Homebrew, ruby-build,
-system. Keep it warning-level: 023.8's spawn-time
-`DYLD_LIBRARY_PATH` mitigation is what makes the embedded path
-tolerable, and that is unchanged. Deferred because it is a change to
-the release gate itself, made while running it.
