@@ -87,6 +87,16 @@ While the major version is 0, everything above still applies except that
 a breaking change may ship in a minor release rather than forcing a major
 one — the usual pre-1.0 convention.
 
+**These are the environment half, and they are necessary rather than
+sufficient.** What 1.0.0 is *for* — the foundation being solid enough that
+a Ruby/Rails engineer is measurably better off, with Pylance as the
+reference — is stated in
+[`docs/design/docs/01-product-requirements.md`](design/docs/01-product-requirements.md)
+section 0, and that document is the one to read first. A 1.0.0 that met
+only the two conditions below would be an insufficient product that runs
+everywhere. Written down in 0.2.5's preparation, after a session took the
+two conditions below to *be* the definition of finished.
+
 1.0.0 is reserved for the point where the two "not yet" qualifications in
 README's capability matrix are gone:
 

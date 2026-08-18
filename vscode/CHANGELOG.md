@@ -6,6 +6,28 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.4 — An untrusted workspace could choose what the extension runs
+
+**Security fix. Update if you ever open a repository you have not
+trusted.**
+
+- **Settings that name a binary or a command are now ignored from
+  workspace scope until you trust the folder.** Opening a repository in
+  Restricted Mode used to run a program of that repository's choosing,
+  about two seconds after the window opened and before Workspace Trust
+  was consulted at all. `ovallsp.rubyExecutablePath`,
+  `ovallsp.ruby.command`, `ovallsp.server.path` and
+  `ovallsp.observation.testCommand` are now declared restricted
+  configuration, which is what makes VS Code withhold a workspace's value
+  for them. User and machine settings are unaffected, and static analysis
+  still works untrusted exactly as before.
+- **`release.sh` refuses to publish when `.vsce-pat.local` is readable
+  beyond its owner.** The file holds a Marketplace token and the script
+  had documented `chmod 600` without ever checking it.
+
+Nothing else an editor does changes, and no capability moves — the
+manifest already promised this and the release makes it true.
+
 ## 0.2.3 — What the record says is what ships
 
 Nothing an editor does changes in this release. It exists because three
