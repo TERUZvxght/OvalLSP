@@ -138,7 +138,18 @@ fi
 if /usr/bin/grep -rlF "$HOME" "$UNPACK_DIR" --include='*.bundle' --include='*.so' --include='*.dylib' >/dev/null; then
   echo "note: compiled native extension(s) embed this machine's Ruby install path (expected; mitigated at spawn -- see 023.8)."
 fi
-echo "PASS: packaged-artifact path inspection"
+# Prints what it looked at, not only that it passed. A text pin cannot
+# see a semantic mutation -- negating the condition, or aiming the check
+# at a directory that does not exist -- and an attack round demonstrated
+# both. A count turns the second into something a reader of this log
+# notices: a check aimed at nothing reports nothing inspected.
+INSPECTED="$(find "$UNPACK_DIR" -type f | wc -l | tr -d ' ')"
+echo "PASS: packaged-artifact path inspection (${INSPECTED} files inspected)"
+if [ "$INSPECTED" -lt 100 ]; then
+  echo "release.sh: only ${INSPECTED} files were inspected -- the artifact should have over a thousand." >&2
+  echo "The check is looking at the wrong place. Refusing to publish." >&2
+  exit 1
+fi
 
 echo "-- node scripts/verify-packaged-payload-hash.js --"
 node "$VSCODE_DIR/scripts/verify-packaged-payload-hash.js" "$UNPACK_DIR/extension"
