@@ -172,7 +172,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | open | 0.2.4 | The two suites that drive a real editor are run by nobody but the ma… |
 | [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.2.4 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
-| [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | open | 0.2.5 | The fork boundary is undone by `Marshal.load` in the parent |
+| [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | open | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | open | 0.3.0 | The trust gate stands in front of callers, not in front of what exec… |
 | [`024.75`](#02475-a-documented-field-selects-nothing) | open | 0.3.0 | A documented field selects nothing |
 | [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.3.0 | Fifty-four `unknown-method` reports over real gem source, and all of… |
@@ -3794,7 +3794,7 @@ user-visible-note: >
   shipped extension sends none, so no user of the published build is
   exposed. It is recorded as a defect rather than a hazard because the
   containment it breaks is the entire reason the fork exists.
-target: 0.2.5
+target: 0.2.6
 ```
 
 **Area:** `core/lib/ovallsp/plugins/loader.rb:446` (`Marshal.load`),
@@ -3842,6 +3842,11 @@ after each object is constructed, which is after a gadget has fired.
 all until 0.2.5; it has one now, so an untrusted workspace cannot reach
 this path even via a client that would otherwise pass manifests. That
 narrows exposure; it does not close the class.
+
+**Shipped open in 0.2.5**, retargeted to 0.2.6. The gate is what makes
+that defensible rather than the size of the remaining work: reaching this
+code needs a client that sends `pluginManifests` *and* a trusted
+workspace, and the shipped extension sends none.
 
 ## 024.74 The trust gate stands in front of callers, not in front of what executes
 
