@@ -88,13 +88,30 @@ module Ovallsp
         fn.required_positionals.map { |p| convert(p.type) }
       end
 
-      # RBS type names are fully-qualified with a leading "::" — the
-      # internal type model (Nominal/Generic#name) uses bare simple names
-      # (matching how Models::ModelRegistry and source Nominal types are
-      # already named), so this strips the namespace down to the last
-      # path component (`::Foo::Bar` -> "Bar", `::Array` -> "Array").
+      # RBS type names are fully-qualified with a leading `::`. This
+      # strips that prefix and keeps the path: `::Foo::Bar` -> "Foo::Bar",
+      # `::Array` -> "Array".
+      #
+      # It used to take the last path component instead, which threw the
+      # namespace away and made every nested type answer under a bare
+      # name. Measured against the loaded RBS environment: **240 of 334
+      # types are nested**, and of their 238 distinct basenames **27 are
+      # also defined as classes in the installed gem corpus** -- `Error`,
+      # `Node`, `Generator`, `Buffer`, `Location` and the like. Where a
+      # workspace defines one, it shadowed the core type: `File.stat(x)`
+      # answered as a workspace `Stat`, listing its methods and denying
+      # the real ones. That is the ordinary path, not the rare one 0.4
+      # permits shipping as a known limitation.
+      #
+      # `Signatures::Environment#rbs_type_name` already parses a
+      # `::`-qualified string, and resolution prefers an exact qualified
+      # match before falling back to a last-segment one, so this adds
+      # information rather than removing an answer.
+      #
+      # What changes for a reader: an aliased core type now shows its real
+      # path -- `Mutex.new` says `Thread::Mutex`, which is what it is.
       def simple_name(type_name)
-        type_name.name.to_s
+        Ovallsp::Index::SymbolId.bare_name(type_name.to_s)
       end
     end
   end
