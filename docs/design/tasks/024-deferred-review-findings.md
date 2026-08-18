@@ -3525,3 +3525,70 @@ tombstone convention (a stub entry pointing into history) so historical
 citations can stay without forbidding deletion forever. That guard
 belongs with 024.R9's register move, which re-points the guard spec
 anyway; hence the target.
+
+## 024.68 Three rounds of guards on a hand-rolled grammar, each blind one assumption deeper
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  The hole is register hygiene: a typo'd or mis-indented metadata key
+  in this file silently un-routes an entry, and nothing an editor user
+  sees is involved. It is deliberately unguarded again after three
+  guard attempts were rolled back; this entry is the record the
+  roll-back rule names as the deliverable.
+target: 0.3.0
+```
+
+**Area:** `core/spec/meta/deferred_findings_spec.rb` (the
+`entries`/`headings` readers and every guard bolted onto them), this
+file's legend
+
+The original defect, found by round 10 of 0.2.3's unification loop:
+`target:` routes entries to releases, and a typo'd key was silently
+ignored by every guard — the value-typo class `status` defends against
+("Anything else reads as open") had no key-side counterpart. Three
+consecutive rounds then shipped a guard and had it broken by the next
+round, each break one assumption deeper:
+
+1. **Round 10** filtered the *parsed* fields against a `KNOWN_KEYS`
+   list — blind outside the field parser's own `[a-z-]` class:
+   `Target:` and `user_visible:` never parsed as fields at all
+   (round 11 planted `Target: 0.2.4`; 24/0, silent).
+2. **Round 11** flagged stray lines instead — but skipped every
+   indented line as "the folded note's continuation", so one leading
+   space (` target: 0.2.4`) was invisible again (round 12; 25/0).
+3. **Round 12** made the walk stateful (indentation legitimate only
+   inside an open folded `>` value) and added a loose heading
+   pre-scan — and round 13 found both halves blind one state deeper:
+   an indented typo *after a folded note* reads as continuation, and
+   a heading indented 1–3 spaces renders as a real `h2` under
+   CommonMark while all three column-0-anchored readers miss it
+   symmetrically (28/0 both, no live instance).
+
+**Root cause:** the metadata grammar is a hand-rolled parser
+("deliberately not a YAML parser"), and every guard re-derives "what
+is a field / a heading" from it with a fresh subset of its
+assumptions — character class, indentation, anchoring. Round 13
+measured the end state: the guard was *more permissive than YAML
+itself* (Psych raises "did not find expected key" on the exact text
+the guard accepted). Patching one assumption manufactures the next
+round's finding one assumption deeper; the supply of assumptions is
+the hand-rolled parser, not any single patch.
+
+**Direction actually needed:** stop hand-parsing. Parse the blocks
+with the real YAML parser and fail on `Psych::SyntaxError` — the
+round-13 probe shows Psych already rejects the class outright — with
+one loose anything-heading-shaped scan owned beside the strict
+reader. That is grammar-formalisation work and belongs with 024.R9's
+register move, which re-points this spec anyway; hence the target.
+
+**The rollback, per the counting rule** (rounds 10 → 12 came out as
+one thread): `KNOWN_KEYS`, `unknown_keys`, `unreadable_headings` and
+their six examples are removed. **What survived:** the legend's
+`target:` documentation line — it fixes the *undocumented* half of
+round 10's finding, never failed a round, and removing it would
+recreate a recorded defect. Until the direction above lands, key
+typos in this file are once again caught by nothing; a reviewer
+reading the register should know that, which is this note's job.

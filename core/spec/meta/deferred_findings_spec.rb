@@ -51,62 +51,6 @@ module DeferredFindings
     end
   end
 
-  # Every key the grammar defines. `status` defends against its own
-  # value typos ("Anything else reads as open" -- deliberately safe);
-  # a typo'd *key* had no counterpart until round 10 of the 0.2.3
-  # release loop pointed out that `taget: 0.2.4` would silently route
-  # nothing -- and routing is the target key's whole job.
-  KNOWN_KEYS = %w[status kind released-in user-visible user-visible-note target].freeze
-
-  # Flags whole lines rather than filtering parsed fields: the field
-  # parser's own grammar is `[a-z-]+`, so a key with a capital or an
-  # underscore (`Target:`, `user_visible:`) never parses as a field at
-  # all -- round 11 demonstrated `Target: 0.2.4` leaving the whole
-  # suite green while the entry went silently un-routed. Round 12 then
-  # demonstrated the same for ` target: 0.2.4` -- one leading space --
-  # because this guard's first shape skipped every indented line as
-  # "the folded note's continuation". So the walk carries the one
-  # piece of state the grammar actually has: an indented line is
-  # continuation only while a folded `>` value is open; every other
-  # line in the block is either a known field or a stray.
-  def unknown_keys(markdown)
-    markdown.scan(METADATA_BLOCK).to_h do |number, block|
-      strays = []
-      folded_open = false
-      block.each_line do |raw|
-        line = raw.chomp
-        next if line.strip.empty?
-
-        if line.start_with?(" ")
-          strays << line unless folded_open
-          next
-        end
-
-        if (field = line.match(/\A(?:#{Regexp.union(KNOWN_KEYS)}): *(.*)\z/))
-          folded_open = field[1] == ">"
-        else
-          folded_open = false
-          strays << line
-        end
-      end
-      [number, strays]
-    end.reject { |_, strays| strays.empty? }
-  end
-
-  # The loose pre-scan against the strict grammar. `## 024.99` with no
-  # title is invisible to ENTRY_HEADING and METADATA_BLOCK
-  # *symmetrically*, so every set-against-set comparison passes while
-  # the entry goes unchecked -- the failure this spec's own header
-  # names as its reason to exist, surviving for that one shape because
-  # both readers shared the blindness. Anything that claims to be an
-  # entry heading must be one the grammar reads.
-  def unreadable_headings(markdown)
-    claimed = markdown.lines.grep(/\A## 024\./).map(&:chomp)
-    parsed = headings(markdown)
-
-    claimed.reject { |line| parsed.any? { |number| line.start_with?("## #{number} ") } }
-  end
-
   def open_defects(markdown)
     entries(markdown).select do |_, fields|
       fields["kind"] == "defect" && !RESOLVED.include?(fields["status"])
@@ -251,63 +195,6 @@ RSpec.describe "deferred findings metadata" do
       expect(DeferredFindings.documents?(markdown, "024.13")).to be(false)
     end
 
-    it "rejects a key the grammar does not define" do
-      typoed = DeferredFindings.unknown_keys(entry("024.30.1", status: "open", kind: "defect", taget: "0.2.4"))
-
-      expect(typoed).to eq("024.30.1" => ["taget: 0.2.4"])
-    end
-
-    # Round 11: the first version of this guard filtered the *parsed*
-    # fields against KNOWN_KEYS, and the field parser's own grammar is
-    # `[a-z-]+` -- so `Target:` or `user_visible:` never parsed as a
-    # field at all and the guard was blind to exactly the typo family
-    # it exists to catch. The guard now flags any non-indented line in
-    # the block that is not a known field, whatever characters the
-    # typo used.
-    it "rejects a mis-cased or underscored key, which the field parser cannot even see" do
-      cased = DeferredFindings.unknown_keys(entry("024.30.1", status: "open", kind: "defect", Target: "0.2.4"))
-
-      expect(cased).to eq("024.30.1" => ["Target: 0.2.4"])
-
-      # Built by hand: the `entry` helper itself tr's underscores to
-      # hyphens, which is exactly why an underscored key is a likely
-      # slip in real editing.
-      underscored = "## 024.30.1 A finding\n\n```yaml\nstatus: open\nkind: defect\nuser_visible: no\n```\n\nprose\n\n"
-
-      expect(DeferredFindings.unknown_keys(underscored)).to eq("024.30.1" => ["user_visible: no"])
-    end
-
-    # Round 12: the stray-line guard skipped *every* indented line as
-    # "the folded note's continuation", so a key typed with one leading
-    # space -- ` target: 0.2.4` -- was neither parsed as a field nor
-    # flagged, and the entry silently lost its routing through one
-    # character. An indented line is continuation only while a folded
-    # `>` block is open; anywhere else it is a stray like any other.
-    it "rejects an indented key when no folded block is open, and still allows the note's continuation" do
-      indented = "## 024.30.1 A finding\n\n```yaml\nstatus: open\nkind: defect\n target: 0.2.4\n```\n\nprose\n\n"
-
-      expect(DeferredFindings.unknown_keys(indented)).to eq("024.30.1" => [" target: 0.2.4"])
-
-      with_note = "## 024.30.1 A finding\n\n```yaml\nstatus: open\nkind: defect\nuser-visible: no\n" \
-                  "user-visible-note: >\n  a reason, folded\n  across lines\ntarget: 0.2.4\n```\n\nprose\n\n"
-
-      expect(DeferredFindings.unknown_keys(with_note)).to eq({})
-    end
-
-    # Round 12's second half: `## 024.99` with no title is invisible to
-    # ENTRY_HEADING and METADATA_BLOCK *symmetrically*, so "parses every
-    # entry" compares two identical sets and an open, uncited entry
-    # rides through every guard unchecked -- the exact failure the
-    # header of this file names as the spec's reason to exist. The
-    # loose pre-scan breaks the symmetry: anything that looks like an
-    # entry heading must be one the grammar reads.
-    it "reports a heading the entry grammar cannot read" do
-      titleless = "## 024.99\n\n```yaml\nstatus: open\nkind: defect\nuser-visible: yes\n```\n\nprose\n\n"
-
-      expect(DeferredFindings.unreadable_headings(titleless)).to eq(["## 024.99"])
-      expect(DeferredFindings.unreadable_headings(entry("024.30.1", status: "open", kind: "defect"))).to eq([])
-    end
-
     it "excludes an entry that declares no user-visible half" do
       opted_out = entry("024.30", status: "open", kind: "defect", user_visible: "no")
 
@@ -381,24 +268,6 @@ RSpec.describe "deferred findings metadata" do
       end
 
       expect(incomplete.keys).to be_empty
-    end
-
-    it "uses only keys the grammar defines" do
-      unknown = DeferredFindings.unknown_keys(deferred)
-
-      expect(unknown).to be_empty,
-                         "entries with keys the grammar does not define: " +
-                         unknown.map { |number, extra| "#{number} (#{extra.join(", ")})" }.join("; ") +
-                         ". A misspelled key is silently ignored by every guard -- " \
-                         "fix the spelling or add the key to KNOWN_KEYS with its rule."
-    end
-
-    it "has no heading the entry grammar cannot read" do
-      unreadable = DeferredFindings.unreadable_headings(deferred)
-
-      expect(unreadable).to be_empty,
-                            "headings the entry grammar cannot read: #{unreadable.join("; ")}. " \
-                            "An unreadable heading is an entry no guard checks -- give it a title."
     end
 
     it "gives a reason with every `user-visible: no`" do
