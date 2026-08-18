@@ -246,10 +246,17 @@ module Ovallsp
       when "initialize"
         @diagnostics_mode = diagnostics_mode_from(message[:params])
         @observation_test_command = observation_test_command_from(message[:params])
+        # Kept, not merely consulted. Until 0.2.5 trust was read out of
+        # these params at `maybe_start_agent` and nowhere else, so every
+        # other request that reaches code execution had to be trusted to
+        # not need it -- which is a property of the callers, not of the
+        # server. `initialize` is the only message that carries it, so
+        # this is the only place it can be recorded.
+        @workspace_trusted = workspace_trusted?(message[:params])
         respond(id, initialize_result)
         load_static_plugins(message[:params])
         start_cold_index
-        maybe_start_agent(message[:params])
+        maybe_start_agent
       when "initialized"
         # no-op: nothing to do yet at this task's scope.
       when "shutdown"
@@ -783,6 +790,13 @@ module Ovallsp
     # itself returns immediately rather than blocking on however long a
     # full Rails boot takes.
     def restart_agent_result(_params)
+      # The Agent executes the workspace's own Rails and Bundler code,
+      # which is the thing trust gates. A restart is another way to start
+      # it, so it asks the same question -- and it must ask the *stored*
+      # answer, because a restart request carries no initializationOptions
+      # of its own to inspect.
+      return { acknowledged: false, reason: "workspace not trusted" } unless trusted_for_execution?("restarting the Runtime Agent")
+
       # A user-initiated restart always gets a fresh attempt, regardless
       # of how many *automatic* attempts were already exhausted --
       # "manual restart" is its own capability (Task 022), not gated by
@@ -839,6 +853,12 @@ module Ovallsp
     # the client is expected to show its own "running…" affordance for
     # the request's duration, not to expect a fast reply.
     def run_observed_tests_result(params)
+      # This runs a command, and `testCommand` lets the caller choose it.
+      # `valid_test_command?` constrains its *shape*, never its meaning --
+      # `["curl", "..."]` is a well-shaped command. Trust is what decides
+      # whether running the workspace's code is allowed at all.
+      return { sampleCount: 0, methodCount: 0 } unless trusted_for_execution?("running observed tests")
+
       override = params.is_a?(Hash) ? params[:testCommand] : nil
       command = valid_test_command?(override) ? override : @observation_test_command
 
@@ -1421,9 +1441,12 @@ module Ovallsp
     # code executionしていないか"). The VS Code extension always sends this
     # explicitly, so real usage is unaffected; a client that never mentions
     # trust at all gets static-only behavior rather than an implicit grant.
-    def maybe_start_agent(params)
-      unless workspace_trusted?(params)
-        @logger.warn("workspace trust not confirmed; not starting the Runtime Agent")
+    # Takes no argument: the trust it needs is the value recorded at
+    # `initialize`, not something a caller supplies. It used to take the
+    # params and inspect them, which let a caller believe passing
+    # `workspaceTrusted: true` was what granted permission.
+    def maybe_start_agent
+      unless trusted_for_execution?("starting the Runtime Agent")
         return
       end
 
@@ -1563,6 +1586,21 @@ module Ovallsp
     def workspace_trusted?(params)
       options = params && params[:initializationOptions]
       options.is_a?(Hash) && options[:workspaceTrusted] == true
+    end
+
+    # The one place that decides whether this server may execute the
+    # workspace's code, so that a new entry point cannot be added without
+    # meeting it. Fail-closed: `@workspace_trusted` is nil before
+    # `initialize` has been handled at all, and nil is not true.
+    #
+    # Named for what it protects rather than for the flag it reads --
+    # `maybe_start_agent`'s own comment already explains why anything but
+    # a literal `true` is a refusal.
+    def trusted_for_execution?(what)
+      return true if @workspace_trusted
+
+      @logger.warn("workspace trust not confirmed; not #{what}")
+      false
     end
 
     def document_symbol_result(params)

@@ -73,9 +73,17 @@ RSpec.describe "Ovallsp::Server environment status (Task 020)" do
     expect(server.send(:status_result, nil)).to eq(state: "indexing")
   end
 
+  # Trust is now supplied, where this example used to send `params: {}`.
+  # That is not a fixture detail: restarting the Agent runs the
+  # workspace's own code, and 0.2.5 gated it on the trust the server
+  # records at `initialize`. An untrusted restart is refused, which
+  # `server_trust_execution_gates_spec.rb` asserts; what *this* example
+  # is about is the no-bootstrap-configured path not raising, so it grants
+  # trust and keeps testing that.
   it "acknowledges ovallsp/restartAgent without raising, even with no Agent bootstrap configured" do
     input =
-      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      frame(jsonrpc: "2.0", id: 1, method: "initialize",
+            params: { initializationOptions: { workspaceTrusted: true } }) +
       frame(jsonrpc: "2.0", id: 2, method: "ovallsp/restartAgent", params: nil) +
       frame(jsonrpc: "2.0", method: "exit", params: nil)
 
@@ -91,6 +99,12 @@ RSpec.describe "Ovallsp::Server environment status (Task 020)" do
     )
     restart_count = 0
     server.define_singleton_method(:restart_agent) { restart_count += 1 }
+
+    # Same reason as the example above: `restart_agent_result` refuses an
+    # untrusted workspace now, and this server never handled an
+    # `initialize` to be told. The subject here is the retry cancellation,
+    # not the gate.
+    server.instance_variable_set(:@workspace_trusted, true)
 
     server.send(:handle_agent_unavailable, "test crash")
     server.send(:restart_agent_result, nil)
