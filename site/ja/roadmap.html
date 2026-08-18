@@ -195,6 +195,25 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v024">
+          <div class="tl-version">
+            <span class="v">0.2.4</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>信頼していないワークスペースが、実行対象を選べていました</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>バイナリやコマンドを指定する設定は、フォルダを信頼するまでワークスペーススコープから無視されるようになりました。</strong>制限モードでリポジトリを開くと、ウィンドウを開いた約2秒後、Workspace Trust が参照されるより前に、そのリポジトリが指定したプログラムが実行されていました。ユーザー設定・マシン設定は影響を受けず、静的解析は未信頼でも従来どおり動作します。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            セキュリティ修正です。それ以外にエディタの動作は変わらず、capability も
+            動きません &mdash; manifest は元々これを約束しており、本リリースはそれを
+            真にするものです。
+          </p>
+        </article>
+
         <article class="tl-item" id="v023">
           <div class="tl-version">
             <span class="v">0.2.3</span>

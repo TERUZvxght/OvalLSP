@@ -200,6 +200,25 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v024">
+          <div class="tl-version">
+            <span class="v">0.2.4</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>An untrusted workspace could choose what the extension runs</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Settings that name a binary or a command are now ignored from workspace scope until you trust the folder.</strong> Opening a repository in Restricted Mode used to run a program of that repository&rsquo;s choosing, a couple of seconds after the window opened and before Workspace Trust was consulted. User and machine settings are unaffected, and static analysis still works untrusted.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            A security fix. Nothing an editor does changes otherwise, and no
+            capability moves &mdash; the manifest already promised this and the
+            release makes it true.
+          </p>
+        </article>
+
         <article class="tl-item" id="v023">
           <div class="tl-version">
             <span class="v">0.2.3</span>

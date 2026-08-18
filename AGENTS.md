@@ -1,11 +1,48 @@
 # Development Guidelines
 
+## Read this first, every time
+
+**Why this project exists, and what "finished" means:**
+[`docs/design/docs/01-product-requirements.md`](docs/design/docs/01-product-requirements.md)
+section 0. It is short. Read it at the start of a session and again
+whenever a task has run long.
+
+In one paragraph, so that a lost pointer is not a lost purpose: Ruby/Rails
+LSP support is markedly weaker than other languages', so every guarantee
+falls to hand-written tests. This product takes the basic half back —
+**type checking and calls to methods that do not exist** — so that tests
+can narrow to what they are actually for, strengthening Ruby's
+conventions rather than fighting them. **1.0.0 is where that becomes
+usable in practice** and a Ruby/Rails engineer is measurably better off;
+its scope is *make the foundation solid, with Pylance as the reference*.
+Conveniences that are not load-bearing — completion candidates sorted
+most-useful-first, say — are 2.x.x.
+
+**Everything else in this file, and every release, register entry and
+review round, is instrumental to that.** A wrong answer is worse than no
+answer, because the foundation's value is that it can be trusted — **but
+letting 1.0.0 recede forever in pursuit of accuracy is worse than either**.
+Nothing is perfect at first. So a wrong answer on a path people walk daily
+blocks the release, one on a path almost nobody walks is recorded as a
+known limitation and ships, and when you cannot tell which it is, *measure
+the frequency* instead of estimating it. "It is a real bug" and "it is
+worth fixing now" are different claims; treating them as one makes
+everything top priority and ships nothing.
+
+The maintainer's role in a session is to notice when an agent has gone a
+long way in the wrong direction and correct the course toward that goal.
+The single largest threat to it is context compaction dropping the goal
+while the work continues — which is why it is written here rather than
+carried in a conversation.
+
+
 - Never implement functionality speculatively or in advance. Apply the YAGNI principle rigorously, and implement only what is explicitly required for the current task.
 - Write tests first: a test must be observed failing before the code that makes it pass is written. Behaviour that no test fails on when it is reverted counts as a defect. See `CLAUDE.md` for the full rule and for how to verify it mechanically.
 - When asking another agent for an independent review, do not tell it what not to count, where to concentrate, or that finding nothing is fine. Each of those narrows what it can report, and a falling defect count then measures the instructions rather than the code. See `CLAUDE.md` for the rule and 024.36 for the control run that established it.
 - **Work in progress lives in `docs/design/tasks/`, not in a transcript.**
   The open findings of the current review loop are in the highest-numbered
-  `NNN-*.md` there — 028 for 0.2.3. Anything a reviewer reported and
+  `NNN-*.md` there — `030-0.2.4-review-loop.md` for the current
+  foundation release. Anything a reviewer reported and
   nobody has fixed exists only in that file; agent reports are not kept.
   Read it before deciding what to do next, and add to it before a long
   session ends.

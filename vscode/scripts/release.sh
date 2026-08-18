@@ -34,6 +34,20 @@ if [ ! -f "$PAT_FILE" ]; then
   exit 1
 fi
 
+# The header above tells you to `chmod 600` this file, and until 0.2.4
+# nothing checked that you had. The file holds a Marketplace publish
+# token; on a shared or backed-up machine, mode 644 hands it to every
+# local account and to anything that walks $HOME. A documented
+# precaution that is never verified is a precaution only for the person
+# who remembers it, which is the class of defect this release is about.
+PAT_MODE="$(stat -f '%Lp' "$PAT_FILE" 2>/dev/null || stat -c '%a' "$PAT_FILE" 2>/dev/null || echo '')"
+if [ -n "$PAT_MODE" ] && [ "$(( 8#$PAT_MODE & 8#077 ))" -ne 0 ]; then
+  echo "release.sh: $PAT_FILE is mode $PAT_MODE -- readable beyond its owner." >&2
+  echo "This file is a Marketplace publish token. Fix it and re-run:" >&2
+  echo "  chmod 600 $PAT_FILE" >&2
+  exit 1
+fi
+
 # Read into a variable, never into a shell option or anything that could
 # land in a trace/log -- and this script never sets -x, deliberately.
 VSCE_PAT="$(cat "$PAT_FILE")"

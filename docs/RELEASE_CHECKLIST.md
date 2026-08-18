@@ -54,6 +54,7 @@ Marketplace Preview公開)固有の22項目のゲートを設ける。`make-fina
 | 17 | clean install/update/uninstall PASS | ✅ 既存の"VS Code isolated install"ステップ(Task 022由来) |
 | 18 | no process leftover | ✅ `scripts/vsix_semantic_smoke.rb`のprocess group kill(0)確認+`clientLifecycle.test.ts`のlifecycle race修正 |
 | 19 | README/Support Matrix/CHANGELOG整合性 | ✅ 目視確認(Task 023.6、Ruby 3.3の扱いをSUPPORT_MATRIX.md/RELEASE_CHECKLIST.md/README.md/KNOWN_LIMITATIONS.mdで統一) |
+| 19.1 | Workspace Trust: an untrusted folder cannot choose what is executed | ✅ 0.2.4 で追加・実機検証済み | `vscode/src/test/unit/workspaceTrust.test.ts` が manifest 側を fail-closed で固定(設定が増えたら restricted 宣言か「実行に影響し得ない」論証のどちらかを強制)。実機手順は下の節を参照 — **対照(公開版で再現すること)を必ず取る**。0.2.3 は約2秒後に7回実行、0.2.4 は0回、信頼済みでは7回(正当な機能が生きていること)|
 | 20 | Marketplace preflight PASS | ⚠️ 手動確認のみ — 実際のMarketplace publisher登録・アップロードUIでのpreflightはpublish実行時まで発生しない(Task 023.8で確認事項として提示) |
 | 21 | repository visibility change is deliberate, not implicit | ✅ Task 023.8完了時点では`gh repo view`で`PRIVATE`のまま変更していないことを都度確認していた。その後、ユーザーの明示的な指示によりpublic化(git履歴の実メールアドレス除去・リポジトリ作り直し・Issues無効化を経た上で)— visibility変更自体がpublish処理の副作用として暗黙に起きたことは一度もない |
 | 22 | awaiting user approval before actual publish | ⚠️ 本タスクのどのコマンドも`vsce publish`を実行しない設計(`docs/PUBLISHING.ja.md`) — ユーザーの明示承認を待つ状態 |
@@ -95,3 +96,28 @@ green は `docs/SUPPORT_MATRIX.md` の OS 行が記録している。
    そのまま拡張して使う
 7. `vscode-languageclient`の破壊的メジャーアップデート(9.x→10.x、npm audit
    の残存3件を解消する)の計画的な追従
+
+## Workspace Trust の実機検証手順(0.2.4)
+
+`restrictedConfigurations` は manifest の宣言なので、spec は「宣言されて
+いること」しか固定できません。**実際に無視されるか**は VS Code 本体の挙動で、
+実機でしか確かめられません。0.2.4 の検証で判明した落とし穴を含めて記録します。
+
+1. `--user-data-dir` は**短いパスにする**(例 `/tmp/ovt/u_x`)。VS Code は
+   そこへ `1.13-main.sock` を作るため、約103文字を超えると `listen EINVAL`
+   でウィンドウが存在する前にメインプロセスが死ぬ。この場合マーカーは当然
+   出ないので、**修正が効いたように見える**。0.2.4 の準備で実際に踏んだ。
+2. 起動は `code` CLI ではなく
+   `/Applications/Visual Studio Code.app/Contents/MacOS/Code` を使う。
+   CLI は `--install-extension` には使えるがウィンドウを保持しない。
+3. **マーカーが出ないことを、そのまま結論にしない。** ウィンドウが開いたことを
+   `<udd>/logs/*/window1/exthost/**/1-OvalLSP.log` の存在で、Core が起動した
+   ことを `ps` で確認する(陽性対照)。
+4. **公開済みの版で対照を取る。** 再現しない装置で修正版を試しても何も言えない。
+5. 未信頼であることは共有 trust store(`content.trust.model.key`)を印字して
+   確認する。プロンプトの設定だけに頼らない。
+6. `.vscode/settings.json` だけでなく **`.code-workspace` の settings ブロック**
+   でも試す。0.2.3 ではこちらでも7回実行された。
+
+**未検証:** Windows / Linux(macOS のみ実施)。セッション中に信頼を付与した
+場合の再適用。
