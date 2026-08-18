@@ -195,6 +195,36 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v025">
+          <div class="tl-version">
+            <span class="v">0.2.5</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>土台と、その上に載っていた答え</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>モデルの <code>scope</code> が、それが属するモデルについて答えます。</strong>別の名前空間に同名クラスがあると、<code>Shipping::Order.recent.first.</code> の補完が別モデルのメソッドを並べ、定義ジャンプは何も見つけませんでした。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>ネストしたコア型が名前空間を保ちます。</strong><code>File.stat(path)</code> は <code>Stat</code> として答えており、同名のワークスペースクラスに乗っ取られていました。読み込まれる RBS 型 334 種のうち 240 種がネストです。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Workspace Trust が実行するすべてを守ります。</strong>Runtime Agent だけでなく、再起動・observed tests の実行・プラグイン読み込みも確認するようになりました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>キャッシュが所有者のみ読める権限になりました。</strong>あなたのソースのメソッド本体を保持していますが、共有マシンでは他の全アカウントから読めていました。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            capability の追加はありません。答えの下にある土台と、それが原因で
+            間違っていた答えのリリースです。
+          </p>
+        </article>
+
         <article class="tl-item" id="v024">
           <div class="tl-version">
             <span class="v">0.2.4</span>
