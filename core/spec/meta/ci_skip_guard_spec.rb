@@ -176,4 +176,39 @@ RSpec.describe "the CI guard against a silently skipped suite" do
       expect(count_step.fetch("run")).to include("File.exist?")
     end
   end
+
+  # 0.2.3 committed a home directory path into a task document *and* a
+  # commit message. The tree half is caught by
+  # `home_path_guard_spec.rb`, which runs everywhere; the message half
+  # has nowhere to run but CI, because the Core jobs check out shallow
+  # and a shallow scan would call the whole history clean. So it lives in
+  # the one job that already fetches full history -- and, being CI-only
+  # text, it is the same class as everything above: deleting the step
+  # leaves every check green while the disclosure path reopens.
+  describe "the commit-message half of the home-path guard" do
+    let(:secret_scan_job) do
+      YAML.safe_load(workflow_text).fetch("jobs").fetch("secret-scan")
+    end
+
+    it "still runs the message scan as an executed step" do
+      step = secret_scan_job.fetch("steps").find { |s| s["run"]&.include?("check_home_paths.rb") }
+
+      expect(step).not_to be_nil,
+                          "the commit-message home-path scan is no longer an executed step of secret-scan"
+      expect(step.fetch("run")).to include("--messages")
+    end
+
+    it "keeps the full history the scan refuses to run without" do
+      checkout = secret_scan_job.fetch("steps").find { |s| s["uses"].to_s.start_with?("actions/checkout") }
+
+      expect(checkout).not_to be_nil, "secret-scan no longer checks the repository out"
+      expect(checkout.fetch("with").fetch("fetch-depth")).to eq(0)
+    end
+
+    it "has a Ruby to run it with" do
+      uses = secret_scan_job.fetch("steps").filter_map { |s| s["uses"] }
+
+      expect(uses).to include(a_string_including("ruby/setup-ruby"))
+    end
+  end
 end

@@ -16,6 +16,18 @@
   was prepared twice in parallel because a pointer on `main` named a
   file that existed only on a branch nothing named. `CLAUDE.md` has the
   rule; 028's "Two preparations, one release" records the episode.
+- **Never write a real absolute home path into the tree or a commit
+  message.** Write `$HOME`, `~`, or a description. This is machine-checked
+  now, in both channels — `core/spec/meta/home_path_guard_spec.rb` for
+  tracked content and ci.yml's secret-scan job for commit messages, both
+  reading the one detector in `scripts/check_home_paths.rb`. The prose
+  rule alone missed it twice, which is why the check exists; `CLAUDE.md`
+  has the rule and what it deliberately does not cover.
+- **Run the tool the thing under test runs.** 0.2.3 read a release
+  gate's `grep` result in a shell where the name resolves to a `ugrep`
+  wrapper that skips binary files, contradicted the gate, and filed a
+  register entry against a defect that did not exist. `CLAUDE.md`'s
+  measurement section carries this with the others.
 - **A measurement that disagrees with a spec you have watched fail is
   wrong until proven otherwise.** The corpus comparisons that went wrong
   are catalogued in `CLAUDE.md`'s measurement section — read them before

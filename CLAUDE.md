@@ -245,6 +245,18 @@ version *before* it runs; and put a control in the diff — a category the
 change cannot affect, which must come out equal. 0.2.1's control was
 `unresolved-constant`, identical at 9,550 on both sides.
 
+**A tool with the right name is not necessarily the tool under test.**
+0.2.3's pre-publish gate reported that the packaged artifact's compiled
+extensions embed the build machine's home path. The check was re-run by
+hand to confirm, came back clean, and a register entry was filed saying
+the gate's warning was blind. Both commands were the same text; the
+gate's ran under `#!/usr/bin/env bash` and got `/usr/bin/grep`, while
+the hand-run went through a shell where `grep` is a function wrapping
+`ugrep`, which does not report matches in binary files without `-a`.
+The entry was withdrawn. The general form: when you re-run a check to
+confirm it, confirm you invoked the same implementation — `type -a`, or
+just call the absolute path the script calls.
+
 **And when a measurement disagrees with a spec you have already watched
 fail, the measurement is wrong until proven otherwise.** That is what
 caught the third one; nothing about re-reading the numbers would have.
@@ -328,3 +340,27 @@ dispositions.
 - This repository is public. Never commit or push secrets, credentials, tokens, private keys, private URLs, personal information, or personal email addresses.
 - Treat Git author/committer metadata, generated artifacts, logs, fixtures, snapshots, and copied command output as possible disclosure paths, not only source files.
 - Use an established public noreply address for commit metadata. Before every push, inspect the complete outgoing diff and commit range and run the repository's secret scan; stop rather than push if any sensitive or personal data may be present.
+
+**One of these is now machine-checked, because the prose alone failed
+twice.** 0.2.1's record named a scaffolded application by its absolute
+path, and 0.2.3's pre-publish gate quoted the build machine's home
+directory into a task document *and* a commit message — the second
+channel being one the line above already names, which is the point: a
+rule that lists disclosure paths does not make anyone see them. Per the
+same-place rule, the third pass is a countermeasure.
+
+`scripts/check_home_paths.rb` is the single detector, read by both places
+that must agree about it: `core/spec/meta/home_path_guard_spec.rb` scans
+tracked content on every suite run, and ci.yml's secret-scan job runs
+`--messages` over commit messages, which no tree scan can see. Adding a
+name to its `SYNTHETIC` list is a deliberate edit with a reason; an
+unknown name fails. The script refuses a shallow clone rather than
+scanning one commit and reporting the history clean.
+
+Note what it does *not* do: it guards content arriving from here on, not
+history. The instance already published in `main` stays, because
+rewriting that history would orphan the `buildCommit` SHAs baked into the
+0.2.1 and 0.2.2 VSIXs the Marketplace still serves — an integrity loss
+for no privacy gain, since the name is the published Marketplace
+publisher id in `vscode/package.json` regardless. That is a decision, and
+`docs/design/tasks/028-0.2.3-review-loop.md` records it.

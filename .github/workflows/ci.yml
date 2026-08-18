@@ -284,6 +284,22 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      # 0.2.3: a commit *message* is a disclosure path a tree scan cannot
+      # see, and gitleaks scans blobs rather than messages -- 0.2.3 put a
+      # home directory path in both halves and only the tree half would
+      # have been caught. This job is where it belongs because it already
+      # fetches full history above; the script refuses a shallow clone
+      # outright rather than scanning one commit and reporting the
+      # history clean. `core/spec/meta/home_path_guard_spec.rb` reads the
+      # same scanner for tracked content, so the two cannot diverge, and
+      # `ci_skip_guard_spec.rb` pins that this step still exists.
+      - name: No real home directory path in any commit message
+        run: ruby scripts/check_home_paths.rb --messages
+
   # Task 023.7: verifies a freshly-packaged VSIX never contains this
   # build machine's own absolute paths -- a regression guard for the
   # native-extension-build-log leak found and fixed in Task 023.6
