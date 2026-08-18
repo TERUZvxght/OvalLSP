@@ -98,6 +98,44 @@ Two traps that cost this project real time: the real-Rails suites need
 examples while `rspec` still exits 0; and `grep` in some shells here is a
 `ugrep` wrapper that silently skips binary files.
 
+### A twelve-line reproduction of the `include` case
+
+Added after the briefing was written, because a minimal reproduction is
+worth more than 213 files. This is a **fact**, not a diagnosis: it shows
+what the ancestor walk returns, and stops there.
+
+```ruby
+module Rackish
+  module Helpers
+    def helper_method; end
+  end
+
+  class Request
+    include Helpers
+    def call = helper_method
+  end
+end
+```
+
+`HierarchyIndex#ancestors("Rackish::Request", singleton: false)` returns:
+
+```
+::Rackish::Request  synthesised=false
+Object              synthesised=true
+Kernel              synthesised=true
+BasicObject         synthesised=true
+```
+
+`Helpers` is absent. The chain still reaches `BasicObject`, every entry
+present is `ancestor_known?`, none declares `method_missing`, and none is
+reopened elsewhere — so `closed_nominal?` returns true and the check
+reports `helper_method` as undefined on a class that plainly has it.
+
+What this establishes: an `include` can be missing from the chain while
+every test `closed_nominal?` applies still passes. What it does **not**
+establish: that this accounts for the 12 findings in that category, or
+that resolution is where the fix belongs.
+
 ## 4. The code
 
 ### `Diagnostics::Engine#unknown_method_findings`
