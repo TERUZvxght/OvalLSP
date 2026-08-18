@@ -3592,3 +3592,107 @@ round 10's finding, never failed a round, and removing it would
 recreate a recorded defect. Until the direction above lands, key
 typos in this file are once again caught by nothing; a reviewer
 reading the register should know that, which is this note's job.
+
+## 024.69 The two suites that drive a real editor are run by nobody but the maintainer
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing an editor user sees. The gap is in verification coverage:
+  the suites still pass once run, and 0.2.3's gate ran them. What is
+  missing is anything that runs them between releases.
+target: 0.2.4
+```
+
+**Area:** `.github/workflows/ci.yml` (the `vscode` job),
+`vscode/package.json`'s `test:integration` / `test:integration:packaged`
+
+CI runs `npm run test:unit` for the extension and nothing else. Both
+integration suites — the only tests that launch a real VS Code and
+drive the extension against a real Core, and the ones
+`RELEASE_CHECKLIST`'s Task 023 gate items #4 and #5 are about — run
+only when a maintainer runs `make-final-review-bundle.sh` on an Apple
+Silicon Mac. Between releases they are executed by nothing.
+
+**How it surfaced.** 0.2.3's pre-publish gate aborted at
+`test:integration` with `spawn .../Contents/MacOS/Electron ENOENT`.
+VS Code renamed the macOS bundle's main executable from `Electron` to
+`Code` in 1.110, `runTest.ts` pins no version so it always downloads
+current stable (1.133.0 on the day), and the pinned
+`@vscode/test-electron@2.5.2` still computed the old path. The
+harness had been broken for every VS Code release since 1.110 and the
+tree recorded gate #4/#5 as green throughout, because the only thing
+that could have contradicted that was the gate itself. Fixed here by
+the bump to `@vscode/test-electron@^3.1.0`, which resolves the
+executable by product name with a "sole regular file in
+`Contents/MacOS/`" fallback — but the bump is the instance, not the
+class.
+
+**Why this is the same shape as a green suite that did not run.**
+CLAUDE.md already carries that rule for the real-Rails and capability
+suites, whose failure mode is skipping to zero examples while `rspec`
+exits 0. This is the same failure with the reporting removed
+entirely: not a suite that reports nothing, a suite that no automated
+run ever reaches. The asymmetry is what made it durable — CI is green
+on every PR, so nothing prompts anyone to doubt the row.
+
+**Direction:** run both suites in CI on a schedule at minimum, and on
+release PRs at best. `test:integration` needs a display on
+`ubuntu-latest` (`xvfb-run`, the usual arrangement for
+`@vscode/test-electron`); `test:integration:packaged` additionally
+needs the vendoring step, whose native gems are built per platform,
+so the packaged variant is honest only on macOS and wants a
+`macos-14` runner. Deferred rather than done here because adding two
+CI jobs during a release gate is an addition, not a fix, and the
+`macos-14` half is a billing decision that belongs to the maintainer.
+
+## 024.70 The packaged-VSIX path warning is scoped to `$HOME`, and this release was not built under it
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  The functional half is already mitigated at spawn time (023.8), so
+  no user sees a failure. What is lost is the gate's own report:
+  a reader of the log cannot tell whether the artifact embeds an
+  absolute Ruby path.
+target: 0.2.4
+```
+
+**Area:** `make-final-review-bundle.sh`, "Package contents
+inspection"
+
+The step has a hard-fail `grep -rlF "$HOME"` (excluding compiled
+extensions) and, beside it, a warning-level `grep -rlF "$HOME"`
+restricted to `*.bundle`/`*.so`/`*.dylib` whose job is to report that
+`prism.bundle` and `rbs_extension.bundle` embed this machine's
+absolute libruby path as `LC_LOAD_DYLIB` (023.8).
+
+Both greps are anchored on `$HOME` because 023.8 was written on a
+machine whose Ruby came from rbenv, where the path is
+`~/.rbenv/versions/<x>/lib/libruby.<x>.dylib`. 0.2.3's artifact was
+built against Homebrew Ruby 3.4.10, so the embedded path is
+`/opt/homebrew/opt/ruby@3.4/lib/libruby.3.4.dylib` — outside `$HOME`,
+and the warning printed nothing. `otool -L` on all four bundles in
+the 0.2.3 VSIX confirms the reference is present exactly as before.
+
+**Root cause:** the hard-fail check is *correctly* `$HOME`-scoped —
+it is looking for this machine's own identity leaking into shipped
+text, and a broader `/Users|/home` pattern false-positives on `rbs`'s
+bundled stdlib documentation, which the script's own comment records.
+The warning was given the same scope by proximity, but it is asking a
+different question: not "did this machine's identity leak" but "what
+absolute Ruby does this payload link against". That question has an
+exact answer that does not involve `$HOME` at all.
+
+**Direction:** ask the linker rather than grepping for a path.
+`otool -L` each compiled extension in the unpacked VSIX and report
+every non-`/usr/lib` `LC_LOAD_DYLIB` entry, which names the embedded
+libruby on any installation layout — rbenv, Homebrew, ruby-build,
+system. Keep it warning-level: 023.8's spawn-time
+`DYLD_LIBRARY_PATH` mitigation is what makes the embedded path
+tolerable, and that is unchanged. Deferred because it is a change to
+the release gate itself, made while running it.
