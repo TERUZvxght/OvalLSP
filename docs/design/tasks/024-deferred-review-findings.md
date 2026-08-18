@@ -3659,3 +3659,79 @@ so the packaged variant is honest only on macOS and wants a
 `macos-14` runner. Deferred rather than done here because adding two
 CI jobs during a release gate is an addition, not a fix, and the
 `macos-14` half is a billing decision that belongs to the maintainer.
+
+## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing an editor user sees. The suite runs serially today and is
+  green that way; what the shared fixture costs is the ability to run
+  it any other way, which is a contributor and CI cost.
+target: 0.2.4
+```
+
+**Area:** `core/spec/fixtures/rails_real` (its `db/*.sqlite3`, `tmp/`
+and `.bundle`), `core/spec/integration/real_rails_spec.rb`,
+`core/spec/e2e/capabilities_spec.rb`
+
+The suite's cost is not its size. Measured at `4f19c67` on
+darwin-arm64 / Ruby 3.4.10, over a full run of 1,964 examples taking
+172s wall (example time is 99% of wall, so this is not load
+overhead):
+
+- **1,125 examples — 57% of the suite — take under 10ms each and
+  total 0.3 seconds between them.**
+- The ten slowest examples are **45%** of all example time; the
+  slowest single one is **20.9s**, 12% of the whole suite on its own.
+- By file: `e2e/capabilities_spec.rb` is **65.1s (38%)**, then
+  `agent_process_manager_spec.rb` 10.3s, `integration/real_rails_spec.rb`
+  9.5s, `server_rails_invalidation_spec.rb` 9.4s. The top entries all
+  spawn real processes and wait on them — the diagnostics examples
+  (G6–G14) wait for a Rails Runtime Agent to come up.
+
+So parallelism is the lever, and it works — measured, with the example
+count as the control on both sides:
+
+| arrangement | wall | speedup | examples | result |
+|---|---|---|---|---|
+| serial | 172s | 1.0x | 1,964 | 0 failures |
+| 3 workers, by file | 67s | 2.6x | 1,964 | 0 failures |
+| 8 workers, by example | 24s | 7.2x | 1,964 | **1 of 3 runs failed** |
+
+Two ceilings, both structural. **By file it stops at 2.6x** — a fourth
+worker buys nothing, because `capabilities_spec.rb` is one 65.1s file.
+**By example it stops near 8x**, at the 20.9s of the single slowest
+example.
+
+**The blocker is the fixture, not the harness.** One run in three at
+eight workers failed `real_rails_spec.rb:544` ("uses the fixture's own
+Gemfile, not the parent's genuine BUNDLE_GEMFILE") with
+`user_email_column` nil — the app's schema query returning nothing.
+That example passes 3 of 3 run on its own, and the full suite passed 3
+of 3 serially the same day, so it is contention rather than an
+inherently flaky example: every worker drives the same
+`core/spec/fixtures/rails_real`, whose sqlite database and `tmp/` are
+shared mutable state.
+
+The 3-worker run passed, but that is not evidence of safety — it puts
+`capabilities_spec` and `real_rails_spec` in different workers, both
+touching Rails at once, so it has the same hazard at a lower rate. One
+green run does not distinguish safe from lucky.
+
+**Direction:** isolate the fixture per worker before adding any
+parallel runner — a copy of `rails_real` per worker, or at minimum a
+worker-scoped database path and `tmp/`. With that done, no gem is
+required: distributing `file:line` locations by measured runtime is
+what produced the 24s figure above. Note when doing it that 42
+locations hold more than one example each (table-driven `it`s sharing
+a line, the largest being 47 at
+`server_word_at_cursor_spec.rb:71`), so a splitter must weight and
+assign whole locations — the first attempt here did not, ran 2,991
+examples instead of 1,964, and its timing meant nothing.
+
+Worth it because CI's Core job is 5m34s today and this is most of it;
+the same measurement says a fixture-isolated 8-way split lands near a
+minute.
