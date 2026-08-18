@@ -202,6 +202,22 @@ build and smoke output for anomalies than a person scrolling it. What is
 *not* within the rule is a script — or an agent — reaching this prompt
 without a decision behind it, or reaching it and deciding for itself.
 
+**A patch does not need the owner asked again.** Their standing position,
+given during 0.2.4: for a *patch* — no capability row moves, by the table
+above — the go-ahead is already granted, **provided the secret and privacy
+checks have actually been run and have passed**. Concretely that means
+`release.sh` reached its publish step, which refuses a `.vsce-pat.local`
+readable beyond its owner; the token appears nowhere in the run's output;
+gitleaks is clean over the outgoing range; and
+`scripts/check_home_paths.rb` is clean in both modes. A minor or major
+release still asks, and so does a patch where any of those did not run.
+
+That is the whole of the delegation; it is not a general licence. It
+exists because this class of change fixes what was already promised and
+adds nothing, so the decision can honestly be made in advance — and it is
+written here because a permission carried only in a conversation is one
+compaction away from being either forgotten or assumed larger than it is.
+
 So the obligation transfers rather than disappears. Whoever answers the
 prompt on the owner's behalf must have read what the script printed
 before it — the vendored-core check, the payload hash, `vsce ls --tree`,
