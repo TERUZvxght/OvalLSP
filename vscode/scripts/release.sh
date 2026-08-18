@@ -40,7 +40,14 @@ fi
 # local account and to anything that walks $HOME. A documented
 # precaution that is never verified is a precaution only for the person
 # who remembers it, which is the class of defect this release is about.
-PAT_MODE="$(stat -f '%Lp' "$PAT_FILE" 2>/dev/null || stat -c '%a' "$PAT_FILE" 2>/dev/null || echo '')"
+# GNU first, BSD second, and the order is the whole point. GNU's `stat -f`
+# means *file system* status and succeeds with output that is not a mode
+# at all, so trying BSD's spelling first silently produced garbage on
+# Linux -- `8#<garbage>` then made the arithmetic fail and the refusal
+# never fire. BSD's `stat` rejects `-c` outright, so this order degrades
+# correctly in both directions. Caught by CI, on a check whose whole
+# purpose is refusing; it had only ever been exercised on macOS.
+PAT_MODE="$(stat -c '%a' "$PAT_FILE" 2>/dev/null || stat -f '%Lp' "$PAT_FILE" 2>/dev/null || echo '')"
 if [ -n "$PAT_MODE" ] && [ "$(( 8#$PAT_MODE & 8#077 ))" -ne 0 ]; then
   echo "release.sh: $PAT_FILE is mode $PAT_MODE -- readable beyond its owner." >&2
   echo "This file is a Marketplace publish token. Fix it and re-run:" >&2

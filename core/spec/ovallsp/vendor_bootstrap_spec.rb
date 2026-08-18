@@ -14,6 +14,14 @@ RSpec.describe Ovallsp::VendorBootstrap do
   # unnoticed; a development checkout that has run `bundle install` under
   # two Rubies has two, and that is the configuration `docs/SUPPORT_MATRIX.md`
   # asks a contributor to create when it says 4.0 is verified by hand.
+  # A platform this interpreter is definitely not on. The fixture used to
+  # name `x86_64-linux` literally, which is "another Ruby" on the
+  # maintainer's Mac and *this* Ruby on CI -- so the payload was
+  # compatible there, nothing was refused, and the example failed on
+  # Linux only. Derived from the running platform instead, so it is wrong
+  # everywhere it needs to be.
+  def other_platform = RUBY_PLATFORM.include?("darwin") ? "x86_64-linux" : "arm64-darwin99"
+
   def this_abi = RbConfig::CONFIG["ruby_version"]
   def other_abi = this_abi.start_with?("3.") ? "4.0.0" : "3.4.0"
 
@@ -82,14 +90,14 @@ RSpec.describe Ovallsp::VendorBootstrap do
 
       added = described_class.activate!(
         vendor_root: vendor_root,
-        manifest_path: manifest(dir, platform: "x86_64-linux"),
+        manifest_path: manifest(dir, platform: other_platform),
         load_path: load_path,
         warner: ->(message) { warnings << message }
       )
 
       expect(added).to be_empty
       expect(load_path).to be_empty
-      expect(warnings.join).to include("ovallsp:").and include("x86_64-linux")
+      expect(warnings.join).to include("ovallsp:").and include(other_platform)
     end
   end
 
