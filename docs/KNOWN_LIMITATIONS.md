@@ -470,6 +470,48 @@ has always been: per keystroke. It will be tried again on top of a
 publish path where one writer decides what is sent, rather than each
 publisher deciding for itself. <!-- documents: 024.57 -->
 
+## What the undefined-method check gets wrong on real code
+
+**Measured, over 213 files of installed gem source: 54 reports, and all
+54 were wrong.** No correct report in that corpus at all. The check is
+built on the policy that a false report is worse than a missed one, and
+on this evidence it is not meeting it.
+
+The cause that matters for application code: a class that `include`s a
+module **defined in the same file, from inside a nested namespace** loses
+that module's methods, and the check then reports them missing. Rails
+concerns are that shape. `Rack::Request` is the worked example — it
+includes `Helpers` and is told it has no `request_method`.
+
+The rest are metaprogrammed accessors (`attr_atomic` and friends), which
+static analysis cannot see and should be silent about rather than report,
+and platform-specific files that never run on your Ruby. <!-- documents: 024.76 -->
+
+**A call that does not exist is also missed through a relation.**
+`Order.recent.first.no_such_method` is reported by nothing, while
+`Order.find(id).no_such_method` is reported normally. Completion knows
+the type at that position — it will not offer the missing name — so the
+information is there and the check is not using it. `Model.scope.first`
+is an everyday idiom. <!-- documents: 024.77 -->
+
+## Completion answers a different type than hover, for one expression
+
+Where a class of yours shares a name with a nested core class — a `Stat`
+of your own, against `File::Stat` — hover and diagnostics now answer
+correctly and **completion still offers your class's methods**. One
+expression, two answers, depending on which feature you use.
+
+0.2.5 fixed the first two and not the third. Without a shadowing class,
+completion after `File.stat(path).` went from offering nothing to
+offering the right 167 entries, so this is an improvement that stopped
+half way rather than a new fault. <!-- documents: 024.78 -->
+
+## What `Model.first` completes to
+
+**Nothing.** `Order.first.` offers no completions, while
+`Order.recent.first.` offers the model's full list. The commoner idiom is
+the one that does not work. <!-- documents: 024.79 -->
+
 ## What a partial's local resolves to
 
 **Nothing.** In `_article.html.erb`, `article` is supplied by whatever

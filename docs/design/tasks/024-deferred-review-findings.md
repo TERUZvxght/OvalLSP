@@ -175,6 +175,10 @@ nobody can search is the recording habit without the benefit.
 | [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | open | 0.2.5 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | open | 0.3.0 | The trust gate stands in front of callers, not in front of what exec… |
 | [`024.75`](#02475-a-documented-field-selects-nothing) | open | 0.3.0 | A documented field selects nothing |
+| [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.3.0 | Fifty-four `unknown-method` reports over real gem source, and all of… |
+| [`024.77`](#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | open | 0.3.0 | A call to a method that does not exist is missed through a relation |
+| [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | open | 0.3.0 | Completion did not get the fix hover and diagnostics did |
+| [`024.79`](#02479-model-first-completes-to-nothing) | open | 0.3.0 | `Model.first` completes to nothing |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -3903,6 +3907,143 @@ influenced by the workspace. **Direction:** delete the field and the
 comment, or implement the lookup deliberately and gate it on trust like
 everything else that lets a workspace choose what runs. Deleting is the
 likely answer; the field was added in anticipation and never wired.
+## 024.76 Fifty-four `unknown-method` reports over real gem source, and all of them false
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+(`#unknown_method_findings`, `#closed_nominal?`),
+`core/lib/ovallsp/semantic/hierarchy_index.rb`
+
+Driven over 213 files of installed gem source (rack 3.2.6, i18n 1.15.2,
+concurrent-ruby 1.3.8) by 0.2.5's round 2: **54 `unknown-method`
+findings, judged false in all 54 cases, zero true positives.** 0.25 per
+file; 17 of 213 files affected. Identical on both branches, so this is
+not a regression — it is the state of the check.
+
+That number is the release's own standard turned on itself. Section 0
+names undefined-method detection as half of what 1.0.0 is, and section
+0.4 says a wrong answer is worse than no answer. A check whose entire
+output on real code is wrong is worse than the check being absent.
+
+Verified causes, from source:
+
+- **`include` of a module defined in the same file, from a nested
+  module** (11 findings) — `Rack::Request` includes `Helpers` at
+  `request.rb:784` and `def request_method` is at `:202`; `Rack::Response`
+  and `MockResponse` lose `buffered_body!` the same way; `Rack::Reloader`
+  loses `rotation`. **This is the one that matters**: Rails concerns are
+  exactly this shape, so the check reports confidently on ordinary
+  application code.
+- **Metaprogrammed accessors** (30) — `attr_atomic`, `attr_volatile`,
+  `singleton_class.send :alias_method`. A fair limitation of static
+  analysis; it should produce silence, not a report.
+- **Platform-specific files** (8) — JRuby-only sources, unreachable on
+  MRI.
+- **`::JSON.parse` inside a namespaced module** (2) — did not reproduce
+  in isolation, so context-dependent and not yet characterised.
+
+**Direction:** the check's stated policy is that a false report is worse
+than a missed one (`015`), and `#closed_nominal?` is what decides a
+receiver is safe to report about. It is treating "I resolved every
+ancestor I could find" as "the ancestor list is complete". The `include`
+case says it is not: a module referenced by a bare name from inside a
+nested namespace is not being resolved, and the receiver is then judged
+closed anyway. Until that resolution is right, a receiver whose chain
+contains an `include` the index could not resolve should produce no
+finding at all.
+
+## 024.77 A call to a method that does not exist is missed through a relation
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
+`core/lib/ovallsp/local_inferencer.rb`
+
+`Billing::Order.recent.first.tracking_label` — a method that does not
+exist on that model — is reported by nothing, on either branch. The same
+wrong call written as `Billing::Order.find(id).tracking_label` **is**
+reported.
+
+Completion knows the answer: at that position it offers 329 labels and
+`tracking_label` is not among them. So the type is available and the
+diagnostic path does not use it. Found by 0.2.5's round 2 while
+confirming the scope fix.
+
+`Model.scope.first.method` is an everyday Rails idiom, and undefined-call
+detection is half of what section 0 says 1.0.0 is, so this is the
+headline capability missing on the headline path.
+
+**Direction:** find where the diagnostic path's receiver typing diverges
+from completion's — the two disagree at the same position, which means
+one of them is asking a question the other is not. That divergence is the
+defect; the missing report is its symptom.
+
+## 024.78 Completion did not get the fix hover and diagnostics did
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/prefix_completion.rb`,
+`core/lib/ovallsp/semantic/query_service.rb`
+
+0.2.5 stopped RBS type names losing their namespace, which fixed hover
+(`File.stat(path)` says `File::Stat`) and removed a false positive. Round
+2 found completion unchanged: with a workspace class named `Stat`
+present, `File.stat(path).` returns that class's 121 labels — byte for
+byte what completing `Stat.new(x).` returns — while hover on the same
+expression says `File::Stat`.
+
+So one expression answers as two different types depending on which
+feature is asked. `024.47` records the same shape for a different
+trigger; this is a second instance, and the pair is the evidence that the
+readers disagree structurally rather than in one place.
+
+Remove the shadowing class and completion returns 167 correct labels
+where 0.2.4 returned 0 — so the release *is* an improvement here, just an
+incomplete one.
+
+**Direction:** with `024.47`, as one task. The register now holds two
+independent reproductions of readers disagreeing about a type, which is
+the argument for fixing where the answer is produced rather than at each
+reader.
+
+## 024.79 `Model.first` completes to nothing
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/models/*`, `core/lib/ovallsp/local_inferencer.rb`
+
+`Billing::Order.first.` offers no completions at all, while
+`Billing::Order.recent.first.` offers 329. Found by 0.2.5's round 2.
+
+`Model.first` is more common than `Model.scope.first`, so the working
+path is the rarer one. The relation from a `scope` is generated with a
+declared return type; the one from `first` on the model class evidently
+is not, or is not carrying the element type through.
+
+**Direction:** whatever gives `scope` its `Relation[Model]` should give
+the finder methods their `Model | nil`. Cheap to check, and it is a
+daily path answering nothing.
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml
@@ -4594,5 +4735,6 @@ guard spec, and a change set that grows a guard mid-loop resets the round
 that was reviewing it.
 
 ---
+
 
 
