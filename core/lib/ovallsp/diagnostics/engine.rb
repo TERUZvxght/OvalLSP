@@ -369,7 +369,19 @@ module Ovallsp
           # unrelated class satisfies one, so reporting against it is a
           # false positive by construction. A Ruby constant is
           # capitalised; these are not, which is what tells them apart.
-          next unless expected.name.to_s.match?(/\A[A-Z]/)
+          #
+          # The **last segment**, not the first character of the path. An
+          # alias can be nested (`String::selector`, `IO::cmd_array`,
+          # `FileUtils::mode`, `JSON::options`), and while RBS names were
+          # being truncated to their last component the two readings
+          # coincided. 0.2.5 stopped truncating, `String::selector` became
+          # capitalised, this guard stopped firing, and `"a.b".tr(".", "")`
+          # -- ordinary, correct Ruby -- started being reported. 45 nested
+          # aliases in rbs 4.0.3 flip the same way.
+          #
+          # Found by driving a corpus, not by the suite, which had no
+          # fixture calling a selector-typed method on a known String.
+          next unless expected.name.to_s.split("::").last.to_s.match?(/\A[A-Z]/)
           # `bool` converts to `Boolean`, which is capitalised and so
           # survives the rule above -- but there is no such Ruby class, so
           # its ancestor walk can never succeed and every argument would

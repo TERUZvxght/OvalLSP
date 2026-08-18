@@ -295,6 +295,17 @@ The entry was withdrawn. The general form: when you re-run a check to
 confirm it, confirm you invoked the same implementation — `type -a`, or
 just call the absolute path the script calls.
 
+**A green suite is not a blast radius.** 0.2.5 changed one line in the
+RBS type converter, ran the whole suite, found one failure, and recorded
+the blast radius as measured. A corpus run then found a second
+consequence immediately: the change made a nested *alias* capitalised,
+which switched off a guard that told aliases from classes by their first
+letter, and ordinary `"a.b".tr(".", "")` started being reported as an
+error. No fixture called a selector-typed method on a known String, so
+the suite could not have seen it. When a change alters something every
+other component reads — a name, an encoding, a key — the suite measures
+the radius it already has fixtures for. Drive a corpus.
+
 **And when a measurement disagrees with a spec you have already watched
 fail, the measurement is wrong until proven otherwise.** That is what
 caught the third one; nothing about re-reading the numbers would have.
