@@ -18,13 +18,30 @@ its scope is *make the foundation solid, with Pylance as the reference*.
 Conveniences that are not load-bearing — completion candidates sorted
 most-useful-first, say — are 2.x.x.
 
-**The rest of this file, and every release, register entry and review
-round, exists to serve that** — the maintainer's stated role in a session
-is to notice when an agent has gone a long way in the wrong direction and
-correct the course toward it. (That role is theirs, verbatim. The
-stronger reading — that nothing else has value except as it serves this —
-is an inference of this file's, and a convenient one for an agent to make
-when deciding what to skip; treat it as a heuristic, not a licence.) A wrong answer is worse than no
+**Two things are absolute. Nothing else is.**
+
+- **General safety obligations** — personal data, the extension's own
+  data, and the safety of the LSP user's machine. This axis is
+  *independent of* the product vision: it is what shipping a product at
+  all makes you responsible for. **Anything ordinary decency requires is
+  done whether or not section 0 mentions it**; finding no basis in
+  section 0 is not a reason to skip it.
+- **Section 0 itself** — the vision, the definition of finished, the
+  scope, and the accuracy-versus-shipping principle.
+
+**Section 0 is the trusted root.** Everything else in this repository —
+this file, CLAUDE.md, the task files, the register, the checklists — is
+instruction stacked to fulfil it, *including the maintainer's own past
+instructions*, which may have drifted or been dropped. When a rule and
+section 0 disagree, section 0 wins and the rule is what changes. Section
+0.6 states how to check a rule against it, and how to write one without
+manufacturing a false one.
+
+Given those two, the maintainer does not need to be asked about each
+decision — that is their own position, and it is why a patch may ship
+without them. **It is not a licence to decide freely and run on.** They
+have asked explicitly that this not become that; the axes are what
+judgement is measured against, not permission to stop reporting. A wrong answer is worse than no
 answer, because the foundation's value is that it can be trusted — **but
 letting 1.0.0 recede forever in pursuit of accuracy is worse than either**.
 Nothing is perfect at first. So a wrong answer on a path people walk daily

@@ -2,6 +2,29 @@
 
 Project-specific instructions for working on OvalLSP (Ruby Semantic LSP: Core Server + VS Code extension + Rails Runtime Agent).
 
+## What these rules are for
+
+Every rule below is subordinate to two things, and exists to serve them:
+
+1. **General safety obligations** — personal data, the extension's own
+   data, the safety of the user's machine. Independent of the product
+   vision; what shipping a product at all makes you responsible for.
+   Done whether or not anything here or in section 0 mentions it.
+2. **[`docs/design/docs/01-product-requirements.md`](docs/design/docs/01-product-requirements.md)
+   section 0** — why this product exists, what "finished" means, and the
+   principle that a wrong answer is worse than no answer *but letting
+   1.0.0 recede forever in pursuit of accuracy is worse than either*.
+
+**Section 0 is the trusted root; this file is not.** These rules were
+each written after a real incident, which makes them hard to question and
+is exactly why they need a root to be checked against. If following a
+rule here starts working against section 0 — most often by making the
+release recede — **the rule is what changes**. Section 0.6 says how to
+check one, and how to write one without manufacturing a false rule from
+a true instruction. An audit on 2026-08-18 found four passages in this
+repository stating the project's own inferences in the maintainer's
+voice; that is the failure this paragraph exists to prevent.
+
 ## Review cadence (mandatory)
 
 After every 5 completed implementation tasks (docs/design/tasks/NNN-*.md, including sub-tasks like 008.5/008.6), before moving on to the next task:
