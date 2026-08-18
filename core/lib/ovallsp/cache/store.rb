@@ -82,8 +82,13 @@ module Ovallsp
       # `File.write` are two syscalls. `UNMARKED_SCOPE_GRACE` is what
       # closes it.
       def self.mark_workspace(scope_dir, workspace_path)
-        FileUtils.mkdir_p(scope_dir)
-        File.write(File.join(scope_dir, WORKSPACE_MARKER), "#{workspace_path}\n")
+        FileUtils.mkdir_p(scope_dir, mode: 0o700)
+        tighten(scope_dir)
+        marker = File.join(scope_dir, WORKSPACE_MARKER)
+        # The marker records an absolute path from this machine, so it is
+        # owner-only for the same reason the entries are.
+        File.write(marker, "#{workspace_path}\n")
+        tighten(marker, 0o600)
       rescue StandardError
         nil
       end
@@ -256,6 +261,18 @@ module Ovallsp
         0
       end
 
+      # Best-effort: a cache on a filesystem that cannot represent these
+      # modes (a mounted share, a Windows volume) is still a working
+      # cache, and refusing to run there would trade a real feature for a
+      # protection that filesystem cannot offer anyway.
+      def self.tighten(path, mode = 0o700)
+        File.chmod(mode, path)
+      rescue StandardError
+        nil
+      end
+
+      def tighten(path, mode = 0o700) = self.class.tighten(path, mode)
+
       # The one place this class removes a directory, so that containment
       # is a property of *removal* rather than of each caller's arithmetic.
       #
@@ -366,6 +383,9 @@ module Ovallsp
         file = entry_path(path)
         tmp = "#{file}.tmp.#{Process.pid}.#{Thread.current.object_id}.#{rand(1_000_000)}"
         File.binwrite(tmp, Marshal.dump(summary))
+        # Before the rename, so the entry is never briefly world-readable
+        # under its real name.
+        self.class.tighten(tmp, 0o600)
         File.rename(tmp, file)
         prune_if_over_bound if rand(64).zero?
       rescue StandardError
@@ -383,8 +403,20 @@ module Ovallsp
 
       private
 
+      # 0700, not the umask's 0755. `vscode/PRIVACY.md` says what is in
+      # here: method bodies from the user's own source, verbatim. On a
+      # shared machine the default handed those to every other account.
+      # `Observation::Runner` already writes the same kind of evidence
+      # through `Tempfile`, which is owner-only, so this is the long-lived
+      # copy catching up with the project's own standard for it.
+      #
+      # `mkdir_p`'s mode applies to directories it creates, not to ones
+      # that already exist, so an existing loose directory is tightened
+      # explicitly -- the case that matters, since every cache created
+      # before 0.2.5 is already on disk at 0755.
       def ensure_directory(cache_dir)
-        FileUtils.mkdir_p(cache_dir)
+        FileUtils.mkdir_p(cache_dir, mode: 0o700)
+        tighten(cache_dir)
         cache_dir
       rescue StandardError
         nil # read-only filesystem, permissions, ... -- cache simply never activates.

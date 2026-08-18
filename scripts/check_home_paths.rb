@@ -24,7 +24,22 @@ module HomePaths
   # A segment counts as a username only if it has at least one
   # alphanumeric character, so prose writing an ellipsis after the prefix
   # to describe the class -- including this file -- does not trip it.
-  PATTERN = %r{/(?:Users|home)/(?=[A-Za-z0-9._-]*[A-Za-z0-9])([A-Za-z0-9._-]+)}
+  #
+  # Both separators, so Windows' `C:\\Users\\name` is caught -- it was not
+  # matched at all before, and it costs nothing to add.
+  #
+  # **Case-sensitive, deliberately, and this was measured rather than
+  # assumed.** An audit pointed out that macOS' filesystem is
+  # case-insensitive, so the all-lowercase spelling of a home path
+  # reaches the same directory as the real one and slips past. Adding
+  # `/i` does catch that -- and
+  # flags 37 lines in this repository, because `app/views/users/...` is
+  # ordinary Rails and appears throughout the specs and the design docs.
+  # A check that cries wolf 37 times is a check people switch off, and
+  # the case it buys is a tool that lowercases a path prefix, which
+  # nothing here does. The real form is what is matched; the theoretical
+  # one is recorded here instead of being defended against at that price.
+  PATTERN = %r{[/\\](?:Users|home)[/\\](?=[A-Za-z0-9._-]*[A-Za-z0-9])([A-Za-z0-9._-]+)}
 
   # Synthetic, or unambiguously a CI machine rather than a person's.
   # Adding one is meant to be a deliberate edit with a reason: an unknown
@@ -60,6 +75,15 @@ module HomePaths
     Dir.chdir(ROOT) { as_utf8(`git ls-files -z`).split(NUL) }
   end
 
+  # Every file this scanner declined to read, and why. A skip is a file
+  # the check could not clear, and until 0.2.5 both skips returned an
+  # empty list silently -- indistinguishable, in the answer, from a file
+  # that was read and found clean. It still skips them; it no longer does
+  # so without saying.
+  def skipped_files
+    @skipped_files ||= []
+  end
+
   def offences_in_file(relative_path)
     absolute = File.join(ROOT, relative_path)
     return [] unless File.file?(absolute)
@@ -68,10 +92,16 @@ module HomePaths
     # Compiled artefacts embed build-time paths that are not authored
     # content; make-final-review-bundle.sh inspects those instead, with
     # otool beside it.
-    return [] if content.include?(NUL)
+    if content.include?(NUL)
+      skipped_files << { path: relative_path, reason: :binary }
+      return []
+    end
 
     content.force_encoding(Encoding::UTF_8)
-    return [] unless content.valid_encoding?
+    unless content.valid_encoding?
+      skipped_files << { path: relative_path, reason: :invalid_encoding }
+      return []
+    end
 
     content.lines.each_with_index.flat_map do |line, index|
       names_in(line).map { |name| "#{relative_path}:#{index + 1}: #{name}" }
@@ -79,6 +109,7 @@ module HomePaths
   end
 
   def tree_offences
+    skipped_files.clear
     tracked_files.flat_map { |path| offences_in_file(path) }
   end
 
@@ -118,6 +149,14 @@ if $PROGRAM_NAME == __FILE__
     end
 
   if offences.empty?
+    skipped = HomePaths.skipped_files
+    unless skipped.empty?
+      # Printed rather than swallowed: a clean answer that rests on
+      # declining to read 40 files is a different claim from one that read
+      # them all.
+      puts "check-home-paths #{mode}: skipped #{skipped.size} unreadable file(s): " \
+           "#{skipped.map { |e| "#{e[:path]} (#{e[:reason]})" }.join(', ')}"
+    end
     puts "check-home-paths #{mode}: clean"
     exit 0
   end

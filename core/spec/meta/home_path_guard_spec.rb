@@ -69,6 +69,36 @@ RSpec.describe "no real home directory path in tracked content" do
     expect(HomePaths.offences_in_file("core/spec/ovallsp/redactor_spec.rb")).to be_empty
   end
 
+  # Windows' backslash form was not matched at all. Assembled, like every
+  # other fixture here, so this spec is not itself the thing the scanner
+  # reports.
+  it "catches the Windows separator form" do
+    expect(HomePaths.names_in(["C:", "Users", "carol", "project"].join("\\"))).to eq(["carol"])
+  end
+
+  # The variant deliberately *not* matched, pinned so the decision is
+  # visible rather than looking like an oversight. Case-insensitivity
+  # would catch `/users/alice` -- and flag 37 ordinary `app/views/users/`
+  # lines in this repository. The reasoning is in the scanner beside the
+  # pattern; if someone later decides the trade is worth it, this example
+  # is what they must consciously change.
+  it "does not treat a lowercase Rails resource directory as a home path" do
+    expect(HomePaths.names_in(["", "users", "alice", "project"].join("/"))).to be_empty
+    expect(HomePaths.names_in("app/views/users/show.html.erb")).to be_empty
+  end
+
+  # A file this scanner cannot read is a file it cannot clear, and until
+  # 0.2.5 both skips returned an empty list silently -- so a compiled
+  # artefact or a mis-encoded file simply did not exist as far as the
+  # guard's answer was concerned. It still skips them, for the reason its
+  # own comment gives, but it says so.
+  it "reports what it skipped rather than returning silence" do
+    skipped = HomePaths.skipped_files
+
+    expect(skipped).to be_an(Array)
+    expect(skipped.map { |entry| entry[:reason] }.uniq - %i[binary invalid_encoding]).to be_empty
+  end
+
   it "reads an ellipsis as prose about the class rather than a name" do
     expect(HomePaths.names_in("#{path_for('...')} strings are synthetic")).to be_empty
   end
