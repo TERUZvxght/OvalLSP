@@ -173,6 +173,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.2.4 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
 | [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | open | 0.2.5 | The fork boundary is undone by `Marshal.load` in the parent |
+| [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | open | 0.3.0 | The trust gate stands in front of callers, not in front of what exec… |
+| [`024.75`](#02475-a-documented-field-selects-nothing) | open | 0.3.0 | A documented field selects nothing |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -3837,6 +3839,70 @@ all until 0.2.5; it has one now, so an untrusted workspace cannot reach
 this path even via a client that would otherwise pass manifests. That
 narrows exposure; it does not close the class.
 
+## 024.74 The trust gate stands in front of callers, not in front of what executes
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user sees, and nothing reachable today: every existing caller
+  is gated. It is recorded because "every caller happens to be right" is
+  the exact property 0.2.5 spent its trust work removing, and this is the
+  same shape one level down.
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` — `#restart_agent`,
+`#trusted_for_execution?` and their call sites
+
+0.2.5 routed every path to code execution through one predicate. Found by
+that release's own attack round: the predicate guards the *callers*.
+`#restart_agent` spawns, and is itself ungated; what is gated is
+`restart_agent_result`, `maybe_start_agent`, and `maybe_restart_agent`
+(reachable only when `@agent_manager` is set, which trust already
+decided). That closes today. A fourth caller closes nothing, and nothing
+would fail when one is added.
+
+The release record for 0.2.5 names this shape as the bug it was fixing,
+one level up — which is the argument for finishing it rather than an
+argument that it is fine.
+
+**Direction:** the check belongs at the point of execution, not in front
+of each route to it — `#restart_agent` asks, and the call sites stop
+asking on its behalf. The cost is that the refusal then has to be
+reported by a method whose callers expect it to have started something,
+so the return contract changes; that is why this is a task rather than a
+line. `Plugins::Loader` and `Observation::Runner` want the same treatment
+for the same reason.
+
+## 024.75 A documented field selects nothing
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Documentation-only. The behaviour it describes -- picking an
+  interpreter from a workspace file -- does not exist, so no user is
+  affected by it working differently than described.
+target: 0.3.0
+```
+
+**Area:** `vscode/src/rubyResolver.ts` — `RubyResolverEnv.workspaceRoot`
+
+The field is documented as being used for `.tool-versions` and
+`.ruby-version`, and is never read; its declaration is its only
+occurrence. Found by 0.2.5's attack round while establishing that
+`resolveRuby` reads no workspace-controlled file — which it does not, and
+that is a security property worth keeping.
+
+So the comment describes a feature that does not exist, in the file
+someone would read to check whether interpreter selection can be
+influenced by the workspace. **Direction:** delete the field and the
+comment, or implement the lookup deliberately and gate it on trust like
+everything else that lets a workspace choose what runs. Deleting is the
+likely answer; the field was added in anticipation and never wired.
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml
@@ -4528,4 +4594,5 @@ guard spec, and a change set that grows a guard mid-loop resets the round
 that was reviewing it.
 
 ---
+
 

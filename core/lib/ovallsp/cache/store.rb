@@ -168,6 +168,16 @@ module Ovallsp
         current_scope = File.dirname(current)
         children_of(cache_root).each do |path|
           next unless File.directory?(path)
+
+          # Every scope, including the one being opened and the ones this
+          # sweep decides to keep. `ensure_directory` only tightens the
+          # scope currently in use, so before 0.2.5's modes reach a
+          # machine's *other* projects they would have to each be opened
+          # once -- ten projects, ten launches, and until then their
+          # method bodies stay world-readable. This walk is the one place
+          # that sees all of them, and it already runs on every launch.
+          tighten_tree(path)
+
           next if File.expand_path(path) == current_scope
 
           marker = File.join(path, WORKSPACE_MARKER)
@@ -267,6 +277,22 @@ module Ovallsp
       # protection that filesystem cannot offer anyway.
       def self.tighten(path, mode = 0o700)
         File.chmod(mode, path)
+      rescue StandardError
+        nil
+      end
+
+      # Directories to 0700 and files to 0600, across one scope. Bounded
+      # by the scope rather than walking the whole root, so the cost is a
+      # handful of chmods per launch and not a full tree walk; and
+      # best-effort throughout, because a cache on a filesystem that
+      # cannot represent these modes is still a working cache.
+      def self.tighten_tree(scope_dir)
+        tighten(scope_dir)
+        Dir.glob(File.join(scope_dir, "**", "*"), File::FNM_DOTMATCH).each do |entry|
+          next if entry.end_with?("/.", "/..")
+
+          tighten(entry, File.directory?(entry) ? 0o700 : 0o600)
+        end
       rescue StandardError
         nil
       end

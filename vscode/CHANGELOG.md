@@ -29,8 +29,10 @@ the disproved approaches are kept below it under **Details**.
   untrusted window, but the LSP is a protocol any client can speak.
 - **The cache is owner-only.** It holds method bodies from your own source,
   as `PRIVACY.md` says, and was created with the default mode — readable by
-  every other account on a shared machine. Existing caches are tightened
-  when opened.
+  every other account on a shared machine. Caches made by earlier versions
+  are tightened too, including other projects': the sweep that already
+  visits every project on launch does it, so you do not have to open each
+  one to make it private.
 
 ### Details
 
