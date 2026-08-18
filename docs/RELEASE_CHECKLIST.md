@@ -56,7 +56,7 @@ Marketplace Preview公開)固有の22項目のゲートを設ける。`make-fina
 | 19 | README/Support Matrix/CHANGELOG整合性 | ✅ 目視確認(Task 023.6、Ruby 3.3の扱いをSUPPORT_MATRIX.md/RELEASE_CHECKLIST.md/README.md/KNOWN_LIMITATIONS.mdで統一) |
 | 20 | Marketplace preflight PASS | ⚠️ 手動確認のみ — 実際のMarketplace publisher登録・アップロードUIでのpreflightはpublish実行時まで発生しない(Task 023.8で確認事項として提示) |
 | 21 | repository visibility change is deliberate, not implicit | ✅ Task 023.8完了時点では`gh repo view`で`PRIVATE`のまま変更していないことを都度確認していた。その後、ユーザーの明示的な指示によりpublic化(git履歴の実メールアドレス除去・リポジトリ作り直し・Issues無効化を経た上で)— visibility変更自体がpublish処理の副作用として暗黙に起きたことは一度もない |
-| 22 | awaiting user approval before actual publish | ⚠️ 本タスクのどのコマンドも`vsce publish`を実行しない設計(`docs/PUBLISHING.ja.md`) — ユーザーの明示承認を待つ状態 |
+| 22 | awaiting user approval before actual publish | ✅ 0.2.3 で充足 — オーナーの明示的な指示のもとでのみ `release.sh` が実行され、`vsce publish` へ到達した。ゲートが要求するのは打鍵者が誰かではなく、判断が人間のものであること(`docs/PUBLISHING.md`「Publishing」節を 0.2.3 で書き直し) |
 
 ## Public distributionの状態
 

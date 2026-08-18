@@ -177,10 +177,29 @@ Credentials below) rather than requiring it typed in each time.
 vscode/scripts/release.sh
 ```
 
-The prompt at the end is deliberate and not skippable by a flag: every
-publish, not just the first, needs a human saying "yes, publish this" at
-the moment it happens — a script that removed that step would undo the
-whole point of gating it. Whether run via this script or the bare `vsce
+The prompt at the end is deliberate and not skippable by a flag. What it
+protects is that **no publish happens without the project owner deciding
+that this release should ship** — every publish, not just the first. A
+standing approval baked into a script that runs unattended is what it
+exists to prevent.
+
+It does *not* require the owner's own fingers on the keystroke. 0.2.3
+was published by an agent driving this script under the owner's explicit
+instruction, and that is within the rule as the owner restated it: the
+human gives the go-ahead, and the publish is then carried out reliably
+and safely; an agent in between is fine, and is better placed to read the
+build and smoke output for anomalies than a person scrolling it. What is
+*not* within the rule is a script — or an agent — reaching this prompt
+without a decision behind it, or reaching it and deciding for itself.
+
+So the obligation transfers rather than disappears. Whoever answers the
+prompt on the owner's behalf must have read what the script printed
+before it — the vendored-core check, the payload hash, `vsce ls --tree`,
+the semantic smoke, the SHA-256 — and must say what it found. 0.2.3's run
+is recorded in `docs/design/tasks/028-0.2.3-review-loop.md`, including
+the one thing worth reporting from it (nine `EBADENGINE` warnings, all
+`devDependencies` of `@vscode/vsce` and one of the test harness, none of
+them shipped). Whether run via this script or the bare `vsce
 publish` command directly, **this must not happen until all of the
 following are true:**
 
