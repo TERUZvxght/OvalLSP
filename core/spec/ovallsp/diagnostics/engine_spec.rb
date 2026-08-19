@@ -79,7 +79,25 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
       expect(findings.map(&:code)).not_to include("unknown-method")
     end
 
-    it "does not flag a call through a Union receiver (ambiguous, not a confirmed error)" do
+    # Reversed in 0.2.6, and the old title said why it had to be: it
+    # called this "ambiguous". It is not. Neither branch has the method,
+    # so the call raises `NoMethodError` whichever branch the value is --
+    # confirmed, not uncertain. Ambiguity is the *other* shape, where one
+    # branch has it and another does not, and that one is still silent
+    # (the example below, and `union_receiver_spec.rb`).
+    #
+    # The bar a Union clears is stricter than the one a Nominal cleared,
+    # not looser: every branch must independently be closed and
+    # independently lack the method. Measured over 213 files of real gem
+    # source this added nothing -- 34 findings before and after -- so the
+    # recall costs no precision there.
+    #
+    # What it buys: `Order.recent.first.missing` was reported by nothing
+    # while `Order.find(id).missing` was reported normally, because
+    # `Relation[T]#first` infers `T | nil` and Unions were discarded
+    # before anything was asked (`024.77`). `Model.scope.first` is an
+    # everyday idiom.
+    it "flags a call through a Union receiver when no branch has the method" do
       document = index(<<~RUBY)
         class User
           def name
@@ -95,6 +113,29 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
           def pick(flag)
             user = flag ? User.new : Admin.new
             user.something_neither_has
+          end
+        end
+      RUBY
+
+      findings = engine.analyze(document: document, semantic_context: context, mode: :safe)
+
+      expect(findings.map(&:code)).to include("unknown-method")
+    end
+
+    it "still does not flag one when a branch does have the method" do
+      document = index(<<~RUBY)
+        class User
+          def only_user_has_this
+          end
+        end
+
+        class Admin
+        end
+
+        class Owner
+          def pick(flag)
+            user = flag ? User.new : Admin.new
+            user.only_user_has_this
           end
         end
       RUBY

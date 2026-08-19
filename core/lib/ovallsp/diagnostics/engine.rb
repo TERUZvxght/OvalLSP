@@ -118,19 +118,56 @@ module Ovallsp
           # whose whole policy is that a false report is worse than a
           # missed one. See 024.13.
           receiver_type = receiver_type_for(document, candidate, context)
-          next unless receiver_type.is_a?(Types::Nominal)
-          next unless closed_nominal?(receiver_type, candidate.singleton, context) ||
-                      model_closed?(receiver_type, context)
-          next if rbs_resolves?(candidate, receiver_type, context)
-          next if model_resolves?(candidate, receiver_type, context)
+          # A Union is asked branch by branch rather than discarded.
+          # `Relation[T]#first` and `CollectionProxy[T]#first` infer
+          # `T | nil`, so `Order.recent.first.missing` was reported by
+          # nothing while `Order.find(id).missing` was reported normally
+          # -- and `Model.scope.first` is an everyday Rails idiom
+          # (`024.77`). Completion already knew the answer at that
+          # position; only this check refused to ask.
+          branches = reportable_branches(receiver_type)
+          next if branches.empty?
+          next unless branches.all? { |branch| absent_from?(branch, candidate, context) }
 
+          reported = branches.length == 1 ? branches.first : receiver_type
           Finding.new(
             code: "unknown-method",
-            message: "#{receiver_type} has no method named `#{candidate.name}`",
+            message: "#{reported} has no method named `#{candidate.name}`",
             range: candidate.location, severity: :warning, confidence: :high,
-            evidence: { receiver: receiver_type.to_s, ancestors_closed: true }, generation: context.generation
+            evidence: { receiver: reported.to_s, ancestors_closed: true }, generation: context.generation
           )
         end
+      end
+
+      # The branches a negative answer would have to hold for. `nil` is
+      # dropped: `nil.foo` is a different check and its own product
+      # question, and letting it make every nilable receiver unreportable
+      # is what closed this path entirely.
+      #
+      # Empty means "not something to assert about" -- a receiver that is
+      # neither a Nominal nor a Union of them, or a Union of nothing but
+      # nil.
+      def reportable_branches(receiver_type)
+        case receiver_type
+        when Types::Nominal then [receiver_type]
+        when Types::Union
+          members = receiver_type.members.reject { |t| t == Types::NIL }
+          members.all? { |t| t.is_a?(Types::Nominal) } ? members : []
+        else []
+        end
+      end
+
+      # Absence, for one branch, on the terms the whole check already
+      # uses. A Union is *more* uncertain than a Nominal, never less, so
+      # every branch must clear the same bar -- one branch that is not
+      # closed, or that has the method, ends the report.
+      def absent_from?(branch, candidate, context)
+        return false unless closed_nominal?(branch, candidate.singleton, context) ||
+                            model_closed?(branch, context)
+        return false if rbs_resolves?(candidate, branch, context)
+        return false if model_resolves?(candidate, branch, context)
+
+        true
       end
 
       # Reports a call that cannot possibly bind, by comparing the call
