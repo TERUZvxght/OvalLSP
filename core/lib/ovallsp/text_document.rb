@@ -22,26 +22,46 @@ module Ovallsp
   class TextDocument
     attr_reader :uri, :version, :language_id, :text
 
+    # **A snapshot, not a mutable buffer.** Until 0.2.7 this class was
+    # edited in place on the dispatch thread while background threads read
+    # it: `apply_incremental_change` wrote `@text` and then `@version`,
+    # and `text=` assigned `@text` *before* recomputing the two
+    # line-offset tables. Six `republish_open_diagnostics` call sites read
+    # `text` and `version` from other threads, and `handle_did_change`
+    # mutated before taking any lock.
+    #
+    # The consequence is a torn read, and the version half is the one that
+    # matters: a background publish could pair old-text findings with a
+    # new version number, which the client's staleness filter then
+    # *accepts* because the number looks current. The other half runs
+    # position arithmetic with new text against stale offsets.
+    #
+    # Text, version and offsets are computed together here and never
+    # change afterwards, so a reader sees either the whole old document or
+    # the whole new one. `DocumentStore` swaps its hash entry for a new
+    # instance -- one reference assignment -- and is the only caller of
+    # the `#with_*` builders below. 029's M-2, and the precondition for
+    # M-3's version ordering to mean anything.
     def initialize(uri:, text:, version:, language_id:)
       @uri = uri
       @language_id = language_id
       @version = version
-      self.text = text
+      @text = text
+      @line_offsets, @line_byte_offsets = compute_line_offsets(text)
+      freeze
     end
 
-    def apply_full_change(text:, version:)
-      self.text = text
-      @version = version
+    def with_full_change(text:, version:)
+      self.class.new(uri: @uri, text: text, version: version, language_id: @language_id)
     end
 
-    def apply_incremental_change(range:, new_text:, version:)
+    def with_incremental_change(range:, new_text:, version:)
       start_offset = position_to_char_offset(range.fetch(:start))
       end_offset = position_to_char_offset(range.fetch(:end))
 
       updated = @text.dup
       updated[start_offset...end_offset] = new_text
-      self.text = updated
-      @version = version
+      with_full_change(text: updated, version: version)
     end
 
     # Ruby character (codepoint) offset — use for indexing/slicing `@text`
@@ -115,11 +135,6 @@ module Ovallsp
     end
 
     private
-
-    def text=(new_text)
-      @text = new_text
-      @line_offsets, @line_byte_offsets = compute_line_offsets(new_text)
-    end
 
     def line_content(line_index)
       start = @line_offsets[line_index]

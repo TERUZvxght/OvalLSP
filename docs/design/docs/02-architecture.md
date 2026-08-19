@@ -228,14 +228,47 @@ diagnostics(document)
 
 Rubyプロセス内で無制限な並列解析は行わない。
 
-推奨:
+### 実際のスレッド所有関係（0.2.7 で記述を実装に合わせた）
 
-- main thread: transport and state mutation
-- analysis worker pool: parse/inferenceの純粋計算
-- agent reader thread: Runtime Agent messages
-- cancellation tokenを全queryへ伝播
+**この節は 0.2.7 まで実装と食い違っていました。** 「インデックスへの
+commit は main thread で行う」と書かれていましたが、HEAD は背景スレッド
+から `@index_mutation_mutex` の下で commit しています（cold index、
+workspace pass、changed-files batch）。`document_store.rb` はこの節を自身
+のスレッド安全性の根拠として引用していたので、食い違いは一箇所では済んで
+いませんでした。以下は規範ではなく、実装の記述です。
 
-インデックスへのcommitは世代番号を確認してmain threadで行う。古いdocument versionの結果は破棄する。
+| スレッド | 所有するもの |
+|---|---|
+| dispatch（transport） | LSP フレームの読み書き、`DocumentStore` への書き込み、didOpen/didChange/didClose の処理 |
+| cold index | ワークスペース走査と、`@index_mutation_mutex` 下でのインデックス commit |
+| workspace pass | 開いていないファイルの解析と publish |
+| changed-files batch | ファイル監視イベントの取り込みと再インデックス |
+| Runtime Agent reader | Agent からのメッセージ受信 |
+
+**共有状態に触るものは、以下の順序でロックを取ります。** 27 箇所の
+`Mutex.new` が個別にこの順序を守っていましたが、どこにも書かれていません
+でした（順序の逆転は発見されていません — 真実の情報源が2つある状態であって、
+生きた deadlock ではありません）:
+
+```text
+agent_refresh → agent_restart → index_mutation → 各 store の内部ロック
+読み取り時: HierarchyIndex → WorkspaceIndex
+```
+
+**文書は不変のスナップショットです。** `TextDocument` は構築時に本文・
+版数・行オフセットを一緒に確定させて凍結し、`DocumentStore#change` は新しい
+インスタンスを作ってハッシュのエントリを差し替えます。背景スレッドの読み手は、
+古い文書か新しい文書のどちらかを丸ごと見ます。0.2.7 まではその場で書き換えて
+いたため、新しい版数と古い本文を組にして読むことができ、クライアントの陳腐化
+フィルタはその組を「新しい」として受理していました（029 の M-2）。
+
+**診断の publish は一つの funnel を通ります。** `Server#publish_findings`
+が uri ごとに最後に送った版数を覚え、古い版数の publish を落とし、clear は
+常に勝って記憶を消します。版数付きの publish は、そのバッファがまだ開いて
+いることを要求します — 閉じたファイルに対して `[findings, clear, findings]`
+が飛ぶ `024.56` の並びは、これで塞がります（029 の M-3）。
+
+古い document version の結果は破棄します。
 
 ## 9. 状態の世代管理
 

@@ -157,7 +157,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.53`](#02453-the-absent-workspace-grace-measured-the-wrong-clock) | fixed | 0.2.2 | The absent-workspace grace measured the wrong clock |
 | [`024.54`](#02454-an-edit-that-changed-nothing-discarded-the-edit-before-it) | fixed | reverted | An edit that changed nothing discarded the edit before it |
 | [`024.55`](#02455-a-version-mismatch-is-reported-and-then-ignored) | open | 0.2.4 | A version mismatch is reported and then ignored |
-| [`024.56`](#02456-a-publish-can-land-after-the-panel-has-been-cleared-and-after-a-newer-one) | open | 0.2.4 | A publish can land after the panel has been cleared, and after a new… |
+| [`024.56`](#02456-a-publish-can-land-after-the-panel-has-been-cleared-and-after-a-newer-one) | fixed | 0.2.7 | A publish can land after the panel has been cleared, and after a new… |
 | [`024.57`](#02457-the-debounce-and-why-it-was-rolled-back) | open | 0.3.0 | The debounce, and why it was rolled back |
 | [`024.58`](#02458-bin-ovallsp-loaded-every-abi-s-vendored-gems-not-the-running-one-s) | fixed | 0.2.2 | `bin/ovallsp` loaded every ABI's vendored gems, not the running one's |
 | [`024.59`](#02459-the-guard-against-a-stale-example-count-could-not-run) | fixed | 0.2.3 | The guard against a stale example count could not run |
@@ -2810,10 +2810,11 @@ change, with the two paths separated:
 ## 024.56 A publish can land after the panel has been cleared, and after a newer one
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.2.4
+target: 0.2.7
+released-in: 0.2.7
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#republish_open_diagnostics`,
@@ -2830,6 +2831,34 @@ clear, the findings again. **Every build has this**, 0.2.1 included; it
 is not a regression of any release. That branch's debounce work gave its
 own waiter path the same race, fixed it there, and the fix did not reach
 here -- which is how the shape came to be understood at all.
+
+### Fixed in 0.2.7, and it needed two rules rather than one
+
+`#publish_findings` keeps a per-uri record of the last version published,
+under one small mutex, and every writer is ordered by it without knowing
+about the others. An older version is dropped; the *same* version is let
+through, because a later pass legitimately knows more about it — the
+Agent answering, routes arriving — and refusing it would switch those
+off. A clear always wins and resets the memory, so a reopened file
+publishes again at any version.
+
+**That alone does not close this entry's own sequence.** The clear resets
+the memory, so the background publish already in flight is accepted right
+after it — findings, clear, findings, exactly as recorded. What separates
+a stale buffer answer from a legitimate one is whether anyone has the
+file open *now*: a versioned publish is a buffer's answer and requires
+that buffer to still be open, while a versionless publish is the
+workspace pass, which analyses files nobody has open by definition and is
+subject to neither rule.
+
+And a second clear path had to go: `#clear_diagnostics` wrote straight to
+the writer, bypassing the funnel, so the memory was not the funnel's. It
+is the "four writer kinds, no state" shape surviving inside the fix for
+it. Pinned by an example that fails without it — a reopened file would
+show nothing until edited nine times.
+
+Rests on `029`'s M-2, landed in the same release: ordering by a version
+number is only meaningful once text and version cannot be read torn.
 
 `#republish_open_diagnostics` publishes on a background thread when
 routes or models land or the Agent becomes ready. If the dispatch thread

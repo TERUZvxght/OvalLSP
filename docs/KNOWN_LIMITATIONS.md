@@ -434,18 +434,17 @@ Treat those answers as unreliable until the mismatch is resolved, and run
 
 ## Diagnostics that come back after you clear or close a file
 
-**Rarely, and only while one of these re-analysis passes is running — a
-window that grows with the number of open files, not just the size of
-one.** When the Runtime Agent supplies routes or models, or becomes
-ready, every open file is re-analysed on a background thread — and that
-pass decides which files to analyse before it starts, not while it runs.
+**Fixed in 0.2.7.** Closing a file used to be able to leave its errors in
+the Problems panel for the rest of the session: a re-analysis pass
+running in the background decided which files to visit before it started,
+so one that was already in flight republished a file you had just closed.
+Nothing republishes a file nobody has open, so they stayed until you
+reopened it. A publish now has to name a version *and* find the buffer
+still open, and closing a file always wins.
 
-Two things follow. If you had paused on a file big enough to take seconds
-to analyse, the `*_path` reports made without routes can be written back
-over the corrected ones; the next edit clears that. And **if you close a
-file while another one is being analysed in that pass, its errors stay in
-the Problems panel** — for the rest of the session, since nothing
-republishes a file nobody has open. Reopening it clears them (024.56). <!-- documents: 024.56 -->
+The same release stops a slower analysis writing its older answers back
+over newer ones — the `*_path` reports made before routes arrived
+overwriting the corrected ones.
 
 ## How long an edit takes to re-analyse
 

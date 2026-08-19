@@ -37,6 +37,7 @@
 | **既知の制限** | `docs/KNOWN_LIMITATIONS.md` + `.ja.md`、およびそれと反することを書いているサイトのページ | `core/spec/meta/deferred_findings_spec.rb`(`user-visible: yes` の未解決 `024.*` 欠陥は両言語から参照されていること。`no` の場合は理由を書くこと) |
 | **どのRuby・Rails・プラットフォームを受け入れるか**(`vscode/src/platformCompatibility.ts`・`versionInfo.ts`・`rubyResolver.ts` の変更を含む) | `docs/SUPPORT_MATRIX.md` + `.ja.md`(用のあった行だけでなく影響する全行)、`docs/KNOWN_LIMITATIONS.md` + `.ja.md`、**`vscode/README.md` + `.ja.md` — Marketplaceの説明文。散文と環境表の両方でこれを述べている**、`site/getting-started.html` + `site/ja/`、`site/index.html` + `site/ja/index.html` のプラットフォーム callout(0.2.3 の統合ラウンドでここに追加 — 誠実化パスがバッジと同じ形でこの callout を見落としたため)、両CHANGELOG、下限が動いたなら `core/ovallsp.gemspec` の `required_ruby_version` | — |
 | **リリース作業の所在**(ブランチの作成・改名・再採番、ブランチ間の作業移動) | `main` 上のそのリリースの `NNN-*.md` がブランチ名を明記する。`AGENTS.md` の現行ループへのポインタも — 0.2.3 はこの行が無かったために並行して二度準備された(CLAUDE.md「Where a release's work lives」、028) | — |
+| **どのスレッドが何を所有するか、どのロックが何を守るか** — 背景スレッドの追加、mutex の追加や順序変更、状態オブジェクトを可変/不変に変えること | `docs/design/docs/02-architecture.md` のスレッド節（所有関係とロック順序を一箇所で述べている）と、それを自身の根拠として引用している `core/lib/ovallsp/document_store.rb` の注記 | — |
 | **進め方の取り決め**(構築・レビュー・リリースの方法) | `CLAUDE.md`、`AGENTS.md`、`CONTRIBUTING.md` + `.ja.md` | — |
 
 ## サイトもドキュメントです
