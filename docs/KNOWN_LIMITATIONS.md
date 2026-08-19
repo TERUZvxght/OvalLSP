@@ -508,6 +508,104 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
+## What the undefined-method check gets wrong without a Runtime Agent
+
+If your project reopens a core class — an `initializers/core_ext.rb`, or
+anything with `class String` in it — this extension treats that class as
+one it fully knows, and then reports every method a *gem* adds to it as
+missing. `String has no method named squish`. `Integer has no method
+named minutes`. Measured over ActiveSupport's and ActiveModel's own
+source: 74 such reports.
+
+The same applies to a class that includes a module from a gem whose code
+is not in your workspace. `include Singleton` then `.instance`;
+`include Sidekiq::Worker` then `sidekiq_options` — 0.2.6 fixed those
+particular two, and the family they belong to is only fully answered by
+the Runtime Agent, which reports what your classes really respond to.
+
+**So this is loudest exactly where the Agent cannot run**: a plain Ruby
+project, which never gets one, and a Rails project in VS Code's
+Restricted Mode, which is every Rails project until you trust the
+folder. Trusting the workspace is what makes these go
+away. <!-- documents: 024.83 -->
+
+## What a constant hovers as
+
+**Its own name, as a class.** `MAX_RETRIES = 3` then `MAX_RETRIES` hovers
+`ClassOf[MAX_RETRIES]`, not `Integer` — and the same for a string, a
+float, an array or a frozen hash. Completion after a constant offers
+nothing, and nothing assigned from one carries a usable
+type. <!-- documents: 024.84 -->
+
+## What `self.` completes to
+
+**Nothing.** Completion after `self.` returns an empty list everywhere —
+instance methods, class methods, plain Ruby, Rails. Typing the same
+prefix without `self.` works. `self.nope` is also not reported as
+undefined, while a bare `nope` on the line above is. <!-- documents: 024.85 -->
+
+## An instance variable set in another method
+
+`@article` assigned by a `before_action` and read in the action has a
+type **in the view** and no type **in the controller**: hovering it in
+`show.html.erb` says `Post` and offers 408 completions, hovering the same
+name in the controller says nothing and offers none. Any ivar written in
+one method and read in another behaves this way. <!-- documents: 024.86 -->
+
+## Where a relation stops being a relation
+
+`Post.where(published: true)` is understood. `Post.where(published:
+true).where(user_id: 1)` is not, and neither are `.order`, `.limit`,
+`.includes`, `.count` or a second scope. Hover goes blank at the second
+link, and so does the undefined-method check —
+`Post.published.where(user_id: 1).titel` is not
+reported. <!-- documents: 024.87 -->
+
+## Completion on a value that could be two things
+
+`x = cond ? "s" : 1` offers you every method of `String` *and* every
+method of `Integer`. Picking one of them fails on the other branch. The
+undefined-method check takes the opposite and safer view of the same
+value, so the two features disagree. <!-- documents: 024.88 -->
+
+## What signature help shows
+
+Defaults, splats, keywords and block parameters are all shown as plain
+positional parameters, so `def simple(a, b = 2, *rest, key:)` presents as
+`simple(a, b, rest, key)` and the popup implies `key` is the fourth
+positional argument. The highlight also never advances as you type
+arguments. <!-- documents: 024.89 -->
+
+## Smaller things
+
+- Hovering somewhere with no answer returns an empty hover rather than
+  nothing at all.
+- `price * quantity` hovers `Complex | Float | Integer | Rational` — true
+  but not useful.
+- A typo on a core-library receiver is not reported: `"hello".upcse` and
+  `[1,2].siz` are silent, though completion at the same spot knows the
+  type exactly.
+- A class name written without its namespace hovers without it too, so
+  with two `Order`s the label does not say which one.
+- `b = nil; b ||= "x"` hovers nothing.
+- A scope defined inside a concern's `included do` has no type.
+- Passing a positional argument to a keyword-only method says it "takes 0
+  arguments". <!-- documents: 024.90 -->
+
+## A module whose name is shared is dropped from the class that includes it
+
+If your class `include`s a module by a bare name — `include Helpers` —
+and any other namespace in the workspace declares a `Helpers` too, this
+extension refuses to guess which one you meant. That is the right answer
+for a diagnostic: reporting your class's own methods as missing, which is
+what it used to do, is worse. But the refusal also reaches completion and
+go-to-definition, so that module's methods disappear from the list and
+jumping to one of them lands nowhere.
+
+`Helpers`, `Base`, `Error` and `Node` are shared often enough that this
+is worth knowing about. Writing the include with its namespace —
+`include Rackish::Request::Helpers` — restores it. <!-- documents: 024.81 -->
+
 ## A class created by assignment is invisible
 
 `Error = Class.new(StandardError)` declares a class as surely as

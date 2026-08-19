@@ -471,6 +471,93 @@ Rails の concern がまさにこの形でした。メタプログラミング�
 `Order.find(id).no_such_method` だけが通常どおり報告されていました。`T | nil` の
 レシーバを捨てずに枝ごとに問い合わせる形になっています。 <!-- documents: 024.77 -->
 
+## Runtime Agent が居ないときに未定義メソッド検査が間違えること
+
+プロジェクトがコアクラスを再オープンしている場合 — `initializers/core_ext.rb`
+など、`class String` を含むもの全般 — この拡張機能はそのクラスを完全に把握して
+いるものとして扱い、**gem** が追加しているメソッドを片端から「存在しない」と
+報告します。`String has no method named squish`、`Integer has no method named
+minutes` など。ActiveSupport と ActiveModel 自身のソースに対する実測で 74 件。
+
+ワークスペースにコードが無い gem のモジュールを include している場合も同じ
+です。`include Singleton` の後の `.instance`、`include Sidekiq::Worker` の後の
+`sidekiq_options` — この2つは 0.2.6 で直しましたが、この系統を完全に答えられる
+のは、クラスが実際に応答するものを報告する Runtime Agent です。
+
+**つまりこれは、Agent を動かせない場所でこそ最も鳴ります**: Agent を持たない
+素の Ruby プロジェクトと、VS Code の Restricted Mode の Rails プロジェクト
+（フォルダを信頼するまでは全ての Rails プロジェクトがそうです）。ワークスペース
+を信頼すれば解消します。 <!-- documents: 024.83 -->
+
+## 定数のホバーが返すもの
+
+**その定数自身の名前を、クラスとして返します。** `MAX_RETRIES = 3` の後の
+`MAX_RETRIES` は `Integer` ではなく `ClassOf[MAX_RETRIES]` とホバーします。
+文字列・浮動小数点・配列・凍結ハッシュでも同じです。定数の後の補完は何も出さず、
+定数から代入したものも使える型を持ちません。 <!-- documents: 024.84 -->
+
+## `self.` の補完が返すもの
+
+**何も返しません。** `self.` の後の補完は、インスタンスメソッド・クラス
+メソッド・素の Ruby・Rails のいずれでも空です。`self.` を付けずに同じ接頭辞を
+打てば動きます。`self.nope` も未定義として報告されません（直前の行の裸の `nope`
+は報告されます）。 <!-- documents: 024.85 -->
+
+## 別のメソッドで代入されたインスタンス変数
+
+`before_action` で代入された `@article` を action で読む場合、**ビューでは**型が
+付き、**コントローラでは**付きません。`show.html.erb` でホバーすると `Post` で
+補完候補は 408 件、同じ名前をコントローラでホバーすると何も出ず候補は 0 件です。
+あるメソッドで書いて別のメソッドで読む ivar は全てこうなります。 <!-- documents: 024.86 -->
+
+## relation が relation でなくなる場所
+
+`Post.where(published: true)` は解釈されます。`Post.where(published:
+true).where(user_id: 1)` は解釈されず、`.order`、`.limit`、`.includes`、
+`.count`、2つ目の scope も同様です。2つ目の連結でホバーが空になり、未定義
+メソッド検査も止まります — `Post.published.where(user_id: 1).titel` は報告され
+ません。 <!-- documents: 024.87 -->
+
+## 2つの型を取りうる値の補完
+
+`x = cond ? "s" : 1` は `String` の全メソッド **と** `Integer` の全メソッドを
+出します。片方を選ぶともう片方の分岐で失敗します。未定義メソッド検査は同じ値に
+ついて逆の（安全な）立場を取るので、2つの機能が食い違います。 <!-- documents: 024.88 -->
+
+## シグネチャヘルプが表示するもの
+
+デフォルト値・splat・キーワード・ブロック引数がすべて素の位置引数として表示され
+るため、`def simple(a, b = 2, *rest, key:)` は `simple(a, b, rest, key)` と出て、
+`key` が4番目の位置引数であるかのように見えます。引数を打ち進めてもハイライトが
+移動しません。 <!-- documents: 024.89 -->
+
+## 細かいもの
+
+- 答えの無い位置でのホバーが、何も返さないのではなく空のホバーを返します。
+- `price * quantity` は `Complex | Float | Integer | Rational` とホバーします。
+  正しくはありますが役に立ちません。
+- コアライブラリのレシーバに対するタイプミスは報告されません。`"hello".upcse` や
+  `[1,2].siz` は無言です（同じ位置の補完は型を正確に把握しています）。
+- 名前空間を書かずに書いたクラス名は、ホバーでも名前空間なしで出るので、`Order`
+  が2つあるとどちらか分かりません。
+- `b = nil; b ||= "x"` は何もホバーしません。
+- concern の `included do` の中で定義した scope は型を持ちません。
+- キーワード専用メソッドに位置引数を渡すと「0 個の引数を取る」と表示され
+  ます。 <!-- documents: 024.90 -->
+
+## 名前を共有するモジュールが、include したクラスから落ちること
+
+クラスが修飾なしの名前でモジュールを `include` していて（`include Helpers`）、
+ワークスペースの別の名前空間にも `Helpers` がある場合、この拡張機能はどちらの
+ことか推測するのを拒みます。診断としてはそれが正しい挙動です — 以前のように
+そのクラス自身のメソッドを「存在しない」と報告する方が悪いためです。ただしこの
+拒否は補完と定義ジャンプにも及ぶので、そのモジュールのメソッドは候補一覧から
+消え、ジャンプもできません。
+
+`Helpers`、`Base`、`Error`、`Node` は共有されがちなので、知っておく価値が
+あります。名前空間付きで書けば（`include Rackish::Request::Helpers`）復帰
+します。 <!-- documents: 024.81 -->
+
 ## 代入で作られたクラスが見えないこと
 
 `Error = Class.new(StandardError)` は `class Error < StandardError` と

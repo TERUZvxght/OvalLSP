@@ -182,6 +182,14 @@ nobody can search is the recording habit without the benefit.
 | [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | open | 0.3.0 | An unresolved hierarchy edge is expressible as a method owner |
 | [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | open | 0.3.0 | An ancestor reference carries no lexical context, so an ambiguous na… |
 | [`024.82`](#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | open | 0.3.0 | `Foo = Class.new(Bar)` is not a type the index knows |
+| [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.3.0 | The undefined-method check is loudest exactly where no Runtime Agent… |
+| [`024.84`](#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | open | 0.3.0 | A constant is typed as a class object whatever it holds |
+| [`024.85`](#02485-self-completes-nothing) | open | 0.3.0 | `self.` completes nothing |
+| [`024.86`](#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | open | 0.3.0 | An ivar assigned in another method has no type, except in the view |
+| [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.3.0 | A relation stops being a relation after one hop |
+| [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.3.0 | Completion unions a union's members; the diagnostic intersects them |
+| [`024.89`](#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | open | 0.3.0 | Signature help strips the parameter kinds and never advances |
+| [`024.90`](#02490-smaller-answers-a-review-round-measured) | open | 0.3.0 | Smaller answers a review round measured |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -4015,7 +4023,7 @@ closed anyway. Until that resolution is right, a receiver whose chain
 contains an `include` the index could not resolve should produce no
 finding at all.
 
-### 0.2.6: 54 to 10, measured the same way
+### 0.2.6: 54 to 6, measured the same way
 
 Same corpus, same harness, one side per revision, with
 `unresolved-constant` as the control. Four changes, each watched failing
@@ -4027,6 +4035,9 @@ first and each pinned by mutating the specific decision inside it:
 | 2 | `singleton_class.send :alias_method` and `self.class_eval` count as the same thing | *(with 4)* |
 | 3 | a name written `::JSON` resolves only to the root, never to a same-named class elsewhere | *(no change alone — see below)* |
 | 4 | the check declines about a rooted receiver the workspace answers for from another namespace | 10 |
+| 5 | an ancestor with no statically-known name opens the surface instead of being dropped | 9 |
+| 6 | a singleton lookup also requires the *instance* chain to be identified | 8 |
+| 7 | an alias whose target is declared later in the same file is withdrawn | 6 |
 
 The **instance/singleton split** in (1) is the part worth carrying
 forward. `attr_atomic :value` defines `#value` and not `.attr_atomic`, so
@@ -4168,12 +4179,28 @@ them in resolution is what 0.2.1 rolled back (`024.47`), and that
 rollback was about a name written bare from inside its own namespace.
 This change cannot reach that case.
 
-Measured on the 213-file corpus: `unknown-method` unchanged at 9, so no
-precision was traded. `unresolved-constant` 897 → 906; every one of the
-nine is `Concurrent::Error`-shaped — see `024.82`, which this change
-uncovered rather than caused. Re-driven directly: `File::Stat` now
-answers 167 members and no longer leaks the workspace class's, while
-`Stat` still answers its own 121.
+Measured on the 213-file corpus: `unknown-method` unchanged, so no
+precision was traded. Re-driven directly: `File::Stat` now answers 167
+members and no longer leaks the workspace class's, while `Stat` still
+answers its own 121.
+
+**Two corrections to the paragraph that stood here**, both from a review
+round that re-measured it:
+
+- "every one of the nine is `Concurrent::Error`-shaped" — one is. The
+  nine are `TruffleRuby::AtomicReference` ×2, `Truffle::AtomicReference`,
+  `URI::Parser`, `Racc::Parser`, `ActiveSupport::JSON`,
+  `Concurrent::Error`, and `Rack::Utils::{ParameterTypeError,
+  InvalidParameterError}`. Most name a gem outside the indexed corpus,
+  which had been answered by an unrelated class of the same basename. Two
+  are a *constant alias* (`ParameterTypeError = QueryParser::ParameterTypeError`),
+  which is `024.82`'s neighbour rather than `024.82`.
+- **`unresolved-constant` was not a valid control for this change.**
+  CLAUDE.md defines a control as a category the change cannot affect, and
+  this one reads `resolve_type_name`, which the change rewrites. It did
+  not come out equal, and it could not have. `unknown-method` staying put
+  is the real evidence here; the control belongs to the changes that do
+  not touch resolution.
 
 
 
@@ -4286,18 +4313,35 @@ level up.
 ```yaml
 status: open
 kind: defect
-user-visible: no
-user-visible-note: >
-  The consequence it caused -- a stranger's module in the ancestor chain,
-  and the class's own methods then reported missing -- is refused in
-  0.2.6 rather than mis-resolved. What is open is that the reference
-  still cannot be resolved *correctly*; it is now declined instead.
+user-visible: yes
 target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/index/ancestor_fact.rb` (its shape),
 `core/lib/ovallsp/parser_service.rb` (`#record_ancestor_call`),
 `core/lib/ovallsp/workspace_index.rb` (`#resolve_type_name`)
+
+**Corrected in 0.2.6's review loop: this *is* user-visible, and the
+`user-visible: no` it carried was wrong.** The note claimed only the
+diagnostic changed. The refusal was placed in `HierarchyIndex`, which is
+what completion and go-to-definition read, so a class whose ancestor name
+is ambiguous loses that module's members everywhere. Measured with the
+entry's own fixture, asking `MethodResolver` rather than the engine:
+
+| | completion candidates for `Rackish::Request` | `resolve("request_method")` |
+|---|---|---|
+| `Rackish::Request::Helpers` alone | 1 | 1 candidate |
+| plus an unrelated `Aaa::Helpers` | **0** | **[]** |
+
+The nested `Helpers` is inside the includer, so Ruby's lexical lookup
+makes it unambiguously right, and it is refused because some other
+namespace has a `Helpers` — one of the four names this entry itself calls
+common. The `no` also satisfied `deferred_findings_spec`, so no
+`KNOWN_LIMITATIONS` paragraph was written for a capability loss; that is
+now written, and it is why the guard's two directions are worth having.
+
+Found by an independent review round; the yaml and the prose two
+paragraphs below it had been disagreeing since the entry was written.
 
 `AncestorFact` carries `owner / relation / target / location`. The target
 is the constant **as written**, and Ruby's constant lookup is lexical —
@@ -4371,6 +4415,249 @@ or module declaration at parse time, with the superclass taken from the
 argument when it is a written constant. `CONST = SomeOther` is an alias
 and is a different question — it names an existing type rather than
 declaring one, and answering it needs the alias resolved first.
+
+## 024.83 The undefined-method check is loudest exactly where no Runtime Agent can answer
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`#closed_nominal?`,
+`#reopened_elsewhere?`), `docs/design/tasks/024-deferred-review-findings.md`
+`024.13`
+
+A workspace that reopens a core class makes that class's chain look
+complete, so every method some *gem* adds to it is reported missing.
+`024.13` recorded the shape; a review round of 0.2.6 measured it, driving
+the real server.
+
+**74 `unknown-method` reports over `activesupport-8.1.3.1/lib` +
+`activemodel-8.1.3.1/lib`** — `Date has no method named today`,
+`Date.parse`, `DateTime.parse`, `Integer#minutes/megabytes/kilobyte`,
+`Class#redefine_method`, `NameError#original_message`. And in a plain
+project with its own `lib/core_ext.rb` reopening `String`: `String has no
+method named squish`, `Integer has no method named minutes`.
+
+`#reopened_elsewhere?` is the answer this engine has, and it needs a
+Runtime Agent. So the reports appear in exactly the configurations that
+cannot have one: a plain Ruby project, and a Rails project in VS Code's
+Restricted Mode — which is every Rails project until the user trusts it.
+The trusted-Rails run of the identical files reported none of them.
+
+**Not fixed in 0.2.6** because the fix is `024.13`'s design question, not
+a narrowing: telling "the workspace defines this class" from "the
+workspace reopens a class that exists elsewhere" is what the Agent is
+for, and doing it statically is its own task. Recorded here rather than
+left inside `024.13` because the measurement is new and it is much larger
+than that entry implies.
+
+**Direction:** a class the workspace declares *and* that something
+outside the workspace also declares is never closed. RBS is one such
+witness and does not know `Date`; the gem's own `sig/` is another. Until
+one exists, section 0.4 says a wrong answer on a walked path is what
+blocks, and this is one.
+
+## 024.84 A constant is typed as a class object whatever it holds
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`#constant_path_type`)
+
+`MAX_RETRIES = 3` then `r = MAX_RETRIES` hovers **`ClassOf[MAX_RETRIES]`**.
+Every constant reads as a class object regardless of what was assigned —
+`%w[]`, `{}.freeze`, `1.5`, `"str"` all the same. Measured through the
+real server by a review round of 0.2.6, in both a plain and a Rails
+workspace.
+
+It is an assertion rather than a decline: hover tells the reader the
+constant is a class. It propagates to anything assigned from it, and it
+silences completion (`DEFAULT_NAME.` offers nothing) and the
+undefined-method check at every use of a constant. Literal constants are
+as ordinary as Ruby gets.
+
+`ClassOf[X]` exists so that `Widget.new` knows `Widget` is a class
+object, which is right for a constant that *names a class*. The rule
+should follow the assigned value where the workspace can see it, and
+`024.82` is the same seam from the other side.
+
+## 024.85 `self.` completes nothing
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/prefix_completion.rb`,
+`core/lib/ovallsp/local_inferencer.rb`
+
+Completion after `self.` returns **0 items** — plain Ruby class or Rails
+model, instance or class context alike. `me = self` hovers `""`, and
+`self.nope` is not reported while the receiverless `nope` on the line
+above is. Bare-prefix completion at the same position works, so this is
+`self` specifically. Measured through the real server by a review round
+of 0.2.6.
+
+`self.` is mandatory for a setter and ubiquitous in `self.class` /
+`self.name`, so the empty list is on a path everyone walks.
+
+## 024.86 An ivar assigned in another method has no type, except in the view
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb`,
+`core/lib/ovallsp/semantic/method_analyzer.rb`
+
+`@article` assigned by a `before_action` and read in the action hovers
+`Post` **in the ERB template** and `""` **in the controller itself**,
+where completion after `@article.` offers 0 items against the view's 408.
+The same shape reproduces in a plain class: `@post` set in one method and
+read in another has no type. Measured through the real server by a review
+round of 0.2.6.
+
+So the machinery to walk a filter exists and is applied to views but not
+to the file the developer is actually editing. `@user`/`@post` set in a
+filter and used in the action is the canonical controller shape.
+
+Separately and in the same family: diagnostics never act on an ivar
+receiver even where hover and completion do know it — in the ERB,
+`@article.no_such_method` is silent while `Post.no_such_class_method` two
+lines below is reported.
+
+## 024.87 A relation stops being a relation after one hop
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/built_in_generic_rules.rb`,
+`core/lib/ovallsp/local_inferencer.rb`
+
+`Post.where(published: true)` infers `Relation[Post]`;
+`Post.where(published: true).where(user_id: 1)` infers nothing. So do
+`.order`, `.limit`, `.includes`, `.count`, and a second scope. `#first`
+and `#to_a` survive because they are modelled; the relation-returning
+methods are not.
+
+The cost is not only hover: `Post.published.where(user_id: 1).titel`
+produced **no** diagnostic in a run where `post.titel` did — the
+undefined-method check switches off at the second link of the most common
+Rails expression there is. `@articles = Post.where(...).order(:id)` in a
+controller hovers `""`.
+
+Measured through the real server by a review round of 0.2.6.
+
+**Not fixed in 0.2.6**: a review round is for fixing what the change set
+got wrong, and this is a capability the round asked for. `024.79`'s
+delegation already puts `Model.<name>` and `Relation#<name>` on one rule,
+so the table is the one place to add them.
+
+## 024.88 Completion unions a union's members; the diagnostic intersects them
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#members_of`),
+`core/lib/ovallsp/diagnostics/engine.rb` (`#reportable_branches`)
+
+`x = cond ? "s" : 1` — completion after `x.` offers **313** items, every
+member of String's list *and* Integer's, `upcase` among them. Picking one
+raises `NoMethodError` on half the branches. The undefined-method check
+at the same position takes the opposite and correct stance: it reports
+only when *every* branch lacks the method.
+
+Two features answering one question about one receiver with inverted
+quantifiers, and completion is the one whose answer can be acted on
+wrongly. Measured through the real server by a review round of 0.2.6.
+
+## 024.89 Signature help strips the parameter kinds and never advances
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#signatures_of`),
+`core/lib/ovallsp/server.rb` (the `textDocument/signatureHelp` handler)
+
+`def simple(a, b = 2, *rest, key:, opt: 1, **others, &blk)` presents as
+`simple(a, b, rest, key, opt, others, blk)` — every default, `*`, `:`,
+`**` and `&` removed, so the popup tells the reader `key` is the fourth
+positional argument when it is a required keyword. Hover shows the same
+stripped label.
+
+And the response carries no `activeParameter` (nor `activeSignature`) at
+any position, so the client has nothing to advance the highlight with and
+the popup stays on parameter 0 for the whole call. Measured through the
+real server by a review round of 0.2.6.
+
+## 024.90 Smaller answers a review round measured
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** various; each line names its own
+
+Kept as one entry because each is small and none has been separated out
+by anything but its size. All measured through the real server by a
+review round of 0.2.6.
+
+- **Hover answers an empty string rather than `null`** for a position it
+  knows nothing about, including inside a comment. LSP expects `null`.
+- **Integer arithmetic answers a four-way union.** `price * qty` hovers
+  `Complex | Float | Integer | Rational`; RBS overloads are collected
+  without narrowing on the argument type. Nothing false is asserted — the
+  union contains the truth — but it is not an answer a reader can use,
+  and completion after it offers 209 members drawn from all four.
+- **No undefined-method report on a core-library receiver.**
+  `"hello".no_such_method`, `[1,2,3].no_such_array_method`, `42.upcase`:
+  nothing, in either mode, while completion at the same position knows
+  the receiver exactly. `024.13` is why, and the trade is deliberate; it
+  is recorded here because section 0.1 names this check as half of what
+  1.0.0 is and Pylance flags the same typo.
+- **A hover label drops the namespace when the name was written bare.**
+  In `Billing::Invoice`, `Order.new` hovers `Order` while
+  `Shipping::Order.new` hovers `Shipping::Order`, so with two `Order`s
+  the label does not say which was meant.
+- **`b = nil; b ||= "x"`** hovers `""`.
+- **A scope defined in a concern's `included do`** has no type.
+- **`kwargs("positional")` against `def kwargs(name:, size: 1, **rest)`**
+  reports "takes 0 arguments, but 1 given", which reads as nonsense next
+  to a method that plainly takes several.
+- **`core/spec/e2e/lsp_client.rb#wait_until_ready` never returns for a
+  non-Rails workspace**: it accepts only `ready`/`ready-rails`, and a
+  plain Ruby project settles on `ready-static`. Any future e2e example
+  pointed at a non-Rails fixture hangs to its timeout instead of failing.
+- **`core/lib/ovallsp/observation/runner.rb` still uses `Marshal.load`**
+  on a subprocess's output. Adjacent to `024.73` and not covered by it;
+  the same reasoning applies, and the same fix shape would.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

@@ -1117,10 +1117,12 @@ RSpec.describe Ovallsp::LocalInferencer do
     #
     # Driven per name, so a change that reaches `last` and not `take`
     # fails on the one it missed rather than on a list.
+    # `find` is absent from this zero-argument table on purpose: with no
+    # arguments and no block it raises, so there is no record to answer
+    # with. Its one-argument spelling has its own example below.
     {
       "last" => "Order | nil", "last!" => "Order",
-      "take" => "Order | nil", "take!" => "Order",
-      "find" => "Order"
+      "take" => "Order | nil", "take!" => "Order"
     }.each do |method_name, expected|
       it "infers CollectionProxy[T]##{method_name} as #{expected}" do
         source = "user = User.find(1)\nuser.company.orders.#{method_name}\n"
@@ -1136,6 +1138,38 @@ RSpec.describe Ovallsp::LocalInferencer do
         expect(infer("x = User.#{method_name}\n", line: 0, character: 1).to_s).to eq(expected)
         expect(infer("x = User.all.#{method_name}\n", line: 0, character: 1).to_s).to eq(expected)
       end
+    end
+
+    # `first`, `last` and `take` return an **Array** when given a count,
+    # and the table that answers them keys on the method name alone. So
+    # `User.last(3)` inferred `User | nil` and the check then reported
+    # `recent.map` as an unknown method on `User` -- a wrong answer where
+    # 0.2.5 had no answer at all, which is the trade section 0.4 puts
+    # first. Silence here rather than `Array[User]`: modelling the array
+    # is a capability this release is not adding, and the wrong answer is
+    # what has to go.
+    %w[first last take first! last! take!].each do |method_name|
+      it "says nothing about Model.#{method_name}(n), which returns an Array" do
+        expect(infer("x = User.#{method_name}(3)\n", line: 0, character: 1)).to eq(Ovallsp::Types::UNKNOWN)
+      end
+
+      it "says nothing about a relation's ##{method_name}(n) either" do
+        source = "user = User.find(1)\nuser.company.orders.#{method_name}(3)\n"
+        expect(infer(source, line: 1, character: 20)).to eq(Ovallsp::Types::UNKNOWN)
+      end
+    end
+
+    # `find` is the other way round: it takes an id and answers a record,
+    # and answers an Array only when given several. One argument is the
+    # spelling worth modelling.
+    it "infers a relation's #find(id) as the record" do
+      source = "user = User.find(1)\nuser.company.orders.find(2)\n"
+      expect(infer(source, line: 1, character: 20)).to eq(Ovallsp::Types::Nominal.new(name: "Order"))
+    end
+
+    it "says nothing about a relation's #find with several ids" do
+      source = "user = User.find(1)\nuser.company.orders.find(2, 3)\n"
+      expect(infer(source, line: 1, character: 20)).to eq(Ovallsp::Types::UNKNOWN)
     end
 
     it "infers a DB column accessor by its mapped Ruby type" do

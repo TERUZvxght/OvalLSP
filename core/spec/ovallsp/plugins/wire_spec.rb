@@ -95,4 +95,39 @@ RSpec.describe Ovallsp::Plugins::Wire do
     expect(described_class.decode_result([1, 2, 3])).to be_nil
     expect(described_class.decode_result({ ok: true })).to be_nil
   end
+
+  # Three decisions inside this module were reverted with the whole suite
+  # still green, which CLAUDE.md counts as a defect in its own right --
+  # and two of them are input validation on the boundary this release
+  # exists to harden.
+  describe "what it refuses" do
+    it "does not rebuild a Union from fewer than two members" do
+      expect(described_class.decode_type({ kind: "union", members: [{ kind: "nil" }] })).to be_nil
+      expect(described_class.decode_type({ kind: "union", members: [] })).to be_nil
+    end
+
+    it "refuses an owner that is not a string" do
+      encoded = { ok: true,
+                  result: { shape: "declarations",
+                            declarations: [{ symbol_id: { kind: "instance_method", owner: { evil: true },
+                                                          name: "x" }, return_type: nil }] } }
+
+      expect(described_class.decode_result(encoded)).to eq(ok: true, result: [])
+    end
+
+    # The kinds beyond methods are reachable: `register_declarations`
+    # takes `kind:` straight from the plugin, so a plugin may register a
+    # class or a constant and this Core builds a `SymbolId` for it.
+    it "carries the kinds a plugin may register beyond methods" do
+      %w[class module constant].each do |kind|
+        encoded = { ok: true,
+                    result: { shape: "declarations",
+                              declarations: [{ symbol_id: { kind: kind, owner: nil, name: "Thing" },
+                                               return_type: nil }] } }
+
+        expect(described_class.decode_result(encoded)[:result].first[:symbol_id].kind).to eq(kind.to_sym)
+      end
+    end
+  end
 end
+

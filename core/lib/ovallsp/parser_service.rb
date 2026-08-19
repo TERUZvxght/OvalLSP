@@ -62,10 +62,55 @@ module Ovallsp
         reference_candidates: visitor.reference_candidates,
         generated_method_facts: visitor.generated_method_facts,
         open_surface_owners: visitor.open_surface_owners.to_a
-      )
+      ).then { |summary| withdraw_forward_aliases(summary) }
     end
 
     private
+
+    # `alias_method :create, :new` binds `create` to whatever `new` means
+    # at the moment the statement runs -- not to a `def new` written five
+    # lines below it. ActiveSupport's `TimeZone` is that shape exactly
+    # (`alias_method :create, :new` at :212, `def new(name)` at :217), so
+    # `TimeZone.create(name, utc_offset, tzinfo)` reaches `Class#new` and
+    # takes three arguments. Resolving the alias to the later `def`
+    # reported "`create` takes 1 argument, but 3 given" on ActiveSupport's
+    # own source, and the same construct in a smaller workspace instead
+    # reported "has no method named `create`" -- two checks, two different
+    # wrong answers about one alias.
+    #
+    # Only the case this file can *prove* wrong is withdrawn: a target
+    # declared later in this same file. A target declared elsewhere, or
+    # earlier, keeps resolving as before -- reopening a class from another
+    # file is an ordinary pattern and nothing here can order those.
+    #
+    # The owner's surface opens in the alias's place, because `create`
+    # does exist; what is unknown is which method it names.
+    def withdraw_forward_aliases(summary)
+      forward = summary.alias_facts.select { |fact| declared_after?(summary, fact) }
+      return summary if forward.empty?
+
+      summary.with(
+        alias_facts: summary.alias_facts - forward,
+        open_surface_owners: (summary.open_surface_owners +
+          forward.map { |fact| [Index::SymbolId.bare_name(fact.owner), fact.singleton ? :singleton : :instance] }).uniq
+      )
+    end
+
+    def declared_after?(summary, fact)
+      kind = fact.singleton ? :singleton_method : :instance_method
+      summary.declarations.any? do |declaration|
+        symbol_id = declaration.symbol_id
+        symbol_id.kind == kind && symbol_id.name == fact.old_name &&
+          symbol_id.owner == Index::SymbolId.qualify_owner(fact.owner) &&
+          starts_after?(declaration.location, fact.location)
+      end
+    end
+
+    def starts_after?(later, earlier)
+      ([later[:start][:line], later[:start][:character]] <=>
+        [earlier[:start][:line], earlier[:start][:character]]).positive?
+    end
+
 
     def erb_document?(uri)
       uri.to_s.end_with?(".erb")
@@ -117,28 +162,35 @@ module Ovallsp
       # and not recognised elsewhere in this visitor makes the surface
       # open, and the check above it then declines to report absence.
       #
-      # Measured over 213 files / 257 classes before adopting the rule,
-      # because the review that proposed it named "the parser cannot tell
-      # a defining call from a harmless one, and ordinary classes fall
-      # silent" as the condition under which it is the wrong shape:
+      # Adding a name here is an assertion that it defines no method, and
+      # it costs precision when wrong -- not merely noise.
       #
-      #   with no list at all       33 of 257 classes open (12.8%)
-      #   with this list            24 of 257 classes open  (9.3%)
+      # **The figures first recorded here were wrong**, and the way they
+      # were wrong is the more useful record: they were taken with a
+      # prototype that counted only calls written directly in a class
+      # body, while the rule that shipped counted calls inside blocks too.
+      # So "24 of 257 classes open, and every name among them can define a
+      # method" described a rule nobody ran. Re-measured over the same 213
+      # files with the shipped code: **52 of 329 class and module names**,
+      # triggered by names including `warn`, `respond_to?`, `lambda`, `<`
+      # and `private_method_defined?`. A review round found it; the
+      # measurement should have.
       #
-      # and every name remaining in the 24 can genuinely define a method
-      # -- `safe_initialization!` 16, `module_eval` 9, `attr_atomic` 6,
-      # `attr`, `attr_volatile`, `def_delegators`, `java_import`, `send`,
-      # `padding`. `private_constant` alone accounted for 21 of the 33,
-      # which is why the list is not empty.
-      #
-      # Adding a name here is therefore an assertion that it defines no
-      # method, and it costs precision when wrong -- not merely noise.
+      # Two corrections followed. The block rule above -- which is the
+      # structural half, since most of the excess was `assert_equal`
+      # inside somebody's `test` block -- and the second group below,
+      # which are calls that read or report and cannot define.
       NON_DEFINING_CLASS_BODY_CALLS = %i[
         private public protected module_function
         private_class_method public_class_method
         private_constant public_constant deprecate_constant
         autoload undef_method remove_method
         require require_relative raise freeze
+        warn puts print p pp
+        respond_to? method_defined? private_method_defined?
+        public_method_defined? protected_method_defined?
+        const_defined? instance_methods instance_variable_get
+        lambda proc ruby2_keywords singleton_class
       ].to_set.freeze
 
       # Task 017's priority-ordered DSL list, scoped to the three this
@@ -146,6 +198,11 @@ module Ovallsp
       # store_accessor/has_one/polymorphic/Concern/helper_method/mailer-
       # job entry points are explicitly deferred (docs/design/tasks/017-rails-dsl-extension.md).
       GENERATED_METHOD_DSLS = %i[enum scope delegate].freeze
+
+      # The calls this visitor turns into declarations of its own. Exempt
+      # from the open-surface rule only when they actually did -- see
+      # #record_open_surface.
+      RECORDING_CALLS = (GENERATED_METHOD_DSLS + %i[alias_method attr_reader attr_writer attr_accessor]).to_set.freeze
 
       def initialize(lines)
         super()
@@ -156,6 +213,12 @@ module Ovallsp
         @reference_candidates = []
         @generated_method_facts = []
         @open_surface_owners = Set.new
+        @recorded_a_declaration = false
+        # How many block or lambda bodies enclose the node being visited.
+        # A block's meaning belongs to the call that owns it, so
+        # #record_open_surface looks at that call and not at what is
+        # written inside -- see there.
+        @block_depth = 0
         @owner_stack = []
         @singleton_context_stack = [false]
         # A second, deliberately separate question. `@singleton_context_stack`
@@ -348,8 +411,16 @@ module Ovallsp
           end
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
+          declared_before = @declarations.size
           record_generated_methods(node) if current_owner && GENERATED_METHOD_DSLS.include?(node.name)
           record_attribute_methods(node) if current_owner && ATTRIBUTE_DSLS.key?(node.name)
+          # A recognised DSL that recorded nothing is not a recognised
+          # call. `attr_reader(*NAMES)` and `delegate(*NAMES, to: :inner)`
+          # produce no declarations -- their recorders need literal
+          # arguments -- and the surface stayed closed anyway because the
+          # *name* was on the exempt list, so `Bag#a` was reported missing.
+          # What matters is whether anything was actually recorded.
+          @recorded_a_declaration = @declarations.size > declared_before
           wrapped_visibility = inline_attribute_visibility_for(node)
         end
         # Outside the receiverless branch: `singleton_class.send` and
@@ -389,6 +460,7 @@ module Ovallsp
 
       def visit_block_node(node)
         @scope_stack.push(next_scope_id)
+        @block_depth += 1
         # A visibility section opened inside a block belongs to that
         # block. `concerning :Auth do private; def authenticate; end end`
         # and `included do ... end` and `class_eval do ... end` all run
@@ -407,8 +479,20 @@ module Ovallsp
         @visibility_stack.push(@visibility_stack.last)
         super
       ensure
+        @block_depth -= 1
         @visibility_stack.pop
         @scope_stack.pop
+      end
+
+      # A lambda body is a block that Prism models separately, and it is
+      # the shape that made the block rule matter: `DEFAULT = -> {
+      # helper_thing }` in a class body silenced every report about that
+      # class.
+      def visit_lambda_node(node)
+        @block_depth += 1
+        super
+      ensure
+        @block_depth -= 1
       end
 
       def visit_constant_read_node(node)
@@ -710,9 +794,26 @@ module Ovallsp
       # this rule exists for.
       def record_open_surface(node)
         return if current_owner.nil? || @in_method_body
+        # Written inside a block, this call says nothing about the
+        # enclosing class's members -- the call that *owns* the block does,
+        # and it is visited separately. `included do ... end` opens the
+        # surface through `included`; `assert_equal` inside somebody's
+        # `test` block does not, and neither does `helper_thing` inside
+        # `DEFAULT = -> { helper_thing }`, which used to silence every
+        # report about the class it was written in.
+        return if @block_depth.positive?
+        # A setter or an operator is named in a way no method-defining
+        # macro is: Ruby will not let `def default_query_parser=(v)`
+        # define something else, and `singleton_class < Comparable` is a
+        # comparison. A shape rather than more names, because a list can
+        # only ever hold the calls somebody has already seen.
+        return unless node.name.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_]*[!?]?\z/)
         return if NON_DEFINING_CLASS_BODY_CALLS.include?(node.name)
-        return if ANCESTOR_RELATIONS.key?(node.name) || node.name == :alias_method
-        return if GENERATED_METHOD_DSLS.include?(node.name) || ATTRIBUTE_DSLS.key?(node.name)
+        # Ancestor relations are exempt by name because
+        # `#record_dynamic_ancestor` already opens the surface for the
+        # ones it cannot read.
+        return if ANCESTOR_RELATIONS.key?(node.name)
+        return if RECORDING_CALLS.include?(node.name) && @recorded_a_declaration
 
         kind = open_surface_kind(node)
         return if kind.nil?

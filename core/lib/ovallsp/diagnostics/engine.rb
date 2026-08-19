@@ -851,8 +851,18 @@ module Ovallsp
         # lookup: a singleton chain ends at the class itself and never
         # reaches BasicObject, so asking it directly would call every
         # `Foo.bar` open and silence the check entirely.
-        return false unless chain_reaches_root?(context.hierarchy_index.ancestors(nominal.name, singleton: false))
+        instance_entries = context.hierarchy_index.ancestors(nominal.name, singleton: false)
+        return false unless chain_reaches_root?(instance_entries)
         return false unless entries.all? { |entry| ancestor_known?(entry, context) }
+        # A singleton lookup also depends on the *instance* chain, because
+        # that is where `include` puts a module and `included`/`extended`
+        # hooks are how a Ruby module adds class methods. The singleton
+        # chain carries no trace of an `include`, so a class that includes
+        # something this workspace cannot identify used to look complete
+        # at class level: `include Singleton` then reported `.instance`
+        # missing, `include Sidekiq::Worker` reported `sidekiq_options`,
+        # `include ActiveModel::Model` reported `validates`.
+        return false if singleton && !instance_entries.all? { |entry| ancestor_known?(entry, context) }
         return false if entries.any? { |entry| declares_method_missing?(entry.name, context) }
         # Same question as `method_missing`, from the other direction: that
         # one is a surface that answers at call time, this one a surface
@@ -864,7 +874,7 @@ module Ovallsp
         # `reopened_elsewhere?` below: this answer comes from the index
         # rather than a round trip, and a workspace that reopens `Object`
         # with an unreadable macro has opened `Object`.
-        return false if entries.any? { |entry| context.workspace_index.open_surface?(entry.name, singleton: singleton) }
+        return false if entries.any? { |entry| open_surface_for?(entry, singleton, context) }
 
         # Asked of every link in the chain, not just the receiver. Once
         # `test/test_helper.rb` has reopened `ActiveSupport::TestCase`,
@@ -1086,6 +1096,16 @@ module Ovallsp
         return true if entry.kind
 
         context.signatures && !context.signatures.ancestors(qualified_owner(entry.name)).empty?
+      end
+
+      # Which side of a module's surface this link actually contributes.
+      # `extend M` puts M's **instance** methods on the class-level chain,
+      # so asking M about its singleton surface answers about the wrong
+      # side -- and `Host.thing` was reported while the `include` spelling
+      # of the same thing was already silent.
+      def open_surface_for?(entry, singleton, context)
+        side = entry.origin == :extend ? false : singleton
+        context.workspace_index.open_surface?(entry.name, singleton: side)
       end
 
       def declares_method_missing?(owner, context)

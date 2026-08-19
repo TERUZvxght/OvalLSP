@@ -229,5 +229,269 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
 
     expect(unknown_methods(document)).to eq(["value"])
   end
+
+  # The rule as first shipped was far broader than its own recorded
+  # measurement, and the measurement was taken against a different rule
+  # than the one that shipped. Re-measured over the same 213 files with
+  # the shipped code: **52 of 329 class and module names open**, not the
+  # 24 of 257 recorded, and the triggering names include `warn`,
+  # `respond_to?`, `lambda`, `<` and `private_method_defined?` -- none of
+  # which can define anything.
+  #
+  # Two things were wrong. The claim, corrected in 035 and in the table
+  # above; and the rule, which counted receiverless calls written *inside
+  # a block*. A block's meaning belongs to the call that owns it:
+  # `included do ... end` is unreadable and opens the surface, but
+  # `assert_equal` written inside somebody's `test` block says nothing
+  # about the enclosing class's members. Counting both silenced a class
+  # for the whole session over a lambda in a constant.
+  it "is not opened by a receiverless call inside a lambda" do
+    document = index(<<~RUBY_SRC)
+      class Service
+        DEFAULT = -> { helper_thing }
+
+        def run
+          definitely_not_defined_zzz
+        end
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to include("definitely_not_defined_zzz")
+  end
+
+  it "is not opened by a receiverless call inside somebody else's block" do
+    document = index(<<~RUBY_SRC)
+      class Suite
+        [1, 2].each { |n| some_helper(n) }
+
+        def run
+          definitely_not_defined_zzz
+        end
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to include("definitely_not_defined_zzz")
+  end
+
+  # The control, and the shape the block rule must not break: the call
+  # that *owns* an unreadable block still opens the surface, because
+  # `included do ... end` and `class_eval { ... }` really do define
+  # methods on the owner.
+  it "is still opened by an unreadable call that takes a block" do
+    document = index(<<~RUBY_SRC)
+      class Concernish
+        included do
+          def woven_in; end
+        end
+
+        def run
+          woven_in
+        end
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).not_to include("woven_in")
+  end
+
+  it "is not opened by a class-body call that cannot define anything" do
+    document = index(<<~RUBY_SRC)
+      class Noisy
+        warn "deprecated"
+
+        def run
+          definitely_not_defined_zzz
+        end
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to include("definitely_not_defined_zzz")
+  end
+
+  # A setter and an operator are named in a way no method-defining macro
+  # is. Ruby will not let you write `def default_query_parser=(v)` and
+  # have it define something else, and `Foo < Bar` in a class body is a
+  # comparison. Expressed as a shape rather than added to the list, since
+  # the list can only ever name the calls somebody has already seen.
+  it "is not opened by a setter or an operator in the class body" do
+    document = index(<<~RUBY_SRC)
+      class Configured
+        self.default_query_parser = 1
+        singleton_class < Comparable
+
+        def run
+          definitely_not_defined_zzz
+        end
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to include("definitely_not_defined_zzz")
+  end
+
+  # An `include` of a module the workspace cannot identify leaves the
+  # *instance* chain correctly open -- the entry is there with no kind, so
+  # `#ancestor_known?` refuses it. The singleton chain carried no trace of
+  # it at all and therefore looked complete, and a `included`/`extended`
+  # hook is exactly how a Ruby module adds class methods.
+  #
+  # Measured by a reviewer driving the real server: `include Singleton` +
+  # `.instance`, `include Sidekiq::Worker` + `sidekiq_options`,
+  # `include ActiveModel::Model` + `validates`, and 8 more of the same
+  # shape across `mail-2.9.1` -- all wrong reports on working code, all in
+  # the configuration a first-time user meets, since a plain Ruby project
+  # never gets a Runtime Agent and a Rails project in Restricted Mode does
+  # not either.
+  it "says nothing at class level about a class that includes a module it cannot identify" do
+    document = index(<<~RUBY_SRC)
+      class ImportWorker
+        include Sidekiq::Worker
+
+        sidekiq_options queue: "low"
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to be_empty
+  end
+
+  # The control: without the unidentifiable include, the same class-level
+  # call is still reported -- 024.23's behaviour, which this must not undo.
+  it "still reports that class-level call when every ancestor is identified" do
+    document = index(<<~RUBY_SRC)
+      module Known
+        def helper; end
+      end
+
+      class ImportWorker
+        include Known
+
+        sidekiq_options queue: "low"
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to eq(["sidekiq_options"])
+  end
+
+  # The message names the *branch* when a Union has one reportable
+  # member, and the whole receiver otherwise. Both arms are reachable and
+  # they differ, so a reader seeing `Widget | nil` in a report is being
+  # told something different from `Widget` -- and `evidence[:receiver]`
+  # carries the same string to anyone consuming findings.
+  it "names the single reportable branch rather than the whole union" do
+    document = index(<<~RUBY_SRC)
+      class Widget
+        def build = nil
+      end
+
+      class Caller
+        def go(flag)
+          maybe = flag ? Widget.new : nil
+          maybe.definitely_not_defined_zzz
+        end
+      end
+    RUBY_SRC
+
+    context = Ovallsp::Diagnostics::SemanticContext.new(
+      workspace_index: workspace_index, hierarchy_index: hierarchy_index, method_resolver: method_resolver,
+      local_inferencer: local_inferencer, model_registry: model_registry,
+      route_registry: Ovallsp::Routes::RouteRegistry.new, signatures: signatures, generation: 1
+    )
+    finding = engine.analyze(document: document, semantic_context: context, mode: :standard)
+                    .find { |f| f.code == "unknown-method" }
+
+    expect(finding&.evidence&.fetch(:receiver)).to eq("Widget")
+  end
+
+  # Inside `class << self`, an unreadable call defines *singleton*
+  # methods, so it must open that surface and not the instance one.
+  # Reverting the branch that decides this left the whole suite green.
+  it "opens the class-level surface for an unreadable call inside class << self" do
+    document = index(<<~RUBY_SRC)
+      class Woven
+        class << self
+          weave_in_class_methods :a
+        end
+      end
+
+      class Caller
+        def go = Woven.woven
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to be_empty
+  end
+
+  it "leaves the instance surface closed in that case" do
+    document = index(<<~RUBY_SRC)
+      class Woven
+        class << self
+          weave_in_class_methods :a
+        end
+
+        def run
+          definitely_not_defined_zzz
+        end
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to include("definitely_not_defined_zzz")
+  end
+
+  # A module reached through `extend M` contributes its **instance**
+  # surface to the class-level chain, so asking `M` about its *singleton*
+  # surface answers about the wrong side and the report goes out anyway.
+  # The `include` spelling of the same thing was already silent.
+  it "reads an extended module's instance surface when asked at class level" do
+    document = index(<<~RUBY_SRC)
+      module Helper
+        attr_atomic :thing
+      end
+
+      class Host
+        extend Helper
+      end
+
+      class Caller
+        def go = Host.thing
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to be_empty
+  end
+
+  # The control: a module that opens nothing leaves the class-level check
+  # answering.
+  it "still reports a class-level call through a module that opens nothing" do
+    document = index(<<~RUBY_SRC)
+      module Helper
+        def readable; end
+      end
+
+      class Host
+        extend Helper
+      end
+
+      class Caller
+        def go = Host.definitely_not_defined_zzz
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to eq(["definitely_not_defined_zzz"])
+  end
+
+  # A recognised DSL called with a splat records no declarations at all --
+  # `record_attribute_methods` needs literal arguments -- yet the surface
+  # stayed closed because the *name* was on the recognised list. The rule
+  # has to key on whether anything was actually recorded.
+  it "opens the surface when a recognised DSL is called in a way it cannot read" do
+    document = index(<<~RUBY_SRC)
+      class Bag
+        NAMES = [:a, :b]
+        attr_reader(*NAMES)
+
+        def show = a
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to be_empty
+  end
 end
 

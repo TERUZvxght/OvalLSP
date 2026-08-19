@@ -72,4 +72,16 @@ RSpec.describe Ovallsp::Index::TypeNameResolution do
       expect(described_class.substitution?("String", "Serializer::Elements::String", raising)).to be(false)
     end
   end
+
+  # Only a *bare* name. A receiver that carries its own namespace is not
+  # somebody else's answer, and `WorkspaceIndex#resolve_type_name` is
+  # where a written namespace is enforced since 0.2.6 (`024.78`).
+  # Reverting this line made `include Foo::Helpers` refusable whenever
+  # any other namespace declared a `Helpers`.
+  it "says nothing about a name that carries its own namespace" do
+    expect(
+      described_class.substitution?("Foo::String", "::Other::String", signatures_declaring("::Foo::String"))
+    ).to be(false)
+  end
 end
+

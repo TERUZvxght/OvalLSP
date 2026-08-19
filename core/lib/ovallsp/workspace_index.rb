@@ -583,8 +583,13 @@ module Ovallsp
     # same constant path `written` does, allowing for an outer namespace
     # the author did not repeat. Compared segment-wise, so `::MyStat` is
     # not a match for `Stat`.
+    #
+    # `written` needs no `bare_name`: a rooted name returned above before
+    # reaching here, so what arrives is always unrooted. A review round
+    # found the call reverted with the suite still green, which is what
+    # dead code looks like from the outside.
     def namespace_suffix?(candidate, written)
-      candidate.to_s.end_with?("::#{Index::SymbolId.bare_name(written)}")
+      candidate.to_s.end_with?("::#{written}")
     end
 
     # One collection is deliberately left in insertion order, and a

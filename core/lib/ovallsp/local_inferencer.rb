@@ -740,7 +740,7 @@ module Ovallsp
         # switched the method off, skipping the class-level finder and the
         # source declaration below (024.3). The `.new` branch had always
         # filtered it; this branch had not.
-        class_level = resolve_class_level_finder(receiver_name, node.name)
+        class_level = resolve_class_level_finder(receiver_name, node.name, positionals: positional_count(node))
         return class_level if class_level
 
         # `Widget.some_class_method` -- an ordinary (non-Active-Record)
@@ -772,7 +772,8 @@ module Ovallsp
       signature = receiver_type && resolve_signature_call(receiver_type, node, direct: true)
       return signature if signature
 
-      instance_level = receiver_type && resolve_instance_level(receiver_type, node.name)
+      instance_level = receiver_type && resolve_instance_level(receiver_type, node.name,
+                                                               positionals: positional_count(node))
       return instance_level if instance_level
 
       inherited_signature = receiver_type && resolve_signature_call(receiver_type, node, direct: false)
@@ -844,7 +845,7 @@ module Ovallsp
     # `Model.find` -> Model, `Model.find_by` -> Model | nil,
     # `Model.where`/`Model.all` -> Relation[Model]
     # (docs/03-semantic-engine.md section 7.1).
-    def resolve_class_level_finder(class_name, method_name)
+    def resolve_class_level_finder(class_name, method_name, positionals: 0)
       return nil unless @model_registry.known_model?(class_name)
 
       # The *model's* name, not the spelling the call site used: `::User`
@@ -868,11 +869,12 @@ module Ovallsp
         # names to the list above, so the two stay one rule as that list
         # grows -- `#resolve_relation_member` is where a relation method's
         # return type is decided, and it stays the only place.
-        resolve_relation_member(Types::Generic.new(name: "Relation", type_arg: model_type), method_name)
+        resolve_relation_member(Types::Generic.new(name: "Relation", type_arg: model_type), method_name,
+                                positionals: positionals)
       end
     end
 
-    def resolve_instance_level(receiver_type, method_name)
+    def resolve_instance_level(receiver_type, method_name, positionals: 0)
       case receiver_type
       when Types::Nominal
         resolve_model_member(receiver_type.name, method_name) || resolve_source_method_member(receiver_type, method_name)
@@ -901,10 +903,10 @@ module Ovallsp
           # at all (`Types.base_nominal` refuses them), so the order is
           # decided entirely by `Array`, the one name in both sets.
           resolve_generic_base_member(receiver_type, method_name) ||
-            resolve_relation_member(receiver_type, method_name)
+            resolve_relation_member(receiver_type, method_name, positionals: positionals)
         end
       when Types::Union
-        resolve_union_member(receiver_type, method_name)
+        resolve_union_member(receiver_type, method_name, positionals: positionals)
       end
     end
 
@@ -1078,11 +1080,11 @@ module Ovallsp
     # resolves. A bare (non-safe-navigation) call through a nilable receiver
     # is exactly the kind of code these acceptance examples are written to
     # infer through, so the nil member itself contributes nothing here.
-    def resolve_union_member(union_type, method_name)
+    def resolve_union_member(union_type, method_name, positionals: 0)
       resolved = union_type.members.filter_map do |member|
         next if member == Types::NIL
 
-        resolve_instance_level(member, method_name)
+        resolve_instance_level(member, method_name, positionals: positionals)
       end
       return nil if resolved.empty?
 
@@ -1119,22 +1121,46 @@ module Ovallsp
     # `Relation#find` is the same method reached through a scope, and the
     # bang forms raise instead of returning nil, which is exactly the
     # difference between the two columns.
+    # Keyed by how many positional arguments the call may carry, because
+    # every one of these answers an *Array* at some other arity and the
+    # table used to key on the name alone: `User.last(3)` inferred
+    # `User | nil`, and the check then reported `recent.map` as an unknown
+    # method on `User` -- a wrong answer where 0.2.5 had none, which is the
+    # trade section 0.4 puts first.
+    #
+    # `first`/`last`/`take` answer a record only with no arguments; `find`
+    # only with exactly one, since several ids give an Array too. The
+    # Array shapes are deliberately not modelled here -- silence is the
+    # fix, and `Array[T]` would be a capability.
     RELATION_RECORD_FINDERS = {
-      first: :optional, last: :optional, take: :optional,
-      first!: :certain, last!: :certain, take!: :certain, find: :certain
+      first: [:optional, 0], last: [:optional, 0], take: [:optional, 0],
+      first!: [:certain, 0], last!: [:certain, 0], take!: [:certain, 0],
+      find: [:certain, 1]
     }.freeze
 
     # `Relation[T]#first`/`CollectionProxy[T]#first` -> T | nil,
     # `#first!` -> T, and the rest of RELATION_RECORD_FINDERS the same
     # way. `#resolve_class_level_finder` delegates here, so `Model.last`
     # and `Model.all.last` are one rule rather than two lists that drift.
-    def resolve_relation_member(generic_type, method_name)
+    def resolve_relation_member(generic_type, method_name, positionals: 0)
       return nil unless RELATION_LIKE.include?(generic_type.name)
 
-      case RELATION_RECORD_FINDERS[method_name]
-      when :optional then Types.normalize_union([generic_type.type_arg, Types::NIL])
-      when :certain then generic_type.type_arg
-      end
+      certainty, arity = RELATION_RECORD_FINDERS[method_name]
+      return nil unless certainty && positionals == arity
+
+      certainty == :optional ? Types.normalize_union([generic_type.type_arg, Types::NIL]) : generic_type.type_arg
+    end
+
+    # How many positional arguments a call carries. A trailing keyword
+    # hash is not one, and a splat makes the count a lower bound rather
+    # than a count -- so it answers nil, which no arity in the table
+    # matches and which therefore declines rather than guesses.
+    def positional_count(node)
+      arguments = node.arguments&.arguments
+      return 0 if arguments.nil? || arguments.empty?
+      return nil if arguments.any? { |a| a.is_a?(Prism::SplatNode) || a.is_a?(Prism::ForwardingArgumentsNode) }
+
+      arguments.count { |a| !a.is_a?(Prism::KeywordHashNode) }
     end
 
     def constant_receiver?(node)

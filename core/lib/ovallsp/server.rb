@@ -997,8 +997,8 @@ module Ovallsp
       @generated_method_index.replace_file(uri: uri, facts: facts) unless facts.empty?
     end
 
-    # `context.declarations` crossed a process boundary as Marshaled,
-    # plain data (Plugins::Loader) -- everything downstream of this
+    # `context.declarations` crossed a process boundary as plain JSON,
+    # rebuilt here by `Plugins::Wire` from validated fields (024.73) -- everything downstream of this
     # point (WorkspaceIndex, HierarchyIndex, GeneratedMethodIndex) trusts
     # its shape unconditionally and raises on anything else (e.g.
     # WorkspaceIndex#simple_name calling `.name` on a nil symbol_id).

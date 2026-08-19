@@ -35,7 +35,7 @@ module Ovallsp
     # returned. Only plain data crosses back across the fork boundary
     # (declarations for a static plugin; snapshot-section/reload-hook
     # *names*, not the Procs themselves, for a runtime one, since Ruby
-    # Procs can't be Marshaled across a process boundary) -- whatever
+    # Procs cannot cross a process boundary at all) -- whatever
     # damage a plugin's own code does happens in a short-lived child
     # process that's discarded (successfully or not) the moment this
     # method returns, POSIX `Process.fork` semantics.
@@ -137,8 +137,8 @@ module Ovallsp
       # Runs *inside the forked child* -- everything this touches
       # (loading the entrypoint file, invoking the plugin's registered
       # block) is thrown away with the child process; only the plain-
-      # data `declarations` array returned here is Marshaled back to
-      # the parent.
+      # data `declarations` array returned here crosses back to the
+      # parent, encoded by `Plugins::Wire`.
       def static_plugin_declarations(manifest)
         context = StaticContext.new(manifest.name)
         Kernel.load(manifest.static_entrypoint_path)
@@ -160,8 +160,8 @@ module Ovallsp
       end
 
       # Same "runs inside the forked child" contract as
-      # #static_plugin_declarations -- but a Proc can't be Marshaled
-      # across the fork boundary at all, so only the registered
+      # #static_plugin_declarations -- but a Proc cannot cross the fork
+      # boundary at all, so only the registered
       # sections'/hooks' *names* (not the callables themselves) survive
       # back into the parent. See RuntimeContext#restore_summary.
       def runtime_plugin_summary(manifest)
@@ -197,12 +197,12 @@ module Ovallsp
         @disabled.key?(name)
       end
 
-      # Forks a child process to run `block`, Marshals whatever it
-      # returns back to the parent through a pipe, and returns that
-      # value here -- or nil (logged, failure-counted, eventually
+      # Forks a child process to run `block`, sends whatever it returns
+      # back to the parent through a pipe as `Plugins::Wire` JSON, and
+      # returns that value here -- or nil (logged, failure-counted, eventually
       # disabling the plugin after MAX_CONSECUTIVE_FAILURES) for any of:
       # the child raising, the child exceeding @timeout_seconds (killed
-      # with SIGKILL), or the child's result failing to Marshal/unMarshal
+      # with SIGKILL), or the child's result failing to encode or decode
       # at all.
       #
       # Deliberately does NOT use Observation::Runner's `pgroup: true` +
@@ -295,7 +295,7 @@ module Ovallsp
         # #reap_finished_child has already reaped the child but before
         # `settled = true` would make this signal an already-reaped pid.
         # The window here is a little wider than Runner's -- it spans the
-        # empty check and `Marshal.load` -- but it still contains no
+        # empty check and the decode -- but it still contains no
         # blocking call, and reaching a live victim would additionally
         # require the kernel to have recycled that exact pid inside it,
         # which is tens of thousands of intervening spawns since pids are
@@ -372,10 +372,10 @@ module Ovallsp
       # itself open and Ruby-visible for the plugin's *entire* execution
       # window (an earlier version of this method) was itself exploitable:
       # a plugin could find `writer` the exact same way via ObjectSpace
-      # and write its own forged `Marshal.dump({ok: true, result: ...})`
-      # payload to it *before* #deliver_result's own write runs --
-      # `Marshal.load` only consumes the first valid object off a
-      # stream, so whichever payload arrived first silently won, letting
+      # and write its own forged `{ok: true, result: ...}` payload to it
+      # *before* #deliver_result's own write runs -- the reader consumed
+      # the first object off the stream, so whichever payload arrived
+      # first silently won, letting
       # a plugin fabricate arbitrary, unvalidated "results" the loader
       # would trust completely (reproduced live: a forged payload of
       # bogus declarations reached WorkspaceIndex and crashed the whole
@@ -453,7 +453,7 @@ module Ovallsp
         begin
           decoded = Wire.decode_result(JSON.parse(raw, symbolize_names: true))
           decoded || { ok: false, error: "plugin process output did not match the plugin protocol" }
-        rescue JSON::ParserError, StandardError => e
+        rescue StandardError => e
           { ok: false, error: "failed to read plugin process output: #{e.class}: #{e.message}" }
         end
       end
