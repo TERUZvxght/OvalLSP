@@ -35,9 +35,15 @@ require "tmpdir"
 ROOT = File.expand_path("..", __dir__)
 LOCK = File.join(Dir.tmpdir, "ovallsp-hunk-sweep.lock")
 
+# Forced to UTF-8: a diff of this tree carries Japanese comments, and
+# `Open3` hands back ASCII-8BIT, which makes every regex against it raise
+# `invalid byte sequence in US-ASCII`. Found by running this script on
+# the change set that introduced it -- which is the only way this kind of
+# thing is found, and the reason the script is in the tree rather than
+# rebuilt from memory each release.
 def run(*command, chdir: ROOT)
   stdout, status = Open3.capture2e(*command, chdir: chdir)
-  [stdout, status.success?]
+  [stdout.force_encoding(Encoding::UTF_8), status.success?]
 end
 
 def refuse(message)
