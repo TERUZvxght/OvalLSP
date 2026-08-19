@@ -332,6 +332,23 @@ module Ovallsp
       # chain, so the extended module's instance-side ancestors are what
       # belongs here too, not its own singleton side).
       def ancestor_entries_for(fact, visited)
+        # An ancestor whose name is claimed by several declared types is
+        # not resolved -- it is picked, and Ruby's own lookup is lexical
+        # while `AncestorFact` carries no lexical nesting. Picking put a
+        # module from an unrelated namespace into the chain and left the
+        # chain looking complete, which is worse than not knowing: the
+        # class's own methods were then reported missing.
+        #
+        # Recorded as a nameless entry rather than dropped, so the chain
+        # says it is incomplete instead of silently shrinking. Dropping it
+        # would produce the same false report for a new reason.
+        #
+        # The durable fix is 024.81: carry the lexical context, so this is
+        # a lookup again rather than a refusal.
+        if @workspace_index.ambiguous_type_name?(fact.target)
+          return [AncestorEntry.new(name: nil, kind: nil, origin: fact.relation, location: fact.location)]
+        end
+
         compute_ancestors_locked(fact.target, singleton: false, visited: visited, origin_for_self: fact.relation)
       end
 

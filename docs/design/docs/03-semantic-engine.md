@@ -300,10 +300,25 @@ Model.find_by(...)              -> Model | nil
 Model.where(...)                -> ActiveRecord::Relation[Model]
 Model.all                       -> ActiveRecord::Relation[Model]
 Relation[T]#first               -> T | nil
-Relation[T]#first!              -> T
+Relation[T]#last                -> T | nil
+Relation[T]#take                -> T | nil
+Relation[T]#first!/#last!/#take! -> T
+Relation[T]#find(id)            -> T
 Relation[T]#to_a                -> Array[T]
 Relation[T]#each block param    -> T
+Model.<any of the above>        -> as if written Model.all.<name>
 ```
+
+**0.2.6 の二点。** `Relation` の record 返却系は `#first` しか模していな
+かったため、`orders.last` も `Model.last` も何も答えませんでした
+(`024.79`)。そして `Model.<name>` はここに名前を足すのではなく
+`Relation` 側へ委譲します — `ActiveRecord::Querying` が実際に `all` へ
+委譲しているので、返り値を決める場所が一つで済みます。
+
+**引数の数で答えが変わります。** `first`/`last`/`take` は引数を取ると
+Array を返し、`find` は複数の id を取ると Array を返します。表は引数の
+数でも引き当てるので、`Model.first(3)` には何も答えません — Array を
+模すのは別の作業で、ここで返すべきは「誤った答え」ではなく沈黙です。
 
 ### 7.2 Associations
 

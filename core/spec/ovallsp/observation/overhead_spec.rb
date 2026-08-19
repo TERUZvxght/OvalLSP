@@ -29,6 +29,7 @@ RSpec.describe "Observation overhead (Task 019)" do
     # flaky across CI hardware) -- this only guards against a gross
     # regression (e.g. an accidental O(n^2) somewhere), not a specific
     # overhead percentage.
+    # perf-guard: gross regression only (an accidental O(n^2)), not an overhead percentage
     expect(elapsed).to be < 10
   end
 

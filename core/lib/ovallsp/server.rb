@@ -169,6 +169,16 @@ module Ovallsp
           @reader.read_message
         rescue Ovallsp::IO::FramedReader::EOF
           break
+        rescue Ovallsp::IO::FramedReader::ProtocolError => e
+          # A malformed frame carries no id, so there is nobody to answer
+          # -- but it is also not a reason to end the session. Until
+          # 0.2.6 every one of these (`Content-Length: -5`, a missing
+          # header, a body that is not JSON) escaped `run` and the
+          # process exited 1 with a raw backtrace, leaving the client's
+          # next request unanswered. Only a client can send one, but a
+          # reconnect or one stray byte on stdin was enough.
+          @logger.error("skipping a malformed message: #{e.message}")
+          next
         end
 
         break if dispatch(message) == :exit
@@ -997,8 +1007,8 @@ module Ovallsp
       @generated_method_index.replace_file(uri: uri, facts: facts) unless facts.empty?
     end
 
-    # `context.declarations` crossed a process boundary as Marshaled,
-    # plain data (Plugins::Loader) -- everything downstream of this
+    # `context.declarations` crossed a process boundary as plain JSON,
+    # rebuilt here by `Plugins::Wire` from validated fields (024.73) -- everything downstream of this
     # point (WorkspaceIndex, HierarchyIndex, GeneratedMethodIndex) trusts
     # its shape unconditionally and raises on anything else (e.g.
     # WorkspaceIndex#simple_name calling `.name` on a nil symbol_id).

@@ -118,19 +118,56 @@ module Ovallsp
           # whose whole policy is that a false report is worse than a
           # missed one. See 024.13.
           receiver_type = receiver_type_for(document, candidate, context)
-          next unless receiver_type.is_a?(Types::Nominal)
-          next unless closed_nominal?(receiver_type, candidate.singleton, context) ||
-                      model_closed?(receiver_type, context)
-          next if rbs_resolves?(candidate, receiver_type, context)
-          next if model_resolves?(candidate, receiver_type, context)
+          # A Union is asked branch by branch rather than discarded.
+          # `Relation[T]#first` and `CollectionProxy[T]#first` infer
+          # `T | nil`, so `Order.recent.first.missing` was reported by
+          # nothing while `Order.find(id).missing` was reported normally
+          # -- and `Model.scope.first` is an everyday Rails idiom
+          # (`024.77`). Completion already knew the answer at that
+          # position; only this check refused to ask.
+          branches = reportable_branches(receiver_type)
+          next if branches.empty?
+          next unless branches.all? { |branch| absent_from?(branch, candidate, context) }
 
+          reported = branches.length == 1 ? branches.first : receiver_type
           Finding.new(
             code: "unknown-method",
-            message: "#{receiver_type} has no method named `#{candidate.name}`",
+            message: "#{reported} has no method named `#{candidate.name}`",
             range: candidate.location, severity: :warning, confidence: :high,
-            evidence: { receiver: receiver_type.to_s, ancestors_closed: true }, generation: context.generation
+            evidence: { receiver: reported.to_s, ancestors_closed: true }, generation: context.generation
           )
         end
+      end
+
+      # The branches a negative answer would have to hold for. `nil` is
+      # dropped: `nil.foo` is a different check and its own product
+      # question, and letting it make every nilable receiver unreportable
+      # is what closed this path entirely.
+      #
+      # Empty means "not something to assert about" -- a receiver that is
+      # neither a Nominal nor a Union of them, or a Union of nothing but
+      # nil.
+      def reportable_branches(receiver_type)
+        case receiver_type
+        when Types::Nominal then [receiver_type]
+        when Types::Union
+          members = receiver_type.members.reject { |t| t == Types::NIL }
+          members.all? { |t| t.is_a?(Types::Nominal) } ? members : []
+        else []
+        end
+      end
+
+      # Absence, for one branch, on the terms the whole check already
+      # uses. A Union is *more* uncertain than a Nominal, never less, so
+      # every branch must clear the same bar -- one branch that is not
+      # closed, or that has the method, ends the report.
+      def absent_from?(branch, candidate, context)
+        return false unless closed_nominal?(branch, candidate.singleton, context) ||
+                            model_closed?(branch, context)
+        return false if rbs_resolves?(candidate, branch, context)
+        return false if model_resolves?(candidate, branch, context)
+
+        true
       end
 
       # Reports a call that cannot possibly bind, by comparing the call
@@ -700,8 +737,36 @@ module Ovallsp
                                                                   context.local_inferencer)
         return Types::UNKNOWN if resolved.is_a?(Types::Nominal) && context.workspace_index.guessed_type_name?(resolved.name)
         return Types::UNKNOWN if resolved.is_a?(Types::Nominal) && shadowed_declared_type?(resolved.name, context)
+        return Types::UNKNOWN if rooted_receiver_answered_elsewhere?(candidate, context)
 
         resolved
+      end
+
+      # `::JSON` is rooted, and Ruby gives a rooted name exactly one
+      # possible referent: the top-level constant. Nothing downstream can
+      # see that, because `ReceiverResolution` strips the `::` on the way
+      # in -- so `HierarchyIndex` re-resolved the bare `JSON` and answered
+      # with i18n's own `I18n::Backend::KeyValue::JSON`, whose singleton
+      # chain is closed, and this check reported `::JSON.parse` missing
+      # over ordinary gem source (2 of the 18 findings the 213-file corpus
+      # still produced after the open-surface rule).
+      #
+      # The same shape as `#shadowed_declared_type?` and declined in the
+      # same place for the same reason: resolution keeps answering, since
+      # moving a rule of this kind into resolution is what 024.47 rolled
+      # back. Completion and go-to-definition still offer the plausible
+      # class; only the assertion is withheld.
+      #
+      # Narrow on purpose. A rooted name the workspace does not claim at
+      # all (`::String`) is left alone -- RBS answers it, and that answer
+      # is right.
+      def rooted_receiver_answered_elsewhere?(candidate, context)
+        written = candidate.receiver.to_s
+        return false unless written.start_with?("::")
+
+        bare = Index::SymbolId.bare_name(written)
+        answer = context.workspace_index.resolve_type_name(bare)
+        !answer.nil? && Index::SymbolId.bare_name(answer) != bare
       end
 
       # Whether the index would answer a *bare* name that signatures
@@ -786,9 +851,30 @@ module Ovallsp
         # lookup: a singleton chain ends at the class itself and never
         # reaches BasicObject, so asking it directly would call every
         # `Foo.bar` open and silence the check entirely.
-        return false unless chain_reaches_root?(context.hierarchy_index.ancestors(nominal.name, singleton: false))
+        instance_entries = context.hierarchy_index.ancestors(nominal.name, singleton: false)
+        return false unless chain_reaches_root?(instance_entries)
         return false unless entries.all? { |entry| ancestor_known?(entry, context) }
+        # A singleton lookup also depends on the *instance* chain, because
+        # that is where `include` puts a module and `included`/`extended`
+        # hooks are how a Ruby module adds class methods. The singleton
+        # chain carries no trace of an `include`, so a class that includes
+        # something this workspace cannot identify used to look complete
+        # at class level: `include Singleton` then reported `.instance`
+        # missing, `include Sidekiq::Worker` reported `sidekiq_options`,
+        # `include ActiveModel::Model` reported `validates`.
+        return false if singleton && !instance_entries.all? { |entry| ancestor_known?(entry, context) }
         return false if entries.any? { |entry| declares_method_missing?(entry.name, context) }
+        # Same question as `method_missing`, from the other direction: that
+        # one is a surface that answers at call time, this one a surface
+        # whose members were written by a macro the parser cannot read.
+        # Neither can be enumerated, so neither supports a claim of
+        # absence. Asked of every link for the reason spelled out below --
+        # `attr_atomic` in a superclass defines instance methods on the
+        # subclass just as surely -- and of synthesised links too, unlike
+        # `reopened_elsewhere?` below: this answer comes from the index
+        # rather than a round trip, and a workspace that reopens `Object`
+        # with an unreadable macro has opened `Object`.
+        return false if entries.any? { |entry| open_surface_for?(entry, singleton, context) }
 
         # Asked of every link in the chain, not just the receiver. Once
         # `test/test_helper.rb` has reopened `ActiveSupport::TestCase`,
@@ -1010,6 +1096,16 @@ module Ovallsp
         return true if entry.kind
 
         context.signatures && !context.signatures.ancestors(qualified_owner(entry.name)).empty?
+      end
+
+      # Which side of a module's surface this link actually contributes.
+      # `extend M` puts M's **instance** methods on the class-level chain,
+      # so asking M about its singleton surface answers about the wrong
+      # side -- and `Host.thing` was reported while the `include` spelling
+      # of the same thing was already silent.
+      def open_surface_for?(entry, singleton, context)
+        side = entry.origin == :extend ? false : singleton
+        context.workspace_index.open_surface?(entry.name, singleton: side)
       end
 
       def declares_method_missing?(owner, context)

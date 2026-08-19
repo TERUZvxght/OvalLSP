@@ -473,46 +473,176 @@ publisher deciding for itself. <!-- documents: 024.57 -->
 ## What the undefined-method check gets wrong on real code
 
 **Measured, over 213 files of installed gem source: 54 reports, of which
-53 were wrong.** The 54th is arguable — an abstract template method that
-really is undefined on the class it is called on, which a Ruby developer
-would still not want reported. The check is
-built on the policy that a false report is worse than a missed one, and
-on this evidence it is not meeting it.
+53 were wrong. 0.2.6 brings that to 9.** The measurement is the same one
+each time — the same files, the same server, with a category the change
+cannot affect held as a control.
 
-The cause that matters for application code: a class that `include`s a
-module **defined in the same file, from inside a nested namespace** loses
-that module's methods, and the check then reports them missing. Rails
-concerns are that shape. `Rack::Request` is the worked example — it
-includes `Helpers` and is told it has no `request_method`.
+The cause that mattered for application code is gone: a class that
+`include`d a module **defined in the same file, from inside a nested
+namespace** lost that module's methods, and the check reported them
+missing. Rails concerns are that shape. So is metaprogramming —
+`attr_atomic` and friends — which static analysis cannot see: a class
+whose body runs a macro this extension cannot read is now treated as
+having a method set it does not know, and the check says nothing about it
+rather than guessing.
 
-The rest are metaprogrammed accessors (`attr_atomic` and friends), which
-static analysis cannot see and should be silent about rather than report,
-and platform-specific files that never run on your Ruby. <!-- documents: 024.76 -->
+**What still gets reported wrongly**, and what it looks like:
 
-**A call that does not exist is also missed through a relation.**
-`Order.recent.first.no_such_method` is reported by nothing, while
-`Order.find(id).no_such_method` is reported normally. Completion knows
-the type at that position — it will not offer the missing name — so the
-information is there and the check is not using it. `Model.scope.first`
-is an everyday idiom. <!-- documents: 024.77 -->
+- **Files for another Ruby implementation.** JRuby-only sources call
+  `java`, which your MRI does not have. Seven of the nine. If you are not
+  opening JRuby-specific files, you will not see these.
+- **A method supplied by a subclass.** An abstract class that calls a
+  method its subclasses define — a deliberate template-method pattern —
+  is reported, because on that class alone the call really would fail.
+  Two of the nine. <!-- documents: 024.76 -->
 
-## Completion offers your class's methods where a core class is meant
+A module chosen at runtime — `extend`ing whatever is held in a variable
+or a constructor argument — used to be a third kind, because an ancestor
+this extension cannot name was recorded as no ancestor at all. It is now
+recorded as one it cannot name, and nothing is reported about that
+class's members.
 
-Where a class of yours shares a name with a nested core class — a `Stat`
-of your own, against `File::Stat` — hover and diagnostics now answer
-correctly and **completion still offers your class's methods**. The type
-is right in both cases; the member list is looked up under the bare name.
+**A call that does not exist through a relation is now reported.**
+`Order.recent.first.no_such_method` was reported by nothing, while
+`Order.find(id).no_such_method` was reported normally; the check now asks
+about each branch of a `T | nil` receiver instead of discarding
+it. <!-- documents: 024.77 -->
 
-0.2.5 fixed the first two and not the third. Without a shadowing class,
-completion after `File.stat(path).` went from offering nothing to
-offering the right 167 entries, so this is an improvement that stopped
-half way rather than a new fault. <!-- documents: 024.78 -->
+## Ordinary Ruby the undefined-method check reports anyway
 
-## What `Model.first` completes to
+Four shapes, all of them code that runs. Measured over 177 files of
+rspec-core, i18n, psych and reline: 41 reports, about one per four files.
 
-**Nothing.** `Order.first.` offers no completions, while
-`Order.recent.first.` offers the model's full list. The commoner idiom is
-the one that does not work. <!-- documents: 024.79 -->
+- **A class made with `Struct.new` or `Data.define` and then reopened.**
+  `Seed = Struct.new(:seed, :used)` followed by `class Seed … end` — every
+  member read inside that body is reported. Calls from outside the class
+  are not checked at all, so it is specifically the implicit-`self` form.
+- **`define_method` and `attr_reader` themselves**, when written inside
+  `Class.new do … end` or `Module.new { … }`.
+- **`alias` to a method that came from an included module.**
+  `include Escaping` then `alias safe_escape escape`. Aliasing a `def` in
+  the same class is fine.
+- **`trap`, `URI`, `set_trace_func` and `pretty_inspect`** — four
+  `Kernel` methods the bundled signatures do not declare. `trap` is
+  ordinary in a CLI or a server.
+
+Also: a method defined inside a loop is reported even when its name is a
+literal — `[1].each { define_method(:alpha) { 1 } }`. Measured at 63
+files and 108 sites across the installed gems and the standard
+library. <!-- documents: 024.91 -->
+
+## What the undefined-method check gets wrong without a Runtime Agent
+
+If your project reopens a core class — an `initializers/core_ext.rb`, or
+anything with `class String` in it — this extension treats that class as
+one it fully knows, and then reports every method a *gem* adds to it as
+missing. `String has no method named squish`. `Integer has no method
+named minutes`. Measured over ActiveSupport's and ActiveModel's own
+source: 74 such reports.
+
+The same applies to a class that includes a module from a gem whose code
+is not in your workspace. `include Singleton` then `.instance`;
+`include Sidekiq::Worker` then `sidekiq_options` — 0.2.6 fixed those
+particular two, and the family they belong to is only fully answered by
+the Runtime Agent, which reports what your classes really respond to.
+
+**So this is loudest exactly where the Agent cannot run**: a plain Ruby
+project, which never gets one, and a Rails project in VS Code's
+Restricted Mode, which is every Rails project until you trust the
+folder. Trusting the workspace is what makes these go
+away. <!-- documents: 024.83 -->
+
+## What a constant hovers as
+
+**Its own name, as a class.** `MAX_RETRIES = 3` then `MAX_RETRIES` hovers
+`ClassOf[MAX_RETRIES]`, not `Integer` — and the same for a string, a
+float, an array or a frozen hash. Completion after a constant offers
+nothing, and nothing assigned from one carries a usable
+type. <!-- documents: 024.84 -->
+
+## What `self.` completes to
+
+**Nothing.** Completion after `self.` returns an empty list everywhere —
+instance methods, class methods, plain Ruby, Rails. Typing the same
+prefix without `self.` works. `self.nope` is also not reported as
+undefined, while a bare `nope` on the line above is. <!-- documents: 024.85 -->
+
+## An instance variable set in another method
+
+`@article` assigned by a `before_action` and read in the action has a
+type **in the view** and no type **in the controller**: hovering it in
+`show.html.erb` says `Post` and offers 408 completions, hovering the same
+name in the controller says nothing and offers none. Any ivar written in
+one method and read in another behaves this way. <!-- documents: 024.86 -->
+
+## Where a relation stops being a relation
+
+`Post.where(published: true)` is understood. `Post.where(published:
+true).where(user_id: 1)` is not, and neither are `.order`, `.limit`,
+`.includes`, `.count` or a second scope. Hover goes blank at the second
+link, and so does the undefined-method check —
+`Post.published.where(user_id: 1).titel` is not
+reported. <!-- documents: 024.87 -->
+
+## Completion on a value that could be two things
+
+`x = cond ? "s" : 1` offers you every method of `String` *and* every
+method of `Integer`. Picking one of them fails on the other branch. The
+undefined-method check takes the opposite and safer view of the same
+value, so the two features disagree. <!-- documents: 024.88 -->
+
+## What signature help shows
+
+Defaults, splats, keywords and block parameters are all shown as plain
+positional parameters, so `def simple(a, b = 2, *rest, key:)` presents as
+`simple(a, b, rest, key)` and the popup implies `key` is the fourth
+positional argument. The highlight also never advances as you type
+arguments. <!-- documents: 024.89 -->
+
+## Smaller things
+
+- Hovering somewhere with no answer returns an empty hover rather than
+  nothing at all.
+- `price * quantity` hovers `Complex | Float | Integer | Rational` — true
+  but not useful.
+- A typo on a core-library receiver is not reported: `"hello".upcse` and
+  `[1,2].siz` are silent, though completion at the same spot knows the
+  type exactly.
+- A class name written without its namespace hovers without it too, so
+  with two `Order`s the label does not say which one.
+- `b = nil; b ||= "x"` hovers nothing.
+- A scope defined inside a concern's `included do` has no type.
+- Passing a positional argument to a keyword-only method says it "takes 0
+  arguments". <!-- documents: 024.90 -->
+
+## A module whose name is shared is dropped from the class that includes it
+
+If your class `include`s a module by a bare name — `include Helpers` —
+and any other namespace in the workspace declares a `Helpers` too, this
+extension refuses to guess which one you meant. That is the right answer
+for a diagnostic: reporting your class's own methods as missing, which is
+what it used to do, is worse. But the refusal also reaches completion and
+go-to-definition, so that module's methods disappear from the list and
+jumping to one of them lands nowhere.
+
+`Helpers`, `Base`, `Error` and `Node` are shared often enough that this
+is worth knowing about. Writing the include with its namespace —
+`include Rackish::Request::Helpers` — restores it. <!-- documents: 024.81 -->
+
+## A class created by assignment is invisible
+
+`Error = Class.new(StandardError)` declares a class as surely as
+`class Error < StandardError` does, and this extension does not see it.
+Nothing resolves to such a name: not hover, not go-to-definition, not
+completion's member list. An `app/errors.rb` written in that style is
+entirely invisible, and it is an ordinary Ruby idiom for exception
+hierarchies.
+
+Until 0.2.6 this was hidden rather than absent: a name the index could
+not find was answered by whatever unrelated class shared its last
+segment, so `Concurrent::Error` resolved to somebody else's `Error`. An
+answer, and the wrong one. It is now reported as unresolvable, which is
+the honest state. <!-- documents: 024.82 -->
 
 ## What a partial's local resolves to
 

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
+require "set"
 require "prism"
 
 require_relative "index/symbol_id"
@@ -41,7 +42,7 @@ module Ovallsp
       result = Prism.parse(parse_source)
       lines = parse_source.split("\n", -1)
 
-      visitor = Visitor.new(lines).tap { |v| result.value.accept(v) }
+      visitor = walk(result, lines)
 
       Index::FileSummary.new(
         uri: document.uri,
@@ -59,11 +60,94 @@ module Ovallsp
         ancestor_facts: visitor.ancestor_facts,
         alias_facts: visitor.alias_facts,
         reference_candidates: visitor.reference_candidates,
-        generated_method_facts: visitor.generated_method_facts
-      )
+        generated_method_facts: visitor.generated_method_facts,
+        open_surface_owners: visitor.open_surface_owners.to_a
+      ).then { |summary| withdraw_forward_aliases(summary) }
     end
 
     private
+
+    # The visitor recurses once per nested node, so a deep enough file
+    # exhausts the interpreter stack. `SystemStackError` is an
+    # `Exception` rather than a `StandardError`, so it passed through
+    # every rescue between here and `Server#run`: opening one such file
+    # ended the editor's session with a raw backtrace on stderr, and the
+    # cold-index thread died without a log line -- taking the deleted-file
+    # sweep, the reference-index bump and the workspace diagnostics pass
+    # with it for the rest of the session. `BackgroundTasks#shutdown`,
+    # documented "never raises", raised too, because `Thread#join`
+    # re-raises what killed the thread.
+    #
+    # Contained where the recursion is rather than at each caller.
+    # `Server#dispatch`, `ColdIndexer` and `scripts/corpus_diagnostics.rb`
+    # each had their own rescue and each was individually plausible; that
+    # is exactly the arrangement CLAUDE.md's containment rule is about.
+    #
+    # An empty visitor rather than a partial one: a half-finished walk
+    # holds the declarations from the top of the file and none from the
+    # bottom, and the undefined-method check would assert absence on the
+    # strength of it. "Nothing was read here" is the truthful answer, and
+    # it is the one every other unreadable-input path in this file gives.
+    #
+    # Measured: a `.succ` chain fails at depth 2104, nested hashes at
+    # 1147. 0 of 4582 `.rb` files across every installed gem and the Ruby
+    # 3.4 stdlib reach any such depth, so this is generated or hostile
+    # input -- and a file arrives from anywhere.
+    def walk(result, lines)
+      visitor = Visitor.new(lines)
+      begin
+        result.value.accept(visitor)
+        visitor
+      rescue SystemStackError
+        Visitor.new(lines)
+      end
+    end
+
+
+    # `alias_method :create, :new` binds `create` to whatever `new` means
+    # at the moment the statement runs -- not to a `def new` written five
+    # lines below it. ActiveSupport's `TimeZone` is that shape exactly
+    # (`alias_method :create, :new` at :212, `def new(name)` at :217), so
+    # `TimeZone.create(name, utc_offset, tzinfo)` reaches `Class#new` and
+    # takes three arguments. Resolving the alias to the later `def`
+    # reported "`create` takes 1 argument, but 3 given" on ActiveSupport's
+    # own source, and the same construct in a smaller workspace instead
+    # reported "has no method named `create`" -- two checks, two different
+    # wrong answers about one alias.
+    #
+    # Only the case this file can *prove* wrong is withdrawn: a target
+    # declared later in this same file. A target declared elsewhere, or
+    # earlier, keeps resolving as before -- reopening a class from another
+    # file is an ordinary pattern and nothing here can order those.
+    #
+    # The owner's surface opens in the alias's place, because `create`
+    # does exist; what is unknown is which method it names.
+    def withdraw_forward_aliases(summary)
+      forward = summary.alias_facts.select { |fact| declared_after?(summary, fact) }
+      return summary if forward.empty?
+
+      summary.with(
+        alias_facts: summary.alias_facts - forward,
+        open_surface_owners: (summary.open_surface_owners +
+          forward.map { |fact| [Index::SymbolId.bare_name(fact.owner), fact.singleton ? :singleton : :instance] }).uniq
+      )
+    end
+
+    def declared_after?(summary, fact)
+      kind = fact.singleton ? :singleton_method : :instance_method
+      summary.declarations.any? do |declaration|
+        symbol_id = declaration.symbol_id
+        symbol_id.kind == kind && symbol_id.name == fact.old_name &&
+          symbol_id.owner == Index::SymbolId.qualify_owner(fact.owner) &&
+          starts_after?(declaration.location, fact.location)
+      end
+    end
+
+    def starts_after?(later, earlier)
+      ([later[:start][:line], later[:start][:character]] <=>
+        [earlier[:start][:line], earlier[:start][:character]]).positive?
+    end
+
 
     def erb_document?(uri)
       uri.to_s.end_with?(".erb")
@@ -106,13 +190,56 @@ module Ovallsp
       # lexical-body form.
       ANCESTOR_RELATIONS = { include: :include, prepend: :prepend, extend: :extend }.freeze
 
-      attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates, :generated_method_facts
+      attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates, :generated_method_facts,
+                  :open_surface_owners
+
+      # Receiverless calls that can be written in a class body without
+      # adding anything to that class's method surface. Membership is a
+      # *claim*, checked against the corpus: everything not listed here
+      # and not recognised elsewhere in this visitor makes the surface
+      # open, and the check above it then declines to report absence.
+      #
+      # Adding a name here is an assertion that it defines no method, and
+      # it costs precision when wrong -- not merely noise.
+      #
+      # **The figures first recorded here were wrong**, and the way they
+      # were wrong is the more useful record: they were taken with a
+      # prototype that counted only calls written directly in a class
+      # body, while the rule that shipped counted calls inside blocks too.
+      # So "24 of 257 classes open, and every name among them can define a
+      # method" described a rule nobody ran. Re-measured over the same 213
+      # files with the shipped code: **52 of 329 class and module names**,
+      # triggered by names including `warn`, `respond_to?`, `lambda`, `<`
+      # and `private_method_defined?`. A review round found it; the
+      # measurement should have.
+      #
+      # Two corrections followed. The block rule above -- which is the
+      # structural half, since most of the excess was `assert_equal`
+      # inside somebody's `test` block -- and the second group below,
+      # which are calls that read or report and cannot define.
+      NON_DEFINING_CLASS_BODY_CALLS = %i[
+        private public protected module_function
+        private_class_method public_class_method
+        private_constant public_constant deprecate_constant
+        autoload undef_method remove_method
+        require require_relative raise freeze
+        warn puts print p pp
+        respond_to? method_defined? private_method_defined?
+        public_method_defined? protected_method_defined?
+        const_defined? instance_methods instance_variable_get
+        lambda proc ruby2_keywords singleton_class
+      ].to_set.freeze
 
       # Task 017's priority-ordered DSL list, scoped to the three this
       # task actually implements (enum/scope/delegate) -- attribute/
       # store_accessor/has_one/polymorphic/Concern/helper_method/mailer-
       # job entry points are explicitly deferred (docs/design/tasks/017-rails-dsl-extension.md).
       GENERATED_METHOD_DSLS = %i[enum scope delegate].freeze
+
+      # The calls this visitor turns into declarations of its own. Exempt
+      # from the open-surface rule only when they actually did -- see
+      # #record_open_surface.
+      RECORDING_CALLS = (GENERATED_METHOD_DSLS + %i[alias_method attr_reader attr_writer attr_accessor]).to_set.freeze
 
       def initialize(lines)
         super()
@@ -122,6 +249,13 @@ module Ovallsp
         @alias_facts = []
         @reference_candidates = []
         @generated_method_facts = []
+        @open_surface_owners = Set.new
+        @recorded_a_declaration = false
+        # How many block or lambda bodies enclose the node being visited.
+        # A block's meaning belongs to the call that owns it, so
+        # #record_open_surface looks at that call and not at what is
+        # written inside -- see there.
+        @block_depth = 0
         @owner_stack = []
         @singleton_context_stack = [false]
         # A second, deliberately separate question. `@singleton_context_stack`
@@ -314,10 +448,21 @@ module Ovallsp
           end
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
+          declared_before = @declarations.size
           record_generated_methods(node) if current_owner && GENERATED_METHOD_DSLS.include?(node.name)
           record_attribute_methods(node) if current_owner && ATTRIBUTE_DSLS.key?(node.name)
+          # A recognised DSL that recorded nothing is not a recognised
+          # call. `attr_reader(*NAMES)` and `delegate(*NAMES, to: :inner)`
+          # produce no declarations -- their recorders need literal
+          # arguments -- and the surface stayed closed anyway because the
+          # *name* was on the exempt list, so `Bag#a` was reported missing.
+          # What matters is whether anything was actually recorded.
+          @recorded_a_declaration = @declarations.size > declared_before
           wrapped_visibility = inline_attribute_visibility_for(node)
         end
+        # Outside the receiverless branch: `singleton_class.send` and
+        # `self.class_eval` metaprogram this owner too (see there).
+        record_open_surface(node)
         record_method_call_candidate(node)
 
         if wrapped_visibility
@@ -352,6 +497,7 @@ module Ovallsp
 
       def visit_block_node(node)
         @scope_stack.push(next_scope_id)
+        @block_depth += 1
         # A visibility section opened inside a block belongs to that
         # block. `concerning :Auth do private; def authenticate; end end`
         # and `included do ... end` and `class_eval do ... end` all run
@@ -370,8 +516,20 @@ module Ovallsp
         @visibility_stack.push(@visibility_stack.last)
         super
       ensure
+        @block_depth -= 1
         @visibility_stack.pop
         @scope_stack.pop
+      end
+
+      # A lambda body is a block that Prism models separately, and it is
+      # the shape that made the block rule matter: `DEFAULT = -> {
+      # helper_thing }` in a class body silenced every report about that
+      # class.
+      def visit_lambda_node(node)
+        @block_depth += 1
+        super
+      ensure
+        @block_depth -= 1
       end
 
       def visit_constant_read_node(node)
@@ -584,13 +742,42 @@ module Ovallsp
         relation = ANCESTOR_RELATIONS.fetch(node.name)
         node.arguments.arguments.each do |arg|
           target = raw_constant_name(arg)
-          next unless target
+          # An argument with no statically-known name used to be dropped
+          # here, which made "extends a module I cannot name" and
+          # "extends nothing" the same fact downstream -- the chain then
+          # looked complete and the module's methods were reported
+          # missing. `Rack::Reloader`'s `extend backend`, a constructor
+          # parameter, is the measured case.
+          next record_dynamic_ancestor(relation) unless target
 
           @ancestor_facts << Index::AncestorFact.new(
             owner: current_owner, relation: relation, target: target,
             location: Index::SourceLocation.to_range(arg.location, @lines)
           )
         end
+      end
+
+      # An ancestor decided at runtime leaves a surface that cannot be
+      # enumerated, which is the same state an unreadable macro leaves
+      # (see #open_surface_kind) and gets the same answer: the check
+      # declines to assert absence rather than guessing.
+      #
+      # Which surface follows what the call does to `self`. In a class
+      # body `self` is the class, so `extend` adds class methods and
+      # `include`/`prepend` add instance ones; inside `class << self`
+      # every relation is class-level; and inside an instance method
+      # `extend other` is `Object#extend` on that instance, so it adds to
+      # the instance surface -- which is the `Rack::Reloader` shape and
+      # the reason this is not gated on `@in_method_body`.
+      def record_dynamic_ancestor(relation)
+        return if current_owner.nil?
+
+        kind =
+          if @singleton_context_stack.last then :singleton
+          elsif relation == :extend && !@in_method_body then :singleton
+          else :instance
+          end
+        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
       end
 
       # `alias_method :new, :old` — the method-call form; symbol (or
@@ -630,6 +817,72 @@ module Ovallsp
         attr_writer: [["=", 1]],
         attr_accessor: [["", 0], ["=", 1]]
       }.freeze
+
+      # A class body that runs something this parser cannot read may have
+      # methods no `def` and no recognised macro accounts for, so the
+      # owner's surface is *open*: absence is unprovable there, and
+      # Diagnostics::Engine#closed_nominal? declines rather than reporting.
+      #
+      # Deliberately about the enclosing owner and not the file: the cost
+      # is paid by exactly the class that ran the unreadable call.
+      # `@in_method_body` excludes calls that merely execute at call time
+      # -- but not blocks, because `included do ... end` and
+      # `class_eval { ... }` define methods on the owner and are the shape
+      # this rule exists for.
+      def record_open_surface(node)
+        return if current_owner.nil? || @in_method_body
+        # Written inside a block, this call says nothing about the
+        # enclosing class's members -- the call that *owns* the block does,
+        # and it is visited separately. `included do ... end` opens the
+        # surface through `included`; `assert_equal` inside somebody's
+        # `test` block does not, and neither does `helper_thing` inside
+        # `DEFAULT = -> { helper_thing }`, which used to silence every
+        # report about the class it was written in.
+        return if @block_depth.positive?
+        # A setter or an operator is named in a way no method-defining
+        # macro is: Ruby will not let `def default_query_parser=(v)`
+        # define something else, and `singleton_class < Comparable` is a
+        # comparison. A shape rather than more names, because a list can
+        # only ever hold the calls somebody has already seen.
+        return unless node.name.to_s.match?(/\A[A-Za-z_][A-Za-z0-9_]*[!?]?\z/)
+        return if NON_DEFINING_CLASS_BODY_CALLS.include?(node.name)
+        # Ancestor relations are exempt by name because
+        # `#record_dynamic_ancestor` already opens the surface for the
+        # ones it cannot read.
+        return if ANCESTOR_RELATIONS.key?(node.name)
+        return if RECORDING_CALLS.include?(node.name) && @recorded_a_declaration
+
+        kind = open_surface_kind(node)
+        return if kind.nil?
+
+        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
+      end
+
+      # Which surface the call could have added to, or nil for a call that
+      # is not metaprogramming this owner at all.
+      #
+      # Receiverless is the ordinary case, and it opens *one* surface, not
+      # both: `attr_atomic :value` in a class body defines `#value`, never
+      # `.attr_atomic`. Opening the singleton surface too would make every
+      # unreadable class-body call silence its own report, and reporting
+      # that call is deliberate behaviour (024.23) which 19 examples pin.
+      # Inside `class << self` the same call defines singleton methods, so
+      # it opens that surface instead.
+      #
+      # Two receivers count as well, because they are the owner:
+      # `singleton_class.send :alias_method, :[], :new` --
+      # concurrent-ruby's `LockFreeStack::Node`, 6 findings over the gem
+      # corpus -- and `self.class_eval { ... }`. Every other receiver is
+      # some other object, and widening to those would open a surface for
+      # `LOGGER.warn`.
+      def open_surface_kind(node)
+        case node.receiver
+        when nil then @singleton_context_stack.last ? :singleton : :instance
+        when Prism::SelfNode then @singleton_context_stack.last ? :singleton : :instance
+        when Prism::CallNode
+          :singleton if node.receiver.receiver.nil? && node.receiver.name == :singleton_class
+        end
+      end
 
       def record_attribute_methods(node)
         return unless node.arguments

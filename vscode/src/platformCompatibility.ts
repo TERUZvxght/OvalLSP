@@ -64,12 +64,35 @@ export type RubyIdentityQuery = (rubyCommand: string, cwd?: string) => Promise<R
  * which directory it's invoked from, when different workspace folders
  * pin different Ruby versions via their own `.ruby-version`.
  */
+/**
+ * The working directory to spawn `rubyCommand` from, or `undefined`.
+ *
+ * `cwd` is the workspace folder on purpose -- a version manager's shim
+ * reports a different `bindir` depending on which directory it is invoked
+ * from, which is the whole reason these queries take one. But libuv's
+ * Windows path search checks the **cwd before PATH**, so spawning a bare
+ * `ruby` from the workspace folder would run a `ruby.exe` the workspace
+ * happens to contain -- before the user has trusted it.
+ *
+ * The two cases separate cleanly: a bare command name is what
+ * `resolveRuby` falls back to when it found no version manager at all, so
+ * there is no shim for the cwd to influence and nothing is lost by
+ * dropping it. An absolute path is not searched for, so it keeps its cwd.
+ *
+ * POSIX is unaffected either way (`execvp` does not search the cwd); the
+ * rule is applied on every platform rather than behind a `win32` check,
+ * because a rule that only runs where nobody tests it is not a rule.
+ */
+export function spawnCwd(rubyCommand: string, cwd?: string): string | undefined {
+  return path.isAbsolute(rubyCommand) ? cwd : undefined;
+}
+
 export function queryRubyIdentity(rubyCommand: string, cwd?: string): Promise<RubyIdentity> {
   return new Promise((resolve, reject) => {
     execFile(
       rubyCommand,
       ['-e', 'print [RUBY_ENGINE, RUBY_VERSION, RUBY_PLATFORM].join("|")'],
-      { timeout: 5000, cwd },
+      { timeout: 5000, cwd: spawnCwd(rubyCommand, cwd) },
       (err, stdout) => {
         if (err) {
           reject(err);
@@ -152,7 +175,7 @@ export function queryRubyConfigPaths(rubyCommand: string, cwd?: string): Promise
     execFile(
       rubyCommand,
       ['-e', 'print [RbConfig::CONFIG["bindir"], RbConfig::CONFIG["libdir"]].join("|")'],
-      { timeout: 5000, cwd },
+      { timeout: 5000, cwd: spawnCwd(rubyCommand, cwd) },
       (err, stdout) => {
         if (err) {
           reject(err);
@@ -195,7 +218,7 @@ export function probeRuntimeDependencies(rubyCommand: string, cwd?: string): Pro
     execFile(
       rubyCommand,
       ['-e', "require 'prism'; require 'rbs'"],
-      { timeout: 15000, cwd },
+      { timeout: 15000, cwd: spawnCwd(rubyCommand, cwd) },
       (err) => resolve(!err)
     );
   });

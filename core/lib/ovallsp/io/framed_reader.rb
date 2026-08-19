@@ -18,11 +18,32 @@ module Ovallsp
         @buffer = "".b
       end
 
+      # Everything that is not a well-formed frame leaves here as a
+      # `ProtocolError`, and a stream that simply ended leaves as `EOF`.
+      # Until 0.2.6 the difference reached the caller as whatever Ruby
+      # happened to raise -- `ArgumentError` from `Integer()`,
+      # `NoMethodError` from a negative `byteslice`, `JSON::ParserError`,
+      # or `ProtocolError` -- and `Server#run` rescues only `EOF`, so any
+      # of them ended the process with a raw backtrace and the client's
+      # next request unanswered.
+      #
+      # `\A\d+\z` rather than `Integer()`: that accepted `0x10` as 16 and
+      # `1_0` as 10, neither of which the LSP framing grammar allows, and
+      # it accepted `-5`, which reached `byteslice(0, -5)`.
       def read_message
         headers = read_headers
-        length = Integer(headers.fetch("content-length") { raise ProtocolError, "missing Content-Length header" })
-        body = read_bytes(length)
+        raw_length = headers.fetch("content-length") { raise ProtocolError, "missing Content-Length header" }
+        raise ProtocolError, "Content-Length is not a decimal byte count: #{raw_length.inspect}" unless
+          raw_length.match?(/\A\d+\z/)
+
+        body = read_bytes(Integer(raw_length, 10))
+        parse_body(body)
+      end
+
+      def parse_body(body)
         JSON.parse(body, symbolize_names: true)
+      rescue JSON::ParserError => e
+        raise ProtocolError, "frame body is not JSON: #{e.message}"
       end
 
       class ProtocolError < StandardError; end

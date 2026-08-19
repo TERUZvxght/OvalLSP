@@ -29,7 +29,14 @@ module Ovallsp
       #
       # It is not the version that protects the *contents*: see
       # `ovallsp=` below.
-      SCHEMA_VERSION = 1
+      # 2 since 0.2.6, when `FileSummary` gained `open_surface_owners`:
+      # a 0.2.5-shaped entry no longer loads at all ("struct size
+      # differs"), and `Store#load` rescues that into a silent
+      # whole-cache miss against a directory that then lingers.
+      # `core/spec/ovallsp/cache/schema_version_spec.rb` is what notices
+      # next time -- this constant and that shape are one decision, and
+      # keeping them in two files is why the bump was missed.
+      SCHEMA_VERSION = 2
 
       module_function
 

@@ -77,21 +77,42 @@ RSpec.describe "Ovallsp::Server cold index (Task 008.5)" do
     end
   end
 
-  it "still answers initialize immediately even when the workspace is large enough that cold indexing takes a while" do
+  # `expect(elapsed).to be < 1.0` was the bound until 0.2.6, and every
+  # attempt to repair it as a measurement failed, which is the finding:
+  #
+  # - it flaked. The run takes ~0.55s here and nearly all of that is
+  #   loading signatures during `initialize`, so the margin was 1.8x and
+  #   a loaded machine crossed it;
+  # - it could not fail for what it claimed. Cold-indexing 120 two-line
+  #   files takes ~50ms, so calling `ColdIndexer` inline also comes in
+  #   under a second -- measured, and the example passed;
+  # - it timed the wrong event. `server.run` returns after `exit`, which
+  #   joins the background tasks, so its duration always included the
+  #   indexing whether or not a client ever waited for it;
+  # - and timing the *reply* instead, over a pipe, with the indexing
+  #   deliberately slowed by two seconds, still could not fail -- because
+  #   `dispatch` calls `respond` **before** `start_cold_index`. The reply
+  #   is early by ordering, not by threading.
+  #
+  # That last point is the property worth pinning, and it needs no clock:
+  # by the time indexing begins, the reply is already written. Moving
+  # `start_cold_index` above `respond` fails this; nothing about machine
+  # load can.
+  it "writes the initialize reply before it begins indexing the workspace" do
     Dir.mktmpdir do |root|
-      120.times { |i| write(root, "app/models/generated_#{i}.rb", "class Generated#{i}\nend\n") }
+      write(root, "app/models/widget.rb", "class Widget\nend\n")
+      output_when_indexing_began = nil
+      allow_any_instance_of(Ovallsp::ColdIndexer).to receive(:run) do
+        output_when_indexing_began = output.string.dup
+        Ovallsp::ColdIndexer::Result.new(seen_uris: [], complete: true)
+      end
 
       input =
         frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
         frame(jsonrpc: "2.0", method: "exit", params: nil)
+      Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger, workspace_root: root).run
 
-      server = Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger, workspace_root: root)
-
-      start_time = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      server.run
-      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - start_time
-
-      expect(elapsed).to be < 1.0
+      expect(output_when_indexing_began).to include(%("id":1))
     end
   end
 

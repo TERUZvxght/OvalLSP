@@ -33,6 +33,12 @@ module Ovallsp
       # to six: 31ms -> 200ms on a 126k-symbol workspace, on the path a
       # keystroke runs.
       @by_owner_kind = Hash.new { |h, k| h[k] = [] }
+      # [owner bare name, :instance | :singleton] => how many indexed
+      # files leave that surface open (Index::FileSummary#open_surface_owners).
+      # A count rather than a set, because two files can each run an
+      # unreadable macro in the same reopened class and removing one of
+      # them must not close the surface the other still opens.
+      @open_surface_owners = Hash.new(0)
       # Secondary index: downcased simple (unqualified) name -> Set of
       # SymbolIds sharing it, so #find_by_simple_name doesn't have to scan
       # every distinct symbol in the workspace to answer one name lookup
@@ -125,6 +131,7 @@ module Ovallsp
         # has shown -- a synthetic 4,000-file single-namespace workspace
         # measures 80ms -> 3.0s -- which is the shape to re-measure if this
         # ever feels slow (024.15).
+        summary.open_surface_owners.each { |key| @open_surface_owners[key] += 1 }
         touched.uniq.each { |symbol_id| @by_symbol[symbol_id].sort_by!(&method(:entry_order)) }
         @generation += 1
         true
@@ -260,6 +267,47 @@ module Ovallsp
     # was edited last, which is what it was until 0.1.13 (024.15).
     def resolve_type_name(name)
       @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
+    end
+
+    # Whether a *bare* name is claimed by more than one declared type, so
+    # that resolving it is a pick rather than a lookup.
+    #
+    # `#resolve_type_name` answers anyway, and should: for completion and
+    # go-to-definition a plausible class beats none, and 024.15 is why the
+    # pick is at least deterministic. But an ancestor edge is different --
+    # putting the wrong module in a chain does not merely answer weakly,
+    # it makes the chain *look complete while being wrong*, and
+    # `closed_nominal?` then reports the class's own methods missing.
+    # Measured: 12 of 54 false findings over real gem source, where
+    # `Helpers`, `Base`, `Error` and `Node` are claimed many times over.
+    #
+    # A qualified name is never ambiguous in this sense: the caller wrote
+    # the namespace, and `#substitution?` is what covers a written
+    # namespace resolving somewhere else.
+    def ambiguous_type_name?(name)
+      bare = Index::SymbolId.bare_name(name.to_s)
+      return false if bare.include?("::")
+
+      @mutex.synchronize do
+        candidates, = type_candidates_locked(name)
+        candidates.map(&:name).uniq.length > 1
+      end
+    end
+
+    # Whether anything indexed leaves this owner's instance (or, with
+    # `singleton:`, its class-level) method surface open --
+    # a class body running a macro the parser cannot read, so the methods
+    # it defines are not in the index and never will be.
+    #
+    # Asked by the undefined-method check, which may assert absence only
+    # where the surface is enumerable. Answers about the owner named, not
+    # its ancestors; the caller walks the chain because that is where the
+    # chain is known.
+    def open_surface?(owner, singleton: false)
+      return false if owner.nil?
+
+      key = [Index::SymbolId.bare_name(owner.to_s), singleton ? :singleton : :instance]
+      @mutex.synchronize { @open_surface_owners[key].positive? }
     end
 
     # Whether `resolve_type_name` answered about a *different name* than
@@ -440,6 +488,10 @@ module Ovallsp
       summary = @summaries.delete(uri)
       return false unless summary
 
+      summary.open_surface_owners.each do |key|
+        @open_surface_owners[key] -= 1
+        @open_surface_owners.delete(key) unless @open_surface_owners[key].positive?
+      end
       summary.declarations.each do |decl|
         entries = @by_symbol[decl.symbol_id]
         next unless entries
@@ -494,11 +546,50 @@ module Ovallsp
       candidates, qualified = type_candidates_locked(name)
       return nil if candidates.empty?
 
+      raw = name.to_s
+      exact = candidates.find { |sid| sid.name == qualified }
+      # A leading `::` is not decoration -- it is the whole meaning of the
+      # reference, and Ruby gives it exactly one possible referent. The
+      # last-segment heuristic below is right for a name the author wrote
+      # bare and wrong for one they rooted: `::JSON` inside i18n resolved
+      # to that gem's own `I18n::Backend::KeyValue::JSON`, and the
+      # undefined-method check then reported `::JSON.parse` missing.
+      # Nil is the correct answer when the workspace has no top-level
+      # constant of that name, because RBS holds the one that exists.
+      return exact if raw.start_with?("::")
+
+      # A written namespace is a constraint too, just a weaker one. It is
+      # not an absolute path -- `Inner::Klass` from inside `module Outer`
+      # legitimately means `Outer::Inner::Klass` -- so the match is a
+      # suffix on segment boundaries rather than equality. That is enough
+      # to keep `File::Stat` from resolving to a workspace `Stat` in some
+      # unrelated namespace, which is what made completion after
+      # `File.stat(path).` offer that class's members while hover and the
+      # diagnostics already said `File::Stat` (024.78).
+      return exact || candidates.find { |sid| namespace_suffix?(sid.name, raw) } if raw.include?("::")
+
       # `.first` is safe here because `candidates` came from
       # `ordered_symbol_ids`, not from the Set directly. Until 0.1.13 it
       # was index order, so an ambiguous bare name resolved to a different
       # class whenever either file was re-indexed (024.15).
-      candidates.find { |sid| sid.name == qualified } || candidates.first
+      #
+      # Bare names keep the heuristic deliberately: 0.2.1 applied a
+      # shadowing rule to them here and broke every bare name written from
+      # inside its own namespace, and was rolled back (024.47).
+      exact || candidates.first
+    end
+
+    # Whether `candidate` (always fully qualified, leading `::`) names the
+    # same constant path `written` does, allowing for an outer namespace
+    # the author did not repeat. Compared segment-wise, so `::MyStat` is
+    # not a match for `Stat`.
+    #
+    # `written` needs no `bare_name`: a rooted name returned above before
+    # reaching here, so what arrives is always unrooted. A review round
+    # found the call reverted with the suite still green, which is what
+    # dead code looks like from the outside.
+    def namespace_suffix?(candidate, written)
+      candidate.to_s.end_with?("::#{written}")
     end
 
     # One collection is deliberately left in insertion order, and a

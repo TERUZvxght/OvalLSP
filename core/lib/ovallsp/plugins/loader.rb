@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
+require "json"
 require "timeout"
 require_relative "../plugins"
 require_relative "../child_process"
 require_relative "manifest"
 require_relative "static_context"
 require_relative "runtime_context"
+require_relative "wire"
 
 module Ovallsp
   module Plugins
@@ -33,12 +35,27 @@ module Ovallsp
     # returned. Only plain data crosses back across the fork boundary
     # (declarations for a static plugin; snapshot-section/reload-hook
     # *names*, not the Procs themselves, for a runtime one, since Ruby
-    # Procs can't be Marshaled across a process boundary) -- whatever
+    # Procs cannot cross a process boundary at all) -- whatever
     # damage a plugin's own code does happens in a short-lived child
     # process that's discarded (successfully or not) the moment this
     # method returns, POSIX `Process.fork` semantics.
     class Loader
       DEFAULT_TIMEOUT_SECONDS = 5
+
+      # The timeout bounds wall-clock, not bytes, and `IO#read` returns
+      # only at EOF -- so until 0.2.6 a plugin chose how much memory the
+      # parent allocated. Measured: 300,000 declarations took the parent
+      # from 44 MB to 380 MB in 1.22s; a single 50 MB method name took it
+      # to 144 MB in 0.14s. Five seconds of pipe throughput is multiple
+      # GB, and "one broken plugin never takes Core down" is this class's
+      # opening guarantee.
+      #
+      # 16 MB because the largest legitimate payload this contract can
+      # carry is a list of declarations: `state_machine_example`'s is
+      # under 200 bytes, and 16 MB is room for roughly a hundred thousand
+      # of them. A plugin that needs more is not a plugin this Core knows
+      # how to be sure about.
+      MAX_RESULT_BYTES = 16 * 1024 * 1024
       MAX_CONSECUTIVE_FAILURES = 3
 
       def initialize(logger:, timeout_seconds: DEFAULT_TIMEOUT_SECONDS)
@@ -135,8 +152,8 @@ module Ovallsp
       # Runs *inside the forked child* -- everything this touches
       # (loading the entrypoint file, invoking the plugin's registered
       # block) is thrown away with the child process; only the plain-
-      # data `declarations` array returned here is Marshaled back to
-      # the parent.
+      # data `declarations` array returned here crosses back to the
+      # parent, encoded by `Plugins::Wire`.
       def static_plugin_declarations(manifest)
         context = StaticContext.new(manifest.name)
         Kernel.load(manifest.static_entrypoint_path)
@@ -158,8 +175,8 @@ module Ovallsp
       end
 
       # Same "runs inside the forked child" contract as
-      # #static_plugin_declarations -- but a Proc can't be Marshaled
-      # across the fork boundary at all, so only the registered
+      # #static_plugin_declarations -- but a Proc cannot cross the fork
+      # boundary at all, so only the registered
       # sections'/hooks' *names* (not the callables themselves) survive
       # back into the parent. See RuntimeContext#restore_summary.
       def runtime_plugin_summary(manifest)
@@ -195,12 +212,12 @@ module Ovallsp
         @disabled.key?(name)
       end
 
-      # Forks a child process to run `block`, Marshals whatever it
-      # returns back to the parent through a pipe, and returns that
-      # value here -- or nil (logged, failure-counted, eventually
+      # Forks a child process to run `block`, sends whatever it returns
+      # back to the parent through a pipe as `Plugins::Wire` JSON, and
+      # returns that value here -- or nil (logged, failure-counted, eventually
       # disabling the plugin after MAX_CONSECUTIVE_FAILURES) for any of:
       # the child raising, the child exceeding @timeout_seconds (killed
-      # with SIGKILL), or the child's result failing to Marshal/unMarshal
+      # with SIGKILL), or the child's result failing to encode or decode
       # at all.
       #
       # Deliberately does NOT use Observation::Runner's `pgroup: true` +
@@ -293,7 +310,7 @@ module Ovallsp
         # #reap_finished_child has already reaped the child but before
         # `settled = true` would make this signal an already-reaped pid.
         # The window here is a little wider than Runner's -- it spans the
-        # empty check and `Marshal.load` -- but it still contains no
+        # empty check and the decode -- but it still contains no
         # blocking call, and reaching a live victim would additionally
         # require the kernel to have recycled that exact pid inside it,
         # which is tens of thousands of intervening spawns since pids are
@@ -331,19 +348,25 @@ module Ovallsp
       # Ruby IO object references it before this point, precisely so the
       # plugin's own code, which already ran by the time this is called,
       # never had one to find) to a writable IO just long enough to
-      # deliver the Marshaled result, then closes it.
+      # deliver the result, then closes it.
+      #
+      # JSON, and only the shapes `Plugins::Wire` can name. This used to
+      # be `Marshal.dump`, and the parent's matching `Marshal.load`
+      # instantiated whatever classes the stream named before any
+      # validation ran -- undoing the boundary the fork exists to create
+      # (`024.73`). Nothing written here can name a class at all now.
       def deliver_result(result_fd, result)
         return unless result_fd
 
         io = ::IO.new(result_fd, "w")
         begin
-          io.write(Marshal.dump(result))
+          io.write(JSON.generate(Wire.encode_result(result)))
         rescue StandardError => e
-          # The result itself couldn't be Marshaled (e.g. a plugin
-          # somehow returned an object holding a Proc/IO/etc.) --
-          # report that specific failure instead of leaving the parent
-          # to time out waiting for output that will never arrive.
-          io.write(Marshal.dump({ ok: false, error: "result could not be serialized: #{e.class}: #{e.message}" }))
+          # The result itself couldn't be encoded (a plugin returned
+          # something outside the contract) -- report that specific
+          # failure instead of leaving the parent to time out waiting for
+          # output that will never arrive.
+          io.write(JSON.generate({ ok: false, error: "result could not be serialized: #{e.class}: #{e.message}" }))
         end
       ensure
         io&.close
@@ -364,10 +387,10 @@ module Ovallsp
       # itself open and Ruby-visible for the plugin's *entire* execution
       # window (an earlier version of this method) was itself exploitable:
       # a plugin could find `writer` the exact same way via ObjectSpace
-      # and write its own forged `Marshal.dump({ok: true, result: ...})`
-      # payload to it *before* #deliver_result's own write runs --
-      # `Marshal.load` only consumes the first valid object off a
-      # stream, so whichever payload arrived first silently won, letting
+      # and write its own forged `{ok: true, result: ...}` payload to it
+      # *before* #deliver_result's own write runs -- the reader consumed
+      # the first object off the stream, so whichever payload arrived
+      # first silently won, letting
       # a plugin fabricate arbitrary, unvalidated "results" the loader
       # would trust completely (reproduced live: a forged payload of
       # bogus declarations reached WorkspaceIndex and crashed the whole
@@ -432,8 +455,12 @@ module Ovallsp
 
       def read_isolated_result(reader, pid)
         raw = nil
+        overflowed = false
         begin
-          Timeout.timeout(@timeout_seconds) { raw = reader.read }
+          # One byte past the cap, so "exactly the cap" still reads and
+          # anything larger is refused without allocating the rest.
+          Timeout.timeout(@timeout_seconds) { raw = reader.read(MAX_RESULT_BYTES + 1) }
+          overflowed = raw && raw.bytesize > MAX_RESULT_BYTES
         rescue Timeout::Error
           kill_child(pid)
           return { ok: false, error: "Timeout::Error: exceeded #{@timeout_seconds}s" }
@@ -442,8 +469,14 @@ module Ovallsp
 
         return { ok: false, error: "plugin process produced no output" } if raw.nil? || raw.empty?
 
+        if overflowed
+          kill_child(pid)
+          return { ok: false, error: "plugin process result too large (over #{MAX_RESULT_BYTES} bytes)" }
+        end
+
         begin
-          Marshal.load(raw)
+          decoded = Wire.decode_result(JSON.parse(raw, symbolize_names: true))
+          decoded || { ok: false, error: "plugin process output did not match the plugin protocol" }
         rescue StandardError => e
           { ok: false, error: "failed to read plugin process output: #{e.class}: #{e.message}" }
         end

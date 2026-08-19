@@ -6,6 +6,67 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.6 — The undefined-method check, made honest
+
+- **False "has no method" reports on real code: 54 → 6.** Measured over
+  the same 213 files of installed gem source each time, one run per
+  revision. A class whose body runs a macro this extension cannot read —
+  `attr_atomic`, `safe_initialization!`, `singleton_class.send
+  :alias_method` — now has a method set it admits it does not know, and
+  says nothing rather than guessing. So does a class that `include`s or
+  `extend`s something it cannot identify, including a module named only
+  at runtime: `include Singleton` no longer reports `.instance`, and
+  `include Sidekiq::Worker` no longer reports `sidekiq_options`.
+- **`alias_method :create, :new` written above `def new` is read the way
+  Ruby reads it.** An alias binds to what the target means at that
+  moment, not to a definition five lines below. ActiveSupport's own
+  `TimeZone` got two false "takes 1 argument, but 3 given" reports from
+  this, and the same construct elsewhere got "has no method named
+  `create`" — two checks, two different wrong answers about one alias.
+- **A call that does not exist through a relation is now reported.**
+  `Order.recent.first.no_such_method` was reported by nothing while
+  `Order.find(id).no_such_method` was reported normally.
+- **`Model.first` answers.** It inferred nothing while
+  `Model.scope.first` answered, so the commoner idiom was the one that
+  did not work. `last`, `take` and their `!` forms answer too. Given a
+  count — `Model.first(3)` — they return an Array and this extension says
+  nothing rather than the wrong thing.
+- **A name written with its namespace is not answered by a class in
+  another one.** `File.stat(path).` offered a workspace `Stat`'s members;
+  it offers the real 167 now. `::JSON` means the top-level `JSON`.
+- **A plugin's result crosses the process boundary as data, not as
+  objects.** The parent used to rebuild whatever classes the stream
+  named, before validating any of it — undoing the isolation the fork
+  exists for. It now rebuilds typed values from fields it has checked,
+  and nothing in a payload can name a class. No plugin needs a change.
+- **One unreadable file no longer ends the session.** A file deep enough
+  to exhaust the interpreter stack took the whole process with it, and so
+  did any malformed message frame.
+
+### Details
+
+Every figure above is a measurement over the same corpus, taken one run
+at a time. What remains is seven reports over those 213 files, and the
+count is not the interesting part: what a report costs is decided by
+whether the path is one people walk. Seven of the nine before this
+release's last two fixes were in JRuby-only files that MRI never loads.
+
+`docs/KNOWN_LIMITATIONS.md` gained ten sections in this release rather
+than losing them. Three independent review rounds — reading the change
+set, driving the product, and attacking its guarantees — measured a great
+deal that was already wrong and is still wrong: a constant hovers as its
+own name, `self.` completes to nothing, an instance variable set in a
+`before_action` has a type in the view and none in the controller, and a
+relation stops being a relation after `.where().where()`. None of it is
+new, and it is written down now because a limitation nobody has stated is
+worse than one everybody can read.
+
+The largest single source of wrong reports that this release does *not*
+fix: a project that reopens a core class. The Runtime Agent answers it by
+reporting what your classes really respond to, and it cannot run in a
+workspace you have not trusted. Trusting the folder is what makes those
+go away.
+
 ## 0.2.5 — The foundations, and the answers that rested on them
 
 - **A model's `scope` answers for the model it belongs to.** `scope :recent`

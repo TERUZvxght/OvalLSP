@@ -51,13 +51,22 @@ module Ovallsp
     #   ordinary WorkspaceIndex/MethodResolver path; this field exists
     #   purely for what a Declaration can't carry -- return type and
     #   DSL-specific metadata.
+    # - open_surface_owners (0.2.6): owners whose body contains a
+    #   receiverless call this parser does not recognise -- so the set of
+    #   methods they define cannot be enumerated from source, and absence
+    #   cannot be established for them. `attr_atomic`, `attr_volatile` and
+    #   `safe_initialization!` are the measured examples; 31 of the 34
+    #   remaining false `unknown-method` reports over the gem corpus are
+    #   this shape. Not a Declaration, because the point is precisely that
+    #   there is no declaration to record.
     FileSummary = Data.define(:uri, :content_hash, :document_version, :declarations, :diagnostics, :source,
                                :read_sequence, :ancestor_facts, :alias_facts, :reference_candidates,
-                               :generated_method_facts) do
+                               :generated_method_facts, :open_surface_owners) do
       def initialize(source: :buffer, read_sequence: 0, ancestor_facts: [], alias_facts: [], reference_candidates: [],
-                      generated_method_facts: [], **rest)
+                      generated_method_facts: [], open_surface_owners: [], **rest)
         super(source: source, read_sequence: read_sequence, ancestor_facts: ancestor_facts, alias_facts: alias_facts,
-              reference_candidates: reference_candidates, generated_method_facts: generated_method_facts, **rest)
+              reference_candidates: reference_candidates, generated_method_facts: generated_method_facts,
+              open_surface_owners: open_surface_owners, **rest)
       end
     end
   end

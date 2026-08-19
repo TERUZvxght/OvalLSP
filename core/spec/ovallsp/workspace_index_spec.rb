@@ -943,4 +943,89 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       expect(index_instance.guessed_type_name?("Collector")).to be(true)
     end
   end
+
+  # `::JSON` is rooted: in Ruby it can only mean the top-level constant.
+  # Resolution matched on the last segment alone, so a nested
+  # `I18n::Backend::KeyValue::JSON` answered for it -- and the
+  # undefined-method check then reported `JSON.parse` and
+  # `JSON.load_file` as missing, over ordinary i18n source. Measured over
+  # the 213-file gem corpus: 2 of the 18 remaining false reports.
+  #
+  # Answering nil is the point. Nothing in the workspace is `::JSON`, so
+  # RBS answers instead, which is where the real `JSON` is.
+  describe "a name written with a leading ::" do
+    before do
+      index.replace_file(
+        summary(uri: "file:///kv.rb",
+                declarations: [declaration(kind: :class, owner: "::Outer::Inner", name: "::Outer::Inner::JSON")])
+      )
+    end
+
+    it "does not resolve to a same-named class in some other namespace" do
+      expect(index.resolve_type_name("::JSON")).to be_nil
+    end
+
+    it "still resolves when the workspace really does declare it at top level" do
+      index.replace_file(
+        summary(uri: "file:///top.rb", declarations: [declaration(kind: :class, owner: nil, name: "::JSON")])
+      )
+
+      expect(index.resolve_type_name("::JSON")).to eq("::JSON")
+    end
+
+    # The distinguishing control: written *without* the ::, the same name
+    # is a bare reference and the heuristic that finds the nested class is
+    # the behaviour 024.15 deliberately made deterministic. This change is
+    # about rootedness, not about narrowing that.
+    it "leaves the bare form resolving as it did" do
+      expect(index.resolve_type_name("JSON")).to eq("::Outer::Inner::JSON")
+    end
+  end
+
+  # `File::Stat` resolved to a workspace `Stat` in some other namespace,
+  # because resolution matched on the last segment alone and fell back to
+  # the alphabetically first candidate. Completion after
+  # `File.stat(path).` then offered that class's members -- byte for byte
+  # what completing `Stat.new(x).` offers (`024.78`). Hover and
+  # diagnostics had already been fixed; member lookup had not.
+  #
+  # A written namespace is a constraint, not decoration. It is still not
+  # an *absolute* path -- `Inner::Klass` inside `module Outer` legitimately
+  # means `Outer::Inner::Klass` -- so the test is a suffix on segment
+  # boundaries rather than equality. `::Stat` does not end with
+  # `File::Stat`; `::Outer::Inner::Klass` does end with `Inner::Klass`.
+  #
+  # Bare names are deliberately untouched. That is 024.47's territory, and
+  # 0.2.1 rolled back an attempt to apply a shadowing rule to them here.
+  describe "a name written with a namespace" do
+    before do
+      index.replace_file(
+        summary(uri: "file:///stat.rb", declarations: [declaration(kind: :class, owner: nil, name: "::Stat")])
+      )
+      index.replace_file(
+        summary(uri: "file:///nested.rb",
+                declarations: [declaration(kind: :class, owner: "::Outer::Inner", name: "::Outer::Inner::Klass")])
+      )
+    end
+
+    it "does not resolve to a class whose namespace is different" do
+      expect(index.resolve_type_name("File::Stat")).to be_nil
+    end
+
+    it "still resolves a partially-qualified name to the class it names" do
+      expect(index.resolve_type_name("Inner::Klass")).to eq("::Outer::Inner::Klass")
+    end
+
+    it "still resolves a fully-qualified name" do
+      expect(index.resolve_type_name("Outer::Inner::Klass")).to eq("::Outer::Inner::Klass")
+    end
+
+    # The control: a bare name keeps the heuristic 024.15 made
+    # deterministic, so this change is about written namespaces only.
+    it "leaves a bare name resolving as it did" do
+      expect(index.resolve_type_name("Klass")).to eq("::Outer::Inner::Klass")
+      expect(index.resolve_type_name("Stat")).to eq("::Stat")
+    end
+  end
 end
+

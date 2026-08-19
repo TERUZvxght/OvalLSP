@@ -671,4 +671,50 @@ RSpec.describe Ovallsp::ParserService do
       expect(generated(summary)).to be_empty
     end
   end
+
+  # A file deep enough to exhaust the interpreter stack used to take the
+  # whole process with it. `SystemStackError` is an `Exception`, not a
+  # `StandardError`, so every rescue between the visitor and `Server#run`
+  # let it through: opening one such file over `didOpen` ended the
+  # editor's session with a raw Ruby backtrace on stderr, the cold-index
+  # thread died silently (skipping the sweep, the reference-index bump and
+  # the workspace diagnostics pass for the rest of the session), and
+  # `BackgroundTasks#shutdown` -- documented "never raises" -- raised out
+  # of `run`'s own ensure because `Thread#join` re-raises.
+  #
+  # Contained here, where the recursion is, rather than at each caller:
+  # `Server#dispatch`, the cold indexer and `scripts/corpus_diagnostics.rb`
+  # each had their own rescue and each was individually plausible, which
+  # is the shape CLAUDE.md's containment rule is about.
+  #
+  # Measured before choosing the depth: a `.succ` chain fails at 2104,
+  # nested hashes at 1147, nested `if` at 1145. 0 of 4582 `.rb` files
+  # across every installed gem and the Ruby 3.4 stdlib reach any of them,
+  # so this is generated or hostile input -- and a file arrives from
+  # anywhere.
+  describe "a file deep enough to exhaust the stack" do
+    let(:document) do
+      source = "class Chain\n  def go\n    x = 1\n    x#{'.succ' * 5_000}\n  end\nend\n"
+      Ovallsp::TextDocument.new(uri: "file:///deep.rb", text: source, version: 1, language_id: "ruby")
+    end
+
+    it "answers a summary instead of taking the process with it" do
+      summary = nil
+
+      expect { summary = described_class.new.summarize(document) }.not_to raise_error
+      expect(summary.uri).to eq("file:///deep.rb")
+    end
+
+    # What it answers is "nothing was read here", not a half-built index:
+    # a partial walk would leave declarations from the top of the file and
+    # none from the bottom, and the undefined-method check would then
+    # assert absence on the strength of it.
+    it "records nothing rather than a partial reading of the file" do
+      summary = described_class.new.summarize(document)
+
+      expect(summary.declarations).to be_empty
+      expect(summary.reference_candidates).to be_empty
+    end
+  end
 end
+

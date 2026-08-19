@@ -156,6 +156,7 @@ RSpec.describe Ovallsp::Semantic::HierarchyIndex do
       elapsed = Benchmark.realtime { index.ancestors("Gen999") }
 
       expect(names(index.ancestors("Gen999")).first(3)).to eq(%w[::Gen999 ::Gen998 ::Gen997])
+      # perf-guard: a 1000-deep chain must not be walked quadratically
       expect(elapsed).to be < 1.0
     end
   end

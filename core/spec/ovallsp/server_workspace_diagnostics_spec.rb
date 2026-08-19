@@ -545,25 +545,44 @@ RSpec.describe "Ovallsp::Server diagnostics for files that are not open (0.2.0)"
   # The pass runs on a background thread precisely so that it cannot do
   # this, and "initialize returns immediately" is the property the cold
   # index itself was already built to preserve.
-  it "does not delay the response to initialize" do
+  #
+  # `expect(elapsed).to be < 1.0` until 0.2.6, and it was the same defect
+  # as `server_cold_index_spec`'s: it flaked under load, and it could not
+  # fail for what it claimed -- `server.run` returns after `exit`, which
+  # joins the background tasks, so the number always included the pass
+  # whether or not a client ever waited for it.
+  #
+  # An ordering assertion was tried next and could not fail either: the
+  # pass is started from the cold index's own completion hook, so it never
+  # ran on the dispatch thread in the first place and reordering
+  # `dispatch` changed nothing. Recorded because that is two
+  # can't-fail assertions in a row about one property, and the second was
+  # written while fixing the first.
+  #
+  # What is actually true, and is the whole reason this cannot delay a
+  # reply: the pass runs on a thread that is not the one serving requests.
+  # Making `#drive_workspace_passes` run inline fails this.
+  #
+  # Two wall-clock thresholds of one shape in one release is what
+  # `core/spec/meta/no_wall_clock_thresholds_spec.rb` exists to stop, per
+  # CLAUDE.md's rule about the same place twice.
+  it "runs the pass on a thread other than the one serving requests" do
     Dir.mktmpdir do |root|
       write(root, "app/models/widget.rb", "class Widget\n  def build\n  end\nend\n")
-      120.times { |i| write(root, "app/services/user_#{i}.rb", "Widget.new.totally_bogus_method\n") }
+      write(root, "app/services/user.rb", "Widget.new.totally_bogus_method\n")
 
-      frame = lambda do |hash|
-        json = JSON.generate(hash)
-        "Content-Length: #{json.bytesize}\r\n\r\n#{json}"
+      server = build_server(root)
+      dispatch_thread = Thread.current
+      pass_thread = nil
+      allow(server).to receive(:drive_workspace_passes).and_wrap_original do |original, *args|
+        pass_thread = Thread.current
+        original.call(*args)
       end
-      input = frame.call(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
-              frame.call(jsonrpc: "2.0", method: "exit", params: nil)
 
-      server = Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger, workspace_root: root)
+      server.send(:start_workspace_diagnostics)
+      expect(wait_until { !pass_thread.nil? }).to be(true)
 
-      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      server.run
-      elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
-
-      expect(elapsed).to be < 1.0
+      expect(pass_thread).not_to be(dispatch_thread)
     end
   end
 end
