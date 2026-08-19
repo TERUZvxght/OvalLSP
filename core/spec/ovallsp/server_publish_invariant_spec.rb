@@ -17,7 +17,10 @@ require "stringio"
 # assertion true cost a full re-analysis of the file: measured 0.015 s
 # before and 2.098 s after on a 2,574-line file, under the lock hover and
 # completion need. VS Code does not discard diagnostics on version, so
-# the price bought a field nobody reads.
+# the price bought a field nobody reads -- `docs/CLIENT_BEHAVIOUR.md`
+# carries that fact and the source line showing it. This file said it
+# first and was contradicted by three others for a release, which is why
+# the fact now has one home.
 #
 # What the property is *for* survives the correction. That branch's
 # round 33 found the shape it guards against -- a byte-identical

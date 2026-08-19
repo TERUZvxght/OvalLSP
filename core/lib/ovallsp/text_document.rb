@@ -41,15 +41,13 @@ module Ovallsp
     # arithmetic.
     #
     # The version half is real and much narrower: a background publish
-    # could send old-text findings under a new version number. **It was
-    # first written down here as dangerous "because the client's staleness
-    # filter accepts them", and that is not true of this product's
-    # client** -- `vscode-languageclient`'s `handleDiagnostics` ignores
-    # `params.version` entirely and queues by uri, which
-    # `server_publish_invariant_spec.rb` already said in this same tree.
-    # The claim came from `029`'s M-2 and was carried here without being
-    # checked. What is left is that the number is wrong for any client
-    # that *does* read it, which is a smaller thing.
+    # could send old-text findings under a new version number. It was
+    # first written down here as dangerous because of what the client
+    # supposedly does with a version, and that was not true --
+    # `docs/CLIENT_BEHAVIOUR.md` records what it actually does, and exists
+    # because this claim was written into three places unchecked. What is
+    # left is that the number is wrong for any client that *does* read it,
+    # which is a smaller thing.
     #
     # Text, version and offsets are computed together here and never
     # change afterwards, so a reader sees either the whole old document or

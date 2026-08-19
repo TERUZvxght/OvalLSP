@@ -16,11 +16,10 @@
 # statements and the document sits torn for a whole quantum.
 #
 # The version half -- old-text findings sent under a new version number
-# -- was first justified by "the client's staleness filter accepts them",
-# which is **not true of this product's client**:
-# `vscode-languageclient` ignores `params.version`, as
-# `server_publish_invariant_spec.rb` says in this same tree. The claim
-# came from `029` and was carried into 0.2.7 unchecked.
+# -- was first justified by a claim about what the client does with a
+# version, and that claim was false. What the client actually does is in
+# `docs/CLIENT_BEHAVIOUR.md`, which exists because this one was written
+# into three files without being checked.
 #
 # 029's M-2. A snapshot cannot tear: text, version and offsets are
 # computed together at construction and never change afterwards, so a
