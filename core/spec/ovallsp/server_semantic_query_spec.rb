@@ -177,6 +177,7 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
       3.times { server.send(:enclosing_call_name_range, document, position) }
       elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - elapsed) / 3
 
+      # perf-guard: this runs on every hover, so a re-scan per call would be felt
       expect(elapsed).to be < 1.0, "#{(elapsed * 1000).round} ms per call to answer that there is no enclosing call"
     end
 
@@ -197,6 +198,7 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
       server.send(:compute_non_code_spans, source)
       elapsed = Process.clock_gettime(Process::CLOCK_MONOTONIC) - elapsed
 
+      # perf-guard: one pass over a large file, not one per token
       expect(elapsed).to be < 2.0, "#{(elapsed * 1000).round} ms to index a #{source.bytesize / 1024} KB file once"
     end
 

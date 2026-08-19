@@ -169,6 +169,16 @@ module Ovallsp
           @reader.read_message
         rescue Ovallsp::IO::FramedReader::EOF
           break
+        rescue Ovallsp::IO::FramedReader::ProtocolError => e
+          # A malformed frame carries no id, so there is nobody to answer
+          # -- but it is also not a reason to end the session. Until
+          # 0.2.6 every one of these (`Content-Length: -5`, a missing
+          # header, a body that is not JSON) escaped `run` and the
+          # process exited 1 with a raw backtrace, leaving the client's
+          # next request unanswered. Only a client can send one, but a
+          # reconnect or one stray byte on stdin was enough.
+          @logger.error("skipping a malformed message: #{e.message}")
+          next
         end
 
         break if dispatch(message) == :exit

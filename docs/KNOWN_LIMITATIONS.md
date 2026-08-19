@@ -508,6 +508,29 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
+## Ordinary Ruby the undefined-method check reports anyway
+
+Four shapes, all of them code that runs. Measured over 177 files of
+rspec-core, i18n, psych and reline: 41 reports, about one per four files.
+
+- **A class made with `Struct.new` or `Data.define` and then reopened.**
+  `Seed = Struct.new(:seed, :used)` followed by `class Seed … end` — every
+  member read inside that body is reported. Calls from outside the class
+  are not checked at all, so it is specifically the implicit-`self` form.
+- **`define_method` and `attr_reader` themselves**, when written inside
+  `Class.new do … end` or `Module.new { … }`.
+- **`alias` to a method that came from an included module.**
+  `include Escaping` then `alias safe_escape escape`. Aliasing a `def` in
+  the same class is fine.
+- **`trap`, `URI`, `set_trace_func` and `pretty_inspect`** — four
+  `Kernel` methods the bundled signatures do not declare. `trap` is
+  ordinary in a CLI or a server.
+
+Also: a method defined inside a loop is reported even when its name is a
+literal — `[1].each { define_method(:alpha) { 1 } }`. Measured at 63
+files and 108 sites across the installed gems and the standard
+library. <!-- documents: 024.91 -->
+
 ## What the undefined-method check gets wrong without a Runtime Agent
 
 If your project reopens a core class — an `initializers/core_ext.rb`, or

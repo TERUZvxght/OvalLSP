@@ -41,6 +41,21 @@ module Ovallsp
     # method returns, POSIX `Process.fork` semantics.
     class Loader
       DEFAULT_TIMEOUT_SECONDS = 5
+
+      # The timeout bounds wall-clock, not bytes, and `IO#read` returns
+      # only at EOF -- so until 0.2.6 a plugin chose how much memory the
+      # parent allocated. Measured: 300,000 declarations took the parent
+      # from 44 MB to 380 MB in 1.22s; a single 50 MB method name took it
+      # to 144 MB in 0.14s. Five seconds of pipe throughput is multiple
+      # GB, and "one broken plugin never takes Core down" is this class's
+      # opening guarantee.
+      #
+      # 16 MB because the largest legitimate payload this contract can
+      # carry is a list of declarations: `state_machine_example`'s is
+      # under 200 bytes, and 16 MB is room for roughly a hundred thousand
+      # of them. A plugin that needs more is not a plugin this Core knows
+      # how to be sure about.
+      MAX_RESULT_BYTES = 16 * 1024 * 1024
       MAX_CONSECUTIVE_FAILURES = 3
 
       def initialize(logger:, timeout_seconds: DEFAULT_TIMEOUT_SECONDS)
@@ -440,8 +455,12 @@ module Ovallsp
 
       def read_isolated_result(reader, pid)
         raw = nil
+        overflowed = false
         begin
-          Timeout.timeout(@timeout_seconds) { raw = reader.read }
+          # One byte past the cap, so "exactly the cap" still reads and
+          # anything larger is refused without allocating the rest.
+          Timeout.timeout(@timeout_seconds) { raw = reader.read(MAX_RESULT_BYTES + 1) }
+          overflowed = raw && raw.bytesize > MAX_RESULT_BYTES
         rescue Timeout::Error
           kill_child(pid)
           return { ok: false, error: "Timeout::Error: exceeded #{@timeout_seconds}s" }
@@ -449,6 +468,11 @@ module Ovallsp
         reap_finished_child(pid)
 
         return { ok: false, error: "plugin process produced no output" } if raw.nil? || raw.empty?
+
+        if overflowed
+          kill_child(pid)
+          return { ok: false, error: "plugin process result too large (over #{MAX_RESULT_BYTES} bytes)" }
+        end
 
         begin
           decoded = Wire.decode_result(JSON.parse(raw, symbolize_names: true))

@@ -474,10 +474,40 @@ RSpec.describe Ovallsp::Plugins::Loader do
     # accepted verbatim -- now produces nothing rather than a decoded
     # object graph. The loader keeps its "one broken plugin contributes
     # nothing, logged" contract instead of trusting the stream.
+    # `Timeout.timeout(5) { reader.read }` bounds wall-clock, not bytes,
+    # and `IO#read` returns only at EOF -- so a plugin chose how much
+    # memory the parent allocated. Measured: 300,000 declarations took the
+    # parent from 44 MB to 380 MB in 1.22s, and a single 50 MB method name
+    # took it to 144 MB in 0.14s. Five seconds of pipe throughput is
+    # multiple GB. "One broken plugin never takes Core down" is the
+    # guarantee this file opens with.
+    it "refuses a result larger than the cap instead of allocating it" do
+      # A real pid, spawned and reaped here. Passing a fabricated one
+      # reached `kill_child` and signalled the rspec process's own group;
+      # `ChildProcess.signal`/`#reap` refuse a zero target now, and the
+      # example stopped fabricating either way.
+      pid = Process.spawn("/bin/sleep", "60")
+      oversized = "x" * (described_class::MAX_RESULT_BYTES + 1)
+
+      result = loader.send(:read_isolated_result, StringIO.new(oversized), pid)
+
+      expect(result[:ok]).to be(false)
+      expect(result[:error]).to match(/too large/)
+    end
+
+    it "still reads a result under the cap" do
+      allow(Ovallsp::ChildProcess).to receive(:reap).and_return(true)
+      payload = JSON.generate(Ovallsp::Plugins::Wire.encode_result({ ok: true, result: [] }))
+
+      result = loader.send(:read_isolated_result, StringIO.new(payload), 1)
+
+      expect(result).to eq(ok: true, result: [])
+    end
+
     it "rejects a Marshal payload on the result pipe instead of loading it" do
       allow(Ovallsp::ChildProcess).to receive(:reap).and_return(true)
 
-      result = loader.send(:read_isolated_result, StringIO.new(Marshal.dump({ ok: true, result: [] })), 0)
+      result = loader.send(:read_isolated_result, StringIO.new(Marshal.dump({ ok: true, result: [] })), 1)
 
       expect(result[:ok]).to be(false)
     end

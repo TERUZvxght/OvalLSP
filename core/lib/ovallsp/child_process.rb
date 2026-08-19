@@ -58,7 +58,20 @@ module Ovallsp
     # failure that needs no follow-up, while EPERM (a group member that
     # changed uid) and anything else killpg(2)/kill(2) can report are
     # precisely the ones that leave a live child unsignalled.
+    # `Process.kill(sig, 0)` signals **every process in the caller's own
+    # process group**, which is never what a caller here wants: each one
+    # holds a specific child's pid. Refused rather than trusted, because
+    # trusting every call site to be right is the arrangement that let a
+    # spec's fabricated `"/x"` delete `/Applications` -- the lesson
+    # recorded in CLAUDE.md is to contain the dangerous operation where it
+    # happens. A spec fabricating `0` as a plausible pid is what found
+    # this one, by killing the rspec process.
+    #
+    # Negative stays allowed: `#signal_group` passes `-pid` deliberately,
+    # and that names a group rather than "whichever group I am in".
     def signal(target, name = "KILL")
+      return false if target.to_i.zero?
+
       Process.kill(name, target)
       true
     rescue StandardError
@@ -174,6 +187,11 @@ module Ovallsp
     # Returns true if the child was reaped here, false if it had to be
     # detached. Never raises.
     def reap(pid, timeout: DEFAULT_REAP_TIMEOUT_SECONDS, logger: nil)
+      # `Process.waitpid(0, …)` waits on any child in the caller's own
+      # process group. See #signal for why that is refused here rather
+      # than guarded at each caller.
+      return false if pid.to_i.zero?
+
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
       loop do
         return true if Process.waitpid(pid, Process::WNOHANG)

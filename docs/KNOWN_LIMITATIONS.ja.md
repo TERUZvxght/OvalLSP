@@ -471,6 +471,28 @@ Rails の concern がまさにこの形でした。メタプログラミング�
 `Order.find(id).no_such_method` だけが通常どおり報告されていました。`T | nil` の
 レシーバを捨てずに枝ごとに問い合わせる形になっています。 <!-- documents: 024.77 -->
 
+## 動く Ruby なのに未定義メソッド検査が報告するもの
+
+4つの形があり、いずれも実際に動くコードです。rspec-core / i18n / psych /
+reline の 177 ファイルに対する実測で 41 件、およそ4ファイルに1件です。
+
+- **`Struct.new` や `Data.define` で作ったクラスを再オープンした場合。**
+  `Seed = Struct.new(:seed, :used)` の後に `class Seed … end` と書くと、その
+  本体で読むメンバーが全て報告されます。クラスの外からの呼び出しは検査対象
+  にならないので、暗黙の `self` の形に限った話です。
+- **`define_method` と `attr_reader` 自体。** `Class.new do … end` や
+  `Module.new { … }` の中に書いた場合です。
+- **include したモジュール由来のメソッドへの `alias`。** `include Escaping`
+  の後の `alias safe_escape escape`。同じクラス内の `def` への alias は
+  問題ありません。
+- **`trap`、`URI`、`set_trace_func`、`pretty_inspect`** — 同梱の型定義が
+  宣言していない4つの `Kernel` メソッドです。`trap` は CLI やサーバーでは
+  ごく普通に使われます。
+
+加えて、ループの中で定義したメソッドは、名前がリテラルであっても報告されます
+（`[1].each { define_method(:alpha) { 1 } }`）。インストール済み gem と標準
+ライブラリに対する実測で 63 ファイル・108 箇所。 <!-- documents: 024.91 -->
+
 ## Runtime Agent が居ないときに未定義メソッド検査が間違えること
 
 プロジェクトがコアクラスを再オープンしている場合 — `initializers/core_ext.rb`

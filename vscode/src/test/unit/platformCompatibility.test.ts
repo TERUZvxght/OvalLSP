@@ -2,7 +2,12 @@ import * as assert from 'assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { checkBundledCoreCompatibility, queryRubyConfigPaths, RubyIdentity } from '../../platformCompatibility';
+import {
+  checkBundledCoreCompatibility,
+  queryRubyConfigPaths,
+  RubyIdentity,
+  spawnCwd
+} from '../../platformCompatibility';
 import { installExecutableFixture } from '../support/executableFixture';
 
 describe('checkBundledCoreCompatibility', () => {
@@ -287,3 +292,33 @@ describe('queryRubyConfigPaths', () => {
     }
   });
 });
+
+// `cwd` is the workspace folder on purpose, so a version manager's shim
+// reports the version that folder pins. But libuv's Windows path search
+// checks the cwd **before** PATH, so spawning a bare `ruby` from there
+// would run a `ruby.exe` the workspace happens to contain -- before the
+// user has trusted the folder, which is the class 0.2.4 was about.
+//
+// `resolveRuby` falls back to the bare string `'ruby'` only when it found
+// no version manager at all, so there is no shim for the cwd to influence
+// and dropping it costs nothing.
+describe('spawnCwd', () => {
+  it('keeps the workspace folder for an absolute interpreter path', () => {
+    const folder = path.join(path.sep, 'work', 'app');
+    assert.strictEqual(spawnCwd(path.join(path.sep, 'usr', 'bin', 'ruby'), folder), folder);
+  });
+
+  it('drops it for a bare command name, which the OS may resolve against the cwd', () => {
+    assert.strictEqual(spawnCwd('ruby', path.join(path.sep, 'work', 'app')), undefined);
+    assert.strictEqual(spawnCwd('ruby.exe', path.join(path.sep, 'work', 'app')), undefined);
+  });
+
+  it('drops it for a relative path, for the same reason', () => {
+    assert.strictEqual(spawnCwd(path.join('.', 'ruby'), path.join(path.sep, 'work')), undefined);
+  });
+
+  it('answers undefined when there was no cwd to begin with', () => {
+    assert.strictEqual(spawnCwd(path.join(path.sep, 'usr', 'bin', 'ruby')), undefined);
+  });
+});
+

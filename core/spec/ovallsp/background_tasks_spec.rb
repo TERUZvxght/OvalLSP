@@ -59,6 +59,7 @@ RSpec.describe Ovallsp::BackgroundTasks do
     # A per-task budget would take roughly 10 * 0.3s = 3s+; a shared
     # deadline keeps total time close to a single 0.3s budget regardless
     # of how many managers were stuck.
+    # perf-guard: a shared deadline vs. a per-task budget; 10 * 0.3s would be 3s+
     expect(elapsed).to be < 1.5
   end
 

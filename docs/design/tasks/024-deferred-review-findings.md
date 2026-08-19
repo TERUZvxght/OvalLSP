@@ -190,6 +190,12 @@ nobody can search is the recording habit without the benefit.
 | [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.3.0 | Completion unions a union's members; the diagnostic intersects them |
 | [`024.89`](#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | open | 0.3.0 | Signature help strips the parameter kinds and never advances |
 | [`024.90`](#02490-smaller-answers-a-review-round-measured) | open | 0.3.0 | Smaller answers a review round measured |
+| [`024.91`](#02491-the-undefined-method-check-reports-on-ordinary-ruby-it-cannot-read) | open | 0.3.0 | The undefined-method check reports on ordinary Ruby it cannot read |
+| [`024.92`](#02492-a-plugin-chooses-how-much-memory-the-parent-allocates) | fixed | 0.2.6 | A plugin chooses how much memory the parent allocates |
+| [`024.93`](#02493-process-kill-sig-0-signals-the-caller-s-own-process-group) | fixed | 0.2.6 | `Process.kill(sig, 0)` signals the caller's own process group |
+| [`024.94`](#02494-a-windows-workspace-could-have-its-own-ruby-exe-run-before-it-is-trusted) | fixed | 0.2.6 | A Windows workspace could have its own `ruby.exe` run before it is t… |
+| [`024.95`](#02495-a-deep-enough-file-ended-the-session-and-three-rescues-did-not-catch-it) | fixed | 0.2.6 | A deep enough file ended the session, and three rescues did not catc… |
+| [`024.96`](#02496-every-malformed-lsp-frame-ended-the-process) | fixed | 0.2.6 | Every malformed LSP frame ended the process |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -4658,6 +4664,217 @@ review round of 0.2.6.
 - **`core/lib/ovallsp/observation/runner.rb` still uses `Marshal.load`**
   on a subprocess's output. Adjacent to `024.73` and not covered by it;
   the same reasoning applies, and the same fix shape would.
+
+## 024.91 The undefined-method check reports on ordinary Ruby it cannot read
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`,
+`core/lib/ovallsp/diagnostics/engine.rb`
+
+Four shapes an attack round found, all measured through the real engine,
+all A/B'd against `v0.2.5` and **byte-identical** there — so none is a
+0.2.6 regression, and each is a report about code that works. Over 177
+files of rspec-core / i18n / psych / reline: **41 reports**, about one
+per four files.
+
+- **`Const = Struct.new(...)` then `class Const … end`** — roughly 19 of
+  the 41. The members are unknown inside the reopened body:
+  `Seed = Struct.new(:seed, :used)` then `def describe = "#{seed}/#{used}"`
+  reports both. The same for `Data.define`, for `keyword_init: true`, and
+  for a subclass of a Struct constant. This is rspec-core's whole
+  `notifications.rb`. Neighbour of `024.82`, which is the same seam seen
+  from resolution rather than from members.
+- **`define_method` and `attr_reader` reported as unknown methods
+  themselves**, inside `Class.new do … end` and
+  `Module.new { define_method(…) }`. Both directions are wrong at once
+  here: per `024.31` the `attr_reader :y` is *also* recorded as declaring
+  a method on the enclosing class.
+- **`alias` to a method from an included module.** `include Escaping`
+  then `alias safe_escape escape` reports `safe_escape`. Plain `alias` to
+  a `def` in the same class is fine.
+- **`Kernel#trap` and `Kernel#URI`** reported missing on the user's own
+  class. Probed one Kernel name per file across ~75: exactly four report
+  — `trap`, `URI`, `set_trace_func`, `pretty_inspect`. `rbs-3.8.0/core`
+  has no `def trap`, so this is a signature-set gap surfacing as a wrong
+  report. `trap` is idiomatic in CLI and server Ruby.
+
+And one correction to what is already recorded: the `KNOWN_LIMITATIONS`
+bullet about loop-defined methods says "the name is not a literal, so the
+index records nothing". A **literal** name inside a block reports too —
+`[1].each { define_method(:alpha) { 1 } }` then `alpha`. 0.2.6's block
+narrowing fixed the direct-in-a-class-body spelling and not this one.
+Measured: 63 files / 108 sites across the installed gems and the stdlib.
+
+## 024.92 A plugin chooses how much memory the parent allocates
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Reachable only by a client that sends `pluginManifests`, and the
+  shipped extension sends none. Recorded as a defect because "one broken
+  plugin never takes Core down" is the guarantee the fork exists for.
+target: 0.2.6
+released-in: 0.2.6
+```
+
+**Area:** `core/lib/ovallsp/plugins/loader.rb` (`#read_isolated_result`)
+
+`Timeout.timeout(5) { reader.read }` bounds wall-clock, not bytes, and
+`IO#read` returns only at EOF. Measured by an attack round: a plugin
+registering 300,000 declarations took the parent from 44 MB to 380 MB in
+1.22s; a plugin whose one method name was 50 MB of `"z"` took it to
+144 MB in 0.14s. Five seconds of pipe throughput is multiple GB.
+
+Fixed by reading one byte past a 16 MB cap and refusing anything larger,
+so the excess is never allocated.
+
+## 024.93 `Process.kill(sig, 0)` signals the caller's own process group
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing in the product can produce a pid of 0 -- fork(2) either yields
+  >= 1 or raises. It is recorded because a *spec* produced one and killed
+  the test process, which is the same failure mode as the fabricated path
+  that deleted `/Applications`.
+target: 0.2.6
+released-in: 0.2.6
+```
+
+**Area:** `core/lib/ovallsp/child_process.rb` (`#signal`, `#reap`)
+
+An example written while capping the plugin payload passed `0` as a
+plausible-looking fake pid. `kill_child(0)` called
+`Process.kill("KILL", 0)`, which signals **every process in the caller's
+own process group** — so `bundle exec rspec` killed itself, with no
+output and an exit code that read like an ordinary failure.
+
+`ChildProcess`' own comment already argued that a pid of 0 "never reaches
+here" because fork returns >= 1. True of production, and it is exactly
+the reasoning the `/Applications` incident disproved: every call site was
+individually right, and containment was an emergent property of all of
+them being right at once, which is not a property. `#signal` and `#reap`
+now refuse a zero target. A negative one stays allowed, because
+`#signal_group` names a group deliberately.
+
+## 024.94 A Windows workspace could have its own `ruby.exe` run before it is trusted
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Windows is `unsupported` in `SUPPORT_MATRIX.md` and the published VSIX
+  carries a darwin-arm64 payload only, so no shipped configuration
+  reaches it. Recorded and fixed anyway: executing a binary an untrusted
+  workspace supplied is the class 0.2.4 was about, and the axis that
+  covers it does not depend on which platforms are supported.
+target: 0.2.6
+released-in: 0.2.6
+```
+
+**Area:** `vscode/src/platformCompatibility.ts`,
+`vscode/src/rubyResolver.ts` (`#pickExecutable`'s fallback)
+
+`resolveRuby` falls back to the bare string `'ruby'` when it finds no
+version manager, and `queryRubyIdentity` / `queryRubyConfigPaths` /
+`probeRuntimeDependencies` pass `cwd: folder.uri.fsPath` — deliberately,
+so a shim reports the version that folder pins. libuv's Windows path
+search checks the **cwd before PATH**, so on a machine with no
+discoverable Ruby, a workspace containing `ruby.exe` would be executed
+during the compatibility probe, which runs before trust is granted.
+POSIX is unaffected: `execvp` does not search the cwd.
+
+Found by an attack round. Fixed by `spawnCwd`, which keeps the cwd for an
+absolute interpreter path and drops it for a bare or relative one — the
+two cases separate cleanly, because the bare fallback means no version
+manager was found and so there is no shim for the cwd to influence.
+Applied on every platform rather than behind a `win32` check: a rule that
+only runs where nobody tests it is not a rule.
+
+## 024.95 A deep enough file ended the session, and three rescues did not catch it
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.2.6
+released-in: 0.2.6
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`#summarize`),
+`core/lib/ovallsp/server.rb`, `core/lib/ovallsp/background_tasks.rb`
+
+`SystemStackError` is an `Exception`, not a `StandardError`, so the
+visitor's recursion escaped every rescue between itself and `Server#run`.
+Measured by an attack round: `x` followed by 5,000 `.succ` calls, opened
+over `didOpen`, exits the process **rc=1** with a raw backtrace on
+stderr; the `documentSymbol` sent immediately after is never answered.
+
+Three more places, same cause: the cold-index thread died with no log
+line at all — silently skipping the deleted-file sweep, the
+reference-index bump and the workspace diagnostics pass for the rest of
+the session, and printing through Ruby's own `report_on_exception`, which
+**bypasses `Logger`'s `Redactor`** and so the `$HOME`→`~` substitution
+`SECURITY_CHECKLIST` §3 claims for that channel. `BackgroundTasks#shutdown`,
+documented "never raises", raised — `Thread#join` re-raises what killed
+the thread — leaving the threads after it in the batch unjoined. And
+`scripts/corpus_diagnostics.rb` aborts a whole measurement on one such
+file.
+
+Thresholds measured: a `.succ` chain fails at depth 2104, nested arrays
+at 1923, nested hashes at 1147, nested `if` at 1145. **0 of 4582 `.rb`
+files** across every installed gem and the Ruby 3.4 stdlib reach any of
+them, so this is generated or hostile input — and a file arrives from
+anywhere.
+
+Fixed where the recursion is rather than at each caller, per CLAUDE.md's
+containment rule: `ParserService#summarize` answers an empty reading of
+the file. Empty rather than partial, because a half-finished walk holds
+the declarations from the top of the file and none from the bottom, and
+the undefined-method check would assert absence on the strength of it.
+
+## 024.96 Every malformed LSP frame ended the process
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.2.6
+released-in: 0.2.6
+```
+
+**Area:** `core/lib/ovallsp/io/framed_reader.rb`,
+`core/lib/ovallsp/server.rb` (`#run`)
+
+`Server#run` rescued only `FramedReader::EOF`. Ten inputs measured by an
+attack round, each after a valid `initialize` and followed by a valid
+`shutdown`: `Content-Length: 0`, `-5`, `abc`, `5.5`, a missing header, a
+malformed body, a truncated frame. All exited **rc=1** with an uncaught
+`JSON::ParserError`, `ArgumentError`, `NoMethodError` or `ProtocolError`;
+none reached `shutdown`.
+
+`Integer()` also accepted `0x10` as 16 and `1_0` as 10, neither of which
+the LSP framing grammar allows, and `-5` reached `byteslice(0, -5)`.
+
+Only a client can send these, so a hostile workspace cannot reach it —
+but a reconnect, a proxy, or one stray byte on stdin ended the session,
+and what the user saw was a backtrace rather than a diagnosable message.
+
+Fixed: the reader raises `ProtocolError` for everything that is not a
+well-formed frame and `EOF` only for a stream that ended, the length must
+match `\A\d+\z`, and `run` logs a malformed message and reads the next
+one.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

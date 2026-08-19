@@ -154,4 +154,43 @@ RSpec.describe Ovallsp::ChildProcess do
       thread&.kill
     end
   end
+
+  # `Process.kill(sig, 0)` signals **every process in the caller's own
+  # process group**, and `Process.waitpid(0, …)` waits on any child in
+  # it. Neither is ever what a caller here wants: every one of them holds
+  # a specific child's pid.
+  #
+  # Found the way this project has found this shape before -- a spec
+  # fabricated the argument. An example passing `0` as a plausible-looking
+  # fake pid reached `kill_child(0)` and killed the rspec process itself,
+  # which is the signalling twin of the `store_spec.rb` example that
+  # fabricated `"/x"` and deleted `/Applications`. The lesson recorded
+  # there is the one applied here: contain it where the dangerous
+  # operation is, not at each caller, because every call site was
+  # individually plausible.
+  #
+  # A negative target stays allowed -- `#signal_group` passes `-pid` on
+  # purpose, and that is a *named* group rather than "whatever group I
+  # happen to be in".
+  describe "a target of 0" do
+    it "is refused by #signal rather than sent to the caller's own process group" do
+      expect(Process).not_to receive(:kill)
+
+      expect(described_class.signal(0)).to be(false)
+    end
+
+    it "is refused by #reap rather than waited on across the group" do
+      expect(Process).not_to receive(:waitpid)
+
+      expect(described_class.reap(0)).to be(false)
+    end
+
+    it "still signals a real child" do
+      pid = Process.spawn("/bin/sleep", "60")
+
+      expect(described_class.signal(pid)).to be(true)
+      expect(described_class.reap(pid)).to be(true)
+    end
+  end
 end
+

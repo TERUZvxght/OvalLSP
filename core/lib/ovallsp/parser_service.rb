@@ -42,7 +42,7 @@ module Ovallsp
       result = Prism.parse(parse_source)
       lines = parse_source.split("\n", -1)
 
-      visitor = Visitor.new(lines).tap { |v| result.value.accept(v) }
+      visitor = walk(result, lines)
 
       Index::FileSummary.new(
         uri: document.uri,
@@ -66,6 +66,43 @@ module Ovallsp
     end
 
     private
+
+    # The visitor recurses once per nested node, so a deep enough file
+    # exhausts the interpreter stack. `SystemStackError` is an
+    # `Exception` rather than a `StandardError`, so it passed through
+    # every rescue between here and `Server#run`: opening one such file
+    # ended the editor's session with a raw backtrace on stderr, and the
+    # cold-index thread died without a log line -- taking the deleted-file
+    # sweep, the reference-index bump and the workspace diagnostics pass
+    # with it for the rest of the session. `BackgroundTasks#shutdown`,
+    # documented "never raises", raised too, because `Thread#join`
+    # re-raises what killed the thread.
+    #
+    # Contained where the recursion is rather than at each caller.
+    # `Server#dispatch`, `ColdIndexer` and `scripts/corpus_diagnostics.rb`
+    # each had their own rescue and each was individually plausible; that
+    # is exactly the arrangement CLAUDE.md's containment rule is about.
+    #
+    # An empty visitor rather than a partial one: a half-finished walk
+    # holds the declarations from the top of the file and none from the
+    # bottom, and the undefined-method check would assert absence on the
+    # strength of it. "Nothing was read here" is the truthful answer, and
+    # it is the one every other unreadable-input path in this file gives.
+    #
+    # Measured: a `.succ` chain fails at depth 2104, nested hashes at
+    # 1147. 0 of 4582 `.rb` files across every installed gem and the Ruby
+    # 3.4 stdlib reach any such depth, so this is generated or hostile
+    # input -- and a file arrives from anywhere.
+    def walk(result, lines)
+      visitor = Visitor.new(lines)
+      begin
+        result.value.accept(visitor)
+        visitor
+      rescue SystemStackError
+        Visitor.new(lines)
+      end
+    end
+
 
     # `alias_method :create, :new` binds `create` to whatever `new` means
     # at the moment the statement runs -- not to a `def new` written five
