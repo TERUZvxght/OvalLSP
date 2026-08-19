@@ -376,12 +376,23 @@ module Ovallsp
         candidates = @method_resolver.resolve(receiver_type: receiver_type, name: method_name, context: context)
         return nil if candidates.empty?
 
-        candidates.map do |candidate|
+        # One entry per *distinct* signature. `#resolve` answers the
+        # override and the method it overrides, in lookup order -- which
+        # is what makes go-to-definition land on the nearest -- and turning
+        # both into labels showed `["area()", "area()"]` for a method that
+        # merely overrides another. Ruby calls exactly one of them, so the
+        # popup was offering a choice that does not exist.
+        #
+        # Deduplicated on the rendered label rather than truncated to the
+        # first: a Union receiver legitimately produces two *different*
+        # signatures for one name, and that is what this popup is for.
+        candidates.filter_map do |candidate|
           decl = candidate.declarations.first&.last
           next unless decl
 
-          { label: signature_label(method_name, decl.parameters), parameters: decl.parameters.map { |p| { label: p.name.to_s } } }
-        end.compact
+          { label: signature_label(method_name, decl.parameters),
+            parameters: decl.parameters.map { |p| { label: p.name.to_s } } }
+        end.uniq { |signature| signature[:label] }
       end
 
       def rbs_signatures(receiver_type, method_name, context, direct: nil)

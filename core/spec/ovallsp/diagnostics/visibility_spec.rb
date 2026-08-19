@@ -97,4 +97,44 @@ RSpec.describe "what completion offers, and whether it can be called" do
       expect(offered("Aliased")).to include("original", "aka", "aka2")
     end
   end
+
+  # A method that overrides another showed its signature twice: `#resolve`
+  # correctly answers the override *and* the one it overrides -- that
+  # ordering is what makes go-to-definition land on the nearest -- and
+  # `#signatures_of` turned both into labels. Ruby calls exactly one of
+  # them, so the popup was offering a choice that does not exist.
+  #
+  # Measured by a 0.2.8 review round: `c.area(` returned
+  # `["area()", "area()"]`.
+  describe "signature help for a method that overrides another" do
+    let(:model_registry) { Ovallsp::Models::ModelRegistry.new }
+    let(:query_service) do
+      inferencer = Ovallsp::LocalInferencer.new(model_registry: model_registry, method_resolver: resolver)
+      Ovallsp::Semantic::QueryService.new(local_inferencer: inferencer, method_resolver: resolver,
+                                          model_registry: model_registry, workspace_index: workspace_index,
+                                          signatures: Ovallsp::Signatures::Environment.new)
+    end
+
+    it "offers the one Ruby would call, once" do
+      index("class Shape\n  def area(x); end\nend\nclass Circle < Shape\n  def area(x); end\nend\n")
+
+      labels = query_service.signatures_of(Ovallsp::Types::Nominal.new(name: "Circle"), "area").map { |s| s[:label] }
+
+      expect(labels).to eq(["area(x)"])
+    end
+
+    # The control: genuinely different signatures for one name -- which a
+    # Union receiver produces, and which the popup is *for* -- still come
+    # through as separate entries.
+    it "still offers both when the two really differ" do
+      index("class A\n  def go(x); end\nend\nclass B\n  def go(x, y); end\nend\n")
+
+      union = Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "A"),
+                                              Ovallsp::Types::Nominal.new(name: "B")])
+      labels = query_service.signatures_of(union, "go").map { |s| s[:label] }
+
+      expect(labels).to contain_exactly("go(x)", "go(x, y)")
+    end
+  end
 end
+
