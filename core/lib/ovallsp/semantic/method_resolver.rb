@@ -117,11 +117,61 @@ module Ovallsp
                                       name.to_s)
         return MemberAvailability.present(candidates) unless candidates.empty?
 
-        singleton = normalized_context[:singleton] == true
-        identified = types.all? do |type|
-          @hierarchy_index.ancestors(type.name, singleton: singleton).all? { |entry| !entry.name.nil? && entry.kind }
-        end
-        MemberAvailability.unknown(identified ? :not_declared_in_workspace : :ancestor_not_identified)
+        MemberAvailability.unknown(types.filter_map { |type| unenumerable_reason(type, normalized_context) }.first ||
+                                   :not_declared_in_workspace)
+      end
+
+      # Why this receiver's members could not be listed in full, or nil if
+      # they could.
+      #
+      # These were `return false` lines inside
+      # `Diagnostics::Engine#closed_nominal?`, each added a review round
+      # at a time after a false report on working code. They belong where
+      # the enumeration happens: as a reason on the answer, a reader gets
+      # them without having been taught, which is the whole of `037`'s C2.
+      #
+      # Two of the engine's six are not here yet -- both need the
+      # signature environment to say whether an ancestor is one RBS
+      # declares, and this resolver is not given one. They move when it
+      # is.
+      def unenumerable_reason(type, context)
+        singleton = context[:singleton] == true
+        entries = @hierarchy_index.ancestors(type.name, singleton: singleton)
+
+        # `Diagnostics::Engine#closed_nominal?` opened with
+        # `return false if entries.empty?`, and that line cannot fire: a
+        # chain always contains at least the receiver itself, for a name
+        # nothing declares and for the empty string alike, in both
+        # singleton and instance modes. It is not carried here.
+        # CLAUDE.md: a guard no input can reach is the same defect as an
+        # untested one.
+        #
+        # Always the *instance* chain, even for a singleton lookup: a
+        # singleton chain ends at the class itself and never reaches
+        # BasicObject, so asking it directly would call every `Foo.bar`
+        # unenumerable and silence everything.
+        instance_entries = @hierarchy_index.ancestors(type.name, singleton: false)
+        return :ancestor_not_identified unless instance_entries.any? { |e| Index::SymbolId.qualify_owner(e.name) == "::BasicObject" }
+        # A singleton lookup depends on the instance chain too: `include`
+        # puts a module there, and `included`/`extended` hooks are how a
+        # module adds class methods.
+        return :ancestor_not_identified if singleton && instance_entries.any? { |e| e.name.nil? }
+        return :ancestor_not_identified if entries.any? { |e| e.name.nil? }
+
+        return :responds_at_call_time if entries.any? { |e| declares_method_missing?(e.name) }
+        return :surface_open if entries.any? { |e| open_surface?(e, singleton) }
+
+        nil
+      end
+
+      def declares_method_missing?(owner)
+        @workspace_index.method_symbol_ids(owner, kind: :instance_method).any? { |sid| sid.name == "method_missing" }
+      end
+
+      # `extend M` puts M's *instance* methods on the class-level chain,
+      # so a link reached that way is asked about the other side.
+      def open_surface?(entry, singleton)
+        @workspace_index.open_surface?(entry.name, singleton: entry.origin == :extend ? false : singleton)
       end
 
       def resolve(receiver_type:, name:, context: {})

@@ -67,4 +67,57 @@ RSpec.describe "Ovallsp::Semantic::MethodResolver#availability" do
     expect(availability_of("build").candidates)
       .to eq(resolver.resolve(receiver_type: receiver, name: "build"))
   end
+
+  # **Step 2 of C2**: the reasons `Diagnostics::Engine#closed_nominal?`
+  # kept for itself, moved to where the enumeration happens. Four of its
+  # six are answerable here today; the two that need the signature
+  # environment stay in the engine until it is passed one.
+  #
+  # Each one used to be a `return false` the engine had learned to make,
+  # one review round at a time. As a reason on the resolver's answer it
+  # is stated once and every reader gets it.
+  describe "the reasons an enumeration was incomplete" do
+    it "cannot account for a chain that does not reach BasicObject" do
+      index("class Widget < Unfindable\nend\n")
+
+      expect(availability_of("anything").reason).to eq(:ancestor_not_identified)
+    end
+
+    # A class nothing declares is its own unidentified link -- the chain
+    # holds the receiver and nothing else, and that entry has no kind.
+    # This example was written expecting a separate `:receiver_not_declared`,
+    # which turned out to describe a state that cannot occur: a chain is
+    # never empty. The engine's equivalent guard could not fire either,
+    # and is not carried over.
+    it "cannot account for a class nothing declares at all" do
+      expect(availability_of("anything", receiver: Ovallsp::Types::Nominal.new(name: "NeverSeen")).reason)
+        .to eq(:ancestor_not_identified)
+    end
+
+    # A surface that answers at call time cannot be enumerated, so
+    # nothing about it supports a claim of absence.
+    it "cannot account for a class that declares method_missing" do
+      index("class Widget\n  def method_missing(name, *args); end\nend\n")
+
+      expect(availability_of("anything").reason).to eq(:responds_at_call_time)
+    end
+
+    # And the other direction: a surface whose members were written by a
+    # macro this parser cannot read.
+    it "cannot account for a class whose body runs a macro it cannot read" do
+      index("class Widget\n  attr_atomic :value\nend\n")
+
+      expect(availability_of("value").reason).to eq(:surface_open)
+    end
+
+    # The control: a class this resolver can account for entirely still
+    # answers `not_declared_in_workspace`, which is what step 3 turns
+    # into `absent` once the engine's remaining two reasons move too.
+    it "says so plainly when it could account for the whole chain" do
+      index("class Widget\n  def build; end\nend\n")
+
+      expect(availability_of("definitely_not_here").reason).to eq(:not_declared_in_workspace)
+    end
+  end
 end
+

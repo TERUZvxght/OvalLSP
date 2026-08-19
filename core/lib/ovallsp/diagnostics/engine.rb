@@ -846,35 +846,30 @@ module Ovallsp
 
       def closed_nominal?(nominal, singleton, context)
         entries = context.hierarchy_index.ancestors(nominal.name, singleton: singleton)
-        return false if entries.empty?
-        # Always asked of the *instance* chain, even for a singleton
-        # lookup: a singleton chain ends at the class itself and never
-        # reaches BasicObject, so asking it directly would call every
-        # `Foo.bar` open and silence the check entirely.
         instance_entries = context.hierarchy_index.ancestors(nominal.name, singleton: false)
-        return false unless chain_reaches_root?(instance_entries)
+
+        # Four of the reasons this method used to keep for itself now live
+        # where the enumeration happens, as reasons on
+        # `MethodResolver#availability`'s answer: a chain that does not
+        # reach BasicObject, a link with no name, a class that declares
+        # `method_missing`, and a surface opened by a macro the parser
+        # cannot read. Each was added here a review round at a time, after
+        # a false report on working code; stated once at the resolver,
+        # every reader gets them without having been taught (`037`'s C2,
+        # step 2).
+        #
+        # Two stay: whether an ancestor is one the *signature* environment
+        # declares, which needs a `Signatures::Environment` the resolver is
+        # not given, and the Runtime Agent's `#reopened_elsewhere?` round
+        # trip below.
+        return false if context.method_resolver &&
+                        context.method_resolver.availability(receiver_type: nominal, name: "",
+                                                             context: { singleton: singleton }).reason != :not_declared_in_workspace
         return false unless entries.all? { |entry| ancestor_known?(entry, context) }
         # A singleton lookup also depends on the *instance* chain, because
         # that is where `include` puts a module and `included`/`extended`
-        # hooks are how a Ruby module adds class methods. The singleton
-        # chain carries no trace of an `include`, so a class that includes
-        # something this workspace cannot identify used to look complete
-        # at class level: `include Singleton` then reported `.instance`
-        # missing, `include Sidekiq::Worker` reported `sidekiq_options`,
-        # `include ActiveModel::Model` reported `validates`.
+        # hooks are how a Ruby module adds class methods.
         return false if singleton && !instance_entries.all? { |entry| ancestor_known?(entry, context) }
-        return false if entries.any? { |entry| declares_method_missing?(entry.name, context) }
-        # Same question as `method_missing`, from the other direction: that
-        # one is a surface that answers at call time, this one a surface
-        # whose members were written by a macro the parser cannot read.
-        # Neither can be enumerated, so neither supports a claim of
-        # absence. Asked of every link for the reason spelled out below --
-        # `attr_atomic` in a superclass defines instance methods on the
-        # subclass just as surely -- and of synthesised links too, unlike
-        # `reopened_elsewhere?` below: this answer comes from the index
-        # rather than a round trip, and a workspace that reopens `Object`
-        # with an unreadable macro has opened `Object`.
-        return false if entries.any? { |entry| open_surface_for?(entry, singleton, context) }
 
         # Asked of every link in the chain, not just the receiver. Once
         # `test/test_helper.rb` has reopened `ActiveSupport::TestCase`,
