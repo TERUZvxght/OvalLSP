@@ -8,7 +8,7 @@
 # since; C9 is not worth building against a number nobody can reproduce
 # (CLAUDE.md, "a measurement is a claim").
 #
-#   ruby scripts/measure_typing_publishes.rb [file-to-type-into] [keystrokes]
+#   ruby scripts/measure_typing_publishes.rb [file-to-type-into] [keystrokes] [interval-seconds]
 #
 # Drives a real server over a pipe, exactly as the client does: initialize,
 # didOpen, then one didChange per keystroke at a fixed interval, then wait
@@ -19,7 +19,7 @@ require "json"
 ROOT = File.expand_path("..", __dir__)
 TARGET = ARGV[0] || File.join(ROOT, "core", "lib", "ovallsp", "server.rb")
 KEYSTROKES = (ARGV[1] || "10").to_i
-INTERVAL = 0.15
+INTERVAL = (ARGV[2] || "0.15").to_f
 QUIET_AFTER = 8.0
 
 abort "no such file: #{TARGET}" unless File.file?(TARGET)
@@ -28,6 +28,11 @@ text = File.read(TARGET, encoding: Encoding::UTF_8)
 puts "measure-typing-publishes: #{TARGET} (#{text.lines.size} lines), " \
      "#{KEYSTROKES} keystrokes #{INTERVAL}s apart"
 puts "measure-typing-publishes: cwd #{Dir.pwd}, version #{File.read(File.join(ROOT, 'core/lib/ovallsp/version.rb'))[/"([^"]+)"/, 1]}"
+# Which code this side actually ran, printed before it runs rather than
+# assumed afterwards -- three of this project's corpus comparisons were
+# false because both sides ran the same tree (CLAUDE.md).
+puts "measure-typing-publishes: HEAD #{`git -C #{ROOT} rev-parse --short HEAD`.strip}, " \
+     "server.rb #{`git -C #{ROOT} diff --stat -- core/lib/ovallsp/server.rb core/lib/ovallsp/io/framed_reader.rb`.strip.empty? ? 'clean' : 'MODIFIED'}"
 
 def frame(message)
   body = JSON.generate(message)

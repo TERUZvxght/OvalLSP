@@ -149,6 +149,11 @@ module Ovallsp
       # orders every writer against it. See #publish_findings.
       @last_published_version = {}
       @publish_state_mutex = Mutex.new
+      # Which uris have changed and not yet been analysed. A set, because
+      # ten edits to one file are one thing to analyse -- 037's C9. Its
+      # mutex guards nothing else and is taken inside nothing else.
+      @pending_analysis = Set.new
+      @settled_analysis_mutex = Mutex.new
       @agent_supervisor = AgentSupervisor.new
       @agent_retry_mutex = Mutex.new
       @agent_retry_generation = 0
@@ -185,9 +190,29 @@ module Ovallsp
           next
         end
 
-        break if dispatch(message) == :exit
+        result = dispatch(message)
+        # **Analysis follows the settled state, not every event** (037's
+        # C9). A `didChange` records that its uri needs analysing; the
+        # analysis itself runs only once nothing else is waiting to be
+        # read, so a burst of keystrokes produces one analysis of where
+        # the buffer landed rather than one per edit.
+        #
+        # It is not a debounce: there is no interval to tune and no
+        # waiter thread. The question asked is "is there more input", and
+        # a reader that cannot answer it says no -- which analyses
+        # immediately, as every release before this one did.
+        #
+        # Draining before the break matters as much as draining in the
+        # loop: the last edit of a session is the one whose answer the
+        # developer is looking at.
+        drain_settled_analyses unless @reader.input_ready?
+        if result == :exit
+          drain_settled_analyses
+          break
+        end
       end
 
+      drain_settled_analyses
       @shutdown_received ? 0 : 1
     ensure
       shutdown_background_tasks
@@ -458,7 +483,7 @@ module Ovallsp
       summary = @parser_service.summarize(document)
       if apply_file_summary(summary)
         invalidate_stale_observations
-        publish_diagnostics(document)
+        note_analysis_needed(document.uri)
       end
     rescue StandardError => e
       # Parsing must never take the server down: keep the previous summary
@@ -479,6 +504,30 @@ module Ovallsp
     # `publishDiagnostics` for any uri. `#reindex_from_disk` now publishes
     # too, through the workspace pass rather than here, so that the two
     # cannot both claim the last word on one uri.
+    # The uri whose buffer has changed, remembered rather than analysed on
+    # the spot. `#drain_settled_analyses` reads the *store* when it runs,
+    # so what gets analysed is wherever the buffer has arrived by then --
+    # which is why the pending record is a set of uris and not a set of
+    # documents.
+    def note_analysis_needed(uri)
+      @settled_analysis_mutex.synchronize { @pending_analysis << uri }
+    end
+
+    def drain_settled_analyses
+      pending = @settled_analysis_mutex.synchronize do
+        taken = @pending_analysis.to_a
+        @pending_analysis.clear
+        taken
+      end
+
+      pending.each do |uri|
+        document = @document_store.fetch(uri: uri)
+        next unless document
+
+        publish_diagnostics(document)
+      end
+    end
+
     def publish_diagnostics(document)
       # Whether there is a running application to ask has to be known
       # *before* the check runs, not after: a receiver it cannot judge
