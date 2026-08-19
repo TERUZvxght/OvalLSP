@@ -1065,6 +1065,34 @@ RSpec.describe Ovallsp::LocalInferencer do
       expect(infer("x = User.all\n", line: 0, character: 1).to_s).to eq("Relation[User]")
     end
 
+    # `024.79`. `Billing::Order.first.` offered no completions at all
+    # while `Billing::Order.recent.first.` offered 329 -- the working
+    # path being the rarer one. `Model.first` was simply not in the
+    # class-level finder list, so it answered nothing.
+    #
+    # Answered by asking the relation rules rather than by adding names
+    # here, because that is what Rails does: `ActiveRecord::Querying`
+    # delegates every one of these to `all`, so `Model.first` *is*
+    # `Model.all.first`. One place knows what a relation method returns,
+    # and it stays one place when that list grows.
+    it "infers Model.first as the model or nil, the same as Model.all.first" do
+      optional = Ovallsp::Types.normalize_union([Ovallsp::Types::Nominal.new(name: "User"), Ovallsp::Types::NIL])
+
+      expect(infer("user = User.first\n", line: 0, character: 1)).to eq(optional)
+      expect(infer("user = User.all.first\n", line: 0, character: 1)).to eq(optional)
+    end
+
+    it "infers Model.first! as the model itself" do
+      expect(infer("user = User.first!\n", line: 0, character: 1)).to eq(Ovallsp::Types::Nominal.new(name: "User"))
+    end
+
+    # The control: a class-level call that is not a relation method must
+    # still answer nothing rather than being handed the model's type.
+    it "still says nothing about a class-level call the rules do not model" do
+      expect(infer("x = User.definitely_not_a_finder_zzz\n", line: 0, character: 1))
+        .to eq(Ovallsp::Types::UNKNOWN)
+    end
+
     it "infers a belongs_to association through a Union receiver (user.company.orders)" do
       source = "user = User.find(1)\nuser.company.orders\n"
       expect(infer(source, line: 1, character: 13).to_s).to eq("CollectionProxy[Order]")
@@ -1079,6 +1107,35 @@ RSpec.describe Ovallsp::LocalInferencer do
     it "infers CollectionProxy[T]#first! as T (no nil)" do
       source = "user = User.find(1)\nuser.company.orders.first!\n"
       expect(infer(source, line: 1, character: 20)).to eq(Ovallsp::Types::Nominal.new(name: "Order"))
+    end
+
+    # `first` was the only one of these modelled, so `orders.last` and
+    # `User.last` both answered nothing -- and `last` is as everyday as
+    # `first`. One table decides what a relation method returns, and
+    # `Model.<name>` reaches it by delegation, so naming them here fixes
+    # both spellings at once.
+    #
+    # Driven per name, so a change that reaches `last` and not `take`
+    # fails on the one it missed rather than on a list.
+    {
+      "last" => "Order | nil", "last!" => "Order",
+      "take" => "Order | nil", "take!" => "Order",
+      "find" => "Order"
+    }.each do |method_name, expected|
+      it "infers CollectionProxy[T]##{method_name} as #{expected}" do
+        source = "user = User.find(1)\nuser.company.orders.#{method_name}\n"
+        expect(infer(source, line: 1, character: 20).to_s).to eq(expected)
+      end
+    end
+
+    {
+      "last" => "User | nil", "last!" => "User",
+      "take" => "User | nil", "take!" => "User"
+    }.each do |method_name, expected|
+      it "infers Model.#{method_name} as #{expected}, the same as Model.all.#{method_name}" do
+        expect(infer("x = User.#{method_name}\n", line: 0, character: 1).to_s).to eq(expected)
+        expect(infer("x = User.all.#{method_name}\n", line: 0, character: 1).to_s).to eq(expected)
+      end
     end
 
     it "infers a DB column accessor by its mapped Ruby type" do

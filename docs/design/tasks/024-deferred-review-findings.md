@@ -172,13 +172,13 @@ nobody can search is the recording habit without the benefit.
 | [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | open | 0.2.4 | The two suites that drive a real editor are run by nobody but the ma… |
 | [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.2.4 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
-| [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | resolved | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
+| [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | fixed | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | open | 0.3.0 | The trust gate stands in front of callers, not in front of what exec… |
 | [`024.75`](#02475-a-documented-field-selects-nothing) | open | 0.3.0 | A documented field selects nothing |
 | [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.2.6 | Fifty-four `unknown-method` reports over real gem source, and all of… |
 | [`024.77`](#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | open | 0.3.0 | A call to a method that does not exist is missed through a relation |
 | [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | open | 0.3.0 | Completion did not get the fix hover and diagnostics did |
-| [`024.79`](#02479-model-first-completes-to-nothing) | open | 0.3.0 | `Model.first` completes to nothing |
+| [`024.79`](#02479-model-first-completes-to-nothing) | fixed | 0.2.6 | `Model.first` completes to nothing |
 | [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | open | 0.3.0 | An unresolved hierarchy edge is expressible as a method owner |
 | [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | open | 0.3.0 | An ancestor reference carries no lexical context, so an ambiguous na… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
@@ -3788,7 +3788,7 @@ call sites read it. Today two functions decide and only one was changed.
 ## 024.73 The fork boundary is undone by `Marshal.load` in the parent
 
 ```yaml
-status: resolved
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -3851,7 +3851,7 @@ that defensible rather than the size of the remaining work: reaching this
 code needs a client that sends `pluginManifests` *and* a trusted
 workspace, and the shipped extension sends none.
 
-### Resolved in 0.2.6, and the predicted protocol change was not needed
+### Fixed in 0.2.6, and the predicted protocol change was not needed
 
 `Plugins::Wire` is the boundary's format: the child encodes to JSON, the
 parent decodes from fields it has checked. Nothing in a payload can name
@@ -4150,10 +4150,11 @@ first diagnosis and round 3 disproved it.
 ## 024.79 `Model.first` completes to nothing
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.3.0
+target: 0.2.6
+released-in: 0.2.6
 ```
 
 **Area:** `core/lib/ovallsp/models/*`, `core/lib/ovallsp/local_inferencer.rb`
@@ -4169,6 +4170,27 @@ is not, or is not carrying the element type through.
 **Direction:** whatever gives `scope` its `Relation[Model]` should give
 the finder methods their `Model | nil`. Cheap to check, and it is a
 daily path answering nothing.
+
+### Fixed in 0.2.6
+
+`Model.first` was simply absent from `#resolve_class_level_finder`'s
+list, which knew `find`, `find_by`, `where` and `all`. Adding a name
+would have fixed the symptom and left the next one; instead the method
+falls through to `#resolve_relation_member`, asked as if the call had
+been written `Model.all.<name>` — which is what Rails does, since
+`ActiveRecord::Querying` delegates every one of these to `all`. One place
+decides what a relation method returns and it stays one place.
+
+That immediately showed the same hole one level down: `#first` was the
+*only* record-returning finder modelled, so `orders.last` and
+`User.last` both answered nothing. `RELATION_RECORD_FINDERS` now names
+`first`/`last`/`take`, their bang forms, and `find`, split by whether the
+call can return nil.
+
+Verified end to end, not only in the unit: with a `User` model
+registered, `User.first` now infers `User | nil` and completes to the
+same member list as `User.all.first` and `User.find(1)`, where before it
+inferred `Unknown` and completed to nothing.
 ## 024.80 An unresolved hierarchy edge is expressible as a method owner
 
 ```yaml

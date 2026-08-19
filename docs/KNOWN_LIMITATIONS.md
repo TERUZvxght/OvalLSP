@@ -520,12 +520,6 @@ completion after `File.stat(path).` went from offering nothing to
 offering the right 167 entries, so this is an improvement that stopped
 half way rather than a new fault. <!-- documents: 024.78 -->
 
-## What `Model.first` completes to
-
-**Nothing.** `Order.first.` offers no completions, while
-`Order.recent.first.` offers the model's full list. The commoner idiom is
-the one that does not work. <!-- documents: 024.79 -->
-
 ## What a partial's local resolves to
 
 **Nothing.** In `_article.html.erb`, `article` is supplied by whatever

@@ -857,6 +857,18 @@ module Ovallsp
       when :find then model_type
       when :find_by then Types.normalize_union([model_type, Types::NIL])
       when :where, :all then Types::Generic.new(name: "Relation", type_arg: model_type)
+      else
+        # Anything else the relation rules model, asked as if the call had
+        # been written `Model.all.<name>` -- which is what Rails does:
+        # `ActiveRecord::Querying` delegates every one of these to `all`.
+        #
+        # `Model.first` answered nothing until 0.2.6 while
+        # `Model.scope.first` answered, so the working path was the rarer
+        # one (`024.79`). Answered by delegating rather than by adding
+        # names to the list above, so the two stay one rule as that list
+        # grows -- `#resolve_relation_member` is where a relation method's
+        # return type is decided, and it stays the only place.
+        resolve_relation_member(Types::Generic.new(name: "Relation", type_arg: model_type), method_name)
       end
     end
 
@@ -1098,14 +1110,30 @@ module Ovallsp
       end
     end
 
+    # The finders that answer with a *record* rather than another
+    # relation. `#first` was the only one modelled until 0.2.6, so
+    # `orders.last` and `User.last` both answered nothing while
+    # `orders.first` answered -- and `last` is as everyday as `first`.
+    #
+    # `#find` is here rather than only on the model class because
+    # `Relation#find` is the same method reached through a scope, and the
+    # bang forms raise instead of returning nil, which is exactly the
+    # difference between the two columns.
+    RELATION_RECORD_FINDERS = {
+      first: :optional, last: :optional, take: :optional,
+      first!: :certain, last!: :certain, take!: :certain, find: :certain
+    }.freeze
+
     # `Relation[T]#first`/`CollectionProxy[T]#first` -> T | nil,
-    # `#first!` -> T.
+    # `#first!` -> T, and the rest of RELATION_RECORD_FINDERS the same
+    # way. `#resolve_class_level_finder` delegates here, so `Model.last`
+    # and `Model.all.last` are one rule rather than two lists that drift.
     def resolve_relation_member(generic_type, method_name)
       return nil unless RELATION_LIKE.include?(generic_type.name)
 
-      case method_name
-      when :first then Types.normalize_union([generic_type.type_arg, Types::NIL])
-      when :first! then generic_type.type_arg
+      case RELATION_RECORD_FINDERS[method_name]
+      when :optional then Types.normalize_union([generic_type.type_arg, Types::NIL])
+      when :certain then generic_type.type_arg
       end
     end
 
