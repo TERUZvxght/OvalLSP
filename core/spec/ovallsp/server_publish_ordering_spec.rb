@@ -111,19 +111,49 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
     expect(published).to eq([[nil, 0], [nil, 1]])
   end
 
-  # The whole point of the lock spanning the write: an admitted publish
-  # cannot be overtaken on the wire by one admitted after it. Asserted by
-  # driving real threads through the funnel and checking that what the
-  # client is left holding is the highest version, every time.
-  it "leaves the client holding the newest version under concurrent publishes" do
-    threads = (1..20).map do |v|
-      Thread.new { server.send(:publish_findings, uri, [finding], version: v) }
-    end
-    threads.each(&:join)
+  # The lock has to span the *write*, not just the decision: holding it
+  # only over the admission rules orders which publishes are allowed, not
+  # which one the client is left holding.
+  #
+  # **Twenty threads racing did not pin this.** A review round measured
+  # it: moving `write_diagnostics` outside the `synchronize`, and then
+  # removing the synchronisation altogether, both left the whole suite
+  # green. `versions == versions.sort` follows from the admission rules
+  # alone, and the window between deciding and writing is too small for
+  # ordinary scheduling to land in.
+  #
+  # So the window is made visible instead of raced for: a publish is
+  # parked inside `to_lsp_diagnostic`, which `write_diagnostics` calls
+  # while (with the fix) still holding the lock. A second publish then
+  # either waits -- because the lock spans the write -- or overtakes it,
+  # which is the defect. That is a property of the lock's scope rather
+  # than of the scheduler, so it fails deterministically.
+  it "holds the lock across the write, so a later publish cannot overtake an earlier one" do
+    inside_first_write = Queue.new
+    let_it_finish = Queue.new
+    first = true
 
-    versions = published.map(&:first)
-    expect(versions.last).to eq(versions.max)
-    expect(versions).to eq(versions.sort)
+    allow(server).to receive(:to_lsp_diagnostic).and_wrap_original do |original, *args|
+      if first
+        first = false
+        inside_first_write << :parked
+        let_it_finish.pop
+      end
+      original.call(*args)
+    end
+
+    slow = Thread.new { server.send(:publish_findings, uri, [finding], version: 3) }
+    inside_first_write.pop
+
+    overtaker = Thread.new { server.send(:publish_findings, uri, [finding, finding], version: 4) }
+    # If the lock spans the write, the second publish cannot even reach
+    # its decision while the first is parked mid-write.
+    expect(overtaker.join(0.5)).to be_nil
+
+    let_it_finish << :go
+    [slow, overtaker].each(&:join)
+
+    expect(published).to eq([[3, 1], [4, 2]])
   end
 
   # And a clear always wins, whatever came before it -- closing a file is

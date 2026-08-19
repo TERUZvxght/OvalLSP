@@ -127,8 +127,12 @@ module Ovallsp
       # not looking at, with nothing to correct it until the next edit.
       return false if @open.call(uri)
 
+      # `#analyzed` drives the `DEFAULT_MAX_FILES` bound and the
+      # truncation log, so it counts files something was published for.
+      # Since 0.2.7 the funnel can refuse a publish -- a `didOpen` landing
+      # in this method's own check-then-publish gap -- and returning
+      # `true` regardless counted a file nothing was said about.
       @publish.call(uri, findings)
-      true
     rescue StandardError => e
       # One unreadable or unparseable file must not end the pass: the
       # other several hundred are still worth reporting on.

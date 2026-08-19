@@ -501,21 +501,27 @@ module Ovallsp
     # carries responses and must stay a dumb frame mutex. 029's M-3, and
     # it rests on M-2: ordering by a version number is only meaningful
     # once text and version cannot be read torn.
+    # Answers whether the publish reached the client, because a caller can
+    # need to know: `WorkspaceDiagnostics` counts analysed files by it,
+    # and that count bounds the pass and drives its truncation log. It
+    # returned `true` unconditionally and so counted files nothing was
+    # published for.
     def publish_findings(uri, findings, version: nil)
       @publish_state_mutex.synchronize do
         open_version = @document_store.fetch(uri: uri)&.version
         if version
-          return if open_version.nil? || version > open_version
+          return false if open_version.nil? || version > open_version
 
           last = @last_published_version[uri]
-          return if last && version < last
+          return false if last && version < last
 
           @last_published_version[uri] = version
         elsif open_version
-          return
+          return false
         end
 
         write_diagnostics(uri, findings, version)
+        true
       end
     end
 

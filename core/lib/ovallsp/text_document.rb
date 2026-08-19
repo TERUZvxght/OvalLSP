@@ -59,8 +59,15 @@ module Ovallsp
       @uri = uri
       @language_id = language_id
       @version = version
-      @text = text
-      @line_offsets, @line_byte_offsets = compute_line_offsets(text)
+      # Frozen through, not just at the top. `freeze` alone is shallow and
+      # `attr_reader :text` hands the string out, so `doc.text << "x"`
+      # succeeded and the offset tables then described text that no longer
+      # existed -- the torn state this class exists to eliminate, reachable
+      # with no concurrency at all. Latent, since no caller does it; but a
+      # property `DocumentStore` and the architecture document both state
+      # was resting on nobody trying.
+      @text = text.frozen? ? text : text.dup.freeze
+      @line_offsets, @line_byte_offsets = compute_line_offsets(@text).map(&:freeze)
       freeze
     end
 

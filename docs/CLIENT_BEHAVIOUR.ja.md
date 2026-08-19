@@ -34,42 +34,42 @@ OvalLSP が**このツリーの外**（VS Code、`vscode-languageclient`、LSP �
 grep できる主張については、`core/spec/meta/client_behaviour_spec.rb` が該当ファイル
 が今もそう言っているかを確認します（**checked** と印の付いた行）。
 
-## Diagnostics
+## 診断
 
-| what we rely on | shown by | |
+| 依存している挙動 | 根拠 | |
 |---|---|---|
-| **The client ignores `params.version` on `publishDiagnostics`.** It queues `params.diagnostics` by uri; the last publish to arrive is what the panel shows, whatever version it carries. | `vscode/node_modules/vscode-languageclient/lib/common/client.js`, `handleDiagnostics` | checked |
-| So **ordering is the server's job**, not the client's. `Server#publish_findings` is the only writer and orders every publish itself. A version travels to the client as information, not as something it acts on. | `core/lib/ovallsp/server.rb` | |
-| A publish with an empty `diagnostics` array clears the panel for that uri. There is no separate "clear" message in the protocol. | LSP specification, `textDocument/publishDiagnostics` | |
-| A uri nobody publishes to again keeps whatever it was last given, for the lifetime of the session. | the same — nothing expires a published list | |
+| **クライアントは `publishDiagnostics` の `params.version` を無視します。** `params.diagnostics` を uri ごとにキューへ入れ、最後に届いた publish が、どの版数を持っていようとパネルに出るものになります。 | `vscode/node_modules/vscode-languageclient/lib/common/client.js` の `handleDiagnostics` | checked |
+| したがって**順序付けはサーバの仕事**であってクライアントの仕事ではありません。`Server#publish_findings` が唯一の書き手で、全ての publish を自分で順序付けます。版数はクライアントへ情報として渡るだけで、クライアントがそれに基づいて動くことはありません。 | `core/lib/ovallsp/server.rb` | |
+| `diagnostics` が空配列の publish は、その uri のパネルをクリアします。プロトコルに独立した「クリア」メッセージはありません。 | LSP 仕様、`textDocument/publishDiagnostics` | |
+| 誰も publish しなくなった uri は、最後に渡されたものをセッションの間ずっと保持します。 | 同上 — publish 済みの一覧を失効させるものは無い | |
 
-## Documents
+## 文書
 
-| what we rely on | shown by | |
+| 依存している挙動 | 根拠 | |
 |---|---|---|
-| `didChange` arrives once per keystroke, with the version incremented each time. Nothing coalesces on the client side. | LSP specification; measured directly in 0.2.7's drive round at 22 publishes for 22 keystrokes | |
-| Closing and reopening a file gives a **new document at version 1**, not a continuation of the old numbering. This is what made a stale publish from the closed buffer look newer than everything the reopened one could produce (`037`). | LSP specification, `textDocument/didOpen` | |
-| A `didChange` may carry several changes, applied in order. | LSP specification | |
+| `didChange` は1打鍵につき1回届き、その都度版数が増えます。クライアント側で束ねるものはありません。 | LSP 仕様。0.2.7 の drive ラウンドで、22打鍵に対し 22 publish を実測 | |
+| ファイルを閉じて開き直すと、**版数 1 の新しい文書**になります。古い採番の続きではありません。閉じたバッファからの古い publish が、開き直したバッファに出せるどの版数より新しく見えたのはこれが理由です（`037`）。 | **VS Code の挙動であって、プロトコルの保証ではありません。** 仕様は `TextDocumentItem.version` を「変更ごとに増える」と定めるだけで、開き直しで 1 に戻るとは書いていません。レビューラウンドが確認するまで仕様として引用していました — 各行が根拠を挙げることを契約としている文書で、funnel の最新の規則が乗っている行で、です。実地確認: `core/spec/e2e/` で開いて閉じて開き直すと、その `didOpen` は版数 1 を持ちます。 | |
+| `didChange` は複数の変更を順に適用する形で届くことがあります。 | LSP 仕様 | |
 
-## Workspace and trust
+## ワークスペースと信頼
 
-| what we rely on | shown by | |
+| 依存している挙動 | 根拠 | |
 |---|---|---|
-| **Workspace Trust is a VS Code concept with no LSP field.** The extension passes it through `initializationOptions`, and Core treats anything but a literal `true` as untrusted. | `vscode/package.json`'s `capabilities.untrustedWorkspaces`; `core/lib/ovallsp/server.rb`'s `#workspace_trusted?` | |
-| `restrictedConfigurations` is what stops an untrusted workspace choosing which binary the extension runs. Settings not listed there are readable from an untrusted folder. | `vscode/package.json`; `vscode/src/test/unit/workspaceTrust.test.ts` checks every setting naming a binary is listed | checked |
-| **On Windows, libuv searches the cwd before `PATH`.** A bare command name spawned with the workspace folder as cwd would run a binary the workspace supplied. POSIX `execvp` does not search the cwd. | Node/libuv process spawning; `vscode/src/platformCompatibility.ts`'s `spawnCwd` is the guard | |
-| `code --uninstall-extension` does not call `deactivate()` in an already-running window. | VS Code's own extension lifecycle — recorded in `docs/RELEASE_CHECKLIST.md` #7 | |
+| **Workspace Trust は VS Code の概念で、LSP のフィールドはありません。** 拡張機能が `initializationOptions` で渡し、Core はリテラルの `true` 以外を全て untrusted として扱います。 | `vscode/package.json` の `capabilities.untrustedWorkspaces`、`core/lib/ovallsp/server.rb` の `#workspace_trusted?` | |
+| `restrictedConfigurations` が、信頼していないワークスペースに実行するバイナリを選ばせないための仕組みです。ここに挙がっていない設定は、信頼していないフォルダからも読まれます。 | `vscode/package.json`。`vscode/src/test/unit/workspaceTrust.test.ts` がバイナリを名指しする設定は全て挙がっていることを検査 | checked |
+| **Windows では libuv が `PATH` より先に cwd を探索します。** ワークスペースフォルダを cwd にして裸のコマンド名を spawn すると、ワークスペースが置いたバイナリが動きます。POSIX の `execvp` は cwd を探索しません。 | Node/libuv のプロセス起動。`vscode/src/platformCompatibility.ts` の `spawnCwd` がその防御 | |
+| `code --uninstall-extension` は、既に起動中のウィンドウでは `deactivate()` を呼びません。 | VS Code 自体の拡張機能ライフサイクル — `docs/RELEASE_CHECKLIST.md` #7 に記録 | |
 
-## Startup
+## 起動
 
-| what we rely on | shown by | |
+| 依存している挙動 | 根拠 | |
 |---|---|---|
-| The client sends `didOpen` for every restored editor back to back at startup. | measured; `core/lib/ovallsp/server.rb` notes it at the batching site | |
-| `initialize` must be answered before the client will send anything else, so nothing slow may run before the reply. `core/spec/ovallsp/server_cold_index_spec.rb` pins the ordering. | LSP specification | |
+| 起動時、復元される全エディタについて `didOpen` が続けて届きます。 | 実測。`core/lib/ovallsp/server.rb` の束ね処理の箇所に記載 | |
+| `initialize` に応答するまでクライアントは他を送らないので、応答前に重い処理を走らせてはいけません。`core/spec/ovallsp/server_cold_index_spec.rb` が順序を固定しています。 | LSP 仕様 | |
 
 ## Marketplace
 
-| what we rely on | shown by | |
+| 依存している挙動 | 根拠 | |
 |---|---|---|
-| A published VSIX is served byte-identical to what was uploaded, so its SHA-256 can be verified after publishing. | verified each release against the gallery API; `docs/RELEASE_ARTIFACTS.md` records the hashes | |
-| PAT-based publishing is what `vsce publish` uses today. | `docs/PUBLISHING.md`'s Credentials section | |
+| 公開された VSIX はアップロードしたものとバイト単位で同一に配信されるので、公開後に SHA-256 を照合できます。 | 各リリースで gallery API に対して検証。`docs/RELEASE_ARTIFACTS.md` にハッシュを記録 | |
+| 現在 `vsce publish` が使うのは PAT 方式です。 | `docs/PUBLISHING.md` の Credentials 節 | |

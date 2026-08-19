@@ -49,6 +49,20 @@ jobs:
           gem install rails -v '~> 8.1' --no-document
           gem install sqlite3 -v '>= 2.1' --no-document
 
+      # `core/spec/meta/client_behaviour_spec.rb` reads
+      # `vscode-languageclient`'s own source to check the facts
+      # `docs/CLIENT_BEHAVIOUR.md` marks **checked**, and skipped itself
+      # when the module was absent -- which was every CI run for a
+      # release, because this job never installed it. Production
+      # dependencies only: the client is one, and the dev tree is the
+      # vscode job's business.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install the extension's production dependencies (read by the client-behaviour checks)
+        working-directory: vscode
+        run: npm ci --omit=dev
+
       - name: Ruby syntax check
         working-directory: core
         run: find lib spec -name '*.rb' -print0 | xargs -0 -n1 ruby -c
@@ -104,7 +118,13 @@ jobs:
             result = JSON.parse(File.read("tmp/rspec.json", encoding: "UTF-8"))
             {
               "real-Rails integration" => "spec/integration/real_rails_spec.rb",
-              "capability E2E" => "spec/e2e/capabilities_spec.rb"
+              "capability E2E" => "spec/e2e/capabilities_spec.rb",
+              # Same failure mode, found a release later: these read the
+              # client'"'"'s own source and skipped when node_modules was
+              # absent, which was every run here. The comment in that file
+              # claimed the example count would notice; it counts skipped
+              # examples, so nothing did.
+              "client-behaviour" => "spec/meta/client_behaviour_spec.rb"
             }.each do |label, path|
               examples = result.fetch("examples").select { |ex| ex.fetch("file_path").include?(path) }
               if examples.empty?

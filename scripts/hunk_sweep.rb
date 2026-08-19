@@ -51,8 +51,29 @@ def refuse(message)
   exit 1
 end
 
+# Two meta specs assert things about the tree's own bookkeeping rather
+# than about behaviour, and both go red for any change a sweep makes:
+# `documented_counts_spec` compares the example count against three
+# documents, so **deleting any spec file turns the suite red for that
+# reason alone**, and `measured_claims_spec` recomputes the `Mutex.new`
+# count, so any hunk that adds or removes one does the same.
+#
+# Excluded, because otherwise this instrument reports "pinned" and "pins
+# something" for reasons that have nothing to do with what it is
+# measuring. Found by a review round, which measured that the spec-file
+# half **could never** report its own negative verdict -- the half this
+# script's header advertises as the thing no sweep here had looked for.
+# A check that cannot fail is the defect this whole exercise is about,
+# and it was in the instrument built to find it.
+BOOKKEEPING_SPECS = %w[
+  spec/meta/documented_counts_spec.rb
+  spec/meta/measured_claims_spec.rb
+].freeze
+
 def suite_result
-  output, = run("bundle", "exec", "rspec", "--no-color", "--fail-fast", chdir: File.join(ROOT, "core"))
+  command = ["bundle", "exec", "rspec", "--no-color", "--fail-fast"]
+  BOOKKEEPING_SPECS.each { |spec| command.push("--exclude-pattern", spec) }
+  output, = run(*command, chdir: File.join(ROOT, "core"))
   line = output.lines.reverse.find { |l| l.match?(/^\d+ examples?,/) }
   return [:errored, "the suite did not run to a count"] unless line
 
@@ -86,7 +107,14 @@ refuse("the working tree is not clean. A sweep rewrites it; commit or stash firs
 refuse("another sweep is running (#{LOCK}). Sequence them -- concurrent mutation invalidates both.") if File.exist?(LOCK)
 
 File.write(LOCK, Process.pid.to_s)
-at_exit { File.delete(LOCK) if File.exist?(LOCK) && File.read(LOCK) == Process.pid.to_s }
+at_exit do
+  File.delete(LOCK) if File.exist?(LOCK) && File.read(LOCK) == Process.pid.to_s
+  # Ctrl-C mid-hunk otherwise leaves a reverted hunk or a deleted spec
+  # file behind, and only the *next* run's clean-tree refusal notices.
+  dirty, = run("git", "status", "--porcelain")
+  warn("hunk_sweep: interrupted with the tree modified -- run `git checkout core/` to restore it.") unless
+    dirty.strip.empty?
+end
 
 diff, ok = run("git", "diff", "#{base}...HEAD", "-U3", "--", "core/lib")
 refuse("could not diff against #{base}") unless ok
@@ -96,9 +124,10 @@ added_specs, = run("git", "diff", "--name-only", "--diff-filter=A", "#{base}...H
 added_specs = added_specs.split("\n").select { |f| f.end_with?("_spec.rb") }
 
 puts "hunk_sweep: #{hunks.length} hunk(s) over core/lib, #{added_specs.length} spec file(s) added, against #{base}"
+puts "hunk_sweep: `vscode/src` is not swept -- its suite is separate and this only drives rspec."
 puts
 
-pinned = unpinned = commentary = 0
+pinned = unpinned = commentary = entangled = 0
 Dir.mktmpdir do |scratch|
   hunks.each_with_index do |hunk, index|
     label = format("h%02d", index + 1)
@@ -113,13 +142,22 @@ Dir.mktmpdir do |scratch|
 
     _, can_revert = run("git", "apply", "-R", "--check", path)
     unless can_revert
+      entangled += 1
       puts "#{label}  cannot revert alone (depends on another hunk)"
       next
     end
 
-    run("git", "apply", "-R", path)
+    _, reverted = run("git", "apply", "-R", path)
+    refuse("#{label}: could not reverse-apply after its own check said it could") unless reverted
+
     verdict, detail = suite_result
-    run("git", "apply", path)
+
+    _, restored = run("git", "apply", path)
+    # A restore that fails silently contaminates every later verdict, and
+    # this script's own header calls a contaminated sweep the thing that
+    # "reports a number that reads exactly like a real one". It was the
+    # one contamination path the script did not check.
+    refuse("#{label}: could not restore the hunk. The tree is now wrong -- `git checkout core/lib`.") unless restored
 
     case verdict
     when :green then unpinned += 1
@@ -139,5 +177,6 @@ Dir.mktmpdir do |scratch|
 end
 
 puts
-puts "hunk_sweep: #{pinned} pinned, #{unpinned} unpinned, #{commentary} comment-only"
+puts "hunk_sweep: #{pinned} pinned, #{unpinned} unpinned, #{commentary} comment-only, " \
+     "#{entangled} not separable (#{pinned + unpinned + commentary + entangled} of #{hunks.length} accounted for)"
 puts "An unpinned behavioural line is a defect in its own right (CLAUDE.md)." if unpinned.positive?

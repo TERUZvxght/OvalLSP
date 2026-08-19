@@ -101,12 +101,25 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
+**101 entries below** <!-- measured: register-entries = 101 -->,
+counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
+The marker lives here rather than in the Index, which
+`scripts/reindex_findings.rb` regenerates and would strip it from.
+
+
 An entry is deleted once nothing in the tree still cites it, and the
 legend says to grep before deleting rather than going by the calendar.
-That grep was skipped, repeatedly: **23 citations across source
-comments, spec comments, the VS Code extension and a task record point
-at numbers that are not here** — `024.67` recorded seven of them and
-undercounted by sixteen.
+That grep was skipped, repeatedly: **25 citations across source
+comments, spec comments, the VS Code extension, a task record and both
+changelogs point at numbers that are not here** — `024.67` recorded seven
+of them and undercounted by eighteen.
+
+The first version of the guard that replaced the grep undercounted too:
+it scanned `core/lib`, `core/spec`, `vscode/src` and `docs`, and missed
+both changelogs — which `024.67`'s own **Area** list names. A review
+round ran the guard's logic over the files it could not see and found
+`024.5` cited in both, unrecovered, in the same sentence as three numbers
+the table did have. The scan now covers every tracked text file.
 
 A pointer to a reason is worth having, so the numbers resolve again,
 here. Each names what the entry said; the reason itself is in the
@@ -117,6 +130,7 @@ comment that cites it, which is where a reader is standing.
 | `024.2` | `Hash.new` / `Set.new` hover as `Hash[Unknown]` / `Set[Unknown]` |
 | `024.3` | an `untyped` RBS singleton signature still shadows source resolution |
 | `024.4` | `BeforeActionFinder#record` mutates the Prism AST in place |
+| `024.5` | `Server#index_references` is dead |
 | `024.7` | `rootIdentity`'s refresh assignment cannot affect any decision |
 | `024.9` | a forced crash popup can still appear for deliberate stops |
 | `024.12` | a hash literal and `Hash.new` still render differently |

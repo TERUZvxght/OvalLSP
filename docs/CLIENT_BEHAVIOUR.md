@@ -53,7 +53,7 @@ says it — those rows are marked **checked**.
 | what we rely on | shown by | |
 |---|---|---|
 | `didChange` arrives once per keystroke, with the version incremented each time. Nothing coalesces on the client side. | LSP specification; measured directly in 0.2.7's drive round at 22 publishes for 22 keystrokes | |
-| Closing and reopening a file gives a **new document at version 1**, not a continuation of the old numbering. This is what made a stale publish from the closed buffer look newer than everything the reopened one could produce (`037`). | LSP specification, `textDocument/didOpen` | |
+| Closing and reopening a file gives a **new document at version 1**, not a continuation of the old numbering. This is what made a stale publish from the closed buffer look newer than everything the reopened one could produce (`037`). | **VS Code behaviour, not a protocol guarantee.** The specification defines `TextDocumentItem.version` as increasing per change and says nothing about a reopen restarting it. Cited as the spec until a review round checked — in the one document whose contract is that each row names what shows it, and on the row the funnel's newest rule rests on. Driven directly: `core/spec/e2e/` opens, closes and reopens a file and the reopened `didOpen` carries version 1. | |
 | A `didChange` may carry several changes, applied in order. | LSP specification | |
 
 ## Workspace and trust

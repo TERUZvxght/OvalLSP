@@ -29,8 +29,25 @@ RSpec.describe Ovallsp::TextDocument do
     described_class.new(uri: "file:///a.rb", text: text, version: version, language_id: "ruby")
   end
 
-  it "is frozen, so nothing can change it after it is built" do
-    expect(document("x = 1\n")).to be_frozen
+  # `freeze` alone is shallow, and `attr_reader :text` hands the string
+  # out. A reviewer measured the consequence: `d.text << "ccc\n"`
+  # succeeds and `position_to_byte_offset` then answers against offsets
+  # for text that no longer exists -- **the exact torn state this release
+  # is built to eliminate, with no concurrency at all.** No caller
+  # mutates it today, so it was latent; but the invariant `document_store.rb`
+  # and the architecture document both state as a property was resting on
+  # nobody trying.
+  # `+"..."` on purpose: this file is `frozen_string_literal: true`, so a
+  # plain literal arrives already frozen and the example would pass
+  # whatever the class does -- an assertion that cannot fail, in the file
+  # asserting the release's central invariant. The text a real `didOpen`
+  # carries comes from `JSON.parse` and is not frozen.
+  it "is frozen through, so nothing can change it or what it says about itself" do
+    doc = described_class.new(uri: "file:///a.rb", text: +"a\nbb\n", version: 1, language_id: "ruby")
+
+    expect(doc).to be_frozen
+    expect(doc.text).to be_frozen
+    expect { doc.text << "ccc\n" }.to raise_error(FrozenError)
   end
 
   it "has no mutators left for a caller to reach for" do

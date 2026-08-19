@@ -434,13 +434,19 @@ Treat those answers as unreliable until the mismatch is resolved, and run
 
 ## Diagnostics that come back after you clear or close a file
 
-**Fixed in 0.2.7.** Closing a file used to be able to leave its errors in
-the Problems panel for the rest of the session: a re-analysis pass
-running in the background decided which files to visit before it started,
-so one that was already in flight republished a file you had just closed.
-Nothing republishes a file nobody has open, so they stayed until you
-reopened it. A publish now has to name a version *and* find the buffer
-still open, and closing a file always wins.
+**Fixed in 0.2.7, for the half that was a mistake.** Closing a file used
+to be able to leave its errors in the Problems panel for the rest of the
+session: a re-analysis pass running in the background decided which files
+to visit before it started, so one already in flight republished a file
+you had just closed, and nothing republishes a file nobody has open. A
+publish from a buffer now has to find that buffer still open, and closing
+a file always wins.
+
+**What still happens, and is deliberate:** close a saved file that has
+findings and they come back — recomputed from what is on disk, because
+since 0.2.0 this extension reports on files you have not opened. That is
+the same answer it would give you before you ever opened the file. What
+was fixed is the *stale* copy from the buffer you just closed.
 
 **Still true, and this release does not change it.** If you paused on a
 file big enough to take seconds to analyse, the `*_path` reports made

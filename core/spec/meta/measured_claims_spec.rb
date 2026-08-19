@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+require "open3"
+require "tmpdir"
+
 # A number in a document that describes this tree is a claim about it, and
 # this project has now had three of them fail re-derivation in two
 # releases — each written while doing the work and never re-run:
@@ -67,7 +70,11 @@ RSpec.describe "numbers documented about this tree" do
 
   def claims
     patterns = %w[docs/**/*.md core/lib/**/*.rb core/spec/**/*.rb vscode/src/**/*.ts]
-    patterns.flat_map { |glob| Dir.glob(File.join(TREE_ROOT, glob)) }.sort.flat_map do |path|
+    # This file writes a sample marker to exercise the scanner, so it
+    # scans everything but itself.
+    patterns.flat_map { |glob| Dir.glob(File.join(TREE_ROOT, glob)) }
+            .reject { |path| path.end_with?(File.basename(__FILE__)) }
+            .sort.flat_map do |path|
       File.read(path, encoding: "UTF-8").lines.each_with_index.filter_map do |line, index|
         next unless (m = line.match(MARKER))
 
@@ -95,6 +102,34 @@ RSpec.describe "numbers documented about this tree" do
     expect(wrong).to be_empty, "#{wrong.join("\n")}\nRe-derive the number rather than editing the prose around it."
   end
 
+  # Every deriver is attached to a claim somewhere. Without this the file
+  # passes with **zero** claims in the tree -- a reviewer measured that
+  # deleting the single marker left it green at 4 examples, so the guard
+  # was one edit away from checking nothing while reading as a guarantee.
+  # A deriver nobody cites is either a claim somebody forgot to mark or a
+  # deriver to delete, and both should be said out loud.
+  it "has every deriver attached to a claim that exists" do
+    cited = claims.map { |c| c[:name] }.uniq
+    orphaned = DERIVERS.keys - cited
+
+    expect(orphaned).to be_empty,
+                        "derivers with no claim to check: #{orphaned.join(', ')}. " \
+                        "Mark the number where it is written, or delete the deriver."
+  end
+
+  # And the marker machinery is exercised rather than assumed: the file's
+  # positive control used to call one deriver directly and assert it was
+  # not 27, which passes whether or not anything scans for markers at all.
+  it "reads a claim out of a document and compares it" do
+    Dir.mktmpdir do |dir|
+      path = File.join(dir, "sample.md")
+      File.write(path, "the tree has 4 of them <!-- measured: sample-claim = 4 -->\n")
+      parsed = File.read(path).lines.filter_map { |line| line.match(MARKER) }
+
+      expect(parsed.map { |m| [m[:name], Integer(m[:value])] }).to eq([["sample-claim", 4]])
+    end
+  end
+
   # The check is worth having only if it would catch what it was written
   # for, so it is run against that rather than trusted: the count the
   # architecture section shipped wrong.
@@ -109,7 +144,7 @@ RSpec.describe "numbers documented about this tree" do
   # The register's legend says to grep before deleting an entry; this is
   # that grep, run every time instead of remembered.
   describe "pointers into the deferred-findings register" do
-    CITATION = /\b024\.(?<number>[0-9]{1,3}|R[0-9]{1,2})\b/
+    CITATION = /\b024\.(?<number>[0-9]+|R[0-9]+)\b/
 
     # An entry that is still here, or a row in the register's
     # "Retired numbers" table -- a deleted entry keeps its number
@@ -120,11 +155,24 @@ RSpec.describe "numbers documented about this tree" do
       (register.scan(/^## (024\.[0-9R]+) /).flatten + register.scan(/^\| `(024\.[0-9R]+)` \|/).flatten).to_set
     end
 
+    # Every tracked text file, not a hand-written list of directories.
+    # The first version of this scanned four globs and missed both
+    # changelogs -- which `024.67`'s own Area list names -- so it reported
+    # clean while `024.5` was cited in both, in the same sentence as three
+    # numbers that did resolve. A guard whose scope is a list somebody
+    # remembered has the defect it was built to catch.
+    def scanned_files
+      tracked, = Open3.capture2("git", "ls-files", "-z", chdir: TREE_ROOT)
+      tracked.split("\0")
+             .select { |path| path.match?(/\.(rb|ts|js|md|json|yml|yaml|sh|erb)\z/) }
+             .reject { |path| path.end_with?("024-deferred-review-findings.md") }
+             .reject { |path| path.end_with?(File.basename(__FILE__)) }
+             .map { |path| File.join(TREE_ROOT, path) }
+    end
+
     def citations
-      patterns = %w[core/lib/**/*.rb core/spec/**/*.rb vscode/src/**/*.ts docs/**/*.md]
       known = register_numbers
-      patterns.flat_map { |glob| Dir.glob(File.join(TREE_ROOT, glob)) }
-              .reject { |path| path.end_with?("024-deferred-review-findings.md") }
+      scanned_files
               .sort.flat_map do |path|
         File.read(path, encoding: "UTF-8").lines.each_with_index.filter_map do |line, index|
           line.scan(CITATION).flatten.filter_map do |number|
