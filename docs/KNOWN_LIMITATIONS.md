@@ -508,17 +508,20 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
-## Completion offers your class's methods where a core class is meant
+## A class created by assignment is invisible
 
-Where a class of yours shares a name with a nested core class — a `Stat`
-of your own, against `File::Stat` — hover and diagnostics now answer
-correctly and **completion still offers your class's methods**. The type
-is right in both cases; the member list is looked up under the bare name.
+`Error = Class.new(StandardError)` declares a class as surely as
+`class Error < StandardError` does, and this extension does not see it.
+Nothing resolves to such a name: not hover, not go-to-definition, not
+completion's member list. An `app/errors.rb` written in that style is
+entirely invisible, and it is an ordinary Ruby idiom for exception
+hierarchies.
 
-0.2.5 fixed the first two and not the third. Without a shadowing class,
-completion after `File.stat(path).` went from offering nothing to
-offering the right 167 entries, so this is an improvement that stopped
-half way rather than a new fault. <!-- documents: 024.78 -->
+Until 0.2.6 this was hidden rather than absent: a name the index could
+not find was answered by whatever unrelated class shared its last
+segment, so `Concurrent::Error` resolved to somebody else's `Error`. An
+answer, and the wrong one. It is now reported as unresolvable, which is
+the honest state. <!-- documents: 024.82 -->
 
 ## What a partial's local resolves to
 

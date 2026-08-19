@@ -177,10 +177,11 @@ nobody can search is the recording habit without the benefit.
 | [`024.75`](#02475-a-documented-field-selects-nothing) | open | 0.3.0 | A documented field selects nothing |
 | [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.2.6 | Fifty-four `unknown-method` reports over real gem source, and all of… |
 | [`024.77`](#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | open | 0.3.0 | A call to a method that does not exist is missed through a relation |
-| [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | open | 0.3.0 | Completion did not get the fix hover and diagnostics did |
+| [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | fixed | 0.2.6 | Completion did not get the fix hover and diagnostics did |
 | [`024.79`](#02479-model-first-completes-to-nothing) | fixed | 0.2.6 | `Model.first` completes to nothing |
 | [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | open | 0.3.0 | An unresolved hierarchy edge is expressible as a method owner |
 | [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | open | 0.3.0 | An ancestor reference carries no lexical context, so an ambiguous na… |
+| [`024.82`](#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | open | 0.3.0 | `Foo = Class.new(Bar)` is not a type the index knows |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -4110,10 +4111,11 @@ defect; the missing report is its symptom.
 ## 024.78 Completion did not get the fix hover and diagnostics did
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.3.0
+target: 0.2.6
+released-in: 0.2.6
 ```
 
 **Area:** `core/lib/ovallsp/semantic/prefix_completion.rb`,
@@ -4138,6 +4140,42 @@ That matters because the first diagnosis pointed at `024.47`'s subject
 narrower and cheaper. The original wording — "one expression answers as
 two different types depending on which feature is asked" — named a cause
 that does not exist.
+
+### Fixed in 0.2.6, one level below where round 3 put it
+
+Round 3 was right that member lookup is where the qualification is lost,
+and wrong about which component loses it. `QueryService#members_of` asks
+`MethodResolver`, which asks `WorkspaceIndex#resolve_type_name` — and
+that matched on the **last segment alone**, then fell back to the
+alphabetically first candidate. `File::Stat` therefore resolved to a
+top-level workspace `Stat`, and every member of that class came back.
+
+`Index::TypeNameResolution.substitution?` could not see it: that rule
+returns false for any name containing `::`, on the stated reasoning that
+"a receiver written or inferred as `Foo::Logger` carries its namespace
+and is nobody else's answer". `File::Stat` is the counterexample — it
+carried its namespace and was answered by somebody else anyway.
+
+So the fix is in resolution, not in a second reader applying a guard: a
+written namespace constrains the answer. Not to equality, because
+`Inner::Klass` from inside `module Outer` legitimately means
+`Outer::Inner::Klass`, so the test is a **suffix on segment boundaries**.
+`::Stat` does not end with `::File::Stat`; `::Outer::Inner::Klass` does
+end with `::Inner::Klass`.
+
+**Bare names are untouched**, deliberately: applying a shadowing rule to
+them in resolution is what 0.2.1 rolled back (`024.47`), and that
+rollback was about a name written bare from inside its own namespace.
+This change cannot reach that case.
+
+Measured on the 213-file corpus: `unknown-method` unchanged at 9, so no
+precision was traded. `unresolved-constant` 897 → 906; every one of the
+nine is `Concurrent::Error`-shaped — see `024.82`, which this change
+uncovered rather than caused. Re-driven directly: `File::Stat` now
+answers 167 members and no longer leaks the workspace class's, while
+`Stat` still answers its own 121.
+
+
 
 Remove the shadowing class and completion returns 167 correct labels
 where 0.2.4 returned 0 — so the release *is* an improvement here, just an
@@ -4295,6 +4333,45 @@ against it, which is what Ruby does. The review notes the alternative
 worth weighing first: if an authoritative constant-reference
 representation already exists elsewhere in the index, `AncestorFact`
 should reference it rather than growing a second lexical model.
+## 024.82 `Foo = Class.new(Bar)` is not a type the index knows
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`#visit_constant_write_node`),
+`core/lib/ovallsp/workspace_index.rb` (`#type_candidates_locked`)
+
+A class created by assignment rather than by the `class` keyword is
+recorded as a constant, not as a class, so `#type_candidates_locked` —
+which matches `kind` of `:class` or `:module` — never sees it. Nothing
+resolves to it: not hover, not go-to-definition, not the member list.
+
+`Concurrent::Error`, `Concurrent::ConfigurationError`,
+`Concurrent::LifecycleError` and the rest of `concurrent/errors.rb` are
+all written this way, as is `Rack::Utils::ParameterTypeError` (an alias
+of `QueryParser::ParameterTypeError`). It is an ordinary Ruby idiom for
+exception hierarchies, so a Rails application's `app/errors.rb` is
+likely to be entirely invisible.
+
+**Uncovered rather than caused by `024.78`'s fix.** Before it, resolution
+matched on a name's last segment alone, so `Concurrent::Error` "resolved"
+to whatever unrelated class named `Error` sorted first — an answer, and
+the wrong one, which is worse than none by section 0.4. Nine such
+constants over the 213-file corpus went from silently mis-resolved to
+correctly reported as unresolvable. That is the honest state, not a
+regression, and `unresolved-constant` does not run in the Server's
+default `:safe` mode.
+
+**Direction:** treat `CONST = Class.new(...)` / `Module.new` as a class
+or module declaration at parse time, with the superclass taken from the
+argument when it is a written constant. `CONST = SomeOther` is an alias
+and is a different question — it names an existing type rather than
+declaring one, and answering it needs the alias resolved first.
+
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml

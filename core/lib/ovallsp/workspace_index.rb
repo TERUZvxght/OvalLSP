@@ -546,6 +546,7 @@ module Ovallsp
       candidates, qualified = type_candidates_locked(name)
       return nil if candidates.empty?
 
+      raw = name.to_s
       exact = candidates.find { |sid| sid.name == qualified }
       # A leading `::` is not decoration -- it is the whole meaning of the
       # reference, and Ruby gives it exactly one possible referent. The
@@ -555,13 +556,35 @@ module Ovallsp
       # undefined-method check then reported `::JSON.parse` missing.
       # Nil is the correct answer when the workspace has no top-level
       # constant of that name, because RBS holds the one that exists.
-      return exact if name.to_s.start_with?("::")
+      return exact if raw.start_with?("::")
+
+      # A written namespace is a constraint too, just a weaker one. It is
+      # not an absolute path -- `Inner::Klass` from inside `module Outer`
+      # legitimately means `Outer::Inner::Klass` -- so the match is a
+      # suffix on segment boundaries rather than equality. That is enough
+      # to keep `File::Stat` from resolving to a workspace `Stat` in some
+      # unrelated namespace, which is what made completion after
+      # `File.stat(path).` offer that class's members while hover and the
+      # diagnostics already said `File::Stat` (024.78).
+      return exact || candidates.find { |sid| namespace_suffix?(sid.name, raw) } if raw.include?("::")
 
       # `.first` is safe here because `candidates` came from
       # `ordered_symbol_ids`, not from the Set directly. Until 0.1.13 it
       # was index order, so an ambiguous bare name resolved to a different
       # class whenever either file was re-indexed (024.15).
+      #
+      # Bare names keep the heuristic deliberately: 0.2.1 applied a
+      # shadowing rule to them here and broke every bare name written from
+      # inside its own namespace, and was rolled back (024.47).
       exact || candidates.first
+    end
+
+    # Whether `candidate` (always fully qualified, leading `::`) names the
+    # same constant path `written` does, allowing for an outer namespace
+    # the author did not repeat. Compared segment-wise, so `::MyStat` is
+    # not a match for `Stat`.
+    def namespace_suffix?(candidate, written)
+      candidate.to_s.end_with?("::#{Index::SymbolId.bare_name(written)}")
     end
 
     # One collection is deliberately left in insertion order, and a
