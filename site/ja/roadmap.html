@@ -195,6 +195,33 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v028">
+          <div class="tl-version">
+            <span class="v">0.2.8</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>パーサの帳簿と、ファイルの同一性</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>シンボリックリンク経由で開いたワークスペースで、全ファイルが二重に出なくなりました。</strong> 拡張機能は<em>解決後</em>のパスで解析し、エディタは開いたパスで会話していたため、2つ目のコピーは決して消せませんでした &mdash; エラーを直しても、保存しても、タブを閉じてもです。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>定義ジャンプがエディタの使うパスを返します。</strong> 辿っても、いま開いているファイルの2つ目のタブが開くことはなくなりました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>パーサが宣言の所属先を6つの別々の帳簿から決めるのをやめました。</strong> 記録済みの欠陥5件と、直近4リリースの「このマクロが逆側に帰属していた」系の修正はすべて、12箇所がそれぞれ「作者が覚えていた部分集合」を参照していたことから来ていました。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            機能の追加はありません。パーサの変更は議論ではなく測定で確認しました &mdash;
+            変更前後の出力全体を gem 3,606 ファイルと標準ライブラリ 976 ファイルで比較し、
+            参照レコードは 634,508 件がバイト単位で同一でした。
+          </p>
+        </article>
+
         <article class="tl-item" id="v027">
           <div class="tl-version">
             <span class="v">0.2.7</span>

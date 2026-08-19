@@ -6,6 +6,46 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.8 — the parser's bookkeeping, and a file's identity
+
+- **A workspace opened through a symlink no longer shows every file
+  twice.** This extension analysed your files under the *resolved* path
+  while the editor talked to it about the path you opened, so the
+  Problems panel listed the same file twice and the second copy could
+  never be cleared — not by fixing the errors, not by saving, not by
+  closing the tab. It now uses the folder the editor named. Symlinked
+  checkouts are ordinary: `/tmp` on macOS, git worktrees, a `~/src` that
+  points at a volume.
+- **Go to definition returns a path your editor will use**, so following
+  it no longer opens a second tab of the file you are already in.
+- **Underneath: the parser stopped deciding a declaration's owner from
+  six separate pieces of bookkeeping.** Five recorded defects and every
+  one of the "this macro was attributed to the wrong side" fixes of the
+  last four releases came from twelve places each consulting whichever
+  subset its author remembered. There is one value now, and it answers
+  the question rather than exposing the state.
+
+### Details
+
+No capability row moves, and the parser change is measured rather than
+argued: its whole output was compared before and after across **3,606
+installed gem files and 976 standard-library files** — every declaration,
+every alias, every ancestor, every reference — and the reference records
+came out byte-identical across 634,508 of them.
+
+`docs/KNOWN_LIMITATIONS.md` gained six sections. All six are defects that
+were already there and are now written down, found by a reviewer driving
+the product: a class of yours named like another class of yours can be
+answered with the wrong one; `class_methods do` in a concern is
+attributed to instances; `private` inside `class << self` does nothing;
+`module_function` and `extend self` produce no completions; an alias is
+missing from completion though every other feature knows it; protected
+methods are offered where they cannot be called.
+
+Five of those six are one thing seen from six angles — the same question
+asked through four different code paths, and an enumeration that cannot
+say when it was incomplete. That is what the next release is for.
+
 ## 0.2.7 — a document cannot be read half-written, and a publish cannot arrive out of order
 
 - **Closing a file no longer leaves its errors behind.** A re-analysis

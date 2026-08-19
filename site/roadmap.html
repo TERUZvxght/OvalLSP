@@ -200,6 +200,34 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v028">
+          <div class="tl-version">
+            <span class="v">0.2.8</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>The parser&rsquo;s bookkeeping, and a file&rsquo;s identity</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A workspace opened through a symlink no longer shows every file twice.</strong> The extension analysed your files under the <em>resolved</em> path while the editor talked about the path you opened, so the second copy could never be cleared &mdash; not by fixing the errors, not by saving, not by closing the tab.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Go to definition returns a path your editor will use</strong>, so following it no longer opens a second tab of the file you are already in.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>The parser stopped deciding a declaration&rsquo;s owner from six separate pieces of bookkeeping.</strong> Five recorded defects, and every &ldquo;this macro was attributed to the wrong side&rdquo; fix of the last four releases, came from twelve places each consulting whichever subset its author remembered.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            No capability is added. The parser change was measured rather than
+            argued: its whole output compared before and after across 3,606 gem
+            files and 976 standard-library files, with the reference records
+            byte-identical across 634,508 of them.
+          </p>
+        </article>
+
         <article class="tl-item" id="v027">
           <div class="tl-version">
             <span class="v">0.2.7</span>
