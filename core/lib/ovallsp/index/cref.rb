@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require_relative "symbol_id"
-
 module Ovallsp
   module Index
     # What Ruby would do with a declaration written at the point the
@@ -32,8 +30,15 @@ module Ovallsp
     # cost a release:
     #
     # - `#declares_singleton?` -- would an unqualified `def` here declare
-    #   a singleton method. True only inside `class << self`, and false
-    #   again inside a `def` written there.
+    #   a singleton method. True inside `class << self`, **and still true
+    #   inside a `def` written there**: Ruby's default definee does not
+    #   change when a method body opens, so `class << self; def build; def
+    #   helper; end; end; end` declares `helper` on the singleton.
+    #   Resetting it here was the first Cref's own regression -- one
+    #   predicate answering two questions, which is the thing this value
+    #   exists to stop. What a method body *does* change is whether a
+    #   receiverless macro can add to the class's surface, and that is
+    #   `#defines_surface?`, below.
     # - `#self_is_module?` -- is `self` here a Class or Module object.
     #   Also true directly in a class body and inside `def self.x`.
     #   Conflating it with the above made every `private` and `attr_reader`
@@ -55,17 +60,11 @@ module Ovallsp
         freeze
       end
 
-      # `Index::SymbolId.bare_name` of the owner -- what every
-      # workspace-produced name in the index is keyed on.
-      def bare_owner = owner && SymbolId.bare_name(owner)
-
       def declares_singleton? = singleton_context
 
       def self_is_module? = self_is_module
 
       def in_method_body? = in_method_body
-
-      def inside_block? = block_depth.positive?
 
       # Whether a receiverless call written here can add to `owner`'s
       # method surface. Three conditions that used to be assembled at each
@@ -82,17 +81,22 @@ module Ovallsp
 
       # `#nesting` is real Ruby's `Module.nesting`, innermost first --
       # what an unqualified constant written here is resolved against.
+      # `in_method_body` is deliberately untouched. `class Inner` written
+      # inside a method body is a Ruby SyntaxError, but Prism is
+      # error-tolerant and that is what a buffer looks like mid-refactor;
+      # resetting it there made reports about the class go silent, which
+      # the six stacks never did.
       def in_namespace(absolute_name)
         with(owner: absolute_name, nesting: [absolute_name, *nesting].freeze, singleton_context: false,
-             self_is_module: true, in_method_body: false, visibility: :public)
+             self_is_module: true, visibility: :public)
       end
 
       def in_singleton_class = with(singleton_context: true, self_is_module: true, visibility: :public)
 
       # A `def`. `self` inside `def self.x` is still a Class or Module;
-      # inside an instance method it is not. Either way an unqualified
-      # `def` nested inside is not a singleton declaration.
-      def in_method(singleton:) = with(singleton_context: false, self_is_module: singleton, in_method_body: true)
+      # inside an instance method it is not. `singleton_context` is
+      # deliberately untouched -- see `#declares_singleton?`.
+      def in_method(singleton:) = with(self_is_module: singleton, in_method_body: true)
 
       # A block or lambda body. Visibility is inherited rather than reset:
       # a plain iterator block does not open a new cref, so a `def` inside

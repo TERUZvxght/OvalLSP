@@ -32,6 +32,27 @@ RSpec.describe "Ovallsp::Server and a workspace reached through a symlink" do
     "Content-Length: #{json.bytesize}\r\n\r\n#{json}"
   end
 
+  # `initialize` reaches `build_cache_store`, which marks a workspace
+  # scope and starts `Cache::Store.prune_generations` -- the function
+  # CLAUDE.md's "a test that deletes things" section is entirely about.
+  # Without this the ordinary unit suite writes permanent scope
+  # directories into the developer's own `~/.cache/ovallsp` and sweeps it:
+  # a review round measured three new directories per run of this file,
+  # in a cache that had reached 4,322. `server_cache_sweep_spec.rb`
+  # already knew to do this; this file did not, and every spec that
+  # dispatches a real `initialize` has the same gap.
+  around do |example|
+    Dir.mktmpdir do |cache_home|
+      previous = ENV.fetch("XDG_CACHE_HOME", nil)
+      ENV["XDG_CACHE_HOME"] = cache_home
+      begin
+        example.run
+      ensure
+        ENV["XDG_CACHE_HOME"] = previous
+      end
+    end
+  end
+
   around do |example|
     Dir.mktmpdir do |parent|
       @real = File.join(parent, "real")
@@ -58,14 +79,56 @@ RSpec.describe "Ovallsp::Server and a workspace reached through a symlink" do
     expect(server.instance_variable_get(:@workspace_root)).to eq(@link)
   end
 
-  # The consequence, stated as the property: a file under the workspace
-  # has one uri, and it is the one the editor will use when it opens it.
-  it "builds a file's uri under the root the editor named" do
-    server = server_started_from(@real, root_uri: @link)
-    root = server.instance_variable_get(:@workspace_root)
+  # The consequence, stated as the property a user meets: the diagnostics
+  # for a file arrive under the uri the editor uses for it, so the
+  # Problems panel lists it once.
+  #
+  # **The first version of this example could not fail**: it read
+  # `@workspace_root` back out of the server and compared
+  # `UriUtil.from_path(root/"app/widget.rb")` with
+  # `UriUtil.from_path(@link/"app/widget.rb")` -- given the example above
+  # it, `x == x`, a pure function applied to both sides of an equality
+  # already asserted. It never asked anything to build a uri. Found by a
+  # review round.
+  it "publishes a file's diagnostics under the uri the editor uses" do
+    File.write(File.join(@real, "app", "widget.rb"), "class Widget\nend\nWidget.new.definitely_not_here\n")
+    output = StringIO.new
+    server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: @real)
+    # `dispatch` rather than `run`: `run` returns at EOF and shuts the
+    # background tasks down, so the pass this example is about would never
+    # get to publish.
+    server.send(:dispatch, { method: "initialize", id: 1,
+                             params: { rootUri: Ovallsp::UriUtil.from_path(@link) } })
+    server.send(:start_cold_index)
+    server.send(:start_workspace_diagnostics)
 
-    expect(Ovallsp::UriUtil.from_path(File.join(root, "app/widget.rb")))
-      .to eq(Ovallsp::UriUtil.from_path(File.join(@link, "app/widget.rb")))
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 20
+    published = []
+    while Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
+      published = published_uris(output)
+      break unless published.empty?
+
+      sleep 0.05
+    end
+    server.shutdown_background_tasks if server.respond_to?(:shutdown_background_tasks)
+
+    expect(published).to all(start_with(Ovallsp::UriUtil.from_path(@link)))
+    expect(published).not_to be_empty
+  end
+
+  def published_uris(output)
+    output.rewind
+    reader = Ovallsp::IO::FramedReader.new(output)
+    uris = []
+    begin
+      loop do
+        message = reader.read_message
+        uris << message[:params][:uri] if message[:method] == "textDocument/publishDiagnostics"
+      end
+    rescue Ovallsp::IO::FramedReader::EOF, Ovallsp::IO::FramedReader::ProtocolError
+      nil
+    end
+    uris
   end
 
   # The control: with no `rootUri` -- a client that does not send one, or
@@ -76,4 +139,46 @@ RSpec.describe "Ovallsp::Server and a workspace reached through a symlink" do
 
     expect(server.instance_variable_get(:@workspace_root)).to eq(@real)
   end
+
+  # `workspaceFolders` is what a client may send instead: `rootUri` is
+  # deprecated in the specification, and a client sending folders often
+  # sends `rootUri: null` alongside them.
+  it "takes the first workspace folder when the client sends no rootUri" do
+    output = StringIO.new
+    server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: @real)
+    server.send(:dispatch, { method: "initialize", id: 1,
+                             params: { rootUri: nil,
+                                       workspaceFolders: [{ uri: Ovallsp::UriUtil.from_path(@link), name: "w" }] } })
+
+    expect(server.instance_variable_get(:@workspace_root)).to eq(@link)
+  end
+
+  # And a root the client names that is not there is refused rather than
+  # adopted: an editor can send a folder that has since been deleted, and
+  # indexing nothing is worse than indexing the cwd.
+  it "keeps its own cwd when the named root does not exist" do
+    output = StringIO.new
+    server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: @real)
+    server.send(:dispatch, { method: "initialize", id: 1,
+                             params: { rootUri: "file:///nonexistent-#{Process.pid}" } })
+
+    expect(server.instance_variable_get(:@workspace_root)).to eq(@real)
+  end
+
+  # The signature environment is built in the constructor, from the cwd,
+  # before any message arrives -- so moving the root without rebuilding it
+  # left the index following `rootUri` while `sig/` followed the cwd. For
+  # a symlinked workspace both name the same files; for a client that
+  # spawns from the editor's own directory they do not.
+  it "rebuilds the signature environment when the root moves" do
+    output = StringIO.new
+    server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: @real)
+    before = server.instance_variable_get(:@signatures)
+
+    server.send(:dispatch, { method: "initialize", id: 1,
+                             params: { rootUri: Ovallsp::UriUtil.from_path(@link) } })
+
+    expect(server.instance_variable_get(:@signatures)).not_to equal(before)
+  end
 end
+

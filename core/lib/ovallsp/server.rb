@@ -270,18 +270,39 @@ module Ovallsp
     # process's cwd, which is what a direct stdio session and every
     # existing caller rely on.
     #
-    # Only before anything has been indexed: this runs from `initialize`,
-    # which is the first message, so nothing has been recorded under the
-    # old root yet.
+    # Nothing has been *indexed* under the old root when this runs --
+    # `initialize` is the first message. The signature environment is the
+    # exception: it is built in the constructor, from the cwd, before any
+    # message arrives. For the symlink case both roots name the same
+    # files, but a client that spawns from the editor's own directory
+    # (nvim's lspconfig, Emacs' lsp-mode) would otherwise index one tree
+    # and read `sig/` from another. So it is rebuilt when the root
+    # actually moves, and only then.
+    #
+    # `workspaceFolders` is read as well: a client may send it with
+    # `rootUri: null`, and `rootUri` is deprecated in the specification.
+    # The first folder is the root, which is what a single-folder session
+    # means; multi-root remains one Core process per folder
+    # (`vscode/src/extension.ts`), so there is nothing here to choose
+    # between.
     def adopt_client_workspace_root(params)
-      root_uri = params.is_a?(Hash) ? params[:rootUri] : nil
-      return if root_uri.nil? || root_uri.to_s.empty?
+      path = client_workspace_root(params)
+      return if path.nil? || path == @workspace_root
 
-      path = UriUtil.to_path(root_uri.to_s)
-      return unless path && File.directory?(path)
-
-      @logger.info("workspace root from the client: #{path}") unless path == @workspace_root
+      @logger.info("workspace root from the client: #{path}")
       @workspace_root = path
+      @signatures = load_signatures_environment
+    end
+
+    def client_workspace_root(params)
+      return nil unless params.is_a?(Hash)
+
+      candidate = params[:rootUri]
+      candidate = Array(params[:workspaceFolders]).first&.dig(:uri) if candidate.nil? || candidate.to_s.empty?
+      return nil if candidate.nil? || candidate.to_s.empty?
+
+      path = UriUtil.to_path(candidate.to_s)
+      path if path && File.directory?(path)
     end
 
     def dispatch(message)

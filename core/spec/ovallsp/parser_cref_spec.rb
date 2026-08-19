@@ -21,26 +21,38 @@
 # wrongly, because there is no subset. 037's C1.
 RSpec.describe "Ovallsp::ParserService and the cref a declaration is recorded against" do
   # The cref as the recorders see it, captured at the one entry point
-  # every method call goes through. Prepended once for the whole file
-  # rather than per example: `Module#prepend` accumulates, and a second
-  # copy would answer from the first example's closure.
-  CAPTURED = []
+  # every method call goes through.
+  #
+  # **The first version of this leaked.** It prepended a module to
+  # `ParserService::Visitor` in a `before(:all)` and never removed it, and
+  # put its array on `Object` as a top-level constant -- so every document
+  # parsed by every later spec file in the run appended to it. Measured by
+  # a review round at 4,261 entries after three spec files, with
+  # production code patched for whatever subset `--order random` puts
+  # after this one.
+  #
+  # A subclass instead: the patch exists only on a class this file makes,
+  # and `ParserService` is told to use it for this call. Nothing outside
+  # these examples is touched, and there is nothing to remove.
+  CAPTURING_VISITOR = Class.new(Ovallsp::ParserService.const_get(:Visitor, false)) do
+    attr_reader :captured_crefs
 
-  before(:all) do
-    captured = CAPTURED
-    Ovallsp::ParserService.const_get(:Visitor, false).prepend(Module.new do
-      define_method(:record_method_call_candidate) do |node|
-        captured << [node.name.to_s, cref] if node.message_loc
-        super(node)
-      end
-    end)
+    def initialize(lines)
+      super
+      @captured_crefs = []
+    end
+
+    def record_method_call_candidate(node)
+      @captured_crefs << [node.name.to_s, cref] if node.message_loc
+      super
+    end
   end
 
   def cref_at(source, call_name)
-    CAPTURED.clear
-    document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
-    Ovallsp::ParserService.new.summarize(document)
-    CAPTURED.find { |name, _| name == call_name }&.last
+    result = Prism.parse(source)
+    visitor = CAPTURING_VISITOR.new(source.split("\n", -1))
+    result.value.accept(visitor)
+    visitor.captured_crefs.find { |name, _| name == call_name }&.last
   end
 
   describe "what a `def` written here would declare" do
@@ -59,10 +71,18 @@ RSpec.describe "Ovallsp::ParserService and the cref a declaration is recorded ag
       expect([cref.owner, cref.declares_singleton?]).to eq(["::Widget", true])
     end
 
-    it "stops answering singleton inside a method written there" do
+    # **This example asserted the opposite when it was written, and was
+    # wrong.** Ruby's default definee does not change when a method body
+    # opens: a `def` nested inside `class << self; def build` still
+    # declares on the singleton. The example encoded my reasoning rather
+    # than the interpreter's behaviour, and the code was written to match
+    # it -- so a test-first example pinned a regression into place. See
+    # the group near the end of this file, which drives the interpreter's
+    # answer.
+    it "keeps answering singleton inside a method written there, as Ruby does" do
       source = "class Widget\n  class << self\n    def build\n      marker\n    end\n  end\nend\n"
 
-      expect(cref_at(source, "marker").declares_singleton?).to be(false)
+      expect(cref_at(source, "marker").declares_singleton?).to be(true)
     end
   end
 
@@ -117,4 +137,50 @@ RSpec.describe "Ovallsp::ParserService and the cref a declaration is recorded ag
   it "is immutable, so a recorder cannot be handed one that changes under it" do
     expect(cref_at("class Widget\n  marker\nend\n", "marker")).to be_frozen
   end
+
+  # **The regression the first Cref introduced.** `#in_method` reset
+  # `singleton_context` to false, on the reasoning that a method body is
+  # not a singleton context. But Ruby's *default definee* inside a method
+  # written in `class << self` is still the singleton class — verified
+  # against the interpreter:
+  #
+  #   class S; class << self; def build; def helper; :h; end; end; end; end
+  #   S.build; S.respond_to?(:helper)      # => true
+  #   S.new.respond_to?(:helper)           # => false
+  #
+  # So a nested `def` was recorded as an instance method and
+  # `Sgl.helper` was reported missing — a wrong answer in the unsafe
+  # direction, on code that runs, introduced by the value whose whole
+  # purpose is that one predicate answers one question.
+  #
+  # The two questions the reset conflated: "what would an unqualified
+  # `def` here declare" (a method body does not change it) and "what
+  # surface can a receiverless macro here add to" (a method body is not a
+  # class body at all, which `#defines_surface?` already answers).
+  describe "a `def` nested inside a method written in `class << self`" do
+    it "still declares on the singleton, as Ruby does" do
+      source = "class Sgl\n  class << self\n    def build\n      marker\n    end\n  end\nend\n"
+
+      expect(cref_at(source, "marker").declares_singleton?).to be(true)
+    end
+
+    # And the surface question still answers separately: a macro written
+    # in a method body adds nothing to the class, whatever the definee is.
+    it "still adds nothing to the class's surface from inside that method" do
+      source = "class Sgl\n  class << self\n    def build\n      marker\n    end\n  end\nend\n"
+
+      expect(cref_at(source, "marker").defines_surface?).to be(false)
+    end
+  end
+
+  # `class Inner` inside a method body is a Ruby SyntaxError, but Prism is
+  # error-tolerant and this is what a buffer looks like mid-refactor. The
+  # first Cref reset `in_method_body` on entering a namespace, which the
+  # six stacks never did, so reports about that class went silent.
+  it "stays inside the method body when a namespace is opened there" do
+    source = "class Outer\n  def builder\n    class Inner\n      marker\n    end\n  end\nend\n"
+
+    expect(cref_at(source, "marker").defines_surface?).to be(false)
+  end
 end
+

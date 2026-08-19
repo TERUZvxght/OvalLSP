@@ -83,7 +83,15 @@ def suite_result
   # UNPINNED, which is the opposite of the truth and the most load-bearing
   # kind of line there is. Found by this script on its second real run,
   # against the change set that adds a `require_relative`.
-  return [:errored, line.strip] if line.include?("error occurred outside of examples")
+  # RSpec pluralises: two load errors print "2 errors occurred outside of
+  # examples", which the singular substring does not match -- and if any
+  # example ran, the line still contains " 0 failures" and the hunk is
+  # reported UNPINNED. Reverting a `require_relative` used by two spec
+  # files is enough to reach it. The check written for exactly this
+  # failure mode had it; a review round found that on the release whose
+  # stated lesson is that a check gets a round aimed at whether it can
+  # fail at all.
+  return [:errored, line.strip] if line.match?(/\d+ errors? occurred outside of examples/)
   return [:errored, "the suite ran no examples"] if line.start_with?("0 examples")
 
   [line.include?(" 0 failures") ? :green : :red, line.strip]
@@ -118,11 +126,18 @@ refuse("another sweep is running (#{LOCK}). Sequence them -- concurrent mutation
 File.write(LOCK, Process.pid.to_s)
 at_exit do
   File.delete(LOCK) if File.exist?(LOCK) && File.read(LOCK) == Process.pid.to_s
-  # Ctrl-C mid-hunk otherwise leaves a reverted hunk or a deleted spec
-  # file behind, and only the *next* run's clean-tree refusal notices.
+  # Ctrl-C mid-hunk otherwise leaves a reverted hunk behind -- and a
+  # reverted hunk is not inert: a review round found this checkout with
+  # one line of `parser_service.rb` reverse-applied, which made
+  # `#summarize` raise on **any file containing an `alias` keyword**. At
+  # minutes per suite run and dozens of hunks, an interrupted sweep is
+  # the likely case rather than the exception, so it restores rather than
+  # warns.
   dirty, = run("git", "status", "--porcelain")
-  warn("hunk_sweep: interrupted with the tree modified -- run `git checkout core/` to restore it.") unless
-    dirty.strip.empty?
+  unless dirty.strip.empty?
+    warn("hunk_sweep: interrupted with the tree modified -- restoring core/ and vscode/.")
+    run("git", "checkout", "--", "core", "vscode")
+  end
 end
 
 diff, ok = run("git", "diff", "#{base}...HEAD", "-U3", "--", "core/lib")
