@@ -846,7 +846,6 @@ module Ovallsp
 
       def closed_nominal?(nominal, singleton, context)
         entries = context.hierarchy_index.ancestors(nominal.name, singleton: singleton)
-        instance_entries = context.hierarchy_index.ancestors(nominal.name, singleton: false)
 
         # Four of the reasons this method used to keep for itself now live
         # where the enumeration happens, as reasons on
@@ -858,18 +857,23 @@ module Ovallsp
         # every reader gets them without having been taught (`037`'s C2,
         # step 2).
         #
-        # Two stay: whether an ancestor is one the *signature* environment
-        # declares, which needs a `Signatures::Environment` the resolver is
-        # not given, and the Runtime Agent's `#reopened_elsewhere?` round
-        # trip below.
-        return false if context.method_resolver &&
-                        context.method_resolver.availability(receiver_type: nominal, name: "",
-                                                             context: { singleton: singleton }).reason != :not_declared_in_workspace
-        return false unless entries.all? { |entry| ancestor_known?(entry, context) }
-        # A singleton lookup also depends on the *instance* chain, because
-        # that is where `include` puts a module and `included`/`extended`
-        # hooks are how a Ruby module adds class methods.
-        return false if singleton && !instance_entries.all? { |entry| ancestor_known?(entry, context) }
+        # **All six now live there**, including the two that needed the
+        # signature environment -- the resolver is given one as of C2's
+        # step 3, so it can say whether an ancestor is accounted for by
+        # anything at all. This method is what is left: the Runtime
+        # Agent's round trip below, which the resolver has no business
+        # making.
+        #
+        # The polarity is the point. This used to assume closure and
+        # subtract the ways of not knowing it had been taught; it now asks
+        # a query that assumes nothing and has to be shown a whole
+        # surface. A way of not knowing nobody has thought of yet produces
+        # silence rather than a report.
+        return false unless context.method_resolver
+        return false unless context.method_resolver
+                                   .availability(receiver_type: nominal, name: "",
+                                                 context: { singleton: singleton },
+                                                 signatures: context.signatures).absent?
 
         # Asked of every link in the chain, not just the receiver. Once
         # `test/test_helper.rb` has reopened `ActiveSupport::TestCase`,

@@ -50,9 +50,25 @@ module Ovallsp
     #     #complete's results (docs/design/tasks/009-method-hierarchy-and-lookup.md
     #     "private methodを不正な明示receiver候補として上位表示しない").
     class MethodResolver
-      def initialize(workspace_index:, hierarchy_index:)
+      # `signatures:` is optional and its absence is not neutral: without
+      # a signature environment nothing can be shown to account for an
+      # ancestor RBS declares, so `#availability` never answers `absent`.
+      # That is the honest reading rather than an optimistic one, and it
+      # matches what `Diagnostics::Engine` already did -- its
+      # `unknown_method_findings` returns immediately without one.
+      # Replaced, not re-injected: `Server` rebuilds its signature
+      # environment when the client names a workspace root different from
+      # the cwd it was spawned in (`024.98`), and everything holding this
+      # resolver -- the inferencer, the query service -- would otherwise
+      # keep asking the environment for the other tree. Written on the
+      # dispatch thread during `initialize`, before any background thread
+      # exists, and never after.
+      attr_writer :signatures
+
+      def initialize(workspace_index:, hierarchy_index:, signatures: nil)
         @workspace_index = workspace_index
         @hierarchy_index = hierarchy_index
+        @signatures = signatures
       end
 
       # The ancestor chain a lookup on this receiver walks, as
@@ -108,7 +124,18 @@ module Ovallsp
       #
       # `#resolve` is untouched, so nothing changes behaviour on the
       # strength of this alone.
-      def availability(receiver_type:, name:, context: {})
+      # `signatures:` is passed per call rather than held. Holding it
+      # meant two references to one fact -- `Server` rebuilds its
+      # signature environment when the client names a root other than the
+      # cwd (`024.98`), and this resolver would have had to be kept in
+      # step, which is the class of defect this release is about arriving
+      # inside the fix for it. The caller already has the environment.
+      #
+      # Its absence is not neutral: without one, nothing can be shown to
+      # account for an ancestor, so this never answers `absent`. That is
+      # the honest reading, and what `Diagnostics::Engine` already did by
+      # returning early when it had no signatures.
+      def availability(receiver_type:, name:, context: {}, signatures: nil)
         normalized, normalized_context = normalize_class_receiver(receiver_type, context)
         types = nominal_members(normalized)
         return MemberAvailability.unknown(:receiver_not_nominal) if types.empty?
@@ -117,8 +144,15 @@ module Ovallsp
                                       name.to_s)
         return MemberAvailability.present(candidates) unless candidates.empty?
 
-        MemberAvailability.unknown(types.filter_map { |type| unenumerable_reason(type, normalized_context) }.first ||
-                                   :not_declared_in_workspace)
+        reason = types.filter_map { |type| unenumerable_reason(type, normalized_context, signatures) }.first
+        return MemberAvailability.unknown(reason) if reason
+
+        # The one place `absent` is produced: every link in the chain is
+        # accounted for by the workspace or by signatures, nothing on it
+        # answers at call time or hides an unreadable surface, and the
+        # name is not among its members. Everything that could make that
+        # untrue is a reason above.
+        MemberAvailability.absent
       end
 
       # Why this receiver's members could not be listed in full, or nil if
@@ -134,7 +168,7 @@ module Ovallsp
       # signature environment to say whether an ancestor is one RBS
       # declares, and this resolver is not given one. They move when it
       # is.
-      def unenumerable_reason(type, context)
+      def unenumerable_reason(type, context, signatures)
         singleton = context[:singleton] == true
         entries = @hierarchy_index.ancestors(type.name, singleton: singleton)
 
@@ -161,7 +195,41 @@ module Ovallsp
         return :responds_at_call_time if entries.any? { |e| declares_method_missing?(e.name) }
         return :surface_open if entries.any? { |e| open_surface?(e, singleton) }
 
+        # An ancestor neither the workspace nor the signature environment
+        # declares means the receiver's real method set could include
+        # anything. Without a signature environment at all, nothing can be
+        # shown to be accounted for -- so the whole chain reads as
+        # unaccounted rather than as fine.
+        return :ancestor_not_declared_anywhere unless entries.all? { |e| accounted_for?(e, signatures) }
+        # The singleton half: `include` puts a module on the *instance*
+        # chain, and `included`/`extended` hooks are how a module adds
+        # class methods, so a class-level lookup depends on the instance
+        # chain being accounted for too. 0.2.6 spent a review round
+        # learning this -- `include Singleton` reported `.instance`
+        # missing, `include Sidekiq::Worker` reported `sidekiq_options`.
+        return :ancestor_not_declared_anywhere if singleton && !instance_entries.all? { |e| accounted_for?(e, signatures) }
+
         nil
+      end
+
+      # Whether anything can say what this link *contributes*, which is a
+      # stronger question than whether it was identified.
+      #
+      # Without a signature environment, nothing can: the synthesised
+      # `Object`/`Kernel`/`BasicObject` tail carries a kind but its
+      # members live in RBS, so treating "has a kind" as accounted-for
+      # made a bare resolver answer `absent` for every method on every
+      # class -- `Widget.new.to_s` included. `Diagnostics::Engine` has the
+      # same hole in `#ancestor_known?` and never meets it, because
+      # `#unknown_method_findings` returns before asking when there is no
+      # signature environment.
+      def accounted_for?(entry, signatures)
+        return false if signatures.nil?
+        return true if entry.kind
+
+        !signatures.ancestors(Index::SymbolId.qualify_owner(entry.name)).empty?
+      rescue StandardError
+        false
       end
 
       def declares_method_missing?(owner)

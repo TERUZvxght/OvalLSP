@@ -14,6 +14,7 @@
 RSpec.describe "Ovallsp::Semantic::MethodResolver#availability" do
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
   let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
+  let(:signatures) { Ovallsp::Signatures::Environment.new.tap { |e| e.load(workspace_root: nil) } }
   subject(:resolver) do
     Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
   end
@@ -25,8 +26,12 @@ RSpec.describe "Ovallsp::Semantic::MethodResolver#availability" do
     hierarchy_index.replace_file(summary)
   end
 
-  def availability_of(name, receiver: Ovallsp::Types::Nominal.new(name: "Widget"))
-    resolver.availability(receiver_type: receiver, name: name)
+  # `signatures:` defaults to the loaded environment here because that is
+  # what the server passes; the one example about its absence passes nil
+  # explicitly, so the difference is visible where it matters rather than
+  # hidden in a helper.
+  def availability_of(name, receiver: Ovallsp::Types::Nominal.new(name: "Widget"), signatures: self.signatures)
+    resolver.availability(receiver_type: receiver, name: name, signatures: signatures)
   end
 
   it "is present when the workspace declares the method" do
@@ -35,13 +40,14 @@ RSpec.describe "Ovallsp::Semantic::MethodResolver#availability" do
     expect(availability_of("build")).to be_present
   end
 
-  it "is unknown, not absent, for a method nothing declares" do
+  # Step 1 shipped this asserting `unknown`, because nothing produced
+  # `absent` yet -- absence was still to be earned. Step 3 is what earns
+  # it: with a signature environment accounting for the chain, a name
+  # that is not among its members is genuinely not there.
+  it "is absent once the whole chain is accounted for" do
     index("class Widget\n  def build; end\nend\n")
 
-    availability = availability_of("definitely_not_here")
-
-    expect(availability).to be_unknown
-    expect(availability).not_to be_absent
+    expect(availability_of("definitely_not_here")).to be_absent
   end
 
   # The two the resolver can answer for itself. Everything else it cannot
@@ -110,13 +116,59 @@ RSpec.describe "Ovallsp::Semantic::MethodResolver#availability" do
       expect(availability_of("value").reason).to eq(:surface_open)
     end
 
-    # The control: a class this resolver can account for entirely still
-    # answers `not_declared_in_workspace`, which is what step 3 turns
-    # into `absent` once the engine's remaining two reasons move too.
-    it "says so plainly when it could account for the whole chain" do
+    # The control: a chain this resolver can account for entirely carries
+    # no reason at all, because there is nothing it could not see.
+    it "carries no reason when it could account for the whole chain" do
       index("class Widget\n  def build; end\nend\n")
 
-      expect(availability_of("definitely_not_here").reason).to eq(:not_declared_in_workspace)
+      expect(availability_of("definitely_not_here").reason).to be_nil
+    end
+  end
+
+  # **Step 3**: the last two reasons, and the first `absent` this query
+  # can produce. Both needed the signature environment, to say whether an
+  # ancestor is one RBS declares -- an ancestor nothing in the workspace
+  # and nothing in RBS accounts for means the receiver's real method set
+  # could include anything.
+  describe "with the signature environment" do
+    it "can account for a chain whose links RBS declares, and says the method is absent" do
+      index("class Widget\n  def build; end\nend\n")
+
+      expect(availability_of("definitely_not_here")).to be_absent
+    end
+
+    # An `include` of something nobody declares: the chain still reaches
+    # BasicObject, so it is not the *identification* that fails -- it is
+    # that nothing can say what that link contributes.
+    it "still cannot account for an ancestor neither the workspace nor RBS declares" do
+      index("class Widget\n  include Sidekiq::Worker\n  def build; end\nend\n")
+
+      availability = availability_of("definitely_not_here")
+
+      expect(availability).to be_unknown
+      expect(availability.reason).to eq(:ancestor_not_declared_anywhere)
+    end
+
+    # The singleton half, which 0.2.6 spent a round learning: `include`
+    # puts a module on the *instance* chain, and `included`/`extended`
+    # hooks are how a module adds class methods -- so a class-level
+    # lookup depends on the instance chain being accounted for too.
+    it "cannot account for a class-level lookup when the instance chain has an unaccounted link" do
+      index("class Widget\n  include Sidekiq::Worker\nend\n")
+
+      availability = resolver.availability(receiver_type: Ovallsp::Types::Nominal.new(name: "Widget"),
+                                           name: "sidekiq_options", context: { singleton: true })
+
+      expect(availability).to be_unknown
+    end
+
+    # And without a signature environment the query stays honest rather
+    # than optimistic: nothing can be called absent when the thing that
+    # would account for RBS is not there.
+    it "answers unknown when it is given no signature environment at all" do
+      index("class Widget\n  def build; end\nend\n")
+
+      expect(availability_of("definitely_not_here", signatures: nil)).to be_unknown
     end
   end
 end
