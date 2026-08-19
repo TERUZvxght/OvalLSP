@@ -172,7 +172,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | open | 0.2.4 | The two suites that drive a real editor are run by nobody but the ma… |
 | [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.2.4 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
-| [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | open | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
+| [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | resolved | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | open | 0.3.0 | The trust gate stands in front of callers, not in front of what exec… |
 | [`024.75`](#02475-a-documented-field-selects-nothing) | open | 0.3.0 | A documented field selects nothing |
 | [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.2.6 | Fifty-four `unknown-method` reports over real gem source, and all of… |
@@ -3788,15 +3788,16 @@ call sites read it. Today two functions decide and only one was changed.
 ## 024.73 The fork boundary is undone by `Marshal.load` in the parent
 
 ```yaml
-status: open
+status: resolved
 kind: defect
 user-visible: no
 user-visible-note: >
   Reachable only by a client that sends `pluginManifests`, and the
-  shipped extension sends none, so no user of the published build is
+  shipped extension sends none, so no user of the published build was
   exposed. It is recorded as a defect rather than a hazard because the
   containment it breaks is the entire reason the fork exists.
 target: 0.2.6
+released-in: 0.2.6
 ```
 
 **Area:** `core/lib/ovallsp/plugins/loader.rb:446` (`Marshal.load`),
@@ -3845,10 +3846,41 @@ all until 0.2.5; it has one now, so an untrusted workspace cannot reach
 this path even via a client that would otherwise pass manifests. That
 narrows exposure; it does not close the class.
 
-**Shipped open in 0.2.5**, retargeted to 0.2.6. The gate is what makes
+**Shipped open in 0.2.5**, retargeted to 0.2.6. The gate is what made
 that defensible rather than the size of the remaining work: reaching this
 code needs a client that sends `pluginManifests` *and* a trusted
 workspace, and the shipped extension sends none.
+
+### Resolved in 0.2.6, and the predicted protocol change was not needed
+
+`Plugins::Wire` is the boundary's format: the child encodes to JSON, the
+parent decodes from fields it has checked. Nothing in a payload can name
+a class, so there is no object to construct before validation — the
+invariant this entry asked for, reached the way the direction above said
+(plain data out, typed values rebuilt in the parent).
+
+**`CURRENT_PROTOCOL_VERSION` stays at 1, which the direction above did
+not anticipate.** It predicted a protocol change and a change to the
+SDK's documented contract, on the reasoning that declarations carry real
+objects. They do — and both ends of the encoding are Core, so the
+plugin-facing API is untouched: a plugin still writes
+`return_type: Types::Nominal.new(name: "Boolean")` and still gets a
+`GeneratedMethodFact`. Nothing a plugin author reads or writes changed,
+so bumping the version would have refused every existing manifest for no
+compatibility reason.
+
+The one behavioural narrowing, recorded in `plugin-sdk.md`: a
+`return_type` outside the `Types` lattice used to cross as whatever
+object it was and now becomes nothing. That was already outside the
+documented contract (`StaticContext#register_declarations` says "optional
+Types value"), and carrying it was the defect.
+
+Pinned by two examples that fail against the old boundary: the loader
+never calls `Marshal.load` on this path, and a Marshal payload arriving
+on the result pipe is rejected rather than decoded. Asserted as "never
+calls it" rather than by demonstrating a gadget, because a gadget is a
+property of whichever classes happen to be loaded — a passing gadget test
+would be evidence about this Gemfile, not about the boundary.
 
 ## 024.74 The trust gate stands in front of callers, not in front of what executes
 

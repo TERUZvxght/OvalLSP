@@ -1,11 +1,13 @@
 # frozen_string_literal: true
 
+require "json"
 require "timeout"
 require_relative "../plugins"
 require_relative "../child_process"
 require_relative "manifest"
 require_relative "static_context"
 require_relative "runtime_context"
+require_relative "wire"
 
 module Ovallsp
   module Plugins
@@ -331,19 +333,25 @@ module Ovallsp
       # Ruby IO object references it before this point, precisely so the
       # plugin's own code, which already ran by the time this is called,
       # never had one to find) to a writable IO just long enough to
-      # deliver the Marshaled result, then closes it.
+      # deliver the result, then closes it.
+      #
+      # JSON, and only the shapes `Plugins::Wire` can name. This used to
+      # be `Marshal.dump`, and the parent's matching `Marshal.load`
+      # instantiated whatever classes the stream named before any
+      # validation ran -- undoing the boundary the fork exists to create
+      # (`024.73`). Nothing written here can name a class at all now.
       def deliver_result(result_fd, result)
         return unless result_fd
 
         io = ::IO.new(result_fd, "w")
         begin
-          io.write(Marshal.dump(result))
+          io.write(JSON.generate(Wire.encode_result(result)))
         rescue StandardError => e
-          # The result itself couldn't be Marshaled (e.g. a plugin
-          # somehow returned an object holding a Proc/IO/etc.) --
-          # report that specific failure instead of leaving the parent
-          # to time out waiting for output that will never arrive.
-          io.write(Marshal.dump({ ok: false, error: "result could not be serialized: #{e.class}: #{e.message}" }))
+          # The result itself couldn't be encoded (a plugin returned
+          # something outside the contract) -- report that specific
+          # failure instead of leaving the parent to time out waiting for
+          # output that will never arrive.
+          io.write(JSON.generate({ ok: false, error: "result could not be serialized: #{e.class}: #{e.message}" }))
         end
       ensure
         io&.close
@@ -443,8 +451,9 @@ module Ovallsp
         return { ok: false, error: "plugin process produced no output" } if raw.nil? || raw.empty?
 
         begin
-          Marshal.load(raw)
-        rescue StandardError => e
+          decoded = Wire.decode_result(JSON.parse(raw, symbolize_names: true))
+          decoded || { ok: false, error: "plugin process output did not match the plugin protocol" }
+        rescue JSON::ParserError, StandardError => e
           { ok: false, error: "failed to read plugin process output: #{e.class}: #{e.message}" }
         end
       end

@@ -50,6 +50,17 @@ existence, definition, and the unknown-method diagnostic all see it for
 free) plus, when you give a `return_type:`, an
 `Index::GeneratedMethodFact` MethodAnalyzer resolves it from directly.
 
+`return_type:` must be one of the `Ovallsp::Types` values — `Nominal`,
+`Generic`, `Union`, `ProcType`, `TypeParameter`, `UNKNOWN`, `NIL`.
+Anything else is dropped rather than carried across the process
+boundary: since 0.2.6 the boundary is plain JSON that cannot name a
+class, and Core rebuilds the typed value in the parent from fields it
+has checked (`Plugins::Wire`, `024.73`). Before that it was
+`Marshal.load`, which built whatever the stream named before any
+validation ran. The registration API is unchanged, so a plugin written
+against the documented contract needs no edit and
+`protocol_version` stays at 1.
+
 `context.register_generic_rules([...])` accepts
 `Semantic::GenericRule` values, the same shape `map`/`select`/`find`
 use for Array/Relation/CollectionProxy (see Task 011).

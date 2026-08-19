@@ -447,6 +447,40 @@ RSpec.describe Ovallsp::Plugins::Loader do
       expect(fact[:symbol_id].owner).to eq("::PipeForgerModel")
       expect(contexts.first.declarations).not_to include(a_hash_including(not_a_real_declaration: anything))
     end
+
+    # `024.73`. The fork exists so a broken or hostile plugin cannot
+    # reach into Core, and reading its answer with `Marshal.load` undid
+    # that: those bytes come from the plugin's own code, and
+    # `Marshal.load` instantiates whatever classes the stream names, in
+    # the parent, before `#partition_plugin_facts` or anything else looks
+    # at the data. An allowlist proc would not have helped -- it runs
+    # after each object is constructed.
+    #
+    # Asserted as "never calls it" rather than by demonstrating a gadget:
+    # a gadget is a property of whatever classes happen to be loaded, so
+    # a passing gadget test would be evidence about this Gemfile, while
+    # this is evidence about the boundary. It fails the moment anyone
+    # puts `Marshal.load` back on this path.
+    it "never reconstructs the child's answer with Marshal" do
+      expect(Marshal).not_to receive(:load)
+
+      contexts = loader.load_static([manifest_path("state_machine_example")])
+
+      expect(contexts.first.declarations.first[:return_type]).to eq(Ovallsp::Types::Nominal.new(name: "Boolean"))
+    end
+
+    # The other half: a plugin that writes a Marshal payload to the pipe
+    # -- which is what `pipe_forger` above does, and what used to be
+    # accepted verbatim -- now produces nothing rather than a decoded
+    # object graph. The loader keeps its "one broken plugin contributes
+    # nothing, logged" contract instead of trusting the stream.
+    it "rejects a Marshal payload on the result pipe instead of loading it" do
+      allow(Ovallsp::ChildProcess).to receive(:reap).and_return(true)
+
+      result = loader.send(:read_isolated_result, StringIO.new(Marshal.dump({ ok: true, result: [] })), 0)
+
+      expect(result[:ok]).to be(false)
+    end
   end
 
   describe "#load_runtime" do
