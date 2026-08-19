@@ -195,6 +195,36 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v029">
+          <div class="tl-version">
+            <span class="v">0.2.9</span>
+            <span class="mark mark--yes">リリース済み</span>
+          </div>
+          <h3>一つの問いを、一度だけ、正直に</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>選んだら例外になる名前を、補完が出さなくなりました。</strong> <code>obj.</code> の private メソッドも、<code>other_object.</code> の protected メソッドも、いま書いている位置からは呼べません。private なエイリアスも同様で、これはエイリアスに自分の宣言がなく、可視性の規則が読む先が無かったためにすり抜けていました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>存在するメソッドを「未定義」と報告するのをやめました。</strong> <code>to_s</code>、<code>send</code>、<code>Comparable</code> のようなモジュールが持ち込むメソッドが、受け手によっては未知として報告されていました。インストール済み gem 213 ファイルでの実測で、誤検出は 54 件から 6 件になりました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>存在しない選択肢を署名ヘルプが出すのをやめました。</strong> 別のメソッドを override したメソッドは署名が2件出ていましたが、Ruby が呼ぶのは1つだけです。0.2.8 は引数名が親と同じ場合だけを直しており、今回は引数名を変える普通のケースを直しています。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            機能の追加はありません。内部では、「この受け手はこのメンバを持って
+            いるか」への答えが、空であることが二つの意味を持つリストではなく
+            なりました。present / absent / unknown の3状態で答え、<em>unknown</em>
+            は受け取った側が推測するのではなく列挙に失敗した当人が作ります。次に
+            見つかる「分からない理由」が、発見1件につき誤報1件を払うのではなく、
+            構造として全機能を黙らせます。
+          </p>
+        </article>
+
         <article class="tl-item" id="v028">
           <div class="tl-version">
             <span class="v">0.2.8</span>

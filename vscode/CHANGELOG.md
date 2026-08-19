@@ -6,6 +6,55 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.9 — one question, asked once, answered honestly
+
+- **Completion no longer offers a name that would raise if you picked
+  it.** A private method on `obj.` and a protected one on
+  `other_object.` are both uncallable from where you are typing, and
+  both were being offered. So was a private *alias* — `alias_method
+  :aka, :build` followed by `private :aka` — which slipped through
+  because an alias has no declaration of its own for the visibility rule
+  to read.
+- **The undefined-method check stopped reporting methods that exist.**
+  `to_s`, `send`, `frozen?` and anything a module such as `Comparable`
+  brings in were reported as unknown on some receivers: the check asked
+  whether an ancestor was *declared* anywhere, never whether it *has* the
+  method. Measured over 213 files of installed gems, `unknown-method`
+  false positives fell from 54 to 6.
+- **Signature help stopped offering a choice that does not exist.** A
+  method that overrides another showed both signatures — Ruby calls
+  exactly one of them. 0.2.8 fixed the case where the override reused its
+  parent's parameter names; this fixes the ordinary case, where it
+  renames them.
+- **A class receiver still answers.** `Widget.build(` was briefly
+  answered by nothing while the above was being fixed; there is now an
+  example holding it.
+
+### Details
+
+**What changed underneath, and why the list above is short.** Asking
+"does this receiver have this member" returned a list, and an empty list
+meant two different things: the member is not there, or the receiver
+could not be enumerated at all. Every feature reconstructed the
+difference for itself, and each learned about a new way of not knowing
+only after it had reported something false — six times in `0.2.6` alone,
+one per review round.
+
+The answer is now a value with three states, and `unknown` is produced by
+whatever failed to enumerate rather than inferred by whoever received it.
+A caller cannot get from `unknown` to "not there" without saying so. The
+practical consequence is that the next way of not knowing makes every
+feature silent by construction instead of by each one being taught, which
+is the only version of this that stops costing a false report per
+discovery.
+
+**What is still open.** Three examples added by this release may not
+distinguish the behaviour they pin — the fixture passes under either
+candidate answer. One of the four reported was found and fixed (it is the
+signature-help item above); the other three were lost before the list was
+written down, and re-deriving them is `024.109`, deliberately left for
+0.2.10 rather than done inside the review loop that found them.
+
 ## 0.2.8 — the parser's bookkeeping, and a file's identity
 
 - **A workspace opened through a symlink no longer shows every file
