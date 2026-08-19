@@ -67,6 +67,49 @@ Write the test before the implementation, in this order:
 
 Writing the fix first and then reverting it to check the new test still counts as verifying that one test — but it cannot reveal the more common problem below, so it is not a substitute for step 1.
 
+### Establish where the expected value comes from, before writing it down
+
+Step 1 says to watch the test fail. It does not say the test is right, and
+**a wrong expectation written first is implemented faithfully.**
+
+0.2.8 replaced the parser's six bookkeeping stacks with one value, and the
+spec was written first, as required:
+
+```ruby
+it "stops answering singleton inside a method written there"
+```
+
+That is not what Ruby does. The default definee does not change when a
+method body opens:
+
+```ruby
+class S; class << self; def build; def helper; :h; end; end; end; end
+S.build; S.respond_to?(:helper)      # => true
+S.new.respond_to?(:helper)           # => false
+```
+
+The code was then written to match the spec, a nested `def` in
+`class << self` was recorded as an instance method, and a working call was
+reported as an unknown method. Test-first did not prevent it; it *pinned
+it into place*, and a review round found it by asking the interpreter.
+
+So, before writing an expected value:
+
+- **A claim about Ruby's semantics is taken from Ruby.** Run it. Paste the
+  session into the example, so the next reader can see what the
+  expectation rests on rather than trusting that somebody checked.
+- **A claim about something outside this tree** — the client, the editor,
+  the LSP specification — goes through `docs/CLIENT_BEHAVIOUR.md`, which
+  exists because the same failure happened with a claim about
+  `vscode-languageclient` that had been quoted forward for two releases
+  and was false.
+- **A claim about this tree's own numbers** is derived, not typed. See the
+  measured-claim markers `core/spec/meta/measured_claims_spec.rb` checks.
+
+The general form: *test-first* is worth what the expectation is worth. Where
+the expectation is a belief about behaviour nobody has run, writing it
+first converts a belief into an implementation.
+
 ### Unpinned behaviour is a defect in its own right
 
 A behavioural line that no test fails on when it is reverted is a defect, and must be reported and fixed like any other — regardless of whether the behaviour itself is correct. Correct code with no test is one refactor away from being incorrect code with no test.

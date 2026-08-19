@@ -140,13 +140,20 @@ RSpec.describe "Ovallsp::ParserService and the cref a declaration is recorded ag
 
   # **The regression the first Cref introduced.** `#in_method` reset
   # `singleton_context` to false, on the reasoning that a method body is
-  # not a singleton context. But Ruby's *default definee* inside a method
-  # written in `class << self` is still the singleton class — verified
-  # against the interpreter:
+  # not a singleton context. Ruby disagrees: the *default definee* inside
+  # a method written in `class << self` is still the singleton class.
   #
+  # Run, not reasoned about -- CLAUDE.md's "establish where the expected
+  # value comes from" exists because of this example, and the session it
+  # asks for is this:
+  #
+  #   $ ruby -e '
   #   class S; class << self; def build; def helper; :h; end; end; end; end
-  #   S.build; S.respond_to?(:helper)      # => true
-  #   S.new.respond_to?(:helper)           # => false
+  #   S.build
+  #   puts S.respond_to?(:helper)      # => true
+  #   puts S.new.respond_to?(:helper)  # => false
+  #   '
+  #   # ruby 3.4.10
   #
   # So a nested `def` was recorded as an instance method and
   # `Sgl.helper` was reported missing — a wrong answer in the unsafe

@@ -50,25 +50,9 @@ module Ovallsp
     #     #complete's results (docs/design/tasks/009-method-hierarchy-and-lookup.md
     #     "private methodを不正な明示receiver候補として上位表示しない").
     class MethodResolver
-      # `signatures:` is optional and its absence is not neutral: without
-      # a signature environment nothing can be shown to account for an
-      # ancestor RBS declares, so `#availability` never answers `absent`.
-      # That is the honest reading rather than an optimistic one, and it
-      # matches what `Diagnostics::Engine` already did -- its
-      # `unknown_method_findings` returns immediately without one.
-      # Replaced, not re-injected: `Server` rebuilds its signature
-      # environment when the client names a workspace root different from
-      # the cwd it was spawned in (`024.98`), and everything holding this
-      # resolver -- the inferencer, the query service -- would otherwise
-      # keep asking the environment for the other tree. Written on the
-      # dispatch thread during `initialize`, before any background thread
-      # exists, and never after.
-      attr_writer :signatures
-
-      def initialize(workspace_index:, hierarchy_index:, signatures: nil)
+      def initialize(workspace_index:, hierarchy_index:)
         @workspace_index = workspace_index
         @hierarchy_index = hierarchy_index
-        @signatures = signatures
       end
 
       # The ancestor chain a lookup on this receiver walks, as
