@@ -228,14 +228,76 @@ diagnostics(document)
 
 Rubyプロセス内で無制限な並列解析は行わない。
 
-推奨:
+### 実際のスレッド所有関係（0.2.7 で記述を実装に合わせた）
 
-- main thread: transport and state mutation
-- analysis worker pool: parse/inferenceの純粋計算
-- agent reader thread: Runtime Agent messages
-- cancellation tokenを全queryへ伝播
+**この節は 0.2.7 まで実装と食い違っていました。** 「インデックスへの
+commit は main thread で行う」と書かれていましたが、HEAD は背景スレッド
+から `@index_mutation_mutex` の下で commit しています（cold index、
+workspace pass、changed-files batch）。`document_store.rb` はこの節を自身
+のスレッド安全性の根拠として引用していたので、食い違いは一箇所では済んで
+いませんでした。以下は規範ではなく、実装の記述です。
 
-インデックスへのcommitは世代番号を確認してmain threadで行う。古いdocument versionの結果は破棄する。
+| スレッド | 所有するもの |
+|---|---|
+| dispatch（transport） | LSP フレームの読み書き、`DocumentStore` への書き込み、didOpen/didChange/didClose の処理 |
+| cold index | ワークスペース走査と、`@index_mutation_mutex` 下でのインデックス commit |
+| workspace pass | 開いていないファイルの解析と publish |
+| changed-files batch | ファイル監視イベントの取り込みと再インデックス |
+| Runtime Agent reader | Agent からのメッセージ受信 |
+| Agent refresh / restart | ルート・モデルの再取得と、その後の全開きファイル再 publish。`024.56` の並びを生むのはこのスレッドです |
+| ancestry question worker | 静的に判定できない祖先について Agent へ問い合わせる |
+| cache prune | 起動時のキャッシュ世代掃除 |
+
+**共有状態に触るものは、以下の順序でロックを取ります。** どこにも書かれて
+いませんでした（順序の逆転は発見されていません — 真実の情報源が2つある状態
+であって、生きた deadlock ではありません）。`Server` が持つ9つと、各 store
+が内部に持つものの関係です:
+
+```text
+agent_refresh → agent_restart → index_mutation → 各 store の内部ロック
+                index_mutation → reference_state
+                reference_rebuild → reference_state
+publish_state は葉。外側へ入れ子にしません（FramedWriter の frame mutex を
+除く。これは publish_state の内側で取られます）
+読み取り時: HierarchyIndex → WorkspaceIndex
+```
+
+`workspace_pass` / `refresh_state` / `agent_retry` は短い状態更新のみを
+守り、他のロックを保持したまま取ることはありません。
+
+**この節が最初に書かれたとき、「27 箇所の `Mutex.new` が個別にこの順序を
+守っていた」と書いていました。** `core/lib` には現在 29 箇所あり
+<!-- measured: mutex-sites = 29 -->、上の順序が名指ししていたのは
+`Server` の 9 つのうち 3 つだけでした。全体の棚卸しに読めて、実際は一部の
+棚卸しだったことになります。実装と食い違わなくなったことを目的に掲げた節が、
+その初出で数を間違えていた — レビューラウンドが指摘しました。
+
+この数には印が付いており、`core/spec/meta/measured_claims_spec.rb` が
+ツリーから数え直して照合します。手で書いた数が三度続けて再導出に耐えなかった
+ため、覚えておくのをやめて検査させることにしました。
+
+**文書は不変のスナップショットです。** `TextDocument` は構築時に本文・
+版数・行オフセットを一緒に確定させて凍結し、`DocumentStore#change` は新しい
+インスタンスを作ってハッシュのエントリを差し替えます。背景スレッドの読み手は、
+古い文書か新しい文書のどちらかを丸ごと見ます。0.2.7 まではその場で書き換えて
+いたため、途中の状態を読めました — 実測で `position_to_byte_offset` の
+1,977,451 回中 1,977,450 回が、どちらの文書のものでもないオフセットを返して
+います（029 の M-2）。
+
+クライアントが版数をどう扱うかについては `docs/CLIENT_BEHAVIOUR.md` を
+参照してください。**この段落は最初、そこに書かれている事実と反対のことを
+主張していました** — しかも、その主張を1箇所に集約するために作った文書と
+同じ変更で書かれたものです。`client_behaviour_spec` はそれを見つけられません
+でした。走査が `docs/*.md` に限られていて `docs/design/docs/` を含まず、
+正規表現も英語表現しか見ていなかったためです。両方直しました。
+
+**診断の publish は一つの funnel を通ります。** `Server#publish_findings`
+が uri ごとに最後に送った版数を覚え、古い版数の publish を落とし、clear は
+常に勝って記憶を消します。版数付きの publish は、そのバッファがまだ開いて
+いることを要求します — 閉じたファイルに対して `[findings, clear, findings]`
+が飛ぶ `024.56` の並びは、これで塞がります（029 の M-3）。
+
+古い document version の結果は破棄します。
 
 ## 9. 状態の世代管理
 

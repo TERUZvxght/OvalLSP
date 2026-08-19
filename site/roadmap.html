@@ -200,6 +200,34 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v027">
+          <div class="tl-version">
+            <span class="v">0.2.7</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>A document cannot be read half-written, and a publish cannot arrive out of order</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Closing a file no longer leaves its errors behind.</strong> A background re-analysis already in flight republished a file you had just closed, and nothing republishes a file nobody has open &mdash; so those errors stayed in the Problems panel for the rest of the session. This was in every version shipped so far.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A slower analysis cannot put its older answers back.</strong> Every publish goes through one place that remembers what it last said about a file, refuses anything older, and lets closing a file win.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A file&rsquo;s text, version and line positions always belong together.</strong> Measured on the previous version: under a concurrent edit, 1,977,450 of 1,977,451 attempts to work out a position returned one belonging to neither document. That arithmetic is under hover, completion and go to definition.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            No capability is added. Four independent review rounds ran against
+            this release, and the first attempt at the publish rule introduced a
+            defect worse than the one it fixes &mdash; found by two of them
+            independently, and recorded in full.
+          </p>
+        </article>
+
         <article class="tl-item" id="v026">
           <div class="tl-version">
             <span class="v">0.2.6</span>

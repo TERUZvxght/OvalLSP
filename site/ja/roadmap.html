@@ -195,6 +195,33 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v027">
+          <div class="tl-version">
+            <span class="v">0.2.7</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>文書が書きかけで読まれず、publish が順序を外して届かない</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>ファイルを閉じても、そのエラーが残らなくなりました。</strong> 背後で既に始まっていた再解析が、閉じたばかりのファイルを再発行していました。誰も開いていないファイルを再発行するものは無いので、そのエラーは「問題」パネルにセッションの間ずっと残りました。これまでの全バージョンにありました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>遅い解析が古い答えを戻すこともなくなりました。</strong> publish は全て、ファイルごとに最後に言ったことを覚えている1箇所を通り、古いものを拒み、ファイルを閉じる操作が常に勝ちます。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>ファイルの本文・版数・行位置が常に一緒に動きます。</strong> 前バージョンでの実測: 並行編集下で、位置を求める 1,977,451 回のうち 1,977,450 回が、どちらの文書のものでもない位置を返していました。この計算はホバー・補完・定義ジャンプの土台にあります。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            機能の追加はありません。このリリースには独立したレビューが4ラウンド走り、
+            publish 規則の最初の実装は直そうとしたものより悪い欠陥を持ち込みました
+            &mdash; 2つのラウンドが独立に発見し、全て記録しています。
+          </p>
+        </article>
+
         <article class="tl-item" id="v026">
           <div class="tl-version">
             <span class="v">0.2.6</span>

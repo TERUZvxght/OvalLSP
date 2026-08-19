@@ -145,6 +145,10 @@ module Ovallsp
       @observation_runner = Observation::Runner.new(logger: @logger)
       @observation_test_command = nil
       @cold_indexing = false
+      # Per-uri memory of the last version published, and the mutex that
+      # orders every writer against it. See #publish_findings.
+      @last_published_version = {}
+      @publish_state_mutex = Mutex.new
       @agent_supervisor = AgentSupervisor.new
       @agent_retry_mutex = Mutex.new
       @agent_retry_generation = 0
@@ -390,7 +394,7 @@ module Ovallsp
       # a still-buffer-sourced existing entry and be silently rejected as
       # stale (docs/design/tasks/008.6-agent-and-index-hardening.md).
       @index_mutation_mutex.synchronize { remove_index_contribution(uri) }
-      clear_diagnostics(uri)
+      clear_findings(uri)
 
       path = UriUtil.to_path(uri)
       publish_workspace_diagnostics_later(uri) if path && File.file?(path) && reindex_from_disk(uri)
@@ -446,7 +450,92 @@ module Ovallsp
       end
     end
 
+    # The one funnel every publish goes through, and since 0.2.7 the one
+    # place that remembers what was last sent for a uri.
+    #
+    # Four kinds of writer reach here: the dispatch thread, the workspace
+    # pass on its own thread, the background republish sites, and the
+    # changed-files batch thread. Nothing ordered them, and `024.56`
+    # records the reproduced sequence for a closed file -- findings, the
+    # clear, the findings again -- present in every shipped build. The
+    # same gap the other way round puts stale findings back over newer
+    # ones.
+    #
+    # Four rules, all per-uri and all decided *and written* under one
+    # mutex. The lock spans the write on purpose: holding it only over the
+    # decision orders admission rather than arrival, so an admitted older
+    # publish could still reach the client after a newer one -- observed
+    # by parking a thread between the two. It costs nothing, because
+    # `FramedWriter` serialises every frame anyway.
+    #
+    # - **A versioned publish is a buffer's answer**, so that buffer must
+    #   still be open. This is `024.56`'s sequence: findings, the clear on
+    #   `didClose`, then a background pass already in flight arriving with
+    #   the findings again. The version rule alone cannot stop it, because
+    #   the clear resets the memory.
+    # - **And it must be the same buffer.** The first version of this
+    #   funnel checked only that *something* was open, and that introduced
+    #   a worse defect than the one it fixed: close a tab mid-republish
+    #   and reopen it, the editor hands out a fresh document at version 1,
+    #   the stale publish at version 47 finds an open buffer and an empty
+    #   memory, and every edit afterwards is refused as older. The panel
+    #   then shows the pre-close errors on text already fixed, for as many
+    #   edits as the old buffer had accumulated. A buffer never publishes
+    #   ahead of itself -- the document came out of the store -- so a
+    #   version above what the store holds now belongs to a closed one.
+    # - **An older version is dropped**; the *same* version is let
+    #   through, because a later pass legitimately knows more about it
+    #   (the Agent answering, routes arriving) and refusing it would
+    #   switch those off.
+    # - **A clear always wins and resets**, because closing a file is not
+    #   something a stale computation may overrule.
+    #
+    # A versionless publish is the workspace pass, which analyses files
+    # nobody has open. It is not ordered against a buffer's numbers -- but
+    # it is refused for a uri that *is* open, which is the property
+    # `WorkspaceDiagnostics` already believes it holds and enforces with a
+    # two-statement check a `didOpen` can land inside. The funnel holds
+    # the uri, so it can make that true rather than likely.
+    #
+    # The memory lives here rather than in `FramedWriter`, which also
+    # carries responses and must stay a dumb frame mutex. 029's M-3, and
+    # it rests on M-2: ordering by a version number is only meaningful
+    # once text and version cannot be read torn.
+    # Answers whether the publish reached the client, because a caller can
+    # need to know: `WorkspaceDiagnostics` counts analysed files by it,
+    # and that count bounds the pass and drives its truncation log. It
+    # returned `true` unconditionally and so counted files nothing was
+    # published for.
     def publish_findings(uri, findings, version: nil)
+      @publish_state_mutex.synchronize do
+        open_version = @document_store.fetch(uri: uri)&.version
+        if version
+          return false if open_version.nil? || version > open_version
+
+          last = @last_published_version[uri]
+          return false if last && version < last
+
+          @last_published_version[uri] = version
+        elsif open_version
+          return false
+        end
+
+        write_diagnostics(uri, findings, version)
+        true
+      end
+    end
+
+    # Clearing a file's diagnostics, and forgetting what it was at. Called
+    # when a buffer closes and when a file leaves the workspace. Under the
+    # same lock as a publish, so it cannot be interleaved with one.
+    def clear_findings(uri)
+      @publish_state_mutex.synchronize do
+        @last_published_version.delete(uri)
+        write_diagnostics(uri, [], nil)
+      end
+    end
+
+    def write_diagnostics(uri, findings, version)
       @writer.write_message(
         jsonrpc: JSONRPC_VERSION, method: "textDocument/publishDiagnostics",
         params: { uri: uri, version: version, diagnostics: findings.map { |f| to_lsp_diagnostic(f) } }
@@ -748,12 +837,6 @@ module Ovallsp
       @refresh_state_mutex.synchronize do
         @ancestry_question_worker = nil if @ancestry_question_worker == :claiming
       end
-    end
-
-    def clear_diagnostics(uri)
-      @writer.write_message(
-        jsonrpc: JSONRPC_VERSION, method: "textDocument/publishDiagnostics", params: { uri: uri, diagnostics: [] }
-      )
     end
 
     DIAGNOSTIC_SEVERITY = { error: 1, warning: 2, information: 3, hint: 4 }.freeze
@@ -2952,7 +3035,7 @@ module Ovallsp
           # returns early on a path that is gone. A rename arrives here as
           # a delete plus a create, so this is not only the `git checkout`
           # case.
-          publish_findings(uri, [])
+          clear_findings(uri)
         elsif @document_store.fetch(uri: uri).nil?
           # An open buffer is always authoritative over what's on disk; only
           # reindex from disk for files nobody currently has open.

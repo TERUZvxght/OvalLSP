@@ -106,17 +106,46 @@ caught.
 Also in it: `024.73` (`Marshal.load` on plugin output — axis A),
 `024.78`, `024.79`.
 
-### 0.2.7 — the remaining foundations *(axis B)* — **in progress on `feat/0.2.7`**
+### 0.2.7 — the remaining foundations *(axis B)* — **shipped**
 
-Recorded in `037-0.2.7-concurrency-foundations.md`, which lives on that
-branch. Named here per CLAUDE.md's residency rule: a pointer to a file
-that exists only on an unnamed branch is a pointer to nothing.
+Recorded in `037-0.2.7-concurrency-foundations.md`, prepared on
+`feat/0.2.7`. Named here per CLAUDE.md's residency rule while it was in
+flight: a pointer to a file that exists only on an unnamed branch is a
+pointer to nothing.
 
 
-`024.47`'s naming-convention decision, and `029`'s `M-2`/`M-3`
-(immutable document snapshots; one writer with memory for the publish
-funnel — noting `M-3` is a no-op as originally specified). These are
-correctness-under-concurrency and answer-stability, not new capability.
+`029`'s `M-2`/`M-3`/`C-3`: immutable document snapshots, one writer with
+memory for the publish funnel, and the architecture document's threading
+section landed with them. Correctness-under-concurrency and
+answer-stability, not new capability. `024.56` is what makes it a must —
+a reproduced publish sequence for a closed file, present in every shipped
+build, that had missed a `0.2.4` target three times.
+
+`024.47`'s naming-convention decision is **not** in it: it is L-sized and
+independent, and 0.2.7 is already the release where a first attempt at
+the funnel introduced a defect worse than the one it fixed.
+
+### 0.2.8 — the parser's bookkeeping, and a file's identity *(axis B)*
+
+`037`'s C1 and C8. A declaration's owner and kind stop being decided by
+six parallel mutable stacks and become one immutable value every recorder
+is handed; a uri gets one canonical form so a symlinked workspace stops
+showing every file twice. Between them they carry `024.26`, `024.31`,
+`024.32`, `024.33`, `024.34` and `024.98`, and the open-surface family
+0.2.6's rounds kept finding one instance at a time.
+
+### 0.2.9 — one question, asked once, answered honestly *(axis B)*
+
+`037`'s C2, C3 and C9. One query per position answering present / absent
+/ unknown plus visibility, read by all four features; the publish path
+taking the document rather than a version integer; and analysis following
+the state the buffer settled into rather than every event on the way.
+`024.13`, `024.18`, `024.35`, `024.45`, `024.57`, `024.78`, `024.82`,
+`024.83`, `024.88`, `024.91`, `024.97`, `024.99`, `024.100`, `024.101`.
+
+This is the largest thing left before 1.0.0 and the one most likely to be
+attempted at the wrong size. `024.15` and `024.47` are what that costs
+here. Each part ships with its own corpus measurement.
 
 ### 0.3.0 — the first release that may add capability *(axis B)*
 
