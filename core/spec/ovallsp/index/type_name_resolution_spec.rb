@@ -62,14 +62,19 @@ RSpec.describe Ovallsp::Index::TypeNameResolution do
       ).to be(false)
     end
 
-    # `Signatures::Environment#ancestors` can raise on a malformed name;
-    # the rule's answer to "I cannot tell" is "then it is not a
-    # substitution", never an exception into the diagnostics engine.
-    it "answers false rather than raising when the signature lookup raises" do
-      raising = Object.new
-      raising.define_singleton_method(:ancestors) { |_name| raise StandardError, "malformed" }
+    # This example used to assert that a `rescue StandardError` here
+    # answered `false` when the signature lookup raised, and it built the
+    # raising collaborator itself. The premise was wrong:
+    # `Signatures::Environment#ancestors` answers `[]` for a name it
+    # cannot parse and never raises, which `environment_spec` now pins
+    # where that containment lives. So the rescue could only ever have
+    # hidden a *different* failure, and a double was the only thing that
+    # could reach it. Asked of the real collaborator instead.
+    it "is no substitution for a name the signature environment cannot parse" do
+      environment = Ovallsp::Signatures::Environment.new
+      environment.load(workspace_root: nil)
 
-      expect(described_class.substitution?("String", "Serializer::Elements::String", raising)).to be(false)
+      expect(described_class.substitution?("Not A Type[[[", "Serializer::Elements::String", environment)).to be(false)
     end
   end
 

@@ -373,15 +373,31 @@ module Ovallsp
       def source_signatures(receiver_type, method_name, context)
         return nil unless @method_resolver
 
-        candidates = @method_resolver.resolve(receiver_type: receiver_type, name: method_name, context: context)
-        return nil if candidates.empty?
-
-        candidates.map do |candidate|
-          decl = candidate.declarations.first&.last
+        # One entry per receiver *member*, not per candidate. `#resolve`
+        # answers the override and the method it overrides, in lookup
+        # order -- which is what makes go-to-definition land on the
+        # nearest -- and turning both into labels showed
+        # `["area()", "area()"]` for a method that merely overrides
+        # another. Ruby calls exactly one of them, so the popup was
+        # offering a choice that does not exist.
+        #
+        # 0.2.9 deduplicated on the rendered label, which collapsed the
+        # pair only when the override happened to reuse its parent's
+        # parameter *names*; an override that renames one -- the ordinary
+        # case -- still showed both. The label was never the question.
+        # Asking each member for its own lowest-ranked candidate is: a
+        # Union legitimately produces two *different* signatures for one
+        # name, and that is what this popup is for, while within one
+        # member there is only ever one method to call.
+        signatures = receiver_members(receiver_type).filter_map do |member|
+          callable = @method_resolver.resolve(receiver_type: member, name: method_name, context: context).first
+          decl = callable&.declarations&.first&.last
           next unless decl
 
-          { label: signature_label(method_name, decl.parameters), parameters: decl.parameters.map { |p| { label: p.name.to_s } } }
-        end.compact
+          { label: signature_label(method_name, decl.parameters),
+            parameters: decl.parameters.map { |p| { label: p.name.to_s } } }
+        end.uniq { |signature| signature[:label] }
+        signatures.empty? ? nil : signatures
       end
 
       def rbs_signatures(receiver_type, method_name, context, direct: nil)
@@ -474,6 +490,16 @@ module Ovallsp
         parameters = overload.block_type.to_s[/\A\((.*?)\)/, 1].to_s
         body = parameters.empty? ? "..." : "|#{parameters}| ..."
         overload.block_required ? " { #{body} }" : " [{ #{body} }]"
+      end
+
+      # The receiver split into the things a lookup happens against,
+      # *unchanged* -- a `ClassOf[Widget]` member names no class and only
+      # `MethodResolver` knows to read it as Widget's singleton chain, so
+      # unwrapping one here (as `#each_nominal` does, correctly, for the
+      # signature-environment paths that key on a type name) answered
+      # nothing for `Widget.build(`.
+      def receiver_members(type)
+        type.is_a?(Types::Union) ? type.members : [type]
       end
 
       def each_nominal(type)

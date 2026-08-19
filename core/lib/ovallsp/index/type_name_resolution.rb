@@ -51,10 +51,14 @@ module Ovallsp
         declared_by_signatures?(bare, signatures)
       end
 
+      # No `rescue` here, and none in `MethodResolver#accounted_for?`
+      # either: `Signatures::Environment#ancestors` answers `[]` for a
+      # name it cannot parse or does not know, so a blanket rescue at each
+      # caller could only ever hide a *different* failure -- and there
+      # were two of them, agreeing about a containment that already lived
+      # where the failure happens. `environment_spec` pins that answer.
       def declared_by_signatures?(name, signatures)
         !signatures.ancestors(SymbolId.qualify_owner(name)).empty?
-      rescue StandardError
-        false
       end
     end
   end

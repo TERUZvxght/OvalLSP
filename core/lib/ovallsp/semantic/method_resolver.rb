@@ -84,6 +84,146 @@ module Ovallsp
       # `conditional: true` rather than omitted — diagnostics/definition
       # callers decide what to do with a conditional candidate; this
       # layer never silently drops one.
+      # The same question as `#resolve`, answered in three states instead
+      # of a list whose emptiness means two different things.
+      #
+      # **The default is `unknown`, and that inversion is the point.**
+      # `#resolve` answers `[]` both for "the workspace does not declare
+      # this" and for "I could not look at all", and every consumer then
+      # assumes absence and subtracts the ways of not knowing it has
+      # heard about. 0.2.6 added four such subtractions to
+      # `Diagnostics::Engine`, one per review round, each after a false
+      # report on code that runs. With the default the other way round, a
+      # way of not knowing that nobody has thought of yet produces
+      # silence.
+      #
+      # This resolver rules out only what it can see: a receiver that is
+      # not a class, and an ancestor chain with a link it could not
+      # identify. RBS, the Runtime Agent, a reopened core class and a
+      # surface opened by an unreadable macro are all somebody else's to
+      # rule out, and until they do the answer stays `unknown`. Nothing
+      # here produces `absent` yet, deliberately: `absent` is earned by
+      # whoever can account for the whole surface, and moving those
+      # accounts here is the rest of `037`'s C2.
+      #
+      # `#resolve` is untouched, so nothing changes behaviour on the
+      # strength of this alone.
+      # `signatures:` is passed per call rather than held. Holding it
+      # meant two references to one fact -- `Server` rebuilds its
+      # signature environment when the client names a root other than the
+      # cwd (`024.98`), and this resolver would have had to be kept in
+      # step, which is the class of defect this release is about arriving
+      # inside the fix for it. The caller already has the environment.
+      #
+      # Its absence is not neutral: without one, nothing can be shown to
+      # account for an ancestor, so this never answers `absent`. That is
+      # the honest reading, and what `Diagnostics::Engine` already did by
+      # returning early when it had no signatures.
+      def availability(receiver_type:, name:, context: {}, signatures: nil)
+        normalized, normalized_context = normalize_class_receiver(receiver_type, context)
+        types = nominal_members(normalized)
+        return MemberAvailability.unknown(:receiver_not_nominal) if types.empty?
+
+        candidates = merge_candidates(types.map { |type| candidates_for_type(type, name.to_s, normalized_context) },
+                                      name.to_s)
+        return MemberAvailability.present(candidates) unless candidates.empty?
+
+        reason = types.filter_map { |type| unenumerable_reason(type, normalized_context, signatures) }.first
+        return MemberAvailability.unknown(reason) if reason
+
+        # The one place `absent` is produced: every link in the chain is
+        # accounted for by the workspace or by signatures, nothing on it
+        # answers at call time or hides an unreadable surface, and the
+        # name is not among its members. Everything that could make that
+        # untrue is a reason above.
+        MemberAvailability.absent
+      end
+
+      # Why this receiver's members could not be listed in full, or nil if
+      # they could.
+      #
+      # These were `return false` lines inside
+      # `Diagnostics::Engine#closed_nominal?`, each added a review round
+      # at a time after a false report on working code. They belong where
+      # the enumeration happens: as a reason on the answer, a reader gets
+      # them without having been taught, which is the whole of `037`'s C2.
+      #
+      # Two of the engine's six are not here yet -- both need the
+      # signature environment to say whether an ancestor is one RBS
+      # declares, and this resolver is not given one. They move when it
+      # is.
+      def unenumerable_reason(type, context, signatures)
+        singleton = context[:singleton] == true
+        entries = @hierarchy_index.ancestors(type.name, singleton: singleton)
+
+        # `Diagnostics::Engine#closed_nominal?` opened with
+        # `return false if entries.empty?`, and that line cannot fire: a
+        # chain always contains at least the receiver itself, for a name
+        # nothing declares and for the empty string alike, in both
+        # singleton and instance modes. It is not carried here.
+        # CLAUDE.md: a guard no input can reach is the same defect as an
+        # untested one.
+        #
+        # Always the *instance* chain, even for a singleton lookup: a
+        # singleton chain ends at the class itself and never reaches
+        # BasicObject, so asking it directly would call every `Foo.bar`
+        # unenumerable and silence everything.
+        instance_entries = @hierarchy_index.ancestors(type.name, singleton: false)
+        return :ancestor_not_identified unless instance_entries.any? { |e| Index::SymbolId.qualify_owner(e.name) == "::BasicObject" }
+        # A singleton lookup depends on the instance chain too: `include`
+        # puts a module there, and `included`/`extended` hooks are how a
+        # module adds class methods.
+        return :ancestor_not_identified if singleton && instance_entries.any? { |e| e.name.nil? }
+        return :ancestor_not_identified if entries.any? { |e| e.name.nil? }
+
+        return :responds_at_call_time if entries.any? { |e| declares_method_missing?(e.name) }
+        return :surface_open if entries.any? { |e| open_surface?(e, singleton) }
+
+        # An ancestor neither the workspace nor the signature environment
+        # declares means the receiver's real method set could include
+        # anything. Without a signature environment at all, nothing can be
+        # shown to be accounted for -- so the whole chain reads as
+        # unaccounted rather than as fine.
+        return :ancestor_not_declared_anywhere unless entries.all? { |e| accounted_for?(e, signatures) }
+        # The singleton half: `include` puts a module on the *instance*
+        # chain, and `included`/`extended` hooks are how a module adds
+        # class methods, so a class-level lookup depends on the instance
+        # chain being accounted for too. 0.2.6 spent a review round
+        # learning this -- `include Singleton` reported `.instance`
+        # missing, `include Sidekiq::Worker` reported `sidekiq_options`.
+        return :ancestor_not_declared_anywhere if singleton && !instance_entries.all? { |e| accounted_for?(e, signatures) }
+
+        nil
+      end
+
+      # Whether anything can say what this link *contributes*, which is a
+      # stronger question than whether it was identified.
+      #
+      # Without a signature environment, nothing can: the synthesised
+      # `Object`/`Kernel`/`BasicObject` tail carries a kind but its
+      # members live in RBS, so treating "has a kind" as accounted-for
+      # made a bare resolver answer `absent` for every method on every
+      # class -- `Widget.new.to_s` included. `Diagnostics::Engine` has the
+      # same hole in `#ancestor_known?` and never meets it, because
+      # `#unknown_method_findings` returns before asking when there is no
+      # signature environment.
+      def accounted_for?(entry, signatures)
+        return false if signatures.nil?
+        return true if entry.kind
+
+        !signatures.ancestors(Index::SymbolId.qualify_owner(entry.name)).empty?
+      end
+
+      def declares_method_missing?(owner)
+        @workspace_index.method_symbol_ids(owner, kind: :instance_method).any? { |sid| sid.name == "method_missing" }
+      end
+
+      # `extend M` puts M's *instance* methods on the class-level chain,
+      # so a link reached that way is asked about the other side.
+      def open_surface?(entry, singleton)
+        @workspace_index.open_surface?(entry.name, singleton: entry.origin == :extend ? false : singleton)
+      end
+
       def resolve(receiver_type:, name:, context: {})
         method_name = name.to_s
         receiver_type, context = normalize_class_receiver(receiver_type, context)
@@ -252,7 +392,15 @@ module Ovallsp
             visibility = @workspace_index.declarations_with_uri(
               Index::SymbolId.new(kind: kind, owner: entry.name, name: name, discriminator: nil)
             ).first&.last&.visibility
-            next if explicit_receiver && visibility == :private
+            # **Protected as well as private.** `Prot.new.guarded` raises
+            # exactly as a private call does, and only private was
+            # excluded -- a 0.2.8 review round measured the cost by asking
+            # a booted application `respond_to?` for every label offered.
+            # Protected is the one visibility that depends on where the
+            # call is written rather than only on the declaration, which
+            # is why it is filtered on the explicit-receiver branch and
+            # left alone for an implicit self.
+            next if explicit_receiver && %i[private protected].include?(visibility)
 
             seen << name
             names << name
@@ -260,8 +408,18 @@ module Ovallsp
         end
       end
 
+      # Declared names *and* the aliases that point at them. `#resolve`
+      # has followed an alias since Task 009 and `#complete` never did, so
+      # hover, go-to-definition and the undefined-method check all knew
+      # `aka` while completion said the name did not exist (`024.107`) --
+      # one question with two answers depending which feature asked, which
+      # is `024.100`'s shape and what C2 is for.
       def method_names_for_owner(owner, kind)
-        @workspace_index.method_symbol_ids(owner, kind: kind).map(&:name).uniq
+        declared = @workspace_index.method_symbol_ids(owner, kind: kind).map(&:name)
+        aliases = @hierarchy_index.aliases(owner)
+                                  .select { |fact| fact.singleton == (kind == :singleton_method) }
+                                  .map(&:new_name)
+        (declared + aliases).uniq
       end
 
       def merge_names(per_type_names)

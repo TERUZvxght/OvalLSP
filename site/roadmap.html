@@ -200,6 +200,37 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v029">
+          <div class="tl-version">
+            <span class="v">0.2.9</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>One question, asked once, answered honestly</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Completion no longer offers a name that would raise if you picked it.</strong> A private method on <code>obj.</code> and a protected one on <code>other_object.</code> are both uncallable from where you are typing. So was a private <em>alias</em>, which slipped through because an alias has no declaration of its own for the visibility rule to read.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>The undefined-method check stopped reporting methods that exist.</strong> <code>to_s</code>, <code>send</code> and anything a module such as <code>Comparable</code> brings in were reported as unknown on some receivers. Measured over 213 files of installed gems, false positives fell from 54 to 6.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Signature help stopped offering a choice that does not exist.</strong> A method that overrides another showed both signatures &mdash; Ruby calls exactly one. 0.2.8 fixed the case where the override reused its parent&rsquo;s parameter names; this fixes the ordinary case, where it renames them.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            No capability is added. Underneath, &ldquo;does this receiver have
+            this member&rdquo; stopped answering with a list whose emptiness meant
+            two different things. It answers present, absent or unknown, and
+            <em>unknown</em> is produced by whatever failed to enumerate rather
+            than inferred by whoever received it &mdash; so the next way of not
+            knowing makes every feature silent by construction, instead of one
+            false report per discovery.
+          </p>
+        </article>
+
         <article class="tl-item" id="v028">
           <div class="tl-version">
             <span class="v">0.2.8</span>

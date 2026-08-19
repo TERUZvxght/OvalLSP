@@ -202,4 +202,19 @@ RSpec.describe Ovallsp::Signatures::Environment do
       end
     end
   end
+  # Two callers -- `Semantic::MethodResolver#accounted_for?` and
+  # `Index::TypeNameResolution.declared_by_signatures?` -- each wrapped
+  # this call in `rescue StandardError`, defending against a failure that
+  # is contained here. The rescues are gone; this is what they were
+  # relying on, stated where it actually lives.
+  describe "an unknown or unparsable type name" do
+    it "answers with no ancestors rather than raising" do
+      environment.load(workspace_root: nil)
+
+      expect(environment.ancestors("::String")).to include("String")
+      expect(environment.ancestors("::No::Such::Type")).to eq([])
+      expect(environment.ancestors("::Not A Type[[[")).to eq([])
+      expect(environment.ancestors("")).to eq([])
+    end
+  end
 end

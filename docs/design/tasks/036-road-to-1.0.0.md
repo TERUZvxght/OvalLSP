@@ -134,18 +134,45 @@ showing every file twice. Between them they carry `024.26`, `024.31`,
 `024.32`, `024.33`, `024.34` and `024.98`, and the open-surface family
 0.2.6's rounds kept finding one instance at a time.
 
-### 0.2.9 — one question, asked once, answered honestly *(axis B)* — **next, on `feat/0.2.9`**
+### 0.2.9 — one question, asked once, answered honestly *(axis B)* — **shipped**
 
-`037`'s C2, C3 and C9. One query per position answering present / absent
-/ unknown plus visibility, read by all four features; the publish path
-taking the document rather than a version integer; and analysis following
-the state the buffer settled into rather than every event on the way.
-`024.13`, `024.18`, `024.35`, `024.45`, `024.57`, `024.78`, `024.82`,
-`024.83`, `024.88`, `024.91`, `024.97`, `024.99`, `024.100`, `024.101`.
+`037`'s C2. One query per position answering present / absent / unknown,
+with `unknown` produced by whatever failed to enumerate rather than
+inferred by a caller — so a new way of not knowing makes every reader
+silent by construction instead of by each reader being taught. The six
+reasons `Diagnostics::Engine` had accumulated one review round at a time
+moved to where the enumeration happens. Completion stopped offering names
+that cannot be called from where the developer is typing: private and
+protected on an explicit receiver, and a private alias, which had no
+declaration for the visibility rule to read. `024.99`, `024.100`,
+`024.105`, `024.107`, `024.108`.
 
-This is the largest thing left before 1.0.0 and the one most likely to be
-attempted at the wrong size. `024.15` and `024.47` are what that costs
-here. Each part ships with its own corpus measurement.
+C3 and C9 moved to 0.2.10 once C2's size was measurable rather than
+estimated in advance — this was the largest thing left before 1.0.0 and
+the one most likely to be attempted at the wrong size, and `024.15` and
+`024.47` are what that costs here. What is still open from the loop is
+`024.109`: three examples of this change set whose fixtures may not
+distinguish the behaviour they pin, whose list was lost before it was
+written down.
+
+### 0.2.10 — an answer knows what it was computed from, and three that slipped *(axis B)*
+
+`037`'s C3 and C9, moved out of 0.2.9 once C2's size was measurable, plus
+the three 0.2.8's drive round found and recorded as 0.2.9 without their
+being built there — `024.103` first, because it is a false report on
+working code on an ordinary Rails layout. `024.55` joins them: written
+for 0.2.4 and still open five releases later, so it is retargeted rather
+than left naming a release that has shipped. They
+are one thing: giving a published answer the identity of the document it
+came from also refuses a slower analysis of the same buffer, and whether
+those should be published at all is C9's question — 0.2.8's drive round
+measured 22 wrong intermediate publishes for one method name typed on a
+4,006-line file.
+
+`024.57` is why it is its own release rather than an appendix: a first
+attempt at the debounce was rolled back, and the precondition `029` said
+it lacked shipped in 0.2.7. `024.19`, `024.44`, `024.45`, `024.57`,
+`024.97`, `024.101`.
 
 ### 0.3.0 — the first release that may add capability *(axis B)*
 
