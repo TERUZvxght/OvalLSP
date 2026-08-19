@@ -244,16 +244,34 @@ workspace pass、changed-files batch）。`document_store.rb` はこの節を自
 | workspace pass | 開いていないファイルの解析と publish |
 | changed-files batch | ファイル監視イベントの取り込みと再インデックス |
 | Runtime Agent reader | Agent からのメッセージ受信 |
+| Agent refresh / restart | ルート・モデルの再取得と、その後の全開きファイル再 publish。`024.56` の並びを生むのはこのスレッドです |
+| ancestry question worker | 静的に判定できない祖先について Agent へ問い合わせる |
+| cache prune | 起動時のキャッシュ世代掃除 |
 
-**共有状態に触るものは、以下の順序でロックを取ります。** 27 箇所の
-`Mutex.new` が個別にこの順序を守っていましたが、どこにも書かれていません
-でした（順序の逆転は発見されていません — 真実の情報源が2つある状態であって、
-生きた deadlock ではありません）:
+**共有状態に触るものは、以下の順序でロックを取ります。** どこにも書かれて
+いませんでした（順序の逆転は発見されていません — 真実の情報源が2つある状態
+であって、生きた deadlock ではありません）。`Server` が持つ9つと、各 store
+が内部に持つものの関係です:
 
 ```text
 agent_refresh → agent_restart → index_mutation → 各 store の内部ロック
+                index_mutation → reference_state
+                reference_rebuild → reference_state
+publish_state は葉。外側へ入れ子にしません（FramedWriter の frame mutex を
+除く。これは publish_state の内側で取られます）
 読み取り時: HierarchyIndex → WorkspaceIndex
 ```
+
+`workspace_pass` / `refresh_state` / `agent_retry` は短い状態更新のみを
+守り、他のロックを保持したまま取ることはありません。
+
+**この節が最初に書かれたとき、「27 箇所の `Mutex.new` が個別にこの順序を
+守っていた」と書いていました。** `core/lib` には 29 箇所あり（この変更自体が
+`@publish_state_mutex` を足したので、書かれた時点で 28 でした）、上の順序が
+名指ししていたのは 9 つのうち 3 つだけでした。全体の棚卸しに読めて、実際は
+一部の棚卸しだったことになります。実装と食い違わなくなったことを目的に掲げた
+節が、その初出で数を間違えていた — レビューラウンドが指摘しました。数は
+数えられるものなので、書くなら数えること。
 
 **文書は不変のスナップショットです。** `TextDocument` は構築時に本文・
 版数・行オフセットを一緒に確定させて凍結し、`DocumentStore#change` は新しい

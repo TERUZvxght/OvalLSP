@@ -9,10 +9,18 @@
 # background threads, and `handle_did_change` mutated before taking any
 # lock.
 #
-# The consequence is a torn read: a background publish can pair
-# old-text findings with a new version number -- which the client's
-# staleness filter then *accepts*, because the number looks current --
-# or run position arithmetic with new text against stale offsets.
+# The consequence is a torn read, and the offsets half is the one that
+# bites: measured against a concurrent change loop on `main`, 1,977,450
+# of 1,977,451 calls to `position_to_byte_offset` returned an offset
+# belonging to neither document. MRI preempts between `text=`'s two
+# statements and the document sits torn for a whole quantum.
+#
+# The version half -- old-text findings sent under a new version number
+# -- was first justified by "the client's staleness filter accepts them",
+# which is **not true of this product's client**:
+# `vscode-languageclient` ignores `params.version`, as
+# `server_publish_invariant_spec.rb` says in this same tree. The claim
+# came from `029` and was carried into 0.2.7 unchecked.
 #
 # 029's M-2. A snapshot cannot tear: text, version and offsets are
 # computed together at construction and never change afterwards, so a

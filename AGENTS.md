@@ -31,6 +31,8 @@ most-useful-first, say — are 2.x.x.
 
 **The distance to 1.0.0 is written down**, derived from those two and
 nothing else: [`docs/design/tasks/036-road-to-1.0.0.md`](docs/design/tasks/036-road-to-1.0.0.md).
+The release being prepared now is **0.2.7, on `feat/0.2.7`**, recorded in
+[`docs/design/tasks/037-0.2.7-concurrency-foundations.md`](docs/design/tasks/037-0.2.7-concurrency-foundations.md).
 Read it when a session opens, so the path is seen rather than inferred —
 an inferred path is what a compaction loses.
 

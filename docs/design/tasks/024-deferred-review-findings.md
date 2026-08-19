@@ -196,6 +196,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.94`](#02494-a-windows-workspace-could-have-its-own-ruby-exe-run-before-it-is-trusted) | fixed | 0.2.6 | A Windows workspace could have its own `ruby.exe` run before it is t… |
 | [`024.95`](#02495-a-deep-enough-file-ended-the-session-and-three-rescues-did-not-catch-it) | fixed | 0.2.6 | A deep enough file ended the session, and three rescues did not catc… |
 | [`024.96`](#02496-every-malformed-lsp-frame-ended-the-process) | fixed | 0.2.6 | Every malformed LSP frame ended the process |
+| [`024.97`](#02497-a-later-pass-at-the-same-version-overwrites-a-corrected-answer) | open | 0.3.0 | A later pass at the same version overwrites a corrected answer |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -4904,6 +4905,45 @@ Fixed: the reader raises `ProtocolError` for everything that is not a
 well-formed frame and `EOF` only for a stream that ended, the length must
 match `\A\d+\z`, and `run` logs a malformed message and reads the next
 one.
+
+## 024.97 A later pass at the same version overwrites a corrected answer
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#publish_findings`)
+
+0.2.7's funnel orders publishes by version and lets the *same* version
+through twice, deliberately: a later pass usually knows more, not less —
+the Agent answering, routes arriving — and refusing a repeat would switch
+those off. So two answers about one version of one file are ordered only
+by arrival, and the slower one wins.
+
+The user-visible instance is the one `024.56` names alongside its own:
+pause on a file large enough to take seconds to analyse, and the
+`*_path` reports made *before* routes arrived can land after the
+corrected ones. Measured across 0.2.7 by a review round: `main` and HEAD
+both publish `[[4, 0], [4, 1]]` — identical, the stale report last.
+
+**Recorded here because 0.2.7 briefly claimed to have fixed it.** The
+`KNOWN_LIMITATIONS` paragraph for `024.56` was rewritten to say the
+release "stops a slower analysis writing its older answers back over
+newer ones", which is not true and was not measured; a review round
+caught it. The sentence the rewrite deleted — "the next edit clears
+that" — was the correct one and is restored.
+
+**Direction:** the version is the wrong key for this. What distinguishes
+the two answers is what was *known* when each was computed — routes
+loaded or not, the Agent ready or not — which the engine already tracks
+as `generation` on every `Finding`. Ordering a repeat of the same
+document version by generation would let the corrected answer win without
+refusing the repeats that make correction possible. Needs its own change
+set and its own measurement: it can silence a publish, which is the
+direction that does not announce itself.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

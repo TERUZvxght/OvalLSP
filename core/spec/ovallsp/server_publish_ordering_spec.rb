@@ -26,13 +26,14 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   let(:uri) { "file:///a.rb" }
 
   # A versioned publish is a buffer's answer, so these examples open the
-  # buffer -- the funnel drops one for a uri nobody has open, which is
-  # half of what makes `024.56`'s sequence impossible.
+  # buffer -- the funnel drops one for a uri nobody has open, and one
+  # whose version is above what the open buffer has reached. Opened at
+  # 100 so an example can name any version below it without that second
+  # rule getting in the way of the one it is about.
   before do
-    server.instance_variable_get(:@document_store)
-          .open(uri: uri, text: "x = 1\n", version: 1, language_id: "ruby")
-    server.instance_variable_get(:@document_store)
-          .open(uri: "file:///b.rb", text: "y = 2\n", version: 1, language_id: "ruby")
+    store = server.instance_variable_get(:@document_store)
+    store.open(uri: uri, text: "x = 1\n", version: 100, language_id: "ruby")
+    store.open(uri: "file:///b.rb", text: "y = 2\n", version: 100, language_id: "ruby")
   end
 
   def published
@@ -92,6 +93,21 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
     expect(published).to eq([[nil, 0], [nil, 1]])
   end
 
+  # The whole point of the lock spanning the write: an admitted publish
+  # cannot be overtaken on the wire by one admitted after it. Asserted by
+  # driving real threads through the funnel and checking that what the
+  # client is left holding is the highest version, every time.
+  it "leaves the client holding the newest version under concurrent publishes" do
+    threads = (1..20).map do |v|
+      Thread.new { server.send(:publish_findings, uri, [finding], version: v) }
+    end
+    threads.each(&:join)
+
+    versions = published.map(&:first)
+    expect(versions.last).to eq(versions.max)
+    expect(versions).to eq(versions.sort)
+  end
+
   # And a clear always wins, whatever came before it -- closing a file is
   # not something a stale computation may overrule.
   it "lets a clear through even when a newer version was just published" do
@@ -112,13 +128,26 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   end
 
   # A versionless publish is the workspace pass's shape -- it analyses
-  # files nobody has open. It must not be silently ordered against a
-  # buffer's version numbers.
-  it "does not order a versionless publish against a versioned one" do
+  # files nobody has open, so it is not ordered against a buffer's
+  # numbers. But it is refused while the buffer *is* open: answering from
+  # disk for a file someone is editing races the buffer path for the last
+  # word, which is the property `WorkspaceDiagnostics` already believes it
+  # holds and guards with a two-statement check a `didOpen` can land
+  # inside. Demonstrated by a reviewer: one versionless publish left the
+  # panel empty for a buffer that had two findings.
+  it "refuses a versionless publish while the buffer is open" do
     server.send(:publish_findings, uri, [finding], version: 7)
+    server.send(:publish_findings, uri, [])
+
+    expect(published).to eq([[7, 1]])
+  end
+
+  it "publishes a versionless answer once nobody has the file open" do
+    server.instance_variable_get(:@document_store).close(uri: uri)
+
     server.send(:publish_findings, uri, [finding, finding])
 
-    expect(published).to eq([[7, 1], [nil, 2]])
+    expect(published).to eq([[nil, 2]])
   end
 
   it "keeps each uri's memory to itself" do
@@ -166,6 +195,54 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
     server.send(:publish_findings, uri, [finding], version: 1)
 
     expect(published.last).to eq([1, 1])
+  end
+
+  # **The regression the first version of this funnel introduced, found by
+  # two independent review rounds at once and worse than what it fixes.**
+  #
+  # The open-buffer rule asked whether *anyone* has the file open now, not
+  # whether the buffer these findings belong to is the one open. Close a
+  # tab while a republish is in flight, reopen it -- VS Code hands out a
+  # fresh document at version 1 -- and the stale publish at version 47
+  # finds an open buffer and an empty memory, is admitted, and sets the
+  # memory to 47. Every edit after that is refused as older.
+  #
+  # So the panel shows the pre-close errors on text the user has already
+  # fixed, and stays wrong for as many edits as the old buffer had
+  # accumulated -- hundreds, since the version bumps per keystroke.
+  # `main` self-corrects on the very next edit. Measured on both sides.
+  #
+  # A buffer never publishes ahead of itself: the document a publish was
+  # computed from came out of the store, so its version cannot exceed what
+  # the store holds now. A version that *does* exceed it belongs to a
+  # different buffer instance -- a closed one.
+  it "refuses a publish from a buffer instance that is no longer the open one" do
+    server.send(:publish_findings, uri, [finding, finding], version: 47)
+    server.send(:handle_did_close, { textDocument: { uri: uri } })
+    server.instance_variable_get(:@document_store)
+          .open(uri: uri, text: "fixed\n", version: 1, language_id: "ruby")
+
+    server.send(:publish_findings, uri, [finding, finding], version: 47)
+    server.send(:publish_findings, uri, [], version: 1)
+    server.instance_variable_get(:@document_store).change(uri: uri, version: 2, changes: [{ text: "fixed!\n" }])
+    server.send(:publish_findings, uri, [], version: 2)
+
+    expect(published).to eq([[47, 2], [nil, 0], [1, 0], [2, 0]])
+  end
+
+  # The control: an answer for a version the buffer has since moved past
+  # is still published -- the analysis that produced it started when that
+  # version was current, and this is the ordinary case every keystroke
+  # produces. The rule is about a version from this buffer's *future*,
+  # which only a different instance can hold.
+  it "still publishes an answer computed before the buffer moved on" do
+    store = server.instance_variable_get(:@document_store)
+    store.change(uri: uri, version: 4, changes: [{ text: "a\n" }])
+
+    server.send(:publish_findings, uri, [finding], version: 3)
+    server.send(:publish_findings, uri, [finding, finding], version: 4)
+
+    expect(published).to eq([[3, 1], [4, 2]])
   end
 end
 

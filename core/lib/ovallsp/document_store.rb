@@ -10,7 +10,8 @@ module Ovallsp
   # editing in place, so a reader mid-swap holds a whole document rather
   # than a half-written one.
   #
-  # This note used to cite `docs/design/docs/02-architecture.md`'s
+  # This note used to cite `docs/02-architecture.md`'s (a path that has
+  # been `docs/design/docs/02-architecture.md` since the docs moved)
   # threading section for "callers serialize mutations onto the main
   # thread" -- a section that said the index is committed on the main
   # thread while HEAD had been committing from background threads under a

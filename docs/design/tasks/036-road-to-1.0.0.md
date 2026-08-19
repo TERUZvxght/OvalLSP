@@ -106,12 +106,18 @@ caught.
 Also in it: `024.73` (`Marshal.load` on plugin output — axis A),
 `024.78`, `024.79`.
 
-### 0.2.7 — the remaining foundations *(axis B)*
+### 0.2.7 — the remaining foundations *(axis B)* — **in progress on `feat/0.2.7`, recorded in `037-0.2.7-concurrency-foundations.md`**
 
-`024.47`'s naming-convention decision, and `029`'s `M-2`/`M-3`
-(immutable document snapshots; one writer with memory for the publish
-funnel — noting `M-3` is a no-op as originally specified). These are
-correctness-under-concurrency and answer-stability, not new capability.
+`029`'s `M-2`/`M-3`/`C-3`: immutable document snapshots, one writer with
+memory for the publish funnel, and the architecture document's threading
+section landed with them. Correctness-under-concurrency and
+answer-stability, not new capability. `024.56` is what makes it a must —
+a reproduced publish sequence for a closed file, present in every shipped
+build, that had missed a `0.2.4` target three times.
+
+`024.47`'s naming-convention decision is **not** in it: it is L-sized and
+independent, and 0.2.7 is already the release where a first attempt at
+the funnel introduced a defect worse than the one it fixed.
 
 ### 0.3.0 — the first release that may add capability *(axis B)*
 

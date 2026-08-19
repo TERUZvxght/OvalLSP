@@ -30,11 +30,26 @@ module Ovallsp
     # `text` and `version` from other threads, and `handle_did_change`
     # mutated before taking any lock.
     #
-    # The consequence is a torn read, and the version half is the one that
-    # matters: a background publish could pair old-text findings with a
-    # new version number, which the client's staleness filter then
-    # *accepts* because the number looks current. The other half runs
-    # position arithmetic with new text against stale offsets.
+    # The consequence is a torn read. **The offsets half is the one that
+    # bites**: `position_to_byte_offset` reads `@line_byte_offsets`, then
+    # `@line_offsets` and `@text`, and `text=` assigned `@text` before
+    # recomputing either table. A reviewer measured it against a
+    # concurrent change loop -- **1,977,450 of 1,977,451 calls returned a
+    # byte offset belonging to neither document**, because MRI preempts
+    # between those two statements and the document then sits torn for a
+    # whole quantum. Every position-based answer runs through that
+    # arithmetic.
+    #
+    # The version half is real and much narrower: a background publish
+    # could send old-text findings under a new version number. **It was
+    # first written down here as dangerous "because the client's staleness
+    # filter accepts them", and that is not true of this product's
+    # client** -- `vscode-languageclient`'s `handleDiagnostics` ignores
+    # `params.version` entirely and queues by uri, which
+    # `server_publish_invariant_spec.rb` already said in this same tree.
+    # The claim came from `029`'s M-2 and was carried here without being
+    # checked. What is left is that the number is wrong for any client
+    # that *does* read it, which is a smaller thing.
     #
     # Text, version and offsets are computed together here and never
     # change afterwards, so a reader sees either the whole old document or

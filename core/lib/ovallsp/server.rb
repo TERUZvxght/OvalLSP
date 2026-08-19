@@ -461,52 +461,72 @@ module Ovallsp
     # same gap the other way round puts stale findings back over newer
     # ones.
     #
-    # Two rules, both per-uri and both under one small mutex:
+    # Four rules, all per-uri and all decided *and written* under one
+    # mutex. The lock spans the write on purpose: holding it only over the
+    # decision orders admission rather than arrival, so an admitted older
+    # publish could still reach the client after a newer one -- observed
+    # by parking a thread between the two. It costs nothing, because
+    # `FramedWriter` serialises every frame anyway.
     #
-    # - a publish carrying a version older than the last one sent is
-    #   dropped. The *same* version is let through, because a later pass
-    #   legitimately knows more about it -- the Agent answering, routes
-    #   arriving -- and refusing it would switch those off.
-    # - `#clear_findings` always wins and resets the memory, because
-    #   closing a file is not something a stale computation may overrule,
-    #   and a reopened file must be able to publish again at any version.
+    # - **A versioned publish is a buffer's answer**, so that buffer must
+    #   still be open. This is `024.56`'s sequence: findings, the clear on
+    #   `didClose`, then a background pass already in flight arriving with
+    #   the findings again. The version rule alone cannot stop it, because
+    #   the clear resets the memory.
+    # - **And it must be the same buffer.** The first version of this
+    #   funnel checked only that *something* was open, and that introduced
+    #   a worse defect than the one it fixed: close a tab mid-republish
+    #   and reopen it, the editor hands out a fresh document at version 1,
+    #   the stale publish at version 47 finds an open buffer and an empty
+    #   memory, and every edit afterwards is refused as older. The panel
+    #   then shows the pre-close errors on text already fixed, for as many
+    #   edits as the old buffer had accumulated. A buffer never publishes
+    #   ahead of itself -- the document came out of the store -- so a
+    #   version above what the store holds now belongs to a closed one.
+    # - **An older version is dropped**; the *same* version is let
+    #   through, because a later pass legitimately knows more about it
+    #   (the Agent answering, routes arriving) and refusing it would
+    #   switch those off.
+    # - **A clear always wins and resets**, because closing a file is not
+    #   something a stale computation may overrule.
     #
-    # A versionless publish is the workspace pass's shape -- it analyses
-    # files nobody has open -- and is deliberately not ordered against a
-    # buffer's numbers in either direction.
+    # A versionless publish is the workspace pass, which analyses files
+    # nobody has open. It is not ordered against a buffer's numbers -- but
+    # it is refused for a uri that *is* open, which is the property
+    # `WorkspaceDiagnostics` already believes it holds and enforces with a
+    # two-statement check a `didOpen` can land inside. The funnel holds
+    # the uri, so it can make that true rather than likely.
     #
     # The memory lives here rather than in `FramedWriter`, which also
     # carries responses and must stay a dumb frame mutex. 029's M-3, and
     # it rests on M-2: ordering by a version number is only meaningful
     # once text and version cannot be read torn.
     def publish_findings(uri, findings, version: nil)
-      # A versioned publish is a *buffer's* answer, so it needs that
-      # buffer to still be open. This is `024.56`'s sequence exactly: the
-      # findings, the clear on `didClose`, and then a background pass
-      # already in flight arriving with the findings again -- which the
-      # version rule alone cannot stop, because the clear resets the
-      # memory so a reopened file can publish at any version. What
-      # separates the two is whether anyone has the file open now.
-      #
-      # A versionless publish is the workspace pass, which analyses files
-      # nobody has open by definition, and is not subject to either rule.
-      return if version && @document_store.fetch(uri: uri).nil?
-
       @publish_state_mutex.synchronize do
-        last = @last_published_version[uri]
-        return if version && last && version < last
+        open_version = @document_store.fetch(uri: uri)&.version
+        if version
+          return if open_version.nil? || version > open_version
 
-        @last_published_version[uri] = version if version
+          last = @last_published_version[uri]
+          return if last && version < last
+
+          @last_published_version[uri] = version
+        elsif open_version
+          return
+        end
+
+        write_diagnostics(uri, findings, version)
       end
-
-      write_diagnostics(uri, findings, version)
     end
 
     # Clearing a file's diagnostics, and forgetting what it was at. Called
-    # when a buffer closes and when a file leaves the workspace.
+    # when a buffer closes and when a file leaves the workspace. Under the
+    # same lock as a publish, so it cannot be interleaved with one.
     def clear_findings(uri)
-      @publish_state_mutex.synchronize { @last_published_version.delete(uri) }
-      write_diagnostics(uri, [], nil)
+      @publish_state_mutex.synchronize do
+        @last_published_version.delete(uri)
+        write_diagnostics(uri, [], nil)
+      end
     end
 
     def write_diagnostics(uri, findings, version)

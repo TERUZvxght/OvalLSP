@@ -442,9 +442,13 @@ Nothing republishes a file nobody has open, so they stayed until you
 reopened it. A publish now has to name a version *and* find the buffer
 still open, and closing a file always wins.
 
-The same release stops a slower analysis writing its older answers back
-over newer ones — the `*_path` reports made before routes arrived
-overwriting the corrected ones.
+**Still true, and this release does not change it.** If you paused on a
+file big enough to take seconds to analyse, the `*_path` reports made
+before routes arrived can be written back over the corrected ones. Both
+answers describe the same version of your text, and the check that orders
+publishes deliberately lets the same version through twice — a later pass
+usually knows *more*, not less, which is how the corrected answer arrives
+in the first place. The next edit clears it. <!-- documents: 024.97 -->
 
 ## How long an edit takes to re-analyse
 
