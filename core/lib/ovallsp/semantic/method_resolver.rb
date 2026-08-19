@@ -212,8 +212,6 @@ module Ovallsp
         return true if entry.kind
 
         !signatures.ancestors(Index::SymbolId.qualify_owner(entry.name)).empty?
-      rescue StandardError
-        false
       end
 
       def declares_method_missing?(owner)

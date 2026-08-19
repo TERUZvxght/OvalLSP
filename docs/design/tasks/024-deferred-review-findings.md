@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**107 entries below** <!-- measured: register-entries = 107 -->,
+**108 entries below** <!-- measured: register-entries = 108 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -252,6 +252,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.10 | `module_function` and `extend self` produce nothing |
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
+| [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | open | 0.2.10 | Specs whose fixture cannot distinguish the behaviour they pin |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5450,6 +5451,50 @@ half of the same rule is simply missing.
 And at the same position class: `c.secret_helper(1)` — private, explicit
 receiver — is excluded from completion while hover answers it and the
 check accepts it. `024.99`'s sibling, and the same `037` C2 seam.
+
+## 024.109 Specs whose fixture cannot distinguish the behaviour they pin
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  A spec that pins less than it claims changes nothing a user can
+  observe today; what it removes is the guarantee that the next refactor
+  cannot silently change the behaviour underneath it.
+target: 0.2.10
+```
+
+**Area:** `core/spec/` (0.2.9's change set)
+
+0.2.9's `attack` round reported four examples that pass under either
+candidate behaviour — the failure `CLAUDE.md` names as "a spec whose
+fixture cannot distinguish the two candidate behaviours is unpinned even
+though it passes".
+
+**One is identified and fixed.** The override-signature example built
+`class Shape; def area(x)` and `class Circle < Shape; def area(x)`, so
+the override and the method it overrides rendered the *same* label. A
+dedup-on-label passed it without ever choosing the callable one, and an
+override that renames its parameter — the ordinary case — still showed
+the phantom choice. The fixture now names the parameters differently and
+the implementation picks the lowest-ranked candidate per receiver member.
+
+**The other three are not named here, because the round's list was held
+in a session and not written down before it was lost.** That is the
+defect this entry mostly records: a review round's findings are a
+measurement, and a measurement kept only in a conversation is gone at the
+next compaction. Round 11's table now lives in
+`docs/design/tasks/039-0.2.9-one-question.md`, which is where the next
+round's should go from the start.
+
+Re-deriving them is mechanical rather than archaeological, which is why
+this is a 0.2.10 item and not a lost cause: for each example added by
+this change set, ask what the *other* branch of the decision would render,
+and reject any fixture where the two answers are equal. The spec-deletion
+pass of `scripts/hunk_sweep.rb` finds files that pin nothing; this is the
+narrower question of an example that pins less than it claims, and the
+two are worth running together.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

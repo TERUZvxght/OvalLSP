@@ -188,8 +188,6 @@ module Ovallsp
       # "wrong number of arguments" on code that runs is worse than no
       # arity checking at all, which is what shipped until now.
       def argument_count_findings(document, summary, context)
-        return [] unless context.method_resolver
-
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :method_call
           next unless (shape = candidate.arguments)
@@ -869,7 +867,6 @@ module Ovallsp
         # a query that assumes nothing and has to be shown a whole
         # surface. A way of not knowing nobody has thought of yet produces
         # silence rather than a report.
-        return false unless context.method_resolver
         return false unless context.method_resolver
                                    .availability(receiver_type: nominal, name: "",
                                                  context: { singleton: singleton },

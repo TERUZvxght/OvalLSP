@@ -115,12 +115,32 @@ RSpec.describe "what completion offers, and whether it can be called" do
                                           signatures: Ovallsp::Signatures::Environment.new)
     end
 
-    it "offers the one Ruby would call, once" do
-      index("class Shape\n  def area(x); end\nend\nclass Circle < Shape\n  def area(x); end\nend\n")
+    # The override's parameter is deliberately named differently from the
+    # one it overrides. With the same name in both, the two labels are
+    # identical and a dedup-on-label passes this example without ever
+    # choosing the callable one -- which is what shipped, and what an
+    # override that renames its parameter (the ordinary case) exposed.
+    it "offers the one Ruby would call, once, even when the labels differ" do
+      index("class Shape\n  def area(x); end\nend\nclass Circle < Shape\n  def area(radius); end\nend\n")
 
       labels = query_service.signatures_of(Ovallsp::Types::Nominal.new(name: "Circle"), "area").map { |s| s[:label] }
 
-      expect(labels).to eq(["area(x)"])
+      expect(labels).to eq(["area(radius)"])
+    end
+
+    # A class receiver reaches here as `ClassOf[Widget]`, which is not a
+    # Nominal and names no class -- only `MethodResolver` knows to read it
+    # as Widget's singleton chain. Splitting the receiver into members
+    # here must therefore hand each member to the resolver whole, not
+    # unwrap it first.
+    it "still answers for a class receiver, whose type names no class" do
+      index("class Widget\n  def self.build(spec); end\nend\n")
+
+      class_object = Ovallsp::Types::Generic.new(name: "ClassOf",
+                                                 type_arg: Ovallsp::Types::Nominal.new(name: "Widget"))
+      labels = query_service.signatures_of(class_object, "build").map { |s| s[:label] }
+
+      expect(labels).to eq(["build(spec)"])
     end
 
     # The control: genuinely different signatures for one name -- which a
