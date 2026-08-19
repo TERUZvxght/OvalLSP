@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**101 entries below** <!-- measured: register-entries = 101 -->,
+**107 entries below** <!-- measured: register-entries = 107 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -246,6 +246,12 @@ nobody can search is the recording habit without the benefit.
 | [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.3.0 | The four features answer from different code paths and disagree at o… |
 | [`024.101`](#024101-analysis-runs-per-keystroke-so-the-answers-fall-behind-the-cursor-and-every-wrong-one-is-published) | open | 0.3.0 | Analysis runs per keystroke, so the answers fall behind the cursor a… |
 | [`024.102`](#024102-eight-classes-and-the-logic-each-one-could-not-have-happened-under) | open | 0.2.9 | Eight classes, and the logic each one could not have happened under |
+| [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | open | 0.2.9 | A bare class name inside a namespace answers with an arbitrary same-… |
+| [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | open | 0.2.9 | `class_methods do` in a concern is attributed to the instance side |
+| [`024.105`](#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | open | 0.2.9 | Visibility is not recorded for singleton methods at all |
+| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.9 | `module_function` and `extend self` produce nothing |
+| [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | open | 0.2.9 | An alias never appears in completion, though every other feature kno… |
+| [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | open | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5232,6 +5238,205 @@ re-derivation. C1 and C8 are 0.2.8; C2, C3 and C9 are 0.2.9.
 what that costs here, and C2 in particular is the shape both had. Each
 class ships with its own corpus measurement, and one that does not move a
 measurement is one to abandon rather than defend.
+
+## 024.103 A bare class name inside a namespace answers with an arbitrary same-named class
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.9
+```
+
+**Area:** `core/lib/ovallsp/workspace_index.rb` (`#resolve_type_name`),
+`core/lib/ovallsp/semantic/receiver_resolution.rb`
+
+Two classes of your own sharing a short name, in different namespaces,
+and a bare reference to one of them from inside its own namespace answers
+with the other. Driven end to end by 0.2.8's `drive` round, A/B'd against
+`main` and identical there — **not a regression, and not covered by any
+existing entry.**
+
+Plain Ruby, three files, `::Config#top_only` and `App::Config#app_only`:
+
+```ruby
+module App
+  class Runner
+    def go
+      Config.new.app_only   # ordinary, correct Ruby
+```
+
+- `unknown-method: Config has no method named 'app_only'` — a **false
+  positive on working code**
+- `Config.new.top_only`, which is the call that really raises, is
+  **silent**
+- completion inside `module App` after `Config.new.` offers `top_only`
+
+Exactly inverted, both directions. The Rails shape is the same:
+`Billing::Comment` alongside an ActiveRecord `Comment`, which is an
+ordinary layout.
+
+**And the winner is not the lexically nearest class.** With only
+`Alpha::Config` and `Beta::Config` and no top-level one, completion
+inside `module Beta` offers `alpha_only` — first-indexed or alphabetical,
+never `Module.nesting`.
+
+`024.47` covers a class of yours named after a *core* class, where the
+engine goes silent; `024.81` covers a shared *module* name in an
+`include`, where it refuses. Here it neither goes silent nor refuses: it
+answers, and the answer is wrong. Section 0.4's own example.
+
+**Direction:** `ReferenceCandidate` already carries `lexical_nesting`,
+and `#resolve_explicit_receiver_name` already walks it — for a receiver
+written bare. What is missing is the same walk for the *type* a bare
+reference denotes, and a refusal when nothing in the nesting matches
+rather than a fall back to the alphabetically first candidate. Part of
+`037`'s C2: the answer is `unknown`, not a pick.
+
+## 024.104 `class_methods do` in a concern is attributed to the instance side
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.9
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (the `included`/
+`class_methods` block forms), `core/lib/ovallsp/semantic/hierarchy_index.rb`
+
+`ActiveSupport::Concern`'s `class_methods do ... end` declares methods on
+the *class*. Ground truth from the booted fixture app:
+`Article.respond_to?(:cm_public)` is true, `Article.new.respond_to?` is
+false, and calling it on an instance raises.
+
+What 0.2.8's `drive` round measured at `ready-rails`, for
+`a = Article.new; a.cm_public`:
+
+| feature | answer |
+|---|---|
+| completion after `Article.new.` | offers `cm_public` |
+| hover | `cm_public()`, defined at the concern |
+| go-to-definition | jumps to the concern |
+| undefined-method check | silent |
+
+**Four features agreeing, all four wrong.** Statically it is offered only
+on the instance and not on the class at all, so the attribution is
+backwards; the Runtime Agent later adds the correct class-side entry
+without removing the wrong instance-side one.
+
+The control that isolates it: the same app's `module ClassMethods` form
+is handled **correctly**, including reporting `a.tag_all` as unknown. So
+it is the `class_methods do` block specifically.
+
+This also contradicts the sentence `024.99` put in `KNOWN_LIMITATIONS` —
+"the instance-level list in a Rails project with the Runtime Agent
+connected is clean".
+
+## 024.105 Visibility is not recorded for singleton methods at all
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.9
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`#visit_def_node`'s
+`visibility: singleton ? nil : ...`)
+
+`private` written inside `class << self`, and `private_class_method`,
+change nothing: the method is offered by completion and accepted by the
+check. Verified against the booted app — `Article.sing_priv` raises
+`NoMethodError: private method 'sing_priv' called for class Article`.
+
+A `def` recorded as a singleton method is given `visibility: nil`
+outright, so there is nothing downstream to filter on. A/B'd against
+`main` in 0.2.8: identical, so this predates the Cref work.
+
+**Everything around it is right**, which is what makes it a hole rather
+than "visibility is not modelled": `private`/`public`/`protected` in a
+class body, `private def x`, `private :x`, `private` inside a concern's
+`included do`, `private` before a nested `class`, and `private` before
+`def self.x` (correctly *not* applied, matching Ruby) all behave.
+
+Neighbour of `024.99`; both are the visibility half of `037`'s C2.
+
+## 024.106 `module_function` and `extend self` produce nothing
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.9
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`
+
+```ruby
+module MF
+  module_function
+  def mf_a; end
+end
+```
+
+`MF.` completes 190 items, none of them `mf_a`. The same for
+`module_function :mf_c` and for `extend self`. A plain `def self.x` or
+`class << self` in a module works, and hover and definition on those are
+correct — so it is these two idioms specifically, and both are everyday
+plain Ruby.
+
+Separately and in the same area: **nothing checks a module's singleton
+calls at all.** `PlainClass.nope_y` is reported; `PlainMod.nope_x` is
+not, on a module whose `def self.` methods the engine does know.
+
+## 024.107 An alias never appears in completion, though every other feature knows it
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.9
+```
+
+**Area:** `core/lib/ovallsp/semantic/method_resolver.rb` (`#complete`
+against `#resolve`)
+
+```ruby
+class Aliased
+  def original; end
+  alias aka original
+  alias_method :aka2, :original
+end
+```
+
+Hover on `a.aka` answers with its signature and its definition site,
+go-to-definition jumps there, and the undefined-method check accepts it.
+Completion after `a.` offers 121 items containing `original` and neither
+alias.
+
+A developer who aliases a method and then types `a.` concludes the alias
+does not exist. `#resolve` follows an alias and `#complete` does not,
+which is `024.100`'s shape again: one question, two code paths.
+
+## 024.108 Protected methods are offered on an explicit external receiver
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.9
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#members_of`)
+
+`Prot.new.` completes `prot_only`; the call raises. **Private** instance
+methods are correctly excluded at the same position, so the protected
+half of the same rule is simply missing.
+
+And at the same position class: `c.secret_helper(1)` — private, explicit
+receiver — is excluded from completion while hover answers it and the
+check accepts it. `024.99`'s sibling, and the same `037` C2 seam.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

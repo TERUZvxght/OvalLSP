@@ -517,6 +517,58 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
+## A class of yours named like another class of yours
+
+If two classes in your workspace share a short name in different
+namespaces — a `Billing::Comment` alongside an ActiveRecord `Comment`, or
+an `App::Config` alongside a top-level one — a bare reference to one from
+inside its own namespace can be answered with the other. Both directions
+are wrong: the call that works is reported as an unknown method, and the
+call that would really raise is not. Completion offers the other class's
+methods.
+
+Which one wins is not the nearer one. Writing the namespace out —
+`Billing::Comment.new` — restores it. <!-- documents: 024.103 -->
+
+## What `class_methods do` in a concern attaches to
+
+**The instance, not the class.** A concern written with
+`class_methods do ... end` declares methods on the class, and this
+extension attributes them to instances: completion offers them after
+`Article.new.`, hover and go to definition answer for them there, and the
+undefined-method check accepts a call that raises. The older
+`module ClassMethods` form is handled correctly. <!-- documents: 024.104 -->
+
+## `private` inside `class << self`
+
+**Has no effect on what is offered.** A method made private inside
+`class << self`, or with `private_class_method`, is still offered by
+completion and still accepted by the undefined-method check, though
+calling it raises. Every other placement of `private` — in a class body,
+`private def x`, `private :x`, inside a concern's `included do`, before a
+nested class — behaves correctly. <!-- documents: 024.105 -->
+
+## `module_function` and `extend self`
+
+**Produce nothing.** Methods made available on the module by
+`module_function` or `extend self` do not appear in completion at all. A
+plain `def self.x` or `class << self` in the same module works. Nothing
+checks a module's class-level calls either, so a typo there is not
+reported the way it would be on a class. <!-- documents: 024.106 -->
+
+## An alias in completion
+
+**Missing.** `alias` and `alias_method` are understood by hover, go to
+definition and the undefined-method check, and not by completion — so
+typing `a.` after aliasing a method suggests the alias does not
+exist. <!-- documents: 024.107 -->
+
+## Protected methods in completion
+
+Offered on an explicit receiver from outside the class, where calling
+them raises. Private instance methods are correctly excluded at the same
+position. <!-- documents: 024.108 -->
+
 ## Completion offers methods you cannot call
 
 On a class — `Post.`, `Circle.` — and on any receiver in a plain Ruby
