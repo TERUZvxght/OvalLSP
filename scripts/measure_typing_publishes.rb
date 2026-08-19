@@ -36,6 +36,7 @@ end
 
 uri = "file://#{TARGET}"
 publishes = []
+hovers = {}
 started = nil
 
 Open3.popen3({ "OVALLSP_DISABLE_CACHE" => "1" }, "bundle", "exec", "ruby", "-Ilib", "bin/ovallsp", "--stdio",
@@ -47,6 +48,7 @@ Open3.popen3({ "OVALLSP_DISABLE_CACHE" => "1" }, "bundle", "exec", "ruby", "-Ili
       length = header[/Content-Length: (\d+)/, 1].to_i
       message = JSON.parse(stdout.read(length))
       publishes << [Time.now, message.dig("params", "version")] if message["method"] == "textDocument/publishDiagnostics"
+      hovers[message["id"]] = Time.now if message["id"] && hovers.key?(message["id"])
     rescue EOFError, IOError
       break
     end
@@ -79,10 +81,23 @@ Open3.popen3({ "OVALLSP_DISABLE_CACHE" => "1" }, "bundle", "exec", "ruby", "-Ili
   publishes.clear
   started = Time.now
 
+  # A hover sent *during* the burst, timed. This is the number C9 is
+  # actually about: every analysis runs on the dispatch thread holding
+  # `@index_mutation_mutex`, which is the lock a hover needs, so an
+  # analysis about text the developer has already moved past is paid for
+  # by the next question they ask. Wasted work nobody waits on is cheap;
+  # wasted work in front of the answer is not.
+  hover_asked = {}
   KEYSTROKES.times do |i|
     stdin.write(frame(jsonrpc: "2.0", method: "textDocument/didChange",
                       params: { textDocument: { uri: uri, version: i + 2 },
                                 contentChanges: [{ text: "#{text}\n# typing#{'x' * (i + 1)}\n" }] }))
+    asked = Time.now
+    hover_id = 100 + i
+    hovers[hover_id] = nil
+    stdin.write(frame(jsonrpc: "2.0", id: hover_id, method: "textDocument/hover",
+                      params: { textDocument: { uri: uri }, position: { line: 0, character: 8 } }))
+    hover_asked[hover_id] = asked
     sleep INTERVAL
   end
   finished_typing = Time.now
@@ -99,4 +114,11 @@ Open3.popen3({ "OVALLSP_DISABLE_CACHE" => "1" }, "bundle", "exec", "ruby", "-Ili
   quiet = publishes.map(&:first).max
   puts "typing took:           #{format('%.2f', finished_typing - started)} s"
   puts "last publish:          #{quiet ? format('%.2f', quiet - finished_typing) : 'n/a'} s after the last keystroke"
+  hover_latencies = hover_asked.map { |id, asked| hovers[id] ? hovers[id] - asked : nil }
+  answered = hover_latencies.compact
+  puts "hovers answered:       #{answered.size} of #{hover_latencies.size}"
+  unless answered.empty?
+    puts "hover latency:         min #{format('%.3f', answered.min)} s, " \
+         "median #{format('%.3f', answered.sort[answered.size / 2])} s, max #{format('%.3f', answered.max)} s"
+  end
 end
