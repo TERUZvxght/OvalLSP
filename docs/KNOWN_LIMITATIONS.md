@@ -473,7 +473,7 @@ publisher deciding for itself. <!-- documents: 024.57 -->
 ## What the undefined-method check gets wrong on real code
 
 **Measured, over 213 files of installed gem source: 54 reports, of which
-53 were wrong. 0.2.6 brings that to 10.** The measurement is the same one
+53 were wrong. 0.2.6 brings that to 9.** The measurement is the same one
 each time — the same files, the same server, with a category the change
 cannot affect held as a control.
 
@@ -489,16 +489,18 @@ rather than guessing.
 **What still gets reported wrongly**, and what it looks like:
 
 - **Files for another Ruby implementation.** JRuby-only sources call
-  `java`, which your MRI does not have. Seven of the ten. If you are not
+  `java`, which your MRI does not have. Seven of the nine. If you are not
   opening JRuby-specific files, you will not see these.
 - **A method supplied by a subclass.** An abstract class that calls a
   method its subclasses define — a deliberate template-method pattern —
   is reported, because on that class alone the call really would fail.
-  Two of the ten.
-- **A module chosen at runtime.** `extend`ing a module held in a variable
-  or a constructor argument leaves an ancestor this extension cannot
-  name, and the methods it would have brought are reported missing. One
-  of the ten. <!-- documents: 024.76 -->
+  Two of the nine. <!-- documents: 024.76 -->
+
+A module chosen at runtime — `extend`ing whatever is held in a variable
+or a constructor argument — used to be a third kind, because an ancestor
+this extension cannot name was recorded as no ancestor at all. It is now
+recorded as one it cannot name, and nothing is reported about that
+class's members.
 
 **A call that does not exist through a relation is now reported.**
 `Order.recent.first.no_such_method` was reported by nothing, while

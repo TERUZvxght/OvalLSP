@@ -621,13 +621,42 @@ module Ovallsp
         relation = ANCESTOR_RELATIONS.fetch(node.name)
         node.arguments.arguments.each do |arg|
           target = raw_constant_name(arg)
-          next unless target
+          # An argument with no statically-known name used to be dropped
+          # here, which made "extends a module I cannot name" and
+          # "extends nothing" the same fact downstream -- the chain then
+          # looked complete and the module's methods were reported
+          # missing. `Rack::Reloader`'s `extend backend`, a constructor
+          # parameter, is the measured case.
+          next record_dynamic_ancestor(relation) unless target
 
           @ancestor_facts << Index::AncestorFact.new(
             owner: current_owner, relation: relation, target: target,
             location: Index::SourceLocation.to_range(arg.location, @lines)
           )
         end
+      end
+
+      # An ancestor decided at runtime leaves a surface that cannot be
+      # enumerated, which is the same state an unreadable macro leaves
+      # (see #open_surface_kind) and gets the same answer: the check
+      # declines to assert absence rather than guessing.
+      #
+      # Which surface follows what the call does to `self`. In a class
+      # body `self` is the class, so `extend` adds class methods and
+      # `include`/`prepend` add instance ones; inside `class << self`
+      # every relation is class-level; and inside an instance method
+      # `extend other` is `Object#extend` on that instance, so it adds to
+      # the instance surface -- which is the `Rack::Reloader` shape and
+      # the reason this is not gated on `@in_method_body`.
+      def record_dynamic_ancestor(relation)
+        return if current_owner.nil?
+
+        kind =
+          if @singleton_context_stack.last then :singleton
+          elsif relation == :extend && !@in_method_body then :singleton
+          else :instance
+          end
+        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
       end
 
       # `alias_method :new, :old` — the method-call form; symbol (or

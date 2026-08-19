@@ -4028,10 +4028,17 @@ Server's default `:safe` mode.
   `challenge` one below.
 - **`Rack::Auth::AbstractHandler#challenge`** — the arguably-true one
   above, unchanged.
-- **`Rack::Reloader#rotation`** — `extend`s a module held in a
-  constructor argument (`def initialize(app, cooldown = 10, backend =
-  Stat)`). A dynamic ancestor edge, which is the open 0.2.6 item on
-  preserving `include`/`extend` uncertainty rather than dropping it.
+- ~~**`Rack::Reloader#rotation`**~~ — fixed in the same release, taking
+  the corpus to **9**. `extend backend`, a constructor parameter, was
+  dropped by `#record_ancestor_call` because `raw_constant_name` returns
+  nil for anything but a written constant — so "extends a module I
+  cannot name" and "extends nothing" were the same fact downstream. It
+  now opens the surface, exactly as an unreadable macro does. Which
+  surface follows what the call does to `self`: `extend` in a class body
+  is class-level, `include`/`prepend` are instance-level, and `extend`
+  inside an instance method is `Object#extend` on that instance and so
+  instance-level — which is this case, and the reason it is not gated on
+  being in a class body. All three branches pinned by mutation.
 
 The `include`-from-a-nested-namespace cluster (12 findings, the row that
 mattered) is gone: it was the ambiguous-bare-name resolution fixed
