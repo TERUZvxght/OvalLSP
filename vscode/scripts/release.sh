@@ -40,7 +40,14 @@ fi
 # local account and to anything that walks $HOME. A documented
 # precaution that is never verified is a precaution only for the person
 # who remembers it, which is the class of defect this release is about.
-PAT_MODE="$(stat -f '%Lp' "$PAT_FILE" 2>/dev/null || stat -c '%a' "$PAT_FILE" 2>/dev/null || echo '')"
+# GNU first, BSD second, and the order is the whole point. GNU's `stat -f`
+# means *file system* status and succeeds with output that is not a mode
+# at all, so trying BSD's spelling first silently produced garbage on
+# Linux -- `8#<garbage>` then made the arithmetic fail and the refusal
+# never fire. BSD's `stat` rejects `-c` outright, so this order degrades
+# correctly in both directions. Caught by CI, on a check whose whole
+# purpose is refusing; it had only ever been exercised on macOS.
+PAT_MODE="$(stat -c '%a' "$PAT_FILE" 2>/dev/null || stat -f '%Lp' "$PAT_FILE" 2>/dev/null || echo '')"
 if [ -n "$PAT_MODE" ] && [ "$(( 8#$PAT_MODE & 8#077 ))" -ne 0 ]; then
   echo "release.sh: $PAT_FILE is mode $PAT_MODE -- readable beyond its owner." >&2
   echo "This file is a Marketplace publish token. Fix it and re-run:" >&2
@@ -111,6 +118,54 @@ fi
 # false "may be corrupted" warning -- and nothing in this script noticed,
 # because everything before this point only ever inspected the staged
 # tree or the file list, never the shipped payload's own hash.
+# The $HOME check has never run against the artifact that actually
+# ships. ci.yml greps an *ubuntu-built* VSIX, where $HOME is
+# /home/runner and the vendored native extensions are different files
+# entirely; apple-silicon-release.yml has no such step. So the only
+# build a user installs was the one build nobody inspected -- and this
+# script is the last point where the real thing exists on disk.
+#
+# Compiled extensions are excluded from the hard failure for the reason
+# make-final-review-bundle.sh gives: they embed an absolute LC_LOAD_DYLIB
+# reference to the building Ruby's libruby, which is a real dynamic-linker
+# dependency rather than a removable byproduct, mitigated at spawn time.
+# They are reported instead, so a reader of this log can see what is in
+# there rather than inferring it from silence.
+#
+# /usr/bin/grep by absolute path, never bare `grep`: on a machine where
+# the name resolves to a ugrep wrapper it skips binary files without -a
+# and reports a clean artifact that is not. 0.2.3 filed and withdrew a
+# register entry over exactly that.
+echo "-- packaged-artifact path inspection --"
+# One variable for the path, used by both the count and the grep. They
+# were two expressions naming the same directory, which is not the same
+# thing: a re-derivation round pointed the *grep* at a subdirectory that
+# does not exist, and the count -- computed from `$UNPACK_DIR` -- stayed
+# plausible, so the check inspected nothing and the guard reported a
+# healthy number. A count that is not derived from what was actually
+# searched guards the variable rather than the search.
+INSPECT_ROOT="$UNPACK_DIR"
+if /usr/bin/grep -rlF --exclude='*.bundle' --exclude='*.so' --exclude='*.dylib' "$HOME" "$INSPECT_ROOT"; then
+  echo "release.sh: the packaged VSIX contains this build machine's own absolute path (outside native extensions)." >&2
+  echo "Refusing to publish." >&2
+  exit 1
+fi
+if /usr/bin/grep -rlF "$HOME" "$INSPECT_ROOT" --include='*.bundle' --include='*.so' --include='*.dylib' >/dev/null; then
+  echo "note: compiled native extension(s) embed this machine's Ruby install path (expected; mitigated at spawn -- see 023.8)."
+fi
+# Prints what it looked at, not only that it passed. A text pin cannot
+# see a semantic mutation -- negating the condition, or aiming the check
+# at a directory that does not exist -- and an attack round demonstrated
+# both. A count turns the second into something a reader of this log
+# notices: a check aimed at nothing reports nothing inspected.
+INSPECTED="$(find "$INSPECT_ROOT" -type f 2>/dev/null | wc -l | tr -d ' ')"
+echo "PASS: packaged-artifact path inspection (${INSPECTED} files inspected)"
+if [ "$INSPECTED" -lt 100 ]; then
+  echo "release.sh: only ${INSPECTED} files were inspected -- the artifact should have over a thousand." >&2
+  echo "The check is looking at the wrong place. Refusing to publish." >&2
+  exit 1
+fi
+
 echo "-- node scripts/verify-packaged-payload-hash.js --"
 node "$VSCODE_DIR/scripts/verify-packaged-payload-hash.js" "$UNPACK_DIR/extension"
 

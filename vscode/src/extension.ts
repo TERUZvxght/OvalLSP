@@ -17,7 +17,9 @@ import {
   OvallspServerInfo,
   VersionDiagnostic,
   compareVersionInfo,
-  gatherClientVersionInfo
+  gatherClientVersionInfo,
+  writeHandshakeLines,
+  writeVersionInformation
 } from './versionInfo';
 import {
   canSpawnCoreProcess,
@@ -323,14 +325,13 @@ function startClientForFolder(
           `OvalLSP: the Ruby interpreter selected for ${folder.name} is incompatible with this VSIX's bundled ` +
             'native dependencies. See the OvalLSP output channel for details.'
         );
-      } else if (compatibility.note) {
-        // Working, but not the way the VSIX packaged it: the bundled
-        // payload does not apply and this Ruby's own prism/rbs are being
-        // used. That is a fact for the Output channel, not an error --
-        // the previous arrangement showed a red toast on every window for
-        // a combination the Core runs green on.
-        outputChannel.appendLine(`OvalLSP: ${compatibility.note}`);
       }
+      // `compatibility.note` is deliberately *not* written here. The
+      // handshake writes the same fact, with this folder's name on it and
+      // a home in `Show Version Information`, and round 40 found both
+      // paragraphs arriving at every launch on exactly the 3.3/4.0
+      // population this release is for. One decider owns the
+      // notification; the verdict split is 024.65 and is still open.
 
       if (configPaths) {
         // Spawn the real binary directly -- bypassing `resolvedRubyCommand`
@@ -445,14 +446,12 @@ function runVersionHandshake(
   const diagnostic = compareVersionInfo(clientInfo, ovallspInfo);
   versionDiagnostics.set(key, diagnostic);
 
+  // True of the combination but not wrong with it -- a Ruby the bundled
+  // payload was not built for, which the Core is nonetheless running
+  // under. Worth a line; not worth a toast.
+  writeHandshakeLines(outputChannel, diagnostic, folder.name);
+
   if (!diagnostic.compatible) {
-    outputChannel.appendLine(`--- OvalLSP version compatibility (${folder.name}) ---`);
-    for (const reason of diagnostic.reasons) {
-      outputChannel.appendLine(`  ✗ ${reason}`);
-    }
-    if (diagnostic.action) {
-      outputChannel.appendLine(`  Action: ${diagnostic.action}`);
-    }
     void vscode.window.showErrorMessage(
       `OvalLSP: the Core Server for ${folder.name} is not version-compatible with this Extension. ` +
         'See the OvalLSP output channel for details.'
@@ -675,21 +674,7 @@ function registerEnvironmentCommands(
       }
 
       const d = diagnostic.details;
-      outputChannel.appendLine(`Compatible: ${diagnostic.compatible ? 'yes' : 'NO'}`);
-      outputChannel.appendLine(`Extension version: ${d.extensionVersion}`);
-      outputChannel.appendLine(`Core version: ${d.coreVersion ?? '(unknown)'}`);
-      outputChannel.appendLine(`Client protocol version: ${d.clientProtocolVersion}`);
-      outputChannel.appendLine(`Server protocol version: ${d.serverProtocolCurrent ?? '(unknown)'}`);
-      outputChannel.appendLine(`Ruby running: ${d.rubyRunning ?? '(unknown)'}`);
-      outputChannel.appendLine(`Ruby expected: ${d.rubyExpected ?? '(no bundled manifest -- monorepo/custom Core)'}`);
-      outputChannel.appendLine(`Core selection: ${d.classification}`);
-      outputChannel.appendLine(`Selected Core path: ${d.selectedCorePath}`);
-      for (const reason of diagnostic.reasons) {
-        outputChannel.appendLine(`  ✗ ${reason}`);
-      }
-      if (diagnostic.action) {
-        outputChannel.appendLine(`Action: ${diagnostic.action}`);
-      }
+      writeVersionInformation(outputChannel, diagnostic);
       outputChannel.show();
 
       void vscode.window.showInformationMessage(

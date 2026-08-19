@@ -29,6 +29,11 @@ most-useful-first, say — are 2.x.x.
 - **Section 0 itself** — the vision, the definition of finished, the
   scope, and the accuracy-versus-shipping principle.
 
+**The distance to 1.0.0 is written down**, derived from those two and
+nothing else: [`docs/design/tasks/036-road-to-1.0.0.md`](docs/design/tasks/036-road-to-1.0.0.md).
+Read it when a session opens, so the path is seen rather than inferred —
+an inferred path is what a compaction loses.
+
 **Section 0 is the trusted root.** Everything else in this repository —
 this file, CLAUDE.md, the task files, the register, the checklists — is
 instruction stacked to fulfil it, *including the maintainer's own past

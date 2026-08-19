@@ -761,7 +761,7 @@ module Ovallsp
         name = symbol_name(node.arguments.arguments.first)
         return unless name
 
-        return_type = Types::Generic.new(name: "Relation", type_arg: Types::Nominal.new(name: simple_owner_name))
+        return_type = Types::Generic.new(name: "Relation", type_arg: Types::Nominal.new(name: qualified_owner_name))
         add_generated_method(node: node, name: name, kind: :singleton_method, return_type: return_type,
                              origin: :scope, parameters: FORWARDED_PARAMETERS)
       end
@@ -822,8 +822,26 @@ module Ovallsp
         )
       end
 
-      def simple_owner_name
-        current_owner.to_s.split("::").last
+      # `Index::SymbolId.bare_name`, not the last segment. Truncating gave
+      # a *workspace-generated* type the naming convention RBS/RBI uses,
+      # so `scope :recent` on `Billing::Order` produced `Relation[Order]`
+      # -- and wherever another namespace holds an `Order`, every answer
+      # about that relation belonged to the wrong class: completion listed
+      # the other model's methods and go-to-definition returned nothing.
+      #
+      # Measured before changing it, over the installed gem corpus (3,301
+      # files): **476 of 3,508 class basenames are shared by more than one
+      # namespace** -- 13.6%. The collision is ordinary, not exotic.
+      #
+      # A companion figure first recorded here, "63 of 66 `scope`
+      # declarations are namespaced", was wrong and is removed: it counted
+      # every receiverless call named `scope`, most of them the routing
+      # DSL. Real `scope :sym` declarations in that corpus number 2.
+      #
+      # `bare_name` strips a leading `::` and keeps the path, which is what
+      # every other workspace-produced Nominal in this file already does.
+      def qualified_owner_name
+        Index::SymbolId.bare_name(current_owner)
       end
 
       # A dynamic superclass/module expression (`Class.new`, a local

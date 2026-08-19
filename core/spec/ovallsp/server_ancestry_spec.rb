@@ -281,7 +281,11 @@ RSpec.describe "Ovallsp::Server ancestry questions for the Runtime Agent" do
     server.send(:publish_diagnostics, document)
     before = published_diagnostics(uri).size
 
-    server.send(:maybe_start_agent, { initializationOptions: { workspaceTrusted: true } })
+    # Trust is server state now, not an argument -- `maybe_start_agent`
+    # takes none, so that no caller can believe it grants permission by
+    # passing one.
+    server.instance_variable_set(:@workspace_trusted, true)
+    server.send(:maybe_start_agent)
 
     expect(wait_until { published_diagnostics(uri).size > before }).to be(true)
 

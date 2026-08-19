@@ -117,6 +117,37 @@ module DeferredFindings
 end
 
 RSpec.describe "deferred findings metadata" do
+  # Sorting and indexing are mechanical, so they are checked mechanically
+  # rather than asked of whoever writes the next entry. The register had
+  # reached 72 entries and 4,300 lines with 25 of them out of numeric
+  # sequence, because rounds appended in whatever order they ran -- and
+  # "is this already known?" is the question it exists to answer.
+  #
+  # `scripts/reindex_findings.rb` is the single implementation; this reads
+  # it rather than reimplementing the ordering, so the two cannot diverge
+  # about what "in order" means.
+  describe "the register stays findable" do
+    it "is in numeric order with its index current" do
+      require_relative "../../../scripts/reindex_findings"
+
+      current = File.read(ReindexFindings::PATH, encoding: "UTF-8")
+
+      expect(ReindexFindings.rebuild).to eq(current),
+                                         "the register is out of numeric order, or its generated index no longer " \
+                                         "matches the entries. Run: ruby scripts/reindex_findings.rb"
+    end
+
+    it "indexes every entry, so the table cannot silently omit one" do
+      require_relative "../../../scripts/reindex_findings"
+
+      body = File.read(ReindexFindings::PATH, encoding: "UTF-8")
+      headings = body.scan(/^## (024\.[0-9R]+)/).flatten
+      indexed = body.scan(/^\| \[`(024\.[0-9R]+)`\]/).flatten
+
+      expect(indexed).to eq(headings)
+    end
+  end
+
   def read_utf8(name) = File.read(File.expand_path("../../../#{name}", __dir__), encoding: "UTF-8")
 
   let(:deferred) { read_utf8("docs/design/tasks/024-deferred-review-findings.md") }

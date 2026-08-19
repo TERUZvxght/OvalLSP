@@ -200,6 +200,36 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v025">
+          <div class="tl-version">
+            <span class="v">0.2.5</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>The foundations, and the answers that rested on them</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A model&rsquo;s <code>scope</code> answers for the model it belongs to.</strong> Where two namespaces held a class of the same name, completion after <code>Shipping::Order.recent.first.</code> listed the other model&rsquo;s methods and go-to-definition found nothing.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A nested core type keeps its namespace.</strong> <code>File.stat(path)</code> answered as <code>Stat</code>, and a workspace class of that name captured it. 240 of the 334 loaded RBS types are nested.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Workspace Trust gates everything that executes</strong>, not only the Runtime Agent &mdash; restarts, observed-test runs and plugin loading all ask now.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>The cache is owner-only.</strong> It holds method bodies from your own source and was readable by every other account on a shared machine.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            No capability is added. This release is the foundations underneath
+            the answers, and the answers that were wrong because of them.
+          </p>
+        </article>
+
         <article class="tl-item" id="v024">
           <div class="tl-version">
             <span class="v">0.2.4</span>

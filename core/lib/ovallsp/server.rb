@@ -246,10 +246,17 @@ module Ovallsp
       when "initialize"
         @diagnostics_mode = diagnostics_mode_from(message[:params])
         @observation_test_command = observation_test_command_from(message[:params])
+        # Kept, not merely consulted. Until 0.2.5 trust was read out of
+        # these params at `maybe_start_agent` and nowhere else, so every
+        # other request that reaches code execution had to be trusted to
+        # not need it -- which is a property of the callers, not of the
+        # server. `initialize` is the only message that carries it, so
+        # this is the only place it can be recorded.
+        @workspace_trusted = workspace_trusted?(message[:params])
         respond(id, initialize_result)
         load_static_plugins(message[:params])
         start_cold_index
-        maybe_start_agent(message[:params])
+        maybe_start_agent
       when "initialized"
         # no-op: nothing to do yet at this task's scope.
       when "shutdown"
@@ -783,6 +790,13 @@ module Ovallsp
     # itself returns immediately rather than blocking on however long a
     # full Rails boot takes.
     def restart_agent_result(_params)
+      # The Agent executes the workspace's own Rails and Bundler code,
+      # which is the thing trust gates. A restart is another way to start
+      # it, so it asks the same question -- and it must ask the *stored*
+      # answer, because a restart request carries no initializationOptions
+      # of its own to inspect.
+      return { acknowledged: false, reason: "workspace not trusted" } unless trusted_for_execution?("restarting the Runtime Agent")
+
       # A user-initiated restart always gets a fresh attempt, regardless
       # of how many *automatic* attempts were already exhausted --
       # "manual restart" is its own capability (Task 022), not gated by
@@ -839,6 +853,12 @@ module Ovallsp
     # the client is expected to show its own "running…" affordance for
     # the request's duration, not to expect a fast reply.
     def run_observed_tests_result(params)
+      # This runs a command, and `testCommand` lets the caller choose it.
+      # `valid_test_command?` constrains its *shape*, never its meaning --
+      # `["curl", "..."]` is a well-shaped command. Trust is what decides
+      # whether running the workspace's code is allowed at all.
+      return { sampleCount: 0, methodCount: 0 } unless trusted_for_execution?("running observed tests")
+
       override = params.is_a?(Hash) ? params[:testCommand] : nil
       command = valid_test_command?(override) ? override : @observation_test_command
 
@@ -948,6 +968,12 @@ module Ovallsp
       options = params && params[:initializationOptions]
       manifest_paths = options.is_a?(Hash) ? options[:pluginManifests] : nil
       return unless manifest_paths.is_a?(Array) && !manifest_paths.empty?
+      # A plugin executes arbitrary Ruby -- that is what a plugin is. The
+      # fork contains it; trust decides whether it runs at all. The paths
+      # come from the client's own initializationOptions, so an untrusted
+      # workspace persuading a client to name a manifest inside it would
+      # otherwise be code execution with no gate in front of it.
+      return unless trusted_for_execution?("loading static plugins")
 
       @plugin_loader.load_static(manifest_paths).each { |context| apply_plugin_context(context) }
     end
@@ -1293,13 +1319,60 @@ module Ovallsp
       # other eight.
       scope_dir = File.join(cache_root, Cache::Key.workspace_scope(workspace_root: @workspace_root))
       cache_dir = File.join(scope_dir, digest)
-      store = Cache::Store.new(cache_dir: cache_dir)
+      # The marker before the generation, not after. `.prune_workspaces`
+      # removes any child of the cache root that has no marker -- a
+      # pre-0.2.1 flat generation, which cannot be read again -- and
+      # `Store.new` creates the scope directory on its way to the
+      # generation. Marking second leaves a window in which the scope
+      # exists and the marker does not, and a second window's sweep
+      # landing inside it deletes this window's entire scope, after which
+      # this process writes cache entries into a removed directory and
+      # every `save` silently rescues.
+      #
+      # It was a narrow window while the sweep ran on the `initialize`
+      # dispatch. Moving it to a background thread below lets it overlap
+      # another window's cold index, so the reorder narrows it and
+      # `Cache::Store::UNMARKED_SCOPE_GRACE` is what closes it.
       Cache::Store.mark_workspace(scope_dir, Cache::Key.canonical_root(@workspace_root))
+      store = Cache::Store.new(cache_dir: cache_dir)
       # After the directory exists, so the current generation is never the
-      # one swept. Once per start: a generation is only minted when the
-      # key changes, which is a Ruby upgrade, a `bundle install` or a
-      # release, not something that happens mid-session.
-      Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir)
+      # one swept. A generation is only minted when the key changes -- a
+      # Ruby upgrade, a `bundle install`, a release -- so there is
+      # normally nothing to sweep after the first start. `Re-index
+      # Workspace` reaches this again and starts another sweep; harmless,
+      # since removing what is already removed is a no-op and the thread
+      # is tracked either way.
+      #
+      # On a background thread, because this runs on the `initialize`
+      # dispatch and every request the editor sends afterwards queues
+      # behind it. 0.9 s to remove 1,000 abandoned directories, measured
+      # -- and the machine this sweep exists for had 28,643 of them and
+      # 2.8 GB -- around 26 seconds of a server that answers nothing. The
+      # first launch after an upgrade is exactly when that bill comes
+      # due, because putting the build's version in the key is what
+      # abandoned them (024.51).
+      #
+      # Nothing waits on it for an *answer*: the current generation's
+      # directory already exists, and removing *other* directories cannot
+      # change what this one reads. It is tracked, though, so shutdown
+      # joins it for up to the background budget and may kill it
+      # mid-`remove_entry`, leaving a directory partly removed -- which
+      # the next sweep finishes, because a partial directory is still an
+      # abandoned one. Untracked would leak the thread instead -- which is
+      # the leak `BackgroundTasks`' own header was written about.
+      #
+      # Rescued separately from the store. Failing to *start* the sweep is
+      # a housekeeping failure and costs nothing this session; letting it
+      # reach the method's own rescue would return a disabled cache and
+      # make every file cold, which is a far worse answer to a
+      # `ThreadError` than skipping a cleanup.
+      begin
+        @background_tasks.track_thread(
+          Thread.new { Cache::Store.prune_generations(cache_root: cache_root, current: cache_dir) }
+        )
+      rescue StandardError => e
+        @logger.error("failed to start the cache sweep; leaving abandoned generations in place: #{e.class}: #{e.message}")
+      end
       store
     rescue StandardError => e
       @logger.error("failed to initialize persistent cache; continuing without one: #{e.class}: #{e.message}")
@@ -1374,9 +1447,12 @@ module Ovallsp
     # code executionしていないか"). The VS Code extension always sends this
     # explicitly, so real usage is unaffected; a client that never mentions
     # trust at all gets static-only behavior rather than an implicit grant.
-    def maybe_start_agent(params)
-      unless workspace_trusted?(params)
-        @logger.warn("workspace trust not confirmed; not starting the Runtime Agent")
+    # Takes no argument: the trust it needs is the value recorded at
+    # `initialize`, not something a caller supplies. It used to take the
+    # params and inspect them, which let a caller believe passing
+    # `workspaceTrusted: true` was what granted permission.
+    def maybe_start_agent
+      unless trusted_for_execution?("starting the Runtime Agent")
         return
       end
 
@@ -1516,6 +1592,21 @@ module Ovallsp
     def workspace_trusted?(params)
       options = params && params[:initializationOptions]
       options.is_a?(Hash) && options[:workspaceTrusted] == true
+    end
+
+    # The one place that decides whether this server may execute the
+    # workspace's code, so that a new entry point cannot be added without
+    # meeting it. Fail-closed: `@workspace_trusted` is nil before
+    # `initialize` has been handled at all, and nil is not true.
+    #
+    # Named for what it protects rather than for the flag it reads --
+    # `maybe_start_agent`'s own comment already explains why anything but
+    # a literal `true` is a refusal.
+    def trusted_for_execution?(what)
+      return true if @workspace_trusted
+
+      @logger.warn("workspace trust not confirmed; not #{what}")
+      false
     end
 
     def document_symbol_result(params)

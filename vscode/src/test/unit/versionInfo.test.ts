@@ -8,7 +8,11 @@ import {
   OvallspServerInfo,
   compareVersionInfo,
   computeBundledPayloadSha256,
-  gatherClientVersionInfo
+  gatherClientVersionInfo,
+  versionInformationLines,
+  versionNoteLines,
+  writeHandshakeLines,
+  writeVersionInformation
 } from '../../versionInfo';
 
 function baseServer(overrides: Partial<OvallspServerInfo> = {}): OvallspServerInfo {
@@ -97,17 +101,41 @@ describe('compareVersionInfo', () => {
     assert.ok(result.reasons.some((r) => r.includes('Ruby engine mismatch')));
   });
 
-  it('detects a Ruby major.minor version mismatch, ignoring patch version', () => {
+  // 0.2.1 changed what a Ruby the payload was not built for *means*:
+  // `platformCompatibility` asks whether that Ruby carries prism and rbs
+  // and, if it does, runs against them and says so in the Output channel.
+  // This second check was not changed with it, and `extension.ts` shows a
+  // red error toast for anything it calls incompatible -- so the toast
+  // 0.2.1 removed was still shown, on every window, worded differently.
+  //
+  // A Ruby the Core is *running under* is by definition one it can run
+  // under. The mismatch is worth saying; it is not an incompatibility,
+  // and only one of these two functions gets to decide that.
+  it('notes a Ruby major.minor difference without calling the Core incompatible', () => {
     const server = baseServer({ ruby: { engine: 'ruby', version: '3.3.9', platform: 'arm64-darwin25' } });
     const result = compareVersionInfo(bundledClient(), server);
-    assert.strictEqual(result.compatible, false);
-    assert.ok(result.reasons.some((r) => r.includes('Ruby version mismatch')));
+    assert.strictEqual(result.compatible, true);
+    assert.ok(result.notes.some((n) => n.includes('Ruby version differs')));
   });
 
-  it('does not flag a patch-version-only difference as a mismatch', () => {
+  // The engine is a different question: a Core running under JRuby is not
+  // one this VSIX's payload can serve at all.
+  it('still detects a Ruby engine mismatch as incompatible', () => {
+    const server = baseServer({ ruby: { engine: 'jruby', version: '3.4.7', platform: 'arm64-darwin25' } });
+    const result = compareVersionInfo(bundledClient(), server);
+    assert.strictEqual(result.compatible, false);
+    assert.ok(result.reasons.some((r) => r.includes('Ruby engine mismatch')));
+  });
+
+  // Both halves. `compatible` alone passes for a build that notes every
+  // patch difference in the Output channel, which is noise on the
+  // overwhelmingly common case -- a note is for a Ruby the payload was
+  // not built for, and 3.4.5 against a 3.4 manifest is not that.
+  it('does not flag a patch-version-only difference as a mismatch, or note it', () => {
     const server = baseServer({ ruby: { engine: 'ruby', version: '3.4.5', platform: 'arm64-darwin25' } });
     const result = compareVersionInfo(bundledClient(), server);
     assert.strictEqual(result.compatible, true);
+    assert.deepStrictEqual(result.notes, []);
   });
 
   it('never compares coreVersion/build/payload/platform/ruby against a bundled manifest for a custom Core path', () => {
@@ -336,5 +364,132 @@ describe('gatherClientVersionInfo', () => {
     const staleResult = compareVersionInfo(afterUpdate, serverStillReportingOldCore);
     assert.strictEqual(staleResult.compatible, false, 'a leftover C1 process running after an E2 update must be flagged');
     assert.ok(staleResult.reasons.some((r) => r.includes('Core version mismatch')));
+  });
+});
+
+// The lines the user actually reads.
+//
+// Round 33 deleted both note-printing loops from `extension.ts` and all
+// 176 tests still passed, because nothing in this suite reaches
+// `extension.ts` at all -- and those loops are the user-visible half of
+// 024.72: the Output-channel line that replaced the red toast 0.2.1 was
+// supposed to have removed. The formatting moved into `versionInfo.ts`
+// so that it can be tested; these are what pin it.
+describe('what the user reads', () => {
+  function noteworthy() {
+    return compareVersionInfo(
+      bundledClient(),
+      baseServer({ ruby: { engine: 'ruby', version: '3.3.9', platform: 'arm64-darwin25' } })
+    );
+  }
+
+  it('shows a Ruby-difference note in Show Version Information', () => {
+    const lines = versionInformationLines(noteworthy());
+
+    assert.ok(lines.some((l) => l.includes('Compatible: yes')));
+    assert.ok(
+      lines.some((l) => l.includes('Ruby version differs')),
+      'a user reading Compatible: yes beside two different Ruby versions needs the reason in the same block'
+    );
+  });
+
+  // Order, not just presence. The note explains why `Compatible: yes` can
+  // sit beside two Ruby versions; a reason explains why it is not. Read
+  // top to bottom, a reason before its note is a different message.
+  it('puts notes before reasons', () => {
+    const diagnostic = compareVersionInfo(
+      bundledClient({ currentTarget: 'darwin-x64' }),
+      baseServer({ ruby: { engine: 'ruby', version: '3.3.9', platform: 'arm64-darwin25' } })
+    );
+    const lines = versionInformationLines(diagnostic);
+    const note = lines.findIndex((l) => l.includes('Ruby version differs'));
+    const reason = lines.findIndex((l) => l.includes('Platform mismatch'));
+
+    assert.ok(note >= 0 && reason >= 0, 'both a note and a reason are expected in this fixture');
+    assert.ok(note < reason);
+  });
+
+  it('says nothing extra when there is nothing to say', () => {
+    const lines = versionInformationLines(compareVersionInfo(bundledClient(), baseServer()));
+
+    assert.ok(!lines.some((l) => l.startsWith('  ·')));
+    assert.ok(!lines.some((l) => l.startsWith('  ✗')));
+  });
+
+  // In a multi-root workspace every folder gets its own Core, and a bare
+  // `OvalLSP:` prefix does not say which one the line is about.
+  it('names the folder in a start-up note', () => {
+    const lines = versionNoteLines(noteworthy(), 'billing-api');
+
+    assert.strictEqual(lines.length, 1);
+    assert.ok(lines[0].startsWith('OvalLSP (billing-api): '));
+    assert.ok(lines[0].includes('Ruby version differs'));
+  });
+
+  it('emits no start-up line when there is no note', () => {
+    assert.deepStrictEqual(versionNoteLines(compareVersionInfo(bundledClient(), baseServer()), 'x'), []);
+  });
+});
+
+// The writers, not just the formatters.
+//
+// Rounds 33 and 36 both found this code unpinned, for the same reason:
+// nothing in this suite can import `extension.ts`. 0.2.2 moved the
+// formatting into `versionInfo.ts` and round 36 showed that was only half
+// -- the *condition* stayed at the call site, and moving the note loop
+// inside `if (!compatible)` restored 024.72's symptom with 182 tests
+// green. The condition lives in `writeHandshakeLines` now, so that
+// mutation cannot be written in `extension.ts` at all.
+describe('what reaches the Output channel', () => {
+  function record() {
+    const lines: string[] = [];
+    return { sink: { appendLine: (line: string) => lines.push(line) }, lines };
+  }
+
+  function noteworthy() {
+    return compareVersionInfo(
+      bundledClient(),
+      baseServer({ ruby: { engine: 'ruby', version: '3.3.9', platform: 'arm64-darwin25' } })
+    );
+  }
+
+  it('writes the note at start-up on a Ruby the payload was not built for', () => {
+    const { sink, lines } = record();
+
+    writeHandshakeLines(sink, noteworthy(), 'billing-api');
+
+    assert.strictEqual(lines.length, 1);
+    assert.ok(lines[0].startsWith('OvalLSP (billing-api): '));
+    assert.ok(lines[0].includes('Ruby version differs'));
+  });
+
+  // The excluding case for the branch: a compatible Core with nothing to
+  // note writes nothing at all, so a build that logged on every start-up
+  // would fail here.
+  it('writes nothing at start-up when everything matches', () => {
+    const { sink, lines } = record();
+
+    writeHandshakeLines(sink, compareVersionInfo(bundledClient(), baseServer()), 'billing-api');
+
+    assert.deepStrictEqual(lines, []);
+  });
+
+  it('writes the incompatibility block, headed by the folder, when they do not match', () => {
+    const { sink, lines } = record();
+    const diagnostic = compareVersionInfo(bundledClient({ currentTarget: 'darwin-x64' }), baseServer());
+
+    writeHandshakeLines(sink, diagnostic, 'billing-api');
+
+    assert.ok(lines.some((l) => l.includes('OvalLSP version compatibility (billing-api)')));
+    assert.ok(lines.some((l) => l.includes('Platform mismatch')));
+  });
+
+  it('writes the note in Show Version Information as well', () => {
+    const { sink, lines } = record();
+
+    writeVersionInformation(sink, noteworthy());
+
+    assert.ok(lines.some((l) => l.includes('Compatible: yes')));
+    assert.ok(lines.some((l) => l.includes('Ruby version differs')));
   });
 });

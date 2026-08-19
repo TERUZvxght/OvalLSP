@@ -70,13 +70,13 @@ describe('checkBundledCoreCompatibility', () => {
     assert.ok(result.note && result.note.includes('4.0'), `expected a note naming the Ruby, got ${result.note}`);
   });
 
-  // Engine is not gated here, and the direction matters: the
-  // 0.2.4-bound branch briefly gated it to make this function agree
-  // with `compareVersionInfo`, and that turned one red toast into two
-  // -- this one advising `gem install prism rbs` without having asked,
-  // on a Core that already has them. Reverted there; which decider owns
-  // the *notification* is that branch's open question, recorded in its
-  // register entries.
+  // Engine is not gated here, and the direction matters: gating it to
+  // make this function agree with `compareVersionInfo` was tried during
+  // the parallel 0.2.3 preparation and turned one red toast into two --
+  // this one advising `gem install prism rbs` without having asked, on a
+  // Core that already has them. Reverted. Which decider owns the
+  // *notification* is still open: `024.65` records the split, and
+  // `024.55` is where the one-decider answer is routed.
   //
   // Both halves asserted, because `compatible: true` alone would pass on
   // a build that skips the probe and assumes.

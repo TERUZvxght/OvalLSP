@@ -461,6 +461,59 @@ and it had no entry here until 0.2.1 (024.45). It is not new in this
 release; 0.2.0 measures the same. Files of a few hundred lines, which is
 most application code, re-analyse in well under a tenth of a second. <!-- documents: 024.45 -->
 
+**Deferring the report until you stop typing was tried, and rolled
+back.** It coalesced a burst of keystrokes into one analysis and was
+measured doing so — but it also produced two races, could not bound how
+many analyses of one file run at once, and each of four consecutive
+review rounds found another defect in it. So the cost today is what it
+has always been: per keystroke. It will be tried again on top of a
+publish path where one writer decides what is sent, rather than each
+publisher deciding for itself. <!-- documents: 024.57 -->
+
+## What the undefined-method check gets wrong on real code
+
+**Measured, over 213 files of installed gem source: 54 reports, of which
+53 were wrong.** The 54th is arguable — an abstract template method that
+really is undefined on the class it is called on, which a Ruby developer
+would still not want reported. The check is
+built on the policy that a false report is worse than a missed one, and
+on this evidence it is not meeting it.
+
+The cause that matters for application code: a class that `include`s a
+module **defined in the same file, from inside a nested namespace** loses
+that module's methods, and the check then reports them missing. Rails
+concerns are that shape. `Rack::Request` is the worked example — it
+includes `Helpers` and is told it has no `request_method`.
+
+The rest are metaprogrammed accessors (`attr_atomic` and friends), which
+static analysis cannot see and should be silent about rather than report,
+and platform-specific files that never run on your Ruby. <!-- documents: 024.76 -->
+
+**A call that does not exist is also missed through a relation.**
+`Order.recent.first.no_such_method` is reported by nothing, while
+`Order.find(id).no_such_method` is reported normally. Completion knows
+the type at that position — it will not offer the missing name — so the
+information is there and the check is not using it. `Model.scope.first`
+is an everyday idiom. <!-- documents: 024.77 -->
+
+## Completion offers your class's methods where a core class is meant
+
+Where a class of yours shares a name with a nested core class — a `Stat`
+of your own, against `File::Stat` — hover and diagnostics now answer
+correctly and **completion still offers your class's methods**. The type
+is right in both cases; the member list is looked up under the bare name.
+
+0.2.5 fixed the first two and not the third. Without a shadowing class,
+completion after `File.stat(path).` went from offering nothing to
+offering the right 167 entries, so this is an improvement that stopped
+half way rather than a new fault. <!-- documents: 024.78 -->
+
+## What `Model.first` completes to
+
+**Nothing.** `Order.first.` offers no completions, while
+`Order.recent.first.` offers the model's full list. The commoner idiom is
+the one that does not work. <!-- documents: 024.79 -->
+
 ## What a partial's local resolves to
 
 **Nothing.** In `_article.html.erb`, `article` is supplied by whatever

@@ -72,8 +72,23 @@ module Ovallsp
       # pre-0.2.1 *generation* directory, which sat at the same level.
       WORKSPACE_MARKER = ".workspace"
 
+      # Creates the scope directory if it is not there yet, because this
+      # now runs *before* the generation directory is made and there would
+      # otherwise be nothing to write into on a first run.
+      #
+      # Marking first *narrows* the window in which a scope exists with no
+      # marker and another process's sweep reads it as a pre-0.2.1 flat
+      # generation -- it does not close it, since `mkdir_p` and
+      # `File.write` are two syscalls. `UNMARKED_SCOPE_GRACE` is what
+      # closes it.
       def self.mark_workspace(scope_dir, workspace_path)
-        File.write(File.join(scope_dir, WORKSPACE_MARKER), "#{workspace_path}\n")
+        FileUtils.mkdir_p(scope_dir, mode: 0o700)
+        tighten(scope_dir)
+        marker = File.join(scope_dir, WORKSPACE_MARKER)
+        # The marker records an absolute path from this machine, so it is
+        # owner-only for the same reason the entries are.
+        File.write(marker, "#{workspace_path}\n")
+        tighten(marker, 0o600)
       rescue StandardError
         nil
       end
@@ -125,19 +140,85 @@ module Ovallsp
         generations = children_of(scope_dir).select { |path| File.directory?(path) }
         return if generations.length <= keep
 
-        generations.sort_by { |path| -File.mtime(path).to_f }
+        # `File.mtime` rather than `seconds_since_write` would raise here
+        # when a generation is removed between `children_of` and the sort
+        # -- another window's sweep, or `Re-index Workspace` re-entering
+        # this one -- and that reaches `prune_generations`' single outer
+        # rescue and abandons the removals. Round 38: the argument for
+        # `prune_workspaces`' per-entry rescue applies to this half of the
+        # same method, and this release is what makes the race ordinary by
+        # moving the sweep to a background thread.
+        #
+        # Sorting an unreadable entry to the *oldest* end is the safe
+        # direction: it is a candidate for removal, and `remove_within`
+        # then declines a path that is already gone.
+        generations.sort_by { |path| -age_for_sort(path) }
                    .reject { |path| File.expand_path(path) == current }
                    .drop(keep - 1)
                    .each { |path| remove_within(root, path) }
+      end
+
+      def self.age_for_sort(path)
+        File.mtime(path).to_f
+      rescue StandardError
+        0.0
       end
 
       def self.prune_workspaces(cache_root, current)
         current_scope = File.dirname(current)
         children_of(cache_root).each do |path|
           next unless File.directory?(path)
+
+          # Every scope, including the one being opened and the ones this
+          # sweep decides to keep. `ensure_directory` only tightens the
+          # scope currently in use, so before 0.2.5's modes reach a
+          # machine's *other* projects they would have to each be opened
+          # once -- ten projects, ten launches, and until then their
+          # method bodies stay world-readable. This walk is the one place
+          # that sees all of them, and it already runs on every launch.
+          tighten_tree(path)
+
           next if File.expand_path(path) == current_scope
 
           marker = File.join(path, WORKSPACE_MARKER)
+          # No marker: a pre-0.2.1 generation, unreadable by this build --
+          # *or* a scope another process created moments ago and has not
+          # marked yet. `.mark_workspace` is `mkdir_p` then `File.write`,
+          # two syscalls, and reordering it ahead of the generation
+          # directory narrowed that window rather than closing it, which
+          # the comment there claimed. Removing the other window's scope
+          # costs it the whole session's cache and a cold index on the
+          # next launch.
+          #
+          # A pre-0.2.1 generation is by definition old -- nothing has
+          # written one since 0.2.1 shipped -- so the same grace that
+          # protects an absent workspace tells the two apart with no new
+          # state and no lock.
+          if !File.file?(marker)
+            next if seconds_since_write(path) < UNMARKED_SCOPE_GRACE
+
+            next remove_within(cache_root, path)
+          end
+
+          # A missing directory is not proof the project is gone: an
+          # unmounted volume and a network share that is briefly away both
+          # look exactly like a deleted one, and this method's own comment
+          # calls every removal it makes "a fact rather than a guess".
+          # Held for a grace period instead, so a project only loses its
+          # warm cache after being unreachable for longer than any mount
+          # is.
+          workspace = File.read(marker).strip
+          next if workspace.empty? || File.directory?(workspace)
+          # The *marker's* mtime, not the scope directory's. A directory's
+          # mtime advances when an entry is created or removed inside it,
+          # which for a scope directory happens only when a generation is
+          # minted -- a Ruby upgrade, a `bundle install`, a release. That
+          # is "how long since the cache key changed", and the question
+          # here is "how long since anyone opened this project". The
+          # marker is rewritten by `.mark_workspace` on every launch that
+          # opens this workspace, so its mtime answers the second one.
+          next if seconds_since_write(marker) < ABSENT_WORKSPACE_GRACE
+
           # These two #remove_within calls cannot currently refuse
           # anything: `path` comes from `children_of(cache_root)`, so it is
           # always `cache_root/<name>` and always inside. Reverse-applying
@@ -153,13 +234,70 @@ module Ovallsp
           # children -- which is precisely how the sweep escaped last time
           # -- the containment is already here rather than needing to be
           # remembered.
-          # No marker: a pre-0.2.1 generation, unreadable by this build.
-          next remove_within(cache_root, path) unless File.file?(marker)
-
-          workspace = File.read(marker).strip
-          remove_within(cache_root, path) unless workspace.empty? || File.directory?(workspace)
+          remove_within(cache_root, path)
+        rescue StandardError
+          # Per entry, not per sweep. `.prune_generations`' single outer
+          # rescue meant anything raised while walking *another
+          # workspace's* directory abandoned the rest of the walk --
+          # including `prune_generations_of`, which prunes the workspace
+          # being opened. One unreadable, half-removed or concurrently
+          # removed sibling therefore switched cache tidying off
+          # permanently, on exactly the machines the feature exists for.
+          #
+          # The asymmetry was already visible here: `seconds_since_write`
+          # rescues per call while the loop around it did not.
+          next
         end
       end
+
+      # Thirty days: long enough that no mount, no external disk and no
+      # laptop left closed over a holiday loses a warm cache, short enough
+      # that a genuinely deleted project does not keep one for ever.
+      ABSENT_WORKSPACE_GRACE = 30 * 24 * 60 * 60
+
+      # An hour: longer than any window between another process's
+      # `mkdir_p` and its `File.write` by many orders of magnitude, and
+      # short enough that a genuine pre-0.2.1 generation is reclaimed on
+      # the first launch after this build has been installed for an hour.
+      UNMARKED_SCOPE_GRACE = 60 * 60
+
+      # Wall clock, deliberately. A monotonic clock does not survive the
+      # reboot this measures across; the cost is that changing the system
+      # clock changes the answer, which is the lesser problem for a
+      # thirty-day window.
+      def self.seconds_since_write(path)
+        Time.now - File.mtime(path)
+      rescue StandardError
+        0
+      end
+
+      # Best-effort: a cache on a filesystem that cannot represent these
+      # modes (a mounted share, a Windows volume) is still a working
+      # cache, and refusing to run there would trade a real feature for a
+      # protection that filesystem cannot offer anyway.
+      def self.tighten(path, mode = 0o700)
+        File.chmod(mode, path)
+      rescue StandardError
+        nil
+      end
+
+      # Directories to 0700 and files to 0600, across one scope. Bounded
+      # by the scope rather than walking the whole root, so the cost is a
+      # handful of chmods per launch and not a full tree walk; and
+      # best-effort throughout, because a cache on a filesystem that
+      # cannot represent these modes is still a working cache.
+      def self.tighten_tree(scope_dir)
+        tighten(scope_dir)
+        Dir.glob(File.join(scope_dir, "**", "*"), File::FNM_DOTMATCH).each do |entry|
+          next if entry.end_with?("/.", "/..")
+
+          tighten(entry, File.directory?(entry) ? 0o700 : 0o600)
+        end
+      rescue StandardError
+        nil
+      end
+
+      def tighten(path, mode = 0o700) = self.class.tighten(path, mode)
 
       # The one place this class removes a directory, so that containment
       # is a property of *removal* rather than of each caller's arithmetic.
@@ -190,10 +328,34 @@ module Ovallsp
       # an unpinned line is a defect in this repository whichever direction
       # it errs in. What it would have saved is a wasted enumeration of a
       # directory nothing will be removed from.
+      # Tolerance lives here for the same reason containment does: one
+      # place, so no call site can get it wrong.
+      #
+      # Rounds 37, 38 and 39 each found a different way for one bad entry
+      # to abandon the whole sweep -- an unreadable sibling scope, a
+      # generation vanishing between listing and sorting, and now a
+      # generation that cannot be removed at all (`EACCES`/`EPERM` from
+      # changed ownership, a restored backup, a read-only parent). The
+      # first two were fixed where they were found, which is what made a
+      # third one possible: `#prune_generations` has a single outer rescue,
+      # so anything reaching it discards every removal not yet made, and
+      # the sort is newest-first, so a blocker shields the entire older
+      # tail. On the machine 024.51 exists for -- 28,643 directories,
+      # 2.8 GB -- that is the accumulation resuming silently and for good.
+      #
+      # `SystemCallError` rather than `StandardError`: a failed *syscall*
+      # is the sweep's business to survive, and a `TypeError` or a bug in
+      # this class is not something to swallow on the way past. ENOENT is
+      # the ordinary member of that family -- two windows sweeping one
+      # root, or `Re-index Workspace` starting a second sweep -- and is
+      # what makes `Server#build_cache_store`'s "removing what is already
+      # removed is a no-op" true rather than merely stated.
       def self.remove_within(root, path)
         return unless inside?(root, path)
 
         FileUtils.remove_entry(path)
+      rescue SystemCallError
+        nil
       end
 
       # Strict containment: `root` itself is never removable, and a sibling
@@ -247,22 +409,40 @@ module Ovallsp
         file = entry_path(path)
         tmp = "#{file}.tmp.#{Process.pid}.#{Thread.current.object_id}.#{rand(1_000_000)}"
         File.binwrite(tmp, Marshal.dump(summary))
+        # Before the rename, so the entry is never briefly world-readable
+        # under its real name.
+        self.class.tighten(tmp, 0o600)
         File.rename(tmp, file)
         prune_if_over_bound if rand(64).zero?
       rescue StandardError
         nil
       ensure
-        begin
-          File.delete(tmp) if tmp && File.exist?(tmp)
-        rescue StandardError
-          nil
-        end
+        # Through the contained removal, like every other deletion in this
+        # class. The path is built from `@cache_dir` a few lines up and so
+        # is inside it today -- which is the argument the directory
+        # removals also had, right up until one of them was not. The
+        # `File.exist?` guard and the rescue are gone with it:
+        # `.remove_within` tolerates an absent path and swallows a failed
+        # syscall itself.
+        self.class.remove_within(@cache_dir, tmp) if tmp
       end
 
       private
 
+      # 0700, not the umask's 0755. `vscode/PRIVACY.md` says what is in
+      # here: method bodies from the user's own source, verbatim. On a
+      # shared machine the default handed those to every other account.
+      # `Observation::Runner` already writes the same kind of evidence
+      # through `Tempfile`, which is owner-only, so this is the long-lived
+      # copy catching up with the project's own standard for it.
+      #
+      # `mkdir_p`'s mode applies to directories it creates, not to ones
+      # that already exist, so an existing loose directory is tightened
+      # explicitly -- the case that matters, since every cache created
+      # before 0.2.5 is already on disk at 0755.
       def ensure_directory(cache_dir)
-        FileUtils.mkdir_p(cache_dir)
+        FileUtils.mkdir_p(cache_dir, mode: 0o700)
+        tighten(cache_dir)
         cache_dir
       rescue StandardError
         nil # read-only filesystem, permissions, ... -- cache simply never activates.
@@ -284,7 +464,7 @@ module Ovallsp
 
         oldest_first = entries.sort_by { |f| File.mtime(File.join(@cache_dir, f)) }
         excess = entries.size - @max_entries
-        oldest_first.first(excess).each { |f| File.delete(File.join(@cache_dir, f)) }
+        oldest_first.first(excess).each { |f| self.class.remove_within(@cache_dir, File.join(@cache_dir, f)) }
       rescue StandardError
         nil
       end

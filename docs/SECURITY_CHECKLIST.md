@@ -41,6 +41,13 @@ OvalLSPはローカル開発マシン上で動くLSPサーバーであり、ネ�
 |---|---|---|
 | プラグインコードがCoreの生きたLSP stdout transportやAgentのパイプに直接書き込み、プロトコルストリームを汚染/乗っ取る | プラグインは`Process.fork`された別プロセスで実行され、実行前にSTDIN/STDOUT/STDERRを`/dev/null`に付け替え、`ObjectSpace.each_object(::IO)`で到達可能な他の生きたIOを全てclose。結果を返す書き込み側は生のfd番号としてのみ渡す(ObjectSpaceから不可視) | `core/lib/ovallsp/plugins/loader.rb`(`isolate_child_io`) |
 | プラグインが実行結果として任意オブジェクト(Procや生のインデックス参照)を親プロセスに返し、コード実行や内部状態の書き換えにつながる | 親子間はMarshal可能なプレーンデータのみ(宣言配列、スナップショットセクション/フックの"名前"のみ、Procそのものは含まない) | `core/lib/ovallsp/plugins/runtime_context.rb`, `static_context.rb` |
+
+  > **これは要件であって、現状の記述ではありません（0.2.5 で確認）。**
+  > 親プロセスは結果を `Marshal.load` で読んでおり、プラグイン側が名指しした
+  > クラスをその場で生成します。検証は生成の後に走るため、fork 境界を越える
+  > gadget を止められません。詳細と方向性は `024.73`。到達には client が
+  > `pluginManifests` を送る必要があり、出荷中の拡張は送りません。加えて
+  > 0.2.5 で `load_static_plugins` に trust ゲートを入れています。
 | プラグインが`WorkspaceIndex`を直接操作し、Coreの索引状態を汚染する | プラグインには書き込み専用のcollection surfaceのみ渡され、実際の`WorkspaceIndex`オブジェクトは渡さない | `core/lib/ovallsp/plugins/static_context.rb` |
 | ランタイムプラグイン(任意コード実行の範囲が広い)が、ワークスペースを信頼していない状態でもロードされてしまう | `load_runtime(manifest_paths, trusted:)`は`trusted:`が真でない限り無条件に空配列を返す(runtime entrypointの中身を一切読まない) | `core/lib/ovallsp/plugins/loader.rb` |
 | プラグインマニフェストの互換性のないプロトコルバージョンを暗黙に受理してしまう | `Plugins::CURRENT_PROTOCOL_VERSION`との厳密一致チェック、不一致はロードせずログのみ | `core/lib/ovallsp/plugins/manifest.rb`, `loader.rb`(`safe_load_manifest`) |

@@ -62,6 +62,10 @@ RSpec.describe Ovallsp::Cache::Store do
   # the filesystem root, and the example failed against correct code.
   # Same rule as the prune examples below: no fabricated absolute paths
   # into code that touches the filesystem, `Dir.mktmpdir` always.
+  #
+  # This fixture is 0.2.2's, kept over the 0.2.4-bound branch's, which
+  # still carried the fabricated path -- that branch was cut before the
+  # incident and never saw the fix. 029's M-1 names this disposition.
   it "returns nil rather than raising when the cache directory itself is unusable" do
     Dir.mktmpdir do |tmp|
       not_a_dir = File.join(tmp, "not-a-dir")
@@ -186,11 +190,164 @@ RSpec.describe Ovallsp::Cache::Store do
       dir
     end
 
+    # `.mark_workspace` now runs *before* the generation directory is
+    # created, so on a first launch there is nothing to write into. It
+    # makes the directory itself; without that the write fails ENOENT into
+    # the method's own rescue, the scope stays unmarked, and any other
+    # window's sweep reads it as a pre-0.2.1 generation and removes it.
+    it "creates the scope directory it is marking" do
+      Dir.mktmpdir do |root|
+        scope = File.join(root, "never-created")
+
+        described_class.mark_workspace(scope, "/some/workspace")
+
+        expect(File.file?(File.join(scope, described_class::WORKSPACE_MARKER))).to be(true)
+      end
+    end
+
     def scope_for(root, name, workspace_path)
       dir = File.join(root, name)
       FileUtils.mkdir_p(dir)
       described_class.mark_workspace(dir, workspace_path)
       dir
+    end
+
+    # The fail-safe both grace periods rest on. `seconds_since_write`
+    # answering 0 means "written just now", so an unreadable mtime keeps a
+    # scope rather than removing it -- the conservative direction, and the
+    # only one that is safe when the question is whether to delete
+    # somebody's cache. Round 37 found it covered in neither direction.
+    #
+    # A path inside a tmpdir that was never created, never a fabricated
+    # absolute one: this method does not delete, but it is one call away
+    # from code that does, and that is the habit this file exists to keep.
+    it "treats a path whose mtime cannot be read as just written, rather than raising" do
+      Dir.mktmpdir do |dir|
+        expect(described_class.seconds_since_write(File.join(dir, "never-created"))).to eq(0)
+      end
+    end
+
+    # `remove_within`'s ENOENT rescue, asserted where it can be told
+    # apart. Both call paths swallow, so round 38 found the rescue
+    # unpinned -- true, and the fix is to ask this method directly rather
+    # than to delete a rescue that makes `Server#build_cache_store`'s
+    # "removing what is already removed is a no-op" an honest claim.
+    it "treats removing an already-removed path inside the root as a no-op" do
+      Dir.mktmpdir do |root|
+        expect { described_class.remove_within(root, File.join(root, "already-gone")) }.not_to raise_error
+      end
+    end
+
+    # The other half of the same method. A generation removed between
+    # `children_of` and the sort -- a second window sweeping the same
+    # root, or `Re-index Workspace` re-entering -- used to raise out of
+    # `File.mtime` and abandon every removal after it.
+    it "prunes the rest when a generation vanishes between listing and sorting" do
+      Dir.mktmpdir do |root|
+        mine = scope_for(root, "mine", root)
+        10.times { |i| generation(mine, "g#{i}", i + 1) }
+        current = generation(mine, "current", 0)
+        vanishing = generation(mine, "vanishing", 5)
+
+        allow(File).to receive(:mtime).and_wrap_original do |original, path|
+          raise Errno::ENOENT, path if path == vanishing
+
+          original.call(path)
+        end
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 3)
+
+        remaining = Dir.children(mine).map { |n| File.join(mine, n) }.select { |p| File.directory?(p) }
+
+        # *Which* survives, not how many. `age_for_sort` answering 0.0
+        # sorts an unreadable entry to the oldest end, making it a removal
+        # candidate; `Float::INFINITY` would sort it to the newest end and
+        # keep it, evicting a readable generation in its place. A count
+        # assertion is satisfied by both -- the fixture problem round 39
+        # found, and the blind spot CLAUDE.md names: the method arrived
+        # whole, so reverse-applying its hunk only tested that it exists.
+        expect(remaining.length).to eq(3)
+        expect(remaining).not_to include(vanishing)
+      end
+    end
+
+    # The third way one entry stopped the whole sweep, and the reason
+    # tolerance moved into `remove_within` rather than into a third loop.
+    # A generation that cannot be removed at all -- changed ownership, a
+    # restored backup, a read-only parent -- propagated out of
+    # `prune_generations_of` into `prune_generations`' single outer
+    # rescue, discarding every removal not yet made. The sort is
+    # newest-first, so a blocker shielded the entire older tail, on every
+    # launch, for good.
+    #
+    # Asserted against `remove_within` directly rather than through a
+    # sweep. Two attempts at an end-to-end fixture passed with the fix
+    # reverse-applied -- the first because the blocked directory ended up
+    # newest and so never became a removal candidate at all -- and a
+    # fixture that cannot distinguish the two behaviours is not a pin
+    # however green it is. This one was watched raising `Errno::EACCES`
+    # with the rescue narrowed back to `ENOENT`.
+    it "tolerates a removal it is not permitted to make" do
+      Dir.mktmpdir do |root|
+        victim = File.join(root, "victim")
+        FileUtils.mkdir_p(File.join(victim, "sub"))
+        File.chmod(0o500, victim)
+        skip "this user can write a 0500 directory" if File.writable?(victim)
+
+        expect { described_class.remove_within(root, victim) }.not_to raise_error
+      ensure
+        File.chmod(0o700, victim) if victim && Dir.exist?(victim)
+      end
+    end
+
+    # One bad sibling must not cost the caller its own tidying.
+    #
+    # `.prune_generations` has a single outer rescue covering both halves,
+    # so anything raised while walking *another workspace's* directory
+    # abandoned the rest of the sweep -- including `prune_generations_of`,
+    # the half that prunes the workspace being opened. The machine this
+    # feature exists for (28,643 abandoned directories, 2.8 GB) is exactly
+    # the one likely to hold a half-removed or unreadable entry, and one
+    # of those switched cache tidying off permanently and silently.
+    #
+    # Round 37 found it; 0.2.3 moves the sweep to a background thread and
+    # a second window sweeping the same root concurrently makes the racing
+    # form ordinary rather than exotic.
+    #
+    # The obstacle has to be a scope the walk actually *reads*. A marker
+    # that is a directory does not work: `File.file?` is false for it, so
+    # the scope takes the unmarked branch and `UNMARKED_SCOPE_GRACE`
+    # short-circuits before anything raises -- a fixture that cannot
+    # distinguish the two behaviours, which this file has been caught on
+    # before. An unreadable marker file is read and raises `EACCES`.
+    it "prunes this workspace's generations even when another scope raises mid-walk" do
+      Dir.mktmpdir do |root|
+        obstacle = File.join(root, "obstacle")
+        described_class.mark_workspace(obstacle, root)
+        File.chmod(0o000, File.join(obstacle, Ovallsp::Cache::Store::WORKSPACE_MARKER))
+        skip "running as a user that can read a 000 file" if File.readable?(File.join(obstacle, ".workspace"))
+
+        mine = scope_for(root, "mine", root)
+        10.times { |i| generation(mine, "g#{i}", i + 1) }
+        current = generation(mine, "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 3)
+
+        generations = Dir.children(mine).map { |name| File.join(mine, name) }.select { |path| File.directory?(path) }
+
+        expect(generations.length).to eq(3)
+      end
+    end
+
+    # How long ago this workspace was last *opened*. `.mark_workspace`
+    # rewrites the marker on every launch, so its mtime is that; the scope
+    # directory's own mtime is something else entirely (it advances when a
+    # generation is minted), which is the distinction the two examples
+    # below exist to hold apart.
+    def last_opened(scope, days_ago)
+      marker = File.join(scope, Ovallsp::Cache::Store::WORKSPACE_MARKER)
+      time = Time.now - (days_ago * 24 * 60 * 60)
+      File.utime(time, time, marker)
     end
 
     it "keeps the current generation however old it looks" do
@@ -235,18 +392,64 @@ RSpec.describe Ovallsp::Cache::Store do
       end
     end
 
-    it "removes a workspace whose directory no longer exists" do
+    # A missing directory is not proof the project is gone -- an unmounted
+    # volume and a network share that is briefly away look exactly like a
+    # deleted one -- so the scope is held for a grace period first. Aged
+    # past it here, because what is being pinned is that it *is* removed
+    # eventually, not that it survives.
+    it "removes a workspace whose directory has been gone for longer than the grace period" do
       Dir.mktmpdir do |root|
         gone = File.join(root, "..", "ovallsp-vanished-#{Process.pid}")
         FileUtils.mkdir_p(gone)
         vanished = scope_for(root, "vanished", gone)
         generation(vanished, "g", 1)
+        last_opened(vanished, 31)
         FileUtils.remove_entry(gone)
         current = generation(scope_for(root, "mine", root), "current", 0)
 
         described_class.prune_generations(cache_root: root, current: current, keep: 8)
 
         expect(Dir.exist?(vanished)).to be(false)
+      end
+    end
+
+    # A scope another window created a moment ago and has not marked yet
+    # looks exactly like a pre-0.2.1 flat generation. Removing it costs
+    # that window its whole cache for the session, and its own marker
+    # write then fails into a directory that is gone.
+    #
+    # Aged in opposite directions, like the absent-workspace pair: this
+    # one is brand new and must survive, the one below is old and must
+    # not. A fixture where both are the same age cannot tell a grace from
+    # no grace.
+    it "keeps an unmarked directory that was created moments ago" do
+      Dir.mktmpdir do |root|
+        racing = File.join(root, "another-window")
+        FileUtils.mkdir_p(racing)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(racing)).to be(true)
+      end
+    end
+
+    # And half an hour later it is still kept, which is what stops the
+    # constant being set to anything positive. The window it covers is two
+    # syscalls wide; the value is an hour because a *pre-0.2.1* generation
+    # is the other thing this branch removes, and nothing has written one
+    # since 0.2.1 shipped.
+    it "keeps an unmarked directory half an hour old" do
+      Dir.mktmpdir do |root|
+        racing = File.join(root, "another-window")
+        FileUtils.mkdir_p(racing)
+        aged = Time.now - (30 * 60)
+        File.utime(aged, aged, racing)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(racing)).to be(true)
       end
     end
 
@@ -258,11 +461,81 @@ RSpec.describe Ovallsp::Cache::Store do
         legacy = File.join(root, "0123abc")
         FileUtils.mkdir_p(legacy)
         File.write(File.join(legacy, "e.cache"), "x")
+        # Two days, an absolute figure rather than
+        # `UNMARKED_SCOPE_GRACE + 60`. Aging relative to the constant makes
+        # *any* positive value pass, which is the defect round 33 found for
+        # `ABSENT_WORKSPACE_GRACE` and round 36 found here: setting this one
+        # to one second left all 1,936 examples green.
+        aged = Time.now - (2 * 24 * 60 * 60)
+        File.utime(aged, aged, legacy)
         current = generation(scope_for(root, "mine", root), "current", 0)
 
         described_class.prune_generations(cache_root: root, current: current, keep: 8)
 
         expect(Dir.exist?(legacy)).to be(false)
+      end
+    end
+
+    it "keeps a workspace that has only just become unreachable" do
+      Dir.mktmpdir do |root|
+        gone = File.join(root, "..", "ovallsp-unmounted-#{Process.pid}")
+        FileUtils.mkdir_p(gone)
+        away = scope_for(root, "away", gone)
+        generation(away, "g", 1)
+        FileUtils.remove_entry(gone)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(away)).to be(true)
+      end
+    end
+
+    # The grace itself, not just its two boundaries. Both examples around
+    # this one write the marker at *now*, so any positive value satisfies
+    # them — round 33 set the constant to one second, which is the
+    # pre-0.2.2 behaviour this release exists to change, and the file's
+    # eighteen examples stayed green. Twenty-nine days is a length no
+    # accidental value reaches.
+    it "keeps a workspace that has been unreachable for four weeks" do
+      Dir.mktmpdir do |root|
+        gone = File.join(root, "..", "ovallsp-fourweeks-#{Process.pid}")
+        FileUtils.mkdir_p(gone)
+        away = scope_for(root, "away", gone)
+        generation(away, "g", 1)
+        last_opened(away, 29)
+        FileUtils.remove_entry(gone)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(away)).to be(true)
+      end
+    end
+
+    # The case the grace was written for, and the one it did not cover
+    # until 0.2.2: a project on an external drive, opened this morning, on
+    # a toolchain that has not changed in three months. The scope
+    # directory's mtime is 90 days old because that is when its last
+    # generation was minted; the *workspace* went away minutes ago. Aging
+    # the two in opposite directions is what makes this example able to
+    # fail -- reading either mtime alone answers a different question, and
+    # only one of them is "has anyone opened this project lately".
+    it "keeps a workspace opened today whose cache key last changed months ago" do
+      Dir.mktmpdir do |root|
+        gone = File.join(root, "..", "ovallsp-external-#{Process.pid}")
+        FileUtils.mkdir_p(gone)
+        away = scope_for(root, "away", gone)
+        generation(away, "g", 90)
+        stale = Time.now - (90 * 24 * 60 * 60)
+        File.utime(stale, stale, away)
+        last_opened(away, 0)
+        FileUtils.remove_entry(gone)
+        current = generation(scope_for(root, "mine", root), "current", 0)
+
+        described_class.prune_generations(cache_root: root, current: current, keep: 8)
+
+        expect(Dir.exist?(away)).to be(true)
       end
     end
 

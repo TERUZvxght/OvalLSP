@@ -3,6 +3,14 @@
 require "stringio"
 
 RSpec.describe "Ovallsp::Server runtime observation (Task 019)" do
+  # `ovallsp/runObservedTests` runs a command, so 0.2.5 gated it on the
+  # workspace trust the server records at `initialize`. Every example here
+  # is about what the observation machinery does *once it is allowed to
+  # run*, so they grant trust; the refusal itself is asserted in
+  # `server_trust_execution_gates_spec.rb`. They previously sent
+  # `params: {}`, which is untrusted -- the gate did not exist then.
+  TRUSTED_INIT = { initializationOptions: { workspaceTrusted: true } }.freeze
+
   let(:output) { StringIO.new }
   let(:logger) { instance_double(Ovallsp::Logger, info: nil, warn: nil, error: nil) }
   let(:fixtures_root) { File.expand_path("../fixtures/observation_runner", __dir__) }
@@ -37,7 +45,7 @@ RSpec.describe "Ovallsp::Server runtime observation (Task 019)" do
     calculator_source = File.read(File.join(fixtures_root, "lib", "calculator.rb"))
 
     input =
-      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: TRUSTED_INIT) +
       did_open(calculator_uri, calculator_source) +
       frame(jsonrpc: "2.0", id: 2, method: "ovallsp/runObservedTests",
             params: { testCommand: ["ruby", "run_tests.rb"] }) +
@@ -62,7 +70,7 @@ RSpec.describe "Ovallsp::Server runtime observation (Task 019)" do
     calculator_source = File.read(File.join(fixtures_root, "lib", "calculator.rb"))
 
     input =
-      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: TRUSTED_INIT) +
       did_open(calculator_uri, calculator_source) +
       frame(jsonrpc: "2.0", id: 2, method: "ovallsp/showTypeEvidence",
             params: { textDocument: { uri: calculator_uri }, position: { line: 3, character: 6 } }) +
@@ -78,7 +86,7 @@ RSpec.describe "Ovallsp::Server runtime observation (Task 019)" do
     calculator_source = File.read(File.join(fixtures_root, "lib", "calculator.rb"))
 
     input =
-      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: TRUSTED_INIT) +
       did_open(calculator_uri, calculator_source) +
       frame(jsonrpc: "2.0", id: 2, method: "ovallsp/runObservedTests",
             params: { testCommand: ["ruby", "run_tests.rb"] }) +
@@ -106,7 +114,7 @@ RSpec.describe "Ovallsp::Server runtime observation (Task 019)" do
     calculator_source = File.read(File.join(fixtures_root, "lib", "calculator.rb"))
 
     input =
-      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: TRUSTED_INIT) +
       did_open(calculator_uri, calculator_source) +
       frame(jsonrpc: "2.0", id: 2, method: "ovallsp/runObservedTests",
             params: { testCommand: ["ruby", "run_tests.rb"] }) +
@@ -140,7 +148,7 @@ RSpec.describe "Ovallsp::Server runtime observation (Task 019)" do
     calculator_source = File.read(File.join(fixtures_root, "lib", "calculator.rb"))
 
     input =
-      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: TRUSTED_INIT) +
       did_open(calculator_uri, calculator_source) +
       frame(jsonrpc: "2.0", id: 2, method: "ovallsp/runObservedTests",
             params: { testCommand: ["ruby", "run_tests.rb"] }) +
@@ -168,7 +176,7 @@ RSpec.describe "Ovallsp::Server runtime observation (Task 019)" do
     calculator_source = File.read(File.join(fixtures_root, "lib", "calculator.rb"))
 
     input =
-      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: TRUSTED_INIT) +
       did_open(calculator_uri, calculator_source) +
       frame(jsonrpc: "2.0", id: 2, method: "ovallsp/runObservedTests",
             params: { testCommand: ["ruby", "run_tests.rb"] }) +
@@ -191,7 +199,7 @@ RSpec.describe "Ovallsp::Server runtime observation (Task 019)" do
     changed_source = calculator_source.sub("a + b", "a + b # comment, still 'add', still returns an Integer")
 
     input =
-      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: {}) +
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: TRUSTED_INIT) +
       did_open(calculator_uri, calculator_source) +
       frame(jsonrpc: "2.0", id: 2, method: "ovallsp/runObservedTests",
             params: { testCommand: ["ruby", "run_tests.rb"] }) +

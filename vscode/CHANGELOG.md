@@ -6,6 +6,58 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.5 — The foundations, and the answers that rested on them
+
+- **A model's `scope` answers for the model it belongs to.** `scope :recent`
+  on `Billing::Order` produced a relation named after the last part of that
+  path, so wherever another namespace held an `Order`, completion after
+  `Shipping::Order.recent.first.` listed the *other* model's methods and
+  go-to-definition found nothing. Measured before fixing: 13.6% of class
+  basenames in the gem corpus are shared by more than one namespace.
+- **A nested core type keeps its namespace, so your class cannot take its
+  place.** `File.stat(path)` answered as `Stat`, and a workspace class of
+  that name captured it — offering its methods and denying the real ones.
+  240 of the 334 types in the loaded RBS environment are nested, and 27 of
+  their basenames are names ordinary code uses: `Error`, `Node`,
+  `Generator`, `Buffer`, `Location`. One visible consequence: an aliased
+  core class now shows its real path, so `Mutex.new` says `Thread::Mutex`.
+- **Workspace Trust gates everything that executes, not just the Agent.**
+  Trust was read once, at start-up, and not kept — so restarting the Agent,
+  running observed tests with a caller-supplied command, and loading a
+  plugin never asked. The shipped extension sends none of those from an
+  untrusted window, but the LSP is a protocol any client can speak.
+- **The cache is owner-only.** It holds method bodies from your own source,
+  as `PRIVACY.md` says, and was created with the default mode — readable by
+  every other account on a shared machine. Caches made by earlier versions
+  are tightened too, including other projects': the sweep that already
+  visits every project on launch does it, so you do not have to open each
+  one to make it private.
+
+### Details
+
+The trust gate is one predicate that fails closed before `initialize` has
+been handled at all, so a new entry point cannot be added without meeting
+it. Six existing tests encoded the ungated contract; one of them asserted
+that an untrusted restart should be acknowledged, which was the hole
+itself.
+
+`Marshal.load` on plugin output remains, and is recorded as `024.73`
+rather than patched: the parent deserialises bytes the plugin produced,
+which instantiates classes before any validation runs. The obvious fix —
+JSON — does not fit, because declarations legitimately carry real type
+objects and `Marshal` was chosen for that. The direction is to send plain
+data and rebuild the objects in the parent from validated fields, which is
+a protocol change. Loading a plugin is gated on trust meanwhile.
+
+Two release-side gaps closed. The packaged artifact that actually ships
+had never been inspected for build-machine paths — CI greps an
+ubuntu-built VSIX, which is a different build entirely — and `release.sh`
+does that now, refusing to publish on a hit. It also refuses to publish
+when the Marketplace token file is readable beyond its owner, which it had
+documented without checking since the token flow was written.
+
+Nothing in this release adds a capability.
+
 ## 0.2.4 — An untrusted workspace could choose what the extension runs
 
 **Security fix. Update if you ever open a repository you have not

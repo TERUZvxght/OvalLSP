@@ -699,12 +699,19 @@ RSpec.describe Ovallsp::LocalInferencer do
       signatures.load(workspace_root: root)
       inferencer = described_class.new(signatures: signatures)
 
-      %w[Mutex Random].each do |constant|
+      # Written as source-to-answer rather than as one name used for
+      # both: 0.2.5 stopped RBS type names losing their namespace, and
+      # `Mutex` *is* `Thread::Mutex` -- so what the user writes and what
+      # the type is are no longer the same string for an aliased core
+      # class. The nesting is the point of that change; see
+      # `Signatures::TypeConverter#simple_name` for what it fixes and the
+      # measurement behind it.
+      { "Mutex" => "Thread::Mutex", "Random" => "Random" }.each do |constant, expected|
         document = Ovallsp::TextDocument.new(
           uri: "file:///a.rb", text: "value = #{constant}.new\nvalue\n", version: 1, language_id: "ruby"
         )
 
-        expect(inferencer.infer_at(document, { line: 1, character: 2 }).to_s).to eq(constant)
+        expect(inferencer.infer_at(document, { line: 1, character: 2 }).to_s).to eq(expected)
       end
     end
   end
