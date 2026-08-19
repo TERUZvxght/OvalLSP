@@ -252,12 +252,45 @@ module Ovallsp
       manager.respond_to?(:ready?) && manager.ready?
     end
 
+    # The editor's `rootUri` is the workspace root, not whatever this
+    # process's cwd resolves to.
+    #
+    # Core never read `rootUri` at all and defaulted to `Dir.pwd`. The
+    # extension spawns it with `cwd: folder.uri.fsPath`, and a child
+    # started with its cwd on a symlink reports the **resolved** path --
+    # so the workspace pass built every uri under the real path while
+    # every editor-driven message used the symlink path. The same file
+    # then appeared twice in the Problems panel, and the resolved-path
+    # copy could never be cleared, because nothing publishes to that uri
+    # again (`024.98`). A symlinked checkout is ordinary: `/tmp` on
+    # macOS, git worktrees, `~/src` pointing at a volume.
+    #
+    # `rootUri` wins because it is what the user sees and what every
+    # editor-driven message carries. A client that sends none keeps this
+    # process's cwd, which is what a direct stdio session and every
+    # existing caller rely on.
+    #
+    # Only before anything has been indexed: this runs from `initialize`,
+    # which is the first message, so nothing has been recorded under the
+    # old root yet.
+    def adopt_client_workspace_root(params)
+      root_uri = params.is_a?(Hash) ? params[:rootUri] : nil
+      return if root_uri.nil? || root_uri.to_s.empty?
+
+      path = UriUtil.to_path(root_uri.to_s)
+      return unless path && File.directory?(path)
+
+      @logger.info("workspace root from the client: #{path}") unless path == @workspace_root
+      @workspace_root = path
+    end
+
     def dispatch(message)
       method = message[:method]
       id = message[:id]
 
       case method
       when "initialize"
+        adopt_client_workspace_root(message[:params])
         @diagnostics_mode = diagnostics_mode_from(message[:params])
         @observation_test_command = observation_test_command_from(message[:params])
         # Kept, not merely consulted. Until 0.2.5 trust was read out of

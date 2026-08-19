@@ -517,18 +517,6 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
-## A workspace opened through a symlink shows every file twice
-
-If the folder you opened is a symlink — a `/tmp` checkout on macOS, a git
-worktree, `~/src` pointing at a volume — this extension analyses your
-files under the **resolved** path while the editor talks to it about the
-symlink path. The Problems panel then lists the same file twice, and the
-resolved-path copy shows errors on lines that no longer exist. Fixing
-them, saving, and closing the tab all leave it: nothing publishes to that
-path again, so nothing can clear it. Go to definition also returns the
-resolved path, so following it opens a second tab of the same
-file. <!-- documents: 024.98 -->
-
 ## Completion offers methods you cannot call
 
 On a class — `Post.`, `Circle.` — and on any receiver in a plain Ruby

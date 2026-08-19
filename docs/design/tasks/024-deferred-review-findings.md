@@ -241,7 +241,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.95`](#02495-a-deep-enough-file-ended-the-session-and-three-rescues-did-not-catch-it) | fixed | 0.2.6 | A deep enough file ended the session, and three rescues did not catc… |
 | [`024.96`](#02496-every-malformed-lsp-frame-ended-the-process) | fixed | 0.2.6 | Every malformed LSP frame ended the process |
 | [`024.97`](#02497-a-later-pass-at-the-same-version-overwrites-a-corrected-answer) | open | 0.3.0 | A later pass at the same version overwrites a corrected answer |
-| [`024.98`](#02498-a-workspace-opened-through-a-symlink-shows-every-file-twice-and-one-copy-can-never-be-cleared) | open | 0.3.0 | A workspace opened through a symlink shows every file twice, and one… |
+| [`024.98`](#02498-a-workspace-opened-through-a-symlink-shows-every-file-twice-and-one-copy-can-never-be-cleared) | fixed | 0.2.8 | A workspace opened through a symlink shows every file twice, and one… |
 | [`024.99`](#02499-completion-offers-members-that-cannot-be-called-from-where-it-was-asked) | open | 0.3.0 | Completion offers members that cannot be called from where it was as… |
 | [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.3.0 | The four features answer from different code paths and disagree at o… |
 | [`024.101`](#024101-analysis-runs-per-keystroke-so-the-answers-fall-behind-the-cursor-and-every-wrong-one-is-published) | open | 0.3.0 | Analysis runs per keystroke, so the answers fall behind the cursor a… |
@@ -5014,10 +5014,11 @@ direction that does not announce itself.
 ## 024.98 A workspace opened through a symlink shows every file twice, and one copy can never be cleared
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.3.0
+target: 0.2.8
+released-in: 0.2.8
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`workspace_root:` default),
@@ -5053,6 +5054,22 @@ canonical uri and nothing else constructs one. Which root wins is a
 deliberate decision — `rootUri` is what the user sees and what every
 editor-driven message carries, so Core should read it rather than
 inferring the root from its own cwd.
+
+### Fixed in 0.2.8, and the suite had been encoding the defect
+
+Core reads `rootUri` from `initialize` and takes it as the workspace
+root; a client that sends none keeps this process's cwd, which is what a
+direct stdio session relies on. It runs from the first message, before
+anything has been indexed under the other root.
+
+**One E2E example broke, and how it broke is the finding from the other
+side.** `capabilities_spec.rb`'s G17 built its expected uri with
+`File.realpath(path)` and had passed for four releases — because the
+workspace sits under a symlinked `/tmp` on macOS, Core resolved its root
+through `Dir.pwd`, and the example had to resolve the path to find the
+diagnostics. It now agrees with the client's own uri and needs no
+`realpath` at all. That call was the single one in the whole E2E suite,
+and nobody read it as a symptom.
 
 ## 024.99 Completion offers members that cannot be called from where it was asked
 
