@@ -180,6 +180,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | open | 0.3.0 | Completion did not get the fix hover and diagnostics did |
 | [`024.79`](#02479-model-first-completes-to-nothing) | open | 0.3.0 | `Model.first` completes to nothing |
 | [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | open | 0.3.0 | An unresolved hierarchy edge is expressible as a method owner |
+| [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | open | 0.3.0 | An ancestor reference carries no lexical context, so an ambiguous na… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -4125,6 +4126,58 @@ The second form is worth more than this entry alone: it is also what
 `024.76` needs — `closed_nominal?` cannot currently tell "no ancestor"
 from "an ancestor I could not name", and that is the same conflation one
 level up.
+## 024.81 An ancestor reference carries no lexical context, so an ambiguous name is picked rather than resolved
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  The consequence it caused -- a stranger's module in the ancestor chain,
+  and the class's own methods then reported missing -- is refused in
+  0.2.6 rather than mis-resolved. What is open is that the reference
+  still cannot be resolved *correctly*; it is now declined instead.
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/index/ancestor_fact.rb` (its shape),
+`core/lib/ovallsp/parser_service.rb` (`#record_ancestor_call`),
+`core/lib/ovallsp/workspace_index.rb` (`#resolve_type_name`)
+
+`AncestorFact` carries `owner / relation / target / location`. The target
+is the constant **as written**, and Ruby's constant lookup is lexical —
+so the one thing needed to identify the ancestor is not recorded.
+`resolve_type_name` then resolves a bare name by picking the first
+ordered candidate, deterministically since `024.15` but with nothing to
+prefer between them.
+
+Reproduced: an unrelated `Aaa::Helpers` anywhere in the workspace
+captures `Rackish::Request`'s `include Helpers`. The chain still reaches
+`BasicObject` and every entry resolves, so `closed_nominal?` calls it
+closed and reports the class's own methods missing.
+
+**Named by an external review** (`034-…-review-gpt-5.6-sol.md`) from the
+shape of the fact alone, against a briefing whose own reproduction of the
+same phenomenon was wrong.
+
+**Measured.** Over 213 files of real gem source: 262 ancestor facts, **8
+ambiguous**. Refusing those eight took `unknown-method` from **54 to 34**
+findings — same harness, one variable, and the unfixed side reproduced
+the independently recorded 54 exactly.
+
+**What 0.2.6 did, and why it is not the fix.** An ambiguous ancestor
+target becomes a nameless entry: the chain says it is incomplete instead
+of containing a stranger. That is a refusal, not a resolution — the
+correct module is still not found, and a legitimate `include Helpers` in
+a workspace that happens to contain another `Helpers` now contributes
+nothing.
+
+**Direction:** record the lexical nesting with the reference — the
+enclosing module path at the point the constant was written — and resolve
+against it, which is what Ruby does. The review notes the alternative
+worth weighing first: if an authoritative constant-reference
+representation already exists elsewhere in the index, `AncestorFact`
+should reference it rather than growing a second lexical model.
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml
@@ -4816,6 +4869,7 @@ guard spec, and a change set that grows a guard mid-loop resets the round
 that was reviewing it.
 
 ---
+
 
 
 

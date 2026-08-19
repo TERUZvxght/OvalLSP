@@ -262,6 +262,31 @@ module Ovallsp
       @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
     end
 
+    # Whether a *bare* name is claimed by more than one declared type, so
+    # that resolving it is a pick rather than a lookup.
+    #
+    # `#resolve_type_name` answers anyway, and should: for completion and
+    # go-to-definition a plausible class beats none, and 024.15 is why the
+    # pick is at least deterministic. But an ancestor edge is different --
+    # putting the wrong module in a chain does not merely answer weakly,
+    # it makes the chain *look complete while being wrong*, and
+    # `closed_nominal?` then reports the class's own methods missing.
+    # Measured: 12 of 54 false findings over real gem source, where
+    # `Helpers`, `Base`, `Error` and `Node` are claimed many times over.
+    #
+    # A qualified name is never ambiguous in this sense: the caller wrote
+    # the namespace, and `#substitution?` is what covers a written
+    # namespace resolving somewhere else.
+    def ambiguous_type_name?(name)
+      bare = Index::SymbolId.bare_name(name.to_s)
+      return false if bare.include?("::")
+
+      @mutex.synchronize do
+        candidates, = type_candidates_locked(name)
+        candidates.map(&:name).uniq.length > 1
+      end
+    end
+
     # Whether `resolve_type_name` answered about a *different name* than
     # the one it was asked about. It always answers when the last segment
     # matches something, and should -- for completion and go-to-definition
