@@ -77,6 +77,15 @@ def suite_result
   line = output.lines.reverse.find { |l| l.match?(/^\d+ examples?,/) }
   return [:errored, "the suite did not run to a count"] unless line
 
+  # An errored run is not a green one. `0 examples, 0 failures, 1 error
+  # occurred outside of examples` contains " 0 failures" and was read as
+  # green -- so a hunk whose reversal breaks *loading* was reported
+  # UNPINNED, which is the opposite of the truth and the most load-bearing
+  # kind of line there is. Found by this script on its second real run,
+  # against the change set that adds a `require_relative`.
+  return [:errored, line.strip] if line.include?("error occurred outside of examples")
+  return [:errored, "the suite ran no examples"] if line.start_with?("0 examples")
+
   [line.include?(" 0 failures") ? :green : :red, line.strip]
 end
 
@@ -127,7 +136,7 @@ puts "hunk_sweep: #{hunks.length} hunk(s) over core/lib, #{added_specs.length} s
 puts "hunk_sweep: `vscode/src` is not swept -- its suite is separate and this only drives rspec."
 puts
 
-pinned = unpinned = commentary = entangled = 0
+pinned = unpinned = commentary = entangled = errored = 0
 Dir.mktmpdir do |scratch|
   hunks.each_with_index do |hunk, index|
     label = format("h%02d", index + 1)
@@ -161,9 +170,11 @@ Dir.mktmpdir do |scratch|
 
     case verdict
     when :green then unpinned += 1
+    when :errored then errored += 1
     else pinned += 1
     end
-    puts "#{label}  #{verdict == :green ? 'UNPINNED' : 'pinned  '}  #{detail}"
+    label_for = { green: "UNPINNED", errored: "load-bearing (the suite could not run)" }.fetch(verdict, "pinned  ")
+    puts "#{label}  #{label_for}  #{detail}"
   end
 
   added_specs.each do |spec|
@@ -177,6 +188,8 @@ Dir.mktmpdir do |scratch|
 end
 
 puts
+accounted = pinned + unpinned + commentary + entangled + errored
 puts "hunk_sweep: #{pinned} pinned, #{unpinned} unpinned, #{commentary} comment-only, " \
-     "#{entangled} not separable (#{pinned + unpinned + commentary + entangled} of #{hunks.length} accounted for)"
+     "#{entangled} not separable, #{errored} load-bearing " \
+     "(#{accounted} of #{hunks.length} accounted for)"
 puts "An unpinned behavioural line is a defect in its own right (CLAUDE.md)." if unpinned.positive?
