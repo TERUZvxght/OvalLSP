@@ -59,6 +59,18 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # "An assertion that cannot fail is not a test" is a rule this project
   # already has and enforces on expectations. This is the same defect
   # arriving through the setup, where nothing was looking.
+  # An answer computed from the open buffer at `version`. The funnel takes
+  # the document rather than an integer since 037's C3, and a snapshot
+  # built through `#with_full_change` carries the same `buffer_id` -- so
+  # this is the same buffer at another point, which is what every example
+  # below is about. A document built from scratch would be a *different*
+  # buffer and would be refused for that reason instead.
+  def at(version, target_uri = uri)
+    server.instance_variable_get(:@document_store)
+          .fetch(uri: target_uri)
+          .with_full_change(text: "x = #{version}\n", version: version)
+  end
+
   def publish!(target_uri, findings, **kwargs)
     before = published.length
     server.send(:publish_findings, target_uri, findings, **kwargs)
@@ -75,15 +87,15 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   end
 
   it "refuses a publish for a version older than the one already sent" do
-    server.send(:publish_findings, uri, [finding, finding], version: 5)
-    server.send(:publish_findings, uri, [finding], version: 3)
+    server.send(:publish_findings, uri, [finding, finding], document: at(5))
+    server.send(:publish_findings, uri, [finding], document: at(3))
 
     expect(published).to eq([[5, 2]])
   end
 
   it "accepts the same version again, since a later pass may know more" do
-    server.send(:publish_findings, uri, [], version: 5)
-    server.send(:publish_findings, uri, [finding], version: 5)
+    server.send(:publish_findings, uri, [], document: at(5))
+    server.send(:publish_findings, uri, [finding], document: at(5))
 
     expect(published).to eq([[5, 0], [5, 1]])
   end
@@ -92,10 +104,13 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # when it is closed, and then a background pass that was already in
   # flight arriving with the findings again.
   it "does not let a background publish undo a clear" do
-    server.send(:publish_findings, uri, [finding, finding], version: 2)
+    in_flight = at(2)
+    server.send(:publish_findings, uri, [finding, finding], document: in_flight)
     server.instance_variable_get(:@document_store).close(uri: uri)
     server.send(:clear_findings, uri)
-    server.send(:publish_findings, uri, [finding, finding], version: 2)
+    # The document the background pass is still holding -- captured before
+    # the close, which is the whole point: it outlives the buffer.
+    server.send(:publish_findings, uri, [finding, finding], document: in_flight)
 
     expect(published).to eq([[2, 2], [nil, 0]])
   end
@@ -142,10 +157,10 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
       original.call(*args)
     end
 
-    slow = Thread.new { server.send(:publish_findings, uri, [finding], version: 3) }
+    slow = Thread.new { server.send(:publish_findings, uri, [finding], document: at(3)) }
     inside_first_write.pop
 
-    overtaker = Thread.new { server.send(:publish_findings, uri, [finding, finding], version: 4) }
+    overtaker = Thread.new { server.send(:publish_findings, uri, [finding, finding], document: at(4)) }
     # If the lock spans the write, the second publish cannot even reach
     # its decision while the first is parked mid-write.
     expect(overtaker.join(0.5)).to be_nil
@@ -159,7 +174,7 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # And a clear always wins, whatever came before it -- closing a file is
   # not something a stale computation may overrule.
   it "lets a clear through even when a newer version was just published" do
-    server.send(:publish_findings, uri, [finding], version: 9)
+    server.send(:publish_findings, uri, [finding], document: at(9))
     server.send(:clear_findings, uri)
 
     expect(published).to eq([[9, 1], [nil, 0]])
@@ -168,9 +183,9 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # Reopening starts over: the memory is per-uri and a clear resets it,
   # so the file's diagnostics come back rather than being refused as old.
   it "publishes again after a clear, at any version, once the file is open again" do
-    server.send(:publish_findings, uri, [finding], version: 9)
+    server.send(:publish_findings, uri, [finding], document: at(9))
     server.send(:clear_findings, uri)
-    server.send(:publish_findings, uri, [finding], version: 1)
+    server.send(:publish_findings, uri, [finding], document: at(1))
 
     expect(published).to eq([[9, 1], [nil, 0], [1, 1]])
   end
@@ -184,7 +199,7 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # inside. Demonstrated by a reviewer: one versionless publish left the
   # panel empty for a buffer that had two findings.
   it "refuses a versionless publish while the buffer is open" do
-    server.send(:publish_findings, uri, [finding], version: 7)
+    server.send(:publish_findings, uri, [finding], document: at(7))
     server.send(:publish_findings, uri, [])
 
     expect(published).to eq([[7, 1]])
@@ -199,8 +214,8 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   end
 
   it "keeps each uri's memory to itself" do
-    server.send(:publish_findings, uri, [finding], version: 5)
-    server.send(:publish_findings, "file:///b.rb", [finding], version: 1)
+    server.send(:publish_findings, uri, [finding], document: at(5))
+    server.send(:publish_findings, "file:///b.rb", [finding], document: at(1, "file:///b.rb"))
 
     expect(published).to eq([[5, 1], [1, 1]])
   end
@@ -211,11 +226,11 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # "four writer kinds, no state" shape 029's M-3 names, surviving inside
   # the fix for it.
   it "clears through the funnel when a buffer closes, so reopening starts over" do
-    publish!(uri, [finding], version: 9)
+    publish!(uri, [finding], document: at(9))
     server.send(:handle_did_close, { textDocument: { uri: uri } })
     server.instance_variable_get(:@document_store)
           .open(uri: uri, text: "x = 1\n", version: 1, language_id: "ruby")
-    server.send(:publish_findings, uri, [finding], version: 1)
+    server.send(:publish_findings, uri, [finding], document: at(1))
 
     # Without the clear going through the funnel, the memory still says 9
     # and the reopened buffer's version 1 is refused as old -- so the file
@@ -234,13 +249,13 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # Found by the hunk-by-hunk sweep: the one behavioural line in this
   # change set that could be reverted with the whole suite still green.
   it "clears through the funnel when a file leaves the workspace" do
-    publish!(uri, [finding], version: 9)
+    publish!(uri, [finding], document: at(9))
     server.instance_variable_get(:@document_store).close(uri: uri)
     server.send(:handle_did_change_watched_files,
                 { changes: [{ uri: uri, type: Ovallsp::Server::FILE_CHANGE_DELETED }] })
     server.instance_variable_get(:@document_store)
           .open(uri: uri, text: "x = 1\n", version: 1, language_id: "ruby")
-    server.send(:publish_findings, uri, [finding], version: 1)
+    server.send(:publish_findings, uri, [finding], document: at(1))
 
     expect(published.last).to eq([1, 1])
   end
@@ -265,15 +280,15 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # the store holds now. A version that *does* exceed it belongs to a
   # different buffer instance -- a closed one.
   it "refuses a publish from a buffer instance that is no longer the open one" do
-    publish!(uri, [finding, finding], version: 47)
+    publish!(uri, [finding, finding], document: at(47))
     server.send(:handle_did_close, { textDocument: { uri: uri } })
     server.instance_variable_get(:@document_store)
           .open(uri: uri, text: "fixed\n", version: 1, language_id: "ruby")
 
-    server.send(:publish_findings, uri, [finding, finding], version: 47)
-    server.send(:publish_findings, uri, [], version: 1)
+    server.send(:publish_findings, uri, [finding, finding], document: at(47))
+    server.send(:publish_findings, uri, [], document: at(1))
     server.instance_variable_get(:@document_store).change(uri: uri, version: 2, changes: [{ text: "fixed!\n" }])
-    server.send(:publish_findings, uri, [], version: 2)
+    server.send(:publish_findings, uri, [], document: at(2))
 
     expect(published).to eq([[47, 2], [nil, 0], [1, 0], [2, 0]])
   end
@@ -287,8 +302,8 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
     store = server.instance_variable_get(:@document_store)
     store.change(uri: uri, version: 4, changes: [{ text: "a\n" }])
 
-    server.send(:publish_findings, uri, [finding], version: 3)
-    server.send(:publish_findings, uri, [finding, finding], version: 4)
+    server.send(:publish_findings, uri, [finding], document: at(3))
+    server.send(:publish_findings, uri, [finding, finding], document: at(4))
 
     expect(published).to eq([[3, 1], [4, 2]])
   end

@@ -20,7 +20,20 @@ module Ovallsp
   #   before the target position throws the comparison off by however many
   #   extra bytes it took (docs/design/tasks/008.5-runtime-and-index-corrections.md).
   class TextDocument
-    attr_reader :uri, :version, :language_id, :text
+    attr_reader :uri, :version, :language_id, :text, :buffer_id
+
+    BUFFER_ID_MUTEX = Mutex.new
+    private_constant :BUFFER_ID_MUTEX
+
+    # A counter rather than `object_id`: object ids are reused once the
+    # object they named is collected, and a document is exactly the kind
+    # of short-lived value that gets collected -- so two unrelated buffers
+    # could present the same id and the funnel would read them as one.
+    # Documents are constructed from a handful of places at human speed;
+    # a mutex around an integer costs nothing measurable.
+    def self.next_buffer_id
+      BUFFER_ID_MUTEX.synchronize { @buffer_id_sequence = (@buffer_id_sequence || 0) + 1 }
+    end
 
     # **A snapshot, not a mutable buffer.** Until 0.2.7 this class was
     # edited in place on the dispatch thread while background threads read
@@ -55,10 +68,25 @@ module Ovallsp
     # instance -- one reference assignment -- and is the only caller of
     # the `#with_*` builders below. 029's M-2, and the precondition for
     # M-3's version ordering to mean anything.
-    def initialize(uri:, text:, version:, language_id:)
+    # `buffer_id` identifies *which* buffer this snapshot belongs to, and
+    # is preserved across edits by the `#with_*` builders -- a new one is
+    # minted only when a document is constructed from scratch, which is
+    # what opening a file or reading one from disk does.
+    #
+    # It exists because a `version` is chosen by the client and is only
+    # meaningful *within* one buffer. Across a close and reopen the client
+    # may start again anywhere: `024.56`'s rule catches a reopen that
+    # numbers *below* what was published, because a version above the open
+    # buffer's cannot be that buffer's -- and cannot catch a reopen that
+    # numbers above, which is the same defect with the numbering going the
+    # other way. No comparison of integers can, because the two integers
+    # are not on the same scale. Carrying which buffer they came from is
+    # what makes them comparable at all (037's C3).
+    def initialize(uri:, text:, version:, language_id:, buffer_id: nil)
       @uri = uri
       @language_id = language_id
       @version = version
+      @buffer_id = buffer_id || self.class.next_buffer_id
       # Frozen through, not just at the top. `freeze` alone is shallow and
       # `attr_reader :text` hands the string out, so `doc.text << "x"`
       # succeeded and the offset tables then described text that no longer
@@ -71,8 +99,11 @@ module Ovallsp
       freeze
     end
 
+    # The same buffer, further along: `buffer_id` is carried, so an answer
+    # computed from an earlier snapshot is still recognisably this
+    # buffer's answer and is ordered against it by version, as before.
     def with_full_change(text:, version:)
-      self.class.new(uri: @uri, text: text, version: version, language_id: @language_id)
+      self.class.new(uri: @uri, text: text, version: version, language_id: @language_id, buffer_id: @buffer_id)
     end
 
     def with_incremental_change(range:, new_text:, version:)

@@ -489,7 +489,7 @@ module Ovallsp
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
       end
-      publish_findings(document.uri, findings, version: document.version)
+      publish_findings(document.uri, findings, document: document)
     rescue StandardError => e
       @logger.error("failed to compute diagnostics for #{document.uri}: #{e.class}: #{e.message}")
     ensure
@@ -560,17 +560,29 @@ module Ovallsp
     # and that count bounds the pass and drives its truncation log. It
     # returned `true` unconditionally and so counted files nothing was
     # published for.
-    def publish_findings(uri, findings, version: nil)
+    # Takes the *document the findings were computed from*, not a version
+    # integer re-derived at the end. A version is chosen by the client and
+    # is only meaningful within one buffer; carrying the buffer makes the
+    # comparison well-defined, and makes a close-and-reopen refusable in
+    # both directions rather than only when the client happens to number
+    # downwards (037's C3, and `024.56`'s other half).
+    #
+    # A document with a nil version is a disk read -- the workspace pass
+    # -- and may only speak for a uri nobody has open, exactly as before.
+    def publish_findings(uri, findings, document: nil)
       @publish_state_mutex.synchronize do
-        open_version = @document_store.fetch(uri: uri)&.version
+        open_document = @document_store.fetch(uri: uri)
+        version = document&.version
         if version
-          return false if open_version.nil? || version > open_version
+          return false if open_document.nil?
+          return false unless document.buffer_id == open_document.buffer_id
+          return false if version > open_document.version
 
           last = @last_published_version[uri]
           return false if last && version < last
 
           @last_published_version[uri] = version
-        elsif open_version
+        elsif open_document
           return false
         end
 
