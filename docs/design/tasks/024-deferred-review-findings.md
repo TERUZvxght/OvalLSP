@@ -231,6 +231,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.99`](#02499-completion-offers-members-that-cannot-be-called-from-where-it-was-asked) | open | 0.3.0 | Completion offers members that cannot be called from where it was as… |
 | [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.3.0 | The four features answer from different code paths and disagree at o… |
 | [`024.101`](#024101-analysis-runs-per-keystroke-so-the-answers-fall-behind-the-cursor-and-every-wrong-one-is-published) | open | 0.3.0 | Analysis runs per keystroke, so the answers fall behind the cursor a… |
+| [`024.102`](#024102-eight-classes-and-the-logic-each-one-could-not-have-happened-under) | open | 0.2.9 | Eight classes, and the logic each one could not have happened under |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5153,6 +5154,53 @@ intermediate answers were wrong, and 22 of 22 were.
 **Direction:** analyse the state the buffer settled into rather than each
 event on the way to it. `029`'s M-3 was named as the precondition the
 rolled-back attempt lacked; it exists as of 0.2.7.
+
+## 024.102 Eight classes, and the logic each one could not have happened under
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Not a defect a user meets. It is the index of the ones they do, sorted
+  by how each came about rather than by where it surfaced, so a reader
+  looking at any single entry below can see which class it belongs to and
+  what is being built to make that class impossible.
+target: 0.2.9
+```
+
+**Area:** the register as a whole; `037`'s "Preventing the classes"
+section carries the same table with sizes and reasoning
+
+Asked for by the maintainer after 0.2.7's second review round: enumerate
+what is open, decide for each the logic under which it could not have
+happened, build those, and only then go on reviewing. The instruction
+behind it is that fixing instances one at a time had stopped paying — six
+entries in this register share one cause, and each 0.2.6 fix was one more
+caller learning one more question.
+
+| | class | preventing logic | entries |
+|---|---|---|---|
+| C1 | a declaration's owner and kind are decided by whichever subset of the parser's six parallel mutable stacks each recorder's author remembered | one immutable cref, pushed in one place, taken as an argument by every recorder | `024.26`, `024.31`, `024.32`, `024.33`, `024.34` |
+| C2 | a check asserts absence from an enumeration it could not finish; the four features answer from different paths and disagree at one position | one query per position: present / absent / unknown, plus visibility, with `unknown` produced by whatever failed to enumerate | `024.13`, `024.18`, `024.35`, `024.78`, `024.82`, `024.83`, `024.88`, `024.91`, `024.99`, `024.100` |
+| C3 | an answer is computed about one thing and attributed to another | the publish path takes the document object, compared by identity | `024.19`, `024.44`, `024.97` |
+| C4 | a number in a document describing the tree is typed rather than derived | marked claims, recomputed by a spec | `024.67` |
+| C5 | an assertion that cannot fail, through the setup | a setup that must take effect asserts it did | `024.30` |
+| C6 | a fact about something outside this tree, asserted from memory | one document, each row naming the line that shows it | — |
+| C8 | a uri is used as an identity without being canonicalised | one function makes the canonical uri; read `rootUri` | `024.98` |
+| C9 | analysis runs per event rather than per settled state | coalesce per uri, cancel a superseded analysis | `024.45`, `024.57`, `024.101` |
+
+C4, C5 and C6 shipped in 0.2.7 — the three that protect measurement
+itself, which is the right order when every class above is to be judged
+by a before-and-after and three of this project's own numbers have failed
+re-derivation. C1 and C8 are 0.2.8; C2, C3 and C9 are 0.2.9.
+
+**What this entry is not.** It is not permission to restructure. `024.15`
+(0.1.12: 47 files, four rounds, zero net progress, rolled back whole) and
+`024.47` (0.2.1: a rule centralised into resolution, rolled back) are
+what that costs here, and C2 in particular is the shape both had. Each
+class ships with its own corpus measurement, and one that does not move a
+measurement is one to abandon rather than defend.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

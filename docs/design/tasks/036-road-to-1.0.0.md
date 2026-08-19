@@ -119,6 +119,28 @@ build, that had missed a `0.2.4` target three times.
 independent, and 0.2.7 is already the release where a first attempt at
 the funnel introduced a defect worse than the one it fixed.
 
+### 0.2.8 — the parser's bookkeeping, and a file's identity *(axis B)*
+
+`037`'s C1 and C8. A declaration's owner and kind stop being decided by
+six parallel mutable stacks and become one immutable value every recorder
+is handed; a uri gets one canonical form so a symlinked workspace stops
+showing every file twice. Between them they carry `024.26`, `024.31`,
+`024.32`, `024.33`, `024.34` and `024.98`, and the open-surface family
+0.2.6's rounds kept finding one instance at a time.
+
+### 0.2.9 — one question, asked once, answered honestly *(axis B)*
+
+`037`'s C2, C3 and C9. One query per position answering present / absent
+/ unknown plus visibility, read by all four features; the publish path
+taking the document rather than a version integer; and analysis following
+the state the buffer settled into rather than every event on the way.
+`024.13`, `024.18`, `024.35`, `024.45`, `024.57`, `024.78`, `024.82`,
+`024.83`, `024.88`, `024.91`, `024.97`, `024.99`, `024.100`, `024.101`.
+
+This is the largest thing left before 1.0.0 and the one most likely to be
+attempted at the wrong size. `024.15` and `024.47` are what that costs
+here. Each part ships with its own corpus measurement.
+
 ### 0.3.0 — the first release that may add capability *(axis B)*
 
 Whatever the roadmap holds once the foundation is sound. Deliberately not
