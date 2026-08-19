@@ -410,7 +410,15 @@ module Ovallsp
             visibility = @workspace_index.declarations_with_uri(
               Index::SymbolId.new(kind: kind, owner: entry.name, name: name, discriminator: nil)
             ).first&.last&.visibility
-            next if explicit_receiver && visibility == :private
+            # **Protected as well as private.** `Prot.new.guarded` raises
+            # exactly as a private call does, and only private was
+            # excluded -- a 0.2.8 review round measured the cost by asking
+            # a booted application `respond_to?` for every label offered.
+            # Protected is the one visibility that depends on where the
+            # call is written rather than only on the declaration, which
+            # is why it is filtered on the explicit-receiver branch and
+            # left alone for an implicit self.
+            next if explicit_receiver && %i[private protected].include?(visibility)
 
             seen << name
             names << name
@@ -418,8 +426,18 @@ module Ovallsp
         end
       end
 
+      # Declared names *and* the aliases that point at them. `#resolve`
+      # has followed an alias since Task 009 and `#complete` never did, so
+      # hover, go-to-definition and the undefined-method check all knew
+      # `aka` while completion said the name did not exist (`024.107`) --
+      # one question with two answers depending which feature asked, which
+      # is `024.100`'s shape and what C2 is for.
       def method_names_for_owner(owner, kind)
-        @workspace_index.method_symbol_ids(owner, kind: kind).map(&:name).uniq
+        declared = @workspace_index.method_symbol_ids(owner, kind: kind).map(&:name)
+        aliases = @hierarchy_index.aliases(owner)
+                                  .select { |fact| fact.singleton == (kind == :singleton_method) }
+                                  .map(&:new_name)
+        (declared + aliases).uniq
       end
 
       def merge_names(per_type_names)

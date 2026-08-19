@@ -327,7 +327,19 @@ module Ovallsp
         @declarations << Index::Declaration.new(
           symbol_id: symbol_id,
           location: Index::SourceLocation.to_range(node.location, @lines),
-          visibility: singleton ? nil : (inline_visibility || @cref.visibility),
+          # A singleton method carried no visibility at all until 0.2.9,
+          # so `private` inside `class << self` and `private_class_method`
+          # had nothing downstream to filter on and both were offered by
+          # completion and accepted by the check (`024.105`; the booted
+          # app raises `private method 'x' called for class`).
+          #
+          # The distinction is *why* it is singleton. Inside `class <<
+          # self` the surrounding body's section applies, exactly as a
+          # class body's does to a `def`. Written `def self.x` in a class
+          # body it does not -- Ruby leaves that public however many
+          # `private`s precede it, and 0.2.8's round confirmed this engine
+          # already had that right.
+          visibility: visibility_for_definition(node, singleton, inline_visibility),
           parameters: extract_parameters(node.parameters),
           origin: :source,
           body_source: node.body&.slice,
@@ -433,6 +445,7 @@ module Ovallsp
           else
             apply_visibility_arguments(node)
           end
+          apply_class_visibility_arguments(node) if CLASS_VISIBILITY_MODIFIERS.key?(node.name)
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
           declared_before = @declarations.size
@@ -1248,6 +1261,12 @@ module Ovallsp
 
       VISIBILITY_MODIFIERS = { public: :public, private: :private, protected: :protected }.freeze
 
+      # The class-side pair. They take names only -- there is no
+      # section-opening form -- and they name *singleton* methods
+      # wherever they are written, which is what makes them a separate
+      # table rather than entries in the one above.
+      CLASS_VISIBILITY_MODIFIERS = { private_class_method: :private, public_class_method: :public }.freeze
+
       # `private`/`protected`/`public` *with* arguments do not open a
       # section -- they change the visibility of exactly the methods named.
       # Only the bare, argumentless section form was handled, so both
@@ -1323,9 +1342,32 @@ module Ovallsp
         rewrite_recorded_visibility(names, visibility)
       end
 
-      def rewrite_recorded_visibility(names, visibility)
+      # `private_class_method :build` names a singleton method that has
+      # already been declared, wherever it is written -- there is no
+      # section-opening form to track and no pending entry to leave. A
+      # `def` argument (`private_class_method def self.x; end`) is
+      # recorded before this runs for the same reason the instance-side
+      # symbol form is.
+      def apply_class_visibility_arguments(node)
+        visibility = CLASS_VISIBILITY_MODIFIERS.fetch(node.name)
+        return if @cref.in_method_body? || node.arguments.nil?
+
+        names = node.arguments.arguments.filter_map { |argument| symbol_name(argument) }
+        rewrite_recorded_visibility(names, visibility, kind: :singleton_method) unless names.empty?
+      end
+
+      def visibility_for_definition(node, singleton, inline_visibility)
+        return inline_visibility || @cref.visibility unless singleton
+        # Singleton *because* of `class << self`, not because of an
+        # explicit `self.` receiver.
+        return inline_visibility || @cref.visibility if node.receiver.nil? && @cref.declares_singleton?
+
+        inline_visibility
+      end
+
+      def rewrite_recorded_visibility(names, visibility, kind: :instance_method)
         @declarations.map! do |declaration|
-          next declaration unless declaration.symbol_id.kind == :instance_method
+          next declaration unless declaration.symbol_id.kind == kind
           next declaration unless declaration.symbol_id.owner == current_owner
           next declaration unless names.include?(declaration.symbol_id.name)
 

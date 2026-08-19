@@ -248,10 +248,10 @@ nobody can search is the recording habit without the benefit.
 | [`024.102`](#024102-eight-classes-and-the-logic-each-one-could-not-have-happened-under) | open | 0.2.9 | Eight classes, and the logic each one could not have happened under |
 | [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | open | 0.2.9 | A bare class name inside a namespace answers with an arbitrary same-… |
 | [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | open | 0.2.9 | `class_methods do` in a concern is attributed to the instance side |
-| [`024.105`](#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | open | 0.2.9 | Visibility is not recorded for singleton methods at all |
+| [`024.105`](#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | fixed | 0.2.9 | Visibility is not recorded for singleton methods at all |
 | [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.9 | `module_function` and `extend self` produce nothing |
-| [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | open | 0.2.9 | An alias never appears in completion, though every other feature kno… |
-| [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | open | 0.2.9 | Protected methods are offered on an explicit external receiver |
+| [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
+| [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5336,10 +5336,11 @@ connected is clean".
 ## 024.105 Visibility is not recorded for singleton methods at all
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.9
+released-in: 0.2.9
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (`#visit_def_node`'s
@@ -5393,10 +5394,11 @@ not, on a module whose `def self.` methods the engine does know.
 ## 024.107 An alias never appears in completion, though every other feature knows it
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.9
+released-in: 0.2.9
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb` (`#complete`
@@ -5422,10 +5424,11 @@ which is `024.100`'s shape again: one question, two code paths.
 ## 024.108 Protected methods are offered on an explicit external receiver
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.9
+released-in: 0.2.9
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#members_of`)
