@@ -84,6 +84,46 @@ module Ovallsp
       # `conditional: true` rather than omitted — diagnostics/definition
       # callers decide what to do with a conditional candidate; this
       # layer never silently drops one.
+      # The same question as `#resolve`, answered in three states instead
+      # of a list whose emptiness means two different things.
+      #
+      # **The default is `unknown`, and that inversion is the point.**
+      # `#resolve` answers `[]` both for "the workspace does not declare
+      # this" and for "I could not look at all", and every consumer then
+      # assumes absence and subtracts the ways of not knowing it has
+      # heard about. 0.2.6 added four such subtractions to
+      # `Diagnostics::Engine`, one per review round, each after a false
+      # report on code that runs. With the default the other way round, a
+      # way of not knowing that nobody has thought of yet produces
+      # silence.
+      #
+      # This resolver rules out only what it can see: a receiver that is
+      # not a class, and an ancestor chain with a link it could not
+      # identify. RBS, the Runtime Agent, a reopened core class and a
+      # surface opened by an unreadable macro are all somebody else's to
+      # rule out, and until they do the answer stays `unknown`. Nothing
+      # here produces `absent` yet, deliberately: `absent` is earned by
+      # whoever can account for the whole surface, and moving those
+      # accounts here is the rest of `037`'s C2.
+      #
+      # `#resolve` is untouched, so nothing changes behaviour on the
+      # strength of this alone.
+      def availability(receiver_type:, name:, context: {})
+        normalized, normalized_context = normalize_class_receiver(receiver_type, context)
+        types = nominal_members(normalized)
+        return MemberAvailability.unknown(:receiver_not_nominal) if types.empty?
+
+        candidates = merge_candidates(types.map { |type| candidates_for_type(type, name.to_s, normalized_context) },
+                                      name.to_s)
+        return MemberAvailability.present(candidates) unless candidates.empty?
+
+        singleton = normalized_context[:singleton] == true
+        identified = types.all? do |type|
+          @hierarchy_index.ancestors(type.name, singleton: singleton).all? { |entry| !entry.name.nil? && entry.kind }
+        end
+        MemberAvailability.unknown(identified ? :not_declared_in_workspace : :ancestor_not_identified)
+      end
+
       def resolve(receiver_type:, name:, context: {})
         method_name = name.to_s
         receiver_type, context = normalize_class_receiver(receiver_type, context)
