@@ -6,6 +6,50 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.7 — a document cannot be read half-written, and a publish cannot arrive out of order
+
+- **Closing a file no longer leaves its errors behind.** A re-analysis
+  pass running in the background decided which files to visit before it
+  started, so one already in flight republished a file you had just
+  closed — and nothing republishes a file nobody has open, so those
+  errors stayed in the Problems panel for the rest of the session. This
+  was in every version this extension has shipped.
+- **And a slower analysis cannot put its older answers back.** Every
+  publish now goes through one place that remembers what it last said
+  about a file, refuses anything older, and lets closing a file win.
+  Reopening a file starts over cleanly: an answer computed for the
+  buffer you closed can no longer be mistaken for one about the buffer
+  you just opened.
+- **A file's text, version and line positions always belong together.**
+  They were written one at a time while background work read them, so a
+  position could be worked out from new text against old line offsets.
+  Measured on the previous version: under a concurrent edit, 1,977,450
+  of 1,977,451 attempts returned a position belonging to neither. That
+  is the arithmetic under hover, completion and go to definition.
+- **A file deep enough to exhaust Ruby's stack, and a malformed message,
+  no longer end the session** — carried over and hardened.
+
+### Details
+
+No capability row moves. This release is about answers arriving in the
+right order and about a document never being readable half-written.
+
+`docs/KNOWN_LIMITATIONS.md` gained six sections rather than losing them,
+and one of the ones it kept was corrected: closing a saved file *does*
+still bring diagnostics back, recomputed from disk, which is how this
+extension has reported on unopened files since 0.2.0. What was fixed is
+the stale copy from the buffer you closed. Saying only the first half was
+an over-claim, and a review round caught it.
+
+Four independent review rounds ran against this release — reading the
+change set, driving the product, attacking its guarantees, and
+re-deriving its own claims. The first attempt at the publish rule
+introduced a defect **worse than the one it fixes**: close a tab while
+work is in flight, reopen it, and the panel would freeze on the pre-close
+errors for hundreds of edits. Two rounds found it independently. It is
+recorded in full, because a release that only lists what it fixed is not
+telling you how it got there.
+
 ## 0.2.6 — The undefined-method check, made honest
 
 - **False "has no method" reports on real code: 54 → 6.** Measured over
