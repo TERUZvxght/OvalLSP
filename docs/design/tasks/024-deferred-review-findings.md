@@ -99,6 +99,36 @@ roadmap file for the same reason everything else does — one place.
 
 ---
 
+## Retired numbers
+
+An entry is deleted once nothing in the tree still cites it, and the
+legend says to grep before deleting rather than going by the calendar.
+That grep was skipped, repeatedly: **23 citations across source
+comments, spec comments, the VS Code extension and a task record point
+at numbers that are not here** — `024.67` recorded seven of them and
+undercounted by sixteen.
+
+A pointer to a reason is worth having, so the numbers resolve again,
+here. Each names what the entry said; the reason itself is in the
+comment that cites it, which is where a reader is standing.
+
+| # | what it recorded |
+|---|---|
+| `024.2` | `Hash.new` / `Set.new` hover as `Hash[Unknown]` / `Set[Unknown]` |
+| `024.3` | an `untyped` RBS singleton signature still shadows source resolution |
+| `024.4` | `BeforeActionFinder#record` mutates the Prism AST in place |
+| `024.7` | `rootIdentity`'s refresh assignment cannot affect any decision |
+| `024.9` | a forced crash popup can still appear for deliberate stops |
+| `024.12` | a hash literal and `Hash.new` still render differently |
+| `024.70` | withdrawn, not fixed — the packaged-VSIX path warning was not blind; the re-run that "disproved" it went through a `ugrep` wrapper that skips binary files without `-a`. See CLAUDE.md's "A tool with the right name is not necessarily the tool under test" |
+
+`core/spec/meta/measured_claims_spec.rb` checks that every `024.N` cited
+anywhere in the tree resolves either to an entry below or to a row here,
+so the next deletion cannot leave a dangling pointer whether or not
+anyone remembers to grep.
+
+---
+
 ## Index
 
 **Generated from the entries below; do not hand-edit.** Regenerate with
@@ -167,7 +197,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.64`](#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | open | — | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
 | [`024.65`](#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
 | [`024.66`](#02466-a-marketing-card-kept-carrying-claims-about-what-an-error-s-text-says) | fixed | 0.2.3 | A marketing card kept carrying claims about what an error's text says |
-| [`024.67`](#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | open | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
+| [`024.67`](#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | fixed | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
 | [`024.68`](#02468-three-rounds-of-guards-on-a-hand-rolled-grammar-each-blind-one-assumption-deeper) | open | 0.3.0 | Three rounds of guards on a hand-rolled grammar, each blind one assu… |
 | [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | open | 0.2.4 | The two suites that drive a real editor are run by nobody but the ma… |
 | [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.2.4 | One mutable Rails fixture is shared by every worker, so the suite ca… |
@@ -197,6 +227,10 @@ nobody can search is the recording habit without the benefit.
 | [`024.95`](#02495-a-deep-enough-file-ended-the-session-and-three-rescues-did-not-catch-it) | fixed | 0.2.6 | A deep enough file ended the session, and three rescues did not catc… |
 | [`024.96`](#02496-every-malformed-lsp-frame-ended-the-process) | fixed | 0.2.6 | Every malformed LSP frame ended the process |
 | [`024.97`](#02497-a-later-pass-at-the-same-version-overwrites-a-corrected-answer) | open | 0.3.0 | A later pass at the same version overwrites a corrected answer |
+| [`024.98`](#02498-a-workspace-opened-through-a-symlink-shows-every-file-twice-and-one-copy-can-never-be-cleared) | open | 0.3.0 | A workspace opened through a symlink shows every file twice, and one… |
+| [`024.99`](#02499-completion-offers-members-that-cannot-be-called-from-where-it-was-asked) | open | 0.3.0 | Completion offers members that cannot be called from where it was as… |
+| [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.3.0 | The four features answer from different code paths and disagree at o… |
+| [`024.101`](#024101-analysis-runs-per-keystroke-so-the-answers-fall-behind-the-cursor-and-every-wrong-one-is-published) | open | 0.3.0 | Analysis runs per keystroke, so the answers fall behind the cursor a… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -3542,15 +3576,32 @@ to start (024.55).
 ## 024.67 Seven register numbers are cited from the tree and resolve to nothing
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
+released-in: 0.2.7
 user-visible-note: >
   The dangling pointers live in source comments, spec comments and
   changelog entries -- developer-facing routes to reasons, not
   anything an editor user sees or a behaviour the extension has.
 target: 0.3.0
 ```
+
+**Fixed in 0.2.7, and there were 23, not seven.** Counted mechanically
+rather than by reading: `core/spec/meta/measured_claims_spec.rb` scans
+every `024.N` cited in `core/lib`, `core/spec`, `vscode/src` and `docs`,
+and found sixteen more than this entry recorded — including two in a task
+record and seven in the extension's own source and unit tests.
+
+The numbers resolve again: the register's head now carries a **Retired
+numbers** table naming what each deleted entry recorded, recovered from
+git history, and the same spec accepts a citation that resolves to a row
+there. So a deletion cannot leave a dangling pointer whether or not
+anyone remembers the legend's grep — which is the arrangement that failed
+here, three times over.
+
+`024.70` is in that table for a different reason: it was **withdrawn**
+rather than fixed, and the table says so.
 
 **Area:** this file's legend (the deletion rule),
 `core/lib/ovallsp/types.rb:122`,
@@ -4944,6 +4995,164 @@ document version by generation would let the corrected answer win without
 refusing the repeats that make correction possible. Needs its own change
 set and its own measurement: it can silence a publish, which is the
 direction that does not announce itself.
+
+## 024.98 A workspace opened through a symlink shows every file twice, and one copy can never be cleared
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`workspace_root:` default),
+`vscode/src/extension.ts` (the `cwd` it spawns Core with)
+
+Core never reads `rootUri` — `grep -rn "rootUri" core/lib` finds nothing
+— and defaults `workspace_root:` to `Dir.pwd`. The extension spawns Core
+with `cwd: folder.uri.fsPath`, and a child started with its cwd on a
+symlink reports the **resolved** path from `Dir.pwd`. So the workspace
+pass builds every uri under the real path while every editor-driven
+publish uses the symlink path.
+
+Driven end to end by 0.2.7's `drive` round, workspace root
+`ws30_link → ws30_real`:
+
+| step | the real-path uri | the symlink uri |
+|---|---|---|
+| cold start | two findings | nothing |
+| opened via the symlink, both errors fixed, saved | **the same two findings** | clean |
+| tab closed | **the same two findings** | clean |
+
+Nothing publishes to the real-path uri again, so nothing can clear it.
+The developer sees the file listed twice, one copy showing errors on
+lines that no longer exist, for the whole session — and go-to-definition
+returns the real path, so following it opens a second tab of the same
+file under a different path.
+
+A symlinked checkout is ordinary: `/tmp` on macOS, git worktrees,
+dotfile setups, `~/src` pointing at a volume.
+
+**Direction:** one function turns a path or uri into the workspace's
+canonical uri and nothing else constructs one. Which root wins is a
+deliberate decision — `rootUri` is what the user sees and what every
+editor-driven message carries, so Core should read it rather than
+inferring the root from its own cwd.
+
+## 024.99 Completion offers members that cannot be called from where it was asked
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#members_of`),
+`core/lib/ovallsp/semantic/method_resolver.rb`
+
+Measured by 0.2.7's `drive` round by asking the *running application*
+`respond_to?` for every label returned, rather than by inspection:
+
+| receiver | labels | not callable |
+|---|---|---|
+| `Post.` (Rails, Agent connected) | 816 | **91** — `abort`, `exec`, `fork`, `exit!`, `eval`, `append_features`, `` ` `` |
+| `p.` where `p = Post.new` | 338 | 0 |
+| a user's own class, plain Ruby | 121 | **69 (57%)**, `initialize` among them |
+| `Circle.` (plain Ruby) | 196 | 86 |
+| `"text".` (plain Ruby) | 251 | 69 |
+
+Every one of those raises `NoMethodError` if accepted. The instance path
+with a live Agent is clean, so this is the static and singleton paths.
+
+`docs/EXTENSION_CAPABILITIES.md` heads this section "the single most-used
+feature" and marks C1/C5 PASS. Section 0.3 sends completion *ordering* to
+2.x; this is not ordering.
+
+**Direction:** the member query answers visibility along with existence,
+and completion filters on where it was asked from — an explicit receiver
+sees public methods only. Same query as `024.78`'s and `024.88`'s
+subject; see the availability item in `037`.
+
+## 024.100 The four features answer from different code paths and disagree at one position
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb`,
+`core/lib/ovallsp/diagnostics/engine.rb`,
+`core/lib/ovallsp/server.rb` (the signature-help handler)
+
+Four positions, measured in single runs by 0.2.7's `drive` round:
+
+- **A view's block parameter.** `<% @posts.each do |post| %>` then
+  `post.titel` — hover answers `Post`, completion offers Post's columns,
+  and the undefined-method check says **nothing**. Written
+  `<% Post.all.each do |post| %>` it *is* reported, and so is the
+  byte-equivalent Ruby in a `.rb` file. `@posts.each do |post|` is the
+  commonest line in a Rails index view.
+- **Hover against completion and diagnostics.** `p.update`, `p.save!`,
+  `q.destroy` hover as `""` and answer no definition and no signature,
+  while completion offers all three and the check accepts them. Hover on
+  a column answers in full.
+- **Signature help.** Silent for `Post.new(`, `Circle.new(`,
+  `Post.find(`, `p.update(` — and answering for `takes(`,
+  `"abc".split(`, `post_path(`. `Klass.new(` is the most-typed call shape
+  in Ruby and its parameters are what the popup is opened for. Separately,
+  an overriding method returns its label twice: `["area()", "area()"]`.
+- **`024.99`**, above, is the same seam seen through visibility.
+
+`S1`/`S2`/`S3` and `H3`/`C11` are PASS rows covering the inference these
+positions rest on; none covers the disagreement.
+
+**Direction:** one query per position that all four features read, which
+is `037`'s availability item. Recorded separately because the evidence is
+different: `024.76`'s family is about precision, this is about four
+answers to one question.
+
+## 024.101 Analysis runs per keystroke, so the answers fall behind the cursor and every wrong one is published
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#handle_did_change`),
+`024.45`, `024.57`
+
+Nothing coalesces changes and nothing cancels a superseded analysis: one
+full re-analysis and one publish per `didChange`. Measured by 0.2.7's
+`drive` round through the real server:
+
+- per keystroke, median of 5: **53 ms at 1006 lines, 155 ms at 2006,
+  368 ms at 4006**;
+- 22 keystrokes 60 ms apart on a 4006-line file, typing a method name
+  that **does exist**: 22 publishes arrive, each reporting a prefix as an
+  unknown method, and the panel is clean **6.55 s after the developer
+  stopped typing**;
+- requests queue behind the backlog: hover after 1 queued keystroke
+  365 ms, after 10 keystrokes **3394 ms**, linear. On a 20 000-line file
+  one hover took **25.44 s**, and a second, small file opened in the same
+  window got no diagnostics for those 25 s either.
+
+At 2000 lines the per-keystroke cost already exceeds a typing interval,
+so the backlog grows rather than drains.
+
+`024.45` recorded the per-file cost and `024.57` the rolled-back
+debounce. What is new here is the queueing measurement and the count of
+wrong intermediate publishes — which is also the argument the rollback
+was missing, since a debounce trades latency for correctness only if the
+intermediate answers were wrong, and 22 of 22 were.
+
+**Direction:** analyse the state the buffer settled into rather than each
+event on the way to it. `029`'s M-3 was named as the precondition the
+rolled-back attempt lacked; it exists as of 0.2.7.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

@@ -49,6 +49,24 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
             .map { |m| [m[:params][:version], m[:params][:diagnostics].length] }
   end
 
+  # Publishes *and* asserts it went out. The funnel's whole job is to
+  # refuse a publish, so a setup step that is silently refused leaves the
+  # example testing a state it never reached -- which is what happened to
+  # the watched-files example below: the version-9 publish it set up was
+  # itself dropped, and it passed against both branches of the change it
+  # was written to pin.
+  #
+  # "An assertion that cannot fail is not a test" is a rule this project
+  # already has and enforces on expectations. This is the same defect
+  # arriving through the setup, where nothing was looking.
+  def publish!(target_uri, findings, **kwargs)
+    before = published.length
+    server.send(:publish_findings, target_uri, findings, **kwargs)
+
+    raise "setup did not reach the client: publish_findings(#{target_uri}, #{kwargs}) was refused" \
+      unless published.length == before + 1
+  end
+
   def finding
     Ovallsp::Diagnostics::Finding.new(
       code: "x", message: "m", range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
@@ -163,7 +181,7 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # "four writer kinds, no state" shape 029's M-3 names, surviving inside
   # the fix for it.
   it "clears through the funnel when a buffer closes, so reopening starts over" do
-    server.send(:publish_findings, uri, [finding], version: 9)
+    publish!(uri, [finding], version: 9)
     server.send(:handle_did_close, { textDocument: { uri: uri } })
     server.instance_variable_get(:@document_store)
           .open(uri: uri, text: "x = 1\n", version: 1, language_id: "ruby")
@@ -186,7 +204,7 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # Found by the hunk-by-hunk sweep: the one behavioural line in this
   # change set that could be reverted with the whole suite still green.
   it "clears through the funnel when a file leaves the workspace" do
-    server.send(:publish_findings, uri, [finding], version: 9)
+    publish!(uri, [finding], version: 9)
     server.instance_variable_get(:@document_store).close(uri: uri)
     server.send(:handle_did_change_watched_files,
                 { changes: [{ uri: uri, type: Ovallsp::Server::FILE_CHANGE_DELETED }] })
@@ -217,7 +235,7 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
   # the store holds now. A version that *does* exceed it belongs to a
   # different buffer instance -- a closed one.
   it "refuses a publish from a buffer instance that is no longer the open one" do
-    server.send(:publish_findings, uri, [finding, finding], version: 47)
+    publish!(uri, [finding, finding], version: 47)
     server.send(:handle_did_close, { textDocument: { uri: uri } })
     server.instance_variable_get(:@document_store)
           .open(uri: uri, text: "fixed\n", version: 1, language_id: "ruby")

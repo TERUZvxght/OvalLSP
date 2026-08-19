@@ -511,6 +511,56 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
+## A workspace opened through a symlink shows every file twice
+
+If the folder you opened is a symlink — a `/tmp` checkout on macOS, a git
+worktree, `~/src` pointing at a volume — this extension analyses your
+files under the **resolved** path while the editor talks to it about the
+symlink path. The Problems panel then lists the same file twice, and the
+resolved-path copy shows errors on lines that no longer exist. Fixing
+them, saving, and closing the tab all leave it: nothing publishes to that
+path again, so nothing can clear it. Go to definition also returns the
+resolved path, so following it opens a second tab of the same
+file. <!-- documents: 024.98 -->
+
+## Completion offers methods you cannot call
+
+On a class — `Post.`, `Circle.` — and on any receiver in a plain Ruby
+project, the list includes private methods. Measured by asking a running
+application whether each offered name is actually callable: 91 of 816 on
+a Rails model class, 69 of 121 on a class of your own in a plain project,
+`initialize` among them. Accepting one raises `NoMethodError`. The
+instance-level list in a Rails project with the Runtime Agent connected
+is clean. <!-- documents: 024.99 -->
+
+## The four features disagree at the same position
+
+- `<% @posts.each do |post| %>` then `post.titel` in a view: hover says
+  `Post` and completion offers Post's columns, and the undefined-method
+  check says nothing. Written `<% Post.all.each do |post| %>` it *is*
+  reported, and so is the same code in a `.rb` file.
+- `p.update`, `p.save!`, `q.destroy`: hover shows nothing and go to
+  definition finds nothing, while completion offers them and the check
+  accepts them.
+- Signature help is silent for `Post.new(`, `Circle.new(`, `Post.find(`
+  and `p.update(`, while it answers for a method of your own and for
+  `"abc".split(`. A method that overrides another shows its signature
+  twice. <!-- documents: 024.100 -->
+
+## Typing on a large file
+
+**Every keystroke starts a full re-analysis, and each one publishes.**
+Measured per keystroke: 53 ms at 1000 lines, 155 ms at 2000, 368 ms at
+4000. Above about 2000 lines that is longer than the gap between
+keystrokes, so the work falls behind you.
+
+What you see: typing a method name that exists produces a red squiggle
+under every prefix of it as you go, and the panel is clean roughly six
+seconds after you stop. Hover and completion queue behind that work —
+after ten quick keystrokes on a 4000-line file, a hover took 3.4 seconds;
+on a 20 000-line file, 25 seconds, during which a second open file got no
+diagnostics either. <!-- documents: 024.101 -->
+
 ## Ordinary Ruby the undefined-method check reports anyway
 
 Four shapes, all of them code that runs. Measured over 177 files of
