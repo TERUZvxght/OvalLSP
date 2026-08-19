@@ -147,6 +147,20 @@ This is the largest thing left before 1.0.0 and the one most likely to be
 attempted at the wrong size. `024.15` and `024.47` are what that costs
 here. Each part ships with its own corpus measurement.
 
+### 0.2.10 — an answer knows what it was computed from *(axis B)*
+
+`037`'s C3 and C9, moved out of 0.2.9 once C2's size was measurable. They
+are one thing: giving a published answer the identity of the document it
+came from also refuses a slower analysis of the same buffer, and whether
+those should be published at all is C9's question — 0.2.8's drive round
+measured 22 wrong intermediate publishes for one method name typed on a
+4,006-line file.
+
+`024.57` is why it is its own release rather than an appendix: a first
+attempt at the debounce was rolled back, and the precondition `029` said
+it lacked shipped in 0.2.7. `024.19`, `024.44`, `024.45`, `024.57`,
+`024.97`, `024.101`.
+
 ### 0.3.0 — the first release that may add capability *(axis B)*
 
 Whatever the roadmap holds once the foundation is sound. Deliberately not
