@@ -737,8 +737,36 @@ module Ovallsp
                                                                   context.local_inferencer)
         return Types::UNKNOWN if resolved.is_a?(Types::Nominal) && context.workspace_index.guessed_type_name?(resolved.name)
         return Types::UNKNOWN if resolved.is_a?(Types::Nominal) && shadowed_declared_type?(resolved.name, context)
+        return Types::UNKNOWN if rooted_receiver_answered_elsewhere?(candidate, context)
 
         resolved
+      end
+
+      # `::JSON` is rooted, and Ruby gives a rooted name exactly one
+      # possible referent: the top-level constant. Nothing downstream can
+      # see that, because `ReceiverResolution` strips the `::` on the way
+      # in -- so `HierarchyIndex` re-resolved the bare `JSON` and answered
+      # with i18n's own `I18n::Backend::KeyValue::JSON`, whose singleton
+      # chain is closed, and this check reported `::JSON.parse` missing
+      # over ordinary gem source (2 of the 18 findings the 213-file corpus
+      # still produced after the open-surface rule).
+      #
+      # The same shape as `#shadowed_declared_type?` and declined in the
+      # same place for the same reason: resolution keeps answering, since
+      # moving a rule of this kind into resolution is what 024.47 rolled
+      # back. Completion and go-to-definition still offer the plausible
+      # class; only the assertion is withheld.
+      #
+      # Narrow on purpose. A rooted name the workspace does not claim at
+      # all (`::String`) is left alone -- RBS answers it, and that answer
+      # is right.
+      def rooted_receiver_answered_elsewhere?(candidate, context)
+        written = candidate.receiver.to_s
+        return false unless written.start_with?("::")
+
+        bare = Index::SymbolId.bare_name(written)
+        answer = context.workspace_index.resolve_type_name(bare)
+        !answer.nil? && Index::SymbolId.bare_name(answer) != bare
       end
 
       # Whether the index would answer a *bare* name that signatures
@@ -826,6 +854,17 @@ module Ovallsp
         return false unless chain_reaches_root?(context.hierarchy_index.ancestors(nominal.name, singleton: false))
         return false unless entries.all? { |entry| ancestor_known?(entry, context) }
         return false if entries.any? { |entry| declares_method_missing?(entry.name, context) }
+        # Same question as `method_missing`, from the other direction: that
+        # one is a surface that answers at call time, this one a surface
+        # whose members were written by a macro the parser cannot read.
+        # Neither can be enumerated, so neither supports a claim of
+        # absence. Asked of every link for the reason spelled out below --
+        # `attr_atomic` in a superclass defines instance methods on the
+        # subclass just as surely -- and of synthesised links too, unlike
+        # `reopened_elsewhere?` below: this answer comes from the index
+        # rather than a round trip, and a workspace that reopens `Object`
+        # with an unreadable macro has opened `Object`.
+        return false if entries.any? { |entry| context.workspace_index.open_surface?(entry.name, singleton: singleton) }
 
         # Asked of every link in the chain, not just the receiver. Once
         # `test/test_helper.rb` has reopened `ActiveSupport::TestCase`,

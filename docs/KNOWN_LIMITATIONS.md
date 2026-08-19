@@ -473,28 +473,38 @@ publisher deciding for itself. <!-- documents: 024.57 -->
 ## What the undefined-method check gets wrong on real code
 
 **Measured, over 213 files of installed gem source: 54 reports, of which
-53 were wrong.** The 54th is arguable — an abstract template method that
-really is undefined on the class it is called on, which a Ruby developer
-would still not want reported. The check is
-built on the policy that a false report is worse than a missed one, and
-on this evidence it is not meeting it.
+53 were wrong. 0.2.6 brings that to 10.** The measurement is the same one
+each time — the same files, the same server, with a category the change
+cannot affect held as a control.
 
-The cause that matters for application code: a class that `include`s a
-module **defined in the same file, from inside a nested namespace** loses
-that module's methods, and the check then reports them missing. Rails
-concerns are that shape. `Rack::Request` is the worked example — it
-includes `Helpers` and is told it has no `request_method`.
+The cause that mattered for application code is gone: a class that
+`include`d a module **defined in the same file, from inside a nested
+namespace** lost that module's methods, and the check reported them
+missing. Rails concerns are that shape. So is metaprogramming —
+`attr_atomic` and friends — which static analysis cannot see: a class
+whose body runs a macro this extension cannot read is now treated as
+having a method set it does not know, and the check says nothing about it
+rather than guessing.
 
-The rest are metaprogrammed accessors (`attr_atomic` and friends), which
-static analysis cannot see and should be silent about rather than report,
-and platform-specific files that never run on your Ruby. <!-- documents: 024.76 -->
+**What still gets reported wrongly**, and what it looks like:
 
-**A call that does not exist is also missed through a relation.**
-`Order.recent.first.no_such_method` is reported by nothing, while
-`Order.find(id).no_such_method` is reported normally. Completion knows
-the type at that position — it will not offer the missing name — so the
-information is there and the check is not using it. `Model.scope.first`
-is an everyday idiom. <!-- documents: 024.77 -->
+- **Files for another Ruby implementation.** JRuby-only sources call
+  `java`, which your MRI does not have. Seven of the ten. If you are not
+  opening JRuby-specific files, you will not see these.
+- **A method supplied by a subclass.** An abstract class that calls a
+  method its subclasses define — a deliberate template-method pattern —
+  is reported, because on that class alone the call really would fail.
+  Two of the ten.
+- **A module chosen at runtime.** `extend`ing a module held in a variable
+  or a constructor argument leaves an ancestor this extension cannot
+  name, and the methods it would have brought are reported missing. One
+  of the ten. <!-- documents: 024.76 -->
+
+**A call that does not exist through a relation is now reported.**
+`Order.recent.first.no_such_method` was reported by nothing, while
+`Order.find(id).no_such_method` was reported normally; the check now asks
+about each branch of a `T | nil` receiver instead of discarding
+it. <!-- documents: 024.77 -->
 
 ## Completion offers your class's methods where a core class is meant
 

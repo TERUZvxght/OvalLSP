@@ -175,7 +175,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | open | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | open | 0.3.0 | The trust gate stands in front of callers, not in front of what exec… |
 | [`024.75`](#02475-a-documented-field-selects-nothing) | open | 0.3.0 | A documented field selects nothing |
-| [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.3.0 | Fifty-four `unknown-method` reports over real gem source, and all of… |
+| [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.2.6 | Fifty-four `unknown-method` reports over real gem source, and all of… |
 | [`024.77`](#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | open | 0.3.0 | A call to a method that does not exist is missed through a relation |
 | [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | open | 0.3.0 | Completion did not get the fix hover and diagnostics did |
 | [`024.79`](#02479-model-first-completes-to-nothing) | open | 0.3.0 | `Model.first` completes to nothing |
@@ -3920,12 +3920,13 @@ likely answer; the field was added in anticipation and never wired.
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.0
+target: 0.2.6
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
 (`#unknown_method_findings`, `#closed_nominal?`),
-`core/lib/ovallsp/semantic/hierarchy_index.rb`
+`core/lib/ovallsp/semantic/hierarchy_index.rb`,
+`core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/workspace_index.rb`
 
 Driven over 213 files of installed gem source (rack 3.2.6, i18n 1.15.2,
 concurrent-ruby 1.3.8) by 0.2.5's round 2: **54 `unknown-method`
@@ -3980,6 +3981,61 @@ nested namespace is not being resolved, and the receiver is then judged
 closed anyway. Until that resolution is right, a receiver whose chain
 contains an `include` the index could not resolve should produce no
 finding at all.
+
+### 0.2.6: 54 to 10, measured the same way
+
+Same corpus, same harness, one side per revision, with
+`unresolved-constant` as the control. Four changes, each watched failing
+first and each pinned by mutating the specific decision inside it:
+
+| | change | 54 → |
+|---|---|---|
+| 1 | an unreadable class-body macro leaves the owner's method **surface open**, so `#closed_nominal?` declines | 18 |
+| 2 | `singleton_class.send :alias_method` and `self.class_eval` count as the same thing | *(with 4)* |
+| 3 | a name written `::JSON` resolves only to the root, never to a same-named class elsewhere | *(no change alone — see below)* |
+| 4 | the check declines about a rooted receiver the workspace answers for from another namespace | 10 |
+
+The **instance/singleton split** in (1) is the part worth carrying
+forward. `attr_atomic :value` defines `#value` and not `.attr_atomic`, so
+opening both surfaces would let every unreadable macro silence *its own*
+report — 19 examples pin that report, established deliberately as
+`024.23`. Written inside `class << self`, the same call opens the
+singleton surface instead.
+
+(3) alone moved nothing, because `ReceiverResolution` strips the leading
+`::` before the receiver type is built. It is kept anyway — resolving
+`::JSON` to i18n's own `I18n::Backend::KeyValue::JSON` is wrong for
+go-to-definition too — and (4) is what the check needed. Declined in the
+engine rather than in resolution, per `024.47`.
+
+The measurement's control moved and is accounted for:
+`unresolved-constant` went 881 → 897, all sixteen of them `::JSON`,
+`::Date` and `::DateTime` in i18n, which had been "resolving" to that
+gem's own nested `JSON` and `I18n::Tests::Localization::Date`. Reporting
+them is the honest answer, and `unresolved-constant` does not run in the
+Server's default `:safe` mode.
+
+**The ten that remain**, and why each stays:
+
+- **7 × `java`** — JRuby-only files (`java_count_down_latch.rb`,
+  `java_non_concurrent_priority_queue.rb`, `processor_counter.rb`,
+  `java_executor_service.rb`). Never loaded on MRI. Section 0.4's
+  "a path almost nobody walks".
+- **`Concurrent::Collection::NonConcurrentMapBackend#initialize` calls
+  `validate_options_hash!`**, which only `Concurrent::Map` — its
+  *subclass* — defines. Literally a `NoMethodError` on the backend
+  alone, so the report is accurate and unwanted, the same shape as the
+  `challenge` one below.
+- **`Rack::Auth::AbstractHandler#challenge`** — the arguably-true one
+  above, unchanged.
+- **`Rack::Reloader#rotation`** — `extend`s a module held in a
+  constructor argument (`def initialize(app, cooldown = 10, backend =
+  Stat)`). A dynamic ancestor edge, which is the open 0.2.6 item on
+  preserving `include`/`extend` uncertainty rather than dropping it.
+
+The `include`-from-a-nested-namespace cluster (12 findings, the row that
+mattered) is gone: it was the ambiguous-bare-name resolution fixed
+earlier in this release, and none of it survives in the ten.
 
 ## 024.77 A call to a method that does not exist is missed through a relation
 

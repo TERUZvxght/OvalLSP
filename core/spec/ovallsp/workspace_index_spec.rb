@@ -943,4 +943,43 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       expect(index_instance.guessed_type_name?("Collector")).to be(true)
     end
   end
+
+  # `::JSON` is rooted: in Ruby it can only mean the top-level constant.
+  # Resolution matched on the last segment alone, so a nested
+  # `I18n::Backend::KeyValue::JSON` answered for it -- and the
+  # undefined-method check then reported `JSON.parse` and
+  # `JSON.load_file` as missing, over ordinary i18n source. Measured over
+  # the 213-file gem corpus: 2 of the 18 remaining false reports.
+  #
+  # Answering nil is the point. Nothing in the workspace is `::JSON`, so
+  # RBS answers instead, which is where the real `JSON` is.
+  describe "a name written with a leading ::" do
+    before do
+      index.replace_file(
+        summary(uri: "file:///kv.rb",
+                declarations: [declaration(kind: :class, owner: "::Outer::Inner", name: "::Outer::Inner::JSON")])
+      )
+    end
+
+    it "does not resolve to a same-named class in some other namespace" do
+      expect(index.resolve_type_name("::JSON")).to be_nil
+    end
+
+    it "still resolves when the workspace really does declare it at top level" do
+      index.replace_file(
+        summary(uri: "file:///top.rb", declarations: [declaration(kind: :class, owner: nil, name: "::JSON")])
+      )
+
+      expect(index.resolve_type_name("::JSON")).to eq("::JSON")
+    end
+
+    # The distinguishing control: written *without* the ::, the same name
+    # is a bare reference and the heuristic that finds the nested class is
+    # the behaviour 024.15 deliberately made deterministic. This change is
+    # about rootedness, not about narrowing that.
+    it "leaves the bare form resolving as it did" do
+      expect(index.resolve_type_name("JSON")).to eq("::Outer::Inner::JSON")
+    end
+  end
 end
+

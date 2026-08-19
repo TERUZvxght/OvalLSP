@@ -33,6 +33,12 @@ module Ovallsp
       # to six: 31ms -> 200ms on a 126k-symbol workspace, on the path a
       # keystroke runs.
       @by_owner_kind = Hash.new { |h, k| h[k] = [] }
+      # [owner bare name, :instance | :singleton] => how many indexed
+      # files leave that surface open (Index::FileSummary#open_surface_owners).
+      # A count rather than a set, because two files can each run an
+      # unreadable macro in the same reopened class and removing one of
+      # them must not close the surface the other still opens.
+      @open_surface_owners = Hash.new(0)
       # Secondary index: downcased simple (unqualified) name -> Set of
       # SymbolIds sharing it, so #find_by_simple_name doesn't have to scan
       # every distinct symbol in the workspace to answer one name lookup
@@ -125,6 +131,7 @@ module Ovallsp
         # has shown -- a synthetic 4,000-file single-namespace workspace
         # measures 80ms -> 3.0s -- which is the shape to re-measure if this
         # ever feels slow (024.15).
+        summary.open_surface_owners.each { |key| @open_surface_owners[key] += 1 }
         touched.uniq.each { |symbol_id| @by_symbol[symbol_id].sort_by!(&method(:entry_order)) }
         @generation += 1
         true
@@ -285,6 +292,22 @@ module Ovallsp
         candidates, = type_candidates_locked(name)
         candidates.map(&:name).uniq.length > 1
       end
+    end
+
+    # Whether anything indexed leaves this owner's instance (or, with
+    # `singleton:`, its class-level) method surface open --
+    # a class body running a macro the parser cannot read, so the methods
+    # it defines are not in the index and never will be.
+    #
+    # Asked by the undefined-method check, which may assert absence only
+    # where the surface is enumerable. Answers about the owner named, not
+    # its ancestors; the caller walks the chain because that is where the
+    # chain is known.
+    def open_surface?(owner, singleton: false)
+      return false if owner.nil?
+
+      key = [Index::SymbolId.bare_name(owner.to_s), singleton ? :singleton : :instance]
+      @mutex.synchronize { @open_surface_owners[key].positive? }
     end
 
     # Whether `resolve_type_name` answered about a *different name* than
@@ -465,6 +488,10 @@ module Ovallsp
       summary = @summaries.delete(uri)
       return false unless summary
 
+      summary.open_surface_owners.each do |key|
+        @open_surface_owners[key] -= 1
+        @open_surface_owners.delete(key) unless @open_surface_owners[key].positive?
+      end
       summary.declarations.each do |decl|
         entries = @by_symbol[decl.symbol_id]
         next unless entries
@@ -519,11 +546,22 @@ module Ovallsp
       candidates, qualified = type_candidates_locked(name)
       return nil if candidates.empty?
 
+      exact = candidates.find { |sid| sid.name == qualified }
+      # A leading `::` is not decoration -- it is the whole meaning of the
+      # reference, and Ruby gives it exactly one possible referent. The
+      # last-segment heuristic below is right for a name the author wrote
+      # bare and wrong for one they rooted: `::JSON` inside i18n resolved
+      # to that gem's own `I18n::Backend::KeyValue::JSON`, and the
+      # undefined-method check then reported `::JSON.parse` missing.
+      # Nil is the correct answer when the workspace has no top-level
+      # constant of that name, because RBS holds the one that exists.
+      return exact if name.to_s.start_with?("::")
+
       # `.first` is safe here because `candidates` came from
       # `ordered_symbol_ids`, not from the Set directly. Until 0.1.13 it
       # was index order, so an ambiguous bare name resolved to a different
       # class whenever either file was re-indexed (024.15).
-      candidates.find { |sid| sid.name == qualified } || candidates.first
+      exact || candidates.first
     end
 
     # One collection is deliberately left in insertion order, and a

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "digest"
+require "set"
 require "prism"
 
 require_relative "index/symbol_id"
@@ -59,7 +60,8 @@ module Ovallsp
         ancestor_facts: visitor.ancestor_facts,
         alias_facts: visitor.alias_facts,
         reference_candidates: visitor.reference_candidates,
-        generated_method_facts: visitor.generated_method_facts
+        generated_method_facts: visitor.generated_method_facts,
+        open_surface_owners: visitor.open_surface_owners.to_a
       )
     end
 
@@ -106,7 +108,38 @@ module Ovallsp
       # lexical-body form.
       ANCESTOR_RELATIONS = { include: :include, prepend: :prepend, extend: :extend }.freeze
 
-      attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates, :generated_method_facts
+      attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates, :generated_method_facts,
+                  :open_surface_owners
+
+      # Receiverless calls that can be written in a class body without
+      # adding anything to that class's method surface. Membership is a
+      # *claim*, checked against the corpus: everything not listed here
+      # and not recognised elsewhere in this visitor makes the surface
+      # open, and the check above it then declines to report absence.
+      #
+      # Measured over 213 files / 257 classes before adopting the rule,
+      # because the review that proposed it named "the parser cannot tell
+      # a defining call from a harmless one, and ordinary classes fall
+      # silent" as the condition under which it is the wrong shape:
+      #
+      #   with no list at all       33 of 257 classes open (12.8%)
+      #   with this list            24 of 257 classes open  (9.3%)
+      #
+      # and every name remaining in the 24 can genuinely define a method
+      # -- `safe_initialization!` 16, `module_eval` 9, `attr_atomic` 6,
+      # `attr`, `attr_volatile`, `def_delegators`, `java_import`, `send`,
+      # `padding`. `private_constant` alone accounted for 21 of the 33,
+      # which is why the list is not empty.
+      #
+      # Adding a name here is therefore an assertion that it defines no
+      # method, and it costs precision when wrong -- not merely noise.
+      NON_DEFINING_CLASS_BODY_CALLS = %i[
+        private public protected module_function
+        private_class_method public_class_method
+        private_constant public_constant deprecate_constant
+        autoload undef_method remove_method
+        require require_relative raise freeze
+      ].to_set.freeze
 
       # Task 017's priority-ordered DSL list, scoped to the three this
       # task actually implements (enum/scope/delegate) -- attribute/
@@ -122,6 +155,7 @@ module Ovallsp
         @alias_facts = []
         @reference_candidates = []
         @generated_method_facts = []
+        @open_surface_owners = Set.new
         @owner_stack = []
         @singleton_context_stack = [false]
         # A second, deliberately separate question. `@singleton_context_stack`
@@ -318,6 +352,9 @@ module Ovallsp
           record_attribute_methods(node) if current_owner && ATTRIBUTE_DSLS.key?(node.name)
           wrapped_visibility = inline_attribute_visibility_for(node)
         end
+        # Outside the receiverless branch: `singleton_class.send` and
+        # `self.class_eval` metaprogram this owner too (see there).
+        record_open_surface(node)
         record_method_call_candidate(node)
 
         if wrapped_visibility
@@ -630,6 +667,55 @@ module Ovallsp
         attr_writer: [["=", 1]],
         attr_accessor: [["", 0], ["=", 1]]
       }.freeze
+
+      # A class body that runs something this parser cannot read may have
+      # methods no `def` and no recognised macro accounts for, so the
+      # owner's surface is *open*: absence is unprovable there, and
+      # Diagnostics::Engine#closed_nominal? declines rather than reporting.
+      #
+      # Deliberately about the enclosing owner and not the file: the cost
+      # is paid by exactly the class that ran the unreadable call.
+      # `@in_method_body` excludes calls that merely execute at call time
+      # -- but not blocks, because `included do ... end` and
+      # `class_eval { ... }` define methods on the owner and are the shape
+      # this rule exists for.
+      def record_open_surface(node)
+        return if current_owner.nil? || @in_method_body
+        return if NON_DEFINING_CLASS_BODY_CALLS.include?(node.name)
+        return if ANCESTOR_RELATIONS.key?(node.name) || node.name == :alias_method
+        return if GENERATED_METHOD_DSLS.include?(node.name) || ATTRIBUTE_DSLS.key?(node.name)
+
+        kind = open_surface_kind(node)
+        return if kind.nil?
+
+        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
+      end
+
+      # Which surface the call could have added to, or nil for a call that
+      # is not metaprogramming this owner at all.
+      #
+      # Receiverless is the ordinary case, and it opens *one* surface, not
+      # both: `attr_atomic :value` in a class body defines `#value`, never
+      # `.attr_atomic`. Opening the singleton surface too would make every
+      # unreadable class-body call silence its own report, and reporting
+      # that call is deliberate behaviour (024.23) which 19 examples pin.
+      # Inside `class << self` the same call defines singleton methods, so
+      # it opens that surface instead.
+      #
+      # Two receivers count as well, because they are the owner:
+      # `singleton_class.send :alias_method, :[], :new` --
+      # concurrent-ruby's `LockFreeStack::Node`, 6 findings over the gem
+      # corpus -- and `self.class_eval { ... }`. Every other receiver is
+      # some other object, and widening to those would open a surface for
+      # `LOGGER.warn`.
+      def open_surface_kind(node)
+        case node.receiver
+        when nil then @singleton_context_stack.last ? :singleton : :instance
+        when Prism::SelfNode then @singleton_context_stack.last ? :singleton : :instance
+        when Prism::CallNode
+          :singleton if node.receiver.receiver.nil? && node.receiver.name == :singleton_class
+        end
+      end
 
       def record_attribute_methods(node)
         return unless node.arguments
