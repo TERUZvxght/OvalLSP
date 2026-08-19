@@ -1271,6 +1271,23 @@ The EN/JA README divergence found in round 2 is real and remains
 unguarded for the same reason. Prefer 1 if this is taken up; it is the
 only one of the two that would also have caught that.
 
+### Re-measured for 0.2.10, and one inference withdrawn
+
+The table above is this entry's own measurement of the *rolled-back
+debounce*, and it stands. What did not survive re-derivation is the
+inference three later documents drew from it — that the synchronous path
+publishes wrong intermediate answers while typing.
+`scripts/measure_typing_publishes.rb` against a 3,907-line file, ten
+keystrokes 0.15 s apart: **ten publishes, versions 2 through 11 in order,
+none wrong, the last 1.25 s after the last keystroke.** One analysis per
+edit, each carrying the version it was computed from.
+
+So what C9 is for is latency and wasted work — nine of those ten
+analyses were about text already moved past, each holding
+`@index_mutation_mutex` for its duration — and not a wrongness that is
+not there. `040` records the harness, the settled baseline it needs, and
+the first run that would have appeared to confirm something worse.
+
 ### What was kept
 
 Everything the rounds established about the *product* stayed: 024.21
