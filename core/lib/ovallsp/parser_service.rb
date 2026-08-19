@@ -327,19 +327,7 @@ module Ovallsp
         @declarations << Index::Declaration.new(
           symbol_id: symbol_id,
           location: Index::SourceLocation.to_range(node.location, @lines),
-          # A singleton method carried no visibility at all until 0.2.9,
-          # so `private` inside `class << self` and `private_class_method`
-          # had nothing downstream to filter on and both were offered by
-          # completion and accepted by the check (`024.105`; the booted
-          # app raises `private method 'x' called for class`).
-          #
-          # The distinction is *why* it is singleton. Inside `class <<
-          # self` the surrounding body's section applies, exactly as a
-          # class body's does to a `def`. Written `def self.x` in a class
-          # body it does not -- Ruby leaves that public however many
-          # `private`s precede it, and 0.2.8's round confirmed this engine
-          # already had that right.
-          visibility: visibility_for_definition(node, singleton, inline_visibility),
+          visibility: singleton ? nil : (inline_visibility || @cref.visibility),
           parameters: extract_parameters(node.parameters),
           origin: :source,
           body_source: node.body&.slice,

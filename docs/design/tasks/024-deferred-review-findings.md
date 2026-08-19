@@ -200,21 +200,21 @@ nobody can search is the recording habit without the benefit.
 | [`024.52`](#02452-a-publish-could-outlive-the-document-it-was-about) | fixed | reverted | A publish could outlive the document it was about |
 | [`024.53`](#02453-the-absent-workspace-grace-measured-the-wrong-clock) | fixed | 0.2.2 | The absent-workspace grace measured the wrong clock |
 | [`024.54`](#02454-an-edit-that-changed-nothing-discarded-the-edit-before-it) | fixed | reverted | An edit that changed nothing discarded the edit before it |
-| [`024.55`](#02455-a-version-mismatch-is-reported-and-then-ignored) | open | 0.2.4 | A version mismatch is reported and then ignored |
+| [`024.55`](#02455-a-version-mismatch-is-reported-and-then-ignored) | open | 0.2.10 | A version mismatch is reported and then ignored |
 | [`024.56`](#02456-a-publish-can-land-after-the-panel-has-been-cleared-and-after-a-newer-one) | fixed | 0.2.7 | A publish can land after the panel has been cleared, and after a new… |
 | [`024.57`](#02457-the-debounce-and-why-it-was-rolled-back) | open | 0.3.0 | The debounce, and why it was rolled back |
 | [`024.58`](#02458-bin-ovallsp-loaded-every-abi-s-vendored-gems-not-the-running-one-s) | fixed | 0.2.2 | `bin/ovallsp` loaded every ABI's vendored gems, not the running one's |
 | [`024.59`](#02459-the-guard-against-a-stale-example-count-could-not-run) | fixed | 0.2.3 | The guard against a stale example count could not run |
 | [`024.60`](#02460-four-test-fixtures-raced-macos-first-execution-scan) | fixed | 0.2.3 | Four test fixtures raced macOS' first-execution scan |
-| [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.2.4 | Two per-file stores are separated by nothing but their payload |
-| [`024.63`](#02463-the-dispatch-layer-owns-view-inference-and-it-has-broken-the-query-layer-s-one-guarantee-twice) | open | 0.2.4 | The dispatch layer owns view inference, and it has broken the query … |
+| [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.2.10 | Two per-file stores are separated by nothing but their payload |
+| [`024.63`](#02463-the-dispatch-layer-owns-view-inference-and-it-has-broken-the-query-layer-s-one-guarantee-twice) | open | 0.2.10 | The dispatch layer owns view inference, and it has broken the query … |
 | [`024.64`](#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | open | — | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
 | [`024.65`](#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
 | [`024.66`](#02466-a-marketing-card-kept-carrying-claims-about-what-an-error-s-text-says) | fixed | 0.2.3 | A marketing card kept carrying claims about what an error's text says |
 | [`024.67`](#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | fixed | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
 | [`024.68`](#02468-three-rounds-of-guards-on-a-hand-rolled-grammar-each-blind-one-assumption-deeper) | open | 0.3.0 | Three rounds of guards on a hand-rolled grammar, each blind one assu… |
-| [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | open | 0.2.4 | The two suites that drive a real editor are run by nobody but the ma… |
-| [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.2.4 | One mutable Rails fixture is shared by every worker, so the suite ca… |
+| [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | open | 0.2.10 | The two suites that drive a real editor are run by nobody but the ma… |
+| [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.2.10 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
 | [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | fixed | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | open | 0.3.0 | The trust gate stands in front of callers, not in front of what exec… |
@@ -246,10 +246,10 @@ nobody can search is the recording habit without the benefit.
 | [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.3.0 | The four features answer from different code paths and disagree at o… |
 | [`024.101`](#024101-analysis-runs-per-keystroke-so-the-answers-fall-behind-the-cursor-and-every-wrong-one-is-published) | open | 0.3.0 | Analysis runs per keystroke, so the answers fall behind the cursor a… |
 | [`024.102`](#024102-eight-classes-and-the-logic-each-one-could-not-have-happened-under) | open | 0.2.9 | Eight classes, and the logic each one could not have happened under |
-| [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | open | 0.2.9 | A bare class name inside a namespace answers with an arbitrary same-… |
-| [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | open | 0.2.9 | `class_methods do` in a concern is attributed to the instance side |
+| [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | open | 0.2.10 | A bare class name inside a namespace answers with an arbitrary same-… |
+| [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | open | 0.2.10 | `class_methods do` in a concern is attributed to the instance side |
 | [`024.105`](#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | fixed | 0.2.9 | Visibility is not recorded for singleton methods at all |
-| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.9 | `module_function` and `extend self` produce nothing |
+| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.10 | `module_function` and `extend self` produce nothing |
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
@@ -2820,8 +2820,10 @@ the panel showing a clean file whose text had a syntax error.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.4
+target: 0.2.10
 ```
+
+**Target slipped.** Written for 0.2.4 and still open five releases later; retargeted to 0.2.10 rather than left naming a release that has shipped.
 
 **Area:** `vscode/src/extension.ts` (`runVersionHandshake`, and the
 pre-start branch on `checkBundledCoreCompatibility`)
@@ -3213,7 +3215,7 @@ user-visible-note: >
   affected. What is recorded is that the correctness rests on four
   call sites each remembering a different subset, rather than on the
   structure — a hazard for the fifth, not a fault in the fourth.
-target: 0.2.4
+target: 0.2.10
 ```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
@@ -3306,7 +3308,7 @@ user-visible-note: >
   remembering to do the same thing, and that the last release broke it
   while fixing it. The entry is about the second occurrence, not about a
   present fault.
-target: 0.2.4
+target: 0.2.10
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (roughly 1580–2004, and
@@ -3744,7 +3746,7 @@ user-visible-note: >
   Nothing an editor user sees. The gap is in verification coverage:
   the suites still pass once run, and 0.2.3's gate ran them. What is
   missing is anything that runs them between releases.
-target: 0.2.4
+target: 0.2.10
 ```
 
 **Area:** `.github/workflows/ci.yml` (the `vscode` job),
@@ -3801,7 +3803,7 @@ user-visible-note: >
   Nothing an editor user sees. The suite runs serially today and is
   green that way; what the shared fixture costs is the ability to run
   it any other way, which is a contributor and CI cost.
-target: 0.2.4
+target: 0.2.10
 ```
 
 **Area:** `core/spec/fixtures/rails_real` (its `db/*.sqlite3`, `tmp/`
@@ -5245,8 +5247,16 @@ measurement is one to abandon rather than defend.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.9
+target: 0.2.10
 ```
+
+**Retargeted to 0.2.10.** Recorded as 0.2.9 when 0.2.8's drive round
+found it, and 0.2.9 shipped C2 without it — the record said one thing and
+the release did another, which is the discrepancy this register exists to
+make visible rather than to contain. Kept at the front of 0.2.10 because
+it is the sharpest of the three: a false report on working code, on a
+layout as ordinary as `Billing::Comment` beside an ActiveRecord
+`Comment`.
 
 **Area:** `core/lib/ovallsp/workspace_index.rb` (`#resolve_type_name`),
 `core/lib/ovallsp/semantic/receiver_resolution.rb`
@@ -5299,7 +5309,7 @@ rather than a fall back to the alphabetically first candidate. Part of
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.9
+target: 0.2.10
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (the `included`/
@@ -5369,7 +5379,7 @@ Neighbour of `024.99`; both are the visibility half of `037`'s C2.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.9
+target: 0.2.10
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`

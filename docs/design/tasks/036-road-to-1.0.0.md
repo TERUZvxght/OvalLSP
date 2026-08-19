@@ -147,9 +147,14 @@ This is the largest thing left before 1.0.0 and the one most likely to be
 attempted at the wrong size. `024.15` and `024.47` are what that costs
 here. Each part ships with its own corpus measurement.
 
-### 0.2.10 — an answer knows what it was computed from *(axis B)*
+### 0.2.10 — an answer knows what it was computed from, and three that slipped *(axis B)*
 
-`037`'s C3 and C9, moved out of 0.2.9 once C2's size was measurable. They
+`037`'s C3 and C9, moved out of 0.2.9 once C2's size was measurable, plus
+the three 0.2.8's drive round found and recorded as 0.2.9 without their
+being built there — `024.103` first, because it is a false report on
+working code on an ordinary Rails layout. `024.55` joins them: written
+for 0.2.4 and still open five releases later, so it is retargeted rather
+than left naming a release that has shipped. They
 are one thing: giving a published answer the identity of the document it
 came from also refuses a slower analysis of the same buffer, and whether
 those should be published at all is C9's question — 0.2.8's drive round
