@@ -145,5 +145,27 @@ RSpec.describe "Ovallsp::Server publish ordering (029 M-3, 024.56)" do
     # shows nothing until it is edited nine times.
     expect(published).to eq([[9, 1], [nil, 0], [1, 1]])
   end
+
+  # A file leaving the workspace clears through the funnel too, for the
+  # same reason `didClose` does: `publish_findings(uri, [])` writes an
+  # empty list without touching the memory, so the uri kept the version it
+  # was last published at. A rename arrives here as a delete plus a
+  # create, so the file coming back at a lower version is the ordinary
+  # case, not a contrived one -- and it would then publish nothing until
+  # it had been edited past the old number.
+  #
+  # Found by the hunk-by-hunk sweep: the one behavioural line in this
+  # change set that could be reverted with the whole suite still green.
+  it "clears through the funnel when a file leaves the workspace" do
+    server.send(:publish_findings, uri, [finding], version: 9)
+    server.instance_variable_get(:@document_store).close(uri: uri)
+    server.send(:handle_did_change_watched_files,
+                { changes: [{ uri: uri, type: Ovallsp::Server::FILE_CHANGE_DELETED }] })
+    server.instance_variable_get(:@document_store)
+          .open(uri: uri, text: "x = 1\n", version: 1, language_id: "ruby")
+    server.send(:publish_findings, uri, [finding], version: 1)
+
+    expect(published.last).to eq([1, 1])
+  end
 end
 
