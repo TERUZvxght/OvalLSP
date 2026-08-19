@@ -106,7 +106,12 @@ caught.
 Also in it: `024.73` (`Marshal.load` on plugin output — axis A),
 `024.78`, `024.79`.
 
-### 0.2.7 — the remaining foundations *(axis B)*
+### 0.2.7 — the remaining foundations *(axis B)* — **in progress on `feat/0.2.7`**
+
+Recorded in `037-0.2.7-concurrency-foundations.md`, which lives on that
+branch. Named here per CLAUDE.md's residency rule: a pointer to a file
+that exists only on an unnamed branch is a pointer to nothing.
+
 
 `024.47`'s naming-convention decision, and `029`'s `M-2`/`M-3`
 (immutable document snapshots; one writer with memory for the publish
