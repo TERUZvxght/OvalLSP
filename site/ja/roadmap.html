@@ -195,6 +195,42 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v026">
+          <div class="tl-version">
+            <span class="v">0.2.6</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>未定義メソッド検査を、正直なものにする</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>動くコードへの誤った「メソッドが無い」報告: 54 → 6 件。</strong> 毎回同じインストール済み gem ソース 213 ファイルに対する実測です。読めないマクロを本体で実行しているクラスや、正体を特定できないものを include しているクラスは、推測せず「把握できていない」ことを認めるようになりました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>Model.first</code> が答えます。</strong> <code>last</code> と <code>take</code> も同様です。<code>Model.scope.first</code> が答えるのにこちらは何も返さず、より一般的な書き方の方が動いていませんでした。relation を経由した存在しない呼び出しも報告されるようになりました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>名前空間付きで書いた名前が、別の名前空間のクラスで答えられなくなりました。</strong> <code>File.stat(path).</code> はワークスペースの <code>Stat</code> のメンバーを出していましたが、本来の 167 件を出します。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>プラグインの結果が、オブジェクトではなくデータとしてプロセス境界を渡ります。</strong> 親プロセスはストリームが名指ししたクラスを検証前に生成していました。プラグイン側の変更は不要です。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>読めないファイル1つでセッションが終わらなくなりました。</strong> インタプリタのスタックを使い切る深さのファイルはプロセスごと落としていました。不正なメッセージフレームも同様です。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            機能の追加はありません。<code>KNOWN_LIMITATIONS</code> は減るのでは
+            なく10節増えました。3ラウンドのレビューが、以前から間違っていて今も
+            間違っていることを大量に計測したためです。誰も述べていない限界は、
+            誰でも読める限界より悪いからです。
+          </p>
+        </article>
+
         <article class="tl-item" id="v025">
           <div class="tl-version">
             <span class="v">0.2.5</span>

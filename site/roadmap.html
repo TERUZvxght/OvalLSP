@@ -200,6 +200,42 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v026">
+          <div class="tl-version">
+            <span class="v">0.2.6</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>The undefined-method check, made honest</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>False &ldquo;has no method&rdquo; reports on real code: 54 &rarr; 6.</strong> Measured over the same 213 files of installed gem source each time. A class whose body runs a macro this extension cannot read, or that includes something it cannot identify, now admits it does not know that class&rsquo;s methods instead of guessing.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>Model.first</code> answers</strong>, and so do <code>last</code> and <code>take</code>. It inferred nothing while <code>Model.scope.first</code> answered, so the commoner idiom was the one that did not work. A call that does not exist through a relation is reported now too.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A name written with its namespace is not answered by a class in another one.</strong> <code>File.stat(path).</code> offered a workspace <code>Stat</code>&rsquo;s members; it offers the real 167 now.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A plugin&rsquo;s result crosses the process boundary as data, not as objects</strong> &mdash; the parent used to rebuild whatever classes the stream named, before validating any of it. No plugin needs a change.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>One unreadable file no longer ends the session.</strong> A file deep enough to exhaust the interpreter stack took the whole process with it, and so did any malformed message frame.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            No capability is added. <code>KNOWN_LIMITATIONS</code> gained ten
+            sections rather than losing them: three review rounds measured a
+            great deal that was already wrong and is still wrong, and a
+            limitation nobody has stated is worse than one everybody can read.
+          </p>
+        </article>
+
         <article class="tl-item" id="v025">
           <div class="tl-version">
             <span class="v">0.2.5</span>
