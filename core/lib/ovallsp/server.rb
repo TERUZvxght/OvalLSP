@@ -252,12 +252,66 @@ module Ovallsp
       manager.respond_to?(:ready?) && manager.ready?
     end
 
+    # The editor's `rootUri` is the workspace root, not whatever this
+    # process's cwd resolves to.
+    #
+    # Core never read `rootUri` at all and defaulted to `Dir.pwd`. The
+    # extension spawns it with `cwd: folder.uri.fsPath`, and a child
+    # started with its cwd on a symlink reports the **resolved** path --
+    # so the workspace pass built every uri under the real path while
+    # every editor-driven message used the symlink path. The same file
+    # then appeared twice in the Problems panel, and the resolved-path
+    # copy could never be cleared, because nothing publishes to that uri
+    # again (`024.98`). A symlinked checkout is ordinary: `/tmp` on
+    # macOS, git worktrees, `~/src` pointing at a volume.
+    #
+    # `rootUri` wins because it is what the user sees and what every
+    # editor-driven message carries. A client that sends none keeps this
+    # process's cwd, which is what a direct stdio session and every
+    # existing caller rely on.
+    #
+    # Nothing has been *indexed* under the old root when this runs --
+    # `initialize` is the first message. The signature environment is the
+    # exception: it is built in the constructor, from the cwd, before any
+    # message arrives. For the symlink case both roots name the same
+    # files, but a client that spawns from the editor's own directory
+    # (nvim's lspconfig, Emacs' lsp-mode) would otherwise index one tree
+    # and read `sig/` from another. So it is rebuilt when the root
+    # actually moves, and only then.
+    #
+    # `workspaceFolders` is read as well: a client may send it with
+    # `rootUri: null`, and `rootUri` is deprecated in the specification.
+    # The first folder is the root, which is what a single-folder session
+    # means; multi-root remains one Core process per folder
+    # (`vscode/src/extension.ts`), so there is nothing here to choose
+    # between.
+    def adopt_client_workspace_root(params)
+      path = client_workspace_root(params)
+      return if path.nil? || path == @workspace_root
+
+      @logger.info("workspace root from the client: #{path}")
+      @workspace_root = path
+      @signatures = load_signatures_environment
+    end
+
+    def client_workspace_root(params)
+      return nil unless params.is_a?(Hash)
+
+      candidate = params[:rootUri]
+      candidate = Array(params[:workspaceFolders]).first&.dig(:uri) if candidate.nil? || candidate.to_s.empty?
+      return nil if candidate.nil? || candidate.to_s.empty?
+
+      path = UriUtil.to_path(candidate.to_s)
+      path if path && File.directory?(path)
+    end
+
     def dispatch(message)
       method = message[:method]
       id = message[:id]
 
       case method
       when "initialize"
+        adopt_client_workspace_root(message[:params])
         @diagnostics_mode = diagnostics_mode_from(message[:params])
         @observation_test_command = observation_test_command_from(message[:params])
         # Kept, not merely consulted. Until 0.2.5 trust was read out of

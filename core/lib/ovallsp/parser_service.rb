@@ -5,6 +5,7 @@ require "set"
 require "prism"
 
 require_relative "index/symbol_id"
+require_relative "index/cref"
 require_relative "index/parameter"
 require_relative "index/declaration"
 require_relative "index/ancestor_fact"
@@ -255,22 +256,14 @@ module Ovallsp
         # A block's meaning belongs to the call that owns it, so
         # #record_open_surface looks at that call and not at what is
         # written inside -- see there.
-        @block_depth = 0
-        @owner_stack = []
-        @singleton_context_stack = [false]
-        # A second, deliberately separate question. `@singleton_context_stack`
-        # answers "would an unqualified `def` here declare a singleton
-        # method", which is true only inside `class << self`. This one
-        # answers "is `self` here a Class/Module object", which is also
-        # true directly in a class or module body and inside a
-        # `def self.x`. Conflating them is what made every `private` and
-        # `attr_reader` in a class body resolve against the *instance*
-        # chain, where they do not exist, and be reported as unknown
-        # methods (024.23). Top level starts `false`: `main` is an Object.
-        @self_is_module_stack = [false]
-        @inline_attribute_visibility = nil
-        @visibility_stack = [:public]
-        @in_method_body = false
+        # One value, not six stacks. `Index::Cref` answers the questions
+        # the recorders actually have -- what a `def` here declares, on
+        # which surface, whether `self` is a Module, whether a
+        # receiverless call can add to the surface -- and is saved and
+        # restored around each nesting rather than pushed onto parallel
+        # stacks a recorder has to reassemble. See its own docs, and
+        # 037's C1 for the five register entries this arrangement cost.
+        @cref = Index::Cref.top_level
         # Task 014: a fresh local-variable scope id per class/module body,
         # `def`, `class << self`, and block — matching real Ruby's own
         # local-scoping boundaries (verified live: `class << self` does
@@ -291,8 +284,8 @@ module Ovallsp
       end
 
       def visit_singleton_class_node(node)
-        @singleton_context_stack.push(true)
-        @self_is_module_stack.push(true)
+        previous_cref = @cref
+        @cref = @cref.in_singleton_class
         # A `class << self` body has its own visibility section, exactly
         # as a class/module body does (see #visit_namespace, which has
         # always pushed both). Without this, a bare `private` inside the
@@ -302,18 +295,15 @@ module Ovallsp
         # detection began filtering on `visibility == :public`, at which
         # point those methods stopped being actions and their ivars
         # silently vanished from the corresponding views.
-        @visibility_stack.push(:public)
         @scope_stack.push(next_scope_id)
         super
       ensure
-        @singleton_context_stack.pop
-        @self_is_module_stack.pop
-        @visibility_stack.pop
+        @cref = previous_cref
         @scope_stack.pop
       end
 
       def visit_def_node(node)
-        singleton = node.receiver.is_a?(Prism::SelfNode) || (@singleton_context_stack.last && node.receiver.nil?)
+        singleton = node.receiver.is_a?(Prism::SelfNode) || (@cref.declares_singleton? && node.receiver.nil?)
         owner_receiver = node.receiver
         owner =
           if owner_receiver && !owner_receiver.is_a?(Prism::SelfNode)
@@ -337,7 +327,7 @@ module Ovallsp
         @declarations << Index::Declaration.new(
           symbol_id: symbol_id,
           location: Index::SourceLocation.to_range(node.location, @lines),
-          visibility: singleton ? nil : (inline_visibility || @visibility_stack.last),
+          visibility: singleton ? nil : (inline_visibility || @cref.visibility),
           parameters: extract_parameters(node.parameters),
           origin: :source,
           body_source: node.body&.slice,
@@ -350,11 +340,10 @@ module Ovallsp
         # not retroactively rewrite a declaration. Restored rather than
         # cleared, since `private def foo; ...; end` nests a def inside a
         # call inside a def in the argument-form case.
-        previous_in_method_body = @in_method_body
-        @in_method_body = true
+        previous_cref = @cref
         # Inside `def self.x` self is still the class, so a `private`
         # written there is Module's, exactly as in the body around it.
-        @self_is_module_stack.push(singleton)
+
         # Same frame discipline as blocks and `class << self`: a bare
         # `private` written inside a method body must not rewrite the
         # class's open section. `@in_method_body` already stopped the
@@ -363,12 +352,10 @@ module Ovallsp
         # `def wrapper; private; end` privatised every method declared
         # after it. Guarding one call site was the symptom fix -- the
         # frame is the cause.
-        @visibility_stack.push(@visibility_stack.last)
+        @cref = @cref.in_method(singleton: singleton)
         super
       ensure
-        @self_is_module_stack.pop
-        @visibility_stack.pop
-        @in_method_body = previous_in_method_body
+        @cref = previous_cref
         @scope_stack.pop
       end
 
@@ -405,7 +392,7 @@ module Ovallsp
         # the bodies of Thor's, minitest's and `rails/engine.rb`'s
         # generated methods.
         if INSTANCE_SELF_BLOCK_CALLS.include?(node.name)
-          return node.receiver.nil? && !@in_method_body && @singleton_context_stack.last
+          return node.receiver.nil? && !@cref.in_method_body? && @cref.declares_singleton?
         end
 
         return nil unless RECEIVER_SELF_BLOCK_CALLS.include?(node.name)
@@ -487,17 +474,17 @@ module Ovallsp
         block_self = node.block && block_self_is_module(node)
         return super if block_self.nil?
 
-        @self_is_module_stack.push(block_self)
+        previous_cref = @cref
+        @cref = @cref.with(self_is_module: block_self)
         begin
           super
         ensure
-          @self_is_module_stack.pop
+          @cref = previous_cref
         end
       end
 
       def visit_block_node(node)
         @scope_stack.push(next_scope_id)
-        @block_depth += 1
         # A visibility section opened inside a block belongs to that
         # block. `concerning :Auth do private; def authenticate; end end`
         # and `included do ... end` and `class_eval do ... end` all run
@@ -513,11 +500,11 @@ module Ovallsp
         # iterator block does not open a new cref, so a `def` inside it
         # really does take the enclosing section's visibility. Inheriting
         # keeps that case right while still containing the leak.
-        @visibility_stack.push(@visibility_stack.last)
+        previous_cref = @cref
+        @cref = @cref.in_block
         super
       ensure
-        @block_depth -= 1
-        @visibility_stack.pop
+        @cref = previous_cref
         @scope_stack.pop
       end
 
@@ -526,10 +513,11 @@ module Ovallsp
       # helper_thing }` in a class body silenced every report about that
       # class.
       def visit_lambda_node(node)
-        @block_depth += 1
+        previous_cref = @cref
+        @cref = @cref.in_block
         super
       ensure
-        @block_depth -= 1
+        @cref = previous_cref
       end
 
       def visit_constant_read_node(node)
@@ -595,7 +583,7 @@ module Ovallsp
             owner: current_owner,
             new_name: new_name,
             old_name: old_name,
-            singleton: @singleton_context_stack.last,
+            singleton: @cref.declares_singleton?,
             location: Index::SourceLocation.to_range(node.location, @lines)
           )
         end
@@ -678,17 +666,12 @@ module Ovallsp
       end
 
       def within_namespace(absolute_name)
-        @owner_stack.push(absolute_name)
-        @singleton_context_stack.push(false)
-        @self_is_module_stack.push(true)
-        @visibility_stack.push(:public)
+        previous_cref = @cref
+        @cref = @cref.in_namespace(absolute_name)
         @scope_stack.push(next_scope_id)
         yield
       ensure
-        @owner_stack.pop
-        @singleton_context_stack.pop
-        @self_is_module_stack.pop
-        @visibility_stack.pop
+        @cref = previous_cref
         @scope_stack.pop
       end
 
@@ -773,8 +756,8 @@ module Ovallsp
         return if current_owner.nil?
 
         kind =
-          if @singleton_context_stack.last then :singleton
-          elsif relation == :extend && !@in_method_body then :singleton
+          if @cref.declares_singleton? then :singleton
+          elsif relation == :extend && !@cref.in_method_body? then :singleton
           else :instance
           end
         @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
@@ -795,7 +778,7 @@ module Ovallsp
 
         @alias_facts << Index::AliasFact.new(
           owner: current_owner, new_name: new_name, old_name: old_name,
-          singleton: @singleton_context_stack.last,
+          singleton: @cref.declares_singleton?,
           location: Index::SourceLocation.to_range(node.location, @lines)
         )
       end
@@ -830,7 +813,7 @@ module Ovallsp
       # `class_eval { ... }` define methods on the owner and are the shape
       # this rule exists for.
       def record_open_surface(node)
-        return if current_owner.nil? || @in_method_body
+        return unless @cref.defines_surface?
         # Written inside a block, this call says nothing about the
         # enclosing class's members -- the call that *owns* the block does,
         # and it is visited separately. `included do ... end` opens the
@@ -838,7 +821,6 @@ module Ovallsp
         # `test` block does not, and neither does `helper_thing` inside
         # `DEFAULT = -> { helper_thing }`, which used to silence every
         # report about the class it was written in.
-        return if @block_depth.positive?
         # A setter or an operator is named in a way no method-defining
         # macro is: Ruby will not let `def default_query_parser=(v)`
         # define something else, and `singleton_class < Comparable` is a
@@ -877,8 +859,7 @@ module Ovallsp
       # `LOGGER.warn`.
       def open_surface_kind(node)
         case node.receiver
-        when nil then @singleton_context_stack.last ? :singleton : :instance
-        when Prism::SelfNode then @singleton_context_stack.last ? :singleton : :instance
+        when nil, Prism::SelfNode then @cref.surface_kind
         when Prism::CallNode
           :singleton if node.receiver.receiver.nil? && node.receiver.name == :singleton_class
         end
@@ -904,11 +885,11 @@ module Ovallsp
         # rather than inventing one. That is the direction this engine
         # chooses everywhere else. 024.31 records the shared defect.
 
-        singleton = @singleton_context_stack.last
+        singleton = @cref.declares_singleton?
         # `private attr_reader :x` is one call taking another as its
         # argument (Ruby 3.0+). The open section still applies when it is
         # written on its own line.
-        visibility = @inline_attribute_visibility || @visibility_stack.last
+        visibility = @inline_attribute_visibility || @cref.visibility
         node.arguments.arguments.each do |argument|
           name = attribute_name(argument)
           # A dynamic argument (`attr_reader(*names)`) names nothing
@@ -1116,8 +1097,12 @@ module Ovallsp
         end
       end
 
+      # The one value every recorder is handed, rather than the six stacks
+      # they each used to reassemble from. See `Index::Cref`.
+      attr_reader :cref
+
       def current_owner
-        @owner_stack.last
+        @cref.owner
       end
 
       # Real Ruby `Module.nesting`, innermost first. `@owner_stack` gets
@@ -1130,7 +1115,7 @@ module Ovallsp
       # bookkeeping is needed beyond capturing this stack, reversed, at
       # the moment a reference is recorded.
       def current_lexical_nesting
-        @owner_stack.reverse
+        @cref.nesting
       end
 
       def next_scope_id
@@ -1144,7 +1129,7 @@ module Ovallsp
       def record_reference(kind, name, location, scope_id: nil)
         @reference_candidates << Index::ReferenceCandidate.new(
           kind: kind, name: name, location: Index::SourceLocation.to_range(location, @lines), scope_id: scope_id,
-          owner: current_owner, singleton: @singleton_context_stack.last, receiver: nil,
+          owner: current_owner, singleton: @cref.declares_singleton?, receiver: nil,
           lexical_nesting: current_lexical_nesting
         )
       end
@@ -1162,7 +1147,7 @@ module Ovallsp
 
         receiver, singleton =
           if node.receiver.nil?
-            [nil, @self_is_module_stack.last]
+            [nil, @cref.self_is_module?]
           elsif (name = raw_constant_name(node.receiver))
             [name, true] # `Foo.bar` -- always a class-level call, regardless of the lexical writing context
           else
@@ -1255,9 +1240,9 @@ module Ovallsp
 
       def update_visibility(node)
         case node.name
-        when :public then @visibility_stack[-1] = :public
-        when :private then @visibility_stack[-1] = :private
-        when :protected then @visibility_stack[-1] = :protected
+        when :public then @cref = @cref.with_visibility(:public)
+        when :private then @cref = @cref.with_visibility(:private)
+        when :protected then @cref = @cref.with_visibility(:protected)
         end
       end
 
@@ -1292,11 +1277,11 @@ module Ovallsp
         # rewrite -- and rewriting by owner alone would hit the
         # same-named instance method instead, privatizing a real Rails
         # action and dropping it from view propagation.
-        return if @singleton_context_stack.last
+        return if @cref.declares_singleton?
         # `private :target` written inside a method body never runs at
         # class level in Ruby, so it must not retroactively change a
         # declaration either.
-        return if @in_method_body
+        return if @cref.in_method_body?
 
         # Only a `def` argument needs a pending entry: it is the one form
         # whose declaration has not been recorded yet, and `visit_def_node`

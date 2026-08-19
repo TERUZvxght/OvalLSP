@@ -77,6 +77,23 @@ def suite_result
   line = output.lines.reverse.find { |l| l.match?(/^\d+ examples?,/) }
   return [:errored, "the suite did not run to a count"] unless line
 
+  # An errored run is not a green one. `0 examples, 0 failures, 1 error
+  # occurred outside of examples` contains " 0 failures" and was read as
+  # green -- so a hunk whose reversal breaks *loading* was reported
+  # UNPINNED, which is the opposite of the truth and the most load-bearing
+  # kind of line there is. Found by this script on its second real run,
+  # against the change set that adds a `require_relative`.
+  # RSpec pluralises: two load errors print "2 errors occurred outside of
+  # examples", which the singular substring does not match -- and if any
+  # example ran, the line still contains " 0 failures" and the hunk is
+  # reported UNPINNED. Reverting a `require_relative` used by two spec
+  # files is enough to reach it. The check written for exactly this
+  # failure mode had it; a review round found that on the release whose
+  # stated lesson is that a check gets a round aimed at whether it can
+  # fail at all.
+  return [:errored, line.strip] if line.match?(/\d+ errors? occurred outside of examples/)
+  return [:errored, "the suite ran no examples"] if line.start_with?("0 examples")
+
   [line.include?(" 0 failures") ? :green : :red, line.strip]
 end
 
@@ -109,11 +126,18 @@ refuse("another sweep is running (#{LOCK}). Sequence them -- concurrent mutation
 File.write(LOCK, Process.pid.to_s)
 at_exit do
   File.delete(LOCK) if File.exist?(LOCK) && File.read(LOCK) == Process.pid.to_s
-  # Ctrl-C mid-hunk otherwise leaves a reverted hunk or a deleted spec
-  # file behind, and only the *next* run's clean-tree refusal notices.
+  # Ctrl-C mid-hunk otherwise leaves a reverted hunk behind -- and a
+  # reverted hunk is not inert: a review round found this checkout with
+  # one line of `parser_service.rb` reverse-applied, which made
+  # `#summarize` raise on **any file containing an `alias` keyword**. At
+  # minutes per suite run and dozens of hunks, an interrupted sweep is
+  # the likely case rather than the exception, so it restores rather than
+  # warns.
   dirty, = run("git", "status", "--porcelain")
-  warn("hunk_sweep: interrupted with the tree modified -- run `git checkout core/` to restore it.") unless
-    dirty.strip.empty?
+  unless dirty.strip.empty?
+    warn("hunk_sweep: interrupted with the tree modified -- restoring core/ and vscode/.")
+    run("git", "checkout", "--", "core", "vscode")
+  end
 end
 
 diff, ok = run("git", "diff", "#{base}...HEAD", "-U3", "--", "core/lib")
@@ -127,7 +151,7 @@ puts "hunk_sweep: #{hunks.length} hunk(s) over core/lib, #{added_specs.length} s
 puts "hunk_sweep: `vscode/src` is not swept -- its suite is separate and this only drives rspec."
 puts
 
-pinned = unpinned = commentary = entangled = 0
+pinned = unpinned = commentary = entangled = errored = 0
 Dir.mktmpdir do |scratch|
   hunks.each_with_index do |hunk, index|
     label = format("h%02d", index + 1)
@@ -161,9 +185,11 @@ Dir.mktmpdir do |scratch|
 
     case verdict
     when :green then unpinned += 1
+    when :errored then errored += 1
     else pinned += 1
     end
-    puts "#{label}  #{verdict == :green ? 'UNPINNED' : 'pinned  '}  #{detail}"
+    label_for = { green: "UNPINNED", errored: "load-bearing (the suite could not run)" }.fetch(verdict, "pinned  ")
+    puts "#{label}  #{label_for}  #{detail}"
   end
 
   added_specs.each do |spec|
@@ -177,6 +203,8 @@ Dir.mktmpdir do |scratch|
 end
 
 puts
+accounted = pinned + unpinned + commentary + entangled + errored
 puts "hunk_sweep: #{pinned} pinned, #{unpinned} unpinned, #{commentary} comment-only, " \
-     "#{entangled} not separable (#{pinned + unpinned + commentary + entangled} of #{hunks.length} accounted for)"
+     "#{entangled} not separable, #{errored} load-bearing " \
+     "(#{accounted} of #{hunks.length} accounted for)"
 puts "An unpinned behavioural line is a defect in its own right (CLAUDE.md)." if unpinned.positive?

@@ -931,7 +931,19 @@ RSpec.describe "Extension capabilities", :e2e do
           end
         end
       RUBY
-      uri = "file://#{File.realpath(path)}"
+      # The path as the *client* named it, not its resolved form. This
+      # example said `File.realpath(path)` and passed until 0.2.8, which
+      # is the whole of `024.98` seen from the test side: Core inferred
+      # its root from its own cwd, which the OS resolves, so a workspace
+      # under a symlinked `/tmp` published every uri under `/private/tmp`
+      # and this example had to resolve the path to find them. It now
+      # publishes under the root the client sent -- the one the editor
+      # will use when it opens the file -- so the two agree without a
+      # `realpath` anywhere.
+      #
+      # The single `realpath` in this suite was the tell, and nobody read
+      # it as one for four releases.
+      uri = "file://#{path}"
 
       client = E2E::LspClient.new(self.class.workspace)
       begin

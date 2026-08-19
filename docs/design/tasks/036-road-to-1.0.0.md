@@ -125,7 +125,7 @@ build, that had missed a `0.2.4` target three times.
 independent, and 0.2.7 is already the release where a first attempt at
 the funnel introduced a defect worse than the one it fixed.
 
-### 0.2.8 — the parser's bookkeeping, and a file's identity *(axis B)*
+### 0.2.8 — the parser's bookkeeping, and a file's identity *(axis B)* — **shipped**
 
 `037`'s C1 and C8. A declaration's owner and kind stop being decided by
 six parallel mutable stacks and become one immutable value every recorder
@@ -134,7 +134,7 @@ showing every file twice. Between them they carry `024.26`, `024.31`,
 `024.32`, `024.33`, `024.34` and `024.98`, and the open-surface family
 0.2.6's rounds kept finding one instance at a time.
 
-### 0.2.9 — one question, asked once, answered honestly *(axis B)*
+### 0.2.9 — one question, asked once, answered honestly *(axis B)* — **next, on `feat/0.2.9`**
 
 `037`'s C2, C3 and C9. One query per position answering present / absent
 / unknown plus visibility, read by all four features; the publish path
