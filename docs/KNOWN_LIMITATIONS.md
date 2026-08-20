@@ -545,6 +545,13 @@ diagnostics for that file stop arriving until the numbering passes where
 it left off. VS Code sends `didClose` first, so this needs an unusual
 client. <!-- documents: 024.118 -->
 
+## Methods made by `define_singleton_method`
+
+A class whose class methods are made by `define_singleton_method` is no
+longer reported for calling them — but hover, go to definition and
+completion still answer nothing there, because the names are not in the
+index. You get silence rather than an answer. <!-- documents: 024.116 -->
+
 ## A macro called inside a block in a class body
 
 A macro this extension cannot read is left alone when you write it

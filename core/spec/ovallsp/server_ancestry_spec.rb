@@ -20,12 +20,11 @@ RSpec.describe "Ovallsp::Server ancestry questions for the Runtime Agent" do
   # This suite has already been bitten by that once, when two files
   # defined the same fixture constant and the second silently won.
   # The call is inside a method body rather than written bare in the class
-  # body: since 0.2.11 an unrecognised *class-body* call opens the owner's
-  # surface on both sides (`024.110`), so a bare `fixtures :all` is silent
-  # whatever the Agent answers -- which is a fixture that cannot
-  # distinguish the behaviour these examples pin (`024.109`). A call
-  # inside a `def` opens nothing, so the Agent's answer is still what
-  # decides.
+  # body. 0.2.11 briefly made a bare class-body call open the owner's
+  # surface on both sides, which would have made `fixtures :all` silent
+  # whatever the Agent answered; that change was rolled back inside the
+  # same release. Kept in this form because it does not depend on which
+  # way `024.110` is eventually settled.
   let(:reopened_gem_class) do
     <<~RUBY
       module ActiveSupport

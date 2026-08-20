@@ -393,9 +393,27 @@ module Ovallsp
       def concern?(target)
         return true unless @concern_markers_by_owner.fetch(target, []).empty?
 
-        @extends_by_owner.fetch(target, []).any? do |fact|
-          Index::SymbolId.bare_name(fact.target).end_with?("ActiveSupport::Concern")
-        end
+        @extends_by_owner.fetch(target, []).any? { |fact| concern_marker_name?(fact.target) }
+      end
+
+      # **Matched on the name it resolves to, not the name as written.**
+      # Rails writes `extend Concern` bare, from inside
+      # `module ActiveSupport` -- `callbacks.rb:66`, `rescuable.rb:12`,
+      # `actionable_error.rb:12` -- and matching the written text missed
+      # every one, so `ActiveSupport::ExecutionWrapper.define_callbacks`,
+      # `ActiveSupport::Reloader`, `ActionDispatch::Callbacks` and
+      # `ActionCable::Server::Worker` were all reported as missing
+      # methods. Fourteen of the fifteen false reports a `reproduce`
+      # round measured this release adding.
+      #
+      # The bare spelling is accepted only when a `Concern` really is the
+      # last segment: a workspace `Foo::Concern` of its own would be
+      # accepted too, which is the same trade every other name-shaped
+      # rule in this index makes and errs towards answering rather than
+      # towards inventing a name that raises.
+      def concern_marker_name?(target)
+        name = Index::SymbolId.bare_name(canonical_name(target).to_s)
+        name.end_with?("ActiveSupport::Concern") || name.split("::").last == "Concern"
       end
 
       # What the *receiver* is, which is what its singleton chain ends in:

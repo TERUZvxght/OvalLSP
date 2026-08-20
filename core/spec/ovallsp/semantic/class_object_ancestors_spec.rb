@@ -120,8 +120,8 @@ RSpec.describe "a class object is an instance of Class (024.23 follow-up)" do
     expect(unknown_methods("class Widget\n  definitely_not_a_macro :a\nend\n")).to eq(["definitely_not_a_macro"])
   end
 
-  # The control the reversal needs: a call on a *receiver* is not
-  # evidence about the receiver's own body, so it is still reported.
+  # A call on a *receiver* is not evidence about the receiver's own body,
+  # so it is reported whatever `024.110` is eventually settled as.
   it "still reports an absent class method on a constant receiver" do
     expect(unknown_methods("class Widget\nend\nWidget.no_such_class_method\n")).to eq(["no_such_class_method"])
   end

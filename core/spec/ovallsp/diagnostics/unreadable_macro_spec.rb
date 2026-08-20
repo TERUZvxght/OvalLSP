@@ -113,9 +113,15 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
     expect(unknown_methods(document)).to eq(["attr_atomic"])
   end
 
-  # **The reproduction that decided it.** `Widget` has no macros and
-  # lives in another file; the only unreadable call in the workspace is
-  # in a reopened `Module`.
+  # **The reproduction that decided it**, and the one that keeps
+  # `#open_surface?` asking the narrower question. `Widget` has no macros
+  # and lives in another file; the only unreadable call in the workspace
+  # is in a reopened `Module`. Asking the *correct* side for the
+  # `:class_object` tail -- which `#declares_method_missing?` now does,
+  # and which is right for a question about a declared method -- would
+  # silence this, because `Module`'s instance surface really is open and
+  # its instance methods really are on every class's singleton chain.
+  # That is `024.110`'s open problem stated as a test.
   it "does not let a reopened core class silence an unrelated class's class-level call" do
     index("class Module\n  def blank_slate?; false; end\n  alias_method :blank?, :blank_slate?\nend\n",
           uri: "file:///core_ext.rb")
@@ -134,13 +140,17 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
     expect(unknown_methods(document)).to eq(["nope_x"])
   end
 
-  # And the distinguishing pair: the *same* file, with and without the
-  # unreadable macro. An implementation that silenced the owner entirely
-  # would pass the first example and fail this one.
-  it "still reports a typo on a class that also ran a macro, once the call is elsewhere" do
+  # **This example could not distinguish anything until 0.2.11's third
+  # round.** Its fixture had no typo in it and `known` was declared, so
+  # `be_empty` held under every candidate behaviour, while its own
+  # comment claimed it would fail if the owner were silenced entirely.
+  # Verified mechanically by the round: re-applying the change and
+  # running the file failed the two examples above and passed this one.
+  # `024.109`'s category, in the spec written to close `024.110`.
+  it "still reports a typo on a class that also ran an unreadable macro" do
     index("class Mixed\n  attr_atomic :thing\n  def self.known; end\nend\n", uri: "file:///mixed.rb")
-    document = index("Mixed.known\n", uri: "file:///ok.rb")
+    document = index("Mixed.known\nMixed.tpyo_class\n", uri: "file:///ok.rb")
 
-    expect(unknown_methods(document)).to be_empty
+    expect(unknown_methods(document)).to eq(["tpyo_class"])
   end
 end

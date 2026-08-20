@@ -144,6 +144,7 @@ module Ovallsp
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
       @lexical_nesting = []
+      @in_singleton_class = false
 
       locate(result.value.statements, offset, initial_env.dup)
     rescue BudgetExceeded, StandardError
@@ -447,9 +448,31 @@ module Ovallsp
     def locate_in_singleton_class(node, offset)
       return Types::UNKNOWN unless contains?(node.location, offset)
 
+      # `class << self` and `def self.x` both make self a class object,
+      # and only the first changes what a bare constant means:
+      #
+      #   $ ruby -e '
+      #   class Config; def top_only; end; end
+      #   class SBase; class Config; def sbase_only; end; end; end
+      #   class SSub < SBase
+      #     def self.probe = Config
+      #     class << self; def probe2 = Config; end
+      #   end
+      #   p [SSub.probe, SSub.probe2]
+      #   '
+      #   # => [SBase::Config, Config]
+      #   # ruby 3.4.10
+      #
+      # A guard reading `@self_type_stack.last.is_a?(Types::Generic)`
+      # cannot tell them apart, and disabling step 2 inside `def self.x`
+      # left both directions inverted there -- which is what this release
+      # marked `024.112` fixed while it was still true.
+      previous_in_singleton_class = @in_singleton_class
+      @in_singleton_class = true
       @self_type_stack.push(Types::Generic.new(name: "ClassOf", type_arg: @self_type_stack.last))
       locate(node.body, offset, {})
     ensure
+      @in_singleton_class = previous_in_singleton_class
       @self_type_stack.pop
     end
 
@@ -749,7 +772,7 @@ module Ovallsp
     # while re-searching the frame step 1 had already tried.
     def ancestor_type_name(name)
       return nil unless @hierarchy_index
-      return nil if @self_type_stack.last.is_a?(Types::Generic)
+      return nil if @in_singleton_class
 
       innermost = current_nesting.first
       return nil unless innermost

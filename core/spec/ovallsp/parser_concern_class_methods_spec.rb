@@ -198,6 +198,25 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
         .not_to include("::Inner::ClassMethods")
     end
 
+    # **Rails writes the marker bare.** `module ActiveSupport` … `extend
+    # Concern` is how `callbacks.rb`, `rescuable.rb` and
+    # `actionable_error.rb` spell it, and matching the written text
+    # missed every one -- fourteen of the fifteen false reports a
+    # `reproduce` round measured this release adding, on
+    # `ActiveSupport::ExecutionWrapper.define_callbacks` and its
+    # neighbours.
+    it "recognises the marker written bare from inside ActiveSupport" do
+      hierarchy_index = chain(
+        "module ActiveSupport\n  module Concern; end\nend\n",
+        "module ActiveSupport\n  module Bare\n    extend Concern\n    module ClassMethods\n" \
+        "      def bare_cm; end\n    end\n  end\nend\n",
+        "class UsesBare\n  include ActiveSupport::Bare\nend\n"
+      )
+
+      expect(hierarchy_index.ancestors("::UsesBare", singleton: true).map(&:name))
+        .to include("::ActiveSupport::Bare::ClassMethods")
+    end
+
     # `024.115`. Keying on "a `ClassMethods` declaration exists" made
     # completion offer a name that raises for any module that merely
     # happens to nest one:
@@ -213,11 +232,12 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
     #   # => NoMethodError
     #   # ruby 3.4.10
     #
-    # The marker is required now. The pre-Rails-4 spelling --
-    # `def self.included(base); base.extend(ClassMethods); end` -- is not
-    # missed by this: it is an ordinary `extend`, which this index has
-    # always followed, and 0.2.10's `drive` round verified that path
-    # separately.
+    # A marker is required now, and there are two of them: this line, and
+    # the `self.included` hook the example above pins. 0.2.11 first
+    # narrowed to this line alone, on the stated ground that the hook "is
+    # an ordinary `extend` this index has always followed" -- which is
+    # false, and was written from another round's summary rather than
+    # checked.
     it "adds nothing for a module that nests a ClassMethods without being a concern" do
       hierarchy_index = chain(
         "module Mixed\n  module ClassMethods\n    def spelled_out; end\n  end\n  def helper; end\nend\n",

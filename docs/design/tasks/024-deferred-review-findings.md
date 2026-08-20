@@ -259,7 +259,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | fixed | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
 | [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | fixed | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | fixed | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
-| [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | fixed | 0.2.11 | `def self.method_missing` and `define_singleton_method` do not open … |
+| [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.12 | `def self.method_missing` and `define_singleton_method` do not open … |
 | [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.12 | The two spellings of a class-body macro get opposite answers |
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | open | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
@@ -5829,12 +5829,13 @@ released-in: 0.2.11
 method that does not exist — `NoMethodError` if the developer picks it.
 
 The recorded reason was that requiring `extend ActiveSupport::Concern`
-would miss every concern written before Rails 4. 0.2.10's `drive` round
-established that reason is weaker than it was presented: those are
-written `def self.included(base); base.extend(ClassMethods); end`, that
-shape is detectable, and the round verified this engine already handles
-it correctly through the ordinary `extend` rule. So requiring *either*
-marker keeps the coverage and stops inventing the name.
+would miss every concern written before Rails 4. **0.2.11 narrowed it on
+a restatement of that reason which turned out to be false**: the
+pre-Rails-4 shape is `def self.included(base); base.extend(ClassMethods); end`,
+and the receiver is a method *parameter* — there is no `extend` in a class
+body for this index to follow, and a generation of real concerns became
+false reports for one round. The parser records that hook as its own
+relation now, and it is the second marker.
 
 Recorded rather than changed because it arrived in the round that closed
 the loop, and because narrowing a rule wants its own corpus measurement.
@@ -5842,11 +5843,10 @@ the loop, and because narrowing a rule wants its own corpus measurement.
 ## 024.116 `def self.method_missing` and `define_singleton_method` do not open a surface
 
 ```yaml
-status: fixed
+status: open
 kind: defect
 user-visible: yes
-target: 0.2.11
-released-in: 0.2.11
+target: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb`
@@ -5861,6 +5861,19 @@ Pre-existing on classes, on `main` and every release before it, and
 `KNOWN_LIMITATIONS`' four-shape list does not mention either. Found by
 0.2.10's `drive` round while checking whether that release had widened
 them to modules; it had, and the widening was reverted with `024.106`.
+**The half that shipped in 0.2.11**: `#declares_method_missing?` asks the
+side the lookup is on, so `def self.method_missing` closes a class-level
+lookup and an instance-side one no longer does. Three review rounds in a
+row found that one side computation wrong, and it is mechanised now --
+`AncestorEntry#declaration_kind` owns the rule and this reader calls it.
+
+**What is left open**: `define_singleton_method` opens the surface, so
+the calls it answers are no longer reported, and hover, go-to-definition
+and completion still answer nothing for them because the names are not
+in the index. Silence instead of an answer, which is the safe direction
+and not the right one. Recording those names is the fix, and it is a
+parser change with its own measurement.
+
 
 ## 024.117 The two spellings of a class-body macro get opposite answers
 

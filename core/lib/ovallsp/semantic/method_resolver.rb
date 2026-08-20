@@ -252,23 +252,50 @@ module Ovallsp
       # `def self.method_missing` was judged closed and every call it
       # handles was reported (`024.116`). Ruby returns `:mm`.
       def declares_method_missing?(entry, singleton)
-        # The same side computation `#open_surface?` makes, for the same
-        # reason, and 0.2.11 shipped this without it for one round:
-        # `extend M` puts M's *instance* methods on the class-level
-        # chain, so asking M about its singleton side asks the wrong one
-        # and `ExtC.anything` was reported on a class Ruby answers.
-        kind = if entry.origin == :extend
-                 :instance_method
-               else
-                 singleton ? :singleton_method : :instance_method
-               end
-        @workspace_index.method_symbol_ids(entry.name, kind: kind).any? { |sid| sid.name == "method_missing" }
+        @workspace_index.method_symbol_ids(entry.name, kind: side_of(entry, singleton))
+                        .any? { |sid| sid.name == "method_missing" }
       end
 
       # `extend M` puts M's *instance* methods on the class-level chain,
       # so a link reached that way is asked about the other side.
+      # **Deliberately not `#side_of`, and this is the one place the two
+      # questions come apart.** `#declares_method_missing?` asks whether a
+      # link *declares* a named method, so it must ask the side the
+      # declaration is on. This asks whether a link's surface is
+      # *unbounded*, and for the `Class`/`Module`/`Object`/`Kernel`/
+      # `BasicObject` tail the true answer collapses the whole workspace:
+      # those five are on every class's singleton chain, so one bare
+      # `alias_method` in a `core_ext` file would make every `Foo.bar`
+      # unknowable. Measured: constant-receiver findings 117 -> 0 over
+      # 1,659 files, with a real latent `NoMethodError` among the losses.
+      #
+      # So it asks the narrower question, which is wrong in the safe
+      # direction, and `024.110` records what a real fix has to
+      # distinguish -- "I could not read *this class's* body" from "I
+      # could not read `Module`'s". Written out here rather than left as
+      # a difference a reader has to notice, because three rounds in a
+      # row found one of these two call sites hand-rolling the side.
       def open_surface?(entry, singleton)
         @workspace_index.open_surface?(entry.name, singleton: entry.origin == :extend ? false : singleton)
+      end
+
+      # **Which side of a link this chain actually reaches**, asked in one
+      # place because three review rounds in a row found one of its two
+      # readers hand-rolling it and getting it wrong. `extend M` puts M's
+      # *instance* methods on a class-level chain, and so does the
+      # `Class`/`Module`/`Object`/`Kernel`/`BasicObject` tail -- both
+      # readers had `origin == :extend` written out, so a workspace
+      # `class Object; def method_missing` was asked for a singleton
+      # method and missed, and `Widget.nope` was reported on code Ruby
+      # answers.
+      #
+      # `AncestorEntry#declaration_kind` already knew: its
+      # `INSTANCE_SIDE_ORIGINS` is `%i[extend class_object]`. The rule was
+      # not missing, it was copied. CLAUDE.md's same-place rule asks for a
+      # countermeasure rather than a third hand-fix, and this is it: both
+      # readers call the value that owns the question.
+      def side_of(entry, singleton)
+        entry.declaration_kind(singleton: singleton)
       end
 
       def resolve(receiver_type:, name:, context: {})

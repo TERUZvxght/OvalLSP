@@ -17,9 +17,13 @@ require "stringio"
 #     class Runner; def go = Config.new.app_only; end
 #   end
 #   p App::Runner.new.go            # => nil, and it does not raise
-#   p(begin; App::Runner.new.instance_eval { Config.new.top_only }
-#     rescue NoMethodError => e; e.class; end)   # => NoMethodError
 #   '
+#
+# (An earlier version of this comment added an `instance_eval` line
+# annotated `# => NoMethodError`. It prints `nil`: `instance_eval`'s
+# block keeps its own lexical scope, so `Config` there is the top-level
+# one and `top_only` exists. The transcript was wrong; the example's own
+# fixture below does raise, which is what it pins.)
 #   # ruby 3.4.10
 RSpec.describe "Ovallsp::Diagnostics::Engine and a bare class name inside a namespace" do
   subject(:engine) { Ovallsp::Diagnostics::Engine.new }
@@ -154,6 +158,17 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a bare class name inside a name
                        "    end\n  end\nend\n", uri: "file:///ssub.rb")
 
       expect(unknown_methods(document)).to eq(["sbase_only"])
+    end
+
+    # `def self.x` is *not* `class << self`: Ruby's cref there is still
+    # the class, so step 2 applies. A guard that could not tell them
+    # apart left this inverted while the entry was marked fixed.
+    it "looks through the superclass's namespace from inside def self.x" do
+      index("class SBase2\n  class Config\n    def sbase_only; end\n  end\nend\n", uri: "file:///sbase2.rb")
+      document = index("class SSub2 < SBase2\n  def self.probe\n    Config.new.sbase_only\n  end\nend\n",
+                       uri: "file:///ssub2.rb")
+
+      expect(unknown_methods(document)).to be_empty
     end
 
     # And the control: with no such class in the superclass's namespace,

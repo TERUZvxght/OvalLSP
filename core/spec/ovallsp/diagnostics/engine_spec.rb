@@ -281,12 +281,13 @@ RSpec.describe Ovallsp::Diagnostics::Engine do
     # call into the gem's own API is reported. Every Rails application's
     # test/test_helper.rb has exactly this shape (024.R5).
     describe "a class the workspace reopens rather than defines" do
-      # The call is inside a method body, not written bare in the class
-      # body. Since 0.2.11 an unrecognised *class-body* call opens the
-      # owner's surface on both sides (`024.110`), which would make this
-      # fixture silent whatever the ancestry rule decided -- it could not
-      # distinguish the two behaviours these examples are about, which is
-      # `024.109`'s category. A call inside a `def` opens nothing.
+      # The call is inside a method body rather than written bare in the
+      # class body. 0.2.11 briefly made a bare class-body call open the
+      # owner's surface on both sides, which would have made a
+      # `fixtures :all` fixture silent whatever the ancestry rule
+      # decided; that change was rolled back inside the same release, so
+      # either spelling works today. This one is kept because it does not
+      # depend on which way `024.110` is eventually settled.
       let(:reopened) do
         index(<<~RUBY)
           module ActiveSupport
