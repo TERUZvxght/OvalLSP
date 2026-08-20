@@ -31,10 +31,11 @@ most-useful-first, say — are 2.x.x.
 
 **The distance to 1.0.0 is written down**, derived from those two and
 nothing else: [`docs/design/tasks/036-road-to-1.0.0.md`](docs/design/tasks/036-road-to-1.0.0.md).
-The release being prepared now is **0.2.11, on `feat/0.2.11`** — the
-entries 0.2.10's three review rounds recorded rather than fixed, and
-`024.106`'s second half. 0.2.10 shipped C3 and C9 and is recorded in
-[`docs/design/tasks/040-0.2.10-what-an-answer-was-computed-from.md`](docs/design/tasks/040-0.2.10-what-an-answer-was-computed-from.md);
+The release being prepared now is **0.2.12, on `feat/0.2.12`** — what
+0.2.11's three rounds recorded rather than fixed, `024.106`'s second
+half, and `024.110`, whose one-line shape was tried and rolled back.
+0.2.11 is recorded in
+[`docs/design/tasks/041-0.2.11-the-loops-own-leavings.md`](docs/design/tasks/041-0.2.11-the-loops-own-leavings.md);
 0.2.7 is in
 [`docs/design/tasks/037-0.2.7-concurrency-foundations.md`](docs/design/tasks/037-0.2.7-concurrency-foundations.md).
 Read it when a session opens, so the path is seen rather than inferred —

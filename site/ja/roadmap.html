@@ -195,6 +195,39 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0211">
+          <div class="tl-version">
+            <span class="v">0.2.11</span>
+            <span class="mark mark--yes">リリース済み</span>
+          </div>
+          <h3>このエンジンが何を断定してよいか</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>concern のクラスメソッドが、include したクラスに届きます。</strong> <code>class_methods do</code> ブロックも、古い <code>def self.included(base)</code> の綴りも、どちらも「存在しないメソッド」と報告されていましたが、どちらも動きます。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>module_function :name</code> が、メソッドが別ファイルにあっても働きます。</strong> ホバーも定義ジャンプも補完も何も答えていませんでしたが、3つとも答えるようになりました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>裸のクラス名が、継承元にあるものからも解決されます</strong> — Ruby と同じで、名前がたまたま一致するトップレベルのクラスではありません。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>def self.method_missing</code> で答えるクラスや、<code>define_singleton_method</code> でクラスメソッドを作るクラスが、実際に答える呼び出しについて報告されなくなりました。</strong></span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            機能の追加はありません。Rails の4つの gem での実測では、このリリースは
+            何も変えません — <code>unknown-method</code> は前後とも84件、コントロールも
+            同一です。修正はそれらの gem が含まない形に対するものです。1つの変更は
+            試して取り下げました — 読めないマクロを黙らせる修正は、ワークスペース全体の
+            クラスレベル検査も黙らせ、Rails 自身の実在する潜在エラーを隠しました。
+          </p>
+        </article>
+
         <article class="tl-item" id="v0210">
           <div class="tl-version">
             <span class="v">0.2.10</span>

@@ -187,7 +187,7 @@ Rails source, including a fix from the round before that had switched
 release ships under `CLAUDE.md`'s bound with `024.106`'s second half,
 `024.109`, and `024.111`–`024.116` open.
 
-### 0.2.11 — the loop's own leavings *(axis B)* — **next, on `feat/0.2.11`**
+### 0.2.11 — the loop's own leavings *(axis B)* — **shipped**
 
 What 0.2.10's rounds recorded rather than fixed, which is a coherent
 release rather than an appendix: `024.106`'s second half needs the index
@@ -196,6 +196,22 @@ to prove a module's declarations are all of them; `024.114` needs
 indexed, the way `AncestorFact` already is; and `024.115` narrows the
 concern rule to something with a marker. `024.111`, `024.112`, `024.113`,
 `024.116`, `024.109` and `024.110` join them.
+
+**What it took.** Three rounds — `attack`, `drive`, `reproduce` — finding
+11, 5 and 9 defects. Six of the nine entries closed; `024.110` was tried
+in its recorded one-line shape and **rolled back inside the release**
+after a `drive` round measured constant-receiver findings going 117 → 0.
+The `reproduce` round then found the release a net regression on its own
+corpus and the headline table advertising the opposite. It ships neutral
+on that corpus — 84 → 84, control identical — with its value in shapes
+four Rails gems do not contain.
+
+### 0.2.12 — what three rounds left *(axis B)* — **next, on `feat/0.2.12`**
+
+`024.106`'s second half, `024.110` in a shape that can tell "I could not
+read *this class's* body" from "I could not read `Module`'s", `024.117`,
+`024.118`, and the residue of `024.116`. `024.109` and `024.111` join
+them.
 
 ### 0.3.0 — the first release that may add capability *(axis B)*
 
