@@ -293,10 +293,13 @@
           <summary>It says the versions don't match</summary>
           <div class="qa-body">
             <p>
-              At startup the Extension and Core Server exchange version, protocol, build and
-              Ruby/platform information. On a mismatch OvalLSP reports it — an error notification
-              and the detail in the Output channel — and <em>keeps running</em>. It does not stop
-              the session, so treat the answers you get afterwards as unreliable until the
+              Two checks, doing different things. <em>Before</em> the Core Server starts, OvalLSP
+              checks that the Ruby it selected can load this VSIX's bundled native dependencies;
+              if it cannot, <strong>the Core Server is not started at all</strong> and you are told
+              so. <em>After</em> it has started, the Extension and Core Server exchange version,
+              protocol, build and Ruby/platform information, and on a mismatch OvalLSP reports it —
+              an error notification and the detail in the Output channel — and <em>keeps
+              running</em>, so treat the answers you get afterwards as unreliable until the
               mismatch is resolved. Common causes: a stale process left by a previous Extension version, a payload
               that did not install correctly, or an incompatible custom
               <code>ovallsp.server.path</code>. Run <strong>OvalLSP: Show Version

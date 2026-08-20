@@ -11,6 +11,7 @@ import {
 import { resolveServerConfig, classifyServerSelection } from './serverConfig';
 import { resolveRuby, RubyResolution } from './rubyResolver';
 import { checkBundledCoreCompatibility, queryRubyConfigPaths, RubyConfigPaths } from './platformCompatibility';
+import { decidePreStart } from './startupGate';
 import { WATCHED_FILES_GLOB } from './watchedFiles';
 import {
   CLIENT_PROTOCOL_VERSION,
@@ -319,12 +320,21 @@ function startClientForFolder(
     checkBundledCoreCompatibility(context.extensionPath, resolvedRubyCommand, undefined, folder.uri.fsPath),
     configPathsPromise
   ]).then(([compatibility, configPaths]) => {
-      if (!compatibility.compatible) {
-        outputChannel.appendLine(`OvalLSP: ${compatibility.reason}`);
-        void vscode.window.showErrorMessage(
-          `OvalLSP: the Ruby interpreter selected for ${folder.name} is incompatible with this VSIX's bundled ` +
-            'native dependencies. See the OvalLSP output channel for details.'
-        );
+      // `024.55`: this branch used to log, raise a notification, and fall
+      // through to `client.start()` -- while four documents said the
+      // extension "stops before sending any feature request" on exactly
+      // this. It stops now. The verdict is a named function with its own
+      // tests (`startupGate.ts`) because a refusal that is wrong locks
+      // the user out of the extension, and nothing in this file can be
+      // unit-tested.
+      const verdict = decidePreStart(compatibility, folder.name);
+      if (!verdict.start) {
+        outputChannel.appendLine(verdict.logLine);
+        if (verdict.notification) {
+          void vscode.window.showErrorMessage(verdict.notification);
+        }
+        lifecycle.markStopped(key, generation);
+        return;
       }
       // `compatibility.note` is deliberately *not* written here. The
       // handshake writes the same fact, with this folder's name on it and

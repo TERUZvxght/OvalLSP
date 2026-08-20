@@ -419,18 +419,22 @@ loop; what 0.2.1 actually shipped is the silence described above.)
 
 ## What a version mismatch actually does
 
-**It tells you, and then carries on.** When the Extension and the Core
-disagree about version, protocol, build identity or payload hash, you get
-an error notification and the detail in the Output channel — and the
-session keeps running. It does not stop before answering, which is what
-both READMEs and both getting-started pages said until 0.2.3.
+**It tells you, and then carries on** — for the mismatches found *after*
+the Core Server has started. When the Extension and the Core disagree
+about version, protocol, build identity or payload hash, you get an error
+notification and the detail in the Output channel, and the session keeps
+running.
 
 That matters most for the two reasons you cannot see: a payload hash
 mismatch means the bundled Core is not the one this build shipped, and a
 protocol mismatch means the two sides disagree about the wire. In both
 cases OvalLSP goes on answering hover, completion and go to definition.
 Treat those answers as unreliable until the mismatch is resolved, and run
-`OvalLSP: Show Version Information` to see what was detected (024.55). <!-- documents: 024.55 -->
+`OvalLSP: Show Version Information` to see what was detected.
+
+The check that runs *before* the Core Server starts does stop: as of
+0.2.10, a Ruby that cannot load this build's bundled dependencies means
+the Core Server is not started at all, and you are told so. <!-- documents: 024.55 -->
 
 ## Diagnostics that come back after you clear or close a file
 

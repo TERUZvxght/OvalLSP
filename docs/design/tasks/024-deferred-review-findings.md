@@ -2846,6 +2846,21 @@ target: 0.2.10
 
 **Target slipped.** Written for 0.2.4 and still open five releases later; retargeted to 0.2.10 rather than left naming a release that has shipped.
 
+**Half of this shipped in 0.2.10: the pre-start path now refuses.**
+`decidePreStart` (`vscode/src/startupGate.ts`) is a named function with
+its own tests, and `extension.ts` returns instead of calling
+`client.start()` when the probe fails. It is a named function rather than
+an `if` in the start callback for the reason this entry gives for the
+delay: a refusal that is wrong locks the user out of the extension
+entirely, and nothing in `extension.ts` can be unit-tested. The
+notification says the Core Server *did not start*, which is both the true
+thing and the actionable one.
+
+**The post-start half is what remains open** -- `compareVersionInfo`
+still reports and keeps running, which is what the four documents now
+describe, split into two paragraphs so each half says what actually
+happens.
+
 **Area:** `vscode/src/extension.ts` (`runVersionHandshake`, and the
 pre-start branch on `checkBundledCoreCompatibility`)
 

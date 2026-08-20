@@ -151,13 +151,24 @@ auto-updated and is only checked for compatibility, never modified.
 
 ## Version and compatibility errors
 
-At startup, the Extension and Core Server exchange version, protocol,
-build, and Ruby/platform information. If they don't match (a stale
-process from a previous Extension version, a payload that didn't install
-correctly, an incompatible custom `ovallsp.server.path`, ...), OvalLSP
-reports it — an error notification, with the detail in the Output channel
-— and keeps running. It does **not** stop the session, so until the
-mismatch is resolved the answers you get should be treated as unreliable.
+There are two checks, and they do different things.
+
+**Before the Core Server starts**, OvalLSP checks that the Ruby
+interpreter it selected can actually load this VSIX's bundled native
+dependencies. If it cannot, **the Core Server is not started at all** —
+you get an error notification saying it did not start, and the reason in
+the Output channel. Nothing is served, so there are no unreliable answers
+to mistake for good ones.
+
+**After it has started**, the Extension and Core Server exchange version,
+protocol, build and Ruby/platform information. If those don't match (a
+stale process from a previous Extension version, a payload that didn't
+install correctly, an incompatible custom `ovallsp.server.path`, ...),
+OvalLSP reports it — an error notification, with the detail in the Output
+channel — and keeps running. It does **not** stop the session, so until
+the mismatch is resolved the answers you get should be treated as
+unreliable.
+
 Run `OvalLSP: Show Version Information` to see exactly what was detected
 and what to do about it.
 
