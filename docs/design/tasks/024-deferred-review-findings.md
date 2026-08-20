@@ -255,7 +255,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | open | 0.2.11 | Specs whose fixture cannot distinguish the behaviour they pin |
 | [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | fixed | 0.2.11 | The macro is reported, and what it might define is not |
 | [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.11 | A visibility section written inside a block does not reach the body … |
-| [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | open | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
+| [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | fixed | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | open | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
 | [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | open | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | open | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
@@ -5635,10 +5635,11 @@ change set under review. Found by the `attack` round.
 ## 024.112 A bare constant is not looked up through the enclosing class's ancestors
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.11
+released-in: 0.2.11
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`#qualify_constant`),

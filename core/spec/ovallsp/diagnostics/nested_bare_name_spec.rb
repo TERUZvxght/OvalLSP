@@ -32,6 +32,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a bare class name inside a name
   let(:local_inferencer) do
     Ovallsp::LocalInferencer.new(
       model_registry: model_registry, method_resolver: method_resolver, workspace_index: workspace_index,
+      hierarchy_index: hierarchy_index,
       method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(
         workspace_index: workspace_index, method_resolver: method_resolver,
         summary_store: Ovallsp::Semantic::MethodSummaryStore.new
@@ -81,6 +82,58 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a bare class name inside a name
                      uri: "file:///app/runner.rb")
 
     expect(unknown_methods(document)).to eq(["top_only"])
+  end
+
+  # **Ruby's second step**, which `024.103` did not implement: nesting
+  # first, *then the ancestors of the innermost cref*, then Object.
+  #
+  # The namespace here is `Other`, not `App`: this file's `before` already
+  # declares `App::Config`, and Ruby's *first* step would find it. Asked
+  # with the fixture these examples actually build --
+  #
+  #   $ ruby -e '
+  #   class Config; def top_only; end; end
+  #   module App; class Config; def app_only; end; end; end
+  #   class Zbase; class Config; def zbase_only; end; end; end
+  #   module App;   class Runner < Zbase; def which = Config; end; end
+  #   module Other; class Runner < Zbase; def which = Config; end; end
+  #   p App::Runner.new.which     # => App::Config
+  #   p Other::Runner.new.which   # => Zbase::Config
+  #   '
+  #   # ruby 3.4.10
+  #
+  # -- which is the difference between step 1 and step 2, and the reason
+  # the first draft of these examples was wrong about what Ruby answers.
+  describe "a class name the enclosing class inherits" do
+    before do
+      index("class Zbase\n  class Config\n    def zbase_only; end\n  end\nend\n", uri: "file:///zbase.rb")
+    end
+
+    it "says nothing about the call the superclass's namespace makes correct" do
+      document = index("module Other\n  class Runner < Zbase\n    def go\n      Config.new.zbase_only\n" \
+                       "    end\n  end\nend\n", uri: "file:///other/runner.rb")
+
+      expect(unknown_methods(document)).to be_empty
+    end
+
+    # The other direction, which is what makes the pair distinguish: the
+    # top-level `Config`'s method is unreachable from inside `Runner`,
+    # because `Zbase::Config` shadows it.
+    it "reports the call that same namespace makes wrong" do
+      document = index("module Other\n  class Runner < Zbase\n    def go\n      Config.new.top_only\n" \
+                       "    end\n  end\nend\n", uri: "file:///other/runner.rb")
+
+      expect(unknown_methods(document)).to eq(["top_only"])
+    end
+
+    # And the control: with no such class in the superclass's namespace,
+    # the top-level one is still what a bare name means.
+    it "falls through to the top-level class when the superclass declares none" do
+      document = index("module Other\n  class Plain\n    def go\n      Config.new.top_only\n" \
+                       "    end\n  end\nend\n", uri: "file:///other/plain.rb")
+
+      expect(unknown_methods(document)).to be_empty
+    end
   end
 
   # No top-level `Config` at all: the winner must still be the nesting's,

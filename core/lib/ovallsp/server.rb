@@ -85,7 +85,8 @@ module Ovallsp
       @workspace_pass_requested = false
       @local_inferencer = LocalInferencer.new(
         model_registry: model_registry, method_resolver: @method_resolver, method_analyzer: @method_analyzer,
-        signatures: @signatures, observation_store: @observation_store, workspace_index: @workspace_index
+        signatures: @signatures, observation_store: @observation_store, workspace_index: @workspace_index,
+        hierarchy_index: @hierarchy_index
       )
       @route_registry = route_registry
       @model_registry = model_registry

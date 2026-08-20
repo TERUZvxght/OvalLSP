@@ -528,15 +528,6 @@ If you write one inside an ordinary block — `1.times { module_function }`,
 that follow, though Ruby does. Written directly in the class or module
 body, both work. <!-- documents: 024.111 -->
 
-## A class name your enclosing class inherits
-
-A bare class name is resolved through the namespaces you are writing
-inside, but not through the ancestors of the class you are writing in. So
-`Config` inside `class Runner < Zbase`, where `Zbase::Config` exists, is
-answered by a top-level `Config` instead — the working call is reported
-as an unknown method and the call that would raise is not. Writing the
-namespace out restores it. <!-- documents: 024.112 -->
-
 ## Reopening a file without closing it
 
 If your editor sends a second `didOpen` for a file it never closed, and
