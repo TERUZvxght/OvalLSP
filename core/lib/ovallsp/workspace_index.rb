@@ -265,8 +265,21 @@ module Ovallsp
     # namespaces) resolves to the alphabetically first qualified name --
     # arbitrary, but a property of the workspace rather than of which file
     # was edited last, which is what it was until 0.1.13 (024.15).
-    def resolve_type_name(name)
-      @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
+    # `nesting` is Ruby's `Module.nesting` at the point the name was
+    # written, innermost first, and it is consulted before anything else
+    # for a *bare* name -- which is what Ruby does and what nothing here
+    # did (`024.103`). Without it, `Config` inside `module App` answered
+    # with whichever `Config` sorted first, so `App::Config#app_only` was
+    # reported missing on working code while the top-level `Config`'s
+    # `top_only` -- the call that really raises there -- was silent.
+    #
+    # This is not `024.47`'s rolled-back shape. That moved a *shadowing
+    # test* into resolution, which cannot tell a written name from an
+    # inferred one and broke every bare name written from inside its own
+    # namespace. This is the opposite: it is the lookup rule itself, and
+    # a caller with no nesting to give gets exactly the previous answer.
+    def resolve_type_name(name, nesting: [])
+      @mutex.synchronize { resolve_type_symbol_locked(name, nesting: nesting)&.name }
     end
 
     # Whether a *bare* name is claimed by more than one declared type, so
@@ -542,7 +555,7 @@ module Ovallsp
       [candidates, Index::SymbolId.qualify_owner(raw)]
     end
 
-    def resolve_type_symbol_locked(name)
+    def resolve_type_symbol_locked(name, nesting: [])
       candidates, qualified = type_candidates_locked(name)
       return nil if candidates.empty?
 
@@ -568,15 +581,38 @@ module Ovallsp
       # diagnostics already said `File::Stat` (024.78).
       return exact || candidates.find { |sid| namespace_suffix?(sid.name, raw) } if raw.include?("::")
 
+      # Ruby's own rule, before any heuristic: walk the nesting outward
+      # and take the first frame that declares this name. `module App;
+      # class Runner; Config` looks in `App::Runner`, then `App`, then
+      # falls through -- which is what the interpreter does, and the
+      # reason it never picks an unrelated namespace's class.
+      from_nesting = nesting_match(candidates, raw, nesting)
+      return from_nesting if from_nesting
+
       # `.first` is safe here because `candidates` came from
       # `ordered_symbol_ids`, not from the Set directly. Until 0.1.13 it
       # was index order, so an ambiguous bare name resolved to a different
       # class whenever either file was re-indexed (024.15).
       #
-      # Bare names keep the heuristic deliberately: 0.2.1 applied a
-      # shadowing rule to them here and broke every bare name written from
-      # inside its own namespace, and was rolled back (024.47).
+      # Reached only when the nesting declares nothing of this name --
+      # the top-level case, and the one where the workspace genuinely
+      # cannot tell. 0.2.1 applied a *shadowing test* here instead and
+      # broke every bare name written from inside its own namespace; it
+      # was rolled back (024.47), and this is not that.
       exact || candidates.first
+    end
+
+    # The innermost nesting frame that declares `raw`, or nil. Frames are
+    # already fully qualified (`ParserService` records `Module.nesting`
+    # itself rather than splitting an owner string, which cannot tell
+    # `module App; class Runner` from a compact `class App::Runner`).
+    def nesting_match(candidates, raw, nesting)
+      Array(nesting).each do |frame|
+        wanted = Index::SymbolId.qualify_owner("#{frame}::#{raw}")
+        found = candidates.find { |sid| sid.name == wanted }
+        return found if found
+      end
+      nil
     end
 
     # Whether `candidate` (always fully qualified, leading `::`) names the

@@ -50,7 +50,8 @@ module Ovallsp
     MAX_ARRAY_ELEMENT_UNION = 8
 
     def initialize(max_steps: 5000, model_registry: Models::ModelRegistry.new, generic_rules: nil,
-                   method_resolver: nil, method_analyzer: nil, signatures: nil, observation_store: nil)
+                   method_resolver: nil, method_analyzer: nil, signatures: nil, observation_store: nil,
+                   workspace_index: nil)
       @max_steps = max_steps
       @model_registry = model_registry
       @generic_rules = generic_rules || self.class.default_generic_rules
@@ -63,6 +64,11 @@ module Ovallsp
       @method_analyzer = method_analyzer
       @signatures = signatures
       @observation_store = observation_store
+      # Optional like the rest: without it a bare constant stays exactly
+      # as written, which is what every release before 0.2.10 did. With
+      # it, a bare constant is resolved through the lexical nesting the
+      # way Ruby resolves one (`024.103`).
+      @workspace_index = workspace_index
       @step_budget = max_steps
     end
 
@@ -132,6 +138,7 @@ module Ovallsp
       @steps = 0
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
+      @lexical_nesting = []
 
       locate(result.value.statements, offset, initial_env.dup)
     rescue BudgetExceeded, StandardError
@@ -407,9 +414,25 @@ module Ovallsp
       @self_type_stack.push(
         Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.constant_path.full_name))
       )
+      push_nesting(node.constant_path.full_name)
       locate(node.body, offset, {})
     ensure
       @self_type_stack.pop
+      @lexical_nesting&.pop
+    end
+
+    # `Module.nesting`, kept in its own stack rather than read back out of
+    # `@self_type_stack`: that stack is pushed again by `#locate_in_def`
+    # with the *same* value, so `module App; class Runner; def go` leaves
+    # `["App", "Runner", "Runner"]` there and the duplicate is not
+    # distinguishable from a real frame. A `def` opens no nesting frame.
+    #
+    # A compact `class App::Runner` is one frame, not two, which is why
+    # the written path is appended whole rather than split.
+    def push_nesting(written)
+      @lexical_nesting ||= []
+      parent = @lexical_nesting.last
+      @lexical_nesting.push(parent ? "#{parent}::#{written}" : written.to_s)
     end
 
     # `class << self` -- unlike ClassNode/ModuleNode, Prism::SingletonClassNode
@@ -652,14 +675,35 @@ module Ovallsp
       name = node.full_name
       return Types::UNKNOWN if name.nil? || name.empty?
 
-      Types::Generic.new(
-        name: "ClassOf",
-        type_arg: Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(name))
-      )
+      Types::Generic.new(name: "ClassOf", type_arg: Types::Nominal.new(name: constant_type_name(name)))
     rescue StandardError
       # `full_name` raises on a dynamic constant path (`Foo::(bar)`).
       Types::UNKNOWN
     end
+
+    # **The one place a constant node becomes a class name.** There were
+    # two -- `#eval_constant` and `#constant_receiver_name` -- and they
+    # agreed only by accident: teaching one of them the nesting rule left
+    # `Config.new` resolving correctly and `Config.new.app_only` not,
+    # which is `024.103` surviving its own fix. Both read this.
+    #
+    # `Config` written inside `module App` means `App::Config` if `App`
+    # declares one, and the top-level `Config` only if it does not --
+    # Ruby's `Module.nesting` rule, applied here where the nesting is
+    # known. A bare `Nominal` carries no nesting, so every reader
+    # downstream was guessing, and `024.103` is what they guessed.
+    def constant_type_name(name)
+      Semantic::ReceiverResolution.canonical_receiver_name(qualify_constant(name))
+    end
+
+    def qualify_constant(name)
+      return name unless @workspace_index
+      return name if name.to_s.start_with?("::")
+
+      @workspace_index.resolve_type_name(name, nesting: current_nesting) || name
+    end
+
+    def current_nesting = Array(@lexical_nesting).reverse
 
     # Elements beyond #MAX_ARRAY_ELEMENT_UNION contribute to a widened
     # (Unknown) element type rather than an ever-growing Union — "type
@@ -1187,7 +1231,7 @@ module Ovallsp
     def constant_receiver_name(node)
       return nil unless constant_receiver?(node)
 
-      Semantic::ReceiverResolution.canonical_receiver_name(node.full_name)
+      constant_type_name(node.full_name)
     rescue StandardError
       nil
     end
