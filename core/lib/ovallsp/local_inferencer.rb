@@ -700,7 +700,7 @@ module Ovallsp
       return name unless @workspace_index
       return name if name.to_s.start_with?("::")
 
-      @workspace_index.resolve_type_name(name, nesting: current_nesting) || name
+      @workspace_index.nested_type_name(name, nesting: current_nesting) || name
     end
 
     def current_nesting = Array(@lexical_nesting).reverse

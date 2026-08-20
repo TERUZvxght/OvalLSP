@@ -282,6 +282,28 @@ module Ovallsp
       @mutex.synchronize { resolve_type_symbol_locked(name, nesting: nesting)&.name }
     end
 
+    # The name `nesting` makes this bare name mean, or **nil when the
+    # nesting decides nothing** -- which is the whole difference between
+    # this and `#resolve_type_name`. A caller rewriting a name it will
+    # hand downstream must not fall through to the first-candidate
+    # heuristic: doing that turned `Queue.new` inside `module DEBUGGER__`
+    # into `ActiveRecord::ConnectionAdapters::ConnectionPool::Queue` and
+    # added five false reports over 40 gems, because the bare name it
+    # replaced was the one RBS could still answer for. Measured; the fix
+    # for `024.103` shipped with this distinction and not without it.
+    #
+    # Both readers go through `#nesting_match`, so the lookup rule itself
+    # is in one place.
+    def nested_type_name(name, nesting: [])
+      raw = name.to_s
+      return nil if raw.start_with?("::") || nesting.empty?
+
+      @mutex.synchronize do
+        candidates, = type_candidates_locked(raw)
+        nesting_match(candidates, raw, nesting)&.name
+      end
+    end
+
     # Whether a *bare* name is claimed by more than one declared type, so
     # that resolving it is a pick rather than a lookup.
     #
