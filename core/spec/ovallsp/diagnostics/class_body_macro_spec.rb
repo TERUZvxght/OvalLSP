@@ -269,8 +269,19 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   # The point of the check is to still catch what is genuinely absent.
   # Without this, "report nothing on a singleton receiver" would pass
   # every example above.
-  it "still reports a singleton call that nothing declares" do
-    expect(unknown_methods("class Widget\n  definitely_not_a_macro :a\nend\n")).to eq(["definitely_not_a_macro"])
+  # **Reversed in 0.2.11 (`024.110`).** A bare call in a class body that
+  # this engine does not recognise is evidence it could not read the
+  # body -- and it cannot tell a mistyped macro from a gem's DSL, so
+  # reporting one means reporting both. Measured over actioncable,
+  # activejob, activemodel and activesupport with `unresolved-constant`
+  # identical at 1,099 as the control: `unknown-method` **84 -> 25**,
+  # 59 removed and 0 added, and every one sampled confirmed against the
+  # interpreter as a false report (`SymbolSerializer.instance` from
+  # `include Singleton`, `Hash.ruby2_keywords_hash`,
+  # `ActionCable::Server::Base.config`). What is lost is the genuinely
+  # mistyped macro, which this engine was never able to distinguish.
+  it "says nothing about a singleton call nothing declares, written bare in the body" do
+    expect(unknown_methods("class Widget\n  definitely_not_a_macro :a\nend\n")).to be_empty
   end
 
   it "still reports an absent class method on a constant receiver" do

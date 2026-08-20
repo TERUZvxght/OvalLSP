@@ -1031,7 +1031,26 @@ module Ovallsp
         kind = open_surface_kind(node)
         return if kind.nil?
 
-        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
+        owner = Index::SymbolId.bare_name(current_owner)
+        @open_surface_owners << [owner, kind]
+
+        # **And the other side, for a receiverless call.** A macro written
+        # bare in a class or module body is itself a call on that owner's
+        # class side, and it is one this engine could not identify -- so
+        # the same evidence that says "I cannot enumerate this owner's
+        # instance members" says "I cannot enumerate its class members
+        # either", because whatever supplies the macro is exactly the
+        # thing that could not be read.
+        #
+        # Without this the engine gave two contradictory answers about
+        # one fact: it declined to report anything the macro *might*
+        # define, and reported the macro itself as a missing method --
+        # `attr_atomic :thing` on any class using a gem's DSL (`024.110`).
+        #
+        # Only receiverless: `Other.class_eval { }` says nothing about
+        # *this* owner's class side, and `singleton_class.send` is
+        # already about the class side alone.
+        @open_surface_owners << [owner, :singleton] if node.receiver.nil? && kind == :instance
       end
 
       # Which surface the call could have added to, or nil for a call that

@@ -81,14 +81,25 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
   # `.attr_atomic`, so the call itself stays reportable. Opening both
   # would make every unreadable macro silence its own report, which is
   # behaviour 024.23 established deliberately.
-  it "still reports the unreadable macro call itself" do
+  # **Reversed in 0.2.11 (`024.110`).** A bare call in a class body that
+  # this engine does not recognise is evidence it could not read the
+  # body -- and it cannot tell a mistyped macro from a gem's DSL, so
+  # reporting one means reporting both. Measured over actioncable,
+  # activejob, activemodel and activesupport with `unresolved-constant`
+  # identical at 1,099 as the control: `unknown-method` **84 -> 25**,
+  # 59 removed and 0 added, and every one sampled confirmed against the
+  # interpreter as a false report (`SymbolSerializer.instance` from
+  # `include Singleton`, `Hash.ruby2_keywords_hash`,
+  # `ActionCable::Server::Base.config`). What is lost is the genuinely
+  # mistyped macro, which this engine was never able to distinguish.
+  it "says nothing about the unreadable macro call itself" do
     document = index(<<~RUBY_SRC)
       class Counter
         attr_atomic :value
       end
     RUBY_SRC
 
-    expect(unknown_methods(document)).to eq(["attr_atomic"])
+    expect(unknown_methods(document)).to be_empty
   end
 
   # The control, and the reason this is not "stop reporting": an ordinary
@@ -367,7 +378,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
       end
     RUBY_SRC
 
-    expect(unknown_methods(document)).to eq(["sidekiq_options"])
+    expect(unknown_methods(document)).to be_empty
   end
 
   # The message names the *branch* when a Union has one reportable

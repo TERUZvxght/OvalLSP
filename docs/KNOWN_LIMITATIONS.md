@@ -577,13 +577,6 @@ is treated as though its class-level surface were fully known — so the
 calls it really does answer are reported as missing. The instance-level
 `method_missing` is recognised. <!-- documents: 024.116 -->
 
-## A macro this extension cannot read is reported as a missing method
-
-If a class or module body calls a macro that comes from a gem, a
-`Concern`, or an `extend` this extension cannot follow — `attr_atomic
-:thing` — the *call itself* is reported as an unknown method. Whatever it
-defines is correctly left alone; the line that defines it is not. <!-- documents: 024.110 -->
-
 ## Completion offers methods you cannot call
 
 On a class — `Post.`, `Circle.` — and on any receiver in a plain Ruby
