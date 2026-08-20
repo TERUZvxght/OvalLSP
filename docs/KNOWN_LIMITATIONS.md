@@ -526,6 +526,13 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
+## A macro called inside a block in a class body
+
+A macro this extension cannot read is left alone when you write it
+plainly — `validates :title` — and reported as a missing method when you
+write the same thing in a loop: `%i[title body].each { |f| validates f }`.
+One construct, two spellings, opposite answers. <!-- documents: 024.117 -->
+
 ## A `private` or `module_function` written inside a block
 
 If you write one inside an ordinary block — `1.times { module_function }`,

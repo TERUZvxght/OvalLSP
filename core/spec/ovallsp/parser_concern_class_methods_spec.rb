@@ -139,6 +139,65 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
         .to eq(spelled.ancestors("::Article", singleton: true).map(&:name))
     end
 
+    # **The pre-`ActiveSupport::Concern` spelling.** 0.2.11 narrowed the
+    # rule to the `extend ActiveSupport::Concern` line on the stated
+    # ground that this shape "is an ordinary `extend` this index has
+    # always followed" -- which is false: the receiver is a method
+    # *parameter*, and there is no `extend` in a class body to follow.
+    # For one round it turned a generation of real concerns into false
+    # reports. Verified against Ruby 3.4.10:
+    #
+    #   $ ruby -e '
+    #   module OldStyle
+    #     def self.included(base); base.extend(ClassMethods); end
+    #     module ClassMethods; def old_cm = :old_cm; end
+    #   end
+    #   class UOld; include OldStyle; end
+    #   p UOld.old_cm
+    #   '
+    #   # => :old_cm
+    it "recognises the self.included hook as a concern marker" do
+      hierarchy_index = chain(
+        "module OldStyle\n  def self.included(base)\n    base.extend(ClassMethods)\n  end\n" \
+        "  module ClassMethods\n    def old_cm; end\n  end\nend\n",
+        "class UOld\n  include OldStyle\nend\n"
+      )
+
+      expect(hierarchy_index.ancestors("::UOld", singleton: true).map(&:name))
+        .to include("::OldStyle::ClassMethods")
+    end
+
+    # A concern that includes a concern passes the inner one's class
+    # methods on -- `append_features` runs the inner module's own hook --
+    # and reading the include list one level deep lost them. This is the
+    # commonest way a large Rails application composes concerns.
+    it "follows a concern that includes another concern" do
+      hierarchy_index = chain(
+        "module Inner\n  extend ActiveSupport::Concern\n  module ClassMethods\n" \
+        "    def inner_cm; end\n  end\nend\n",
+        "module OuterC\n  extend ActiveSupport::Concern\n  include Inner\n  module ClassMethods\n" \
+        "    def outer_cm; end\n  end\nend\n",
+        "class UTrans\n  include OuterC\nend\n"
+      )
+      names = hierarchy_index.ancestors("::UTrans", singleton: true).map(&:name)
+
+      expect(names).to include("::OuterC::ClassMethods", "::Inner::ClassMethods")
+    end
+
+    # The control for the transitive rule: a *plain* module that includes
+    # a concern does not pass its class methods on, and Ruby raises.
+    it "does not follow a plain module that includes a concern" do
+      hierarchy_index = chain(
+        "module Inner\n  extend ActiveSupport::Concern\n  module ClassMethods\n" \
+        "    def inner_cm; end\n  end\nend\n",
+        "module UWrapMod\n  include Inner\nend\n",
+        "class UWrap\n  include UWrapMod\nend\n"
+      )
+
+      expect(hierarchy_index.ancestors("::UWrap", singleton: true).map(&:name))
+        .not_to include("::Inner::ClassMethods")
+    end
+
     # `024.115`. Keying on "a `ClassMethods` declaration exists" made
     # completion offer a name that raises for any module that merely
     # happens to nest one:

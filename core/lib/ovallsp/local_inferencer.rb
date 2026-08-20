@@ -736,14 +736,28 @@ module Ovallsp
 
     # Step 2. Only the *innermost* cref's ancestors: Ruby does not walk
     # the outer nesting frames' ancestors, and neither does this.
+    #
+    # **Not inside `class << self`.** The innermost cref there is the
+    # singleton class, whose ancestors are not the enclosing class's --
+    # `class SSub < SBase; class << self; Config` is a `NameError` in
+    # Ruby even when `SBase::Config` exists, and answering `SBase::Config`
+    # there names an owner the code never reaches.
+    #
+    # The self entry is dropped by *name*, not by position: with
+    # `prepend M` the chain starts `["::M", "::Self", …]`, and taking
+    # `.drop(1)` discarded the one namespace that could have answered
+    # while re-searching the frame step 1 had already tried.
     def ancestor_type_name(name)
       return nil unless @hierarchy_index
+      return nil if @self_type_stack.last.is_a?(Types::Generic)
 
       innermost = current_nesting.first
       return nil unless innermost
 
+      qualified = Index::SymbolId.qualify_owner(innermost)
       ancestors = @hierarchy_index.ancestors(innermost).map(&:name).compact
-      @workspace_index.nested_type_name(name, nesting: ancestors.drop(1))
+                                  .reject { |a| Index::SymbolId.qualify_owner(a) == qualified }
+      @workspace_index.nested_type_name(name, nesting: ancestors)
     end
 
     def current_nesting = Array(@lexical_nesting).reverse

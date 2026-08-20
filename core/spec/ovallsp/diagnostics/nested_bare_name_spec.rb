@@ -127,6 +127,35 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a bare class name inside a name
       expect(unknown_methods(document)).to eq(["top_only"])
     end
 
+    # `prepend` is in "the ancestors of the innermost cref" as much as a
+    # superclass is, and dropping the chain's *first* entry rather than
+    # the *self* entry discarded it -- with `prepend`, self is second.
+    it "looks through a prepended module's namespace too" do
+      index("module PreM\n  class Config\n    def prem_only; end\n  end\nend\n", uri: "file:///prem.rb")
+      document = index("module Other\n  class ViaPrepend\n    prepend PreM\n    def go\n" \
+                       "      Config.new.prem_only\n    end\n  end\nend\n", uri: "file:///via.rb")
+
+      expect(unknown_methods(document)).to be_empty
+    end
+
+    # **Not inside `class << self`.** The innermost cref there is the
+    # singleton class, and its ancestors are not the enclosing class's:
+    #
+    #   $ ruby -e '
+    #   class SBase; class Config; def sbase_only; end; end; end
+    #   class SSub < SBase; class << self; def probe = Config; end; end
+    #   p (SSub.probe rescue $!.class)
+    #   '
+    #   # => NameError
+    #   # ruby 3.4.10
+    it "does not reach the superclass's namespace from inside class << self" do
+      index("class SBase\n  class Config\n    def sbase_only; end\n  end\nend\n", uri: "file:///sbase.rb")
+      document = index("class SSub < SBase\n  class << self\n    def probe\n      Config.new.sbase_only\n" \
+                       "    end\n  end\nend\n", uri: "file:///ssub.rb")
+
+      expect(unknown_methods(document)).to eq(["sbase_only"])
+    end
+
     # And the control: with no such class in the superclass's namespace,
     # the top-level one is still what a bare name means.
     it "falls through to the top-level class when the superclass declares none" do

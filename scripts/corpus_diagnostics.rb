@@ -94,7 +94,7 @@ method_resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspa
 # only reason it was looked at (CLAUDE.md).
 local_inferencer = Ovallsp::LocalInferencer.new(
   model_registry: model_registry, method_resolver: method_resolver, signatures: signatures,
-  workspace_index: workspace_index,
+  workspace_index: workspace_index, hierarchy_index: hierarchy_index,
   method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(
     workspace_index: workspace_index, method_resolver: method_resolver,
     summary_store: Ovallsp::Semantic::MethodSummaryStore.new,

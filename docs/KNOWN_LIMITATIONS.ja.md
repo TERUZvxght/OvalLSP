@@ -483,6 +483,13 @@ Rails の concern がまさにこの形でした。メタプログラミング�
 `Order.find(id).no_such_method` だけが通常どおり報告されていました。`T | nil` の
 レシーバを捨てずに枝ごとに問い合わせる形になっています。 <!-- documents: 024.77 -->
 
+## クラス本体のブロックの中で呼ばれたマクロ
+
+この拡張機能が読めないマクロは、素直に書けば(`validates :title`)そのままに
+されますが、同じものをループで書くと(`%i[title body].each { |f| validates f }`)
+「存在しないメソッド」として報告されます。1つの構文の2つの綴りに、逆の答えが
+返ります。 <!-- documents: 024.117 -->
+
 ## ブロックの中に書いた `private` / `module_function`
 
 `1.times { module_function }`、`[1].each { private }` のように、通常の

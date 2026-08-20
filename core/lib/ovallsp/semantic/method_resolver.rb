@@ -183,7 +183,7 @@ module Ovallsp
         return :ancestor_not_identified if singleton && instance_entries.any? { |e| e.name.nil? }
         return :ancestor_not_identified if entries.any? { |e| e.name.nil? }
 
-        return :responds_at_call_time if entries.any? { |e| declares_method_missing?(e.name, singleton) }
+        return :responds_at_call_time if entries.any? { |e| declares_method_missing?(e, singleton) }
         return :surface_open if entries.any? { |e| open_surface?(e, singleton) }
 
         # An ancestor neither the workspace nor the signature environment
@@ -251,9 +251,18 @@ module Ovallsp
       # a class answering `CWithMM.anything` through
       # `def self.method_missing` was judged closed and every call it
       # handles was reported (`024.116`). Ruby returns `:mm`.
-      def declares_method_missing?(owner, singleton)
-        kind = singleton ? :singleton_method : :instance_method
-        @workspace_index.method_symbol_ids(owner, kind: kind).any? { |sid| sid.name == "method_missing" }
+      def declares_method_missing?(entry, singleton)
+        # The same side computation `#open_surface?` makes, for the same
+        # reason, and 0.2.11 shipped this without it for one round:
+        # `extend M` puts M's *instance* methods on the class-level
+        # chain, so asking M about its singleton side asks the wrong one
+        # and `ExtC.anything` was reported on a class Ruby answers.
+        kind = if entry.origin == :extend
+                 :instance_method
+               else
+                 singleton ? :singleton_method : :instance_method
+               end
+        @workspace_index.method_symbol_ids(entry.name, kind: kind).any? { |sid| sid.name == "method_missing" }
       end
 
       # `extend M` puts M's *instance* methods on the class-level chain,

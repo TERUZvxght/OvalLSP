@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**115 entries below** <!-- measured: register-entries = 115 -->,
+**116 entries below** <!-- measured: register-entries = 116 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -260,6 +260,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | fixed | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | fixed | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
 | [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | fixed | 0.2.11 | `def self.method_missing` and `define_singleton_method` do not open … |
+| [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.12 | The two spellings of a class-body macro get opposite answers |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5836,6 +5837,38 @@ Pre-existing on classes, on `main` and every release before it, and
 `KNOWN_LIMITATIONS`' four-shape list does not mention either. Found by
 0.2.10's `drive` round while checking whether that release had widened
 them to modules; it had, and the widening was reverted with `024.106`.
+
+## 024.117 The two spellings of a class-body macro get opposite answers
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.12
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`#record_open_surface`)
+
+```ruby
+class B1; the_macro; end                       # silent
+class B2; %w[a b].each { |n| the_macro(n) }; end
+# unknown-method: B2 has no method named `the_macro`
+```
+
+`024.110` decided that a bare call this parser cannot read is evidence it
+could not read the body, and stopped reporting it. The implementation
+returns early at `@cref.defines_surface?`, which is false inside a block
+— so `%i[title body].each { |f| validates f }`, a mainstream spelling of
+exactly the construct `024.110` is about, still reports.
+
+Neither report is *wrong* in a bare-Ruby fixture: both raise. What is
+wrong is that one construct written two ways gets opposite answers, which
+is the shape `024.100` names.
+
+Not fixed in 0.2.11 because the block guard is `024.111`'s territory —
+the frame exists so `included do ... end` cannot leak a `private` into
+the enclosing class — and the two want deciding together. Found by
+0.2.11's `attack` round.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
