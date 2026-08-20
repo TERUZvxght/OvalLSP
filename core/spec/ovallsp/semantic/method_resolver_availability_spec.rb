@@ -153,13 +153,37 @@ RSpec.describe "Ovallsp::Semantic::MethodResolver#availability" do
     # puts a module on the *instance* chain, and `included`/`extended`
     # hooks are how a module adds class methods -- so a class-level
     # lookup depends on the instance chain being accounted for too.
+    #
+    # **This example did not pass for that reason until 0.2.10.** It built
+    # the query by hand and left `signatures:` at its `nil` default, so it
+    # was answering "unknown because there is no signature environment"
+    # and would have gone on passing with the instance-chain rule
+    # removed. One of `024.109`'s three, found by asking what the other
+    # branch would render. The environment is passed now, and the reason
+    # is asserted -- which is what distinguishes the two.
     it "cannot account for a class-level lookup when the instance chain has an unaccounted link" do
       index("class Widget\n  include Sidekiq::Worker\nend\n")
 
       availability = resolver.availability(receiver_type: Ovallsp::Types::Nominal.new(name: "Widget"),
-                                           name: "sidekiq_options", context: { singleton: true })
+                                           name: "sidekiq_options", context: { singleton: true },
+                                           signatures: signatures)
 
       expect(availability).to be_unknown
+      expect(availability.reason).to eq(:ancestor_not_declared_anywhere)
+    end
+
+    # The control it needed: the same class-level lookup with every
+    # instance-chain link accounted for is *absent*, not unknown. Without
+    # this, the example above cannot tell "the rule fired" from "nothing
+    # is ever accounted for at class level".
+    it "answers absent for a class-level lookup when the instance chain is accounted for" do
+      index("class Widget\n  def self.build; end\nend\n")
+
+      availability = resolver.availability(receiver_type: Ovallsp::Types::Nominal.new(name: "Widget"),
+                                           name: "definitely_not_here", context: { singleton: true },
+                                           signatures: signatures)
+
+      expect(availability).to be_absent
     end
 
     # And without a signature environment the query stays honest rather

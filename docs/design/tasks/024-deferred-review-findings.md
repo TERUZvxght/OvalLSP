@@ -252,7 +252,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | fixed | 0.2.10 | `module_function` and `extend self` produce nothing |
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
-| [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | open | 0.2.10 | Specs whose fixture cannot distinguish the behaviour they pin |
+| [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | open | 0.2.11 | Specs whose fixture cannot distinguish the behaviour they pin |
 | [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | open | 0.2.11 | The macro is reported, and what it might define is not |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
@@ -5501,7 +5501,7 @@ user-visible-note: >
   A spec that pins less than it claims changes nothing a user can
   observe today; what it removes is the guarantee that the next refactor
   cannot silently change the behaviour underneath it.
-target: 0.2.10
+target: 0.2.11
 ```
 
 **Area:** `core/spec/` (0.2.9's change set)
@@ -5519,7 +5519,16 @@ override that renames its parameter — the ordinary case — still showed
 the phantom choice. The fixture now names the parameters differently and
 the implementation picks the lowest-ranked candidate per receiver member.
 
-**The other three are not named here, because the round's list was held
+**A second is now named.**
+`method_resolver_availability_spec.rb`'s "cannot account for a
+class-level lookup when the instance chain has an unaccounted link" built
+its query by hand and left `signatures:` at its `nil` default, so it was
+passing on "unknown because there is no signature environment" and would
+have gone on passing with the instance-chain rule removed. Fixed in
+0.2.10, with the control it was missing: the same lookup with the chain
+accounted for is `absent`, not `unknown`.
+
+**The remaining two are not named here, because the round's list was held
 in a session and not written down before it was lost.** That is the
 defect this entry mostly records: a review round's findings are a
 measurement, and a measurement kept only in a conversation is gone at the
