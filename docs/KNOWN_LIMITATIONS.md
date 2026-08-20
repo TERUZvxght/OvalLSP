@@ -517,28 +517,6 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
-## A class of yours named like another class of yours
-
-If two classes in your workspace share a short name in different
-namespaces — a `Billing::Comment` alongside an ActiveRecord `Comment`, or
-an `App::Config` alongside a top-level one — a bare reference to one from
-inside its own namespace can be answered with the other. Both directions
-are wrong: the call that works is reported as an unknown method, and the
-call that would really raise is not. Completion offers the other class's
-methods.
-
-Which one wins is not the nearer one. Writing the namespace out —
-`Billing::Comment.new` — restores it. <!-- documents: 024.103 -->
-
-## What `class_methods do` in a concern attaches to
-
-**The instance, not the class.** A concern written with
-`class_methods do ... end` declares methods on the class, and this
-extension attributes them to instances: completion offers them after
-`Article.new.`, hover and go to definition answer for them there, and the
-undefined-method check accepts a call that raises. The older
-`module ClassMethods` form is handled correctly. <!-- documents: 024.104 -->
-
 ## `module_function` and `extend self`
 
 **Produce nothing.** Methods made available on the module by
@@ -570,20 +548,6 @@ is clean. <!-- documents: 024.99 -->
   and `p.update(`, while it answers for a method of your own and for
   `"abc".split(`. A method that overrides another shows its signature
   twice. <!-- documents: 024.100 -->
-
-## Typing on a large file
-
-**Every keystroke starts a full re-analysis, and each one publishes.**
-Measured per keystroke: 53 ms at 1000 lines, 155 ms at 2000, 368 ms at
-4000. Above about 2000 lines that is longer than the gap between
-keystrokes, so the work falls behind you.
-
-What you see: typing a method name that exists produces a red squiggle
-under every prefix of it as you go, and the panel is clean roughly six
-seconds after you stop. Hover and completion queue behind that work —
-after ten quick keystrokes on a 4000-line file, a hover took 3.4 seconds;
-on a 20 000-line file, 25 seconds, during which a second open file got no
-diagnostics either. <!-- documents: 024.101 -->
 
 ## Ordinary Ruby the undefined-method check reports anyway
 

@@ -167,7 +167,7 @@ are one thing: giving a published answer the identity of the document it
 came from also refuses a slower analysis of the same buffer, and whether
 those should be published at all is C9's question — 0.2.8's drive round
 measured 22 wrong intermediate publishes for one method name typed on a
-4,006-line file. (**the "wrong" half of this does not reproduce on 0.2.10's tree** — `040` records the re-measurement: ten keystrokes produce ten publishes, in order, each carrying the version it was computed from)
+4,006-line file. (re-measured for 0.2.10 in `040`, in this scenario rather than a different one: **it reproduces** — 12 keystrokes, 12 publishes, all 12 reporting the unfinished name; after C9, one)
 
 `024.57` is why it is its own release rather than an appendix: a first
 attempt at the debounce was rolled back, and the precondition `029` said

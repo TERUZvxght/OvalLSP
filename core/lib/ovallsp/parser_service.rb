@@ -484,6 +484,8 @@ module Ovallsp
         # `Other.instance_exec(helper) { }` resolve their arguments under
         # the pushed frame too, and report them. Identical on 0.1.14, and
         # narrowing it to the block node is its own change.
+        return visit_concern_class_methods(node) if concern_class_methods?(node)
+
         block_self = node.block && block_self_is_module(node)
         return super if block_self.nil?
 
@@ -496,7 +498,64 @@ module Ovallsp
         end
       end
 
+      # `ActiveSupport::Concern`'s `class_methods do ... end` is sugar for
+      # `module ClassMethods ... end`, and the gem itself says so:
+      #
+      #   $ ruby -e '
+      #   gem "activesupport"; require "active_support"
+      #   require "active_support/concern"
+      #   module Taggable
+      #     extend ActiveSupport::Concern
+      #     class_methods do
+      #       def cm_public; :cm; end
+      #     end
+      #   end
+      #   p Taggable.const_defined?(:ClassMethods)          # => true
+      #   p Taggable::ClassMethods.instance_methods(false)  # => [:cm_public]
+      #   '
+      #   # ruby 3.4.10, activesupport 8.1.3.1
+      #
+      # Recorded as that module rather than given a rule of its own, so
+      # the two spellings of one thing cannot disagree -- and they did:
+      # the block's methods landed on the concern's *instance* side, so
+      # `include Taggable` offered `cm_public` on every instance while
+      # the spelled-out form was handled correctly (`024.104`). Four
+      # features answered from the same wrong record.
+      def concern_class_methods?(node)
+        node.name == :class_methods && node.receiver.nil? && node.block.is_a?(Prism::BlockNode) &&
+          current_owner && !@cref.in_method_body?
+      end
+
+      def visit_concern_class_methods(node)
+        absolute_name = qualify("ClassMethods")
+
+        @declarations << Index::Declaration.new(
+          symbol_id: Index::SymbolId.new(kind: :module, owner: current_owner, name: absolute_name,
+                                         discriminator: nil),
+          location: Index::SourceLocation.to_range(node.location, @lines),
+          visibility: nil, parameters: [], origin: :source,
+          name_location: Index::SourceLocation.to_range(node.message_loc || node.location, @lines)
+        )
+
+        # The block body is the module body, so it opens a namespace and
+        # *not* a block frame: a `def` in `module ClassMethods` is written
+        # at depth zero, and `#defines_surface?` reads that depth.
+        within_namespace(absolute_name) do
+          @skip_block_frame = true
+          begin
+            node.block.accept(self)
+          ensure
+            @skip_block_frame = false
+          end
+        end
+      end
+
       def visit_block_node(node)
+        if @skip_block_frame
+          @skip_block_frame = false
+          return super
+        end
+
         @scope_stack.push(next_scope_id)
         # A visibility section opened inside a block belongs to that
         # block. `concerning :Auth do private; def authenticate; end end`

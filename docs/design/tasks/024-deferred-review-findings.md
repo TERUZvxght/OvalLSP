@@ -244,10 +244,10 @@ nobody can search is the recording habit without the benefit.
 | [`024.98`](#02498-a-workspace-opened-through-a-symlink-shows-every-file-twice-and-one-copy-can-never-be-cleared) | fixed | 0.2.8 | A workspace opened through a symlink shows every file twice, and one… |
 | [`024.99`](#02499-completion-offers-members-that-cannot-be-called-from-where-it-was-asked) | open | 0.3.0 | Completion offers members that cannot be called from where it was as… |
 | [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.3.0 | The four features answer from different code paths and disagree at o… |
-| [`024.101`](#024101-analysis-runs-per-keystroke-so-the-answers-fall-behind-the-cursor-and-every-wrong-one-is-published) | open | 0.3.0 | Analysis runs per keystroke, so the answers fall behind the cursor a… |
+| [`024.101`](#024101-analysis-runs-per-keystroke-so-the-answers-fall-behind-the-cursor-and-every-wrong-one-is-published) | fixed | 0.2.10 | Analysis runs per keystroke, so the answers fall behind the cursor a… |
 | [`024.102`](#024102-eight-classes-and-the-logic-each-one-could-not-have-happened-under) | open | 0.2.9 | Eight classes, and the logic each one could not have happened under |
-| [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | open | 0.2.10 | A bare class name inside a namespace answers with an arbitrary same-… |
-| [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | open | 0.2.10 | `class_methods do` in a concern is attributed to the instance side |
+| [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | fixed | 0.2.10 | A bare class name inside a namespace answers with an arbitrary same-… |
+| [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | fixed | 0.2.10 | `class_methods do` in a concern is attributed to the instance side |
 | [`024.105`](#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | fixed | 0.2.9 | Visibility is not recorded for singleton methods at all |
 | [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.10 | `module_function` and `extend self` produce nothing |
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
@@ -1271,22 +1271,24 @@ The EN/JA README divergence found in round 2 is real and remains
 unguarded for the same reason. Prefer 1 if this is taken up; it is the
 only one of the two that would also have caught that.
 
-### Re-measured for 0.2.10, and one inference withdrawn
+### Re-measured for 0.2.10, twice, and the first re-measurement was wrong
 
 The table above is this entry's own measurement of the *rolled-back
-debounce*, and it stands. What did not survive re-derivation is the
-inference three later documents drew from it — that the synchronous path
-publishes wrong intermediate answers while typing.
-`scripts/measure_typing_publishes.rb` against a 3,907-line file, ten
-keystrokes 0.15 s apart: **ten publishes, versions 2 through 11 in order,
-none wrong, the last 1.25 s after the last keystroke.** One analysis per
-edit, each carrying the version it was computed from.
+debounce*, and it stands.
 
-So what C9 is for is latency and wasted work — nine of those ten
-analyses were about text already moved past, each holding
-`@index_mutation_mutex` for its duration — and not a wrongness that is
-not there. `040` records the harness, the settled baseline it needs, and
-the first run that would have appeared to confirm something worse.
+A first attempt to re-derive `024.101`'s "22 wrong intermediate
+publishes" typed by appending a comment, found ten correct publishes, and
+concluded the claim did not reproduce. **That conclusion was withdrawn.**
+The scenario was not `024.101`'s: typing a method name one character at a
+time makes every intermediate state a call to a prefix that really is
+undefined, and appending a comment makes none of them anything at all.
+
+In the right scenario, 12 keystrokes 0.03 s apart on a 3,907-line file:
+**12 publishes, all 12 reporting the unfinished name**, a hover asked
+during the burst answered in 1.430 s median, and the client's own writes
+taking 15.93 s to send 12 edits because the server was not reading. After
+C9: one publish, 0.042 s, 0.52 s. `040` records both measurements and why
+the first was wrong.
 
 ### What was kept
 
@@ -5175,10 +5177,11 @@ answers to one question.
 ## 024.101 Analysis runs per keystroke, so the answers fall behind the cursor and every wrong one is published
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.3.0
+target: 0.2.10
+released-in: 0.2.10
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#handle_did_change`),
@@ -5262,10 +5265,11 @@ measurement is one to abandon rather than defend.
 ## 024.103 A bare class name inside a namespace answers with an arbitrary same-named class
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.10
+released-in: 0.2.10
 ```
 
 **Retargeted to 0.2.10.** Recorded as 0.2.9 when 0.2.8's drive round
@@ -5324,10 +5328,11 @@ rather than a fall back to the alphabetically first candidate. Part of
 ## 024.104 `class_methods do` in a concern is attributed to the instance side
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.10
+released-in: 0.2.10
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (the `included`/

@@ -52,7 +52,10 @@ Open3.popen3({ "OVALLSP_DISABLE_CACHE" => "1" }, "bundle", "exec", "ruby", "-Ili
       header << stdout.readpartial(1) while !header.end_with?("\r\n\r\n")
       length = header[/Content-Length: (\d+)/, 1].to_i
       message = JSON.parse(stdout.read(length))
-      publishes << [Time.now, message.dig("params", "version")] if message["method"] == "textDocument/publishDiagnostics"
+      if message["method"] == "textDocument/publishDiagnostics"
+        publishes << [Time.now, message.dig("params", "version"),
+                      Array(message.dig("params", "diagnostics")).map { |d| d["code"] }]
+      end
       hovers[message["id"]] = Time.now if message["id"] && hovers.key?(message["id"])
     rescue EOFError, IOError
       break
@@ -93,10 +96,20 @@ Open3.popen3({ "OVALLSP_DISABLE_CACHE" => "1" }, "bundle", "exec", "ruby", "-Ili
   # by the next question they ask. Wasted work nobody waits on is cheap;
   # wasted work in front of the answer is not.
   hover_asked = {}
+  # **Typing a method name that exists**, one character at a time, which
+  # is 024.101's own scenario: each intermediate state is a call to a
+  # prefix that really is undefined, so every intermediate publish
+  # reports something the finished line does not. Appending a comment --
+  # what an earlier version of this harness did -- produces no such
+  # findings and cannot measure the claim at all.
+  target = "def measure_typing_target; end"
+  full_call = "measure_typing_target"
   KEYSTROKES.times do |i|
+    typed = full_call[0, [i + 1, full_call.length].min]
+    body = "#{text}\nclass MeasureTypingProbe\n  #{target}\n  def call_it; #{typed}; end\nend\n"
     stdin.write(frame(jsonrpc: "2.0", method: "textDocument/didChange",
                       params: { textDocument: { uri: uri, version: i + 2 },
-                                contentChanges: [{ text: "#{text}\n# typing#{'x' * (i + 1)}\n" }] }))
+                                contentChanges: [{ text: body }] }))
     asked = Time.now
     hover_id = 100 + i
     hovers[hover_id] = nil
@@ -115,7 +128,8 @@ Open3.popen3({ "OVALLSP_DISABLE_CACHE" => "1" }, "bundle", "exec", "ruby", "-Ili
   puts
   puts "keystrokes:            #{KEYSTROKES}"
   puts "publishes after them:  #{publishes.size}"
-  puts "versions published:    #{publishes.map(&:last).inspect}"
+  puts "versions published:    #{publishes.map { |_, version, _| version }.inspect}"
+  puts "of which reported the unfinished name: #{publishes.count { |_, _, codes| codes&.include?('unknown-method') }}"
   quiet = publishes.map(&:first).max
   puts "typing took:           #{format('%.2f', finished_typing - started)} s"
   puts "last publish:          #{quiet ? format('%.2f', quiet - finished_typing) : 'n/a'} s after the last keystroke"
