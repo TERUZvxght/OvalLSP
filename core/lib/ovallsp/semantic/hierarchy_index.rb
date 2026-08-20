@@ -114,6 +114,10 @@ module Ovallsp
         @prepends_by_owner = Hash.new { |h, k| h[k] = [] }
         @includes_by_owner = Hash.new { |h, k| h[k] = [] }
         @extends_by_owner = Hash.new { |h, k| h[k] = [] }
+        # `def self.included(base) = base.extend(ClassMethods)` -- a
+        # concern marker, not an ancestor edge. Its own bucket because
+        # it is neither: the module does not extend anything.
+        @concern_markers_by_owner = Hash.new { |h, k| h[k] = [] }
         @aliases_by_owner = Hash.new { |h, k| h[k] = [] }
         @generation = 0
       end
@@ -235,6 +239,7 @@ module Ovallsp
         when :prepend then @prepends_by_owner[fact.owner] << fact
         when :include then @includes_by_owner[fact.owner] << fact
         when :extend then @extends_by_owner[fact.owner] << fact
+        when :concern_class_methods then @concern_markers_by_owner[fact.owner] << fact
         end
       end
 
@@ -245,6 +250,7 @@ module Ovallsp
         when :prepend then @prepends_by_owner[fact.owner]&.delete(fact)
         when :include then @includes_by_owner[fact.owner]&.delete(fact)
         when :extend then @extends_by_owner[fact.owner]&.delete(fact)
+        when :concern_class_methods then @concern_markers_by_owner[fact.owner]&.delete(fact)
         end
       end
 
@@ -329,26 +335,85 @@ module Ovallsp
       #   # => [true, false]
       #   # ruby 3.4.10, activesupport 8.1.3.1
       #
-      # Keyed on the *declaration existing* rather than on spotting
-      # `extend ActiveSupport::Concern`: a module that declares a
-      # `ClassMethods` and is included without being a Concern adds
-      # nothing at runtime, so this can be wrong in the direction of
-      # offering a name that is not there. That is the same trade the
-      # rest of this index makes for `include`/`extend`, and the
-      # alternative -- requiring the `extend ActiveSupport::Concern` line
-      # -- misses every concern written before Rails 4 and every project
-      # that re-exports one. `024.104`.
+      # **A marker is required, and there are two of them.** 0.2.10 keyed
+      # this on the `ClassMethods` declaration merely existing, which made
+      # completion offer a name that raises for any module that happens to
+      # nest one. 0.2.11 first narrowed it to `extend ActiveSupport::Concern`
+      # alone, on the stated ground that the pre-Rails-4 spelling is "an
+      # ordinary `extend` this index has always followed" -- **that was
+      # not true, and it was written from another round's summary rather
+      # than checked.** In
+      # `def self.included(base); base.extend(ClassMethods); end` the
+      # receiver is a method *parameter*; there is no `extend` in a class
+      # body for this index to follow, and a whole generation of real
+      # concerns became false reports for one round.
+      #
+      # So the second marker is that spelling itself, recognised by the
+      # parser as an `extend` fact from the module to its own
+      # `ClassMethods`. Both are markers the module *writes*; a module
+      # that writes neither still contributes nothing (`024.115`).
+      #
       # `prepend` as well as `include`: `Concern#prepend_features` extends
       # `ClassMethods` exactly as `append_features` does, so a prepended
       # concern's class methods are on the class the same way.
       def concern_class_method_entries(canonical, visited)
-        facts = @includes_by_owner.fetch(canonical, []) + @prepends_by_owner.fetch(canonical, [])
-        facts.flat_map do |fact|
-          class_methods = "#{Index::SymbolId.qualify_owner(canonical_name(fact.target))}::ClassMethods"
+        concern_targets(canonical, Set.new).flat_map do |target|
+          class_methods = "#{target}::ClassMethods"
           next [] unless kind_of(class_methods)
 
           compute_ancestors_locked(class_methods, singleton: false, visited: visited, origin_for_self: :extend)
         end
+      end
+
+      # Every concern this owner picks up, **transitively**. A concern
+      # that includes another concern passes the inner one's class methods
+      # on -- `ActiveSupport::Concern#append_features` runs the inner
+      # module's own hook -- and reading `@includes_by_owner` one level
+      # deep lost them. That is the commonest way a large Rails
+      # application composes concerns.
+      #
+      # Only through modules that are concerns: a plain module that
+      # happens to include one does *not* pass its class methods on, and
+      # Ruby raises there.
+      def concern_targets(canonical, seen)
+        return [] unless seen.add?(canonical)
+
+        facts = @includes_by_owner.fetch(canonical, []) + @prepends_by_owner.fetch(canonical, [])
+        facts.flat_map do |fact|
+          target = Index::SymbolId.qualify_owner(canonical_name(fact.target))
+          next [] unless concern?(target)
+
+          [target, *concern_targets(target, seen)]
+        end
+      end
+
+      # Whether the module says it is one, by either spelling: the
+      # `extend ActiveSupport::Concern` line, or the `self.included` hook
+      # the parser records as `:concern_class_methods`.
+      def concern?(target)
+        return true unless @concern_markers_by_owner.fetch(target, []).empty?
+
+        @extends_by_owner.fetch(target, []).any? { |fact| concern_marker_name?(fact.target) }
+      end
+
+      # **Matched on the name it resolves to, not the name as written.**
+      # Rails writes `extend Concern` bare, from inside
+      # `module ActiveSupport` -- `callbacks.rb:66`, `rescuable.rb:12`,
+      # `actionable_error.rb:12` -- and matching the written text missed
+      # every one, so `ActiveSupport::ExecutionWrapper.define_callbacks`,
+      # `ActiveSupport::Reloader`, `ActionDispatch::Callbacks` and
+      # `ActionCable::Server::Worker` were all reported as missing
+      # methods. Fourteen of the fifteen false reports a `reproduce`
+      # round measured this release adding.
+      #
+      # The bare spelling is accepted only when a `Concern` really is the
+      # last segment: a workspace `Foo::Concern` of its own would be
+      # accepted too, which is the same trade every other name-shaped
+      # rule in this index makes and errs towards answering rather than
+      # towards inventing a name that raises.
+      def concern_marker_name?(target)
+        name = Index::SymbolId.bare_name(canonical_name(target).to_s)
+        name.end_with?("ActiveSupport::Concern") || name.split("::").last == "Concern"
       end
 
       # What the *receiver* is, which is what its singleton chain ends in:

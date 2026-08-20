@@ -81,6 +81,23 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
   # `.attr_atomic`, so the call itself stays reportable. Opening both
   # would make every unreadable macro silence its own report, which is
   # behaviour 024.23 established deliberately.
+  # **0.2.11 reversed this and rolled the reversal back inside the same
+  # release.** The reversal marked the owner's *class* surface open as
+  # well, which is right for the class in front of you and catastrophic
+  # for `class Module`, `class Object` or `class Kernel` -- they are in
+  # every class's singleton chain, so one bare `alias_method` in a
+  # `core_ext` file switched off `Foo.bar` checking for the whole
+  # workspace. A `drive` round measured it over 1,659 files of 16 gems:
+  # constant-receiver `unknown-method` findings **117 -> 0**, and among
+  # the 148 removals a real latent `NoMethodError`
+  # (`ActiveRecord::Promise.wrap`). The measurement that justified the
+  # reversal had the same contamination -- its corpus contained
+  # activesupport's `core_ext/module/attr_internal.rb`, a bare
+  # `alias_method` in `class Module` -- and the sampling missed it.
+  #
+  # So the macro call itself is reported again, and `024.110` is open
+  # with what a real fix has to distinguish: "I could not read *this
+  # class's* body" from "I could not read `Module`'s".
   it "still reports the unreadable macro call itself" do
     document = index(<<~RUBY_SRC)
       class Counter
@@ -366,7 +383,6 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
         sidekiq_options queue: "low"
       end
     RUBY_SRC
-
     expect(unknown_methods(document)).to eq(["sidekiq_options"])
   end
 
@@ -460,7 +476,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
     # nothing checked a module's class-level calls at all, which
     # `024.106` fixed. That asymmetry (the engine silences what a macro
     # might define and reports the macro) is `024.110`, not this example's
-    # subject.
+    # subject -- 0.2.11 reversed it and rolled the reversal back.
     expect(unknown_methods(document)).not_to include("thing")
   end
 

@@ -62,7 +62,8 @@ module Ovallsp
         alias_facts: visitor.alias_facts,
         reference_candidates: visitor.reference_candidates,
         generated_method_facts: visitor.generated_method_facts,
-        open_surface_owners: visitor.open_surface_owners.to_a
+        open_surface_owners: visitor.open_surface_owners.to_a,
+        module_function_names: visitor.module_function_names.to_a
       ).then { |summary| withdraw_forward_aliases(summary) }
     end
 
@@ -192,7 +193,7 @@ module Ovallsp
       ANCESTOR_RELATIONS = { include: :include, prepend: :prepend, extend: :extend }.freeze
 
       attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates, :generated_method_facts,
-                  :open_surface_owners
+                  :open_surface_owners, :module_function_names
 
       # Receiverless calls that can be written in a class body without
       # adding anything to that class's method surface. Membership is a
@@ -251,6 +252,8 @@ module Ovallsp
         @reference_candidates = []
         @generated_method_facts = []
         @open_surface_owners = Set.new
+        @module_function_names = Set.new
+        @included_hook_parameter = nil
         @recorded_a_declaration = false
         # How many block or lambda bodies enclose the node being visited.
         # A block's meaning belongs to the call that owns it, so
@@ -347,6 +350,15 @@ module Ovallsp
         )
         record_module_function_twin(node, owner) if @cref.module_function? && !singleton
 
+        # The parameter `def self.included(base)` binds, so a
+        # `base.extend(…)` in its body is recognisable as the concern
+        # hook rather than as an ordinary `extend` on some object.
+        previous_hook_parameter = @included_hook_parameter
+        @included_hook_parameter =
+          if singleton && %i[included prepended].include?(node.name)
+            node.parameters&.requireds&.first&.name
+          end
+
         @scope_stack.push(next_scope_id)
         # Tracks "we are inside a method body", so a `private :target`
         # written there -- which never runs at class level in Ruby -- does
@@ -369,6 +381,7 @@ module Ovallsp
         super
       ensure
         @cref = previous_cref
+        @included_hook_parameter = previous_hook_parameter
         @scope_stack.pop
       end
 
@@ -447,7 +460,9 @@ module Ovallsp
             apply_visibility_arguments(node)
           end
           apply_class_visibility_arguments(node) if CLASS_VISIBILITY_MODIFIERS.key?(node.name)
-          apply_module_function_arguments(node) if node.name == :module_function && node.arguments
+          if node.name == :module_function && node.arguments && @cref.module_owner? && !@cref.declares_singleton?
+            apply_module_function_arguments(node)
+          end
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
           declared_before = @declarations.size
@@ -470,6 +485,8 @@ module Ovallsp
         # checking entirely: the spelled-out form reported
         # `Post.new.total_garbage` and the block form reported nothing.
         return visit_concern_class_methods(node) if concern_class_methods?(node)
+
+        record_concern_hook(node)
 
         # Outside the receiverless branch: `singleton_class.send` and
         # `self.class_eval` metaprogram this owner too (see there).
@@ -866,6 +883,14 @@ module Ovallsp
         names = node.arguments.arguments.filter_map { |argument| symbol_name(argument) }
         return if names.empty?
 
+        # Recorded as a fact as well as applied here. The names may belong
+        # to a `def` in another file -- which is what this form is for --
+        # and the rewrite below can only see what this file declared
+        # (`024.114`). `WorkspaceIndex` applies the fact once every file
+        # is in; this stays because it also carries the *visibility*
+        # change, which is per-declaration.
+        names.each { |name| @module_function_names << [Index::SymbolId.bare_name(current_owner), name] }
+
         twins = @declarations.select do |declaration|
           declaration.symbol_id.kind == :instance_method &&
             declaration.symbol_id.owner == current_owner &&
@@ -884,6 +909,39 @@ module Ovallsp
       def inline_module_function?(node)
         node.name == :module_function && node.receiver.nil? && @cref.module_owner? &&
           node.arguments&.arguments&.any? { |argument| argument.is_a?(Prism::DefNode) }
+      end
+
+      # The pre-`ActiveSupport::Concern` spelling of a concern:
+      #
+      #   module OldStyle
+      #     def self.included(base) = base.extend(ClassMethods)
+      #     module ClassMethods; def old_cm; end; end
+      #   end
+      #
+      # Recorded as its own relation rather than as an `extend`, because
+      # it is not one: `OldStyle` does not extend `ClassMethods`, it
+      # arranges for whoever *includes* it to. `HierarchyIndex` reads it
+      # as the marker that makes `include OldStyle` reach
+      # `OldStyle::ClassMethods` (`024.115`).
+      #
+      # 0.2.11 narrowed the concern rule on the stated ground that this
+      # shape "is an ordinary `extend` this index has always followed".
+      # It is not -- the receiver is a method parameter -- and that claim
+      # was written from a summary rather than checked, which turned a
+      # generation of real concerns into false reports for one round.
+      def record_concern_hook(node)
+        return unless node.name == :extend && @cref.module_owner?
+        return unless node.receiver.is_a?(Prism::LocalVariableReadNode)
+        return unless node.receiver.name == @included_hook_parameter
+
+        target = node.arguments&.arguments&.first
+        name = target && raw_constant_name(target)
+        return unless name
+
+        @ancestor_facts << Index::AncestorFact.new(
+          owner: current_owner, relation: :concern_class_methods, target: name,
+          location: Index::SourceLocation.to_range(target.location, @lines)
+        )
       end
 
       def record_ancestor_call(node)
@@ -1006,7 +1064,38 @@ module Ovallsp
       # -- but not blocks, because `included do ... end` and
       # `class_eval { ... }` define methods on the owner and are the shape
       # this rule exists for.
+      # `define_method` and `define_singleton_method` name what they do.
+      # Written inside a block -- `%w[a b].each { |n| define_singleton_method(n) { … } }`,
+      # which is how a class generates a family of methods -- the block
+      # guard below dropped them, and every call they answer was reported
+      # (`024.116`). Unlike an arbitrary macro, these two are not a guess:
+      # the call defines a method whose name this parser cannot compute,
+      # which is exactly what an open surface means.
+      # `define_method` adds to whichever surface a bare `def` would add
+      # to *here*, which is what `Cref#surface_kind` answers -- inside
+      # `class << self` that is the singleton side. Hardcoding `:instance`
+      # inverted both directions there, and both were right in 0.2.10.
+      #
+      # `define_singleton_method` is a level further out: inside
+      # `class << self` Ruby puts the method on
+      # `C.singleton_class.singleton_class`, which this index cannot name
+      # at all -- so it opens nothing there rather than claiming the
+      # class side.
+      METHOD_DEFINING_CALLS = %i[define_method define_singleton_method].freeze
+
+      def method_defining_surface(node)
+        return nil unless node.receiver.nil? && current_owner && METHOD_DEFINING_CALLS.include?(node.name)
+        return @cref.surface_kind if node.name == :define_method
+        return nil if @cref.declares_singleton?
+
+        :singleton
+      end
+
       def record_open_surface(node)
+        if (kind = method_defining_surface(node))
+          return @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
+        end
+
         return unless @cref.defines_surface?
         # Written inside a block, this call says nothing about the
         # enclosing class's members -- the call that *owns* the block does,

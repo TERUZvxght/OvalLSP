@@ -1085,28 +1085,16 @@ module Ovallsp
         Index::SymbolId.qualify_owner(name)
       end
 
-      def ancestor_known?(entry, context)
-        # A nameless ancestor is `class Foo < <expression>` -- there is
-        # nothing to look up and nothing to know.
-        return false if entry.name.nil?
-        return true if entry.kind
-
-        context.signatures && !context.signatures.ancestors(qualified_owner(entry.name)).empty?
-      end
-
-      # Which side of a module's surface this link actually contributes.
-      # `extend M` puts M's **instance** methods on the class-level chain,
-      # so asking M about its singleton surface answers about the wrong
-      # side -- and `Host.thing` was reported while the `include` spelling
-      # of the same thing was already silent.
-      def open_surface_for?(entry, singleton, context)
-        side = entry.origin == :extend ? false : singleton
-        context.workspace_index.open_surface?(entry.name, singleton: side)
-      end
-
-      def declares_method_missing?(owner, context)
-        context.workspace_index.method_symbol_ids(owner, kind: :instance_method).any? { |sid| sid.name == "method_missing" }
-      end
+      # `#ancestor_known?`, `#open_surface_for?` and
+      # `#declares_method_missing?` lived here until 0.2.11 and had no
+      # callers: `#closed_nominal?`'s own note records that all six
+      # reasons moved to `MethodResolver#unenumerable_reason` in 0.2.9,
+      # and these three stayed behind as copies. The last of them still
+      # stated the *pre*-`024.116` rule -- asking for instance methods
+      # whichever side the lookup was on -- so a reader who grepped for
+      # the rule and landed here got the answer 0.2.10 gave. Two copies
+      # of a rule that must not diverge is the shape `CLAUDE.md`'s
+      # same-place rule is about; deleted rather than kept in step.
     end
   end
 end

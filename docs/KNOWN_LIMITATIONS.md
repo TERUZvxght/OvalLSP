@@ -334,14 +334,14 @@ missed one", so each is narrow on purpose. What that costs a user:
   mismatch in a union, an interface, a generic, or a method with several
   overloads is not reported.
 
-  One shape is wrong rather than merely silent, recorded as 024.19. A
-  constant the workspace does not declare — `::Vendor::Gadgets::Widget` —
-  reaches the index's last-segment fallback, which answers with whatever
-  class shares that final name. The argument check then judges against
-  *that* class's signature and can report a mismatch against a class the
-  receiver is not. There is no accompanying signal to spot it by: the
-  constant check skips a name the same fallback resolves, so precisely
-  when this misfires, the constant is *not* also reported unresolvable.
+  One shape is wrong rather than merely silent, recorded as 024.19, and
+  it is **narrower than this paragraph said until 0.2.11**. A name you
+  write with its namespace — `::Vendor::Gadgets::Widget`, or
+  `Vendor::Gadgets::Widget` — no longer reaches the index's last-segment
+  fallback at all, and *is* reported unresolvable when nothing declares
+  it. What remains is a **bare** name that exactly one class in your
+  workspace claims: `Widget.make(1)` is judged against that class's
+  signature even where the receiver you meant is a different `Widget`.
   What gives it away is the message naming a type from somewhere the
   receiver's own namespace has nothing to do with. <!-- documents: 024.19 -->
 - **Reading an `@ivar` nothing assigns** is reported in ERB views only,
@@ -474,14 +474,19 @@ and it had no entry here until 0.2.1 (024.45). It is not new in this
 release; 0.2.0 measures the same. Files of a few hundred lines, which is
 most application code, re-analyse in well under a tenth of a second. <!-- documents: 024.45 -->
 
-**Deferring the report until you stop typing was tried, and rolled
-back.** It coalesced a burst of keystrokes into one analysis and was
-measured doing so — but it also produced two races, could not bound how
-many analyses of one file run at once, and each of four consecutive
-review rounds found another defect in it. So the cost today is what it
-has always been: per keystroke. It will be tried again on top of a
-publish path where one writer decides what is sent, rather than each
-publisher deciding for itself. <!-- documents: 024.57 -->
+**Deferring the report until you stop typing was tried in 0.2.2, rolled
+back, and built again in 0.2.10 in a different shape.** The first attempt
+was a timed debounce with waiter threads; it produced two races, could
+not bound how many analyses of one file run at once, and each of four
+consecutive review rounds found another defect in it. What ships now is
+not a debounce: there is no interval, no waiter thread, and the question
+is only whether anything else is waiting to be read. A burst of edits
+faster than one analysis produces a few answers rather than one per
+keystroke, and — the part you feel — a hover asked while you are typing
+is answered before the pending analysis runs, in about 0.04 s instead of
+1.4. What is still per-keystroke is a burst slower than the analysis: an
+edit that settles is always analysed, which is the property that matters
+more. <!-- documents: 024.57 -->
 
 ## What the undefined-method check gets wrong on real code
 
@@ -521,28 +526,45 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
+## A macro this extension cannot read is reported as a missing method
+
+If a class or module body calls a macro that comes from a gem, a
+`Concern`, or an `extend` this extension cannot follow — `attr_atomic
+:thing` — the *call itself* is reported as an unknown method. Whatever it
+defines is correctly left alone; the line that defines it is not.
+
+0.2.11 tried silencing it and took the attempt back out: the fix also
+silenced `Foo.bar` checking across the whole workspace whenever any file
+reopened `Module`, `Object` or `Kernel`. <!-- documents: 024.110 -->
+
+## Reopening a file without closing it
+
+If your editor sends a second `didOpen` for a file it never closed, and
+the new buffer's version numbering starts below the old one's,
+diagnostics for that file stop arriving until the numbering passes where
+it left off. VS Code sends `didClose` first, so this needs an unusual
+client. <!-- documents: 024.118 -->
+
+## Methods made by `define_singleton_method`
+
+A class whose class methods are made by `define_singleton_method` is no
+longer reported for calling them — but hover, go to definition and
+completion still answer nothing there, because the names are not in the
+index. You get silence rather than an answer. <!-- documents: 024.116 -->
+
+## A macro called inside a block in a class body
+
+A macro this extension cannot read is left alone when you write it
+plainly — `validates :title` — and reported as a missing method when you
+write the same thing in a loop: `%i[title body].each { |f| validates f }`.
+One construct, two spellings, opposite answers. <!-- documents: 024.117 -->
+
 ## A `private` or `module_function` written inside a block
 
 If you write one inside an ordinary block — `1.times { module_function }`,
 `[1].each { private }` — this extension does not apply it to the methods
 that follow, though Ruby does. Written directly in the class or module
 body, both work. <!-- documents: 024.111 -->
-
-## A class name your enclosing class inherits
-
-A bare class name is resolved through the namespaces you are writing
-inside, but not through the ancestors of the class you are writing in. So
-`Config` inside `class Runner < Zbase`, where `Zbase::Config` exists, is
-answered by a top-level `Config` instead — the working call is reported
-as an unknown method and the call that would raise is not. Writing the
-namespace out restores it. <!-- documents: 024.112 -->
-
-## Reopening a file without closing it
-
-If your editor sends a second `didOpen` for a file it never closed, and
-the new buffer's version numbering starts below the old one's, diagnostics
-for that file stop updating until the numbering passes where it left off.
-VS Code sends `didClose` first, so this needs an unusual client. <!-- documents: 024.113 -->
 
 ## A typo in a call on a module
 
@@ -554,35 +576,6 @@ it" — and 0.2.10 tried treating the two as the same, which reported
 is the safer half of that trade until the index can prove the difference.
 `module_function` and `extend self` themselves work: their methods appear
 in completion, hover and go to definition. <!-- documents: 024.106 -->
-
-## `module_function :name` written in a different file from the method
-
-`module Reopened; def r_a; end; end` in one file and
-`module Reopened; module_function :r_a; end` in another: the module
-method is not recorded, and calling `Reopened.r_a` is reported as
-missing. Both in the same file works. <!-- documents: 024.114 -->
-
-## A module with a nested `ClassMethods` that is not a concern
-
-Including a module that happens to declare a `ClassMethods` makes this
-extension offer that module's class methods on the including class, as
-though it were an `ActiveSupport::Concern`. If it is not one, those names
-do not exist and calling one raises. <!-- documents: 024.115 -->
-
-## `def self.method_missing`, and methods made by `define_singleton_method`
-
-A class that answers class-level calls through `def self.method_missing`,
-or whose class methods are made by `define_singleton_method` in a loop,
-is treated as though its class-level surface were fully known — so the
-calls it really does answer are reported as missing. The instance-level
-`method_missing` is recognised. <!-- documents: 024.116 -->
-
-## A macro this extension cannot read is reported as a missing method
-
-If a class or module body calls a macro that comes from a gem, a
-`Concern`, or an `extend` this extension cannot follow — `attr_atomic
-:thing` — the *call itself* is reported as an unknown method. Whatever it
-defines is correctly left alone; the line that defines it is not. <!-- documents: 024.110 -->
 
 ## Completion offers methods you cannot call
 

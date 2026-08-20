@@ -6,6 +6,44 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.11 — what the engine may assert
+
+Five fixes, all of one kind: this extension was answering from evidence
+that did not establish the answer.
+
+- **A concern's class methods reach the class that includes it.**
+  `Article.cm_public` from a `class_methods do` block, and from the older
+  `def self.included(base); base.extend(ClassMethods); end` spelling —
+  both were reported as missing methods, and both work.
+- **`module_function :name` works when the method is in another file.**
+  `module Reopened; def r_a; end; end` in one file and
+  `module Reopened; module_function :r_a; end` in another: `Reopened.r_a`
+  now has a hover, a definition to jump to, and a place in completion.
+  It had none of the three.
+- **A bare class name is resolved through what your class inherits.**
+  `Config` inside `class Runner < Zbase`, where `Zbase::Config` exists,
+  means that one — as Ruby does — instead of a top-level `Config`.
+- **A class that answers through `def self.method_missing`, or whose
+  class methods are made by `define_singleton_method`, is no longer
+  reported for the calls it really does answer.**
+- **A file reopened without being closed keeps getting diagnostics.**
+
+### Details
+
+**What this release does not change**, measured: over four Rails gems,
+`unknown-method` findings are 84 before and 84 after, with
+`unresolved-constant` identical at 1,099 as a control. Nothing added,
+nothing removed. The fixes above are for shapes those gems do not
+contain, and each was checked against the Ruby interpreter one at a time.
+
+**One change was tried and taken back out.** A macro this extension
+cannot read — `attr_atomic :thing` from a gem's DSL — is still reported
+as a missing method, which is wrong. Silencing it also silenced every
+`Foo.bar` check in the whole workspace whenever any file reopened
+`Module`, `Object` or `Kernel`, and hid a real latent error in Rails
+itself. `docs/KNOWN_LIMITATIONS.md` describes what is left, along with
+everything else open.
+
 ## 0.2.10 — an answer knows what it was computed from
 
 - **Typing on a large file stops queueing your questions behind stale

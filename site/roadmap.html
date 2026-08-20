@@ -200,6 +200,40 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0211">
+          <div class="tl-version">
+            <span class="v">0.2.11</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>What the engine may assert</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A concern's class methods reach the class that includes it.</strong> Both the <code>class_methods do</code> block and the older <code>def self.included(base)</code> spelling were reported as missing methods, and both work.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>module_function :name</code> works when the method is in another file.</strong> Hover, go to definition and completion all answered nothing for it; now all three do.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A bare class name is resolved through what your class inherits</strong>, as Ruby does &mdash; not by a top-level class that happens to share the name.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A class answering through <code>def self.method_missing</code>, or generating class methods with <code>define_singleton_method</code>, is no longer reported</strong> for the calls it really does answer.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            No capability is added, and measured over four Rails gems this
+            release changes nothing: 84 <code>unknown-method</code> findings
+            before and after, control identical. The fixes are for shapes those
+            gems do not contain. One change was tried and taken back out &mdash;
+            silencing an unreadable macro also silenced every class-level check
+            in the workspace, and hid a real latent error in Rails itself.
+          </p>
+        </article>
+
         <article class="tl-item" id="v0210">
           <div class="tl-version">
             <span class="v">0.2.10</span>

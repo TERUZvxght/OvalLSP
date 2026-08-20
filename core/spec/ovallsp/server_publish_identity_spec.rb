@@ -69,6 +69,38 @@ RSpec.describe "Ovallsp::Server publish identity (037 C3)" do
     expect(published).to eq([[3, 1]])
   end
 
+  # `024.113`. The funnel took the document in 0.2.10 and left the memory
+  # it compares against keyed by uri alone -- so a client that reopens a
+  # file *without* closing it, with the new buffer numbering below the
+  # old, had every edit refused until the numbering passed where the
+  # previous buffer left off. A version is only meaningful inside one
+  # buffer, and that is exactly as true of the remembered one.
+  it "does not compare a new buffer's version against the one before it" do
+    first = store.open(uri: uri, text: "x = 1\n", version: 10, language_id: "ruby")
+    publish!(first, [finding])
+
+    # No didClose: the reopen replaces the buffer in place.
+    second = store.open(uri: uri, text: "y = 2\n", version: 1, language_id: "ruby")
+    server.send(:publish_findings, uri, [], document: second)
+    third = store.change(uri: uri, version: 2, changes: [{ text: "y = 3\n" }])
+    server.send(:publish_findings, uri, [finding, finding], document: third)
+
+    expect(published).to eq([[10, 1], [1, 0], [2, 2]])
+  end
+
+  # The control: inside *one* buffer the ordering rule still holds, which
+  # is what the memory is for. An implementation that simply stopped
+  # remembering would pass the example above and fail this one.
+  it "still refuses an older version of the same buffer" do
+    opened = store.open(uri: uri, text: "x = 1\n", version: 10, language_id: "ruby")
+    publish!(opened, [finding])
+    earlier = opened.with_full_change(text: "x = 0\n", version: 4)
+
+    server.send(:publish_findings, uri, [], document: earlier)
+
+    expect(published).to eq([[10, 1]])
+  end
+
   it "refuses a workspace-path answer while a buffer is open, as before" do
     store.open(uri: uri, text: "x = 1\n", version: 3, language_id: "ruby")
     disk = Ovallsp::TextDocument.new(uri: uri, text: "from disk\n", version: nil, language_id: "ruby")

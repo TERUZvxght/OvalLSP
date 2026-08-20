@@ -51,7 +51,7 @@ module Ovallsp
 
     def initialize(max_steps: 5000, model_registry: Models::ModelRegistry.new, generic_rules: nil,
                    method_resolver: nil, method_analyzer: nil, signatures: nil, observation_store: nil,
-                   workspace_index: nil)
+                   workspace_index: nil, hierarchy_index: nil)
       @max_steps = max_steps
       @model_registry = model_registry
       @generic_rules = generic_rules || self.class.default_generic_rules
@@ -69,6 +69,11 @@ module Ovallsp
       # it, a bare constant is resolved through the lexical nesting the
       # way Ruby resolves one (`024.103`).
       @workspace_index = workspace_index
+      # For Ruby's *second* constant-lookup step: after the nesting, the
+      # ancestors of the innermost cref. Optional like the rest -- without
+      # it the lookup stops after the nesting, which is what 0.2.10
+      # shipped.
+      @hierarchy_index = hierarchy_index
       @step_budget = max_steps
     end
 
@@ -139,6 +144,7 @@ module Ovallsp
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
       @lexical_nesting = []
+      @in_singleton_class = false
 
       locate(result.value.statements, offset, initial_env.dup)
     rescue BudgetExceeded, StandardError
@@ -442,9 +448,31 @@ module Ovallsp
     def locate_in_singleton_class(node, offset)
       return Types::UNKNOWN unless contains?(node.location, offset)
 
+      # `class << self` and `def self.x` both make self a class object,
+      # and only the first changes what a bare constant means:
+      #
+      #   $ ruby -e '
+      #   class Config; def top_only; end; end
+      #   class SBase; class Config; def sbase_only; end; end; end
+      #   class SSub < SBase
+      #     def self.probe = Config
+      #     class << self; def probe2 = Config; end
+      #   end
+      #   p [SSub.probe, SSub.probe2]
+      #   '
+      #   # => [SBase::Config, Config]
+      #   # ruby 3.4.10
+      #
+      # A guard reading `@self_type_stack.last.is_a?(Types::Generic)`
+      # cannot tell them apart, and disabling step 2 inside `def self.x`
+      # left both directions inverted there -- which is what this release
+      # marked `024.112` fixed while it was still true.
+      previous_in_singleton_class = @in_singleton_class
+      @in_singleton_class = true
       @self_type_stack.push(Types::Generic.new(name: "ClassOf", type_arg: @self_type_stack.last))
       locate(node.body, offset, {})
     ensure
+      @in_singleton_class = previous_in_singleton_class
       @self_type_stack.pop
     end
 
@@ -696,11 +724,63 @@ module Ovallsp
       Semantic::ReceiverResolution.canonical_receiver_name(qualify_constant(name))
     end
 
+    # Ruby's rule, in Ruby's order:
+    #
+    #   1. `Module.nesting`, innermost first;
+    #   2. **the ancestors of the innermost cref**;
+    #   3. Object, which is the fall-through this returns `name` for.
+    #
+    #   $ ruby -e '
+    #   class Config; def top_only; end; end
+    #   class Zbase; class Config; def zbase_only; end; end; end
+    #   module App
+    #     class Runner < Zbase
+    #       def go  = Config.new.zbase_only
+    #       def bad = Config.new.top_only
+    #     end
+    #   end
+    #   p ["go",  (App::Runner.new.go  rescue $!.class)]
+    #   p ["bad", (App::Runner.new.bad rescue $!.class)]
+    #   '
+    #   # => ["go", nil]  ["bad", NoMethodError]
+    #   # ruby 3.4.10
+    #
+    # 0.2.10 implemented step 1 and stopped, which left both directions
+    # inverted for an inherited namespace: the working call reported, the
+    # raising one silent (`024.112`).
     def qualify_constant(name)
       return name unless @workspace_index
       return name if name.to_s.start_with?("::")
 
-      @workspace_index.nested_type_name(name, nesting: current_nesting) || name
+      @workspace_index.nested_type_name(name, nesting: current_nesting) ||
+        ancestor_type_name(name) ||
+        name
+    end
+
+    # Step 2. Only the *innermost* cref's ancestors: Ruby does not walk
+    # the outer nesting frames' ancestors, and neither does this.
+    #
+    # **Not inside `class << self`.** The innermost cref there is the
+    # singleton class, whose ancestors are not the enclosing class's --
+    # `class SSub < SBase; class << self; Config` is a `NameError` in
+    # Ruby even when `SBase::Config` exists, and answering `SBase::Config`
+    # there names an owner the code never reaches.
+    #
+    # The self entry is dropped by *name*, not by position: with
+    # `prepend M` the chain starts `["::M", "::Self", …]`, and taking
+    # `.drop(1)` discarded the one namespace that could have answered
+    # while re-searching the frame step 1 had already tried.
+    def ancestor_type_name(name)
+      return nil unless @hierarchy_index
+      return nil if @in_singleton_class
+
+      innermost = current_nesting.first
+      return nil unless innermost
+
+      qualified = Index::SymbolId.qualify_owner(innermost)
+      ancestors = @hierarchy_index.ancestors(innermost).map(&:name).compact
+                                  .reject { |a| Index::SymbolId.qualify_owner(a) == qualified }
+      @workspace_index.nested_type_name(name, nesting: ancestors)
     end
 
     def current_nesting = Array(@lexical_nesting).reverse

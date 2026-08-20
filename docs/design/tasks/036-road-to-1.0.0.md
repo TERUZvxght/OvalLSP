@@ -130,9 +130,14 @@ the funnel introduced a defect worse than the one it fixed.
 `037`'s C1 and C8. A declaration's owner and kind stop being decided by
 six parallel mutable stacks and become one immutable value every recorder
 is handed; a uri gets one canonical form so a symlinked workspace stops
-showing every file twice. Between them they carry `024.26`, `024.31`,
-`024.32`, `024.33`, `024.34` and `024.98`, and the open-surface family
-0.2.6's rounds kept finding one instance at a time.
+showing every file twice.
+
+**"Carry" was the wrong word, and this sentence said it for two
+releases.** 0.2.11's stocktake re-ran all five of C1's entries —
+`024.26`, `024.31`, `024.32`, `024.33`, `024.34` — and every one still
+reproduces. Four were never within the mechanism's reach and one is,
+and is still wrong. `024.98` (C8) is genuinely fixed. `024.102` records
+the verdicts and what each says about the mechanism.
 
 ### 0.2.9 — one question, asked once, answered honestly *(axis B)* — **shipped**
 
@@ -182,7 +187,7 @@ Rails source, including a fix from the round before that had switched
 release ships under `CLAUDE.md`'s bound with `024.106`'s second half,
 `024.109`, and `024.111`–`024.116` open.
 
-### 0.2.11 — the loop's own leavings *(axis B)* — **next, on `feat/0.2.11`**
+### 0.2.11 — the loop's own leavings *(axis B)* — **shipped**
 
 What 0.2.10's rounds recorded rather than fixed, which is a coherent
 release rather than an appendix: `024.106`'s second half needs the index
@@ -191,6 +196,22 @@ to prove a module's declarations are all of them; `024.114` needs
 indexed, the way `AncestorFact` already is; and `024.115` narrows the
 concern rule to something with a marker. `024.111`, `024.112`, `024.113`,
 `024.116`, `024.109` and `024.110` join them.
+
+**What it took.** Three rounds — `attack`, `drive`, `reproduce` — finding
+11, 5 and 9 defects. Six of the nine entries closed; `024.110` was tried
+in its recorded one-line shape and **rolled back inside the release**
+after a `drive` round measured constant-receiver findings going 117 → 0.
+The `reproduce` round then found the release a net regression on its own
+corpus and the headline table advertising the opposite. It ships neutral
+on that corpus — 84 → 84, control identical — with its value in shapes
+four Rails gems do not contain.
+
+### 0.2.12 — what three rounds left *(axis B)* — **next, on `feat/0.2.12`**
+
+`024.106`'s second half, `024.110` in a shape that can tell "I could not
+read *this class's* body" from "I could not read `Module`'s", `024.117`,
+`024.118`, and the residue of `024.116`. `024.109` and `024.111` join
+them.
 
 ### 0.3.0 — the first release that may add capability *(axis B)*
 
