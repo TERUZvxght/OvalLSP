@@ -551,13 +551,6 @@ is the safer half of that trade until the index can prove the difference.
 `module_function` and `extend self` themselves work: their methods appear
 in completion, hover and go to definition. <!-- documents: 024.106 -->
 
-## A module with a nested `ClassMethods` that is not a concern
-
-Including a module that happens to declare a `ClassMethods` makes this
-extension offer that module's class methods on the including class, as
-though it were an `ActiveSupport::Concern`. If it is not one, those names
-do not exist and calling one raises. <!-- documents: 024.115 -->
-
 ## Completion offers methods you cannot call
 
 On a class — `Post.`, `Circle.` — and on any receiver in a plain Ruby

@@ -508,12 +508,6 @@ Rails の concern がまさにこの形でした。メタプログラミング�
 `module_function` と `extend self` 自体は動作します — それらのメソッドは補完・
 ホバー・定義ジャンプに出ます。 <!-- documents: 024.106 -->
 
-## concern ではないのに `ClassMethods` を持つモジュール
-
-`ClassMethods` を入れ子に宣言しているモジュールを include すると、この拡張機能は
-それを `ActiveSupport::Concern` と同じように扱い、そのクラスメソッドを include 先の
-クラスに出します。concern でない場合、それらの名前は存在せず、選ぶと例外になります。 <!-- documents: 024.115 -->
-
 ## 呼び出せないメソッドが補完に出ること
 
 クラスに対して（`Post.`、`Circle.`）、および素の Ruby プロジェクトでは

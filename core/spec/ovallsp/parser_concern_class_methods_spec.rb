@@ -139,6 +139,36 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
         .to eq(spelled.ancestors("::Article", singleton: true).map(&:name))
     end
 
+    # `024.115`. Keying on "a `ClassMethods` declaration exists" made
+    # completion offer a name that raises for any module that merely
+    # happens to nest one:
+    #
+    #   $ ruby -e '
+    #   module Mixed
+    #     module ClassMethods; def spelled_out; end; end
+    #     def helper; end
+    #   end
+    #   class UsesMixed; include Mixed; end
+    #   p (UsesMixed.spelled_out rescue $!.class)
+    #   '
+    #   # => NoMethodError
+    #   # ruby 3.4.10
+    #
+    # The marker is required now. The pre-Rails-4 spelling --
+    # `def self.included(base); base.extend(ClassMethods); end` -- is not
+    # missed by this: it is an ordinary `extend`, which this index has
+    # always followed, and 0.2.10's `drive` round verified that path
+    # separately.
+    it "adds nothing for a module that nests a ClassMethods without being a concern" do
+      hierarchy_index = chain(
+        "module Mixed\n  module ClassMethods\n    def spelled_out; end\n  end\n  def helper; end\nend\n",
+        "class UsesMixed\n  include Mixed\nend\n"
+      )
+
+      expect(hierarchy_index.ancestors("::UsesMixed", singleton: true).map(&:name))
+        .not_to include("::Mixed::ClassMethods")
+    end
+
     # The control: an ordinary module with no `ClassMethods` adds nothing
     # to the class-level chain. Without this, an implementation that
     # appended a `::ClassMethods` name unconditionally would pass both

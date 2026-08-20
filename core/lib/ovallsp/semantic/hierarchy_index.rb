@@ -329,25 +329,41 @@ module Ovallsp
       #   # => [true, false]
       #   # ruby 3.4.10, activesupport 8.1.3.1
       #
-      # Keyed on the *declaration existing* rather than on spotting
-      # `extend ActiveSupport::Concern`: a module that declares a
-      # `ClassMethods` and is included without being a Concern adds
-      # nothing at runtime, so this can be wrong in the direction of
-      # offering a name that is not there. That is the same trade the
-      # rest of this index makes for `include`/`extend`, and the
-      # alternative -- requiring the `extend ActiveSupport::Concern` line
-      # -- misses every concern written before Rails 4 and every project
-      # that re-exports one. `024.104`.
+      # **The marker is required, as of 0.2.11.** 0.2.10 keyed this on the
+      # `ClassMethods` declaration merely existing, and recorded the
+      # reason as "requiring `extend ActiveSupport::Concern` misses every
+      # concern written before Rails 4". A `drive` round disproved that:
+      # the pre-Rails-4 spelling is
+      # `def self.included(base); base.extend(ClassMethods); end`, which
+      # is an ordinary `extend` this index has always followed, and the
+      # round verified that path answers correctly on its own.
+      #
+      # What the unmarked version cost is the direction that *invents* a
+      # name: any module nesting a `ClassMethods` made completion offer
+      # its methods on every including class, and picking one raises
+      # (`024.115`).
+      #
       # `prepend` as well as `include`: `Concern#prepend_features` extends
       # `ClassMethods` exactly as `append_features` does, so a prepended
       # concern's class methods are on the class the same way.
       def concern_class_method_entries(canonical, visited)
         facts = @includes_by_owner.fetch(canonical, []) + @prepends_by_owner.fetch(canonical, [])
         facts.flat_map do |fact|
-          class_methods = "#{Index::SymbolId.qualify_owner(canonical_name(fact.target))}::ClassMethods"
+          target = Index::SymbolId.qualify_owner(canonical_name(fact.target))
+          next [] unless concern?(target)
+
+          class_methods = "#{target}::ClassMethods"
           next [] unless kind_of(class_methods)
 
           compute_ancestors_locked(class_methods, singleton: false, visited: visited, origin_for_self: :extend)
+        end
+      end
+
+      # Whether the module says it is one, which is the only thing that
+      # makes `include` mean `extend ClassMethods` as well.
+      def concern?(target)
+        @extends_by_owner.fetch(target, []).any? do |fact|
+          Index::SymbolId.bare_name(fact.target).end_with?("ActiveSupport::Concern")
         end
       end
 
