@@ -558,14 +558,6 @@ extension offer that module's class methods on the including class, as
 though it were an `ActiveSupport::Concern`. If it is not one, those names
 do not exist and calling one raises. <!-- documents: 024.115 -->
 
-## `def self.method_missing`, and methods made by `define_singleton_method`
-
-A class that answers class-level calls through `def self.method_missing`,
-or whose class methods are made by `define_singleton_method` in a loop,
-is treated as though its class-level surface were fully known — so the
-calls it really does answer are reported as missing. The instance-level
-`method_missing` is recognised. <!-- documents: 024.116 -->
-
 ## Completion offers methods you cannot call
 
 On a class — `Post.`, `Circle.` — and on any receiver in a plain Ruby

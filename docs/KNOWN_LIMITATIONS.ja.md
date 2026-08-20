@@ -514,13 +514,6 @@ Rails の concern がまさにこの形でした。メタプログラミング�
 それを `ActiveSupport::Concern` と同じように扱い、そのクラスメソッドを include 先の
 クラスに出します。concern でない場合、それらの名前は存在せず、選ぶと例外になります。 <!-- documents: 024.115 -->
 
-## `def self.method_missing` と `define_singleton_method` で作られるメソッド
-
-`def self.method_missing` でクラスレベルの呼び出しに答えるクラスや、クラスメソッドを
-`define_singleton_method` のループで作るクラスは、クラスレベルの面が完全に既知で
-あるかのように扱われ、実際には答えられる呼び出しが「存在しない」と報告されます。
-インスタンス側の `method_missing` は認識されます。 <!-- documents: 024.116 -->
-
 ## 呼び出せないメソッドが補完に出ること
 
 クラスに対して（`Post.`、`Circle.`）、および素の Ruby プロジェクトでは

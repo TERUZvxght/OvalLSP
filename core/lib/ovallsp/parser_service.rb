@@ -1016,7 +1016,20 @@ module Ovallsp
       # -- but not blocks, because `included do ... end` and
       # `class_eval { ... }` define methods on the owner and are the shape
       # this rule exists for.
+      # `define_method` and `define_singleton_method` name what they do.
+      # Written inside a block -- `%w[a b].each { |n| define_singleton_method(n) { … } }`,
+      # which is how a class generates a family of methods -- the block
+      # guard below dropped them, and every call they answer was reported
+      # (`024.116`). Unlike an arbitrary macro, these two are not a guess:
+      # the call defines a method whose name this parser cannot compute,
+      # which is exactly what an open surface means.
+      METHOD_DEFINING_CALLS = { define_method: :instance, define_singleton_method: :singleton }.freeze
+
       def record_open_surface(node)
+        if node.receiver.nil? && current_owner && (kind = METHOD_DEFINING_CALLS[node.name])
+          return @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
+        end
+
         return unless @cref.defines_surface?
         # Written inside a block, this call says nothing about the
         # enclosing class's members -- the call that *owns* the block does,

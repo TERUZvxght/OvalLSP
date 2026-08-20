@@ -259,7 +259,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | open | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
 | [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | fixed | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | open | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
-| [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.11 | `def self.method_missing` and `define_singleton_method` do not open … |
+| [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | fixed | 0.2.11 | `def self.method_missing` and `define_singleton_method` do not open … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5815,10 +5815,11 @@ the loop, and because narrowing a rule wants its own corpus measurement.
 ## 024.116 `def self.method_missing` and `define_singleton_method` do not open a surface
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.11
+released-in: 0.2.11
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb`

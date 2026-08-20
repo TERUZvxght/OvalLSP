@@ -183,7 +183,7 @@ module Ovallsp
         return :ancestor_not_identified if singleton && instance_entries.any? { |e| e.name.nil? }
         return :ancestor_not_identified if entries.any? { |e| e.name.nil? }
 
-        return :responds_at_call_time if entries.any? { |e| declares_method_missing?(e.name) }
+        return :responds_at_call_time if entries.any? { |e| declares_method_missing?(e.name, singleton) }
         return :surface_open if entries.any? { |e| open_surface?(e, singleton) }
 
         # An ancestor neither the workspace nor the signature environment
@@ -245,8 +245,15 @@ module Ovallsp
         instance_entries.any? { |e| Index::SymbolId.qualify_owner(e.name) == "::BasicObject" }
       end
 
-      def declares_method_missing?(owner)
-        @workspace_index.method_symbol_ids(owner, kind: :instance_method).any? { |sid| sid.name == "method_missing" }
+      # **The side matters.** `def self.method_missing` answers class-level
+      # calls and `def method_missing` answers instance ones, and this
+      # asked for instance methods whichever side the lookup was on -- so
+      # a class answering `CWithMM.anything` through
+      # `def self.method_missing` was judged closed and every call it
+      # handles was reported (`024.116`). Ruby returns `:mm`.
+      def declares_method_missing?(owner, singleton)
+        kind = singleton ? :singleton_method : :instance_method
+        @workspace_index.method_symbol_ids(owner, kind: kind).any? { |sid| sid.name == "method_missing" }
       end
 
       # `extend M` puts M's *instance* methods on the class-level chain,

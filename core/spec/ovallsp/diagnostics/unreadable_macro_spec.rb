@@ -46,6 +46,50 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
                                 .map { |f| f.message[/named `(.+)`/, 1] }
   end
 
+  # `024.116`. `declares_method_missing?` asked the index for
+  # `kind: :instance_method` only, so a class answering class-level calls
+  # through `def self.method_missing` was judged closed and every call it
+  # handles was reported. Ruby:
+  #
+  #   $ ruby -e '
+  #   class CWithMM
+  #     def self.method_missing(n, *a) = :mm
+  #     def self.respond_to_missing?(n, p = false) = true
+  #   end
+  #   p CWithMM.anything
+  #   class CDynamic
+  #     %w[dyn_a dyn_b].each { |n| define_singleton_method(n) { n } }
+  #   end
+  #   p CDynamic.dyn_a
+  #   '
+  #   # => :mm  and  "dyn_a"
+  #   # ruby 3.4.10
+  describe "a class that answers class-level calls it does not declare" do
+    it "says nothing when the class defines def self.method_missing" do
+      index("class CWithMM\n  def self.method_missing(name, *args); end\nend\n", uri: "file:///mm.rb")
+      document = index("CWithMM.anything\n", uri: "file:///use_mm.rb")
+
+      expect(unknown_methods(document)).to be_empty
+    end
+
+    it "says nothing when its class methods are made by define_singleton_method" do
+      index("class CDynamic\n  %w[dyn_a dyn_b].each { |n| define_singleton_method(n) { n } }\nend\n",
+            uri: "file:///dyn.rb")
+      document = index("CDynamic.dyn_a\n", uri: "file:///use_dyn.rb")
+
+      expect(unknown_methods(document)).to be_empty
+    end
+
+    # The control: a class doing neither still answers. Without this,
+    # "stop reporting class-level calls" would pass both examples above.
+    it "still reports a class-level typo on a class that does neither" do
+      index("class COrdinary\n  def self.known; end\nend\n", uri: "file:///ord.rb")
+      document = index("COrdinary.nope_x\n", uri: "file:///use_ord.rb")
+
+      expect(unknown_methods(document)).to eq(["nope_x"])
+    end
+  end
+
   it "says nothing about the macro itself, having declined to enumerate what it defines" do
     document = index("class HostC\n  attr_atomic :thing\nend\n")
 
