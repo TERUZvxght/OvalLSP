@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**108 entries below** <!-- measured: register-entries = 108 -->,
+**109 entries below** <!-- measured: register-entries = 109 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -249,10 +249,11 @@ nobody can search is the recording habit without the benefit.
 | [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | fixed | 0.2.10 | A bare class name inside a namespace answers with an arbitrary same-… |
 | [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | fixed | 0.2.10 | `class_methods do` in a concern is attributed to the instance side |
 | [`024.105`](#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | fixed | 0.2.9 | Visibility is not recorded for singleton methods at all |
-| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.10 | `module_function` and `extend self` produce nothing |
+| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | fixed | 0.2.10 | `module_function` and `extend self` produce nothing |
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | open | 0.2.10 | Specs whose fixture cannot distinguish the behaviour they pin |
+| [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | open | 0.2.11 | The macro is reported, and what it might define is not |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5399,10 +5400,11 @@ Neighbour of `024.99`; both are the visibility half of `037`'s C2.
 ## 024.106 `module_function` and `extend self` produce nothing
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.10
+released-in: 0.2.10
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`
@@ -5517,6 +5519,47 @@ and reject any fixture where the two answers are equal. The spec-deletion
 pass of `scripts/hunk_sweep.rb` finds files that pin nothing; this is the
 narrower question of an example that pins less than it claims, and the
 two are worth running together.
+
+## 024.110 The macro is reported, and what it might define is not
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.11
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
+`core/lib/ovallsp/parser_service.rb` (`#record_open_surface`)
+
+```ruby
+class HostC
+  attr_atomic :thing        # `unknown-method: HostC has no method named `attr_atomic``
+end
+```
+
+An unrecognised class-body macro correctly opens the owner's surface, so
+nothing it *might* define is reported. The call that opened it is
+reported anyway — a false positive on ordinary code whenever a macro
+comes from a gem, a `Concern`, or an `extend` this parser cannot read.
+
+The two answers contradict each other about the same fact: the engine
+says "I cannot enumerate this class's members because something
+unreadable ran here", and then asserts that the unreadable thing does not
+exist.
+
+Found while fixing `024.106`'s second half. It is **not new** — the class
+spelling has always behaved this way — but it became visible on modules
+too once a module's class-level calls started being checked at all. An
+existing example in `open_surface_spec.rb` was asserting `be_empty` over
+a document containing one, and was narrowed to the call it is actually
+about rather than left pinning an accident.
+
+**Direction:** a receiverless call in a class or module body that opens
+the surface is evidence about that owner's *class* side as well —
+whatever provides the macro is exactly what could not be read. Recording
+that is a one-line change with a corpus measurement attached, and it
+belongs with a measurement rather than inside the release that found it.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

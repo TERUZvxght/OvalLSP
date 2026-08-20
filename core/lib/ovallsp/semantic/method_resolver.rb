@@ -169,7 +169,16 @@ module Ovallsp
         # BasicObject, so asking it directly would call every `Foo.bar`
         # unenumerable and silence everything.
         instance_entries = @hierarchy_index.ancestors(type.name, singleton: false)
-        return :ancestor_not_identified unless instance_entries.any? { |e| Index::SymbolId.qualify_owner(e.name) == "::BasicObject" }
+        # **A module's instance chain is itself, and that is complete.**
+        # `PlainMod.ancestors` is `[PlainMod]` -- no Object, no
+        # BasicObject -- so requiring BasicObject called every module
+        # unenumerable and nothing checked a module's class-level calls at
+        # all: `PlainClass.nope_y` was reported and `PlainMod.nope_x` was
+        # not, on a module whose `def self.` methods this engine knows
+        # (`024.106`). Ruby raises `NoMethodError` for both.
+        unless rooted_instance_chain?(type, instance_entries)
+          return :ancestor_not_identified
+        end
         # A singleton lookup depends on the instance chain too: `include`
         # puts a module there, and `included`/`extended` hooks are how a
         # module adds class methods.
@@ -212,6 +221,16 @@ module Ovallsp
         return true if entry.kind
 
         !signatures.ancestors(Index::SymbolId.qualify_owner(entry.name)).empty?
+      end
+
+      # Whether the instance chain ends where Ruby ends it. For a class
+      # that is `::BasicObject`; for a module the chain is the module and
+      # whatever it includes, and the workspace declaring it a module is
+      # what says the chain is complete rather than truncated.
+      def rooted_instance_chain?(type, instance_entries)
+        return true if instance_entries.any? { |e| Index::SymbolId.qualify_owner(e.name) == "::BasicObject" }
+
+        @workspace_index.type_kind(type.name) == :module
       end
 
       def declares_method_missing?(owner)

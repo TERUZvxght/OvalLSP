@@ -49,16 +49,38 @@ module Ovallsp
     #   somebody else's block (the call that *owns* the block is what
     #   decides), false with no owner at all.
     Cref = Data.define(:owner, :nesting, :singleton_context, :self_is_module, :in_method_body,
-                       :block_depth, :visibility) do
+                       :block_depth, :visibility, :module_function) do
       def self.top_level
         new(owner: nil, nesting: [].freeze, singleton_context: false, self_is_module: false,
-            in_method_body: false, block_depth: 0, visibility: :public)
+            in_method_body: false, block_depth: 0, visibility: :public, module_function: false)
       end
 
-      def initialize(**fields)
-        super
+      def initialize(module_function: false, **fields)
+        super(module_function: module_function, **fields)
         freeze
       end
+
+      # Whether a bare `module_function` is open here. Ruby's answer to a
+      # `def` written under one is *two* methods -- a private instance
+      # method and a module method:
+      #
+      #   $ ruby -e '
+      #   module MF
+      #     module_function
+      #     def mf_a; end
+      #   end
+      #   p [MF.respond_to?(:mf_a), MF.private_instance_methods(false)]
+      #   '
+      #   # => [true, [:mf_a]]
+      #   # ruby 3.4.10
+      #
+      # It belongs here rather than in a parallel flag beside the visitor
+      # for the same reason the visibility section does: it is part of
+      # "what does a bare `def` written at this point mean", which is the
+      # whole of what this value answers (`024.106`).
+      def module_function? = module_function
+
+      def in_module_function = with(module_function: true)
 
       def declares_singleton? = singleton_context
 
@@ -86,12 +108,17 @@ module Ovallsp
       # error-tolerant and that is what a buffer looks like mid-refactor;
       # resetting it there made reports about the class go silent, which
       # the six stacks never did.
+      # `module_function` is reset here for the same reason `visibility`
+      # is: a nested module body opens its own section, and Ruby does not
+      # carry the outer one into it.
       def in_namespace(absolute_name)
         with(owner: absolute_name, nesting: [absolute_name, *nesting].freeze, singleton_context: false,
-             self_is_module: true, visibility: :public)
+             self_is_module: true, visibility: :public, module_function: false)
       end
 
-      def in_singleton_class = with(singleton_context: true, self_is_module: true, visibility: :public)
+      def in_singleton_class
+        with(singleton_context: true, self_is_module: true, visibility: :public, module_function: false)
+      end
 
       # A `def`. `self` inside `def self.x` is still a Class or Module;
       # inside an instance method it is not. `singleton_context` is

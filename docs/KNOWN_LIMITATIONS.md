@@ -517,13 +517,12 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
-## `module_function` and `extend self`
+## A macro this extension cannot read is reported as a missing method
 
-**Produce nothing.** Methods made available on the module by
-`module_function` or `extend self` do not appear in completion at all. A
-plain `def self.x` or `class << self` in the same module works. Nothing
-checks a module's class-level calls either, so a typo there is not
-reported the way it would be on a class. <!-- documents: 024.106 -->
+If a class or module body calls a macro that comes from a gem, a
+`Concern`, or an `extend` this extension cannot follow — `attr_atomic
+:thing` — the *call itself* is reported as an unknown method. Whatever it
+defines is correctly left alone; the line that defines it is not. <!-- documents: 024.110 -->
 
 ## Completion offers methods you cannot call
 

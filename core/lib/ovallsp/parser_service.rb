@@ -345,6 +345,7 @@ module Ovallsp
           body_source: node.body&.slice,
           name_location: Index::SourceLocation.to_range(node.name_loc, @lines)
         )
+        record_module_function_twin(node, owner) if @cref.module_function? && !singleton
 
         @scope_stack.push(next_scope_id)
         # Tracks "we are inside a method body", so a `private :target`
@@ -446,6 +447,7 @@ module Ovallsp
             apply_visibility_arguments(node)
           end
           apply_class_visibility_arguments(node) if CLASS_VISIBILITY_MODIFIERS.key?(node.name)
+          apply_module_function_arguments(node) if node.name == :module_function && node.arguments
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
           declared_before = @declarations.size
@@ -791,7 +793,54 @@ module Ovallsp
         )
       end
 
+      # `module_function` makes each method reachable on the module *as
+      # well as* leaving a private instance copy -- two methods, which is
+      # why this records a second declaration rather than moving the
+      # first. `#visibility_for_definition` makes the instance copy
+      # private. See `Index::Cref#module_function?` for the interpreter
+      # session both halves come from (`024.106`).
+      def record_module_function_twin(node, owner)
+        instance_declaration = @declarations.last
+
+        @declarations << instance_declaration.with(
+          symbol_id: Index::SymbolId.new(kind: :singleton_method, owner: owner, name: node.name.to_s,
+                                         discriminator: nil),
+          visibility: :public
+        )
+      end
+
+      # `module_function :mf_c` names methods already declared above it,
+      # so there is nothing pending to remember -- the declarations are
+      # rewritten in place and given their singleton twins. Only the names
+      # written: a sibling `mf_d` stays a public instance method and off
+      # the module entirely, which is the half that distinguishes this
+      # form from the bare one.
+      def apply_module_function_arguments(node)
+        names = node.arguments.arguments.filter_map { |argument| symbol_name(argument) }
+        return if names.empty?
+
+        twins = @declarations.select do |declaration|
+          declaration.symbol_id.kind == :instance_method &&
+            declaration.symbol_id.owner == current_owner &&
+            names.include?(declaration.symbol_id.name)
+        end
+        rewrite_recorded_visibility(names, :private)
+        twins.each do |declaration|
+          @declarations << declaration.with(
+            symbol_id: Index::SymbolId.new(kind: :singleton_method, owner: declaration.symbol_id.owner,
+                                           name: declaration.symbol_id.name, discriminator: nil),
+            visibility: :public
+          )
+        end
+      end
+
       def record_ancestor_call(node)
+        # `extend self` in a module body: no argument names a constant, so
+        # this dropped it and `MF.` completed nothing the module declared.
+        # Ruby adds no methods here -- it puts the module in its own
+        # singleton chain -- so that is what is recorded, and the methods
+        # stay exactly where they are written.
+        return record_extend_self(node) if extend_self?(node)
         return unless node.arguments
 
         relation = ANCESTOR_RELATIONS.fetch(node.name)
@@ -810,6 +859,19 @@ module Ovallsp
             location: Index::SourceLocation.to_range(arg.location, @lines)
           )
         end
+      end
+
+      def extend_self?(node)
+        node.name == :extend && current_owner && !@cref.in_method_body? &&
+          node.arguments&.arguments&.length == 1 &&
+          node.arguments.arguments.first.is_a?(Prism::SelfNode) && @cref.self_is_module?
+      end
+
+      def record_extend_self(node)
+        @ancestor_facts << Index::AncestorFact.new(
+          owner: current_owner, relation: :extend, target: current_owner,
+          location: Index::SourceLocation.to_range(node.arguments.arguments.first.location, @lines)
+        )
       end
 
       # An ancestor decided at runtime leaves a surface that cannot be
@@ -1315,6 +1377,7 @@ module Ovallsp
         when :public then @cref = @cref.with_visibility(:public)
         when :private then @cref = @cref.with_visibility(:private)
         when :protected then @cref = @cref.with_visibility(:protected)
+        when :module_function then @cref = @cref.in_module_function
         end
       end
 
@@ -1416,6 +1479,11 @@ module Ovallsp
       end
 
       def visibility_for_definition(node, singleton, inline_visibility)
+        # Under `module_function`, Ruby makes the instance copy private --
+        # `MF.private_instance_methods(false)` is `[:mf_a]` -- which is
+        # what keeps it from being offered on an instance of an including
+        # class. An explicit `private def` still outranks it.
+        return inline_visibility || :private if !singleton && @cref.module_function?
         return inline_visibility || @cref.visibility unless singleton
         # Singleton *because* of `class << self`, not because of an
         # explicit `self.` receiver.
