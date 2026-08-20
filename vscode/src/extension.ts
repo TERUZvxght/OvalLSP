@@ -115,7 +115,6 @@ function resolveRubyForFolder(folder: vscode.WorkspaceFolder): { command: string
     platform: process.platform,
     home: process.env.HOME ?? process.env.USERPROFILE,
     pathEnv: process.env.PATH,
-    workspaceRoot: folder.uri.fsPath,
     existsSync: fs.existsSync
   });
   return { command: resolution.executable, resolution };

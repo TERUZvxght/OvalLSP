@@ -213,12 +213,12 @@ nobody can search is the recording habit without the benefit.
 | [`024.66`](#02466-a-marketing-card-kept-carrying-claims-about-what-an-error-s-text-says) | fixed | 0.2.3 | A marketing card kept carrying claims about what an error's text says |
 | [`024.67`](#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | fixed | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
 | [`024.68`](#02468-three-rounds-of-guards-on-a-hand-rolled-grammar-each-blind-one-assumption-deeper) | open | 0.2.12 | Three rounds of guards on a hand-rolled grammar, each blind one assu… |
-| [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | open | 0.2.12 | The two suites that drive a real editor are run by nobody but the ma… |
+| [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | fixed | 0.2.12 | The two suites that drive a real editor are run by nobody but the ma… |
 | [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.3.0 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
 | [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | fixed | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | open | 0.3.0 | The trust gate stands in front of callers, not in front of what exec… |
-| [`024.75`](#02475-a-documented-field-selects-nothing) | open | 0.2.12 | A documented field selects nothing |
+| [`024.75`](#02475-a-documented-field-selects-nothing) | fixed | 0.2.12 | A documented field selects nothing |
 | [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.3.0 | Fifty-four `unknown-method` reports over real gem source, and all of… |
 | [`024.77`](#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | open | 0.3.0 | A call to a method that does not exist is missed through a relation |
 | [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | fixed | 0.2.6 | Completion did not get the fix hover and diagnostics did |
@@ -3789,7 +3789,7 @@ reading the register should know that, which is this note's job.
 ## 024.69 The two suites that drive a real editor are run by nobody but the maintainer
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -3797,6 +3797,7 @@ user-visible-note: >
   the suites still pass once run, and 0.2.3's gate ran them. What is
   missing is anything that runs them between releases.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `.github/workflows/ci.yml` (the `vscode` job),
@@ -3841,6 +3842,17 @@ so the packaged variant is honest only on macOS and wants a
 CI jobs during a release gate is an addition, not a fix, and the
 `macos-14` half costs paid runner minutes on every run, which is a
 trade-off this entry does not get to make on its own.
+
+**Fixed in 0.2.12** by a `vscode-integration` job that runs
+`npm run test:integration` on every pull request and push --
+`xvfb-run` for the display, and Ruby with the bundle installed because
+the extension spawns the real Core Server, which is the half a unit test
+cannot reach.
+
+The measurement this entry is really about is not the suites passing; it
+is **who runs them**. Twice a month, by one person, on one machine, is
+how a harness stays broken across four VS Code releases while the tree
+records the gate items about it as green.
 
 
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
@@ -4091,7 +4103,7 @@ for the same reason.
 ## 024.75 A documented field selects nothing
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -4099,6 +4111,7 @@ user-visible-note: >
   interpreter from a workspace file -- does not exist, so no user is
   affected by it working differently than described.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `vscode/src/rubyResolver.ts` — `RubyResolverEnv.workspaceRoot`
@@ -4111,10 +4124,23 @@ that is a security property worth keeping.
 
 So the comment describes a feature that does not exist, in the file
 someone would read to check whether interpreter selection can be
-influenced by the workspace. **Direction:** delete the field and the
-comment, or implement the lookup deliberately and gate it on trust like
-everything else that lets a workspace choose what runs. Deleting is the
-likely answer; the field was added in anticipation and never wired.
+influenced by the workspace. **Fixed in 0.2.12 by deleting it** -- the field was added in
+anticipation and never wired, and implementing the lookup instead would
+be a real feature that has to be gated on trust like everything else that
+lets a workspace choose what runs.
+
+**And the property it obscured is now stated where it can be checked.**
+`resolveRuby and the workspace` asserts that `RubyResolverEnv` has
+exactly four fields -- `platform`, `home`, `pathEnv`, `existsSync` -- so
+a fifth arriving is a change someone has to argue for rather than one a
+reader has to notice.
+
+The check deliberately does *not* forbid the string `.ruby-version`,
+which the first draft did and which failed: chruby reads
+`~/.ruby-version`, under `env.home`, and a file in the user's own home
+directory is not something a cloned repository can write. The invariant
+is about the resolver's **inputs**, not about which filenames it knows,
+and writing the first version taught the difference.
 ## 024.76 Fifty-four `unknown-method` reports over real gem source, and all of them false
 
 ```yaml

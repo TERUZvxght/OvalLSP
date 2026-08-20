@@ -252,6 +252,43 @@ jobs:
         working-directory: vscode
         run: npm run test:unit
 
+  # **The only tests that launch a real VS Code and drive the extension
+  # against a real Core**, and until 0.2.12 they ran nowhere between
+  # releases -- only when a maintainer ran the pre-publish bundle on an
+  # Apple Silicon Mac (`024.69`). That is how the harness came to be
+  # broken for every VS Code release since 1.110 while the tree recorded
+  # the gate items about it as green: the only thing that could have
+  # contradicted that was the gate itself, run twice a month.
+  #
+  # `xvfb-run` because VS Code needs a display and this runner has none.
+  # Ruby and the bundle are installed because the extension spawns the
+  # real Core Server, which is the half a unit test cannot reach.
+  vscode-integration:
+    name: VS Code extension (integration, real editor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: core
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+
+      - name: Install dependencies
+        working-directory: vscode
+        run: npm ci
+
+      - name: Integration tests (monorepo-relative Core)
+        working-directory: vscode
+        run: xvfb-run -a npm run test:integration
+
   # The site check compares the version the index pages advertise
   # against vscode/package.json, and it must run when *either* side of
   # that comparison moves. Until 0.2.3 the deploy workflow that also
