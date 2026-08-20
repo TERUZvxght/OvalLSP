@@ -643,10 +643,18 @@ module Ovallsp
           return false unless document.buffer_id == open_document.buffer_id
           return false if version > open_document.version
 
-          last = @last_published_version[uri]
-          return false if last && version < last
+          # Remembered *per buffer*, not per uri. A version is chosen by
+          # the client and is only meaningful inside one buffer -- which
+          # is the whole reason this funnel takes the document -- and
+          # that is exactly as true of the version it is compared
+          # against. Keyed by uri alone, a client reopening a file
+          # without closing it, numbering the new buffer below the old,
+          # had every edit refused until it passed where the previous
+          # buffer left off (`024.113`).
+          last_buffer, last_version = @last_published_version[uri]
+          return false if last_buffer == document.buffer_id && last_version && version < last_version
 
-          @last_published_version[uri] = version
+          @last_published_version[uri] = [document.buffer_id, version]
         elsif open_document
           return false
         end

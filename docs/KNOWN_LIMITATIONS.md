@@ -533,13 +533,6 @@ If you write one inside an ordinary block — `1.times { module_function }`,
 that follow, though Ruby does. Written directly in the class or module
 body, both work. <!-- documents: 024.111 -->
 
-## Reopening a file without closing it
-
-If your editor sends a second `didOpen` for a file it never closed, and
-the new buffer's version numbering starts below the old one's, diagnostics
-for that file stop updating until the numbering passes where it left off.
-VS Code sends `didClose` first, so this needs an unusual client. <!-- documents: 024.113 -->
-
 ## A typo in a call on a module
 
 `PlainClass.nope` is reported and `PlainMod.nope` is not. A module's
