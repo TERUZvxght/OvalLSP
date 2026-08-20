@@ -462,10 +462,37 @@ module Ovallsp
           @recorded_a_declaration = @declarations.size > declared_before
           wrapped_visibility = inline_attribute_visibility_for(node)
         end
+        # Before `#record_open_surface`, not after: a `class_methods do`
+        # block *is* read -- its methods are recorded as the
+        # `ClassMethods` module it is sugar for -- so marking the
+        # concern's surface open said the opposite. It did, and the cost
+        # was every class including that concern losing instance-side
+        # checking entirely: the spelled-out form reported
+        # `Post.new.total_garbage` and the block form reported nothing.
+        return visit_concern_class_methods(node) if concern_class_methods?(node)
+
         # Outside the receiverless branch: `singleton_class.send` and
         # `self.class_eval` metaprogram this owner too (see there).
         record_open_surface(node)
         record_method_call_candidate(node)
+
+        # `module_function def a; end`. The argument is a definition, not a
+        # name, so `#apply_module_function_arguments` cannot see it -- and
+        # it runs before the `def` is visited in any case. Visiting the
+        # arguments under an open `module_function` makes the same two
+        # recorders that handle the section form handle this one, rather
+        # than a third path that can disagree with them. Rails writes it:
+        # `action_cable.rb:77` is `module_function def server`, and
+        # `ActionCable.server` was reported as missing.
+        if inline_module_function?(node)
+          previous_cref = @cref
+          @cref = @cref.in_module_function
+          begin
+            return super
+          ensure
+            @cref = previous_cref
+          end
+        end
 
         if wrapped_visibility
           previous = @inline_attribute_visibility
@@ -486,8 +513,6 @@ module Ovallsp
         # `Other.instance_exec(helper) { }` resolve their arguments under
         # the pushed frame too, and report them. Identical on 0.1.14, and
         # narrowing it to the block node is its own change.
-        return visit_concern_class_methods(node) if concern_class_methods?(node)
-
         block_self = node.block && block_self_is_module(node)
         return super if block_self.nil?
 
@@ -542,7 +567,7 @@ module Ovallsp
         # The block body is the module body, so it opens a namespace and
         # *not* a block frame: a `def` in `module ClassMethods` is written
         # at depth zero, and `#defines_surface?` reads that depth.
-        within_namespace(absolute_name) do
+        within_namespace(absolute_name, module_owner: true) do
           @skip_block_frame = true
           begin
             node.block.accept(self)
@@ -736,12 +761,14 @@ module Ovallsp
 
         record_superclass(node, absolute_name) if node.is_a?(Prism::ClassNode)
 
-        within_namespace(absolute_name) { node.each_child_node { |child| child.accept(self) } }
+        within_namespace(absolute_name, module_owner: kind == :module) do
+          node.each_child_node { |child| child.accept(self) }
+        end
       end
 
-      def within_namespace(absolute_name)
+      def within_namespace(absolute_name, module_owner: false)
         previous_cref = @cref
-        @cref = @cref.in_namespace(absolute_name)
+        @cref = @cref.in_namespace(absolute_name, module_owner: module_owner)
         @scope_stack.push(next_scope_id)
         yield
       ensure
@@ -834,6 +861,11 @@ module Ovallsp
         end
       end
 
+      def inline_module_function?(node)
+        node.name == :module_function && node.receiver.nil? && @cref.module_owner? &&
+          node.arguments&.arguments&.any? { |argument| argument.is_a?(Prism::DefNode) }
+      end
+
       def record_ancestor_call(node)
         # `extend self` in a module body: no argument names a constant, so
         # this dropped it and `MF.` completed nothing the module declared.
@@ -861,10 +893,18 @@ module Ovallsp
         end
       end
 
+      # `@cref.module_owner?` rather than `self_is_module?`: the latter is
+      # true in a class body too, and Ruby has no `extend self` there --
+      # `class ESC; extend self; end` raises
+      # `TypeError: wrong argument type Class (expected Module)`
+      # (ruby 3.4.10). Recording an edge Ruby refuses to make puts a
+      # class's instance methods on its own singleton chain, and every
+      # answer about it is then wrong in the direction that invents
+      # methods.
       def extend_self?(node)
-        node.name == :extend && current_owner && !@cref.in_method_body? &&
+        node.name == :extend && current_owner && !@cref.in_method_body? && @cref.module_owner? &&
           node.arguments&.arguments&.length == 1 &&
-          node.arguments.arguments.first.is_a?(Prism::SelfNode) && @cref.self_is_module?
+          node.arguments.arguments.first.is_a?(Prism::SelfNode)
       end
 
       def record_extend_self(node)

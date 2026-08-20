@@ -61,6 +61,76 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
     end
   end
 
+  # Ruby keeps *one* scope-visibility value, so `public`/`private` after a
+  # `module_function` replaces it; two independent flags do not:
+  #
+  #   $ ruby -e '
+  #   module M; module_function; public; def x; end; end
+  #   p [M.respond_to?(:x), M.public_instance_methods(false)]  # => [false, [:x]]
+  #   module MFP; module_function; def a; end; private; def b; end; end
+  #   p [MFP.respond_to?(:a), MFP.respond_to?(:b)]             # => [true, false]
+  #   module P; module_function; def a; def b; end; end; end
+  #   P.a; p P.respond_to?(:b)                                 # => false
+  #   '
+  #   # ruby 3.4.10
+  describe "what cancels module_function" do
+    it "is cancelled by a following public" do
+      summary = summarize("module M\n  module_function\n  public\n  def x; end\nend\n")
+
+      expect(declared(summary, :singleton_method)).to be_empty
+      expect(declared(summary, :instance_method)).to eq([["x", :public]])
+    end
+
+    it "is cancelled by a following private" do
+      summary = summarize("module MFP\n  module_function\n  def a; end\n  private\n  def b; end\nend\n")
+
+      expect(declared(summary, :singleton_method).map(&:first)).to eq(["a"])
+      expect(declared(summary, :instance_method)).to eq([["a", :private], ["b", :private]])
+    end
+
+    it "does not reach a def written inside another def" do
+      summary = summarize("module P\n  module_function\n  def a\n    def b; end\n  end\nend\n")
+
+      expect(declared(summary, :singleton_method).map(&:first)).to eq(["a"])
+    end
+
+    # Ruby raises `NameError: undefined local variable or method
+    # 'module_function' for class CMF`, so a class body writing it is
+    # broken code and the engine must not invent a module method from it.
+    it "is not applied in a class body, where Ruby does not have it" do
+      summary = summarize("class CMF\n  module_function\n  def a; end\nend\n")
+
+      expect(declared(summary, :singleton_method)).to be_empty
+      expect(declared(summary, :instance_method)).to eq([["a", :public]])
+    end
+  end
+
+  # `module_function def a; end` is the inline form, and it recorded
+  # nothing at all -- `apply_module_function_arguments` ran before the
+  # `def` was visited, and reads symbols rather than definitions anyway.
+  # Rails writes it: `action_cable.rb:77` is `module_function def server`,
+  # and `ActionCable.server` was reported as missing.
+  #
+  #   $ ruby -e '
+  #   module MF1; module_function def a; end
+  #     def b; end
+  #   end
+  #   p [MF1.respond_to?(:a), MF1.private_instance_methods(false), MF1.instance_methods(false)]
+  #   '
+  #   # => [true, [:a], [:b]]
+  #   # ruby 3.4.10
+  describe "the inline module_function def form" do
+    let(:summary) { summarize("module MF1\n  module_function def a; end\n  def b; end\nend\n") }
+
+    it "records the module method" do
+      expect(declared(summary, :singleton_method).map(&:first)).to eq(["a"])
+    end
+
+    it "makes only that one private, and leaves the sibling alone" do
+      expect(declared(summary, :instance_method)).to eq([["a", :private], ["b", :public]])
+    end
+  end
+
   describe "module_function with names" do
     let(:summary) do
       summarize("module MF2\n  def mf_c; end\n  def mf_d; end\n  module_function :mf_c\nend\n")
@@ -76,6 +146,21 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
     end
   end
 
+  # Ruby has no `extend self` in a class body -- `self` there is a Class,
+  # and `Module#extend` wants a Module:
+  #
+  #   $ ruby -e 'class ESC; extend self; end'
+  #   # => wrong argument type Class (expected Module) (TypeError)
+  #   # ruby 3.4.10
+  #
+  # So a class writing it is broken code, and the engine must not record
+  # an ancestor edge that Ruby refuses to make.
+  it "does not record extend self in a class body, where Ruby raises" do
+    summary = summarize("class ESC\n  extend self\n  def a; end\nend\n")
+
+    expect(summary.ancestor_facts.map { |f| [f.owner, f.relation, f.target] }).to be_empty
+  end
+
   describe "extend self" do
     let(:summary) { summarize("module ES\n  extend self\n  def es_a; end\nend\n") }
 
@@ -84,6 +169,27 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
     # instance methods. Recording a singleton copy would answer the same
     # completion question by the wrong means and would be wrong about
     # `ES.instance_methods(false)`.
+    # The chain listed the module twice -- `["::ES", "::ES", "Module", ...]`
+    # -- because the module is both the chain's head and the target of its
+    # own `extend`. Ruby's `ES.singleton_class.ancestors` names it once.
+    # Harmless for the availability check, which asks `any?`; not harmless
+    # for anything that counts entries or reports one per link.
+    it "lists itself once in its own singleton chain" do
+      summary = Ovallsp::ParserService.new.summarize(
+        Ovallsp::TextDocument.new(uri: "file:///es.rb", version: 1, language_id: "ruby",
+                                   text: "module ES\n  extend self\n  def es_a; end\nend\n")
+      )
+      workspace_index = Ovallsp::WorkspaceIndex.new
+      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      workspace_index.replace_file(summary)
+      hierarchy_index.replace_file(summary)
+
+      names = hierarchy_index.ancestors("::ES", singleton: true).map(&:name)
+
+      expect(names).to eq(names.uniq)
+      expect(names.first).to eq("::ES")
+    end
+
     it "records the module extending itself, and leaves the methods where they are" do
       expect(declared(summary, :instance_method)).to eq([["es_a", :public]])
       expect(declared(summary, :singleton_method)).to be_empty
@@ -147,6 +253,43 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a module's class-level calls" d
   before do
     index("module PlainMod\n  def self.known; end\nend\n", uri: "file:///pm.rb")
     index("class PlainClass\n  def self.known; end\nend\n", uri: "file:///pc.rb")
+  end
+
+  # **The mixin contract, which is what makes the module short-circuit a
+  # singleton-only rule.** `self` inside a module's instance method is an
+  # object of the *including* class, whose chain does reach `Kernel` and
+  # `BasicObject` -- so the module's own two-entry chain says nothing
+  # about it. Judging the instance side by it reported `Kernel#raise` and
+  # `Kernel#puts` as missing on shipped Rails source: 21 -> 249
+  # `unknown-method` findings over 172 files of actioncable, activejob and
+  # activemodel.
+  #
+  #   $ ruby -e '
+  #   module Helper
+  #     def helped(x)
+  #       raise ArgumentError, "no" unless x
+  #       provided_by_includer
+  #     end
+  #   end
+  #   class User
+  #     include Helper
+  #     def provided_by_includer = :ok
+  #   end
+  #   p User.new.helped("ok")   # => :ok
+  #   '
+  #   # ruby 3.4.10
+  it "says nothing about a module's instance method calling Kernel or the includer" do
+    document = index(<<~RUBY_SRC, uri: "file:///helper.rb")
+      module Helper
+        def helped(x)
+          raise ArgumentError, "no" unless x
+          puts x
+          provided_by_includer
+        end
+      end
+    RUBY_SRC
+
+    expect(unknown_methods(document)).to be_empty
   end
 
   it "reports a typo on a module exactly as it does on a class" do

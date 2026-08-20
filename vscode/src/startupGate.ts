@@ -23,7 +23,7 @@ export interface PreStartProbe {
 export interface PreStartVerdict {
   /** Whether `client.start()` may be called. */
   readonly start: boolean;
-  /** Always written to the output channel. */
+  /** Written to the output channel when the verdict refuses. */
   readonly logLine: string;
   /** Shown to the user, or undefined when there is nothing to say. */
   readonly notification?: string;
@@ -44,11 +44,17 @@ export function decidePreStart(probe: PreStartProbe, folderName: string): PreSta
     logLine: `OvalLSP: not starting the Core Server for ${folderName} -- ${reason}`,
     // "did not start" rather than "is incompatible": by the time this is
     // shown, the probe has established that the selected Ruby can load
-    // neither the bundled payload nor its own `prism`/`rbs`, so the Core
-    // would fail on `require`. Saying it did not start is both the true
-    // thing and the actionable one.
+    // neither the bundled payload nor its own `prism`/`rbs` -- including
+    // on the path where the version query failed, which 0.2.10 made ask
+    // the dependency probe before it becomes fatal. So the Core would
+    // fail on `require`. Saying it did not start is both the true thing
+    // and the actionable one.
+    //
+    // The reason is included: this used to name only the bundled
+    // dependencies, which is categorically wrong for the query-failure
+    // path and left the user nothing to act on.
     notification:
-      `OvalLSP: the Core Server for ${folderName} did not start -- the Ruby interpreter selected for it ` +
-      "cannot load this VSIX's bundled native dependencies. See the OvalLSP output channel for details."
+      `OvalLSP: the Core Server for ${folderName} did not start -- ${reason} ` +
+      'See the OvalLSP output channel for details.'
   };
 }

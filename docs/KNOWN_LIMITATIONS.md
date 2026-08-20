@@ -521,6 +521,29 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
+## A `private` or `module_function` written inside a block
+
+If you write one inside an ordinary block — `1.times { module_function }`,
+`[1].each { private }` — this extension does not apply it to the methods
+that follow, though Ruby does. Written directly in the class or module
+body, both work. <!-- documents: 024.111 -->
+
+## A class name your enclosing class inherits
+
+A bare class name is resolved through the namespaces you are writing
+inside, but not through the ancestors of the class you are writing in. So
+`Config` inside `class Runner < Zbase`, where `Zbase::Config` exists, is
+answered by a top-level `Config` instead — the working call is reported
+as an unknown method and the call that would raise is not. Writing the
+namespace out restores it. <!-- documents: 024.112 -->
+
+## Reopening a file without closing it
+
+If your editor sends a second `didOpen` for a file it never closed, and
+the new buffer's version numbering starts below the old one's, diagnostics
+for that file stop updating until the numbering passes where it left off.
+VS Code sends `didClose` first, so this needs an unusual client. <!-- documents: 024.113 -->
+
 ## A macro this extension cannot read is reported as a missing method
 
 If a class or module body calls a macro that comes from a gem, a

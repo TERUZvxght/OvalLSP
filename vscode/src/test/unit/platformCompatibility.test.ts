@@ -225,6 +225,45 @@ describe('checkBundledCoreCompatibility', () => {
 
     assert.strictEqual(result.compatible, true);
   });
+  // `024.55`'s refusal made this verdict fatal, and the version-query
+  // branch reached it without ever asking the question the Core actually
+  // cares about. The identity query's `execFile` has a 5 s timeout
+  // against the dependency probe's 15 s, and on darwin it runs
+  // concurrently with `queryRubyConfigPaths` -- so a version-manager shim
+  // on a cold cache can exceed it. Before 0.2.10 that produced a toast
+  // and a working session; after it, no language server at all.
+  describe('when the version query itself fails', () => {
+    const failingIdentity = async () => {
+      throw new Error('timed out after 5000 ms');
+    };
+
+    it('is compatible when that Ruby can load prism and rbs of its own', async () => {
+      writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
+
+      const result = await checkBundledCoreCompatibility(
+        extensionRoot, 'slow-ruby', failingIdentity, undefined, async () => true
+      );
+
+      assert.strictEqual(result.compatible, true);
+      assert.ok(result.note?.includes('prism and rbs of its own'));
+    });
+
+    // The distinguishing half: it is still a refusal when the interpreter
+    // cannot load them either. An implementation that made the branch
+    // unconditionally compatible would pass the example above and fail
+    // this one.
+    it('refuses when it cannot load them either, and says both things', async () => {
+      writeManifest({ rubyEngine: 'ruby', rubyVersionMajorMinor: '3.4', rubyPlatform: 'arm64-darwin25' });
+
+      const result = await checkBundledCoreCompatibility(
+        extensionRoot, 'slow-ruby', failingIdentity, undefined, async () => false
+      );
+
+      assert.strictEqual(result.compatible, false);
+      assert.ok(result.reason?.includes('could not determine the version'));
+      assert.ok(result.reason?.includes('could not load prism and rbs of its own either'));
+    });
+  });
 });
 
 describe('queryRubyConfigPaths', () => {
@@ -320,5 +359,6 @@ describe('spawnCwd', () => {
   it('answers undefined when there was no cwd to begin with', () => {
     assert.strictEqual(spawnCwd(path.join(path.sep, 'usr', 'bin', 'ruby')), undefined);
   });
+
 });
 

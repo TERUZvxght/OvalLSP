@@ -187,6 +187,15 @@ module Ovallsp
           # next request unanswered. Only a client can send one, but a
           # reconnect or one stray byte on stdin was enough.
           @logger.error("skipping a malformed message: #{e.message}")
+          # Drained here too. A malformed frame queued behind a
+          # `didChange` meant `input_ready?` was true when that change was
+          # dispatched, so nothing drained there either -- and `next`
+          # returns to a blocking read. The pending analysis was then lost
+          # for the rest of the session, leaving the panel describing text
+          # the developer had already replaced. 0.2.6's own note on this
+          # rescue is that "a reconnect or one stray byte on stdin was
+          # enough" to reach it.
+          drain_settled_analyses
           next
         end
 
@@ -202,14 +211,14 @@ module Ovallsp
         # a reader that cannot answer it says no -- which analyses
         # immediately, as every release before this one did.
         #
-        # Draining before the break matters as much as draining in the
-        # loop: the last edit of a session is the one whose answer the
-        # developer is looking at.
+        # The last edit of a session is the one whose answer the developer
+        # is looking at, and it is the call *after* the loop that
+        # guarantees it -- `break` runs straight into it, with no rescue
+        # or ensure between. A second drain before the break was written
+        # here too, with a comment claiming it mattered; nothing could
+        # fail on removing it.
         drain_settled_analyses unless @reader.input_ready?
-        if result == :exit
-          drain_settled_analyses
-          break
-        end
+        break if result == :exit
       end
 
       drain_settled_analyses
@@ -492,10 +501,16 @@ module Ovallsp
     end
 
     # Task 015: computed and published synchronously, in the same dispatch
-    # turn that already owns `document`'s current version -- there's no
-    # background/async gap for a result to go stale in, so "stale document
-    # versionのdiagnosticをpublishしない" holds by construction rather than
-    # needing its own generation check.
+    # turn that already owns `document`'s current version.
+    #
+    # **That is no longer how it runs.** Since 0.2.10 a `didChange`
+    # records the uri and `#drain_settled_analyses` performs the analysis
+    # once nothing else is waiting to be read, re-reading the store when
+    # it does (037's C9). What replaced the by-construction argument is
+    # the funnel: `#publish_findings` takes the document the findings were
+    # computed from and compares its `buffer_id`, so an answer cannot be
+    # attributed to a buffer it was not computed from however long the
+    # gap is.
     #
     # This is the *buffer* path. Until 0.2.0 it was the only one, on the
     # reasoning that an unopened file has no client-side buffer to attach

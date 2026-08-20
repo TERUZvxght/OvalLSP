@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**109 entries below** <!-- measured: register-entries = 109 -->,
+**112 entries below** <!-- measured: register-entries = 112 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -254,6 +254,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | open | 0.2.11 | Specs whose fixture cannot distinguish the behaviour they pin |
 | [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | open | 0.2.11 | The macro is reported, and what it might define is not |
+| [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.11 | A visibility section written inside a block does not reach the body … |
+| [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | open | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
+| [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | open | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5584,6 +5587,107 @@ the surface is evidence about that owner's *class* side as well —
 whatever provides the macro is exactly what could not be read. Recording
 that is a one-line change with a corpus measurement attached, and it
 belongs with a measurement rather than inside the release that found it.
+
+## 024.111 A visibility section written inside a block does not reach the body it runs in
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.11
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`#visit_block_node`)
+
+```ruby
+module BMF
+  1.times { module_function }
+  def y; end
+end
+```
+
+Ruby (3.4.10) gives `BMF.respond_to?(:y) == true` and
+`BMF.private_instance_methods(false) == [:y]`; the engine records `y` as
+a public instance method and no module method, and reports `BMF.y` as
+unknown. The same for a plain `private`:
+`class BV; [1].each { private }; def x; end; end` leaves
+`private_instance_methods(false) == [:x]` in Ruby and `[["x", :public]]`
+here.
+
+`#visit_block_node` gives a block its own cref frame, and the reason is
+sound for the case it was written for: `included do ... end` and
+`class_eval do ... end` run their `private` against a different module,
+and without the frame it leaked into the enclosing class and silently
+made every later method private — which dropped real controller actions.
+
+But an *ordinary* iterator block shares self with its body, so the frame
+is wrong there. Distinguishing the two needs to know what the call does
+with the block, which is `#block_self_is_module`'s question, and
+extending it is a change to a rule three releases have adjusted.
+
+**Not fixed in 0.2.10** because the release was already in a review loop
+and this is the shape `CLAUDE.md` says to record rather than add to a
+change set under review. Found by the `attack` round.
+
+## 024.112 A bare constant is not looked up through the enclosing class's ancestors
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.11
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`#qualify_constant`),
+`core/lib/ovallsp/workspace_index.rb` (`#nested_type_name`)
+
+Ruby resolves a bare constant by `Module.nesting`, **then the ancestors
+of the innermost cref**, then Object. 0.2.10 implemented the first step
+and stops:
+
+```ruby
+class Config; def top_only; end; end
+class Zbase; class Config; def zbase_only; end; end; end
+module App
+  class Runner < Zbase
+    def go  = Config.new.zbase_only   # Ruby: Zbase::Config, works
+    def bad = Config.new.top_only     # Ruby: NoMethodError
+  end
+end
+```
+
+Both directions inverted, exactly as `024.103` describes: the working
+call is reported, the raising call is silent. Pre-existing — the same on
+`main` — and not a regression from `024.103`'s fix, which correctly
+answers nil when the nesting decides nothing and leaves the old heuristic
+to answer.
+
+Also here: `#push_nesting` concatenates written paths, so
+`module App; class ::Other::Runner` records the frame
+`App::Other::Runner` where Ruby's is `Other::Runner`. The compact
+`class App::Runner` form is handled correctly.
+
+## 024.113 The publish funnel's memory is keyed by uri, not by buffer
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.11
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`@last_published_version`)
+
+0.2.10 made `#publish_findings` take the document and compare its
+`buffer_id`, and left the memory it compares against keyed by uri. A
+client that reopens a file **without closing it** — `didOpen v10`, then
+`didOpen v1` for a new buffer, then `didChange v2` — publishes `[10]` and
+refuses every edit until the new buffer's numbering passes 10.
+
+Pre-existing and unchanged by this release (`#clear_findings` covers the
+close path, which is what a conforming client sends), but it is the same
+category error the release says carrying the buffer eliminates, and it is
+the last place a version integer is compared across buffers.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

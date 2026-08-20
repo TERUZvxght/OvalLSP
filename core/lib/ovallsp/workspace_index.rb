@@ -265,21 +265,8 @@ module Ovallsp
     # namespaces) resolves to the alphabetically first qualified name --
     # arbitrary, but a property of the workspace rather than of which file
     # was edited last, which is what it was until 0.1.13 (024.15).
-    # `nesting` is Ruby's `Module.nesting` at the point the name was
-    # written, innermost first, and it is consulted before anything else
-    # for a *bare* name -- which is what Ruby does and what nothing here
-    # did (`024.103`). Without it, `Config` inside `module App` answered
-    # with whichever `Config` sorted first, so `App::Config#app_only` was
-    # reported missing on working code while the top-level `Config`'s
-    # `top_only` -- the call that really raises there -- was silent.
-    #
-    # This is not `024.47`'s rolled-back shape. That moved a *shadowing
-    # test* into resolution, which cannot tell a written name from an
-    # inferred one and broke every bare name written from inside its own
-    # namespace. This is the opposite: it is the lookup rule itself, and
-    # a caller with no nesting to give gets exactly the previous answer.
-    def resolve_type_name(name, nesting: [])
-      @mutex.synchronize { resolve_type_symbol_locked(name, nesting: nesting)&.name }
+    def resolve_type_name(name)
+      @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
     end
 
     # The name `nesting` makes this bare name mean, or **nil when the
@@ -294,6 +281,18 @@ module Ovallsp
     #
     # Both readers go through `#nesting_match`, so the lookup rule itself
     # is in one place.
+    # `nesting` is Ruby's `Module.nesting` at the point the name was
+    # written, innermost first.
+    #
+    # This is not `024.47`'s rolled-back shape. That moved a *shadowing
+    # test* into `#resolve_type_name`, which cannot tell a written name
+    # from an inferred one and broke every bare name written from inside
+    # its own namespace. This is the lookup rule itself, asked as its own
+    # question by the one caller that has a nesting to give -- and 0.2.10
+    # shipped a `nesting:` parameter on `#resolve_type_name` as well,
+    # which no caller ever passed. An unreachable branch is a defect in
+    # its own right (CLAUDE.md), and it was carrying the comment that
+    # argued it was not 024.47. Removed; this is where the rule lives.
     def nested_type_name(name, nesting: [])
       raw = name.to_s
       return nil if raw.start_with?("::") || nesting.empty?
@@ -577,7 +576,7 @@ module Ovallsp
       [candidates, Index::SymbolId.qualify_owner(raw)]
     end
 
-    def resolve_type_symbol_locked(name, nesting: [])
+    def resolve_type_symbol_locked(name)
       candidates, qualified = type_candidates_locked(name)
       return nil if candidates.empty?
 
@@ -603,31 +602,20 @@ module Ovallsp
       # diagnostics already said `File::Stat` (024.78).
       return exact || candidates.find { |sid| namespace_suffix?(sid.name, raw) } if raw.include?("::")
 
-      # Ruby's own rule, before any heuristic: walk the nesting outward
-      # and take the first frame that declares this name. `module App;
-      # class Runner; Config` looks in `App::Runner`, then `App`, then
-      # falls through -- which is what the interpreter does, and the
-      # reason it never picks an unrelated namespace's class.
-      from_nesting = nesting_match(candidates, raw, nesting)
-      return from_nesting if from_nesting
-
       # `.first` is safe here because `candidates` came from
       # `ordered_symbol_ids`, not from the Set directly. Until 0.1.13 it
       # was index order, so an ambiguous bare name resolved to a different
       # class whenever either file was re-indexed (024.15).
       #
-      # Reached only when the nesting declares nothing of this name --
-      # the top-level case, and the one where the workspace genuinely
-      # cannot tell. 0.2.1 applied a *shadowing test* here instead and
-      # broke every bare name written from inside its own namespace; it
-      # was rolled back (024.47), and this is not that.
+      # Bare names keep the heuristic deliberately: 0.2.1 applied a
+      # shadowing rule to them here and broke every bare name written from
+      # inside its own namespace, and was rolled back (024.47). Ruby's
+      # actual lookup rule is asked as its own question by
+      # `#nested_type_name`, which the caller with a nesting uses.
       exact || candidates.first
     end
 
-    # The innermost nesting frame that declares `raw`, or nil. Frames are
-    # already fully qualified (`ParserService` records `Module.nesting`
-    # itself rather than splitting an owner string, which cannot tell
-    # `module App; class Runner` from a compact `class App::Runner`).
+    # The innermost nesting frame that declares `raw`, or nil.
     def nesting_match(candidates, raw, nesting)
       Array(nesting).each do |frame|
         wanted = Index::SymbolId.qualify_owner("#{frame}::#{raw}")

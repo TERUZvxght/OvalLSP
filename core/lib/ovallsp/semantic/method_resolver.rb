@@ -176,9 +176,7 @@ module Ovallsp
         # all: `PlainClass.nope_y` was reported and `PlainMod.nope_x` was
         # not, on a module whose `def self.` methods this engine knows
         # (`024.106`). Ruby raises `NoMethodError` for both.
-        unless rooted_instance_chain?(type, instance_entries)
-          return :ancestor_not_identified
-        end
+        return :ancestor_not_identified unless rooted_instance_chain?(type, instance_entries, singleton)
         # A singleton lookup depends on the instance chain too: `include`
         # puts a module there, and `included`/`extended` hooks are how a
         # module adds class methods.
@@ -223,14 +221,27 @@ module Ovallsp
         !signatures.ancestors(Index::SymbolId.qualify_owner(entry.name)).empty?
       end
 
-      # Whether the instance chain ends where Ruby ends it. For a class
-      # that is `::BasicObject`; for a module the chain is the module and
-      # whatever it includes, and the workspace declaring it a module is
-      # what says the chain is complete rather than truncated.
-      def rooted_instance_chain?(type, instance_entries)
+      # Whether the chain ends where Ruby ends it. For a class that is
+      # `::BasicObject`.
+      #
+      # **A module is the exception only for a class-level lookup.**
+      # `PlainMod.ancestors` is `[PlainMod]` and that chain is complete,
+      # which is what lets a typo in `PlainMod.nope` be reported. It says
+      # nothing at all about `self` inside one of the module's *instance*
+      # methods: that self is an object of whatever class included the
+      # module, and its chain reaches `Object`, `Kernel` and
+      # `BasicObject` -- along with every method the includer promises.
+      #
+      # Judging the instance side by the module's own chain reported
+      # `Kernel#raise` and `Kernel#puts` as missing inside an ordinary
+      # mixin. Measured over 172 files of actioncable, activejob and
+      # activemodel with `unresolved-constant` identical at 593 as the
+      # control: `unknown-method` went from 21 to 249, and all 228 were
+      # false. Found by two independent review rounds at once.
+      def rooted_instance_chain?(type, instance_entries, singleton)
         return true if instance_entries.any? { |e| Index::SymbolId.qualify_owner(e.name) == "::BasicObject" }
 
-        @workspace_index.type_kind(type.name) == :module
+        singleton && @workspace_index.type_kind(type.name) == :module
       end
 
       def declares_method_missing?(owner)

@@ -240,11 +240,33 @@ export async function checkBundledCoreCompatibility(
   try {
     identity = await queryIdentity(rubyCommand, cwd);
   } catch (err) {
+    // **Not fatal on its own, since 0.2.10.** This branch is reached when
+    // the identity query merely *fails* -- its `execFile` has a 5 s
+    // timeout, against 15 s for the dependency probe, and on darwin it
+    // runs concurrently with `queryRubyConfigPaths`, so a version-manager
+    // shim on a cold cache can exceed it. Before this release the verdict
+    // only produced a toast and the session worked; now it decides
+    // whether to start at all, and a 5-second hiccup must not mean no
+    // language server.
+    //
+    // What the Core actually needs is `prism` and `rbs`. Ask, exactly as
+    // the payload-mismatch path below does, and only refuse when that
+    // also fails.
+    if (await probeDependencies(rubyCommand, cwd)) {
+      return {
+        compatible: true,
+        note:
+          `Could not determine the version of the Ruby interpreter "${rubyCommand}" (${err}), so the bundled ` +
+          'native dependencies could not be matched against it. That Ruby has prism and rbs of its own, which ' +
+          'is what the Core needs, so OvalLSP is running against those.'
+      };
+    }
+
     return {
       compatible: false,
       reason:
-        `could not determine the version of the Ruby interpreter "${rubyCommand}" (${err}) -- ` +
-        'cannot verify it is compatible with the bundled native dependencies.'
+        `could not determine the version of the Ruby interpreter "${rubyCommand}" (${err}), and it could not ` +
+        'load prism and rbs of its own either.'
     };
   }
 

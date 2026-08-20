@@ -160,7 +160,7 @@ module Ovallsp
       def ancestors(type_name, singleton: false)
         @mutex.synchronize do
           entries = compute_ancestors_locked(type_name, singleton: singleton, visited: Set.new)
-          singleton ? entries + singleton_tail_for(type_name, entries) : entries
+          dedupe_named(singleton ? entries + singleton_tail_for(type_name, entries) : entries)
         end
       end
 
@@ -175,6 +175,22 @@ module Ovallsp
       end
 
       private
+
+      # Ruby lists a module once in an ancestor chain, however many ways it
+      # got there. This index could list one twice: `module ES; extend
+      # self` makes ES both the head of its own singleton chain and the
+      # target of its own `extend`, and the chain came out
+      # `["::ES", "::ES", "Module", ...]`. Keeping the first occurrence is
+      # what Ruby does -- the earliest position is the one that decides
+      # lookup.
+      #
+      # Nameless entries are never merged: each is a *different* thing
+      # this index could not identify, and collapsing them would say the
+      # chain is shorter than the number of unknowns in it.
+      def dedupe_named(entries)
+        seen = Set.new
+        entries.select { |entry| entry.name.nil? || seen.add?(entry.name) }
+      end
 
       # Plain resolution. 0.2.1 applied `Index::TypeNameResolution` here so
       # that a literal's `String` would not be answered by a workspace
@@ -262,6 +278,7 @@ module Ovallsp
         entries = [AncestorEntry.new(name: canonical, kind: kind_of(canonical), origin: origin_for_self, location: nil)]
 
         @extends_by_owner.fetch(canonical, []).reverse_each { |fact| entries.concat(ancestor_entries_for(fact, visited)) }
+        entries.concat(concern_class_method_entries(canonical, visited))
 
         superclass_fact = @superclass_by_owner[canonical]
         if superclass_fact && unresolvable_superclass?(superclass_fact.target)
@@ -278,6 +295,44 @@ module Ovallsp
         end
 
         entries
+      end
+
+      # `include M` where `M::ClassMethods` exists puts that module on the
+      # *class-level* chain -- which is `ActiveSupport::Concern`'s whole
+      # contract, and what makes recording a `class_methods do` block as
+      # `M::ClassMethods` mean anything:
+      #
+      #   $ ruby -e '
+      #   gem "activesupport"; require "active_support"
+      #   require "active_support/concern"
+      #   module Taggable
+      #     extend ActiveSupport::Concern
+      #     class_methods do
+      #       def cm_public; end
+      #     end
+      #   end
+      #   class Article; include Taggable; end
+      #   p [Article.respond_to?(:cm_public), Article.new.respond_to?(:cm_public)]
+      #   '
+      #   # => [true, false]
+      #   # ruby 3.4.10, activesupport 8.1.3.1
+      #
+      # Keyed on the *declaration existing* rather than on spotting
+      # `extend ActiveSupport::Concern`: a module that declares a
+      # `ClassMethods` and is included without being a Concern adds
+      # nothing at runtime, so this can be wrong in the direction of
+      # offering a name that is not there. That is the same trade the
+      # rest of this index makes for `include`/`extend`, and the
+      # alternative -- requiring the `extend ActiveSupport::Concern` line
+      # -- misses every concern written before Rails 4 and every project
+      # that re-exports one. `024.104`.
+      def concern_class_method_entries(canonical, visited)
+        @includes_by_owner.fetch(canonical, []).flat_map do |fact|
+          class_methods = "#{Index::SymbolId.qualify_owner(canonical_name(fact.target))}::ClassMethods"
+          next [] unless kind_of(class_methods)
+
+          compute_ancestors_locked(class_methods, singleton: false, visited: visited, origin_for_self: :extend)
+        end
       end
 
       # What the *receiver* is, which is what its singleton chain ends in:

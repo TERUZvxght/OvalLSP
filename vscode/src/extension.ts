@@ -289,11 +289,16 @@ function startClientForFolder(
   // reported as a clear message in this extension's own OutputChannel
   // and an error notification, rather than only surfacing however Core
   // happens to degrade (working via system gems, or failing to load
-  // prism/rbs at all) after the fact. Still starts Core regardless of the
-  // outcome -- Core's own check is what actually decides whether the
-  // vendor payload gets used, and a Ruby with its own separately-installed
-  // prism/rbs is a legitimate, fully-working combination this check has
-  // no way to rule out in advance.
+  // prism/rbs at all) after the fact. **Since 0.2.10 it also stops**: a
+  // verdict of `compatible: false` now means the Core is not started
+  // (`024.55`, and ADR-0005's own "不一致ならCore Serverを起動せず").
+  // This comment said the opposite until the review round that caught it.
+  //
+  // A Ruby with its own separately-installed prism/rbs is still a
+  // legitimate, fully-working combination -- the probe asks about exactly
+  // that before refusing, on both the payload-mismatch path and the
+  // version-query-failure path, so the refusal means the Core would fail
+  // on `require`.
   // Task 023.8: queried in parallel with the compatibility probe below,
   // and only on darwin (this Preview's only target; Linux/Windows use
   // their own different dynamic-linker environment variables and shim
@@ -333,7 +338,18 @@ function startClientForFolder(
         if (verdict.notification) {
           void vscode.window.showErrorMessage(verdict.notification);
         }
+        // The same teardown the `client.start()` rejection handler does.
+        // Without it this was the one exit from this function that left
+        // state behind: `clients` holding a client that was never
+        // started -- which `activate` and `shouldStartAddedFolder` both
+        // read -- and the folder's FileSystemWatcher never disposed.
         lifecycle.markStopped(key, generation);
+        if (lifecycle.isCurrentGeneration(key, generation) && clients.get(key) === client) {
+          clients.delete(key);
+          watchers.get(key)?.dispose();
+          watchers.delete(key);
+          versionDiagnostics.delete(key);
+        }
         return;
       }
       // `compatibility.note` is deliberately *not* written here. The

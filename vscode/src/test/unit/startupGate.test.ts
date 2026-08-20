@@ -11,8 +11,9 @@ import { decidePreStart } from '../../startupGate';
 // Only the *pre-start* half is decided here, which is the half that can
 // honestly claim "before any feature request". By the time this verdict
 // exists the probe has already established that the selected Ruby can
-// load neither the bundled payload nor its own `prism`/`rbs`, so the Core
-// would fail on `require` anyway -- refusing costs nothing. The
+// load neither the bundled payload nor its own `prism`/`rbs` -- on every
+// path, including the one where the version query merely timed out, which
+// 0.2.10's review round found could refuse a working interpreter. The
 // post-start handshake is a different decision with a different failure
 // mode and is still open (`024.55`'s remaining half).
 describe('pre-start compatibility gate', () => {
@@ -25,6 +26,10 @@ describe('pre-start compatibility gate', () => {
     // The point of the change: the user is told it did not start, not
     // that something was wrong while it starts anyway.
     assert.ok(verdict.notification?.includes('did not start'));
+    // The reason travels into the notification: it used to name only the
+    // bundled dependencies, which is the wrong reason on the path where
+    // the version query failed.
+    assert.ok(verdict.notification?.includes('prism.bundle is for ruby 3.3'));
   });
 
   it('starts when the probe is satisfied, and says nothing', () => {

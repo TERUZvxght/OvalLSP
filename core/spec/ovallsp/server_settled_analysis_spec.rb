@@ -78,6 +78,56 @@ RSpec.describe "Ovallsp::Server analysis follows the settled state (037 C9)" do
     expect(versions.compact).to eq([8])
   end
 
+  # A malformed frame arriving behind the edit, with the client still
+  # connected -- which is the situation, because a client that has gone
+  # away also ends the loop and the post-loop drain covers that.
+  # `Server#run` rescued the `ProtocolError` and went straight back to a
+  # blocking read, so the analysis the edit asked for was never drained;
+  # and because the bad bytes were already in the pipe, `input_ready?` was
+  # true when the edit was dispatched, so nothing drained there either.
+  # The panel then described text the developer had already replaced,
+  # until they typed again.
+  #
+  # Run on a thread with the pipe held open, because "the server is still
+  # waiting for more input" is the whole condition.
+  it "still analyses the settled state when a malformed frame follows the edit" do
+    in_read, in_write = ::IO.pipe
+    out_read, out_write = ::IO.pipe
+    server = Ovallsp::Server.new(input: in_read, output: out_write, logger: logger)
+    thread = Thread.new { server.run }
+
+    [
+      { jsonrpc: "2.0", id: 1, method: "initialize", params: { capabilities: {} } },
+      { jsonrpc: "2.0", method: "initialized", params: {} },
+      { jsonrpc: "2.0", method: "textDocument/didOpen",
+        params: { textDocument: { uri: uri, languageId: "ruby", version: 1, text: "class A\nend\n" } } },
+      { jsonrpc: "2.0", method: "textDocument/didChange",
+        params: { textDocument: { uri: uri, version: 2 },
+                  contentChanges: [{ text: "class A\n  def settled; end\nend\n" }] } }
+    ].each { |m| in_write.write(frame(m)) }
+    in_write.write("Content-Length: -5\r\n\r\n")
+    in_write.flush
+
+    versions = []
+    deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 10
+    reader = Ovallsp::IO::FramedReader.new(out_read)
+    # `wait_readable` before every read: without the drain there is simply
+    # nothing more to read, and a blocking `read_message` would hang the
+    # example rather than fail it. A test that hangs is not a test.
+    until versions.include?(2) || Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
+      break unless out_read.wait_readable(1)
+
+      message = reader.read_message
+      versions << message[:params][:version] if message[:method] == "textDocument/publishDiagnostics"
+    end
+
+    expect(versions).to include(2)
+  ensure
+    in_write&.close
+    thread&.join(5)
+    [in_read, out_read, out_write].each { |io| io&.close unless io.nil? || io.closed? }
+  end
+
   # The control, and the property that matters more than the coalescing:
   # an edit that settles is always analysed. A burst that stops must not
   # leave the panel describing the state before it.

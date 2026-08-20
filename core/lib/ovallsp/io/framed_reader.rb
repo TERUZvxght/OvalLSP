@@ -36,7 +36,11 @@ module Ovallsp
         return false unless @input.respond_to?(:wait_readable)
 
         !@input.wait_readable(0).nil? && !@input.eof?
-      rescue ::IOError
+      rescue ::IOError, ::SystemCallError
+        # `SystemCallError` covers every `Errno::*`: a closed or reset
+        # pipe raises one of those rather than `IOError`, and letting it
+        # out of here ends `Server#run` with a raw backtrace -- the exact
+        # failure shape 0.2.6 fixed for frames and this method reopened.
         false
       end
 
