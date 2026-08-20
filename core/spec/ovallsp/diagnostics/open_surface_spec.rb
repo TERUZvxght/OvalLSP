@@ -81,25 +81,31 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
   # `.attr_atomic`, so the call itself stays reportable. Opening both
   # would make every unreadable macro silence its own report, which is
   # behaviour 024.23 established deliberately.
-  # **Reversed in 0.2.11 (`024.110`).** A bare call in a class body that
-  # this engine does not recognise is evidence it could not read the
-  # body -- and it cannot tell a mistyped macro from a gem's DSL, so
-  # reporting one means reporting both. Measured over actioncable,
-  # activejob, activemodel and activesupport with `unresolved-constant`
-  # identical at 1,099 as the control: `unknown-method` **84 -> 25**,
-  # 59 removed and 0 added, and every one sampled confirmed against the
-  # interpreter as a false report (`SymbolSerializer.instance` from
-  # `include Singleton`, `Hash.ruby2_keywords_hash`,
-  # `ActionCable::Server::Base.config`). What is lost is the genuinely
-  # mistyped macro, which this engine was never able to distinguish.
-  it "says nothing about the unreadable macro call itself" do
+  # **0.2.11 reversed this and rolled the reversal back inside the same
+  # release.** The reversal marked the owner's *class* surface open as
+  # well, which is right for the class in front of you and catastrophic
+  # for `class Module`, `class Object` or `class Kernel` -- they are in
+  # every class's singleton chain, so one bare `alias_method` in a
+  # `core_ext` file switched off `Foo.bar` checking for the whole
+  # workspace. A `drive` round measured it over 1,659 files of 16 gems:
+  # constant-receiver `unknown-method` findings **117 -> 0**, and among
+  # the 148 removals a real latent `NoMethodError`
+  # (`ActiveRecord::Promise.wrap`). The measurement that justified the
+  # reversal had the same contamination -- its corpus contained
+  # activesupport's `core_ext/module/attr_internal.rb`, a bare
+  # `alias_method` in `class Module` -- and the sampling missed it.
+  #
+  # So the macro call itself is reported again, and `024.110` is open
+  # with what a real fix has to distinguish: "I could not read *this
+  # class's* body" from "I could not read `Module`'s".
+  it "still reports the unreadable macro call itself" do
     document = index(<<~RUBY_SRC)
       class Counter
         attr_atomic :value
       end
     RUBY_SRC
 
-    expect(unknown_methods(document)).to be_empty
+    expect(unknown_methods(document)).to eq(["attr_atomic"])
   end
 
   # The control, and the reason this is not "stop reporting": an ordinary
@@ -377,8 +383,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
         sidekiq_options queue: "low"
       end
     RUBY_SRC
-
-    expect(unknown_methods(document)).to be_empty
+    expect(unknown_methods(document)).to eq(["sidekiq_options"])
   end
 
   # The message names the *branch* when a Union has one reportable
@@ -471,7 +476,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
     # nothing checked a module's class-level calls at all, which
     # `024.106` fixed. That asymmetry (the engine silences what a macro
     # might define and reports the macro) is `024.110`, not this example's
-    # subject.
+    # subject -- 0.2.11 reversed it and rolled the reversal back.
     expect(unknown_methods(document)).not_to include("thing")
   end
 

@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**116 entries below** <!-- measured: register-entries = 116 -->,
+**117 entries below** <!-- measured: register-entries = 117 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -253,7 +253,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | open | 0.2.11 | Specs whose fixture cannot distinguish the behaviour they pin |
-| [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | fixed | 0.2.11 | The macro is reported, and what it might define is not |
+| [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | open | 0.2.12 | The macro is reported, and what it might define is not |
 | [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.11 | A visibility section written inside a block does not reach the body … |
 | [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | fixed | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | fixed | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
@@ -261,6 +261,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | fixed | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
 | [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | fixed | 0.2.11 | `def self.method_missing` and `define_singleton_method` do not open … |
 | [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.12 | The two spellings of a class-body macro get opposite answers |
+| [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | open | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5614,11 +5615,10 @@ two are worth running together.
 ## 024.110 The macro is reported, and what it might define is not
 
 ```yaml
-status: fixed
+status: open
 kind: defect
 user-visible: yes
-target: 0.2.11
-released-in: 0.2.11
+target: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
@@ -5647,11 +5647,35 @@ existing example in `open_surface_spec.rb` was asserting `be_empty` over
 a document containing one, and was narrowed to the call it is actually
 about rather than left pinning an accident.
 
-**Direction:** a receiverless call in a class or module body that opens
-the surface is evidence about that owner's *class* side as well —
-whatever provides the macro is exactly what could not be read. Recording
-that is a one-line change with a corpus measurement attached, and it
-belongs with a measurement rather than inside the release that found it.
+**0.2.11 tried exactly that direction and rolled it back inside the same
+release.** "A receiverless call that opens the surface is evidence about
+that owner's class side as well" is one line, and it is right for the
+class in front of you. It is catastrophic for `class Module`,
+`class Object` or `class Kernel`, which are in *every* class's singleton
+chain: one bare `alias_method` in a `core_ext` file switched off
+`Foo.bar` checking for the whole workspace.
+
+Measured by a `drive` round over 1,659 files of 16 installed gems, with
+`unresolved-constant` identical at 4,556 as the control: `unknown-method`
+497 → 349, **and constant-receiver findings 117 → 0**. Among the 148
+removals was a real latent `NoMethodError` —
+`ActiveRecord::Promise.wrap` at `statement_cache.rb:158`, where the only
+`def self.wrap` in the tree belongs to `FutureResult`.
+
+**The measurement that justified the try had the same contamination.**
+It ran over four gems including activesupport, whose
+`core_ext/module/attr_internal.rb` contains a bare `alias_method` in
+`class Module` — so its headline `84 → 25` was the class-level check
+dying rather than a precision gain, and the sampling that called every
+removal a false report missed `Promise.wrap`. A four-line reproduction is
+in `unreadable_macro_spec.rb`.
+
+**What a real fix has to distinguish:** "I could not read *this class's*
+body" from "I could not read `Module`'s". An open surface on a universal
+ancestor is not evidence about a specific class, and the current
+representation — a flat `[owner, side]` set consulted through the whole
+chain — cannot express the difference. That is the change, and it is
+bigger than one line.
 
 ## 024.111 A visibility section written inside a block does not reach the body it runs in
 
@@ -5869,6 +5893,37 @@ Not fixed in 0.2.11 because the block guard is `024.111`'s territory —
 the frame exists so `included do ... end` cannot leak a `private` into
 the enclosing class — and the two want deciding together. Found by
 0.2.11's `attack` round.
+
+## 024.118 `WorkspaceIndex#stale?` compares versions across buffers
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.12
+```
+
+**Area:** `core/lib/ovallsp/workspace_index.rb` (`#stale?`),
+`core/lib/ovallsp/index/file_summary.rb`
+
+`024.113` made the publish funnel remember `[buffer_id, version]`, and
+the scenario its own commit message names still fails at the LSP
+boundary. Driven as `didOpen v20` → `didChange v21` → `didOpen v1`
+without a close → `didChange v2`, nothing at all is published for the new
+buffer.
+
+The reopen is dropped one layer earlier: `#stale?` compares
+`document_version` against what it already holds, `FileSummary` carries
+no `buffer_id`, and the comment there still asserts "an LSP client always
+sends increasing versions per document" — the premise `024.113` rejected
+one layer down.
+
+**Two places compared a version across buffers and one of them was
+fixed.** Found by 0.2.11's `drive` round, driving the real server, after
+the `attack` round had reported the funnel unbreakable — which it is, in
+isolation. The lesson is the one `024.100` keeps making: a fix belongs
+where the *question* is answered, and "which buffer is this" is answered
+in two places.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

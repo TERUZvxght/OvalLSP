@@ -90,10 +90,39 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
     end
   end
 
-  it "says nothing about the macro itself, having declined to enumerate what it defines" do
+  # **Rolled back inside 0.2.11, and this example records why.** The fix
+  # marked the owner's *class* surface open as well as its instance one.
+  # That is right for the class in front of you and catastrophic for
+  # `class Module`, `class Object` or `class Kernel`: they are in every
+  # class's singleton chain, so one bare `alias_method` in a `core_ext`
+  # file switched off `Foo.bar` checking for the whole workspace. A
+  # `drive` round measured it over 1,659 files of 16 gems --
+  # constant-receiver `unknown-method` findings **117 -> 0**, and among
+  # the removals a real latent `NoMethodError`
+  # (`ActiveRecord::Promise.wrap`).
+  #
+  # The measurement that justified the reversal had the same
+  # contamination: its corpus contained activesupport's
+  # `core_ext/module/attr_internal.rb`, a bare `alias_method` in
+  # `class Module`, and the sampling missed it. So the engine still
+  # contradicts itself about one fact -- `024.110`, open, with what a real
+  # fix has to distinguish written down.
+  it "still reports the macro itself, which is what 024.110 is about" do
     document = index("class HostC\n  attr_atomic :thing\nend\n")
 
-    expect(unknown_methods(document)).to be_empty
+    expect(unknown_methods(document)).to eq(["attr_atomic"])
+  end
+
+  # **The reproduction that decided it.** `Widget` has no macros and
+  # lives in another file; the only unreadable call in the workspace is
+  # in a reopened `Module`.
+  it "does not let a reopened core class silence an unrelated class's class-level call" do
+    index("class Module\n  def blank_slate?; false; end\n  alias_method :blank?, :blank_slate?\nend\n",
+          uri: "file:///core_ext.rb")
+    index("class Widget\n  def go; 1; end\nend\n", uri: "file:///widget.rb")
+    document = index("Widget.tpyo_class\n", uri: "file:///caller.rb")
+
+    expect(unknown_methods(document)).to eq(["tpyo_class"])
   end
 
   # The control that keeps this from being "stop reporting class-level

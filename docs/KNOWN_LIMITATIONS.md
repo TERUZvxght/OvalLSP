@@ -526,6 +526,25 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
+## A macro this extension cannot read is reported as a missing method
+
+If a class or module body calls a macro that comes from a gem, a
+`Concern`, or an `extend` this extension cannot follow — `attr_atomic
+:thing` — the *call itself* is reported as an unknown method. Whatever it
+defines is correctly left alone; the line that defines it is not.
+
+0.2.11 tried silencing it and took the attempt back out: the fix also
+silenced `Foo.bar` checking across the whole workspace whenever any file
+reopened `Module`, `Object` or `Kernel`. <!-- documents: 024.110 -->
+
+## Reopening a file without closing it
+
+If your editor sends a second `didOpen` for a file it never closed, and
+the new buffer's version numbering starts below the old one's,
+diagnostics for that file stop arriving until the numbering passes where
+it left off. VS Code sends `didClose` first, so this needs an unusual
+client. <!-- documents: 024.118 -->
+
 ## A macro called inside a block in a class body
 
 A macro this extension cannot read is left alone when you write it
