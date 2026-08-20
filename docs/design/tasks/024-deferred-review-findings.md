@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**117 entries below** <!-- measured: register-entries = 117 -->,
+**118 entries below** <!-- measured: register-entries = 118 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -262,6 +262,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.13 | `def self.method_missing` and `define_singleton_method` do not open … |
 | [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.13 | The two spellings of a class-body macro get opposite answers |
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | open | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
+| [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | open | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5950,6 +5951,43 @@ the `attack` round had reported the funnel unbreakable — which it is, in
 isolation. The lesson is the one `024.100` keeps making: a fix belongs
 where the *question* is answered, and "which buffer is this" is answered
 in two places.
+
+## 024.119 Twenty-eight spec files assemble their own analysis stack
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Not a defect a user meets. It is the reason an example can pass while
+  the shipped server answers differently, which is how several defects a
+  user does meet reached a release -- so it is recorded as a defect
+  rather than as a chore.
+target: 0.2.12
+```
+
+**Area:** the twenty-eight files named in
+`core/spec/meta/analysis_stack_spec.rb`'s `NOT_YET_MIGRATED`
+
+0.2.12 made `Ovallsp::AnalysisStack` the one place the analysis
+collaborators are wired together, and `Server#initialize` and
+`scripts/corpus_diagnostics.rb` now assemble nothing — those are the two
+places where measuring against the wrong program actually happened
+(`024.103`, `024.112`).
+
+The spec files still write the constructors out, and most are missing
+one. `open_surface_spec.rb`'s `LocalInferencer` has no `signatures:`, no
+`workspace_index:` and no `hierarchy_index:`; the server's has all three.
+An example there is therefore green against a program that is not the one
+that ships, which is `024.109`'s category arriving through the wiring
+instead of through a fixture — and invisible, because nothing compared
+the two lists until the check existed.
+
+Listed by name rather than by pattern so the set can only shrink, and a
+second example fails if a file leaves the list without leaving it in the
+tree. Migrating them is bookkeeping rather than design, and it is one
+commit rather than twenty-eight: a half-migrated suite runs two programs,
+which is the condition being removed.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

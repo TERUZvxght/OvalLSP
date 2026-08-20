@@ -77,37 +77,20 @@ signatures = Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace
 # `signatures:` the shadow rule of the day read -- so every number it
 # produced described a configuration no user runs. That is not a smaller
 # measurement, it is a measurement of something else, and it is why a
-# 55-report regression reached a release whose headline figure came from
-# here (024.48). The rule now lives in the diagnostics engine alone and
-# reads the `signatures:` handed to `SemanticContext` below; keep every
-# constructor here matching `Server#initialize`, whatever each currently
-# takes.
-hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
-method_resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
-                                                        hierarchy_index: hierarchy_index)
-# `workspace_index:` is not optional here even though the constructor
-# allows it: without it this harness builds a *different program* from the
-# one the server runs, and 0.2.10 caught that the hard way -- a fix for
-# `024.103` came out byte-identical on both sides of a 6,772-finding
-# comparison, because the collaborator the fix reads was never wired in.
-# Identical output is the signature of a measurement error, which is the
-# only reason it was looked at (CLAUDE.md).
-local_inferencer = Ovallsp::LocalInferencer.new(
-  model_registry: model_registry, method_resolver: method_resolver, signatures: signatures,
-  workspace_index: workspace_index, hierarchy_index: hierarchy_index,
-  method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(
-    workspace_index: workspace_index, method_resolver: method_resolver,
-    summary_store: Ovallsp::Semantic::MethodSummaryStore.new,
-    model_registry: model_registry, generated_method_index: Ovallsp::Semantic::GeneratedMethodIndex.new
-  ),
-  observation_store: Ovallsp::Observation::Store.new
-)
-context = Ovallsp::Diagnostics::SemanticContext.new(
-  workspace_index: workspace_index, hierarchy_index: hierarchy_index, method_resolver: method_resolver,
-  local_inferencer: local_inferencer, model_registry: model_registry,
-  route_registry: Ovallsp::Routes::RouteRegistry.new, signatures: signatures, generation: 1,
-  ancestry_registry: Ovallsp::Runtime::AncestryRegistry.new
-)
+# **Assembled, not wired here** (`042`'s D8). This script had the
+# constructors written out, under a comment asking the reader to "keep
+# every constructor here matching `Server#initialize`" -- and the reader
+# did not, twice. `024.103` came out byte-identical on both sides of a
+# 6,772-finding comparison because `LocalInferencer` had no
+# `workspace_index:`; `024.112` repeated it a release later, after that
+# comment had been added. A harness that assembles is a harness that can
+# differ from the server, so this one no longer assembles.
+stack = Ovallsp::AnalysisStack.build(signatures: signatures, workspace_index: workspace_index,
+                                     model_registry: model_registry)
+hierarchy_index = stack.hierarchy_index
+method_resolver = stack.method_resolver
+local_inferencer = stack.local_inferencer
+context = stack.semantic_context(route_registry: Ovallsp::Routes::RouteRegistry.new, generation: 1)
 
 parser = Ovallsp::ParserService.new
 documents = {}

@@ -329,6 +329,143 @@ never reach.
 
 ---
 
+## The execution plan: which release, what steps, what size
+
+Written down because the first exercise was not. `024.102` named eight
+classes and left "when" and "how big" to be inferred, and the inference
+that got made was "the mechanism shipped, so the class is done" — which
+the stocktake then measured as 0 of 5 and 1 of 9.
+
+**Sizes are counted, not estimated.** Each is the number of entries the
+class claims, the files its mechanism touches, and the measurement its
+acceptance needs. Where a number is a guess it says so.
+
+### The procedure every class runs under
+
+The same one, so a class cannot be "done differently":
+
+1. **Write the acceptance reproduction first**, as an example, and watch
+   it fail. It is a reproduction of a *named entry*, not a unit test of
+   the mechanism — the mechanism passing its own test is what `024.102`
+   mistook for progress.
+2. **Build the mechanism.** Where it introduces a value, list in its own
+   file which accessors must *not* exist, per this document's third rule.
+3. **Re-run every entry the class claims.** An entry that still
+   reproduces stays open, and the class does not close. An entry the
+   mechanism cannot reach is a miscategorisation: move it and say so.
+4. **Corpus, one at a time, in the foreground**, with a control category
+   and both sides printing their own revision. `026`'s list applies.
+5. **Hunk sweep**, tree otherwise untouched.
+6. **Three review rounds**, methods differing, per `CLAUDE.md`. Ship with
+   what is open recorded.
+
+### 0.2.12 — the apparatus, and two small mechanical classes
+
+**D8 — one assembler.** *Started.* `Ovallsp::AnalysisStack` exists,
+`Server#initialize` and `scripts/corpus_diagnostics.rb` assemble nothing,
+and `core/spec/meta/analysis_stack_spec.rb` fails if anything else does.
+**28 spec files still write the constructors out** and are listed by name
+in that spec as a debt that can only shrink; migrating them is the rest
+of D8. Entries: `024.55`, `024.64`, `024.69`, `024.75`. Size: 1 new lib
+file (~100 lines, done), 2 call sites (done), 28 spec files (mechanical,
+one commit each is wrong — one commit for all 28, since a half-migrated
+suite runs two programs).
+
+**D7 — a spec names the mutation it pins.** The check applies that
+mutation and requires the example to fail. Entries: `024.25`, `024.30`,
+`024.68`, `024.90`, `024.109`. Size: 1 meta spec plus a per-example
+annotation; the annotation is the work, and it is bounded by the number
+of examples that *claim* to pin a decision rather than by the suite.
+Start with the four `024.109` names and `unreadable_macro_spec.rb`'s
+distinguishing example, which is known to be undistinguishing.
+
+**D6 — one comparable document identity.** `DocumentVersion(buffer_id:,
+version:)`; the bare integer is not reachable from `TextDocument` or
+`FileSummary`; two from different buffers compare `:incomparable`.
+Entries: `024.39`, `024.97`, `024.118`. Size: 1 value, 3 readers
+(`WorkspaceIndex#stale?`, `Server#publish_findings`, `FileSummary`).
+Acceptance is two reproductions that already exist in prose.
+
+**D4 — a chain entry that can say what it is.** `Type` / `SingletonOf` /
+`Unidentified`; `Unidentified` has no `#name`. Entries: `024.26`,
+`024.80`, `024.81`. Size: `AncestorEntry` and its readers —
+`HierarchyIndex`, `MethodResolver`, `Engine`. The two hand-written
+`next if entry.name.nil?` guards are deleted as part of it, and their
+deletion is the acceptance.
+
+Fourteen entries, four mechanisms, no user-visible behaviour change
+intended beyond `024.26` and `024.97`. **If the corpus moves at all
+except for those two, something is wrong** — that is this release's
+control.
+
+### 0.2.13 — what an owner's own body says
+
+**D2 — a member set carries its own completeness.** The largest class and
+the one whose failures are user-visible false reports.
+`MemberSet(names:, complete:, incomplete_because:)`, produced by the
+recorder that knows: `ParserService` for a call it could not read,
+the RBS loader for a missing signature. `absent` is a thing only a
+complete set can answer. Entries: `024.18`, `024.22`, `024.27`,
+`024.28`, `024.76`, `024.77`, `024.83`, `024.91`, `024.106`, `024.110`,
+`024.116` — **11**. Size: the parser records a per-owner completeness
+alongside its declarations; `WorkspaceIndex` stores it; `MethodResolver`
+reads it instead of `unenumerable_reason`'s chain walk. Expect this to be
+the release, not a part of one.
+
+**D5 — `Cref` exposes questions, not flags.** `#surface_for(node)`
+returning `[owner, side]` or `nil`, with the nine predicates private, and
+`#in_block` taking the receiver the block runs against. Entries:
+`024.31`, `024.32`, `024.33`, `024.34`, `024.111`, `024.117` — **6**.
+Size: `Index::Cref` plus the seven `declares_singleton?` read sites.
+`024.32`'s decision is *not* in `Cref` — it is a Prism node-class test —
+so it is claimed here only because the fix belongs beside the others, and
+if it does not move it goes back to individually-caused.
+
+Seventeen entries. Both are user-visible, both need a corpus with a
+control, and D2's acceptance includes the four-line `class Module`
+reproduction staying reported.
+
+### 0.2.14 — resolution says what it knows
+
+**D1 — `Resolution(name:, basis:)`.** Entries: `024.13`, `024.19`,
+`024.35`, `024.37`, `024.40`, `024.47`, `024.82`, `024.84` — **8**.
+Size: `WorkspaceIndex`'s two resolvers and every consumer of a resolved
+name, which is the widest blast radius of any class here. It is last of
+the correctness classes for that reason and because 0.2.1's attempt at
+the same area was rolled back (`024.47`).
+
+### 0.3.0 — the first release that may add capability
+
+**D3 — one `ReceiverResolver#at(document:, position:)`.** Entries:
+`024.42`, `024.43`, `024.44`, `024.63`, `024.85`, `024.86`, `024.87`,
+`024.88`, `024.89`, `024.99`, `024.100` — **11**. This is C2's unbuilt
+half, and it is here rather than earlier because it changes what hover,
+completion, definition and signature help *answer*, which is a capability
+change by `docs/PUBLISHING.md`'s own definition. Every other class above
+is meant to leave the four features answering what they already answer,
+only correctly.
+
+D3 is also the class that most wants the apparatus: it is a
+four-consumer change whose failure mode is "two features disagree", and
+that is invisible to a suite whose examples each build their own stack.
+**0.2.12's D8 is a precondition for it**, not a nicety.
+
+### D9 — cost
+
+`024.38`, `024.45`, `024.57`, `024.71`. **Not scheduled here.**
+`024.45`'s honest size is per-method incremental summaries, which is a
+different axis from everything above, and putting a number on it before
+D2 lands would be a guess — D2 changes what a file summary contains.
+
+### What this plan does not promise
+
+That the classes are right. Two of C1's five entries were outside its
+reach and the exercise could not see it; this one asks "where is the
+value produced" for every entry, which is a better question but not a
+proof. **Step 3 of the procedure is where a wrong class is found** — an
+entry that does not move when its mechanism ships is a miscategorisation,
+and it gets moved and recorded rather than argued with.
+
 ## What this says about sequencing
 
 | class | entries | discharges |
