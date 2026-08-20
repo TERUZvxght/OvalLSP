@@ -131,6 +131,66 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
     end
   end
 
+  # `024.114`. `module_function :name` names methods that may be declared
+  # in a *different file* -- which is what the by-name form is for, since
+  # the section form covers the same-file case. The recorder ran over the
+  # per-file visitor accumulator, so cross-file never worked and
+  # `Reopened.r_a` was reported as missing:
+  #
+  #   $ ruby -e '
+  #   module Reopened; def r_a; :a; end; end
+  #   module Reopened; module_function :r_a; end
+  #   p [Reopened.r_a, Reopened.private_instance_methods(false)]
+  #   '
+  #   # => [:a, [:r_a]]
+  #   # ruby 3.4.10
+  #
+  # Recorded as a fact the index applies once every file is in, the way
+  # `AncestorFact` already is, rather than as a rewrite the parser
+  # performs on what it happens to have seen.
+  describe "module_function naming a method declared in another file" do
+    it "makes the module method reachable" do
+      workspace_index = Ovallsp::WorkspaceIndex.new
+      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      [["file:///a.rb", "module Reopened\n  def r_a; end\nend\n"],
+       ["file:///b.rb", "module Reopened\n  module_function :r_a\nend\n"]].each do |uri, text|
+        summary = Ovallsp::ParserService.new.summarize(
+          Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
+        )
+        workspace_index.replace_file(summary)
+        hierarchy_index.replace_file(summary)
+      end
+      resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
+                                                       hierarchy_index: hierarchy_index)
+
+      candidates = resolver.resolve(receiver_type: Ovallsp::Types::Nominal.new(name: "Reopened"),
+                                    name: "r_a", context: { singleton: true })
+
+      expect(candidates.map { |c| c.symbol_id.name }).to eq(["r_a"])
+    end
+
+    # The control: a name it does not mention stays off the module. An
+    # implementation that put every instance method on the singleton side
+    # once any `module_function` appeared would pass the example above.
+    it "leaves a method it does not name alone" do
+      workspace_index = Ovallsp::WorkspaceIndex.new
+      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      [["file:///a.rb", "module Reopened\n  def r_a; end\n  def r_b; end\nend\n"],
+       ["file:///b.rb", "module Reopened\n  module_function :r_a\nend\n"]].each do |uri, text|
+        summary = Ovallsp::ParserService.new.summarize(
+          Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
+        )
+        workspace_index.replace_file(summary)
+        hierarchy_index.replace_file(summary)
+      end
+      resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
+                                                       hierarchy_index: hierarchy_index)
+
+      expect(resolver.resolve(receiver_type: Ovallsp::Types::Nominal.new(name: "Reopened"),
+                              name: "r_b", context: { singleton: true })).to be_empty
+    end
+  end
+
   describe "module_function with names" do
     let(:summary) do
       summarize("module MF2\n  def mf_c; end\n  def mf_d; end\n  module_function :mf_c\nend\n")

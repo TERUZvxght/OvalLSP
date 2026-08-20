@@ -36,7 +36,7 @@ module Ovallsp
       # `core/spec/ovallsp/cache/schema_version_spec.rb` is what notices
       # next time -- this constant and that shape are one decision, and
       # keeping them in two files is why the bump was missed.
-      SCHEMA_VERSION = 2
+      SCHEMA_VERSION = 3
 
       module_function
 

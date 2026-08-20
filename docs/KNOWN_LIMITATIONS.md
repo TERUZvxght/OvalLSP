@@ -546,13 +546,6 @@ is the safer half of that trade until the index can prove the difference.
 `module_function` and `extend self` themselves work: their methods appear
 in completion, hover and go to definition. <!-- documents: 024.106 -->
 
-## `module_function :name` written in a different file from the method
-
-`module Reopened; def r_a; end; end` in one file and
-`module Reopened; module_function :r_a; end` in another: the module
-method is not recorded, and calling `Reopened.r_a` is reported as
-missing. Both in the same file works. <!-- documents: 024.114 -->
-
 ## A module with a nested `ClassMethods` that is not a concern
 
 Including a module that happens to declare a `ClassMethods` makes this

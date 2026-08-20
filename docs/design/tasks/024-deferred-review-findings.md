@@ -257,7 +257,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.11 | A visibility section written inside a block does not reach the body … |
 | [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | fixed | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | open | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
-| [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | open | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
+| [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | fixed | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | open | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
 | [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.11 | `def self.method_missing` and `define_singleton_method` do not open … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
@@ -5696,10 +5696,11 @@ the last place a version integer is compared across buffers.
 ## 024.114 `module_function :name` cannot see a module reopened in another file
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.11
+released-in: 0.2.11
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`

@@ -39,6 +39,12 @@ module Ovallsp
       # unreadable macro in the same reopened class and removing one of
       # them must not close the surface the other still opens.
       @open_surface_owners = Hash.new(0)
+      # `[owner, name]` pairs a `module_function :name` named, counted the
+      # same way as `@open_surface_owners` so a file being re-indexed does
+      # not lose another file's. Applied at read time rather than written
+      # into `@by_symbol`, because the `def` it names may be indexed
+      # before or after the `module_function` that names it (`024.114`).
+      @module_function_names = Hash.new(0)
       # Secondary index: downcased simple (unqualified) name -> Set of
       # SymbolIds sharing it, so #find_by_simple_name doesn't have to scan
       # every distinct symbol in the workspace to answer one name lookup
@@ -132,6 +138,7 @@ module Ovallsp
         # measures 80ms -> 3.0s -- which is the shape to re-measure if this
         # ever feels slow (024.15).
         summary.open_surface_owners.each { |key| @open_surface_owners[key] += 1 }
+        summary.module_function_names.each { |key| @module_function_names[key] += 1 }
         touched.uniq.each { |symbol_id| @by_symbol[symbol_id].sort_by!(&method(:entry_order)) }
         @generation += 1
         true
@@ -156,7 +163,18 @@ module Ovallsp
     # LSP Location need one, so this is an intentional, documented addition
     # to the task's required interface rather than a change to it.
     def declarations_with_uri(symbol_id)
-      @mutex.synchronize { @by_symbol.fetch(symbol_id, []).dup }
+      @mutex.synchronize do
+        found = @by_symbol.fetch(symbol_id, [])
+        return found.dup unless found.empty?
+
+        # A module method this owner has only through `module_function
+        # :name`, whose `def` is in another file. The declaration to show
+        # is that `def`'s -- it is the same method, and go-to-definition
+        # should land on it.
+        return [] unless module_function_named_locked?(symbol_id)
+
+        @by_symbol.fetch(symbol_id.with(kind: :instance_method), []).dup
+      end
     end
 
     # Every Declaration currently indexed for `uri` (regardless of which
@@ -420,7 +438,10 @@ module Ovallsp
     # is what 024.15 was spent on.
     def method_symbol_ids(owner, kind:)
       needle = Index::SymbolId.qualify_owner(owner)
-      @mutex.synchronize { @by_owner_kind.fetch([needle, kind], []).sort_by(&:name) }
+      @mutex.synchronize do
+        declared = @by_owner_kind.fetch([needle, kind], [])
+        (declared + module_function_symbol_ids_locked(needle, kind)).uniq.sort_by(&:name)
+      end
     end
 
     # Completion's question, which is not `search`'s. A completion prefix
@@ -522,6 +543,10 @@ module Ovallsp
       summary = @summaries.delete(uri)
       return false unless summary
 
+      summary.module_function_names.each do |key|
+        @module_function_names[key] -= 1
+        @module_function_names.delete(key) unless @module_function_names[key].positive?
+      end
       summary.open_surface_owners.each do |key|
         @open_surface_owners[key] -= 1
         @open_surface_owners.delete(key) unless @open_surface_owners[key].positive?
@@ -574,6 +599,24 @@ module Ovallsp
         %i[class module].include?(sid.kind) && simple_name(sid) == simple
       })
       [candidates, Index::SymbolId.qualify_owner(raw)]
+    end
+
+    # The singleton SymbolIds an owner has only through a
+    # `module_function :name` written somewhere. Instance methods it
+    # declares *and* a `module_function` names, which is exactly Ruby's
+    # rule for the by-name form.
+    def module_function_symbol_ids_locked(needle, kind)
+      return [] unless kind == :singleton_method
+
+      @by_owner_kind.fetch([needle, :instance_method], []).select do |symbol_id|
+        @module_function_names.key?([Index::SymbolId.bare_name(needle), symbol_id.name])
+      end.map { |symbol_id| symbol_id.with(kind: :singleton_method) }
+    end
+
+    def module_function_named_locked?(symbol_id)
+      return false unless symbol_id.kind == :singleton_method
+
+      @module_function_names.key?([Index::SymbolId.bare_name(symbol_id.owner), symbol_id.name])
     end
 
     def resolve_type_symbol_locked(name)

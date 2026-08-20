@@ -62,7 +62,8 @@ module Ovallsp
         alias_facts: visitor.alias_facts,
         reference_candidates: visitor.reference_candidates,
         generated_method_facts: visitor.generated_method_facts,
-        open_surface_owners: visitor.open_surface_owners.to_a
+        open_surface_owners: visitor.open_surface_owners.to_a,
+        module_function_names: visitor.module_function_names.to_a
       ).then { |summary| withdraw_forward_aliases(summary) }
     end
 
@@ -192,7 +193,7 @@ module Ovallsp
       ANCESTOR_RELATIONS = { include: :include, prepend: :prepend, extend: :extend }.freeze
 
       attr_reader :declarations, :ancestor_facts, :alias_facts, :reference_candidates, :generated_method_facts,
-                  :open_surface_owners
+                  :open_surface_owners, :module_function_names
 
       # Receiverless calls that can be written in a class body without
       # adding anything to that class's method surface. Membership is a
@@ -251,6 +252,7 @@ module Ovallsp
         @reference_candidates = []
         @generated_method_facts = []
         @open_surface_owners = Set.new
+        @module_function_names = Set.new
         @recorded_a_declaration = false
         # How many block or lambda bodies enclose the node being visited.
         # A block's meaning belongs to the call that owns it, so
@@ -865,6 +867,14 @@ module Ovallsp
       def apply_module_function_arguments(node)
         names = node.arguments.arguments.filter_map { |argument| symbol_name(argument) }
         return if names.empty?
+
+        # Recorded as a fact as well as applied here. The names may belong
+        # to a `def` in another file -- which is what this form is for --
+        # and the rewrite below can only see what this file declared
+        # (`024.114`). `WorkspaceIndex` applies the fact once every file
+        # is in; this stays because it also carries the *visibility*
+        # change, which is per-declaration.
+        names.each { |name| @module_function_names << [Index::SymbolId.bare_name(current_owner), name] }
 
         twins = @declarations.select do |declaration|
           declaration.symbol_id.kind == :instance_method &&

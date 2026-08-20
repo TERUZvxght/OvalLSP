@@ -505,13 +505,6 @@ Rails の concern がまさにこの形でした。メタプログラミング�
 `module_function` と `extend self` 自体は動作します — それらのメソッドは補完・
 ホバー・定義ジャンプに出ます。 <!-- documents: 024.106 -->
 
-## メソッドと別のファイルに書かれた `module_function :name`
-
-`module Reopened; def r_a; end; end` が一方のファイルにあり、
-`module Reopened; module_function :r_a; end` が別のファイルにある場合、モジュール
-メソッドとして記録されず、`Reopened.r_a` の呼び出しが「存在しない」と報告され
-ます。同じファイル内であれば正しく働きます。 <!-- documents: 024.114 -->
-
 ## concern ではないのに `ClassMethods` を持つモジュール
 
 `ClassMethods` を入れ子に宣言しているモジュールを include すると、この拡張機能は
