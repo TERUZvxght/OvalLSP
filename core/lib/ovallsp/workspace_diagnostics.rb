@@ -132,7 +132,11 @@ module Ovallsp
       # Since 0.2.7 the funnel can refuse a publish -- a `didOpen` landing
       # in this method's own check-then-publish gap -- and returning
       # `true` regardless counted a file nothing was said about.
-      @publish.call(uri, findings)
+      # The document that was actually read and analysed, handed to the
+      # funnel rather than discarded -- 037's C3. Its version is nil, so
+      # the funnel still reads it as a disk answer that may not speak over
+      # an open buffer.
+      @publish.call(uri, findings, document: document)
     rescue StandardError => e
       # One unreadable or unparseable file must not end the pass: the
       # other several hundred are still worth reporting on.

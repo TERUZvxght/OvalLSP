@@ -18,6 +18,32 @@ module Ovallsp
         @buffer = "".b
       end
 
+      # Whether another message is already waiting, which is how the
+      # server tells "the developer is still typing" from "they have
+      # stopped" without a timer to tune (037's C9).
+      #
+      # **False when it cannot tell**, which is the safe direction: the
+      # caller then analyses immediately, exactly as every release before
+      # this one did. A `StringIO` -- what most of the suite drives the
+      # server with -- cannot be asked, and neither can anything else that
+      # is not a real IO.
+      #
+      # At end of stream a pipe reports itself readable, so `#eof?` is
+      # asked first; otherwise the last message of a session would leave a
+      # pending analysis that nothing ever drains.
+      def input_ready?
+        return true unless @buffer.empty?
+        return false unless @input.respond_to?(:wait_readable)
+
+        !@input.wait_readable(0).nil? && !@input.eof?
+      rescue ::IOError, ::SystemCallError
+        # `SystemCallError` covers every `Errno::*`: a closed or reset
+        # pipe raises one of those rather than `IOError`, and letting it
+        # out of here ends `Server#run` with a raw backtrace -- the exact
+        # failure shape 0.2.6 fixed for frames and this method reopened.
+        false
+      end
+
       # Everything that is not a well-formed frame leaves here as a
       # `ProtocolError`, and a stream that simply ended leaves as `EOF`.
       # Until 0.2.6 the difference reached the caller as whatever Ruby

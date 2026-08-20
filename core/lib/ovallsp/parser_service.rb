@@ -345,6 +345,7 @@ module Ovallsp
           body_source: node.body&.slice,
           name_location: Index::SourceLocation.to_range(node.name_loc, @lines)
         )
+        record_module_function_twin(node, owner) if @cref.module_function? && !singleton
 
         @scope_stack.push(next_scope_id)
         # Tracks "we are inside a method body", so a `private :target`
@@ -446,6 +447,7 @@ module Ovallsp
             apply_visibility_arguments(node)
           end
           apply_class_visibility_arguments(node) if CLASS_VISIBILITY_MODIFIERS.key?(node.name)
+          apply_module_function_arguments(node) if node.name == :module_function && node.arguments
           record_ancestor_call(node) if ANCESTOR_RELATIONS.key?(node.name)
           record_alias_method_call(node) if node.name == :alias_method
           declared_before = @declarations.size
@@ -460,10 +462,37 @@ module Ovallsp
           @recorded_a_declaration = @declarations.size > declared_before
           wrapped_visibility = inline_attribute_visibility_for(node)
         end
+        # Before `#record_open_surface`, not after: a `class_methods do`
+        # block *is* read -- its methods are recorded as the
+        # `ClassMethods` module it is sugar for -- so marking the
+        # concern's surface open said the opposite. It did, and the cost
+        # was every class including that concern losing instance-side
+        # checking entirely: the spelled-out form reported
+        # `Post.new.total_garbage` and the block form reported nothing.
+        return visit_concern_class_methods(node) if concern_class_methods?(node)
+
         # Outside the receiverless branch: `singleton_class.send` and
         # `self.class_eval` metaprogram this owner too (see there).
         record_open_surface(node)
         record_method_call_candidate(node)
+
+        # `module_function def a; end`. The argument is a definition, not a
+        # name, so `#apply_module_function_arguments` cannot see it -- and
+        # it runs before the `def` is visited in any case. Visiting the
+        # arguments under an open `module_function` makes the same two
+        # recorders that handle the section form handle this one, rather
+        # than a third path that can disagree with them. Rails writes it:
+        # `action_cable.rb:77` is `module_function def server`, and
+        # `ActionCable.server` was reported as missing.
+        if inline_module_function?(node)
+          previous_cref = @cref
+          @cref = @cref.in_module_function
+          begin
+            return super
+          ensure
+            @cref = previous_cref
+          end
+        end
 
         if wrapped_visibility
           previous = @inline_attribute_visibility
@@ -496,7 +525,84 @@ module Ovallsp
         end
       end
 
+      # `ActiveSupport::Concern`'s `class_methods do ... end` is sugar for
+      # `module ClassMethods ... end`, and the gem itself says so:
+      #
+      #   $ ruby -e '
+      #   gem "activesupport"; require "active_support"
+      #   require "active_support/concern"
+      #   module Taggable
+      #     extend ActiveSupport::Concern
+      #     class_methods do
+      #       def cm_public; :cm; end
+      #     end
+      #   end
+      #   p Taggable.const_defined?(:ClassMethods)          # => true
+      #   p Taggable::ClassMethods.instance_methods(false)  # => [:cm_public]
+      #   '
+      #   # ruby 3.4.10, activesupport 8.1.3.1
+      #
+      # Recorded as that module rather than given a rule of its own, so
+      # the two spellings of one thing cannot disagree -- and they did:
+      # the block's methods landed on the concern's *instance* side, so
+      # `include Taggable` offered `cm_public` on every instance while
+      # the spelled-out form was handled correctly (`024.104`). Four
+      # features answered from the same wrong record.
+      # `@cref.module_owner?` for the same reason `#extend_self?` has it:
+      # `ActiveSupport::Concern` is a module thing, and a *class* writing
+      # `class_methods do` raises `NoMethodError`. Declaring a
+      # `ClassMethods` module Ruby never creates also silenced a report
+      # this engine used to make about the `class_methods` call itself.
+      def concern_class_methods?(node)
+        node.name == :class_methods && node.receiver.nil? && node.block.is_a?(Prism::BlockNode) &&
+          current_owner && !@cref.in_method_body? && @cref.module_owner?
+      end
+
+      def visit_concern_class_methods(node)
+        absolute_name = qualify("ClassMethods")
+
+        # A concern may open the block more than once -- `ActionText::
+        # Serialization` does, the second only to `alias_method` -- and
+        # each emitted its own `module` declaration with the same
+        # `SymbolId`, so the outline showed two identical `ClassMethods`
+        # nodes each listing every method. One declaration per module,
+        # which is what the spelled-out form produces.
+        already_declared = @declarations.any? do |declaration|
+          declaration.symbol_id.kind == :module && declaration.symbol_id.name == absolute_name
+        end
+        return visit_concern_class_methods_body(node, absolute_name) if already_declared
+
+        @declarations << Index::Declaration.new(
+          symbol_id: Index::SymbolId.new(kind: :module, owner: current_owner, name: absolute_name,
+                                         discriminator: nil),
+          location: Index::SourceLocation.to_range(node.location, @lines),
+          visibility: nil, parameters: [], origin: :source,
+          name_location: Index::SourceLocation.to_range(node.message_loc || node.location, @lines)
+        )
+
+        visit_concern_class_methods_body(node, absolute_name)
+      end
+
+      # The block body is the module body, so it opens a namespace and
+      # *not* a block frame: a `def` in `module ClassMethods` is written
+      # at depth zero, and `#defines_surface?` reads that depth.
+      def visit_concern_class_methods_body(node, absolute_name)
+        within_namespace(absolute_name, module_owner: true) do
+          @skip_block_frame = true
+          begin
+            node.block.accept(self)
+          ensure
+            @skip_block_frame = false
+          end
+        end
+      end
+
       def visit_block_node(node)
+        if @skip_block_frame
+          @skip_block_frame = false
+          return super
+        end
+
         @scope_stack.push(next_scope_id)
         # A visibility section opened inside a block belongs to that
         # block. `concerning :Auth do private; def authenticate; end end`
@@ -675,12 +781,14 @@ module Ovallsp
 
         record_superclass(node, absolute_name) if node.is_a?(Prism::ClassNode)
 
-        within_namespace(absolute_name) { node.each_child_node { |child| child.accept(self) } }
+        within_namespace(absolute_name, module_owner: kind == :module) do
+          node.each_child_node { |child| child.accept(self) }
+        end
       end
 
-      def within_namespace(absolute_name)
+      def within_namespace(absolute_name, module_owner: false)
         previous_cref = @cref
-        @cref = @cref.in_namespace(absolute_name)
+        @cref = @cref.in_namespace(absolute_name, module_owner: module_owner)
         @scope_stack.push(next_scope_id)
         yield
       ensure
@@ -732,7 +840,59 @@ module Ovallsp
         )
       end
 
+      # `module_function` makes each method reachable on the module *as
+      # well as* leaving a private instance copy -- two methods, which is
+      # why this records a second declaration rather than moving the
+      # first. `#visibility_for_definition` makes the instance copy
+      # private. See `Index::Cref#module_function?` for the interpreter
+      # session both halves come from (`024.106`).
+      def record_module_function_twin(node, owner)
+        instance_declaration = @declarations.last
+
+        @declarations << instance_declaration.with(
+          symbol_id: Index::SymbolId.new(kind: :singleton_method, owner: owner, name: node.name.to_s,
+                                         discriminator: nil),
+          visibility: :public
+        )
+      end
+
+      # `module_function :mf_c` names methods already declared above it,
+      # so there is nothing pending to remember -- the declarations are
+      # rewritten in place and given their singleton twins. Only the names
+      # written: a sibling `mf_d` stays a public instance method and off
+      # the module entirely, which is the half that distinguishes this
+      # form from the bare one.
+      def apply_module_function_arguments(node)
+        names = node.arguments.arguments.filter_map { |argument| symbol_name(argument) }
+        return if names.empty?
+
+        twins = @declarations.select do |declaration|
+          declaration.symbol_id.kind == :instance_method &&
+            declaration.symbol_id.owner == current_owner &&
+            names.include?(declaration.symbol_id.name)
+        end
+        rewrite_recorded_visibility(names, :private)
+        twins.each do |declaration|
+          @declarations << declaration.with(
+            symbol_id: Index::SymbolId.new(kind: :singleton_method, owner: declaration.symbol_id.owner,
+                                           name: declaration.symbol_id.name, discriminator: nil),
+            visibility: :public
+          )
+        end
+      end
+
+      def inline_module_function?(node)
+        node.name == :module_function && node.receiver.nil? && @cref.module_owner? &&
+          node.arguments&.arguments&.any? { |argument| argument.is_a?(Prism::DefNode) }
+      end
+
       def record_ancestor_call(node)
+        # `extend self` in a module body: no argument names a constant, so
+        # this dropped it and `MF.` completed nothing the module declared.
+        # Ruby adds no methods here -- it puts the module in its own
+        # singleton chain -- so that is what is recorded, and the methods
+        # stay exactly where they are written.
+        return record_extend_self(node) if extend_self?(node)
         return unless node.arguments
 
         relation = ANCESTOR_RELATIONS.fetch(node.name)
@@ -751,6 +911,27 @@ module Ovallsp
             location: Index::SourceLocation.to_range(arg.location, @lines)
           )
         end
+      end
+
+      # `@cref.module_owner?` rather than `self_is_module?`: the latter is
+      # true in a class body too, and Ruby has no `extend self` there --
+      # `class ESC; extend self; end` raises
+      # `TypeError: wrong argument type Class (expected Module)`
+      # (ruby 3.4.10). Recording an edge Ruby refuses to make puts a
+      # class's instance methods on its own singleton chain, and every
+      # answer about it is then wrong in the direction that invents
+      # methods.
+      def extend_self?(node)
+        node.name == :extend && current_owner && !@cref.in_method_body? && @cref.module_owner? &&
+          node.arguments&.arguments&.length == 1 &&
+          node.arguments.arguments.first.is_a?(Prism::SelfNode)
+      end
+
+      def record_extend_self(node)
+        @ancestor_facts << Index::AncestorFact.new(
+          owner: current_owner, relation: :extend, target: current_owner,
+          location: Index::SourceLocation.to_range(node.arguments.arguments.first.location, @lines)
+        )
       end
 
       # An ancestor decided at runtime leaves a surface that cannot be
@@ -1256,6 +1437,7 @@ module Ovallsp
         when :public then @cref = @cref.with_visibility(:public)
         when :private then @cref = @cref.with_visibility(:private)
         when :protected then @cref = @cref.with_visibility(:protected)
+        when :module_function then @cref = @cref.in_module_function
         end
       end
 
@@ -1357,6 +1539,11 @@ module Ovallsp
       end
 
       def visibility_for_definition(node, singleton, inline_visibility)
+        # Under `module_function`, Ruby makes the instance copy private --
+        # `MF.private_instance_methods(false)` is `[:mf_a]` -- which is
+        # what keeps it from being offered on an instance of an including
+        # class. An explicit `private def` still outranks it.
+        return inline_visibility || :private if !singleton && @cref.module_function?
         return inline_visibility || @cref.visibility unless singleton
         # Singleton *because* of `class << self`, not because of an
         # explicit `self.` receiver.

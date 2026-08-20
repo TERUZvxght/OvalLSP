@@ -223,6 +223,16 @@ settle. Everything it declines is listed under the non-goals below.
   is a local variable or a call on self — over whatever grammar is in
   use, in `.rb` files and in an ERB template's Ruby regions alike.
 - Anything about a Ruby file outside a workspace folder.
+- **Anything at all, when the Ruby chosen for a workspace folder cannot
+  load what the Core needs.** As of 0.2.10 the extension checks, before
+  starting the Core Server, whether that interpreter can load either this
+  build's bundled `prism`/`rbs` or its own; if neither, the Core Server is
+  **not started** for that folder and an error notification says so. Every
+  capability in this document is absent there, which is the point: the
+  Core would fail on `require`, and four documents had said this extension
+  stops in that case while it did not (`024.55`). The post-start version
+  handshake still reports and keeps running — a different check, with a
+  different failure mode, and `docs/KNOWN_LIMITATIONS.md` describes it.
 - Anything while the workspace is untrusted: the Runtime Agent does not
   start, so every Rails-derived capability (H2, C3, C4, C5, C7, C11, D2,
   G3, G4, G12, S3) degrades to its static-only answer by design. That

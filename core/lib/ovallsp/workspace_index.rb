@@ -269,6 +269,40 @@ module Ovallsp
       @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
     end
 
+    # The name `nesting` makes this bare name mean, or **nil when the
+    # nesting decides nothing** -- which is the whole difference between
+    # this and `#resolve_type_name`. A caller rewriting a name it will
+    # hand downstream must not fall through to the first-candidate
+    # heuristic: doing that turned `Queue.new` inside `module DEBUGGER__`
+    # into `ActiveRecord::ConnectionAdapters::ConnectionPool::Queue` and
+    # added five false reports over 40 gems, because the bare name it
+    # replaced was the one RBS could still answer for. Measured; the fix
+    # for `024.103` shipped with this distinction and not without it.
+    #
+    # Both readers go through `#nesting_match`, so the lookup rule itself
+    # is in one place.
+    # `nesting` is Ruby's `Module.nesting` at the point the name was
+    # written, innermost first.
+    #
+    # This is not `024.47`'s rolled-back shape. That moved a *shadowing
+    # test* into `#resolve_type_name`, which cannot tell a written name
+    # from an inferred one and broke every bare name written from inside
+    # its own namespace. This is the lookup rule itself, asked as its own
+    # question by the one caller that has a nesting to give -- and 0.2.10
+    # shipped a `nesting:` parameter on `#resolve_type_name` as well,
+    # which no caller ever passed. An unreachable branch is a defect in
+    # its own right (CLAUDE.md), and it was carrying the comment that
+    # argued it was not 024.47. Removed; this is where the rule lives.
+    def nested_type_name(name, nesting: [])
+      raw = name.to_s
+      return nil if raw.start_with?("::") || nesting.empty?
+
+      @mutex.synchronize do
+        candidates, = type_candidates_locked(raw)
+        nesting_match(candidates, raw, nesting)&.name
+      end
+    end
+
     # Whether a *bare* name is claimed by more than one declared type, so
     # that resolving it is a pick rather than a lookup.
     #
@@ -575,8 +609,20 @@ module Ovallsp
       #
       # Bare names keep the heuristic deliberately: 0.2.1 applied a
       # shadowing rule to them here and broke every bare name written from
-      # inside its own namespace, and was rolled back (024.47).
+      # inside its own namespace, and was rolled back (024.47). Ruby's
+      # actual lookup rule is asked as its own question by
+      # `#nested_type_name`, which the caller with a nesting uses.
       exact || candidates.first
+    end
+
+    # The innermost nesting frame that declares `raw`, or nil.
+    def nesting_match(candidates, raw, nesting)
+      Array(nesting).each do |frame|
+        wanted = Index::SymbolId.qualify_owner("#{frame}::#{raw}")
+        found = candidates.find { |sid| sid.name == wanted }
+        return found if found
+      end
+      nil
     end
 
     # Whether `candidate` (always fully qualified, leading `::`) names the

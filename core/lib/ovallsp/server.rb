@@ -85,7 +85,7 @@ module Ovallsp
       @workspace_pass_requested = false
       @local_inferencer = LocalInferencer.new(
         model_registry: model_registry, method_resolver: @method_resolver, method_analyzer: @method_analyzer,
-        signatures: @signatures, observation_store: @observation_store
+        signatures: @signatures, observation_store: @observation_store, workspace_index: @workspace_index
       )
       @route_registry = route_registry
       @model_registry = model_registry
@@ -149,6 +149,11 @@ module Ovallsp
       # orders every writer against it. See #publish_findings.
       @last_published_version = {}
       @publish_state_mutex = Mutex.new
+      # Which uris have changed and not yet been analysed. A set, because
+      # ten edits to one file are one thing to analyse -- 037's C9. Its
+      # mutex guards nothing else and is taken inside nothing else.
+      @pending_analysis = Set.new
+      @settled_analysis_mutex = Mutex.new
       @agent_supervisor = AgentSupervisor.new
       @agent_retry_mutex = Mutex.new
       @agent_retry_generation = 0
@@ -182,12 +187,41 @@ module Ovallsp
           # next request unanswered. Only a client can send one, but a
           # reconnect or one stray byte on stdin was enough.
           @logger.error("skipping a malformed message: #{e.message}")
+          # Drained here too. A malformed frame queued behind a
+          # `didChange` meant `input_ready?` was true when that change was
+          # dispatched, so nothing drained there either -- and `next`
+          # returns to a blocking read. The pending analysis was then lost
+          # for the rest of the session, leaving the panel describing text
+          # the developer had already replaced. 0.2.6's own note on this
+          # rescue is that "a reconnect or one stray byte on stdin was
+          # enough" to reach it.
+          drain_settled_analyses
           next
         end
 
-        break if dispatch(message) == :exit
+        result = dispatch(message)
+        # **Analysis follows the settled state, not every event** (037's
+        # C9). A `didChange` records that its uri needs analysing; the
+        # analysis itself runs only once nothing else is waiting to be
+        # read, so a burst of keystrokes produces one analysis of where
+        # the buffer landed rather than one per edit.
+        #
+        # It is not a debounce: there is no interval to tune and no
+        # waiter thread. The question asked is "is there more input", and
+        # a reader that cannot answer it says no -- which analyses
+        # immediately, as every release before this one did.
+        #
+        # The last edit of a session is the one whose answer the developer
+        # is looking at, and it is the call *after* the loop that
+        # guarantees it -- `break` runs straight into it, with no rescue
+        # or ensure between. A second drain before the break was written
+        # here too, with a comment claiming it mattered; nothing could
+        # fail on removing it.
+        drain_settled_analyses unless @reader.input_ready?
+        break if result == :exit
       end
 
+      drain_settled_analyses
       @shutdown_received ? 0 : 1
     ensure
       shutdown_background_tasks
@@ -458,7 +492,7 @@ module Ovallsp
       summary = @parser_service.summarize(document)
       if apply_file_summary(summary)
         invalidate_stale_observations
-        publish_diagnostics(document)
+        note_analysis_needed(document.uri)
       end
     rescue StandardError => e
       # Parsing must never take the server down: keep the previous summary
@@ -467,10 +501,16 @@ module Ovallsp
     end
 
     # Task 015: computed and published synchronously, in the same dispatch
-    # turn that already owns `document`'s current version -- there's no
-    # background/async gap for a result to go stale in, so "stale document
-    # versionのdiagnosticをpublishしない" holds by construction rather than
-    # needing its own generation check.
+    # turn that already owns `document`'s current version.
+    #
+    # **That is no longer how it runs.** Since 0.2.10 a `didChange`
+    # records the uri and `#drain_settled_analyses` performs the analysis
+    # once nothing else is waiting to be read, re-reading the store when
+    # it does (037's C9). What replaced the by-construction argument is
+    # the funnel: `#publish_findings` takes the document the findings were
+    # computed from and compares its `buffer_id`, so an answer cannot be
+    # attributed to a buffer it was not computed from however long the
+    # gap is.
     #
     # This is the *buffer* path. Until 0.2.0 it was the only one, on the
     # reasoning that an unopened file has no client-side buffer to attach
@@ -479,6 +519,30 @@ module Ovallsp
     # `publishDiagnostics` for any uri. `#reindex_from_disk` now publishes
     # too, through the workspace pass rather than here, so that the two
     # cannot both claim the last word on one uri.
+    # The uri whose buffer has changed, remembered rather than analysed on
+    # the spot. `#drain_settled_analyses` reads the *store* when it runs,
+    # so what gets analysed is wherever the buffer has arrived by then --
+    # which is why the pending record is a set of uris and not a set of
+    # documents.
+    def note_analysis_needed(uri)
+      @settled_analysis_mutex.synchronize { @pending_analysis << uri }
+    end
+
+    def drain_settled_analyses
+      pending = @settled_analysis_mutex.synchronize do
+        taken = @pending_analysis.to_a
+        @pending_analysis.clear
+        taken
+      end
+
+      pending.each do |uri|
+        document = @document_store.fetch(uri: uri)
+        next unless document
+
+        publish_diagnostics(document)
+      end
+    end
+
     def publish_diagnostics(document)
       # Whether there is a running application to ask has to be known
       # *before* the check runs, not after: a receiver it cannot judge
@@ -489,7 +553,7 @@ module Ovallsp
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
       end
-      publish_findings(document.uri, findings, version: document.version)
+      publish_findings(document.uri, findings, document: document)
     rescue StandardError => e
       @logger.error("failed to compute diagnostics for #{document.uri}: #{e.class}: #{e.message}")
     ensure
@@ -560,17 +624,29 @@ module Ovallsp
     # and that count bounds the pass and drives its truncation log. It
     # returned `true` unconditionally and so counted files nothing was
     # published for.
-    def publish_findings(uri, findings, version: nil)
+    # Takes the *document the findings were computed from*, not a version
+    # integer re-derived at the end. A version is chosen by the client and
+    # is only meaningful within one buffer; carrying the buffer makes the
+    # comparison well-defined, and makes a close-and-reopen refusable in
+    # both directions rather than only when the client happens to number
+    # downwards (037's C3, and `024.56`'s other half).
+    #
+    # A document with a nil version is a disk read -- the workspace pass
+    # -- and may only speak for a uri nobody has open, exactly as before.
+    def publish_findings(uri, findings, document: nil)
       @publish_state_mutex.synchronize do
-        open_version = @document_store.fetch(uri: uri)&.version
+        open_document = @document_store.fetch(uri: uri)
+        version = document&.version
         if version
-          return false if open_version.nil? || version > open_version
+          return false if open_document.nil?
+          return false unless document.buffer_id == open_document.buffer_id
+          return false if version > open_document.version
 
           last = @last_published_version[uri]
           return false if last && version < last
 
           @last_published_version[uri] = version
-        elsif open_version
+        elsif open_document
           return false
         end
 

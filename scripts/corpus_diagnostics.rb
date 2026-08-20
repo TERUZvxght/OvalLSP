@@ -85,8 +85,16 @@ signatures = Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace
 hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
 method_resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
                                                         hierarchy_index: hierarchy_index)
+# `workspace_index:` is not optional here even though the constructor
+# allows it: without it this harness builds a *different program* from the
+# one the server runs, and 0.2.10 caught that the hard way -- a fix for
+# `024.103` came out byte-identical on both sides of a 6,772-finding
+# comparison, because the collaborator the fix reads was never wired in.
+# Identical output is the signature of a measurement error, which is the
+# only reason it was looked at (CLAUDE.md).
 local_inferencer = Ovallsp::LocalInferencer.new(
   model_registry: model_registry, method_resolver: method_resolver, signatures: signatures,
+  workspace_index: workspace_index,
   method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(
     workspace_index: workspace_index, method_resolver: method_resolver,
     summary_store: Ovallsp::Semantic::MethodSummaryStore.new,

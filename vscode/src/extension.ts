@@ -11,6 +11,7 @@ import {
 import { resolveServerConfig, classifyServerSelection } from './serverConfig';
 import { resolveRuby, RubyResolution } from './rubyResolver';
 import { checkBundledCoreCompatibility, queryRubyConfigPaths, RubyConfigPaths } from './platformCompatibility';
+import { decidePreStart } from './startupGate';
 import { WATCHED_FILES_GLOB } from './watchedFiles';
 import {
   CLIENT_PROTOCOL_VERSION,
@@ -288,11 +289,16 @@ function startClientForFolder(
   // reported as a clear message in this extension's own OutputChannel
   // and an error notification, rather than only surfacing however Core
   // happens to degrade (working via system gems, or failing to load
-  // prism/rbs at all) after the fact. Still starts Core regardless of the
-  // outcome -- Core's own check is what actually decides whether the
-  // vendor payload gets used, and a Ruby with its own separately-installed
-  // prism/rbs is a legitimate, fully-working combination this check has
-  // no way to rule out in advance.
+  // prism/rbs at all) after the fact. **Since 0.2.10 it also stops**: a
+  // verdict of `compatible: false` now means the Core is not started
+  // (`024.55`, and ADR-0005's own "不一致ならCore Serverを起動せず").
+  // This comment said the opposite until the review round that caught it.
+  //
+  // A Ruby with its own separately-installed prism/rbs is still a
+  // legitimate, fully-working combination -- the probe asks about exactly
+  // that before refusing, on both the payload-mismatch path and the
+  // version-query-failure path, so the refusal means the Core would fail
+  // on `require`.
   // Task 023.8: queried in parallel with the compatibility probe below,
   // and only on darwin (this Preview's only target; Linux/Windows use
   // their own different dynamic-linker environment variables and shim
@@ -319,12 +325,32 @@ function startClientForFolder(
     checkBundledCoreCompatibility(context.extensionPath, resolvedRubyCommand, undefined, folder.uri.fsPath),
     configPathsPromise
   ]).then(([compatibility, configPaths]) => {
-      if (!compatibility.compatible) {
-        outputChannel.appendLine(`OvalLSP: ${compatibility.reason}`);
-        void vscode.window.showErrorMessage(
-          `OvalLSP: the Ruby interpreter selected for ${folder.name} is incompatible with this VSIX's bundled ` +
-            'native dependencies. See the OvalLSP output channel for details.'
-        );
+      // `024.55`: this branch used to log, raise a notification, and fall
+      // through to `client.start()` -- while four documents said the
+      // extension "stops before sending any feature request" on exactly
+      // this. It stops now. The verdict is a named function with its own
+      // tests (`startupGate.ts`) because a refusal that is wrong locks
+      // the user out of the extension, and nothing in this file can be
+      // unit-tested.
+      const verdict = decidePreStart(compatibility, folder.name);
+      if (!verdict.start) {
+        outputChannel.appendLine(verdict.logLine);
+        if (verdict.notification) {
+          void vscode.window.showErrorMessage(verdict.notification);
+        }
+        // The same teardown the `client.start()` rejection handler does.
+        // Without it this was the one exit from this function that left
+        // state behind: `clients` holding a client that was never
+        // started -- which `activate` and `shouldStartAddedFolder` both
+        // read -- and the folder's FileSystemWatcher never disposed.
+        lifecycle.markStopped(key, generation);
+        if (lifecycle.isCurrentGeneration(key, generation) && clients.get(key) === client) {
+          clients.delete(key);
+          watchers.get(key)?.dispose();
+          watchers.delete(key);
+          versionDiagnostics.delete(key);
+        }
+        return;
       }
       // `compatibility.note` is deliberately *not* written here. The
       // handshake writes the same fact, with this folder's name on it and

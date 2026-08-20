@@ -146,12 +146,21 @@ Marketplace経由でこの拡張機能が更新されると、同梱されたCor
 
 ## バージョン・互換性エラー
 
-起動時、ExtensionとCore Serverはバージョン・protocol・build・Ruby/
+検査は2つあり、それぞれ挙動が異なります。
+
+**Core Serverの起動前**、OvalLSPは選択したRubyインタプリタがこのVSIXの
+バンドル済みネイティブ依存を実際にロードできるかを検査します。できない場合、
+**Core Serverは起動しません** — 「起動しませんでした」というエラー通知と、
+Outputチャンネルに理由が出ます。何も応答しないので、信頼できない応答を
+良い応答と取り違えることもありません。
+
+**起動後**、ExtensionとCore Serverはバージョン・protocol・build・Ruby/
 platform情報を交換します。これらが一致しない場合(以前のExtension
 バージョンの残留プロセス、正しくインストールされなかったpayload、
 互換性のないカスタム`ovallsp.server.path`等)、OvalLSPはそれを報告します —
 エラー通知と、Outputチャンネルの詳細です。ただしセッションを**停止はしません**。
 不一致を解消するまで、その後の応答は信頼できないものとして扱ってください。
+
 `OvalLSP: Show Version Information`で検出内容と対処方法を確認できます。
 
 ## Ruby解決

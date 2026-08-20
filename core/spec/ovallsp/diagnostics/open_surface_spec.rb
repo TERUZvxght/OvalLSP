@@ -454,7 +454,14 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
       end
     RUBY_SRC
 
-    expect(unknown_methods(document)).to be_empty
+    # Narrowed in 0.2.10 from `be_empty` to the call this example is
+    # about. The macro call itself -- `attr_atomic :thing` -- is reported,
+    # and always was on a *class*; it went unreported here only because
+    # nothing checked a module's class-level calls at all, which
+    # `024.106` fixed. That asymmetry (the engine silences what a macro
+    # might define and reports the macro) is `024.110`, not this example's
+    # subject.
+    expect(unknown_methods(document)).not_to include("thing")
   end
 
   # The control: a module that opens nothing leaves the class-level check

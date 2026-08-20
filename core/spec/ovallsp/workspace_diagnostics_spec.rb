@@ -15,7 +15,10 @@ RSpec.describe Ovallsp::WorkspaceDiagnostics do
   def build(root, max_files: described_class::DEFAULT_MAX_FILES, analyze: nil)
     described_class.new(
       analyze: analyze || ->(document) { analyzed << document.uri; [] },
-      publish: ->(uri, findings) { published << [uri, findings] },
+      # The document is what the pass analysed, handed to the funnel
+      # rather than discarded (037's C3) -- recorded here so an example
+      # can assert the answer and the text it came from travel together.
+      publish: ->(uri, findings, document: nil) { published << [uri, findings, document] },
       open_in_buffer: ->(uri) { open_uris.include?(uri) },
       logger: logger, max_files: max_files
     )
@@ -26,6 +29,35 @@ RSpec.describe Ovallsp::WorkspaceDiagnostics do
       path = File.join(root, "file_#{i}.rb")
       File.write(path, "class File#{i}\nend\n")
       Ovallsp::UriUtil.from_path(path)
+    end
+  end
+
+  # 037's C3. The pass reads a file, builds a document from it, analyses
+  # that document -- and then published a `uri` and nothing else, so the
+  # funnel had no way to tell an answer about this text from an answer
+  # about whatever the file said a second later. The document it actually
+  # analysed now travels with the answer.
+  #
+  # The fixture writes text the document must be distinguishable *by*: an
+  # example asserting only that some document arrived would pass if the
+  # pass invented an empty one.
+  it "hands the funnel the document it analysed, not just the uri" do
+    Dir.mktmpdir do |root|
+      path = File.join(root, "only.rb")
+      File.write(path, "class OnlyThisText
+end
+")
+      uri = Ovallsp::UriUtil.from_path(path)
+
+      pass = build(root)
+      pass.run([uri], pass.begin_pass)
+
+      document = published.first.last
+      expect(document.text).to eq("class OnlyThisText\nend\n")
+      expect(document.uri).to eq(uri)
+      # Nil, which is what makes the funnel read it as a disk answer that
+      # may not speak over an open buffer.
+      expect(document.version).to be_nil
     end
   end
 

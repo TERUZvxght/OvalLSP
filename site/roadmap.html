@@ -200,6 +200,39 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0210">
+          <div class="tl-version">
+            <span class="v">0.2.10</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>An answer knows what it was computed from</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Typing on a large file stops queueing your questions behind stale work.</strong> Measured on a 3,900-line file: a hover asked during a burst of edits took <strong>1.43 seconds; it now takes 0.04</strong>. A burst faster than one analysis produces one answer, about where the buffer landed.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A class of yours named like another class of yours resolves the way Ruby resolves it.</strong> <code>Config</code> inside <code>module App</code> means <code>App::Config</code> if <code>App</code> declares one &mdash; so its own methods are no longer reported as missing while the call that really raises goes unmentioned.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>class_methods do</code> in an ActiveSupport::Concern attaches to the class</strong>, and <strong><code>module_function</code> and <code>extend self</code> produce their methods</strong> &mdash; both idioms produced nothing at all before.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A Ruby that cannot run the Core no longer half-starts it.</strong> Four documents said this extension stops before answering anything on an incompatible interpreter, and it did not. It does now, after asking whether that Ruby can load <code>prism</code> and <code>rbs</code> of its own.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            No capability is added. Three review rounds; the third ran the
+            product against real Ruby rather than reading the change, and found
+            41 false reports on shipped Rails source that the two reading rounds
+            had both missed &mdash; one of them a fix from the round before it.
+            None of that reached this release.
+          </p>
+        </article>
+
         <article class="tl-item" id="v029">
           <div class="tl-version">
             <span class="v">0.2.9</span>

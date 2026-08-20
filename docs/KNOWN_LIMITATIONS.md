@@ -419,18 +419,22 @@ loop; what 0.2.1 actually shipped is the silence described above.)
 
 ## What a version mismatch actually does
 
-**It tells you, and then carries on.** When the Extension and the Core
-disagree about version, protocol, build identity or payload hash, you get
-an error notification and the detail in the Output channel — and the
-session keeps running. It does not stop before answering, which is what
-both READMEs and both getting-started pages said until 0.2.3.
+**It tells you, and then carries on** — for the mismatches found *after*
+the Core Server has started. When the Extension and the Core disagree
+about version, protocol, build identity or payload hash, you get an error
+notification and the detail in the Output channel, and the session keeps
+running.
 
 That matters most for the two reasons you cannot see: a payload hash
 mismatch means the bundled Core is not the one this build shipped, and a
 protocol mismatch means the two sides disagree about the wire. In both
 cases OvalLSP goes on answering hover, completion and go to definition.
 Treat those answers as unreliable until the mismatch is resolved, and run
-`OvalLSP: Show Version Information` to see what was detected (024.55). <!-- documents: 024.55 -->
+`OvalLSP: Show Version Information` to see what was detected.
+
+The check that runs *before* the Core Server starts does stop: as of
+0.2.10, a Ruby that cannot load this build's bundled dependencies means
+the Core Server is not started at all, and you are told so. <!-- documents: 024.55 -->
 
 ## Diagnostics that come back after you clear or close a file
 
@@ -517,35 +521,68 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
-## A class of yours named like another class of yours
+## A `private` or `module_function` written inside a block
 
-If two classes in your workspace share a short name in different
-namespaces — a `Billing::Comment` alongside an ActiveRecord `Comment`, or
-an `App::Config` alongside a top-level one — a bare reference to one from
-inside its own namespace can be answered with the other. Both directions
-are wrong: the call that works is reported as an unknown method, and the
-call that would really raise is not. Completion offers the other class's
-methods.
+If you write one inside an ordinary block — `1.times { module_function }`,
+`[1].each { private }` — this extension does not apply it to the methods
+that follow, though Ruby does. Written directly in the class or module
+body, both work. <!-- documents: 024.111 -->
 
-Which one wins is not the nearer one. Writing the namespace out —
-`Billing::Comment.new` — restores it. <!-- documents: 024.103 -->
+## A class name your enclosing class inherits
 
-## What `class_methods do` in a concern attaches to
+A bare class name is resolved through the namespaces you are writing
+inside, but not through the ancestors of the class you are writing in. So
+`Config` inside `class Runner < Zbase`, where `Zbase::Config` exists, is
+answered by a top-level `Config` instead — the working call is reported
+as an unknown method and the call that would raise is not. Writing the
+namespace out restores it. <!-- documents: 024.112 -->
 
-**The instance, not the class.** A concern written with
-`class_methods do ... end` declares methods on the class, and this
-extension attributes them to instances: completion offers them after
-`Article.new.`, hover and go to definition answer for them there, and the
-undefined-method check accepts a call that raises. The older
-`module ClassMethods` form is handled correctly. <!-- documents: 024.104 -->
+## Reopening a file without closing it
 
-## `module_function` and `extend self`
+If your editor sends a second `didOpen` for a file it never closed, and
+the new buffer's version numbering starts below the old one's, diagnostics
+for that file stop updating until the numbering passes where it left off.
+VS Code sends `didClose` first, so this needs an unusual client. <!-- documents: 024.113 -->
 
-**Produce nothing.** Methods made available on the module by
-`module_function` or `extend self` do not appear in completion at all. A
-plain `def self.x` or `class << self` in the same module works. Nothing
-checks a module's class-level calls either, so a typo there is not
-reported the way it would be on a class. <!-- documents: 024.106 -->
+## A typo in a call on a module
+
+`PlainClass.nope` is reported and `PlainMod.nope` is not. A module's
+ancestor chain is itself, so this extension cannot tell "I have seen
+everything this module declares" from "I have seen one file that reopens
+it" — and 0.2.10 tried treating the two as the same, which reported
+`Rails.application`, `Rails.env` and `Rails.logger` as missing. Declining
+is the safer half of that trade until the index can prove the difference.
+`module_function` and `extend self` themselves work: their methods appear
+in completion, hover and go to definition. <!-- documents: 024.106 -->
+
+## `module_function :name` written in a different file from the method
+
+`module Reopened; def r_a; end; end` in one file and
+`module Reopened; module_function :r_a; end` in another: the module
+method is not recorded, and calling `Reopened.r_a` is reported as
+missing. Both in the same file works. <!-- documents: 024.114 -->
+
+## A module with a nested `ClassMethods` that is not a concern
+
+Including a module that happens to declare a `ClassMethods` makes this
+extension offer that module's class methods on the including class, as
+though it were an `ActiveSupport::Concern`. If it is not one, those names
+do not exist and calling one raises. <!-- documents: 024.115 -->
+
+## `def self.method_missing`, and methods made by `define_singleton_method`
+
+A class that answers class-level calls through `def self.method_missing`,
+or whose class methods are made by `define_singleton_method` in a loop,
+is treated as though its class-level surface were fully known — so the
+calls it really does answer are reported as missing. The instance-level
+`method_missing` is recognised. <!-- documents: 024.116 -->
+
+## A macro this extension cannot read is reported as a missing method
+
+If a class or module body calls a macro that comes from a gem, a
+`Concern`, or an `extend` this extension cannot follow — `attr_atomic
+:thing` — the *call itself* is reported as an unknown method. Whatever it
+defines is correctly left alone; the line that defines it is not. <!-- documents: 024.110 -->
 
 ## Completion offers methods you cannot call
 
@@ -570,20 +607,6 @@ is clean. <!-- documents: 024.99 -->
   and `p.update(`, while it answers for a method of your own and for
   `"abc".split(`. A method that overrides another shows its signature
   twice. <!-- documents: 024.100 -->
-
-## Typing on a large file
-
-**Every keystroke starts a full re-analysis, and each one publishes.**
-Measured per keystroke: 53 ms at 1000 lines, 155 ms at 2000, 368 ms at
-4000. Above about 2000 lines that is longer than the gap between
-keystrokes, so the work falls behind you.
-
-What you see: typing a method name that exists produces a red squiggle
-under every prefix of it as you go, and the panel is clean roughly six
-seconds after you stop. Hover and completion queue behind that work —
-after ten quick keystrokes on a 4000-line file, a hover took 3.4 seconds;
-on a 20 000-line file, 25 seconds, during which a second open file got no
-diagnostics either. <!-- documents: 024.101 -->
 
 ## Ordinary Ruby the undefined-method check reports anyway
 
