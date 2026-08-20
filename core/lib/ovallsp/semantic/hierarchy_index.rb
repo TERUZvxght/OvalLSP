@@ -160,7 +160,7 @@ module Ovallsp
       def ancestors(type_name, singleton: false)
         @mutex.synchronize do
           entries = compute_ancestors_locked(type_name, singleton: singleton, visited: Set.new)
-          dedupe_named(singleton ? entries + singleton_tail_for(type_name, entries) : entries)
+          dedupe_named(singleton ? entries + singleton_tail_for(type_name, entries) : entries, singleton)
         end
       end
 
@@ -176,20 +176,32 @@ module Ovallsp
 
       private
 
-      # Ruby lists a module once in an ancestor chain, however many ways it
-      # got there. This index could list one twice: `module ES; extend
-      # self` makes ES both the head of its own singleton chain and the
-      # target of its own `extend`, and the chain came out
-      # `["::ES", "::ES", "Module", ...]`. Keeping the first occurrence is
-      # what Ruby does -- the earliest position is the one that decides
-      # lookup.
+      # One entry per *link*, where a link is a name **and which side of
+      # it** the chain reaches. Not the name alone:
+      #
+      #   $ ruby -e 'module ES; extend self; def es_a; end; end
+      #              p ES.singleton_class.ancestors.first(3)'
+      #   # => [#<Class:ES>, ES, Module]
+      #   # ruby 3.4.10
+      #
+      # Those are two different things, and this index writes both under
+      # the name `"::ES"` -- the singleton class as `origin: :self`, the
+      # module as `origin: :extend`, which is exactly what
+      # `AncestorEntry#declaration_kind` reads. Keying the dedupe on the
+      # name alone kept the first and dropped the second, which made
+      # `extend self` record a fact that nothing could then read:
+      # `ActiveSupport::Inflector.pluralize` lost hover, go-to-definition
+      # and completion and gained a false report, and 0.2.9 had answered
+      # it correctly.
       #
       # Nameless entries are never merged: each is a *different* thing
       # this index could not identify, and collapsing them would say the
       # chain is shorter than the number of unknowns in it.
-      def dedupe_named(entries)
+      def dedupe_named(entries, singleton)
         seen = Set.new
-        entries.select { |entry| entry.name.nil? || seen.add?(entry.name) }
+        entries.select do |entry|
+          entry.name.nil? || seen.add?([entry.name, entry.declaration_kind(singleton: singleton)])
+        end
       end
 
       # Plain resolution. 0.2.1 applied `Index::TypeNameResolution` here so
@@ -326,8 +338,12 @@ module Ovallsp
       # alternative -- requiring the `extend ActiveSupport::Concern` line
       # -- misses every concern written before Rails 4 and every project
       # that re-exports one. `024.104`.
+      # `prepend` as well as `include`: `Concern#prepend_features` extends
+      # `ClassMethods` exactly as `append_features` does, so a prepended
+      # concern's class methods are on the class the same way.
       def concern_class_method_entries(canonical, visited)
-        @includes_by_owner.fetch(canonical, []).flat_map do |fact|
+        facts = @includes_by_owner.fetch(canonical, []) + @prepends_by_owner.fetch(canonical, [])
+        facts.flat_map do |fact|
           class_methods = "#{Index::SymbolId.qualify_owner(canonical_name(fact.target))}::ClassMethods"
           next [] unless kind_of(class_methods)
 

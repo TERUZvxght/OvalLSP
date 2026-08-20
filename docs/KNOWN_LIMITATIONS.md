@@ -544,6 +544,39 @@ the new buffer's version numbering starts below the old one's, diagnostics
 for that file stop updating until the numbering passes where it left off.
 VS Code sends `didClose` first, so this needs an unusual client. <!-- documents: 024.113 -->
 
+## A typo in a call on a module
+
+`PlainClass.nope` is reported and `PlainMod.nope` is not. A module's
+ancestor chain is itself, so this extension cannot tell "I have seen
+everything this module declares" from "I have seen one file that reopens
+it" — and 0.2.10 tried treating the two as the same, which reported
+`Rails.application`, `Rails.env` and `Rails.logger` as missing. Declining
+is the safer half of that trade until the index can prove the difference.
+`module_function` and `extend self` themselves work: their methods appear
+in completion, hover and go to definition. <!-- documents: 024.106 -->
+
+## `module_function :name` written in a different file from the method
+
+`module Reopened; def r_a; end; end` in one file and
+`module Reopened; module_function :r_a; end` in another: the module
+method is not recorded, and calling `Reopened.r_a` is reported as
+missing. Both in the same file works. <!-- documents: 024.114 -->
+
+## A module with a nested `ClassMethods` that is not a concern
+
+Including a module that happens to declare a `ClassMethods` makes this
+extension offer that module's class methods on the including class, as
+though it were an `ActiveSupport::Concern`. If it is not one, those names
+do not exist and calling one raises. <!-- documents: 024.115 -->
+
+## `def self.method_missing`, and methods made by `define_singleton_method`
+
+A class that answers class-level calls through `def self.method_missing`,
+or whose class methods are made by `define_singleton_method` in a loop,
+is treated as though its class-level surface were fully known — so the
+calls it really does answer are reported as missing. The instance-level
+`method_missing` is recognised. <!-- documents: 024.116 -->
+
 ## A macro this extension cannot read is reported as a missing method
 
 If a class or module body calls a macro that comes from a gem, a

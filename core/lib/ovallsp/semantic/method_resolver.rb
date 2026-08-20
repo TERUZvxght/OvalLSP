@@ -221,27 +221,28 @@ module Ovallsp
         !signatures.ancestors(Index::SymbolId.qualify_owner(entry.name)).empty?
       end
 
-      # Whether the chain ends where Ruby ends it. For a class that is
-      # `::BasicObject`.
+      # Whether the chain ends where Ruby ends it: at `::BasicObject`.
       #
-      # **A module is the exception only for a class-level lookup.**
-      # `PlainMod.ancestors` is `[PlainMod]` and that chain is complete,
-      # which is what lets a typo in `PlainMod.nope` be reported. It says
-      # nothing at all about `self` inside one of the module's *instance*
-      # methods: that self is an object of whatever class included the
-      # module, and its chain reaches `Object`, `Kernel` and
-      # `BasicObject` -- along with every method the includer promises.
+      # **0.2.10 tried to make a module an exception and rolled it back.**
+      # `PlainMod.ancestors` is `[PlainMod]`, so the sentinel can never
+      # fire for one, and `024.106`'s second half -- nothing checks a
+      # module's class-level calls -- is real. But "the workspace declares
+      # this name a module" is not the completeness proof the sentinel is:
+      # a module reopened *anywhere*, however partially, then read as
+      # fully enumerable. `module Rails` reopened by two generator files
+      # was enough to report `Rails.application`, `Rails.env`,
+      # `Rails.logger`, `Rails.root` and four more as missing.
       #
-      # Judging the instance side by the module's own chain reported
-      # `Kernel#raise` and `Kernel#puts` as missing inside an ordinary
-      # mixin. Measured over 172 files of actioncable, activejob and
-      # activemodel with `unresolved-constant` identical at 593 as the
-      # control: `unknown-method` went from 21 to 249, and all 228 were
-      # false. Found by two independent review rounds at once.
-      def rooted_instance_chain?(type, instance_entries, singleton)
-        return true if instance_entries.any? { |e| Index::SymbolId.qualify_owner(e.name) == "::BasicObject" }
-
-        singleton && @workspace_index.type_kind(type.name) == :module
+      # Measured by a `drive` round over 261 files of actioncable,
+      # activejob, activemodel and this repository's own `core/lib`, with
+      # `unresolved-constant` identical at 1,780 as the control:
+      # **41 findings added, 0 removed, and every one of the 41 false** --
+      # including two about code this release itself added. A rule that
+      # buys no true report for 41 false ones is not a rule to refine.
+      # `024.106`'s second half is open again and records what a real
+      # completeness proof for a module would have to be.
+      def rooted_instance_chain?(type, instance_entries, _singleton)
+        instance_entries.any? { |e| Index::SymbolId.qualify_owner(e.name) == "::BasicObject" }
       end
 
       def declares_method_missing?(owner)

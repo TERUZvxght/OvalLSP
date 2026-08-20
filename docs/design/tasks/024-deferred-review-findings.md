@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**112 entries below** <!-- measured: register-entries = 112 -->,
+**115 entries below** <!-- measured: register-entries = 115 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -249,7 +249,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | fixed | 0.2.10 | A bare class name inside a namespace answers with an arbitrary same-… |
 | [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | fixed | 0.2.10 | `class_methods do` in a concern is attributed to the instance side |
 | [`024.105`](#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | fixed | 0.2.9 | Visibility is not recorded for singleton methods at all |
-| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | fixed | 0.2.10 | `module_function` and `extend self` produce nothing |
+| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.10 | `module_function` and `extend self` produce nothing |
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | open | 0.2.11 | Specs whose fixture cannot distinguish the behaviour they pin |
@@ -257,6 +257,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.11 | A visibility section written inside a block does not reach the body … |
 | [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | open | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | open | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
+| [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | open | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
+| [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | open | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
+| [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.11 | `def self.method_missing` and `define_singleton_method` do not open … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5418,14 +5421,13 @@ Neighbour of `024.99`; both are the visibility half of `037`'s C2.
 ## 024.106 `module_function` and `extend self` produce nothing
 
 ```yaml
-status: fixed
+status: open
 kind: defect
 user-visible: yes
 target: 0.2.10
-released-in: 0.2.10
 ```
 
-**Area:** `core/lib/ovallsp/parser_service.rb`
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/semantic/method_resolver.rb`
 
 ```ruby
 module MF
@@ -5688,6 +5690,85 @@ Pre-existing and unchanged by this release (`#clear_findings` covers the
 close path, which is what a conforming client sends), but it is the same
 category error the release says carrying the buffer eliminates, and it is
 the last place a version integer is compared across buffers.
+
+## 024.114 `module_function :name` cannot see a module reopened in another file
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.11
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`
+(`#apply_module_function_arguments`)
+
+```ruby
+# a.rb
+module Reopened; def r_a; :a; end; end
+# b.rb
+module Reopened; module_function :r_a; end
+Reopened.r_a          # Ruby: :a. Reported as missing.
+```
+
+The recorder scans `@declarations`, the per-file visitor accumulator, so
+the same-file form works and the cross-file form never does — and
+cross-file is what the by-name form exists for. 112 `module_function :`
+sites in one 40-gem corpus.
+
+The fix is not in the parser: it has to be a fact the index applies after
+both files are indexed, the way `AncestorFact` already is. Found by
+0.2.10's `drive` round.
+
+## 024.115 `include M` reaches `M::ClassMethods` whether or not M is a Concern
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.11
+```
+
+**Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`
+(`#concern_class_method_entries`)
+
+0.2.10 keys the class-level edge on `M::ClassMethods` existing, not on
+`M` being an `ActiveSupport::Concern`. A plain module with a nested
+`ClassMethods`, included into a class, then makes completion offer a
+method that does not exist — `NoMethodError` if the developer picks it.
+
+The recorded reason was that requiring `extend ActiveSupport::Concern`
+would miss every concern written before Rails 4. 0.2.10's `drive` round
+established that reason is weaker than it was presented: those are
+written `def self.included(base); base.extend(ClassMethods); end`, that
+shape is detectable, and the round verified this engine already handles
+it correctly through the ordinary `extend` rule. So requiring *either*
+marker keeps the coverage and stops inventing the name.
+
+Recorded rather than changed because it arrived in the round that closed
+the loop, and because narrowing a rule wants its own corpus measurement.
+
+## 024.116 `def self.method_missing` and `define_singleton_method` do not open a surface
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.11
+```
+
+**Area:** `core/lib/ovallsp/semantic/method_resolver.rb`
+(`#declares_method_missing?`)
+
+`declares_method_missing?` asks the index for `kind: :instance_method`
+only, so a class answering through `def self.method_missing` is judged
+closed and every call it handles is reported. The same for a class whose
+methods are made by `define_singleton_method` in a loop.
+
+Pre-existing on classes, on `main` and every release before it, and
+`KNOWN_LIMITATIONS`' four-shape list does not mention either. Found by
+0.2.10's `drive` round while checking whether that release had widened
+them to modules; it had, and the widening was reverted with `024.106`.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

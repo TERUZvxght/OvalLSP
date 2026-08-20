@@ -548,13 +548,29 @@ module Ovallsp
       # `include Taggable` offered `cm_public` on every instance while
       # the spelled-out form was handled correctly (`024.104`). Four
       # features answered from the same wrong record.
+      # `@cref.module_owner?` for the same reason `#extend_self?` has it:
+      # `ActiveSupport::Concern` is a module thing, and a *class* writing
+      # `class_methods do` raises `NoMethodError`. Declaring a
+      # `ClassMethods` module Ruby never creates also silenced a report
+      # this engine used to make about the `class_methods` call itself.
       def concern_class_methods?(node)
         node.name == :class_methods && node.receiver.nil? && node.block.is_a?(Prism::BlockNode) &&
-          current_owner && !@cref.in_method_body?
+          current_owner && !@cref.in_method_body? && @cref.module_owner?
       end
 
       def visit_concern_class_methods(node)
         absolute_name = qualify("ClassMethods")
+
+        # A concern may open the block more than once -- `ActionText::
+        # Serialization` does, the second only to `alias_method` -- and
+        # each emitted its own `module` declaration with the same
+        # `SymbolId`, so the outline showed two identical `ClassMethods`
+        # nodes each listing every method. One declaration per module,
+        # which is what the spelled-out form produces.
+        already_declared = @declarations.any? do |declaration|
+          declaration.symbol_id.kind == :module && declaration.symbol_id.name == absolute_name
+        end
+        return visit_concern_class_methods_body(node, absolute_name) if already_declared
 
         @declarations << Index::Declaration.new(
           symbol_id: Index::SymbolId.new(kind: :module, owner: current_owner, name: absolute_name,
@@ -564,9 +580,13 @@ module Ovallsp
           name_location: Index::SourceLocation.to_range(node.message_loc || node.location, @lines)
         )
 
-        # The block body is the module body, so it opens a namespace and
-        # *not* a block frame: a `def` in `module ClassMethods` is written
-        # at depth zero, and `#defines_surface?` reads that depth.
+        visit_concern_class_methods_body(node, absolute_name)
+      end
+
+      # The block body is the module body, so it opens a namespace and
+      # *not* a block frame: a `def` in `module ClassMethods` is written
+      # at depth zero, and `#defines_surface?` reads that depth.
+      def visit_concern_class_methods_body(node, absolute_name)
         within_namespace(absolute_name, module_owner: true) do
           @skip_block_frame = true
           begin

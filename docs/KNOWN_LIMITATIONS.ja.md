@@ -503,6 +503,37 @@ Rails の concern がまさにこの形でした。メタプログラミング�
 版数が元の位置を追い越すまで更新されなくなります。VS Code は先に `didClose`
 を送るため、これには変わったクライアントが必要です。 <!-- documents: 024.113 -->
 
+## モジュールに対する呼び出しのタイプミス
+
+`PlainClass.nope` は報告され、`PlainMod.nope` は報告されません。モジュールの
+祖先チェーンは自分自身なので、この拡張機能は「このモジュールが宣言するものを
+すべて見た」と「このモジュールを再オープンするファイルを1つ見た」を区別でき
+ません。0.2.10 は両者を同じものとして扱ってみて、`Rails.application`・
+`Rails.env`・`Rails.logger` を「存在しない」と報告してしまいました。索引が
+その違いを証明できるようになるまでは、報告しない側が安全な選択です。
+`module_function` と `extend self` 自体は動作します — それらのメソッドは補完・
+ホバー・定義ジャンプに出ます。 <!-- documents: 024.106 -->
+
+## メソッドと別のファイルに書かれた `module_function :name`
+
+`module Reopened; def r_a; end; end` が一方のファイルにあり、
+`module Reopened; module_function :r_a; end` が別のファイルにある場合、モジュール
+メソッドとして記録されず、`Reopened.r_a` の呼び出しが「存在しない」と報告され
+ます。同じファイル内であれば正しく働きます。 <!-- documents: 024.114 -->
+
+## concern ではないのに `ClassMethods` を持つモジュール
+
+`ClassMethods` を入れ子に宣言しているモジュールを include すると、この拡張機能は
+それを `ActiveSupport::Concern` と同じように扱い、そのクラスメソッドを include 先の
+クラスに出します。concern でない場合、それらの名前は存在せず、選ぶと例外になります。 <!-- documents: 024.115 -->
+
+## `def self.method_missing` と `define_singleton_method` で作られるメソッド
+
+`def self.method_missing` でクラスレベルの呼び出しに答えるクラスや、クラスメソッドを
+`define_singleton_method` のループで作るクラスは、クラスレベルの面が完全に既知で
+あるかのように扱われ、実際には答えられる呼び出しが「存在しない」と報告されます。
+インスタンス側の `method_missing` は認識されます。 <!-- documents: 024.116 -->
+
 ## 読めないマクロが「存在しないメソッド」として報告されます
 
 クラスやモジュールの本体が、gem・`Concern`・この拡張機能が辿れない `extend`

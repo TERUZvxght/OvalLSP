@@ -169,12 +169,20 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
     # instance methods. Recording a singleton copy would answer the same
     # completion question by the wrong means and would be wrong about
     # `ES.instance_methods(false)`.
-    # The chain listed the module twice -- `["::ES", "::ES", "Module", ...]`
-    # -- because the module is both the chain's head and the target of its
-    # own `extend`. Ruby's `ES.singleton_class.ancestors` names it once.
-    # Harmless for the availability check, which asks `any?`; not harmless
-    # for anything that counts entries or reports one per link.
-    it "lists itself once in its own singleton chain" do
+    # **Ruby names it twice, and they are two different things:**
+    #
+    #   $ ruby -e 'module ES; extend self; def es_a; end; end
+    #              p ES.singleton_class.ancestors.first(3)'
+    #   # => [#<Class:ES>, ES, Module]
+    #   # ruby 3.4.10
+    #
+    # The singleton class supplies `def self.` methods; the module
+    # supplies its instance methods, which is what `extend self` is for.
+    # This index writes both under the name `"::ES"` and tells them apart
+    # by `origin`. An earlier version of this example asserted the chain
+    # listed the name once -- round 2's reading -- and the dedupe written
+    # to satisfy it switched `extend self` off entirely.
+    it "lists each side of itself once in its own singleton chain" do
       summary = Ovallsp::ParserService.new.summarize(
         Ovallsp::TextDocument.new(uri: "file:///es.rb", version: 1, language_id: "ruby",
                                    text: "module ES\n  extend self\n  def es_a; end\nend\n")
@@ -184,10 +192,37 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
       workspace_index.replace_file(summary)
       hierarchy_index.replace_file(summary)
 
-      names = hierarchy_index.ancestors("::ES", singleton: true).map(&:name)
+      links = hierarchy_index.ancestors("::ES", singleton: true)
+                             .map { |e| [e.name, e.declaration_kind(singleton: true)] }
 
-      expect(names).to eq(names.uniq)
-      expect(names.first).to eq("::ES")
+      expect(links).to eq(links.uniq)
+      expect(links.first(2)).to eq([["::ES", :singleton_method], ["::ES", :instance_method]])
+    end
+
+    # **The question the other examples here do not ask.** They assert the
+    # ancestor fact is recorded and that the chain lists each name once,
+    # and both stayed true while `#dedupe_named` -- added to fix the
+    # duplicate -- silently cancelled the whole feature: `ES.es_a`
+    # stopped resolving, and `ActiveSupport::Inflector.pluralize` lost
+    # hover, go-to-definition and completion and gained a false report.
+    # 0.2.9 answered it correctly. `024.109`'s own category, in this
+    # release's own new spec.
+    it "answers about a method reached through extending itself" do
+      summary = Ovallsp::ParserService.new.summarize(
+        Ovallsp::TextDocument.new(uri: "file:///es.rb", version: 1, language_id: "ruby",
+                                   text: "module ES\n  extend self\n  def es_a; end\nend\n")
+      )
+      workspace_index = Ovallsp::WorkspaceIndex.new
+      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      workspace_index.replace_file(summary)
+      hierarchy_index.replace_file(summary)
+      resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
+                                                       hierarchy_index: hierarchy_index)
+
+      candidates = resolver.resolve(receiver_type: Ovallsp::Types::Nominal.new(name: "ES"),
+                                    name: "es_a", context: { singleton: true })
+
+      expect(candidates.map { |c| c.symbol_id.name }).to eq(["es_a"])
     end
 
     it "records the module extending itself, and leaves the methods where they are" do
@@ -292,10 +327,17 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a module's class-level calls" d
     expect(unknown_methods(document)).to be_empty
   end
 
-  it "reports a typo on a module exactly as it does on a class" do
+  # **Rolled back in 0.2.10's third round, and this example records what
+  # it was.** Making the module's own chain count as complete reported
+  # `Rails.application`, `Rails.env` and five more as missing, because
+  # `module Rails` reopened by two generator files was enough to make the
+  # workspace call it "declared". Measured: 41 findings added, 0 removed,
+  # all 41 false, control identical. So a module's class-level typo is
+  # *not* reported, which is `024.106`'s second half, open again.
+  it "does not report a typo on a module, which a class-level typo still is" do
     document = index("PlainMod.nope_x\nPlainClass.nope_y\n", uri: "file:///use.rb")
 
-    expect(unknown_methods(document)).to contain_exactly("nope_x", "nope_y")
+    expect(unknown_methods(document)).to contain_exactly("nope_y")
   end
 
   # The control: the methods that *are* there stay silent, on both.
