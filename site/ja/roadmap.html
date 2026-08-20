@@ -195,6 +195,39 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0210">
+          <div class="tl-version">
+            <span class="v">0.2.10</span>
+            <span class="mark mark--yes">リリース済み</span>
+          </div>
+          <h3>答えが「何から計算されたか」を知っている</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>大きなファイルでの入力中、質問が古い作業の後ろに並ばなくなりました。</strong> 3,900行のファイルでの実測で、入力中に求めたホバーは <strong>1.43秒 → 0.04秒</strong>。1回の解析より速い連続入力は、落ち着いた状態について1つの答えを返します。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>自分の別のクラスと名前を共有しているクラスが、Ruby と同じように解決されます。</strong> `module App` の中の <code>Config</code> は、`App` が宣言していれば <code>App::Config</code>。自身のメソッドが「存在しない」と報告される一方で実際に失敗する呼び出しが黙殺される、という状態がなくなりました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>ActiveSupport::Concern の <code>class_methods do</code> がクラス側に付き</strong>、<strong><code>module_function</code> と <code>extend self</code> がメソッドを生みます</strong> — どちらのイディオムも以前は何も生んでいませんでした。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Core を動かせない Ruby で、中途半端に起動しなくなりました。</strong> 4つの文書が「互換性がなければ何も答える前に停止する」と書いていましたが、していませんでした。その Ruby が自前の <code>prism</code>・<code>rbs</code> をロードできるかを尋ねたうえで、停止します。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            機能の追加はありません。レビューは3ラウンド。3つ目は変更を読むのでは
+            なく実際の Ruby に対して製品を走らせる方法で、読む2ラウンドがどちらも
+            見逃していた出荷済み Rails ソース上の41件の誤報告を見つけました —
+            うち1件はその前のラウンドの修正そのものです。いずれもこのリリースには
+            入っていません。
+          </p>
+        </article>
+
         <article class="tl-item" id="v029">
           <div class="tl-version">
             <span class="v">0.2.9</span>

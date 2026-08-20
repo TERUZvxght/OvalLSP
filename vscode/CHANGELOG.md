@@ -6,6 +6,60 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.10 — an answer knows what it was computed from
+
+- **Typing on a large file stops queueing your questions behind stale
+  work.** Every keystroke used to start a full re-analysis and publish
+  its result, so a hover asked while you were typing waited behind all of
+  them. Measured on a 3,900-line file: a hover asked during a burst of
+  edits took **1.43 seconds; it now takes 0.04.** A burst of edits faster
+  than one analysis produces one answer — about where the buffer landed
+  — instead of one per keystroke, and the client is no longer throttled
+  by the server while it types.
+- **A class of yours named like another class of yours resolves the way
+  Ruby resolves it.** `Config` written inside `module App` means
+  `App::Config` if `App` declares one, exactly as the interpreter does —
+  so `App::Config`'s own methods are no longer reported as missing while
+  the call that really raises goes unmentioned. The Rails shape of this
+  is a `Billing::Comment` beside an ActiveRecord `Comment`.
+- **`class_methods do` in an ActiveSupport::Concern attaches to the
+  class.** It was attributed to instances: completion offered those
+  methods after `Article.new.`, and the undefined-method check accepted a
+  call that raises while reporting `Article.cm_public`, which works. All
+  four of those answers are now what Ruby does.
+- **`module_function` and `extend self` produce their methods.** Both
+  idioms produced nothing at all — `MF.` completed 190 items with no
+  `mf_a` among them — while `def self.x` in the same module worked. The
+  bare form, the by-name form and the `module_function def` form Rails
+  itself writes are all recorded now.
+- **A Ruby that cannot run the Core no longer half-starts it.** Four
+  documents said this extension stops before answering anything on an
+  incompatible interpreter, and it did not: it warned and served answers
+  anyway. It now checks, before starting, whether your Ruby can load
+  either this build's bundled `prism`/`rbs` or its own — and if neither,
+  the Core Server does not start and says so. If it merely could not
+  determine your Ruby's version, that is no longer fatal on its own.
+
+### Details
+
+**Underneath**: a published diagnostic now carries the buffer it was
+computed from rather than a version integer. A version is chosen by your
+editor and is only meaningful inside one buffer — across a close and
+reopen it may start again anywhere — so comparing two of them across
+buffers was comparing numbers on different scales. And analysis follows
+the state a buffer settles into rather than every event on the way to it:
+not a debounce, with no interval to tune, but a question about whether
+anything else is waiting to be read.
+
+**What the review found, because it is worth knowing what a release
+costs.** Three rounds, and the third — which ran the product against real
+Ruby rather than reading the change — found 41 false reports on shipped
+Rails source that the two reading rounds had both missed. One was a fix
+from the round before it. Nothing in that list reached this release; the
+work it required is why `module_function` ships and a typo in
+`PlainMod.nope` still is not reported. That last one is in
+`docs/KNOWN_LIMITATIONS.md`, along with everything else left open.
+
 ## 0.2.9 — one question, asked once, answered honestly
 
 - **Completion no longer offers a name that would raise if you picked

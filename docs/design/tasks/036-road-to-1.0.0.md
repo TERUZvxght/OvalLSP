@@ -155,7 +155,7 @@ the one most likely to be attempted at the wrong size, and `024.15` and
 distinguish the behaviour they pin, whose list was lost before it was
 written down.
 
-### 0.2.10 — an answer knows what it was computed from, and three that slipped *(axis B)*
+### 0.2.10 — an answer knows what it was computed from, and three that slipped *(axis B)* — **shipped**
 
 `037`'s C3 and C9, moved out of 0.2.9 once C2's size was measurable, plus
 the three 0.2.8's drive round found and recorded as 0.2.9 without their
@@ -173,6 +173,24 @@ measured 22 wrong intermediate publishes for one method name typed on a
 attempt at the debounce was rolled back, and the precondition `029` said
 it lacked shipped in 0.2.7. `024.19`, `024.44`, `024.45`, `024.57`,
 `024.97`, `024.101`.
+
+**What it took.** Three review rounds — `diff`, `attack` and `drive` —
+finding 19, 12 and 8 defects. The `drive` round is the one that mattered:
+the two reading rounds between them missed 41 false reports on shipped
+Rails source, including a fix from the round before that had switched
+`extend self` off entirely. `040` records all three tables, and the
+release ships under `CLAUDE.md`'s bound with `024.106`'s second half,
+`024.109`, and `024.111`–`024.116` open.
+
+### 0.2.11 — the loop's own leavings *(axis B)* — **next, on `feat/0.2.11`**
+
+What 0.2.10's rounds recorded rather than fixed, which is a coherent
+release rather than an appendix: `024.106`'s second half needs the index
+to prove a module's declarations are all of them; `024.114` needs
+`module_function :name` to be a fact applied after both files are
+indexed, the way `AncestorFact` already is; and `024.115` narrows the
+concern rule to something with a marker. `024.111`, `024.112`, `024.113`,
+`024.116`, `024.109` and `024.110` join them.
 
 ### 0.3.0 — the first release that may add capability *(axis B)*
 
