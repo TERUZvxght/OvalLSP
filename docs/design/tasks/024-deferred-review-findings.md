@@ -3854,6 +3854,16 @@ is **who runs them**. Twice a month, by one person, on one machine, is
 how a harness stays broken across four VS Code releases while the tree
 records the gate items about it as green.
 
+**And the job asserts the count, not just the exit code.** `runTest.js`
+exits 0 when the extension host reports no failures, and no failures is
+also what zero examples looks like -- so a harness that stops discovering
+tests, or an activation that quietly never happens, would read as a pass.
+Adding the job without that check would have replaced "nobody runs them"
+with "CI runs them and would not notice if it stopped", which is the same
+defect wearing a green tick. The core job has carried the equivalent
+guard since 0.2.5. First run: **5 passing**, against a real VS Code
+1.134.0 driving a real Core.
+
 
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 

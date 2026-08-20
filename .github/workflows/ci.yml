@@ -287,7 +287,27 @@ jobs:
 
       - name: Integration tests (monorepo-relative Core)
         working-directory: vscode
-        run: xvfb-run -a npm run test:integration
+        run: xvfb-run -a npm run test:integration 2>&1 | tee integration.log
+
+      # **A green run is a measurement, and it can be green because it did
+      # not run.** `runTest.js` exits 0 when the extension host reports no
+      # failures, and no failures is also what zero examples looks like --
+      # so a harness that stops discovering tests, or an activation that
+      # quietly never happens, would read as a pass. That is the same
+      # hazard the core job guards with "Fail if the real-Rails or
+      # capability suites were skipped instead of run", and this job would
+      # otherwise replace "nobody runs them" with "CI runs them and would
+      # not notice if it stopped".
+      - name: Fail if the integration suite reported no examples
+        working-directory: vscode
+        run: |
+          count=$(grep -oE '[0-9]+ passing' integration.log | tail -1 | grep -oE '[0-9]+' || echo 0)
+          echo "integration examples: $count"
+          if [ "${count:-0}" -lt 1 ]; then
+            echo "The integration suite reported no passing examples. A real VS Code launching and"
+            echo "discovering nothing exits 0, which is why this check exists (024.69)." >&2
+            exit 1
+          fi
 
   # The site check compares the version the index pages advertise
   # against vscode/package.json, and it must run when *either* side of
