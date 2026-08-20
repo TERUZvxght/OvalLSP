@@ -206,12 +206,38 @@ corpus and the headline table advertising the opposite. It ships neutral
 on that corpus — 84 → 84, control identical — with its value in shapes
 four Rails gems do not contain.
 
-### 0.2.12 — what three rounds left *(axis B)* — **next, on `feat/0.2.12`**
+### 0.2.12 — the apparatus, and two small mechanical classes *(axis B)* — **next, on `feat/0.2.12`**
 
-`024.106`'s second half, `024.110` in a shape that can tell "I could not
-read *this class's* body" from "I could not read `Module`'s", `024.117`,
-`024.118`, and the residue of `024.116`. `024.109` and `024.111` join
-them.
+[`042-second-enumeration.md`](042-second-enumeration.md)'s **D7, D8, D6
+and D4**. A spec names the mutation it pins and a check applies it; one
+function assembles the analysis stack, so a harness cannot be a subset of
+the server; a document identity carries its buffer, so two versions from
+different buffers are `:incomparable` rather than ordered; and an
+ancestor chain is a list of `Type` / `SingletonOf` / `Unidentified`, so
+the `nil`-owner guards become impossible instead of remembered.
+
+**D7 and D8 go first, and not because they are the largest.** They are
+the two classes whose failures make every *other* class's measurement
+untrustworthy — a spec that cannot distinguish, and a harness that is not
+the server. Two of the three corpus comparisons in the 0.2.9–0.2.11 cycle
+were invalidated by D8 alone, one of them in the script whose own comment
+forbids exactly that.
+
+`024.25`, `024.26`, `024.30`, `024.39`, `024.55`, `024.64`, `024.68`,
+`024.69`, `024.75`, `024.80`, `024.81`, `024.97`, `024.109`, `024.118`.
+
+### 0.2.13 — what an owner's own body says *(axis B)*
+
+042's **D2** and **D5**. The largest group and C1's axis done as
+questions rather than storage: a member set produced *with* its
+completeness by the recorder that knows, so `absent` is a thing only a
+complete set can answer; and a `Cref` that exposes `#surface_for(node)`
+and nothing else, with a block frame that carries the receiver the block
+runs against.
+
+`024.106`, `024.110`, `024.111`, `024.116`, `024.117`, `024.76`,
+`024.77`, `024.83`, `024.91`, `024.18`, `024.22`, `024.27`, `024.28`,
+`024.31`, `024.32`, `024.33`, `024.34`.
 
 ### 0.3.0 — the first release that may add capability *(axis B)*
 

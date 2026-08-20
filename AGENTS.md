@@ -31,9 +31,14 @@ most-useful-first, say — are 2.x.x.
 
 **The distance to 1.0.0 is written down**, derived from those two and
 nothing else: [`docs/design/tasks/036-road-to-1.0.0.md`](docs/design/tasks/036-road-to-1.0.0.md).
-The release being prepared now is **0.2.12, on `feat/0.2.12`** — what
-0.2.11's three rounds recorded rather than fixed, `024.106`'s second
-half, and `024.110`, whose one-line shape was tried and rolled back.
+The release being prepared now is **0.2.12, on `feat/0.2.12`** — the
+apparatus classes of
+[`docs/design/tasks/042-second-enumeration.md`](docs/design/tasks/042-second-enumeration.md):
+a spec that names the mutation it pins, one place that assembles the
+analysis stack, one comparable document identity, and a chain entry that
+can say what it is. **Read 042 before starting any of it.** It supersedes
+`024.102`, and the reason is the stocktake: eight classes were built and
+C1 discharged 0 of 5 of the entries it claimed.
 0.2.11 is recorded in
 [`docs/design/tasks/041-0.2.11-the-loops-own-leavings.md`](docs/design/tasks/041-0.2.11-the-loops-own-leavings.md);
 0.2.7 is in
