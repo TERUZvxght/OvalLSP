@@ -130,9 +130,14 @@ the funnel introduced a defect worse than the one it fixed.
 `037`'s C1 and C8. A declaration's owner and kind stop being decided by
 six parallel mutable stacks and become one immutable value every recorder
 is handed; a uri gets one canonical form so a symlinked workspace stops
-showing every file twice. Between them they carry `024.26`, `024.31`,
-`024.32`, `024.33`, `024.34` and `024.98`, and the open-surface family
-0.2.6's rounds kept finding one instance at a time.
+showing every file twice.
+
+**"Carry" was the wrong word, and this sentence said it for two
+releases.** 0.2.11's stocktake re-ran all five of C1's entries —
+`024.26`, `024.31`, `024.32`, `024.33`, `024.34` — and every one still
+reproduces. Four were never within the mechanism's reach and one is,
+and is still wrong. `024.98` (C8) is genuinely fixed. `024.102` records
+the verdicts and what each says about the mechanism.
 
 ### 0.2.9 — one question, asked once, answered honestly *(axis B)* — **shipped**
 

@@ -5254,6 +5254,67 @@ target: 0.3.0
 **Area:** the register as a whole; `037`'s "Preventing the classes"
 section carries the same table with sizes and reasoning
 
+## The stocktake, 0.2.11: the mechanisms are built and the instances are not gone
+
+Asked for by the maintainer, after this entry had been read for two
+releases as though building a class's preventing logic discharged the
+entries under it. It does not, and the difference is measurable. Twenty
+entries, each reproduction re-run against the tree at `0449007` by three
+independent audits, every claim about Ruby taken from the interpreter.
+
+| class | mechanism | entries fixed |
+|---|---|---|
+| C1 | shipped 0.2.8 | **0 of 5** |
+| C2 | shipped 0.2.9 | **1 of 9** (`024.35`), plus `024.83` reduced 74 → 20 |
+| C3 | shipped 0.2.10 | **0 of 3** (`024.19` narrowed, by rules that are not C3) |
+| C4 | shipped 0.2.7 | 1 of 1 |
+| C5 | shipped 0.2.7 | instances gone; **the instrument works and found 3 unpinned hunks on this branch** |
+| C6 | shipped 0.2.7 | — |
+| C8 | shipped 0.2.8 | 1 of 1 |
+| C9 | shipped 0.2.10 | `024.57`'s behaviour **gone**; `024.45` reproduces |
+
+**Four of the five entries under C1 were never within its reach.** Two
+are decided in `HierarchyIndex` and in a Prism node-class test, not from
+parser bookkeeping; two need a block *receiver*, and `Cref#in_block` is a
+counter. The fifth is the informative one: `Cref#defines_surface?`
+answers exactly the question `024.34` needs, and `record_attribute_methods`
+asks `declares_singleton?` instead. `defines_surface?` is read at **one**
+site in the parser; `declares_singleton?` at **seven**. So `cref.rb`'s
+claim — "There is no subset to read wrongly because there is no subset" —
+is false. Collecting six flags into one value collected the *storage*,
+not the *question*.
+
+**C2's charter had two halves and one was never built.** "One query per
+position answering present / absent / unknown" shipped; "read by all four
+features" did not. `members_of`, `signatures_of` and hover never call
+`availability` — only `Engine#closed_nominal?` does. That accounts for
+`024.88`, `024.99` and half of `024.100` directly. Two more failures:
+`unenumerable_reason` enumerates *ancestors*, while every surviving false
+positive in `024.13`, `024.83` and `024.91` is a failure to enumerate a
+class's **own members**; and `MemberAvailability` has no visibility field
+although `024.99`'s stated direction requires one.
+
+`024.100`'s root cause was located during the audit and is the sharpest
+statement of the gap: hover and completion pass
+`initial_env: ivars_for_view(uri)`; the diagnostics path passes only a
+set of *names*, and `initial_env` appears nowhere in `engine.rb`. **One
+query per position was built as one query about a *type*, not about a
+*position*.**
+
+**What the stocktake does not say** is that the mechanisms were a
+mistake. C5's instrument found three unpinned lines on the branch it was
+run against, one of them a collaborator wired into `Server#initialize`
+that no test touched — the same failure `040` records for `024.103`, and
+found by a machine rather than a reviewer. C9's rolled-back debounce
+findings are structurally impossible now. C2 turned 74 false reports into
+20 on one corpus. What it says is that **a class's mechanism and a
+class's entries are two different pieces of work**, and this register
+recorded the first as though it were both.
+
+Every entry's `status` is unchanged by the stocktake, because every
+verdict agreed with what the register already said. What changes is
+`036`, which described 0.2.8 and 0.2.10 as *carrying* these entries.
+
 Asked for by the maintainer after 0.2.7's second review round: enumerate
 what is open, decide for each the logic under which it could not have
 happened, build those, and only then go on reviewing. The instruction

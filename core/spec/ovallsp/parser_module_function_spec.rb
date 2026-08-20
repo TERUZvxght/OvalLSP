@@ -169,6 +169,28 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
       expect(candidates.map { |c| c.symbol_id.name }).to eq(["r_a"])
     end
 
+    # **The count has to come back down when the file goes away.** The
+    # decrement in `remove_file_locked` was unpinned: reverting it leaks a
+    # `module_function` across a re-index, so a module keeps a class-level
+    # method after the line that made it was deleted, and nothing failed.
+    it "forgets the module method when the file naming it is removed" do
+      workspace_index = Ovallsp::WorkspaceIndex.new
+      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      [["file:///a.rb", "module Reopened\n  def r_a; end\nend\n"],
+       ["file:///b.rb", "module Reopened\n  module_function :r_a\nend\n"]].each do |uri, text|
+        summary = Ovallsp::ParserService.new.summarize(
+          Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
+        )
+        workspace_index.replace_file(summary)
+        hierarchy_index.replace_file(summary)
+      end
+      expect(workspace_index.method_symbol_ids("Reopened", kind: :singleton_method).map(&:name)).to eq(["r_a"])
+
+      workspace_index.remove_file("file:///b.rb")
+
+      expect(workspace_index.method_symbol_ids("Reopened", kind: :singleton_method)).to be_empty
+    end
+
     # The control: a name it does not mention stays off the module. An
     # implementation that put every instance method on the singleton side
     # once any `module_function` appeared would pass the example above.

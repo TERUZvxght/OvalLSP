@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "stringio"
 # `024.103`. Two classes of your own sharing a short name in different
 # namespaces, and a bare reference to one of them *from inside its own
 # namespace* answered with the other. Both directions inverted: the call
@@ -139,6 +140,23 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a bare class name inside a name
   # No top-level `Config` at all: the winner must still be the nesting's,
   # not whichever was indexed first or sorts earliest. `024.103` measured
   # `Alpha::Config` winning inside `module Beta`.
+  # **The server's own wiring, not the spec's.** Every example here builds
+  # its collaborators by hand, so `hierarchy_index:` could be dropped from
+  # `Server#initialize`'s `LocalInferencer.new` call and the whole suite
+  # would stay green -- the C5 sweep measured exactly that, and it is the
+  # same failure `040` records for `024.103`: a collaborator the fix reads,
+  # never wired into the thing under test.
+  it "is wired into the server, so the running product asks the same question" do
+    server = Ovallsp::Server.new(input: StringIO.new(""), output: StringIO.new,
+                                 logger: instance_double(Ovallsp::Logger, info: nil, warn: nil, error: nil))
+    inferencer = server.instance_variable_get(:@local_inferencer)
+
+    expect(inferencer.instance_variable_get(:@hierarchy_index))
+      .to be(server.instance_variable_get(:@hierarchy_index))
+    expect(inferencer.instance_variable_get(:@workspace_index))
+      .to be(server.instance_variable_get(:@workspace_index))
+  end
+
   it "does not answer with an unrelated namespace's class when neither is top-level" do
     workspace_index.replace_file(
       Ovallsp::ParserService.new.summarize(

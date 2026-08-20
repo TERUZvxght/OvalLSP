@@ -334,14 +334,14 @@ missed one", so each is narrow on purpose. What that costs a user:
   mismatch in a union, an interface, a generic, or a method with several
   overloads is not reported.
 
-  One shape is wrong rather than merely silent, recorded as 024.19. A
-  constant the workspace does not declare — `::Vendor::Gadgets::Widget` —
-  reaches the index's last-segment fallback, which answers with whatever
-  class shares that final name. The argument check then judges against
-  *that* class's signature and can report a mismatch against a class the
-  receiver is not. There is no accompanying signal to spot it by: the
-  constant check skips a name the same fallback resolves, so precisely
-  when this misfires, the constant is *not* also reported unresolvable.
+  One shape is wrong rather than merely silent, recorded as 024.19, and
+  it is **narrower than this paragraph said until 0.2.11**. A name you
+  write with its namespace — `::Vendor::Gadgets::Widget`, or
+  `Vendor::Gadgets::Widget` — no longer reaches the index's last-segment
+  fallback at all, and *is* reported unresolvable when nothing declares
+  it. What remains is a **bare** name that exactly one class in your
+  workspace claims: `Widget.make(1)` is judged against that class's
+  signature even where the receiver you meant is a different `Widget`.
   What gives it away is the message naming a type from somewhere the
   receiver's own namespace has nothing to do with. <!-- documents: 024.19 -->
 - **Reading an `@ivar` nothing assigns** is reported in ERB views only,
@@ -474,14 +474,19 @@ and it had no entry here until 0.2.1 (024.45). It is not new in this
 release; 0.2.0 measures the same. Files of a few hundred lines, which is
 most application code, re-analyse in well under a tenth of a second. <!-- documents: 024.45 -->
 
-**Deferring the report until you stop typing was tried, and rolled
-back.** It coalesced a burst of keystrokes into one analysis and was
-measured doing so — but it also produced two races, could not bound how
-many analyses of one file run at once, and each of four consecutive
-review rounds found another defect in it. So the cost today is what it
-has always been: per keystroke. It will be tried again on top of a
-publish path where one writer decides what is sent, rather than each
-publisher deciding for itself. <!-- documents: 024.57 -->
+**Deferring the report until you stop typing was tried in 0.2.2, rolled
+back, and built again in 0.2.10 in a different shape.** The first attempt
+was a timed debounce with waiter threads; it produced two races, could
+not bound how many analyses of one file run at once, and each of four
+consecutive review rounds found another defect in it. What ships now is
+not a debounce: there is no interval, no waiter thread, and the question
+is only whether anything else is waiting to be read. A burst of edits
+faster than one analysis produces a few answers rather than one per
+keystroke, and — the part you feel — a hover asked while you are typing
+is answered before the pending analysis runs, in about 0.04 s instead of
+1.4. What is still per-keystroke is a burst slower than the analysis: an
+edit that settles is always analysed, which is the property that matters
+more. <!-- documents: 024.57 -->
 
 ## What the undefined-method check gets wrong on real code
 
