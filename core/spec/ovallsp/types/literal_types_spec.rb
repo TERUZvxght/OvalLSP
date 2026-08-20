@@ -29,18 +29,17 @@ RSpec.describe Ovallsp::Types::LiteralTypes do
   }.freeze
 
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
-  let(:method_resolver) { Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index) }
+  # One stack, assembled where the server assembles its own (042's D8).
+  let(:stack) { build_analysis_stack(workspace_index: workspace_index) }
+  let(:analyzer) { stack.method_analyzer }
+  let(:hierarchy_index) { stack.hierarchy_index }
+  let(:method_resolver) { stack.method_resolver }
   let(:summary_store) { Ovallsp::Semantic::MethodSummaryStore.new }
-  let(:analyzer) do
-    Ovallsp::Semantic::MethodAnalyzer.new(workspace_index: workspace_index, method_resolver: method_resolver,
-                                          summary_store: summary_store)
-  end
 
   def document(text) = Ovallsp::TextDocument.new(uri: "file:///l.rb", text: text, version: 1, language_id: "ruby")
 
   def expression_type(source)
-    Ovallsp::LocalInferencer.new.infer_at(document("x = #{source}\n"), { line: 0, character: 1 }).to_s
+    stack.local_inferencer.infer_at(document("x = #{source}\n"), { line: 0, character: 1 }).to_s
   end
 
   def return_type(source)

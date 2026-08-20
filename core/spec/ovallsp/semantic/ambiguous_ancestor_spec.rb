@@ -20,7 +20,7 @@
 RSpec.describe "Ovallsp::Semantic::HierarchyIndex and an ambiguous ancestor name" do
   def build(sources)
     index = Ovallsp::WorkspaceIndex.new
-    hierarchy = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: index)
+    hierarchy = build_analysis_stack(workspace_index: index).hierarchy_index
     sources.each do |uri, text|
       document = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
       summary = Ovallsp::ParserService.new.summarize(document)

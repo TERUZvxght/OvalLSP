@@ -557,7 +557,7 @@ RSpec.describe "Ovallsp::Server controller-to-view instance variable propagation
     # Tight enough that one shared budget covers the first callback only.
     server.instance_variable_set(
       :@local_inferencer,
-      Ovallsp::LocalInferencer.new(max_steps: 6)
+      build_analysis_stack(max_steps: 6).local_inferencer
     )
 
     ivars = server.send(:infer_controller_action_ivars, "::PostsController", "show")

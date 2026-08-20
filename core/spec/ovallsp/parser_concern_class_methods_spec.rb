@@ -111,7 +111,8 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
   describe "a class including the concern" do
     def chain(*sources)
       workspace_index = Ovallsp::WorkspaceIndex.new
-      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      stack = build_analysis_stack(workspace_index: workspace_index)
+      hierarchy_index = stack.hierarchy_index
       sources.each_with_index do |text, i|
         summary = Ovallsp::ParserService.new.summarize(
           Ovallsp::TextDocument.new(uri: "file:///f#{i}.rb", text: text, version: 1, language_id: "ruby")

@@ -41,7 +41,8 @@ module Ovallsp
                    model_registry: Models::ModelRegistry.new,
                    observation_store: Observation::Store.new,
                    method_summary_store: Semantic::MethodSummaryStore.new,
-                   generated_method_index: Semantic::GeneratedMethodIndex.new)
+                   generated_method_index: Semantic::GeneratedMethodIndex.new,
+                   max_steps: nil)
       hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: workspace_index)
       method_resolver = Semantic::MethodResolver.new(workspace_index: workspace_index,
                                                     hierarchy_index: hierarchy_index)
@@ -57,11 +58,13 @@ module Ovallsp
         summary_store: method_summary_store, model_registry: model_registry,
         generated_method_index: generated_method_index
       )
+      # `max_steps` is passed only when a caller names one, so the
+      # inferencer's own default stays the single source of it.
       local_inferencer = LocalInferencer.new(
-        model_registry: model_registry, method_resolver: method_resolver,
-        method_analyzer: method_analyzer, signatures: signatures,
-        observation_store: observation_store, workspace_index: workspace_index,
-        hierarchy_index: hierarchy_index
+        **{ model_registry: model_registry, method_resolver: method_resolver,
+            method_analyzer: method_analyzer, signatures: signatures,
+            observation_store: observation_store, workspace_index: workspace_index,
+            hierarchy_index: hierarchy_index }.merge(max_steps ? { max_steps: max_steps } : {})
       )
 
       new(workspace_index: workspace_index, hierarchy_index: hierarchy_index,

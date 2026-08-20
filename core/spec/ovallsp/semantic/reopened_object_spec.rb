@@ -10,10 +10,10 @@
 # `unknown-method` on every closed receiver in the workspace.
 RSpec.describe "Ovallsp reopened core class lookups (0.1.11)" do
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
-  let(:method_resolver) do
-    Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
-  end
+  # One stack, assembled where the server assembles its own (042's D8).
+  let(:stack) { build_analysis_stack(workspace_index: workspace_index) }
+  let(:hierarchy_index) { stack.hierarchy_index }
+  let(:method_resolver) { stack.method_resolver }
   let(:widget) { Ovallsp::Types::Nominal.new(name: "Widget") }
 
   before do
@@ -51,7 +51,7 @@ RSpec.describe "Ovallsp reopened core class lookups (0.1.11)" do
   end
 
   it "does not report it as an unknown method" do
-    local_inferencer = Ovallsp::LocalInferencer.new(method_resolver: method_resolver)
+    local_inferencer = stack.local_inferencer
     document = Ovallsp::TextDocument.new(uri: "file:///u.rb", text: "Widget.new.blank?\n",
                                          version: 1, language_id: "ruby")
     context = Ovallsp::Diagnostics::SemanticContext.new(

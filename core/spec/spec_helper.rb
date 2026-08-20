@@ -62,3 +62,4 @@ RSpec.configure do |config|
   Kernel.srand config.seed
 end
 
+Dir[File.join(__dir__, "support", "*.rb")].sort.each { |f| require f }

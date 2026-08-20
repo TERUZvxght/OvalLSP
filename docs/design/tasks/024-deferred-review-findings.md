@@ -262,7 +262,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.13 | `def self.method_missing` and `define_singleton_method` do not open … |
 | [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.13 | The two spellings of a class-body macro get opposite answers |
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | open | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
-| [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | open | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
+| [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5955,7 +5955,7 @@ in two places.
 ## 024.119 Twenty-eight spec files assemble their own analysis stack
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -5964,6 +5964,7 @@ user-visible-note: >
   user does meet reached a release -- so it is recorded as a defect
   rather than as a chore.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** the twenty-eight files named in
@@ -5983,11 +5984,19 @@ that ships, which is `024.109`'s category arriving through the wiring
 instead of through a fixture — and invisible, because nothing compared
 the two lists until the check existed.
 
-Listed by name rather than by pattern so the set can only shrink, and a
-second example fails if a file leaves the list without leaving it in the
-tree. Migrating them is bookkeeping rather than design, and it is one
-commit rather than twenty-eight: a half-migrated suite runs two programs,
-which is the condition being removed.
+**Migrated in one commit rather than twenty-eight**, because a
+half-migrated suite runs two programs, which is the condition being
+removed. The named list the check carried while that was in flight is
+gone with it: a list that can only shrink is still a list, and keeping an
+empty one invites the next file to be added to it.
+
+Two of the twenty-eight needed more than a mechanical rewrite and are
+worth naming, because both were the defect in miniature:
+`visibility_spec.rb` built a `QueryService` around a `MethodResolver`
+that no `LocalInferencer` in the file shared, and `literal_types_spec.rb`
+called `LocalInferencer.new` with no collaborators at all to answer a
+question about literal types — which is the one shape where that happens
+to be right, and indistinguishable from the shapes where it is not.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

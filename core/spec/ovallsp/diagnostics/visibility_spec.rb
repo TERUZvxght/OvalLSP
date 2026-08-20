@@ -21,10 +21,11 @@
 # feature asks. `037`'s C2, step 4.
 RSpec.describe "what completion offers, and whether it can be called" do
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
-  let(:resolver) do
-    Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
-  end
+  # One stack, assembled where the server assembles its own (042's D8).
+  let(:model_registry) { Ovallsp::Models::ModelRegistry.new }
+  let(:stack) { build_analysis_stack(workspace_index: workspace_index, model_registry: model_registry) }
+  let(:hierarchy_index) { stack.hierarchy_index }
+  let(:resolver) { stack.method_resolver }
 
   def index(source)
     document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")
@@ -107,12 +108,10 @@ RSpec.describe "what completion offers, and whether it can be called" do
   # Measured by a 0.2.8 review round: `c.area(` returned
   # `["area()", "area()"]`.
   describe "signature help for a method that overrides another" do
-    let(:model_registry) { Ovallsp::Models::ModelRegistry.new }
     let(:query_service) do
-      inferencer = Ovallsp::LocalInferencer.new(model_registry: model_registry, method_resolver: resolver)
-      Ovallsp::Semantic::QueryService.new(local_inferencer: inferencer, method_resolver: resolver,
+      Ovallsp::Semantic::QueryService.new(local_inferencer: stack.local_inferencer, method_resolver: resolver,
                                           model_registry: model_registry, workspace_index: workspace_index,
-                                          signatures: Ovallsp::Signatures::Environment.new)
+                                          signatures: stack.signatures)
     end
 
     # The override's parameter is deliberately named differently from the

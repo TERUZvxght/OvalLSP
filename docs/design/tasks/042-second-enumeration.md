@@ -361,15 +361,20 @@ The same one, so a class cannot be "done differently":
 
 ### 0.2.12 — the apparatus, and two small mechanical classes
 
-**D8 — one assembler.** *Started.* `Ovallsp::AnalysisStack` exists,
-`Server#initialize` and `scripts/corpus_diagnostics.rb` assemble nothing,
-and `core/spec/meta/analysis_stack_spec.rb` fails if anything else does.
-**28 spec files still write the constructors out** and are listed by name
-in that spec as a debt that can only shrink; migrating them is the rest
-of D8. Entries: `024.55`, `024.64`, `024.69`, `024.75`. Size: 1 new lib
-file (~100 lines, done), 2 call sites (done), 28 spec files (mechanical,
-one commit each is wrong — one commit for all 28, since a half-migrated
-suite runs two programs).
+**D8 — one assembler.** *Mechanism done.* `Ovallsp::AnalysisStack` is the
+only place the four collaborators are constructed;
+`core/spec/meta/analysis_stack_spec.rb` fails if anything else does, and
+carries a second example proving the check fires on a real duplicate
+rather than merely matching nothing. `Server#initialize`,
+`scripts/corpus_diagnostics.rb` and all 28 spec files assemble nothing.
+Actual size: 1 new lib file (106 lines), 2 call sites, 28 spec files, one
+commit. `024.119` records it.
+
+What remains of D8 is the *entries*: `024.55`, `024.64`, `024.69`,
+`024.75`. The assembler does not fix them — it removes the condition
+under which measuring them would be untrustworthy. **That distinction is
+the whole point of rule 2**, and it is worth watching this class prove or
+disprove it first, since D8 is the smallest place the rule can be tested.
 
 **D7 — a spec names the mutation it pins.** The check applies that
 mutation and requires the example to fail. Entries: `024.25`, `024.30`,
