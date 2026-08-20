@@ -3864,6 +3864,21 @@ defect wearing a green tick. The core job has carried the equivalent
 guard since 0.2.5. First run: **5 passing**, against a real VS Code
 1.134.0 driving a real Core.
 
+**And the first guarded run reported green with `1 failing` in its log**,
+which is worth recording rather than quietly fixing. `xvfb-run … | tee`
+takes its exit status from `tee`, so the job added to stop a suite going
+unrun spent one commit being a suite that ran and was not listened to --
+the same defect the entry is about, one layer out. `set -o pipefail`.
+
+The failing example was a real flake and is fixed in the same change:
+`createFileSystemWatcher` registers asynchronously, so a file written
+immediately afterwards can be created before anything is listening, and a
+create event for a file that already exists never arrives however long
+the test waits. It now rewrites each still-unseen file each time round
+the loop, which turns the race into a retry. It had passed on the run
+before, and locally -- **two runs of a new job found a flake that no
+amount of reading would have.**
+
 
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 

@@ -285,9 +285,18 @@ jobs:
         working-directory: vscode
         run: npm ci
 
+      # `set -o pipefail`, and it is not decoration. Without it the exit
+      # status of `... | tee` is `tee`'s, so a failing integration run
+      # reported green -- which this job's own first guarded run did, with
+      # "1 failing" in the log and a passing tick beside it. The job added
+      # to stop a suite going unrun spent one commit being a suite that
+      # ran and was not listened to.
       - name: Integration tests (monorepo-relative Core)
         working-directory: vscode
-        run: xvfb-run -a npm run test:integration 2>&1 | tee integration.log
+        shell: bash
+        run: |
+          set -o pipefail
+          xvfb-run -a npm run test:integration 2>&1 | tee integration.log
 
       # **A green run is a measurement, and it can be green because it did
       # not run.** `runTest.js` exits 0 when the extension host reports no

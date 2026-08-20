@@ -53,10 +53,32 @@ describe('OvalLSP extension watcher pattern reaches Core-relevant schema files',
       fs.writeFileSync(candidates.signature, 'class WatcherTest\nend\n');
       fs.writeFileSync(candidates.rbi, 'class WatcherRbiTest\nend\n');
 
+      // **Re-create, do not merely wait.** `createFileSystemWatcher`
+      // registers its underlying watcher asynchronously, so a file
+      // written immediately after can be created before anything is
+      // listening -- and a create event for a file that already exists
+      // never comes, however long the loop waits. This failed on CI's
+      // first guarded run for exactly that reason, on the migration file
+      // alone, while passing locally and on the run before it.
+      //
+      // Rewriting a still-unseen file each time round turns the race into
+      // a retry: whichever pass happens after registration completes is
+      // the one that fires.
       const deadline = Date.now() + 10000;
-      const expectedBasenames = ['20260101000000_create_widgets.rb', 'structure.sql', 'watcher_test.rbs', 'watcher_test.rbi'];
-      while (Date.now() < deadline && !expectedBasenames.every((name) => [...seen].some((p) => p.endsWith(name)))) {
+      const byBasename: Record<string, string> = {
+        '20260101000000_create_widgets.rb': candidates.migration,
+        'structure.sql': candidates.structureSql,
+        'watcher_test.rbs': candidates.signature,
+        'watcher_test.rbi': candidates.rbi
+      };
+      const expectedBasenames = Object.keys(byBasename);
+      const missing = () => expectedBasenames.filter((name) => ![...seen].some((p) => p.endsWith(name)));
+      while (Date.now() < deadline && missing().length > 0) {
         await new Promise((resolve) => setTimeout(resolve, 200));
+        for (const name of missing()) {
+          fs.rmSync(byBasename[name], { force: true });
+          fs.writeFileSync(byBasename[name], `# retouched ${Date.now()}\n`);
+        }
       }
 
       assert.ok(
