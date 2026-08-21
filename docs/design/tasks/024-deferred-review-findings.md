@@ -170,7 +170,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | — | The unassigned-`@ivar` check is silent in an application `rails new`… |
 | [`024.23`](#02423-the-singleton-chain-did-not-model-class-module) | fixed | 0.1.14 | The singleton chain did not model `Class`/`Module` |
 | [`024.24`](#02424-every-path-url-call-is-a-missing-route-when-no-routes-are-loaded) | fixed | 0.2.0 | Every `*_path`/`*_url` call is a missing route when no routes are lo… |
-| [`024.25`](#02425-a-markdown-parsing-spec-is-the-wrong-shape-for-these-two-documents-must-agree) | open | 0.2.12 | A Markdown-parsing spec is the wrong shape for "these two documents … |
+| [`024.25`](#02425-a-markdown-parsing-spec-is-the-wrong-shape-for-these-two-documents-must-agree) | fixed | 0.2.12 | A Markdown-parsing spec is the wrong shape for "these two documents … |
 | [`024.26`](#02426-a-workspace-def-object-foo-is-reachable-from-every-class-in-ruby-and-from-none-here) | fixed | 0.2.12 | A workspace `def Object.foo` is reachable from every class in Ruby a… |
 | [`024.27`](#02427-documentsymbol-lists-one-outline-entry-per-name-a-macro-declares) | open | — | `documentSymbol` lists one outline entry per name a macro declares |
 | [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | — | Rename refuses on a macro-declared method rather than editing it |
@@ -1207,10 +1207,11 @@ says nothing.
 ## 024.25 A Markdown-parsing spec is the wrong shape for "these two documents must agree"
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 target: 0.2.12
+released-in: 0.2.12
 user-visible-note: >
   A rolled-back internal guard. Nothing about the product changed, so
   there is nothing to tell a user; what is open is a decision about how
@@ -1313,6 +1314,29 @@ both languages. Those were verified against the source and against corpus
 runs, and no round disputed them. Only the enforcement apparatus and the
 claims about it were rolled back.
 
+
+**Closed in 0.2.12.** The direction this entry chose — give the data a
+schema instead of parsing prose — was already shipped; 0.2.12 finished
+it in two places.
+
+`deferred_findings_spec.rb` stopped hand-rolling the `key: value` grammar
+and parses the fenced block as yaml with a key whitelist (`024.68`),
+which is the same move one level deeper: the schema was there and the
+reader was still improvising.
+
+And **the EN/JA README divergence this entry left unguarded is guarded**,
+in the shape `check_site_links.rb` already uses for the site's Japanese
+pages. It does not compare prose — the two READMEs were written
+independently and say the same things differently, and demanding
+identical wording buys a stricter check by making the prose worse. It
+compares the *shape* of the matrix: how many rows carry a verdict, and
+which marks each carries, in order. That is the half a translation cannot
+legitimately change, and a row saying ✅ in one language and ⚠️ in the
+other is a promise made to half the users.
+
+Two examples: the pair as it stands, and one that mutates a copy in
+memory and requires the comparison to fail — because reading a guard
+cannot tell you whether it would notice.
 
 ## 024.26 A workspace `def Object.foo` is reachable from every class in Ruby and from none here
 
