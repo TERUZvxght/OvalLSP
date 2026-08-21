@@ -206,7 +206,7 @@ corpus and the headline table advertising the opposite. It ships neutral
 on that corpus — 84 → 84, control identical — with its value in shapes
 four Rails gems do not contain.
 
-### 0.2.12 — the apparatus, and two small mechanical classes *(axis B)* — **next, on `feat/0.2.12`**
+### 0.2.12 — the apparatus, and two small mechanical classes *(axis B)* — **shipped**
 
 [`042-second-enumeration.md`](042-second-enumeration.md)'s **D7, D8, D6
 and D4**. A spec names the mutation it pins and a check applies it; one
@@ -226,7 +226,7 @@ forbids exactly that.
 `024.25`, `024.26`, `024.30`, `024.39`, `024.55`, `024.64`, `024.68`,
 `024.69`, `024.75`, `024.80`, `024.81`, `024.97`, `024.109`, `024.118`.
 
-### 0.2.13 — what an owner's own body says, and failures that stop being silent *(axis B)*
+### 0.2.13 — what an owner's own body says, and failures that stop being silent *(axis B)* — **next, on `feat/0.2.13`**
 
 042's **D2** and **D5**. The largest group and C1's axis done as
 questions rather than storage: a member set produced *with* its

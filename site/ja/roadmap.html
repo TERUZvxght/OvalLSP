@@ -195,6 +195,36 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0212">
+          <div class="tl-version">
+            <span class="v">0.2.12</span>
+            <span class="mark mark--yes">リリース済み</span>
+          </div>
+          <h3>検査する道具と、それが見つけたもの</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>private なエイリアスが補完に出なくなりました。</strong> 過去の2リリースがこの問題の半分ずつを別々に直しており(片方はエイリアスを補完に入れ、片方は private/protected を除外し)、両者は一度も出会っていませんでした — エイリアスには自分の宣言がなく、可視性の規則は宣言を読むためです。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>ワークスペースが <code>Object</code> に足したクラスメソッドに、再び届きます。</strong> 変更履歴が 0.1.15 以来「0.1.14 より<em>悪くなる</em>唯一の形」と書き続けてきた項目です。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>修飾なしの名前で include したモジュールが、メソッドを失わなくなりました。</strong> Ruby は書かれた位置から名前を探します。この拡張機能も、別の名前空間が同じ名前を持つからといって拒否するのをやめました。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            機能の追加はありません。このリリースの目的は、3ラウンド連続で
+            「守るはずの変更に対して落ちることができない example」が見つかった
+            ことへの対処です。spec が「自分が捕まえると主張する変異」を名乗れる
+            ようになり、CI がそれを適用します。初めて正しく動いた実行で、
+            「意図的な妥協」と文書化されていた死んだコードを見つけ、次に
+            「出荷済み」と記録され一度も書かれていなかった修正を見つけました。
+          </p>
+        </article>
+
         <article class="tl-item" id="v0211">
           <div class="tl-version">
             <span class="v">0.2.11</span>

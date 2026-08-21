@@ -31,18 +31,14 @@ most-useful-first, say — are 2.x.x.
 
 **The distance to 1.0.0 is written down**, derived from those two and
 nothing else: [`docs/design/tasks/036-road-to-1.0.0.md`](docs/design/tasks/036-road-to-1.0.0.md).
-The release being prepared now is **0.2.12, on `feat/0.2.12`** — the
-apparatus classes of
-[`docs/design/tasks/042-second-enumeration.md`](docs/design/tasks/042-second-enumeration.md):
-a spec that names the mutation it pins, one place that assembles the
-analysis stack, one comparable document identity, and a chain entry that
-can say what it is. **Read 042 before starting any of it.** It supersedes
-`024.102`, and the reason is the stocktake: eight classes were built and
-C1 discharged 0 of 5 of the entries it claimed.
-0.2.11 is recorded in
-[`docs/design/tasks/041-0.2.11-the-loops-own-leavings.md`](docs/design/tasks/041-0.2.11-the-loops-own-leavings.md);
-0.2.7 is in
-[`docs/design/tasks/037-0.2.7-concurrency-foundations.md`](docs/design/tasks/037-0.2.7-concurrency-foundations.md).
+The release being prepared now is **0.2.13, on `feat/0.2.13`** —
+[`042`](docs/design/tasks/042-second-enumeration.md)'s **D2, D5 and
+D10**: a member set produced with its own completeness, a `Cref` that
+exposes questions rather than storage, and the 72 measured places where a
+failure becomes a plausible value. 0.2.12 shipped 042's four apparatus
+classes and is recorded in
+[`docs/design/tasks/043-0.2.12-the-apparatus.md`](docs/design/tasks/043-0.2.12-the-apparatus.md).
+**Read 042 before starting any of it.**
 Read it when a session opens, so the path is seen rather than inferred —
 an inferred path is what a compaction loses.
 

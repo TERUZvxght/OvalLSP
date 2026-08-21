@@ -6,6 +6,52 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.12 — the apparatus, and what it found
+
+Nothing in this release changes what OvalLSP answers about your code. It
+changes what this project can find out about itself, and the four things
+that turned up while building it are the reason the release exists.
+
+- **A private alias was being offered by completion.** `alias_method
+  :aka, :build` followed by `private :aka` put `aka` in the list, and
+  picking it raises. Two earlier releases had fixed the halves of this
+  separately — one put aliases into completion, one filtered private and
+  protected — and neither made them meet, because an alias has no
+  declaration of its own and the visibility rule reads declarations.
+- **A class method your workspace adds to `Object` is reachable again.**
+  `class Object; def self.foo; end` is inherited by every class in Ruby
+  and was inherited by none here. This is the one shape the changelog has
+  described as *worse* than 0.1.14 since 0.1.15.
+- **A module included by a bare name keeps its methods.** If your class
+  writes `include Helpers` and any other namespace in the workspace also
+  has a `Helpers`, that module's methods used to disappear from
+  completion, hover and go to definition. Ruby is not ambiguous here —
+  it looks the name up where you wrote it — and neither is this now.
+- **Diagnostics keep updating if your editor reopens a file without
+  closing it**, and a corrected answer is no longer overwritten by a
+  slower one computed from less.
+
+### Details
+
+**What the release was actually for.** Three review rounds in a row, over
+three releases, found an example that could not fail under the change it
+was written to guard against — a test that passes whatever the code does.
+Reading cannot find those, and this project had been finding them one
+reviewer at a time.
+
+A spec can now name the mutation it claims to catch, and a CI job applies
+each one and requires the failure. It is not a substitute for judgement;
+it makes a *stated* claim unable to be false.
+
+On its first working run it found a clause that was documented as a
+deliberate trade-off and was dead code. Then, asked about an older
+release's decisions, it found a fix that had been designed, described in
+the register as shipped, and never actually written — the private-alias
+bug above. Then it found a claim about which test pinned which decision
+pointing at the wrong test.
+
+None of those is visible by reading. They were all passing.
+
 ## 0.2.11 — what the engine may assert
 
 Five fixes, all of one kind: this extension was answering from evidence
