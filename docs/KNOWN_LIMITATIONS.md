@@ -436,30 +436,6 @@ The check that runs *before* the Core Server starts does stop: as of
 0.2.10, a Ruby that cannot load this build's bundled dependencies means
 the Core Server is not started at all, and you are told so. <!-- documents: 024.55 -->
 
-## Diagnostics that come back after you clear or close a file
-
-**Fixed in 0.2.7, for the half that was a mistake.** Closing a file used
-to be able to leave its errors in the Problems panel for the rest of the
-session: a re-analysis pass running in the background decided which files
-to visit before it started, so one already in flight republished a file
-you had just closed, and nothing republishes a file nobody has open. A
-publish from a buffer now has to find that buffer still open, and closing
-a file always wins.
-
-**What still happens, and is deliberate:** close a saved file that has
-findings and they come back — recomputed from what is on disk, because
-since 0.2.0 this extension reports on files you have not opened. That is
-the same answer it would give you before you ever opened the file. What
-was fixed is the *stale* copy from the buffer you just closed.
-
-**Still true, and this release does not change it.** If you paused on a
-file big enough to take seconds to analyse, the `*_path` reports made
-before routes arrived can be written back over the corrected ones. Both
-answers describe the same version of your text, and the check that orders
-publishes deliberately lets the same version through twice — a later pass
-usually knows *more*, not less, which is how the corrected answer arrives
-in the first place. The next edit clears it. <!-- documents: 024.97 -->
-
 ## How long an edit takes to re-analyse
 
 **Seconds, on a file of a couple of thousand lines.** Measured per
@@ -536,14 +512,6 @@ defines is correctly left alone; the line that defines it is not.
 0.2.11 tried silencing it and took the attempt back out: the fix also
 silenced `Foo.bar` checking across the whole workspace whenever any file
 reopened `Module`, `Object` or `Kernel`. <!-- documents: 024.110 -->
-
-## Reopening a file without closing it
-
-If your editor sends a second `didOpen` for a file it never closed, and
-the new buffer's version numbering starts below the old one's,
-diagnostics for that file stop arriving until the numbering passes where
-it left off. VS Code sends `didClose` first, so this needs an unusual
-client. <!-- documents: 024.118 -->
 
 ## Methods made by `define_singleton_method`
 

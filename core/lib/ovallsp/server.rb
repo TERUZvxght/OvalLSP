@@ -645,10 +645,29 @@ module Ovallsp
           # without closing it, numbering the new buffer below the old,
           # had every edit refused until it passed where the previous
           # buffer left off (`024.113`).
-          last_buffer, last_version = @last_published_version[uri]
-          return false if last_buffer == document.buffer_id && last_version && version < last_version
+          last_buffer, last_version, last_generation = @last_published_version[uri]
+          same_buffer = last_buffer == document.buffer_id
+          return false if same_buffer && last_version && version < last_version
 
-          @last_published_version[uri] = [document.buffer_id, version]
+          # **Two answers about one version are ordered by what was known
+          # when each was computed.** The repeat is deliberate and stays:
+          # a later pass usually knows more, not less -- the Agent has
+          # answered, routes have arrived -- and refusing it would switch
+          # correction off. What was missing is that the *slower* one won,
+          # so a `*_path` report made before routes arrived landed after
+          # the corrected one on any file slow enough to analyse
+          # (`024.97`).
+          #
+          # `generation` is what the engine already tracks for this, on
+          # every `Finding`. A publish that carries none -- an empty list,
+          # the ordinary "this file is clean now" -- has nothing to be
+          # dated by and is never refused on this ground.
+          generation = findings.filter_map(&:generation).max
+          if same_buffer && version == last_version && generation && last_generation && generation < last_generation
+            return false
+          end
+
+          @last_published_version[uri] = [document.buffer_id, version, generation || last_generation]
         elsif open_document
           return false
         end

@@ -240,7 +240,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.94`](#02494-a-windows-workspace-could-have-its-own-ruby-exe-run-before-it-is-trusted) | fixed | 0.2.6 | A Windows workspace could have its own `ruby.exe` run before it is t… |
 | [`024.95`](#02495-a-deep-enough-file-ended-the-session-and-three-rescues-did-not-catch-it) | fixed | 0.2.6 | A deep enough file ended the session, and three rescues did not catc… |
 | [`024.96`](#02496-every-malformed-lsp-frame-ended-the-process) | fixed | 0.2.6 | Every malformed LSP frame ended the process |
-| [`024.97`](#02497-a-later-pass-at-the-same-version-overwrites-a-corrected-answer) | open | 0.2.12 | A later pass at the same version overwrites a corrected answer |
+| [`024.97`](#02497-a-later-pass-at-the-same-version-overwrites-a-corrected-answer) | fixed | 0.2.12 | A later pass at the same version overwrites a corrected answer |
 | [`024.98`](#02498-a-workspace-opened-through-a-symlink-shows-every-file-twice-and-one-copy-can-never-be-cleared) | fixed | 0.2.8 | A workspace opened through a symlink shows every file twice, and one… |
 | [`024.99`](#02499-completion-offers-members-that-cannot-be-called-from-where-it-was-asked) | open | 0.3.0 | Completion offers members that cannot be called from where it was as… |
 | [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.3.0 | The four features answer from different code paths and disagree at o… |
@@ -261,7 +261,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | fixed | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
 | [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.13 | `def self.method_missing` and `define_singleton_method` do not open … |
 | [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.13 | The two spellings of a class-body macro get opposite answers |
-| [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | open | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
+| [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | fixed | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
 | [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.0 | Nothing measures how much of this tree no test would notice changing |
@@ -5087,10 +5087,11 @@ one.
 ## 024.97 A later pass at the same version overwrites a corrected answer
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#publish_findings`)
@@ -5978,10 +5979,11 @@ the enclosing class — and the two want deciding together. Found by
 ## 024.118 `WorkspaceIndex#stale?` compares versions across buffers
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/workspace_index.rb` (`#stale?`),
