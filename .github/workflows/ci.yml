@@ -318,6 +318,26 @@ jobs:
             exit 1
           fi
 
+  # `042`'s D10 / `024.122`. Every `rescue` in `core/lib` carries a
+  # verdict, and a new one with none fails. Not "no rescue may swallow" --
+  # that rule would have had 111 exceptions the day it was written. What
+  # gates is that the decision is *made*, in a file a reviewer reads.
+  #
+  # Cheap, so it runs here as well as in the suite: the suite is where a
+  # contributor meets it, and this is where a push cannot get round it.
+  swallowed-failures:
+    name: Rescue verdicts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Every rescue in core/lib has a verdict
+        run: ruby scripts/check_swallowed_failures.rb
+
   # `042`'s D7. An example whose fixture cannot distinguish the two
   # candidate behaviours passes under both, and reading cannot find that:
   # 0.2.11's third round found one in the spec written to close `024.110`,

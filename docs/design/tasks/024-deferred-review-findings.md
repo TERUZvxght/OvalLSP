@@ -6387,7 +6387,7 @@ user-visible: yes
 target: 0.2.13
 ```
 
-**Area:** `core/lib` (239 `rescue` sites), `vscode/src` (21 `catch`
+**Area:** `core/lib` (159 `rescue` sites), `vscode/src` (21 `catch`
 sites), and `CLAUDE.md`, which does not say what the rule is
 
 Raised by the maintainer, who had noticed the pattern across the
@@ -6402,8 +6402,16 @@ its handler does:
 | other (sets a flag, retries, cleans up) | 39 |
 | re-raises as a typed error | 4 |
 
-134 of the 239 are `rescue StandardError` — the widest catch there is —
-and 13 are a bare `rescue`. `vscode/src` has 21 `catch` blocks outside
+**The count was first written down as 239 and that was wrong.** It came
+from `grep -c rescue`, which counts the word wherever it appears —
+including in the prose of comments explaining a rescue, of which this
+tree has many. Counting `rescue` *statements* gives **159**, and the
+breakdown above was computed that way and is unchanged. Corrected here
+rather than quietly, because a measured claim that nobody re-derives is
+the thing `026` is about, and this one lasted one release.
+
+**133 of the 159 are `rescue StandardError`** — the widest catch there is —
+and the remaining 26 name a type. There are no bare `rescue` statements; the 13 that grep found were the keyword inside comments and one-line modifier prose. `vscode/src` has 21 `catch` blocks outside
 its tests, uncounted here.
 
 **Why this is a defect and not a style preference.** A swallowed failure
@@ -6458,6 +6466,35 @@ which is the arrangement `CLAUDE.md`'s own preamble warns about.
 puts the apparatus classes first for exactly that reason. This belongs
 with them; it did not go into 0.2.12 only because that release was
 already scoped and under review when the maintainer raised it.
+
+### Step 1 shipped in 0.2.13: the enumeration is a checked artefact
+
+`core/spec/meta/rescue_verdicts.yml` names every `rescue` statement in
+`core/lib` and what it does with the failure — `surfaces`, `contained`,
+or `swallows`. `scripts/check_swallowed_failures.rb` fails on a rescue
+with no verdict and on a verdict whose rescue is gone; it runs in the
+suite and gates in CI.
+
+Keyed by the enclosing `def` and an ordinal within it, not by line
+number — a line number rots on the next edit above it, and 42 of these
+live in one file where `rescue StandardError` is not a distinguishing
+string.
+
+First-pass verdicts, assigned mechanically: **48 surface** (the handler
+raises, or reports through a channel a person sees) and **111 swallow**.
+Nothing is `contained` yet, and that is deliberate: `contained` means
+*somebody argued it*, and nobody has. The mechanical pass marks the safe,
+honest default and leaves the argument to the review this entry
+describes.
+
+**The mechanism is deliberately not "no rescue may swallow".** That rule
+would have had 111 exceptions on the day it was written, which is the
+arrangement `CLAUDE.md`'s preamble warns about, and it is why step 3 is
+last. What gates now is that the *decision is made*: writing a rescue
+means writing down what happens to the failure, in a file a reviewer
+reads, and `swallows` is something somebody types rather than a default
+nobody notices. Emptying the column is the work; this is what stops it
+refilling behind the work's back.
 
 ## 024.123 A private alias was offered, and the register said it was not
 

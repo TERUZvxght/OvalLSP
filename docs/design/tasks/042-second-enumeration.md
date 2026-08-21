@@ -304,7 +304,7 @@ requires exactly one edit; `024.69`'s two suites fail CI when skipped.
 
 **Entries:** `024.122`, and it is upstream of `024.35` and part of D2
 
-**Where the decision is made:** 239 `rescue` sites in `core/lib` and 21
+**Where the decision is made:** 159 `rescue` sites in `core/lib` and 21
 `catch` blocks in `vscode/src`. Counted: **72 return a plausible value
 silently**, 44 log and then return one, 4 re-raise as a typed error.
 
@@ -324,7 +324,7 @@ Where the caller already has a three-state answer, the failure becomes
 `unknown` — which is the machinery D2 builds, pointed at the other
 source of not-knowing.
 
-**Acceptance:** the enumeration comes out at the same 239 + 21 it started
+**Acceptance:** the enumeration comes out at the same 159 + 21 it started
 from; no site in the third group remains; `CLAUDE.md` carries the rule;
 and a deliberately-added bare `rescue StandardError` fails CI.
 

@@ -1,0 +1,176 @@
+# Every `rescue` statement in `core/lib`, and what it does with the failure.
+#
+# `042`'s D10 / `024.122`. The key is `<file>:<the rescue statement>`; the
+# value is one of `surfaces`, `contained` or `swallows`, optionally followed
+# by `: <why>` -- and for `contained`, the why is not optional in review.
+#
+#   surfaces  -- raises, or reports through a channel a person sees
+#   contained -- the failure genuinely has no consequence, said in place
+#   swallows  -- neither. This is the group `024.122` exists to empty
+#
+# `scripts/check_swallowed_failures.rb` fails on a rescue with no verdict,
+# so adding one becomes an edit somebody makes on purpose. The verdicts
+# below are a *first pass*: every site whose handler raises or reports was
+# marked `surfaces` mechanically, and the rest are marked `swallows` --
+# which is the safe default and the honest one, since nothing has yet been
+# argued. Moving one to `contained` is the review work `024.122` describes.
+
+"core/lib/ovallsp/agent_process_manager.rb#stop_registered_at_exit": swallows
+"core/lib/ovallsp/agent_process_manager.rb#start": surfaces
+"core/lib/ovallsp/agent_process_manager.rb#read_loop": swallows
+"core/lib/ovallsp/agent_process_manager.rb#read_loop[2]": surfaces
+"core/lib/ovallsp/agent_process_manager.rb#log_stderr": swallows
+"core/lib/ovallsp/agent_process_manager.rb#request_locked": surfaces
+"core/lib/ovallsp/agent_process_manager.rb#wait_for_exit": swallows
+"core/lib/ovallsp/background_tasks.rb#safely": swallows
+"core/lib/ovallsp/benchmark/cold_index_benchmark.rb#run": swallows
+"core/lib/ovallsp/build_manifest.rb#load": swallows
+"core/lib/ovallsp/cache/key.rb#canonical_root": swallows
+"core/lib/ovallsp/cache/store.rb#self.mark_workspace": swallows
+"core/lib/ovallsp/cache/store.rb#self.prune_generations": swallows
+"core/lib/ovallsp/cache/store.rb#self.age_for_sort": swallows
+"core/lib/ovallsp/cache/store.rb#self.prune_workspaces": swallows
+"core/lib/ovallsp/cache/store.rb#self.seconds_since_write": swallows
+"core/lib/ovallsp/cache/store.rb#self.tighten": swallows
+"core/lib/ovallsp/cache/store.rb#self.tighten_tree": swallows
+"core/lib/ovallsp/cache/store.rb#self.remove_within": swallows
+"core/lib/ovallsp/cache/store.rb#self.children_of": swallows
+"core/lib/ovallsp/cache/store.rb#load": swallows
+"core/lib/ovallsp/cache/store.rb#save": swallows
+"core/lib/ovallsp/cache/store.rb#ensure_directory": swallows
+"core/lib/ovallsp/cache/store.rb#prune_if_over_bound": swallows
+"core/lib/ovallsp/child_process.rb#signal": swallows
+"core/lib/ovallsp/child_process.rb#close_quietly": swallows
+"core/lib/ovallsp/child_process.rb#join_quietly": swallows
+"core/lib/ovallsp/child_process.rb#reap": swallows
+"core/lib/ovallsp/cold_indexer.rb#run": swallows
+"core/lib/ovallsp/cold_indexer.rb#each_candidate_file": swallows
+"core/lib/ovallsp/cold_indexer.rb#index_file": swallows
+"core/lib/ovallsp/cold_indexer.rb#safe_realpath": swallows
+"core/lib/ovallsp/diagnostics/engine.rb#ivar_names_tested_for_existence": swallows
+"core/lib/ovallsp/diagnostics/engine.rb#ivar_writes": swallows
+"core/lib/ovallsp/diagnostics/engine.rb#operator_expression?": swallows
+"core/lib/ovallsp/diagnostics/engine.rb#rbs_known_constant?": swallows
+"core/lib/ovallsp/io/framed_reader.rb#input_ready?": swallows
+"core/lib/ovallsp/io/framed_reader.rb#parse_body": surfaces
+"core/lib/ovallsp/io/framed_reader.rb#fill_buffer": surfaces
+"core/lib/ovallsp/local_inferencer.rb#scope_at": swallows
+"core/lib/ovallsp/local_inferencer.rb#infer_at": swallows
+"core/lib/ovallsp/local_inferencer.rb#infer_ivars_for_method_node": swallows
+"core/lib/ovallsp/local_inferencer.rb#method_nodes": swallows
+"core/lib/ovallsp/local_inferencer.rb#before_action_operations": swallows
+"core/lib/ovallsp/local_inferencer.rb#static_render_target_for_node": swallows
+"core/lib/ovallsp/local_inferencer.rb#assigned_ivar_names": swallows
+"core/lib/ovallsp/local_inferencer.rb#class_body_call_names": swallows
+"core/lib/ovallsp/local_inferencer.rb#eval_constant": swallows
+"core/lib/ovallsp/local_inferencer.rb#resolve_signature_call": swallows
+"core/lib/ovallsp/local_inferencer.rb#constant_receiver_name": swallows
+"core/lib/ovallsp/logger.rb#write": swallows
+"core/lib/ovallsp/observation/collector.rb#handle": swallows
+"core/lib/ovallsp/observation/collector.rb#defined_method": swallows
+"core/lib/ovallsp/observation/collector.rb#workspace_method?": swallows
+"core/lib/ovallsp/observation/collector.rb#fingerprint_for": swallows
+"core/lib/ovallsp/observation/collector.rb#positional_param_names": swallows
+"core/lib/ovallsp/observation/collector.rb#positional_param_types": swallows
+"core/lib/ovallsp/observation/collector.rb#positional_param_types[2]": swallows
+"core/lib/ovallsp/observation/fingerprint.rb#file_digest": swallows
+"core/lib/ovallsp/observation/harness.rb#install": swallows
+"core/lib/ovallsp/observation/harness.rb#finish": swallows
+"core/lib/ovallsp/observation/harness.rb#dump": swallows
+"core/lib/ovallsp/observation/runner.rb#run": swallows
+"core/lib/ovallsp/observation/runner.rb#discard_quietly": swallows
+"core/lib/ovallsp/observation/runner.rb#spawn_and_collect": surfaces
+"core/lib/ovallsp/observation/runner.rb#wait_for_exit": surfaces
+"core/lib/ovallsp/observation/runner.rb#wait_for_exit[2]": swallows
+"core/lib/ovallsp/observation/runner.rb#read_results": surfaces
+"core/lib/ovallsp/parser_service.rb#walk": swallows
+"core/lib/ovallsp/parser_service.rb#raw_constant_name": swallows
+"core/lib/ovallsp/parser_service.rb#constant_full_name": swallows
+"core/lib/ovallsp/plugins/loader.rb#guarded": surfaces
+"core/lib/ovallsp/plugins/loader.rb#safe_load_manifest": surfaces
+"core/lib/ovallsp/plugins/loader.rb#run_isolated": swallows
+"core/lib/ovallsp/plugins/loader.rb#fork_plugin_child": swallows
+"core/lib/ovallsp/plugins/loader.rb#deliver_result": swallows
+"core/lib/ovallsp/plugins/loader.rb#isolate_child_io": swallows
+"core/lib/ovallsp/plugins/loader.rb#isolate_child_io[2]": swallows
+"core/lib/ovallsp/plugins/loader.rb#read_isolated_result": swallows
+"core/lib/ovallsp/plugins/loader.rb#read_isolated_result[2]": swallows
+"core/lib/ovallsp/plugins/manifest.rb#self.load": surfaces
+"core/lib/ovallsp/plugins/manifest.rb#self.load[2]": surfaces
+"core/lib/ovallsp/rails_bootstrap.rb#populate_registries": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#run": swallows
+"core/lib/ovallsp/runtime_agent/agent.rb#dispatch": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#eager_load_models!": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#active_record_api": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#names_taking_arguments": swallows
+"core/lib/ovallsp/runtime_agent/agent.rb#resolve_owner": swallows
+"core/lib/ovallsp/runtime_agent/agent.rb#model_method_extras": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#extract_columns": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#safely": swallows
+"core/lib/ovallsp/runtime_agent/agent.rb#normalize_source_location": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#reload_routes_section": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#reload_models_section": surfaces
+"core/lib/ovallsp/semantic/method_analyzer.rb#eval_constant_receiver_call": swallows
+"core/lib/ovallsp/semantic_tokens.rb#collect": swallows
+"core/lib/ovallsp/server.rb#run": swallows
+"core/lib/ovallsp/server.rb#run[2]": swallows
+"core/lib/ovallsp/server.rb#shutdown_background_tasks": swallows
+"core/lib/ovallsp/server.rb#shutdown_background_tasks[2]": swallows
+"core/lib/ovallsp/server.rb#dispatch": swallows
+"core/lib/ovallsp/server.rb#reindex": surfaces
+"core/lib/ovallsp/server.rb#publish_diagnostics": surfaces
+"core/lib/ovallsp/server.rb#publish_diagnostics[2]": surfaces
+"core/lib/ovallsp/server.rb#workspace_findings_for": surfaces
+"core/lib/ovallsp/server.rb#publish_workspace_diagnostics_later": surfaces
+"core/lib/ovallsp/server.rb#drive_workspace_passes": surfaces
+"core/lib/ovallsp/server.rb#answer_pending_ancestry_questions": swallows
+"core/lib/ovallsp/server.rb#run_ancestry_questions": surfaces
+"core/lib/ovallsp/server.rb#run_ancestry_questions[2]": surfaces
+"core/lib/ovallsp/server.rb#current_observation_fingerprint": swallows
+"core/lib/ovallsp/server.rb#ensure_reference_index_current": surfaces
+"core/lib/ovallsp/server.rb#start_cold_index": surfaces
+"core/lib/ovallsp/server.rb#build_cache_store": surfaces
+"core/lib/ovallsp/server.rb#build_cache_store[2]": surfaces
+"core/lib/ovallsp/server.rb#gemfile_lock_digest": swallows
+"core/lib/ovallsp/server.rb#rbs_digest": swallows
+"core/lib/ovallsp/server.rb#load_signatures_environment": surfaces
+"core/lib/ovallsp/server.rb#maybe_start_agent": surfaces
+"core/lib/ovallsp/server.rb#maybe_start_agent[2]": surfaces
+"core/lib/ovallsp/server.rb#assigned_ivars_for": surfaces
+"core/lib/ovallsp/server.rb#renders_something?": swallows
+"core/lib/ovallsp/server.rb#load_document_from_disk": surfaces
+"core/lib/ovallsp/server.rb#declaration_at_cursor": swallows
+"core/lib/ovallsp/server.rb#compute_structural_tokens": swallows
+"core/lib/ovallsp/server.rb#compute_non_code_spans": swallows
+"core/lib/ovallsp/server.rb#analyze_changed_files_later": surfaces
+"core/lib/ovallsp/server.rb#reindex_from_disk": surfaces
+"core/lib/ovallsp/server.rb#refresh_routes": surfaces
+"core/lib/ovallsp/server.rb#refresh_models": swallows
+"core/lib/ovallsp/server.rb#refresh_models[2]": swallows
+"core/lib/ovallsp/server.rb#refresh_models[3]": surfaces
+"core/lib/ovallsp/server.rb#refresh_all_models": surfaces
+"core/lib/ovallsp/server.rb#restart_agent": surfaces
+"core/lib/ovallsp/server.rb#republish_open_diagnostics": surfaces
+"core/lib/ovallsp/server.rb#receiverless_call_at?": swallows
+"core/lib/ovallsp/server.rb#documentation_at": surfaces
+"core/lib/ovallsp/server.rb#completion_resolve_result": surfaces
+"core/lib/ovallsp/signatures/environment.rb#load_environment": swallows
+"core/lib/ovallsp/signatures/environment.rb#load_stdlib_only": swallows
+"core/lib/ovallsp/signatures/environment.rb#type_parameters": swallows
+"core/lib/ovallsp/signatures/environment.rb#load_rbi_methods": swallows
+"core/lib/ovallsp/signatures/environment.rb#add_project_sig": swallows
+"core/lib/ovallsp/signatures/environment.rb#add_gem_signatures": swallows
+"core/lib/ovallsp/signatures/environment.rb#add_gem_signatures[2]": swallows
+"core/lib/ovallsp/signatures/environment.rb#build_signature_method": swallows
+"core/lib/ovallsp/signatures/environment.rb#build_definition": swallows
+"core/lib/ovallsp/signatures/environment.rb#signature_location": swallows
+"core/lib/ovallsp/signatures/environment.rb#compute_member_names": swallows
+"core/lib/ovallsp/signatures/environment.rb#compute_ancestors": swallows
+"core/lib/ovallsp/signatures/environment.rb#rbs_type_name": swallows
+"core/lib/ovallsp/signatures/rbi_parser.rb#parse": swallows
+"core/lib/ovallsp/signatures/rbi_parser.rb#handle_sig": swallows
+"core/lib/ovallsp/signatures/rbi_parser.rb#convert_type_expr": swallows
+"core/lib/ovallsp/signatures/type_converter.rb#convert": swallows
+"core/lib/ovallsp/uri_util.rb#to_path": swallows
+"core/lib/ovallsp/vendor_compatibility.rb#check": swallows
+"core/lib/ovallsp/workspace_diagnostics.rb#publish_for": surfaces
