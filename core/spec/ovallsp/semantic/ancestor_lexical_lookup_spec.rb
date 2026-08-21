@@ -25,7 +25,9 @@
 # unambiguously right.
 RSpec.describe "Ovallsp::Semantic::HierarchyIndex and an ancestor named ambiguously" do
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
+  # One stack, assembled where the server assembles its own (042's D8).
+  let(:stack) { build_analysis_stack(workspace_index: workspace_index) }
+  let(:hierarchy_index) { stack.hierarchy_index }
 
   def index(text, uri:)
     summary = Ovallsp::ParserService.new.summarize(

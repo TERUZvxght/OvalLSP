@@ -57,3 +57,38 @@
   spec: spec/ovallsp/parser_concern_class_methods_spec.rb
   example: "recognises the marker written bare from inside ActiveSupport"
 
+- why: "0.2.9's `unknown` refusing a nil reason -- the guarantee that a new way of not knowing cannot be recorded anonymously."
+  file: core/lib/ovallsp/semantic/member_availability.rb
+  from: "raise ArgumentError, \"an unknown availability must name its reason\" if reason.nil?"
+  to: ""
+  spec: spec/ovallsp/semantic/member_availability_spec.rb
+  example: "refuses an unknown with no reason"
+
+- why: "0.2.9's three-state answer -- that `unknown` cannot be read as an absence by a caller that only asks `absent?`."
+  file: core/lib/ovallsp/semantic/member_availability.rb
+  from: "def absent? = state == :absent"
+  to: "def absent? = state != :present"
+  spec: spec/ovallsp/semantic/member_availability_spec.rb
+  example: "never lets an unknown be read as an absence"
+
+- why: "0.2.9's deep freeze -- an answer a reader can be handed and then have changed under it."
+  file: core/lib/ovallsp/semantic/member_availability.rb
+  from: "candidates.freeze"
+  to: "candidates"
+  spec: spec/ovallsp/semantic/member_availability_spec.rb
+  example: "is frozen all the way to the candidates a reader is handed"
+
+- why: "0.2.9's visibility filter -- that a private or protected member is not offered on an explicit receiver."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "next if explicit_receiver && %i[private protected].include?(visibility)"
+  to: "next if explicit_receiver && visibility == :private"
+  spec: spec/ovallsp/diagnostics/visibility_spec.rb
+  example: "a protected method is not offered on an explicit receiver from outside"
+
+- why: "0.2.9's alias visibility -- that `private :aka` reaches an alias, which has no declaration for the rule to read."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "declared_visibility(owner, kind, name) || alias_visibility_of(owner, kind, name)"
+  to: "declared_visibility(owner, kind, name)"
+  spec: spec/ovallsp/diagnostics/visibility_spec.rb
+  example: "is not offered when the alias itself is made private"
+

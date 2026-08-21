@@ -469,9 +469,7 @@ module Ovallsp
             next unless name.start_with?(prefix)
             next if seen.include?(name)
 
-            visibility = @workspace_index.declarations_with_uri(
-              Index::SymbolId.new(kind: kind, owner: entry.name, name: name, discriminator: nil)
-            ).first&.last&.visibility
+            visibility = visibility_of(entry.name, kind, name)
             # **Protected as well as private.** `Prot.new.guarded` raises
             # exactly as a private call does, and only private was
             # excluded -- a 0.2.8 review round measured the cost by asking
@@ -494,6 +492,35 @@ module Ovallsp
       # `aka` while completion said the name did not exist (`024.107`) --
       # one question with two answers depending which feature asked, which
       # is `024.100`'s shape and what C2 is for.
+      # The one place that knows what a name's visibility is, so the
+      # filter cannot be right about declarations and wrong about
+      # aliases. An alias has no declaration, so the lookup read `nil` for
+      # it and let a private one through -- `024.107` put aliases into
+      # completion, `024.108` filtered private and protected, and neither
+      # made the two meet.
+      def visibility_of(owner, kind, name)
+        declared_visibility(owner, kind, name) || alias_visibility_of(owner, kind, name)
+      end
+
+      def declared_visibility(owner, kind, name)
+        @workspace_index.declarations_with_uri(
+          Index::SymbolId.new(kind: kind, owner: owner, name: name, discriminator: nil)
+        ).first&.last&.visibility
+      end
+
+      # The alias's own recorded visibility if `private :aka` gave it one,
+      # and otherwise the visibility of the method it names -- which is
+      # what Ruby gives an alias at the moment it is made. Nil when the
+      # name is not an alias of this owner at all, so `#visibility_of` can
+      # tell "no answer here" from `:public`.
+      def alias_visibility_of(owner, kind, name)
+        singleton = kind == :singleton_method
+        fact = @hierarchy_index.aliases(owner).find { |f| f.singleton == singleton && f.new_name == name }
+        return nil unless fact
+
+        fact.visibility || declared_visibility(owner, kind, fact.old_name) || :public
+      end
+
       def method_names_for_owner(owner, kind)
         declared = @workspace_index.method_symbol_ids(owner, kind: kind).map(&:name)
         aliases = @hierarchy_index.aliases(owner)

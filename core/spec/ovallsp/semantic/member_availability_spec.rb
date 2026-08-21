@@ -59,7 +59,27 @@ RSpec.describe Ovallsp::Semantic::MemberAvailability do
     expect { described_class.unknown(nil) }.to raise_error(ArgumentError, /reason/)
   end
 
-  it "is frozen, so a reader cannot be handed one that changes under it" do
-    expect(described_class.absent).to be_frozen
+  # **This example could not distinguish anything until 0.2.12.** It
+  # asserted `described_class.absent` is frozen -- which a `Data` is
+  # anyway, whatever this class does -- so it passed with every `freeze`
+  # in the file removed. One of the two `024.109` reports whose identity
+  # was lost with the round's list; found by
+  # `scripts/check_pinned_mutations.rb` rather than by re-reading.
+  #
+  # What matters is the *candidates array*, which is the thing a caller
+  # is handed and could push onto. The literal is built with `+""`-style
+  # explicitness for the same reason `text_document_spec` does: a frozen
+  # string literal would make the fixture pass either way.
+  it "is frozen all the way to the candidates a reader is handed" do
+    present = described_class.present(["build"])
+
+    expect(present).to be_frozen
+    expect(present.candidates).to be_frozen
+    expect { present.candidates << "extra" }.to raise_error(FrozenError)
+  end
+
+  it "freezes the candidates of an absence and an unknown too" do
+    expect(described_class.absent.candidates).to be_frozen
+    expect(described_class.unknown(:surface_open).candidates).to be_frozen
   end
 end

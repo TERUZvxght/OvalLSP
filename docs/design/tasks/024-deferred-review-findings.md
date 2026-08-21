@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**121 entries below** <!-- measured: register-entries = 121 -->,
+**122 entries below** <!-- measured: register-entries = 122 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -252,7 +252,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.13 | `module_function` and `extend self` produce nothing |
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
-| [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | open | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
+| [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | fixed | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
 | [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | open | 0.2.13 | The macro is reported, and what it might define is not |
 | [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.13 | A visibility section written inside a block does not reach the body … |
 | [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | fixed | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
@@ -266,6 +266,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
 | [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.0 | Nothing measures how much of this tree no test would notice changing |
 | [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | open | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
+| [`024.123`](#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5692,7 +5693,7 @@ check accepts it. `024.99`'s sibling, and the same `037` C2 seam.
 ## 024.109 Specs whose fixture cannot distinguish the behaviour they pin
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -5700,6 +5701,7 @@ user-visible-note: >
   observe today; what it removes is the guarantee that the next refactor
   cannot silently change the behaviour underneath it.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/spec/` (0.2.9's change set)
@@ -5741,6 +5743,29 @@ and reject any fixture where the two answers are equal. The spec-deletion
 pass of `scripts/hunk_sweep.rb` finds files that pin nothing; this is the
 narrower question of an example that pins less than it claims, and the
 two are worth running together.
+
+**The remaining two are named, and the way they were found is the
+point.** 0.2.12 built the mechanism this entry has always wanted — a
+spec names the mutation it claims to catch, and
+`scripts/check_pinned_mutations.rb` applies it and requires the failure
+— and then pointed it at 0.2.9's own decisions.
+
+**Third:** `member_availability_spec.rb`'s "is frozen, so a reader cannot
+be handed one that changes under it" asserted
+`described_class.absent` is frozen. A `Data` is frozen whatever this
+class does, so the example passed with every `freeze` in the file
+removed. It now asserts the *candidates array* — the thing a caller is
+handed and could push onto — for all three states.
+
+**Fourth:** the alias-visibility rule the round had designed **was never
+in the tree at all.** The mutation could not be written because the
+method it was supposed to invert did not exist, and the register carried
+`024.105`, `024.107` and `024.108` as fixed while completion offered a
+name that raises. Recorded and fixed as `024.123`.
+
+So the count is four of four, and the two nobody could name were found
+by a machine rather than by re-reading. That is what this entry was
+really about.
 
 ## 024.110 The macro is reported, and what it might define is not
 
@@ -6305,6 +6330,56 @@ which is the arrangement `CLAUDE.md`'s own preamble warns about.
 puts the apparatus classes first for exactly that reason. This belongs
 with them; it did not go into 0.2.12 only because that release was
 already scoped and under review when the maintainer raised it.
+
+## 024.123 A private alias was offered, and the register said it was not
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.2.12
+released-in: 0.2.12
+```
+
+**Area:** `core/lib/ovallsp/semantic/method_resolver.rb`,
+`core/lib/ovallsp/parser_service.rb`,
+`core/lib/ovallsp/index/alias_fact.rb`
+
+```ruby
+class A
+  def build; end
+  alias_method :aka, :build
+  private :aka
+end
+```
+
+`A.new.aka` raises; completion offered `aka`. `024.107` put aliases into
+completion and `024.108` filtered private and protected, both released in
+0.2.9 — and **neither made the two meet**, because an alias has no
+declaration of its own and the visibility rule reads declarations. So the
+lookup found `nil` for it and let it through.
+
+**How it was found is the part worth recording.** 0.2.9's review round
+identified this and a fix was written for it; the fix never reached a
+commit, and the register carried `024.105`, `024.107` and `024.108` as
+`fixed` while the tree offered a name that raises. Reading the register
+could not reveal that, and neither could reading the specs — the
+`visibility_spec.rb` examples all passed.
+
+It surfaced while writing a `pinned_mutations.yml` entry for the alias
+rule: the mutation could not be written, because the method it was
+supposed to invert did not exist. **A checker built to ask "does this
+example catch this change" found a fix that was not there at all.** That
+is `042`'s D7 doing something its own charter did not claim.
+
+**Fixed**, with the shape 0.2.9's round had designed:
+`MethodResolver#visibility_of` is the one place that answers what a
+name's visibility is, so the filter cannot be right about declarations
+and wrong about aliases; `AliasFact` carries the alias's *own*
+visibility; and `private :aka` writes it — including inside
+`class << self`, which the instance-side guard used to return before
+reaching, and which is safe for an alias because an `AliasFact` carries
+`singleton` itself.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

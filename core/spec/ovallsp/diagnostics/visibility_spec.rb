@@ -91,6 +91,46 @@ RSpec.describe "what completion offers, and whether it can be called" do
     end
   end
 
+  # **An alias has no declaration of its own**, so the visibility rule --
+  # which reads declarations -- found nothing for it and let it through.
+  # `024.107` put aliases into completion and `024.108` filtered private
+  # and protected; neither made the two meet. Ruby:
+  #
+  #   $ ruby -e '
+  #   class A
+  #     def build; end
+  #     alias_method :aka, :build
+  #     private :aka
+  #     private
+  #     def sec; end
+  #     alias_method :sec_aka, :sec
+  #   end
+  #   p [A.new.respond_to?(:aka), A.new.respond_to?(:sec_aka)]
+  #   '
+  #   # => [false, false]
+  #   # ruby 3.4.10
+  describe "an alias's own visibility" do
+    it "is not offered when the alias itself is made private" do
+      index("class Aka\n  def build; end\n  alias_method :aka, :build\n  private :aka\nend\n")
+
+      expect(offered("Aka")).to include("build")
+      expect(offered("Aka")).not_to include("aka")
+    end
+
+    it "is not offered when the method it names is private" do
+      index("class AkaSec\n  private\n  def sec; end\n  alias_method :sec_aka, :sec\nend\n")
+
+      expect(offered("AkaSec")).not_to include("sec_aka", "sec")
+    end
+
+    it "is not offered on the class side either" do
+      index("class AkaCls\n  class << self\n    def build; end\n    alias_method :aka, :build\n" \
+            "    private :aka\n  end\nend\n")
+
+      expect(offered("AkaCls", singleton: true)).not_to include("aka")
+    end
+  end
+
   describe "an alias" do
     it "is offered, like the method it names" do
       index("class Aliased\n  def original; end\n  alias aka original\n  alias_method :aka2, :original\nend\n")

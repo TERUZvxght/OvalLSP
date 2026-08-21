@@ -54,9 +54,13 @@ failures = []
 
 entries.each_with_index do |entry, i|
   label = entry["why"].to_s.strip.split("\n").first.to_s[0, 70]
-  %w[why file from to spec example].each do |key|
+  %w[why file from spec example].each do |key|
     fail_with("entry #{i + 1} has no `#{key}`") if entry[key].nil? || entry[key].to_s.empty?
   end
+  # `to` may be empty: deleting a line is a mutation, and the commonest
+  # one for a guard. Nil is still an error -- that is a missing key
+  # rather than a deliberate deletion.
+  fail_with("entry #{i + 1} has no `to`") if entry["to"].nil?
 
   source = File.join(ROOT, entry["file"])
   fail_with("entry #{i + 1}: #{entry["file"]} does not exist") unless File.file?(source)
