@@ -253,15 +253,6 @@ Seven more are older than this release and untouched by it:
   lexically is what `def` has always done, and three attempts to be
   cleverer for `attr_*` alone each produced false reports instead
   (024.31). <!-- documents: 024.31 -->
-- **`def Foo.bar` is recorded as an instance method**, so `Foo.bar` is
-  reported as unknown while `Foo.new.bar` is accepted — both answers
-  inverted. **56** of Ruby's own standard-library reports are this. The
-  same declaration is also filed under a namespace that does not exist
-  (`def Fetcher.start` inside `class Fetcher` lands on
-  `Fetcher::Fetcher`), which the argument-count check then reads: **10 of
-  the 14** wrong-argument-count reports over the corpus below are this
-  shape, among them `net/http.rb`'s `HTTP.start`
-  (024.32). <!-- documents: 024.32 -->
 - **A class that includes a module the workspace has not read still has
   its class-level macros reported.** `include SomeGem::Model` followed by
   `validate :ensure_ok` is reported, though the Concern installs

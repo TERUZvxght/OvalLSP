@@ -307,11 +307,18 @@ module Ovallsp
       end
 
       def visit_def_node(node)
-        singleton = node.receiver.is_a?(Prism::SelfNode) || (@cref.declares_singleton? && node.receiver.nil?)
         owner_receiver = node.receiver
+        # **A written receiver is a singleton definition, whatever it
+        # names.** `def Foo.bar` defines a singleton method on `Foo`, and
+        # this recorded an *instance* method -- so both answers inverted:
+        # the call Ruby runs was reported and the call Ruby raises on was
+        # accepted. Ten of the fourteen wrong-argument-count reports over
+        # the 0.2.1 corpus were this shape, `net/http.rb`'s `HTTP.start`
+        # among them (`024.32`).
+        singleton = !owner_receiver.nil? || (@cref.declares_singleton? && owner_receiver.nil?)
         owner =
           if owner_receiver && !owner_receiver.is_a?(Prism::SelfNode)
-            constant_full_name(owner_receiver) || current_owner
+            receiver_owner_name(owner_receiver) || current_owner
           else
             current_owner
           end
@@ -826,6 +833,30 @@ module Ovallsp
       # the Task 014-018 independent review.
       def namespace_name_location(constant_path_node)
         constant_path_node.respond_to?(:name_loc) ? constant_path_node.name_loc : constant_path_node.location
+      end
+
+      # The owner `def Const.name` names, resolved the way Ruby resolves a
+      # constant: through the nesting, innermost first, before falling
+      # back to qualifying under the current owner.
+      #
+      # `#qualify` alone gave `::Fetcher::Fetcher` for `def Fetcher.start`
+      # written inside `class Fetcher` -- a class that does not exist, and
+      # one every later lookup then failed against. Ruby finds the
+      # enclosing `Fetcher`, because `Fetcher::Fetcher` is not declared.
+      #
+      # Only the frames *this parser has seen declared* are matched, which
+      # is the honest limit of doing it here: a nesting frame is a name
+      # this file wrote, and a constant declared elsewhere still falls
+      # back. `024.32`.
+      def receiver_owner_name(receiver)
+        written = raw_constant_name(receiver)
+        return constant_full_name(receiver) if written.nil? || written.start_with?("::")
+
+        head = written.split("::").first
+        frame = @cref.nesting.find { |f| Index::SymbolId.bare_name(f).split("::").last == head }
+        return Index::SymbolId.qualify_owner(frame) if frame && written == head
+
+        constant_full_name(receiver)
       end
 
       def qualify(local_path)

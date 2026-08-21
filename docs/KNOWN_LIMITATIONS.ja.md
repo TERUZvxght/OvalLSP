@@ -243,13 +243,6 @@ b = "str"        # → Article has no method named `b=`
   ないためです。字句的に帰属
   させるのは `def` が以前からしていることで、`attr_*` だけを賢くしようとした
   3度の試みは、いずれも誤報告を生みました(024.31)。 <!-- documents: 024.31 -->
-- **`def Foo.bar` はインスタンスメソッドとして記録されます。** そのため
-  `Foo.bar` が未定義と報告され、`Foo.new.bar` は通ります — 両方が逆です。
-  Ruby自身の標準ライブラリの報告のうち**56件**がこれです。同じ宣言は存在
-  しない名前空間の下にも入ります(`class Fetcher` の中の `def Fetcher.start`
-  が `Fetcher::Fetcher` に入る)。引数個数の検査はその宣言を読むので、計測
-  コーパスに残る引数個数の誤報**14件中10件**がこの形です。`net/http.rb` の
-  `HTTP.start` などが該当します(024.32)。 <!-- documents: 024.32 -->
 - **ワークスペースが読んでいないモジュールを include したクラスでは、クラス
   レベルのマクロが報告されます。** `include SomeGem::Model` に続く
   `validate :ensure_ok` は、Concern が `validate` を入れるにもかかわらず報告

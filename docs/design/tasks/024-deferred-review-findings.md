@@ -177,7 +177,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.29`](#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | open | — | Two features were written for 0.1.15 and cut from it |
 | [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | fixed | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
 | [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | open | — | A declaration written inside a block has no owner this parser can na… |
-| [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | open | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
+| [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | fixed | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
 | [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | open | — | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
 | [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
 | [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | open | — | A class that includes a module the workspace cannot resolve still re… |
@@ -1708,7 +1708,7 @@ asking what `def` in the same position does.
 ## 024.32 `def Foo.bar` is recorded as an instance method, so both answers are inverted
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 ```
@@ -1779,6 +1779,32 @@ this entry gave before and round 22 agreed with: it changes declaration
 kinds, which is what 0.1.14 and 0.1.15 were both spent on, and it wants
 a corpus run in both directions.
 
+
+**Fixed in 0.2.13.** Both halves. A written receiver makes the definition
+a singleton one whatever it names — the test was
+`node.receiver.is_a?(Prism::SelfNode)`, so `def Foo.bar` fell through to
+*instance*, inverting both answers. And the owner is resolved through the
+nesting before falling back to qualifying: `def Fetcher.start` inside
+`class Fetcher` named `::Fetcher::Fetcher`, a class that does not exist,
+and every later lookup failed against it.
+
+Only nesting frames this parser has seen declared are matched, which is
+the honest limit of doing it in the parser; a constant declared elsewhere
+still falls back to the previous behaviour.
+
+**And it surfaced a second decision that had to move with it.** The
+16-gem corpus came back +3, all in
+`activerecord/associations/builder/has_and_belongs_to_many.rb`, where
+`Class.new(Base) { class << self; attr_accessor :left_model; end }` is
+written inside a `def`. `024.34`'s new `Cref#surface_for` reads
+"in a method body" as the instance side, which is right for
+`def setup; attr_accessor :x; end` and wrong once a `class << self`
+intervenes — that opens a definition context of its own. `#in_singleton_class`
+resets `in_method_body` now, and the corpus returns to 0 added.
+
+The entry the residue belongs to is `024.31`: those accessors are really
+the *anonymous* class's, and attributing them to the lexically enclosing
+owner at all is that entry's subject.
 
 ## 024.33 `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` is not
 

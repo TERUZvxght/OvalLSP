@@ -162,8 +162,17 @@ module Ovallsp
              self_is_module: true, visibility: :public, module_function: false, module_owner: module_owner)
       end
 
+      # `in_method_body` is reset: `class << self` opens a *definition
+      # context* of its own, so a macro written directly inside it lands
+      # on that singleton surface whatever the block or method it was
+      # reached through. Without the reset, `Class.new { class << self;
+      # attr_accessor :left_model; end }` inside a `def` was recorded as
+      # an instance accessor on the enclosing class -- and the
+      # `def self.` methods beside it, which really do call
+      # `left_model`, were then reported.
       def in_singleton_class
-        with(singleton_context: true, self_is_module: true, visibility: :public, module_function: false)
+        with(singleton_context: true, self_is_module: true, visibility: :public,
+             module_function: false, in_method_body: false)
       end
 
       # A `def`. `self` inside `def self.x` is still a Class or Module;
