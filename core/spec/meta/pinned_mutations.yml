@@ -99,3 +99,10 @@
   spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
   example: "reads an instance_eval block on an explicit receiver as an instance"
 
+- why: "024.34's question -- asking the cref whether it declares a singleton, rather than asking what surface a definition written here lands on."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        owner_for_attrs, side = @cref.surface_for\n        return if owner_for_attrs.nil?\n\n        singleton = side == :singleton\n"
+  to: "        singleton = @cref.declares_singleton?\n"
+  spec: spec/ovallsp/diagnostics/attr_in_singleton_def_spec.rb
+  example: "records no singleton accessor"
+

@@ -179,7 +179,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | open | — | A declaration written inside a block has no owner this parser can na… |
 | [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | open | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
 | [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | open | — | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
-| [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | open | — | `attr_*` inside a `def` inside `class << self` is kinded singleton |
+| [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
 | [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | open | — | A class that includes a module the workspace cannot resolve still re… |
 | [`024.36`](#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
 | [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | — | The argument-type check reports nothing on measured real Ruby |
@@ -1814,8 +1814,10 @@ Worth doing with 024.31 rather than separately.
 ## 024.34 `attr_*` inside a `def` inside `class << self` is kinded singleton
 
 ```yaml
-status: open
+status: fixed
 kind: defect
+target: 0.2.13
+released-in: 0.2.13
 user-visible: yes
 ```
 
@@ -1859,6 +1861,27 @@ Real code has the shape:
 behaviour change on its own, so it wants its own corpus run in both
 directions rather than a ride on a correction release.
 
+
+**Fixed in 0.2.13, and it is the entry the 0.2.11 stocktake called the
+most informative of C1's five.** `Cref#defines_surface?` already answered
+the question this needs and was read at *one* site in the parser, while
+`#declares_singleton?` was read at *seven* — and
+`#record_attribute_methods` read the second. The stocktake's verdict on
+C1 was that collecting six flags into one value collected the *storage*
+and not the *question*, and this is that sentence made concrete.
+
+`Cref#surface_for` is the question a recorder actually has: `[owner,
+side]` for a definition written here, or nil where there is nothing to
+attribute it to. The two answers differ in exactly one place, which is
+this one — inside a `def` written in `class << self` the cref is still
+the singleton class, but self at run time is the class object, so
+`attr_accessor` there is `Module#attr_accessor` and defines an *instance*
+accessor.
+
+The control is in the same file: written *directly* in `class << self`,
+`attr_accessor` still records a singleton accessor, which is what Ruby
+does and what an implementation that simply stopped answering singleton
+would break.
 
 ## 024.35 A class that includes a module the workspace cannot resolve still reads as closed
 

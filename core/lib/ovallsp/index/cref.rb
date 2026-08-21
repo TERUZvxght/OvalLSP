@@ -111,6 +111,42 @@ module Ovallsp
       # `class << self` the same call defines singleton methods.
       def surface_kind = singleton_context ? :singleton : :instance
 
+      # **The question a recorder actually has**, and the one thing they
+      # should be asking. `[owner, side]` for a definition written *here*,
+      # or nil where there is nothing to attribute it to.
+      #
+      # `024.34` is why it exists. `#declares_singleton?` answers about
+      # the *cref*, which is the right answer to a bare `def`'s question
+      # and the wrong one to `attr_accessor`'s: inside a `def` written in
+      # `class << self`, self at run time is the class object, so
+      # `attr_accessor` defines an *instance* accessor. Ruby:
+      #
+      #   $ ruby -e '
+      #   class S
+      #     class << self
+      #       def setup
+      #         attr_accessor :attr_x
+      #       end
+      #     end
+      #   end
+      #   S.setup
+      #   p [S.new.respond_to?(:attr_x), S.respond_to?(:attr_x)]
+      #   '
+      #   # => [true, false]
+      #   # ruby 3.4.10
+      #
+      # 0.2.8 collected six flags into this value and the stocktake found
+      # `#defines_surface?` read at one site in the parser and
+      # `#declares_singleton?` at seven -- so a recorder could still read
+      # one predicate of nine and get the wrong answer, which is exactly
+      # what `#record_attribute_methods` did. Collecting the storage was
+      # not collecting the question.
+      def surface_for
+        return nil if owner.nil?
+
+        [owner, in_method_body ? :instance : surface_kind]
+      end
+
       # `#nesting` is real Ruby's `Module.nesting`, innermost first --
       # what an unqualified constant written here is resolved against.
       # `in_method_body` is deliberately untouched. `class Inner` written

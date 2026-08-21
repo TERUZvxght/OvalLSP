@@ -1190,7 +1190,16 @@ module Ovallsp
         # rather than inventing one. That is the direction this engine
         # chooses everywhere else. 024.31 records the shared defect.
 
-        singleton = @cref.declares_singleton?
+        # **`#surface_for`, not `#declares_singleton?`.** They differ in
+        # exactly one place and it is this one: inside a `def` written in
+        # `class << self`, the cref is still the singleton class, but
+        # self *at run time* is the class object -- so `attr_accessor`
+        # there is `Module#attr_accessor` and defines an instance
+        # accessor. `S.attr_x` was reported on code that runs (`024.34`).
+        owner_for_attrs, side = @cref.surface_for
+        return if owner_for_attrs.nil?
+
+        singleton = side == :singleton
         # `private attr_reader :x` is one call taking another as its
         # argument (Ruby 3.0+). The open section still applies when it is
         # written on its own line.

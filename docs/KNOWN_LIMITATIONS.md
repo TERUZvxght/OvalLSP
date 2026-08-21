@@ -286,13 +286,6 @@ Seven more are older than this release and untouched by it:
   this shape -- and the 7 written here until 0.2.1's last day was itself
   a number taken once and not re-measured. A number recorded and not re-measured after the fix that
   invalidated it.)
-- **`attr_accessor` written inside a `def` inside `class << self` is
-  recorded as declaring class-level methods**, where Ruby defines
-  instance ones — the macro runs when that method is *called*, with the
-  class as `self`. Reading the attribute from an instance method is then
-  reported as unknown. Real code has the shape: ActiveRecord's
-  `has_and_belongs_to_many` builder, `csv/parser.rb`, `cgi/core.rb` and
-  Devise (024.34). <!-- documents: 024.34 -->
 
 ## What 0.2.0's new checks deliberately do not cover
 
