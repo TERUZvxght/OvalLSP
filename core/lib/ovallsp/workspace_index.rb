@@ -516,8 +516,9 @@ module Ovallsp
     # flight for the same file — either way the buffer is authoritative),
     # but a disk read can never overwrite a buffer, full stop. Only when
     # both sides share the same source does either kind of "staleness"
-    # ordering apply: document_version for two buffer updates (an LSP
-    # client always sends increasing versions per document), or
+    # ordering apply: document_version for two updates *of one buffer*
+    # (see the buffer_id refusal below -- across buffers the two
+    # numberings are not comparable at all), or
     # read_sequence for two disk reads (ordered by when each *started*
     # reading, not when each *finished* writing to the index — a slow
     # walk that began reading stale content before a fast, later-started
@@ -530,6 +531,16 @@ module Ovallsp
 
       if incoming.source == :buffer
         return false if incoming.document_version.nil? || existing.document_version.nil?
+        # **Two buffers of one uri are two documents.** Version 1 of the
+        # second is not older than version 20 of the first; the two
+        # numberings are not one sequence, and comparing them made a
+        # reopen-without-close stop updating until the new buffer's
+        # numbering passed where the old one left off. The comment above
+        # asserted "an LSP client always sends increasing versions per
+        # document" -- which is the premise 0.2.10's publish funnel had
+        # already rejected one layer up, leaving two places comparing a
+        # version across buffers and one of them fixed (`024.118`).
+        return false if incoming.buffer_id != existing.buffer_id
 
         incoming.document_version < existing.document_version
       else

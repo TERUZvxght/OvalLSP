@@ -300,6 +300,36 @@ requires exactly one edit; `024.69`'s two suites fail CI when skipped.
 
 ---
 
+## D10 — A failure is turned into a plausible value
+
+**Entries:** `024.122`, and it is upstream of `024.35` and part of D2
+
+**Where the decision is made:** 239 `rescue` sites in `core/lib` and 21
+`catch` blocks in `vscode/src`. Counted: **72 return a plausible value
+silently**, 44 log and then return one, 4 re-raise as a typed error.
+
+Added after the first nine, because the maintainer noticed it across the
+codebase rather than in any one place — which is the shape of a class,
+and none of D1–D9 names it. It is not a tenth *kind* of mistake so much
+as the mechanism several of the others travel by: an empty ancestor list
+that means "the RBS load failed" is D2's problem arriving through a
+`rescue`, and a checker that reports "not pinned" when it could not load
+the code is D7's.
+
+**The logic under which none of these could arise:** catching and
+continuing is not the default. A site that does it says in place what
+the failure cannot affect and how a reader would find out it happened,
+and a check fails the build on a new `rescue StandardError` without one.
+Where the caller already has a three-state answer, the failure becomes
+`unknown` — which is the machinery D2 builds, pointed at the other
+source of not-knowing.
+
+**Acceptance:** the enumeration comes out at the same 239 + 21 it started
+from; no site in the third group remains; `CLAUDE.md` carries the rule;
+and a deliberately-added bare `rescue StandardError` fails CI.
+
+---
+
 ## D9 — Cost
 
 **Entries:** `024.38`, `024.45`, `024.57`, `024.71`

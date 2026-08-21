@@ -552,6 +552,15 @@ longer reported for calling them — but hover, go to definition and
 completion still answer nothing there, because the names are not in the
 index. You get silence rather than an answer. <!-- documents: 024.116 -->
 
+## Something can fail without you being told
+
+In 72 measured places this extension catches a failure and carries on
+with a value that looks like a real answer — an empty list, a `nil`, a
+`false`. When one of those fires you get a plausible answer rather than
+an error, so a missing hover or a silent check may be a failure nothing
+reported rather than a limit of what this engine knows. The Output
+channel is the place to look, and it will not always have a line. <!-- documents: 024.122 -->
+
 ## A macro called inside a block in a class body
 
 A macro this extension cannot read is left alone when you write it

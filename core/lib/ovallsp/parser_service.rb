@@ -56,6 +56,7 @@ module Ovallsp
         # changed.
         content_hash: Digest::SHA256.hexdigest(raw_source),
         document_version: document.version,
+        buffer_id: document.buffer_id,
         declarations: visitor.declarations,
         diagnostics: parse_diagnostics(result, lines, erb: erb_document?(document.uri)),
         ancestor_facts: visitor.ancestor_facts,

@@ -16,9 +16,9 @@
 RSpec.describe "the cache schema version and the shape it protects" do
   it "moves whenever FileSummary's members do" do
     expect([Ovallsp::Cache::Key::SCHEMA_VERSION, Ovallsp::Index::FileSummary.members]).to eq(
-      [3, %i[uri content_hash document_version declarations diagnostics source read_sequence ancestor_facts
+      [4, %i[uri content_hash document_version declarations diagnostics source read_sequence ancestor_facts
              alias_facts reference_candidates generated_method_facts open_surface_owners
-             module_function_names]]
+             module_function_names buffer_id]]
     )
   end
 end

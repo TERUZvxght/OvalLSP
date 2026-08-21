@@ -226,7 +226,7 @@ forbids exactly that.
 `024.25`, `024.26`, `024.30`, `024.39`, `024.55`, `024.64`, `024.68`,
 `024.69`, `024.75`, `024.80`, `024.81`, `024.97`, `024.109`, `024.118`.
 
-### 0.2.13 — what an owner's own body says *(axis B)*
+### 0.2.13 — what an owner's own body says, and failures that stop being silent *(axis B)*
 
 042's **D2** and **D5**. The largest group and C1's axis done as
 questions rather than storage: a member set produced *with* its
@@ -238,6 +238,16 @@ runs against.
 `024.106`, `024.110`, `024.111`, `024.116`, `024.117`, `024.76`,
 `024.77`, `024.83`, `024.91`, `024.18`, `024.22`, `024.27`, `024.28`,
 `024.31`, `024.32`, `024.33`, `024.34`.
+
+And **D10**, raised by the maintainer and measured before it was
+written down: 72 places in `core/lib` catch a failure and return a value
+that looks like a real answer. Every layer of this project has been bitten
+by it — a cache that silently missed, an RBS load whose failure is
+indistinguishable from a type with no ancestors, and 0.2.12's own mutation
+checker reporting "nothing pinned" when it could not load the code it was
+mutating. `024.122` is the task, and its third step is the one that has to
+come last: the policy is written into `CLAUDE.md` *after* the tree obeys
+it, not before, so the rule does not arrive with 72 exceptions.
 
 ### 0.3.0 — the first release that may add capability *(axis B)*
 

@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**120 entries below** <!-- measured: register-entries = 120 -->,
+**121 entries below** <!-- measured: register-entries = 121 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -265,6 +265,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
 | [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.0 | Nothing measures how much of this tree no test would notice changing |
+| [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | open | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -6160,6 +6161,87 @@ because a number recorded from one run of a load-dependent quantity is
 periodic run is hours, and the fixture isolation that entry describes
 takes the suite to about a minute, which takes this from overnight to
 lunchtime.
+
+## 024.122 A failure is turned into a plausible value, in 72 measured places
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.13
+```
+
+**Area:** `core/lib` (239 `rescue` sites), `vscode/src` (21 `catch`
+sites), and `CLAUDE.md`, which does not say what the rule is
+
+Raised by the maintainer, who had noticed the pattern across the
+codebase rather than in one place. Counted rather than estimated —
+every `rescue` in `core/lib`, classified by what the first statement of
+its handler does:
+
+| what the handler does | sites |
+|---|---|
+| **returns a plausible value, silently** | **72** |
+| logs, then usually returns a value | 44 |
+| other (sets a flag, retries, cleans up) | 39 |
+| re-raises as a typed error | 4 |
+
+134 of the 239 are `rescue StandardError` — the widest catch there is —
+and 13 are a bare `rescue`. `vscode/src` has 21 `catch` blocks outside
+its tests, uncounted here.
+
+**Why this is a defect and not a style preference.** A swallowed failure
+does not produce a wrong answer that someone eventually notices. It
+produces *the answer that would be right if nothing had gone wrong*, and
+this project has now been bitten by that at every layer:
+
+- `Cache::Store#load` rescued a "struct size differs" into a silent
+  whole-cache miss, so a schema bump that was never made looked exactly
+  like a cache that was working. `SCHEMA_VERSION`'s own comment records
+  it.
+- `Signatures::Environment#ancestors` answering `[]` on failure is
+  indistinguishable from a type with no ancestors, which is `024.35`'s
+  whole shape and half of what `042`'s D2 is about.
+- 0.2.12's own `check_pinned_mutations.rb` reported all four mutations
+  uncaught on its first run — because it could not load the code it was
+  mutating. **A checker that cannot see the thing it checks reports
+  exactly what a working checker reports when nothing is pinned.** That
+  is this defect happening to the thing built to prevent a different one.
+- `prune_generations` swallowing every error by design is what made
+  `.not_to raise_error` an assertion that could not fail, in the spec
+  that deleted the maintainer's applications. `CLAUDE.md` records the
+  incident and does not draw this conclusion from it.
+
+**The task, in the order it has to happen:**
+
+1. **Enumerate.** Every `rescue` in `core/lib` and every `catch` in
+   `vscode/src`, one at a time, with the count above as the control —
+   an enumeration that comes out at a different total has missed
+   something or double-counted. Each site gets one of three verdicts:
+   *surfaces* (raises, or reports through a channel a user or a log
+   reader sees), *deliberate and argued* (the failure genuinely has no
+   consequence, and the reason is written at the site), or *swallows*.
+2. **Fix every site in the third group.** Not by adding a log line —
+   44 sites already log and still return a plausible value, and a log
+   nobody reads is a swallow with extra steps. The value returned has to
+   be one a caller cannot mistake for a real answer: `unknown` where
+   there is a three-state answer, a raise where there is not.
+3. **Then write the policy**, in `CLAUDE.md`, as a mandatory section:
+   catching an exception and continuing is not allowed by default; a
+   site that does it names, in place, what the failure cannot affect and
+   how a reader would find out it happened. And a check that a new
+   `rescue StandardError` without such a note fails the build, because
+   this register's whole history says a prose rule alone does not hold.
+
+**Order matters and step 3 is last.** Declaring the policy before the
+tree obeys it makes a rule with 72 exceptions on the day it is written,
+which is the arrangement `CLAUDE.md`'s own preamble warns about.
+
+**Why 0.2.13 rather than later.** A swallowed failure makes a
+*measurement* silently measure nothing, and `042`'s sequencing already
+puts the apparatus classes first for exactly that reason. This belongs
+with them; it did not go into 0.2.12 only because that release was
+already scoped and under review when the maintainer raised it.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
