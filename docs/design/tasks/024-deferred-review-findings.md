@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**119 entries below** <!-- measured: register-entries = 119 -->,
+**120 entries below** <!-- measured: register-entries = 120 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -264,6 +264,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | open | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
+| [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.0 | Nothing measures how much of this tree no test would notice changing |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -6092,6 +6093,73 @@ distinguished it was the *third* run failing somewhere else. A single
 observation of a nondeterministic failure describes the run, not the
 system -- the same rule `026` records for measurements, arriving through
 a test.
+
+## 024.121 Nothing measures how much of this tree no test would notice changing
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing an editor user meets directly. What it costs is that a
+  behaviour can be broken silently, which every user-visible entry in
+  this register that began "and no test noticed" was downstream of.
+target: 0.3.0
+```
+
+**Area:** `scripts/check_pinned_mutations.rb`, `scripts/hunk_sweep.rb`,
+`.github/workflows/ci.yml`
+
+Three review rounds in a row, across three releases, have found an
+example that could not fail under the change it was written to guard
+against. The maintainer's question — *can this be made structurally
+impossible to miss, rather than found again next time?* — is the right
+one, and the honest answer is that two of the three layers exist and the
+third does not.
+
+**Layer 1, per change set: `hunk_sweep.rb`.** Reverse-applies each hunk
+of a change set and requires something to fail. Exists, `CLAUDE.md`
+requires it. Covers *changed* lines only, is run by hand, and has a
+recorded blind spot: reverting a hunk that adds a whole method removes
+its only call site too, so the decisions inside it are never exercised.
+
+**Layer 2, per commit: `check_pinned_mutations.rb`.** Added in 0.2.12.
+An example that claims to distinguish two behaviours names the mutation
+it claims to catch, and CI applies it and requires the failure. This is
+the layer that makes a *stated* claim unable to be false — and it caught
+a dead clause on its first working run.
+
+**It is opt-in, and that is the gap.** A decision nobody thought to add
+to the manifest is exactly as unprotected as before. Layer 2 turns "a
+reviewer might notice the comment is wrong" into "the comment cannot be
+wrong", which is real, but it does not turn "someone must think of it"
+into "nobody has to".
+
+**Layer 3, periodic and missing: every behavioural line, no manifest.**
+Mutate each one mechanically — flip a boolean, drop a guard, swap a
+comparison — and require some example to fail. That is ordinary mutation
+testing, and it is the only form that needs nobody to remember anything.
+
+Its cost is why it is not layer 2: a 2,276-example suite at roughly three
+minutes, times thousands of mutants, is hours rather than minutes. So it
+does not gate a commit. It runs on a schedule, and **what gates is a
+ratchet**: the surviving-mutant count is recorded in the tree, CI fails
+if a change makes it worse, and lowering it is the only edit allowed.
+That is what converts "someone should look" into "the build says no",
+and it is the same shape as the `<!-- measured: -->` markers this
+register already uses — a number that is derived rather than typed, and
+may only move one way.
+
+Two things to settle when it is built, both learned the expensive way
+here: run it on a schedule and never beside another tree-mutating run
+(`026`), and seed the ratchet from a measured run rather than a guess,
+because a number recorded from one run of a load-dependent quantity is
+`040`'s own correction.
+
+`024.71` is a precondition worth naming: at three minutes serial the
+periodic run is hours, and the fixture isolation that entry describes
+takes the suite to about a minute, which takes this from overnight to
+lunchtime.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
