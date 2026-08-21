@@ -46,7 +46,6 @@ describe('OvalLSP extension watcher pattern reaches Core-relevant schema files',
 
     try {
       const dbDir = path.join(workspaceFolder!.uri.fsPath, 'db');
-      fs.mkdirSync(dbDir, { recursive: true });
 
       const candidates = {
         migration: path.join(dbDir, 'migrate', '20260101000000_create_widgets.rb'),
@@ -55,22 +54,20 @@ describe('OvalLSP extension watcher pattern reaches Core-relevant schema files',
         signature: path.join(workspaceFolder!.uri.fsPath, 'sig', 'watcher_test.rbs'),
         rbi: path.join(workspaceFolder!.uri.fsPath, 'sorbet', 'rbi', 'watcher_test.rbi')
       };
-      fs.mkdirSync(path.dirname(candidates.migration), { recursive: true });
-      fs.mkdirSync(path.dirname(candidates.signature), { recursive: true });
-      fs.mkdirSync(path.dirname(candidates.rbi), { recursive: true });
-
-      // **The directories first, then a settle, then the files.** On
-      // Linux the watcher adds an inotify watch per directory, and a file
-      // written into a directory created microseconds earlier can be
-      // created before that directory is being watched. Three CI runs
-      // failed here, each on a different file, and the two that failed
-      // most were the two in *second-level* new directories
-      // (`db/migrate/`, `sorbet/rbi/`).
+      // **The directories are committed, not created here.** On Linux the
+      // watcher adds an inotify watch per directory, and a *second level*
+      // directory created after the extension host started never became
+      // watched at all -- so a file written into `db/migrate/` or
+      // `sorbet/rbi/` fired nothing, however many times the retry below
+      // rewrote it. Two attempts at this spec's own timing, a settle and
+      // then the retry, each passed once and failed the run after; the
+      // third round on one place buys a countermeasure rather than a
+      // third guess at a duration (`CLAUDE.md`, `024.120`).
       //
-      // This is a property of the test's setup, not of the glob: nothing
-      // a user does creates a directory and a file in it in the same
-      // millisecond and then expects the event within one tick.
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // `test-fixtures/sample-workspace/{db/migrate,sig,sorbet/rbi}/`
+      // carry a `.gitkeep` for this. It is also what a real workspace
+      // looks like: nobody creates `db/migrate/` and a migration in it in
+      // the same millisecond and then expects the event on the next tick.
 
       fs.writeFileSync(candidates.migration, '# frozen_string_literal: true\n');
       fs.writeFileSync(candidates.structureSql, '-- schema\n');
@@ -123,10 +120,12 @@ describe('OvalLSP extension watcher pattern reaches Core-relevant schema files',
         `expected a create event for a project RBI file; saw: ${[...seen].join(', ')}`
       );
 
-      fs.rmSync(dbDir, { recursive: true, force: true });
-      fs.rmSync(candidates.gemfileLock, { force: true });
-      fs.rmSync(path.dirname(candidates.signature), { recursive: true, force: true });
-      fs.rmSync(path.join(workspaceFolder!.uri.fsPath, 'sorbet'), { recursive: true, force: true });
+      // The files, never the directories: they are committed, and
+      // removing them would make the next run create them again -- which
+      // is the race this spec just stopped having.
+      for (const file of Object.values(candidates)) {
+        fs.rmSync(file, { force: true });
+      }
     } finally {
       disposable.dispose();
       watcher.dispose();
