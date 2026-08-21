@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**118 entries below** <!-- measured: register-entries = 118 -->,
+**119 entries below** <!-- measured: register-entries = 119 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -263,6 +263,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.13 | The two spellings of a class-body macro get opposite answers |
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | open | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
+| [`024.120`](#024120-no-create-event-for-a-migration-file-on-linux) | open | 0.2.13 | No create event for a migration file on Linux |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -6048,6 +6049,42 @@ that no `LocalInferencer` in the file shared, and `literal_types_spec.rb`
 called `LocalInferencer.new` with no collaborators at all to answer a
 question about literal types — which is the one shape where that happens
 to be right, and indistinguishable from the shapes where it is not.
+
+## 024.120 No create event for a migration file on Linux
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.13
+```
+
+**Area:** `vscode/src/watchedFiles.ts` (`WATCHED_FILES_GLOB`),
+`vscode/src/test/integration/watcher.spec.ts`
+
+Creating `db/migrate/20260101000000_create_widgets.rb` produces **no
+create event** from `vscode.workspace.createFileSystemWatcher` on the CI
+Linux runner. In the same example, in the same tick, four other files do:
+`db/structure.sql`, a `.rbs` under a newly created `sig/`, and a `.rbi`
+under a newly created `sorbet/rbi/`. On macOS all five fire.
+
+**Not the registration race** the example's retry loop handles -- that
+one was real, was fixed in the same change, and the retry demonstrably
+works for the four that fire. This one persists across every retry for
+ten seconds.
+
+The glob is `**/{*.rb,*.rbs,*.rbi,*.erb,Gemfile.lock,db/structure.sql}`,
+so a migration matches through the bare `*.rb` alternative rather than
+through a `db/` entry. Whether that is an inotify recursion difference in
+newly created nested directories, or a real gap in what reaches the Core
+Server on Linux, is the open question -- **and the second would be
+user-visible**: editing migrations is how a Rails schema changes, and a
+missed watch event means the model registry does not refresh.
+
+Found the day `024.69` put the integration suite on CI, which is the
+entry's own argument: nobody had run these on Linux, ever. The example
+skips this one assertion on Linux with this number cited, so the job
+gates on the rest rather than being switched off.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
