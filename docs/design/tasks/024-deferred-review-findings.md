@@ -212,7 +212,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.65`](#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
 | [`024.66`](#02466-a-marketing-card-kept-carrying-claims-about-what-an-error-s-text-says) | fixed | 0.2.3 | A marketing card kept carrying claims about what an error's text says |
 | [`024.67`](#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | fixed | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
-| [`024.68`](#02468-three-rounds-of-guards-on-a-hand-rolled-grammar-each-blind-one-assumption-deeper) | open | 0.2.12 | Three rounds of guards on a hand-rolled grammar, each blind one assu… |
+| [`024.68`](#02468-three-rounds-of-guards-on-a-hand-rolled-grammar-each-blind-one-assumption-deeper) | fixed | 0.2.12 | Three rounds of guards on a hand-rolled grammar, each blind one assu… |
 | [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | fixed | 0.2.12 | The two suites that drive a real editor are run by nobody but the ma… |
 | [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.3.0 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
@@ -3744,7 +3744,7 @@ anyway; hence the target.
 ## 024.68 Three rounds of guards on a hand-rolled grammar, each blind one assumption deeper
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -3754,6 +3754,7 @@ user-visible-note: >
   guard attempts were rolled back; this entry is the record the
   roll-back rule names as the deliverable.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/spec/meta/deferred_findings_spec.rb` (the
@@ -3902,6 +3903,26 @@ the loop, which turns the race into a retry. It had passed on the run
 before, and locally -- **two runs of a new job found a flake that no
 amount of reading would have.**
 
+
+**Fixed in 0.2.12, by deleting the grammar rather than guarding it a
+fourth time.** The block is fenced ` ```yaml `, and it was being scanned
+with `/^([a-z-]+): *(.*)$/` under a comment saying "deliberately not a
+YAML parser". Every one of the three guards was an attempt to
+re-implement, in that scanner, something a yaml parser does for free —
+which is why each was blind one assumption deeper than the last.
+
+`DeferredFindings.entries` now calls `YAML.safe_load` and checks the keys
+against `KNOWN_KEYS`, the set the legend defines. `Target:` and
+`user_visible:` are keys like any other and fail as unknown; a key
+indented under another is a nested mapping and fails the same way; a
+block that is not valid yaml raises rather than parsing to nothing.
+Four examples pin it, including the control that the real register still
+parses.
+
+The one shape that needed care: yaml turns an unquoted `yes` into `true`,
+and every caller compares against the string `"no"`. Values are
+stringified back, which is a real behaviour and is why the control
+example exists.
 
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 
