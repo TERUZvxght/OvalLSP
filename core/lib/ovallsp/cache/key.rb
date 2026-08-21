@@ -36,7 +36,9 @@ module Ovallsp
       # `core/spec/ovallsp/cache/schema_version_spec.rb` is what notices
       # next time -- this constant and that shape are one decision, and
       # keeping them in two files is why the bump was missed.
-      SCHEMA_VERSION = 3
+      # 3 since 0.2.12, when `FileSummary` gained `module_function_names`;
+      # 4 in the same release, when it gained `buffer_id` (`024.118`).
+      SCHEMA_VERSION = 4
 
       module_function
 

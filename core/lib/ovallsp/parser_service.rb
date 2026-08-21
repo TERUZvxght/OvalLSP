@@ -56,6 +56,7 @@ module Ovallsp
         # changed.
         content_hash: Digest::SHA256.hexdigest(raw_source),
         document_version: document.version,
+        buffer_id: document.buffer_id,
         declarations: visitor.declarations,
         diagnostics: parse_diagnostics(result, lines, erb: erb_document?(document.uri)),
         ancestor_facts: visitor.ancestor_facts,
@@ -853,8 +854,7 @@ module Ovallsp
 
         @ancestor_facts << Index::AncestorFact.new(
           owner: owner, relation: :superclass, target: raw_constant_name(node.superclass),
-          location: Index::SourceLocation.to_range(node.superclass.location, @lines)
-        )
+          location: Index::SourceLocation.to_range(node.superclass.location, @lines), nesting: current_nesting)
       end
 
       # `module_function` makes each method reachable on the module *as
@@ -940,8 +940,7 @@ module Ovallsp
 
         @ancestor_facts << Index::AncestorFact.new(
           owner: current_owner, relation: :concern_class_methods, target: name,
-          location: Index::SourceLocation.to_range(target.location, @lines)
-        )
+          location: Index::SourceLocation.to_range(target.location, @lines), nesting: current_nesting)
       end
 
       def record_ancestor_call(node)
@@ -966,8 +965,7 @@ module Ovallsp
 
           @ancestor_facts << Index::AncestorFact.new(
             owner: current_owner, relation: relation, target: target,
-            location: Index::SourceLocation.to_range(arg.location, @lines)
-          )
+            location: Index::SourceLocation.to_range(arg.location, @lines), nesting: current_nesting)
         end
       end
 
@@ -988,8 +986,7 @@ module Ovallsp
       def record_extend_self(node)
         @ancestor_facts << Index::AncestorFact.new(
           owner: current_owner, relation: :extend, target: current_owner,
-          location: Index::SourceLocation.to_range(node.arguments.arguments.first.location, @lines)
-        )
+          location: Index::SourceLocation.to_range(node.arguments.arguments.first.location, @lines), nesting: current_nesting)
       end
 
       # An ancestor decided at runtime leaves a surface that cannot be
@@ -1384,6 +1381,11 @@ module Ovallsp
       # they each used to reassemble from. See `Index::Cref`.
       attr_reader :cref
 
+      # `Module.nesting` at the point being visited, innermost first --
+      # what `AncestorFact` needs to identify a bare constant the way
+      # Ruby does (`024.81`).
+      def current_nesting = @cref.nesting
+
       def current_owner
         @cref.owner
       end
@@ -1567,7 +1569,16 @@ module Ovallsp
         # rewrite -- and rewriting by owner alone would hit the
         # same-named instance method instead, privatizing a real Rails
         # action and dropping it from view propagation.
-        return if @cref.declares_singleton?
+        #
+        # An *alias* is safe to rewrite here even so: an `AliasFact`
+        # carries `singleton` itself, so naming one inside `class << self`
+        # cannot reach the same-named instance alias. Without this,
+        # `class << self; alias_method :aka, :build; private :aka; end`
+        # offered `aka` on the class side, which raises.
+        if @cref.declares_singleton?
+          rewrite_recorded_alias_visibility(symbol_argument_names(node), visibility, singleton: true)
+          return
+        end
         # `private :target` written inside a method body never runs at
         # class level in Ruby, so it must not retroactively change a
         # declaration either.
@@ -1610,7 +1621,11 @@ module Ovallsp
           @pending_visibility_names ||= {}
           pending_names.each { |name| @pending_visibility_names[[current_owner, name]] = visibility }
         end
+        # Instance side only: the `class << self` branch above returned
+        # before reaching here, and `private_class_method` has its own
+        # path.
         rewrite_recorded_visibility(names, visibility)
+        rewrite_recorded_alias_visibility(names, visibility, singleton: false)
       end
 
       # `private_class_method :build` names a singleton method that has
@@ -1624,7 +1639,10 @@ module Ovallsp
         return if @cref.in_method_body? || node.arguments.nil?
 
         names = node.arguments.arguments.filter_map { |argument| symbol_name(argument) }
-        rewrite_recorded_visibility(names, visibility, kind: :singleton_method) unless names.empty?
+        return if names.empty?
+
+        rewrite_recorded_visibility(names, visibility, kind: :singleton_method)
+        rewrite_recorded_alias_visibility(names, visibility, singleton: true)
       end
 
       def visibility_for_definition(node, singleton, inline_visibility)
@@ -1639,6 +1657,25 @@ module Ovallsp
         return inline_visibility || @cref.visibility if node.receiver.nil? && @cref.declares_singleton?
 
         inline_visibility
+      end
+
+      # `private :aka` names an alias as readily as a `def`, and an alias
+      # has no declaration to rewrite -- so the visibility went nowhere
+      # and completion offered a name that raises. Recorded on the fact
+      # itself, which is what `MethodResolver#alias_visibility_of` reads.
+      # The plain `:name` arguments of a visibility call, ignoring the
+      # `def` and receiver-qualified forms the caller handles separately.
+      def symbol_argument_names(node)
+        node.arguments&.arguments.to_a.filter_map { |argument| symbol_name(argument) }
+      end
+
+      def rewrite_recorded_alias_visibility(names, visibility, singleton:)
+        @alias_facts.map! do |fact|
+          next fact unless fact.singleton == singleton
+          next fact unless fact.owner == current_owner && names.include?(fact.new_name)
+
+          fact.with(visibility: visibility)
+        end
       end
 
       def rewrite_recorded_visibility(names, visibility, kind: :instance_method)

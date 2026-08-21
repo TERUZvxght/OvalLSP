@@ -1,0 +1,101 @@
+# Mutations an example claims to catch, and the example that must catch it.
+#
+# `042`'s D7. An example whose fixture cannot distinguish the two candidate
+# behaviours passes under both, and no amount of reading finds that: 0.2.11's
+# third round found one in the spec written to close `024.110`, whose own
+# comment promised it would fail under the change it guarded against, and
+# which passed under it. `024.109` is three more, lost before they were
+# written down.
+#
+# This is the hunk sweep turned around. The sweep asks "does *anything* fail
+# when this line is reverted"; this asks "does *this example* fail when the
+# decision it names is inverted". A comment claiming an example distinguishes
+# something is a claim about this tree, and `CLAUDE.md` says a claim about
+# this tree is derived rather than typed.
+#
+# Each entry names:
+#   why      -- the decision, in one line, as the example's own comment puts it
+#   file     -- a path under `core/lib`, relative to the repository root
+#   from/to  -- an exact replacement. `from` must appear exactly once
+#   spec     -- the spec file, relative to `core/`
+#   example  -- the full example description; `rspec -e` must select exactly one
+#
+# `from` and `to` are JSON strings (JSON is valid YAML) so that leading
+# whitespace survives exactly. A block scalar cannot: its indentation is set by
+# its first line, and a later line indented *less* silently ends the block --
+# which is how the first version of this file failed to parse.
+#
+# Run by `scripts/check_pinned_mutations.rb`, which applies each mutation to a
+# throwaway copy of `core/lib` and runs the named example against it. The live
+# tree is never modified: the copy goes first on the load path.
+
+- why: "024.110's reversal -- marking the owner's class surface open as well as its instance one, which silences every `Foo.bar` in a workspace that reopens `Module`."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        return if kind.nil?\n\n        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]"
+  to: "        return if kind.nil?\n\n        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]\n        if node.receiver.nil? && kind == :instance\n          @open_surface_owners << [Index::SymbolId.bare_name(current_owner), :singleton]\n        end"
+  spec: spec/ovallsp/diagnostics/unreadable_macro_spec.rb
+  example: "does not let a reopened core class silence an unrelated class's class-level call"
+
+- why: "024.116's side remap -- asking a `:class_object` or `:extend` link about its singleton side, which misses a workspace `class Object; def method_missing`."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "kind: side_of(entry, singleton))"
+  to: "kind: singleton ? :singleton_method : :instance_method)"
+  spec: spec/ovallsp/diagnostics/unreadable_macro_spec.rb
+  example: "says nothing about a class-level call when a workspace Object declares method_missing"
+
+- why: "024.112's guard -- disabling the ancestor step inside `def self.x` as well as inside `class << self`, which inverts both directions there."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "return nil if @in_singleton_class"
+  to: "return nil if @self_type_stack.last.is_a?(Types::Generic)"
+  spec: spec/ovallsp/diagnostics/nested_bare_name_spec.rb
+  example: "looks through the superclass's namespace from inside def self.x"
+
+- why: "024.115's marker -- matching the concern marker on the name as written rather than as resolved, which misses Rails' own bare `extend Concern`."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "Index::SymbolId.bare_name(canonical_name(target).to_s)"
+  to: "Index::SymbolId.bare_name(target.to_s)"
+  spec: spec/ovallsp/parser_concern_class_methods_spec.rb
+  example: "recognises the marker written bare from inside ActiveSupport"
+
+- why: "0.2.9's `unknown` refusing a nil reason -- the guarantee that a new way of not knowing cannot be recorded anonymously."
+  file: core/lib/ovallsp/semantic/member_availability.rb
+  from: "raise ArgumentError, \"an unknown availability must name its reason\" if reason.nil?"
+  to: ""
+  spec: spec/ovallsp/semantic/member_availability_spec.rb
+  example: "refuses an unknown with no reason"
+
+- why: "0.2.9's three-state answer -- that `unknown` cannot be read as an absence by a caller that only asks `absent?`."
+  file: core/lib/ovallsp/semantic/member_availability.rb
+  from: "def absent? = state == :absent"
+  to: "def absent? = state != :present"
+  spec: spec/ovallsp/semantic/member_availability_spec.rb
+  example: "never lets an unknown be read as an absence"
+
+- why: "0.2.9's deep freeze -- an answer a reader can be handed and then have changed under it."
+  file: core/lib/ovallsp/semantic/member_availability.rb
+  from: "candidates.freeze"
+  to: "candidates"
+  spec: spec/ovallsp/semantic/member_availability_spec.rb
+  example: "is frozen all the way to the candidates a reader is handed"
+
+- why: "0.2.9's visibility filter -- that a private or protected member is not offered on an explicit receiver."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "next if explicit_receiver && %i[private protected].include?(visibility)"
+  to: "next if explicit_receiver && visibility == :private"
+  spec: spec/ovallsp/diagnostics/visibility_spec.rb
+  example: "a protected method is not offered on an explicit receiver from outside"
+
+- why: "0.2.9's alias visibility -- that `private :aka` reaches an alias, which has no declaration for the rule to read."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "declared_visibility(owner, kind, name) || alias_visibility_of(owner, kind, name)"
+  to: "declared_visibility(owner, kind, name)"
+  spec: spec/ovallsp/diagnostics/visibility_spec.rb
+  example: "is not offered when the alias itself is made private"
+
+- why: "024.30's last unpinned decision -- `#block_self_is_module`'s explicit-receiver term, which two sweeps missed and a third round pinned."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "node.receiver.nil? ? nil : false"
+  to: "nil"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "reads an instance_eval block on an explicit receiver as an instance"
+

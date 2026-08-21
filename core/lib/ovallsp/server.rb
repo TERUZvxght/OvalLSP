@@ -62,32 +62,26 @@ module Ovallsp
       @workspace_root = workspace_root
       @document_store = DocumentStore.new
       @parser_service = ParserService.new
-      @workspace_index = WorkspaceIndex.new
+      # **Assembled, not wired here** (`042`'s D8). Every collaborator
+      # below reads the others, and building that graph in a second place
+      # is running a second program -- which is how `024.103` and
+      # `024.112` were each measured against a harness that could not see
+      # the fix. `core/spec/meta/analysis_stack_spec.rb` fails if anything
+      # outside `AnalysisStack` constructs one of them.
       @signatures = load_signatures_environment
-      @hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: @workspace_index)
-      @method_resolver = Semantic::MethodResolver.new(workspace_index: @workspace_index, hierarchy_index: @hierarchy_index)
-      @method_summary_store = Semantic::MethodSummaryStore.new
-      @generated_method_index = Semantic::GeneratedMethodIndex.new
-      @observation_store = Observation::Store.new
-      @method_analyzer = Semantic::MethodAnalyzer.new(
-        workspace_index: @workspace_index, method_resolver: @method_resolver, summary_store: @method_summary_store,
-        model_registry: model_registry, generated_method_index: @generated_method_index
-      )
-      # method_resolver/method_analyzer let a plain (non-Active-Record)
-      # method call chain keep resolving past its first hop instead of
-      # widening to Unknown immediately -- see LocalInferencer#resolve_source_method_member
-      # (docs/design/tasks/010-method-summaries-and-call-chains.md; wired
-      # in as part of Task 013 after an independent review found Task 010
-      # had shipped as a fully isolated, never-called engine).
+      @analysis = AnalysisStack.build(signatures: @signatures, model_registry: model_registry)
+      @workspace_index = @analysis.workspace_index
+      @hierarchy_index = @analysis.hierarchy_index
+      @method_resolver = @analysis.method_resolver
+      @method_summary_store = @analysis.method_summary_store
+      @generated_method_index = @analysis.generated_method_index
+      @observation_store = @analysis.observation_store
+      @method_analyzer = @analysis.method_analyzer
+      @local_inferencer = @analysis.local_inferencer
       @helper_ivars = {}
       @workspace_pass_mutex = Mutex.new
       @workspace_pass_running = false
       @workspace_pass_requested = false
-      @local_inferencer = LocalInferencer.new(
-        model_registry: model_registry, method_resolver: @method_resolver, method_analyzer: @method_analyzer,
-        signatures: @signatures, observation_store: @observation_store, workspace_index: @workspace_index,
-        hierarchy_index: @hierarchy_index
-      )
       @route_registry = route_registry
       @model_registry = model_registry
       @ancestry_registry = ancestry_registry
@@ -651,10 +645,29 @@ module Ovallsp
           # without closing it, numbering the new buffer below the old,
           # had every edit refused until it passed where the previous
           # buffer left off (`024.113`).
-          last_buffer, last_version = @last_published_version[uri]
-          return false if last_buffer == document.buffer_id && last_version && version < last_version
+          last_buffer, last_version, last_generation = @last_published_version[uri]
+          same_buffer = last_buffer == document.buffer_id
+          return false if same_buffer && last_version && version < last_version
 
-          @last_published_version[uri] = [document.buffer_id, version]
+          # **Two answers about one version are ordered by what was known
+          # when each was computed.** The repeat is deliberate and stays:
+          # a later pass usually knows more, not less -- the Agent has
+          # answered, routes have arrived -- and refusing it would switch
+          # correction off. What was missing is that the *slower* one won,
+          # so a `*_path` report made before routes arrived landed after
+          # the corrected one on any file slow enough to analyse
+          # (`024.97`).
+          #
+          # `generation` is what the engine already tracks for this, on
+          # every `Finding`. A publish that carries none -- an empty list,
+          # the ordinary "this file is clean now" -- has nothing to be
+          # dated by and is never refused on this ground.
+          generation = findings.filter_map(&:generation).max
+          if same_buffer && version == last_version && generation && last_generation && generation < last_generation
+            return false
+          end
+
+          @last_published_version[uri] = [document.buffer_id, version, generation || last_generation]
         elsif open_document
           return false
         end

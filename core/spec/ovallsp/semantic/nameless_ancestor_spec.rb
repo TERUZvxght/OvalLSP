@@ -17,7 +17,7 @@
 RSpec.describe "Ovallsp::Semantic::MethodResolver and a parent it cannot name" do
   def build(sources)
     index = Ovallsp::WorkspaceIndex.new
-    hierarchy = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: index)
+    hierarchy = build_analysis_stack(workspace_index: index).hierarchy_index
     sources.each do |uri, text|
       document = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
       summary = Ovallsp::ParserService.new.summarize(document)
@@ -37,12 +37,12 @@ RSpec.describe "Ovallsp::Semantic::MethodResolver and a parent it cannot name" d
   it "records the unidentifiable parent as a nameless entry" do
     _index, hierarchy = build(sources)
 
-    expect(hierarchy.ancestors("Unknowable", singleton: false).map(&:name)).to include(nil)
+    expect(hierarchy.ancestors("Unknowable", singleton: false).map(&:name_or_nil)).to include(nil)
   end
 
   it "does not offer the workspace's top-level methods as members of that class" do
     index, hierarchy = build(sources)
-    resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: index, hierarchy_index: hierarchy)
+    resolver = build_analysis_stack(workspace_index: index).method_resolver
 
     names = resolver.send(:names_for_type, Ovallsp::Types::Nominal.new(name: "Unknowable"), "top_level", {})
 
@@ -53,7 +53,7 @@ RSpec.describe "Ovallsp::Semantic::MethodResolver and a parent it cannot name" d
   # or "return nothing for everything" would satisfy the example above.
   it "still offers a nameable owner's own methods" do
     index, hierarchy = build("file:///w.rb" => "class Widget\n  def widget_thing_zzz; end\nend\n")
-    resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: index, hierarchy_index: hierarchy)
+    resolver = build_analysis_stack(workspace_index: index).method_resolver
 
     names = resolver.send(:names_for_type, Ovallsp::Types::Nominal.new(name: "Widget"), "widget", {})
 

@@ -151,7 +151,8 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
   describe "module_function naming a method declared in another file" do
     it "makes the module method reachable" do
       workspace_index = Ovallsp::WorkspaceIndex.new
-      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      stack = build_analysis_stack(workspace_index: workspace_index)
+      hierarchy_index = stack.hierarchy_index
       [["file:///a.rb", "module Reopened\n  def r_a; end\nend\n"],
        ["file:///b.rb", "module Reopened\n  module_function :r_a\nend\n"]].each do |uri, text|
         summary = Ovallsp::ParserService.new.summarize(
@@ -160,8 +161,7 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
         workspace_index.replace_file(summary)
         hierarchy_index.replace_file(summary)
       end
-      resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
-                                                       hierarchy_index: hierarchy_index)
+      resolver = stack.method_resolver
 
       candidates = resolver.resolve(receiver_type: Ovallsp::Types::Nominal.new(name: "Reopened"),
                                     name: "r_a", context: { singleton: true })
@@ -175,7 +175,8 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
     # method after the line that made it was deleted, and nothing failed.
     it "forgets the module method when the file naming it is removed" do
       workspace_index = Ovallsp::WorkspaceIndex.new
-      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      stack = build_analysis_stack(workspace_index: workspace_index)
+      hierarchy_index = stack.hierarchy_index
       [["file:///a.rb", "module Reopened\n  def r_a; end\nend\n"],
        ["file:///b.rb", "module Reopened\n  module_function :r_a\nend\n"]].each do |uri, text|
         summary = Ovallsp::ParserService.new.summarize(
@@ -196,7 +197,8 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
     # once any `module_function` appeared would pass the example above.
     it "leaves a method it does not name alone" do
       workspace_index = Ovallsp::WorkspaceIndex.new
-      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      stack = build_analysis_stack(workspace_index: workspace_index)
+      hierarchy_index = stack.hierarchy_index
       [["file:///a.rb", "module Reopened\n  def r_a; end\n  def r_b; end\nend\n"],
        ["file:///b.rb", "module Reopened\n  module_function :r_a\nend\n"]].each do |uri, text|
         summary = Ovallsp::ParserService.new.summarize(
@@ -205,8 +207,7 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
         workspace_index.replace_file(summary)
         hierarchy_index.replace_file(summary)
       end
-      resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
-                                                       hierarchy_index: hierarchy_index)
+      resolver = stack.method_resolver
 
       expect(resolver.resolve(receiver_type: Ovallsp::Types::Nominal.new(name: "Reopened"),
                               name: "r_b", context: { singleton: true })).to be_empty
@@ -270,7 +271,8 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
                                    text: "module ES\n  extend self\n  def es_a; end\nend\n")
       )
       workspace_index = Ovallsp::WorkspaceIndex.new
-      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      stack = build_analysis_stack(workspace_index: workspace_index)
+      hierarchy_index = stack.hierarchy_index
       workspace_index.replace_file(summary)
       hierarchy_index.replace_file(summary)
 
@@ -295,11 +297,11 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
                                    text: "module ES\n  extend self\n  def es_a; end\nend\n")
       )
       workspace_index = Ovallsp::WorkspaceIndex.new
-      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      stack = build_analysis_stack(workspace_index: workspace_index)
+      hierarchy_index = stack.hierarchy_index
       workspace_index.replace_file(summary)
       hierarchy_index.replace_file(summary)
-      resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
-                                                       hierarchy_index: hierarchy_index)
+      resolver = stack.method_resolver
 
       candidates = resolver.resolve(receiver_type: Ovallsp::Types::Nominal.new(name: "ES"),
                                     name: "es_a", context: { singleton: true })
@@ -332,21 +334,13 @@ end
 #   # ruby 3.4.10
 RSpec.describe "Ovallsp::Diagnostics::Engine and a module's class-level calls" do
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
-  let(:method_resolver) do
-    Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
-  end
+  # One stack, assembled where the server assembles its own (042's D8).
+  let(:stack) { build_analysis_stack(workspace_index: workspace_index, model_registry: model_registry, signatures: signatures) }
+  let(:hierarchy_index) { stack.hierarchy_index }
+  let(:method_resolver) { stack.method_resolver }
+  let(:local_inferencer) { stack.local_inferencer }
   let(:model_registry) { Ovallsp::Models::ModelRegistry.new }
   let(:signatures) { Ovallsp::Signatures::Environment.new.tap { |e| e.load(workspace_root: nil) } }
-  let(:local_inferencer) do
-    Ovallsp::LocalInferencer.new(
-      model_registry: model_registry, method_resolver: method_resolver, workspace_index: workspace_index,
-      method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(
-        workspace_index: workspace_index, method_resolver: method_resolver,
-        summary_store: Ovallsp::Semantic::MethodSummaryStore.new
-      )
-    )
-  end
 
   def index(text, uri:)
     document = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")

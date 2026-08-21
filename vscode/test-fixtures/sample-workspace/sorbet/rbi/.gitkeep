@@ -1,0 +1,13 @@
+Committed so that `watcher.spec.ts` does not have to create this directory.
+
+On Linux the watcher adds an inotify watch per directory, and a *second
+level* directory created after the extension host started never became
+watched at all -- so a file written into it fired nothing, however many
+times the spec rewrote it. Two attempts at the test's own timing (a
+settle, then a delete-and-rewrite retry) each passed once and failed the
+run after.
+
+The directories exist before the host starts now, so only the file is
+new. That is also what a real workspace looks like: nobody creates
+`db/migrate/` and a migration in it in the same millisecond and expects
+the event on the next tick. `024.120`.

@@ -80,7 +80,10 @@ RSpec.describe "Ovallsp root-scoped model receivers (0.1.12)" do
   end
 
   describe "inference through a root-scoped receiver" do
-    let(:inferencer) { Ovallsp::LocalInferencer.new(model_registry: model_registry) }
+    # One stack, assembled where the server assembles its own (042's D8).
+    let(:stack) { build_analysis_stack(model_registry: model_registry) }
+    let(:workspace_index) { stack.workspace_index }
+    let(:inferencer) { stack.local_inferencer }
 
     def type_of(source)
       document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: source, version: 1, language_id: "ruby")

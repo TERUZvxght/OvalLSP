@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**117 entries below** <!-- measured: register-entries = 117 -->,
+**122 entries below** <!-- measured: register-entries = 122 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -170,12 +170,12 @@ nobody can search is the recording habit without the benefit.
 | [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | — | The unassigned-`@ivar` check is silent in an application `rails new`… |
 | [`024.23`](#02423-the-singleton-chain-did-not-model-class-module) | fixed | 0.1.14 | The singleton chain did not model `Class`/`Module` |
 | [`024.24`](#02424-every-path-url-call-is-a-missing-route-when-no-routes-are-loaded) | fixed | 0.2.0 | Every `*_path`/`*_url` call is a missing route when no routes are lo… |
-| [`024.25`](#02425-a-markdown-parsing-spec-is-the-wrong-shape-for-these-two-documents-must-agree) | open | 0.2.12 | A Markdown-parsing spec is the wrong shape for "these two documents … |
-| [`024.26`](#02426-a-workspace-def-object-foo-is-reachable-from-every-class-in-ruby-and-from-none-here) | open | 0.2.12 | A workspace `def Object.foo` is reachable from every class in Ruby a… |
+| [`024.25`](#02425-a-markdown-parsing-spec-is-the-wrong-shape-for-these-two-documents-must-agree) | fixed | 0.2.12 | A Markdown-parsing spec is the wrong shape for "these two documents … |
+| [`024.26`](#02426-a-workspace-def-object-foo-is-reachable-from-every-class-in-ruby-and-from-none-here) | fixed | 0.2.12 | A workspace `def Object.foo` is reachable from every class in Ruby a… |
 | [`024.27`](#02427-documentsymbol-lists-one-outline-entry-per-name-a-macro-declares) | open | — | `documentSymbol` lists one outline entry per name a macro declares |
 | [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | — | Rename refuses on a macro-declared method rather than editing it |
 | [`024.29`](#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | open | — | Two features were written for 0.1.15 and cut from it |
-| [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | open | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
+| [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | fixed | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
 | [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | open | — | A declaration written inside a block has no owner this parser can na… |
 | [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | open | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
 | [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | open | — | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
@@ -200,7 +200,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.52`](#02452-a-publish-could-outlive-the-document-it-was-about) | fixed | reverted | A publish could outlive the document it was about |
 | [`024.53`](#02453-the-absent-workspace-grace-measured-the-wrong-clock) | fixed | 0.2.2 | The absent-workspace grace measured the wrong clock |
 | [`024.54`](#02454-an-edit-that-changed-nothing-discarded-the-edit-before-it) | fixed | reverted | An edit that changed nothing discarded the edit before it |
-| [`024.55`](#02455-a-version-mismatch-is-reported-and-then-ignored) | open | 0.2.12 | A version mismatch is reported and then ignored |
+| [`024.55`](#02455-a-version-mismatch-is-reported-and-then-ignored) | fixed | 0.2.12 | A version mismatch is reported and then ignored |
 | [`024.56`](#02456-a-publish-can-land-after-the-panel-has-been-cleared-and-after-a-newer-one) | fixed | 0.2.7 | A publish can land after the panel has been cleared, and after a new… |
 | [`024.57`](#02457-the-debounce-and-why-it-was-rolled-back) | open | 0.3.0 | The debounce, and why it was rolled back |
 | [`024.58`](#02458-bin-ovallsp-loaded-every-abi-s-vendored-gems-not-the-running-one-s) | fixed | 0.2.2 | `bin/ovallsp` loaded every ABI's vendored gems, not the running one's |
@@ -212,19 +212,19 @@ nobody can search is the recording habit without the benefit.
 | [`024.65`](#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
 | [`024.66`](#02466-a-marketing-card-kept-carrying-claims-about-what-an-error-s-text-says) | fixed | 0.2.3 | A marketing card kept carrying claims about what an error's text says |
 | [`024.67`](#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | fixed | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
-| [`024.68`](#02468-three-rounds-of-guards-on-a-hand-rolled-grammar-each-blind-one-assumption-deeper) | open | 0.2.12 | Three rounds of guards on a hand-rolled grammar, each blind one assu… |
-| [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | open | 0.2.12 | The two suites that drive a real editor are run by nobody but the ma… |
+| [`024.68`](#02468-three-rounds-of-guards-on-a-hand-rolled-grammar-each-blind-one-assumption-deeper) | fixed | 0.2.12 | Three rounds of guards on a hand-rolled grammar, each blind one assu… |
+| [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | fixed | 0.2.12 | The two suites that drive a real editor are run by nobody but the ma… |
 | [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.3.0 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
 | [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | fixed | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | open | 0.3.0 | The trust gate stands in front of callers, not in front of what exec… |
-| [`024.75`](#02475-a-documented-field-selects-nothing) | open | 0.2.12 | A documented field selects nothing |
+| [`024.75`](#02475-a-documented-field-selects-nothing) | fixed | 0.2.12 | A documented field selects nothing |
 | [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.3.0 | Fifty-four `unknown-method` reports over real gem source, and all of… |
 | [`024.77`](#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | open | 0.3.0 | A call to a method that does not exist is missed through a relation |
 | [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | fixed | 0.2.6 | Completion did not get the fix hover and diagnostics did |
 | [`024.79`](#02479-model-first-completes-to-nothing) | fixed | 0.2.6 | `Model.first` completes to nothing |
-| [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | open | 0.2.12 | An unresolved hierarchy edge is expressible as a method owner |
-| [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | open | 0.2.12 | An ancestor reference carries no lexical context, so an ambiguous na… |
+| [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | fixed | 0.2.12 | An unresolved hierarchy edge is expressible as a method owner |
+| [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | fixed | 0.2.12 | An ancestor reference carries no lexical context, so an ambiguous na… |
 | [`024.82`](#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | open | 0.3.0 | `Foo = Class.new(Bar)` is not a type the index knows |
 | [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.3.0 | The undefined-method check is loudest exactly where no Runtime Agent… |
 | [`024.84`](#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | open | 0.3.0 | A constant is typed as a class object whatever it holds |
@@ -240,7 +240,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.94`](#02494-a-windows-workspace-could-have-its-own-ruby-exe-run-before-it-is-trusted) | fixed | 0.2.6 | A Windows workspace could have its own `ruby.exe` run before it is t… |
 | [`024.95`](#02495-a-deep-enough-file-ended-the-session-and-three-rescues-did-not-catch-it) | fixed | 0.2.6 | A deep enough file ended the session, and three rescues did not catc… |
 | [`024.96`](#02496-every-malformed-lsp-frame-ended-the-process) | fixed | 0.2.6 | Every malformed LSP frame ended the process |
-| [`024.97`](#02497-a-later-pass-at-the-same-version-overwrites-a-corrected-answer) | open | 0.2.12 | A later pass at the same version overwrites a corrected answer |
+| [`024.97`](#02497-a-later-pass-at-the-same-version-overwrites-a-corrected-answer) | fixed | 0.2.12 | A later pass at the same version overwrites a corrected answer |
 | [`024.98`](#02498-a-workspace-opened-through-a-symlink-shows-every-file-twice-and-one-copy-can-never-be-cleared) | fixed | 0.2.8 | A workspace opened through a symlink shows every file twice, and one… |
 | [`024.99`](#02499-completion-offers-members-that-cannot-be-called-from-where-it-was-asked) | open | 0.3.0 | Completion offers members that cannot be called from where it was as… |
 | [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.3.0 | The four features answer from different code paths and disagree at o… |
@@ -252,7 +252,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.13 | `module_function` and `extend self` produce nothing |
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
-| [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | open | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
+| [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | fixed | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
 | [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | open | 0.2.13 | The macro is reported, and what it might define is not |
 | [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.13 | A visibility section written inside a block does not reach the body … |
 | [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | fixed | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
@@ -261,7 +261,12 @@ nobody can search is the recording habit without the benefit.
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | fixed | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
 | [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.13 | `def self.method_missing` and `define_singleton_method` do not open … |
 | [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.13 | The two spellings of a class-body macro get opposite answers |
-| [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | open | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
+| [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | fixed | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
+| [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
+| [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
+| [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.0 | Nothing measures how much of this tree no test would notice changing |
+| [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | open | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
+| [`024.123`](#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -1202,10 +1207,11 @@ says nothing.
 ## 024.25 A Markdown-parsing spec is the wrong shape for "these two documents must agree"
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 target: 0.2.12
+released-in: 0.2.12
 user-visible-note: >
   A rolled-back internal guard. Nothing about the product changed, so
   there is nothing to tell a user; what is open is a decision about how
@@ -1309,13 +1315,37 @@ runs, and no round disputed them. Only the enforcement apparatus and the
 claims about it were rolled back.
 
 
+**Closed in 0.2.12.** The direction this entry chose — give the data a
+schema instead of parsing prose — was already shipped; 0.2.12 finished
+it in two places.
+
+`deferred_findings_spec.rb` stopped hand-rolling the `key: value` grammar
+and parses the fenced block as yaml with a key whitelist (`024.68`),
+which is the same move one level deeper: the schema was there and the
+reader was still improvising.
+
+And **the EN/JA README divergence this entry left unguarded is guarded**,
+in the shape `check_site_links.rb` already uses for the site's Japanese
+pages. It does not compare prose — the two READMEs were written
+independently and say the same things differently, and demanding
+identical wording buys a stricter check by making the prose worse. It
+compares the *shape* of the matrix: how many rows carry a verdict, and
+which marks each carries, in order. That is the half a translation cannot
+legitimately change, and a row saying ✅ in one language and ⚠️ in the
+other is a promise made to half the users.
+
+Two examples: the pair as it stands, and one that mutates a copy in
+memory and requires the comparison to fail — because reading a guard
+cannot tell you whether it would notice.
+
 ## 024.26 A workspace `def Object.foo` is reachable from every class in Ruby and from none here
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`
@@ -1350,6 +1380,24 @@ standard library or the gems measured for it hits this shape.
 expressed at all. Worth doing with 024.13 rather than alone, since both
 are about what a chain says when the workspace has reopened a core class.
 
+
+**Fixed in 0.2.12.** The chain a class's singleton side ends in now
+carries the two links Ruby puts before `Class` — the singleton classes of
+`Object` and `BasicObject`, as `origin: :singleton_of`, which keeps them
+on the singleton side rather than the `:class_object` tail's instance
+one. A workspace `class Object; def self.foo` is reachable from every
+class, as Ruby makes it.
+
+`Object` appears twice in a singleton chain now, once as its singleton
+class and once as the class the class object is an instance of. They are
+two different links and the index tells them apart by which side each
+contributes, which `#dedupe_named` already keys on — the name alone was
+never enough, and 0.2.11 learned that from `extend self`.
+
+Corpus, four gems, control `unresolved-constant` identical at 1,099:
+`unknown-method` 84 → 84, **0 added and 0 removed**. The rule fires only
+where a workspace declares a class method on `Object` itself, which none
+of these gems do.
 
 ## 024.27 `documentSymbol` lists one outline entry per name a macro declares
 
@@ -1477,10 +1525,11 @@ it changes an answer a user sees; the one taken here says it does not.
 ## 024.30 0.1.15's hunk sweep: three hunks that cannot be pinned, and why
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 target: 0.2.12
+released-in: 0.2.12
 user-visible-note: >
   A record of which lines no test holds, and the reasoning for leaving
   each. Nothing here changes what the engine answers.
@@ -1564,6 +1613,25 @@ broken tree; none of them stops a run from leaving one. The script traps
 4.5-minute suite is nearly two hours, which is worth knowing before
 starting rather than after.
 
+
+**Closed in 0.2.12, and one of its two claims was checked rather than
+believed.** The fourth sweep guard this entry describes is in the tree:
+`scripts/hunk_sweep.rb`'s `at_exit` restores `core/` and `vscode/` when
+an interrupted run leaves the working tree mutated.
+
+The other claim — "the fixture writes it directly in `class << self` now,
+and fails when the term is removed" — is prose about a test, which is
+exactly what `042`'s D7 says not to trust. It is now an entry in
+`core/spec/meta/pinned_mutations.yml`: replacing
+`node.receiver.nil? ? nil : false` with `nil` must fail
+`class_body_macro_spec.rb`'s "reads an instance_eval block on an explicit
+receiver as an instance", and CI applies it.
+
+Worth noting how the entry was written into the manifest: the first
+attempt named an example in `parser_cref_spec.rb` that reads well and is
+about a *different* decision, and the checker reported it uncaught. A
+prose claim about which example pins what is a claim about this tree,
+and this one was wrong in a way no reader would have questioned.
 
 ## 024.31 A declaration written inside a block has no owner this parser can name
 
@@ -2850,10 +2918,11 @@ the panel showing a clean file whose text had a syntax error.
 ## 024.55 A version mismatch is reported and then ignored
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Target slipped.** Written for 0.2.4 and still open five releases later; retargeted to 0.2.10 rather than left naming a release that has shipped.
@@ -2912,6 +2981,32 @@ change, with the two paths separated:
    an integrity failure, a core-version mismatch after a Marketplace update
    is usually a stale process that a restart fixes.
 
+
+**Closed in 0.2.12, and the post-start half is closed by a decision
+rather than by code.**
+
+The defect this entry names is that four documents said OvalLSP "stops
+before sending any feature request" and it did not. Both halves of that
+are now settled: 0.2.10 made the *pre-start* verdict fatal, and 0.2.11
+corrected every document to describe the two checks separately, since
+they have different failure modes.
+
+**What was left was a question, not a bug: should a post-start version
+mismatch stop the session too?** The answer is no, and the reason is
+reachability. The Core ships *inside the VSIX* and
+`ServerConfig#defaultServerPath` uses it unless `ovallsp.serverPath` is
+set. After 0.2.10's pre-start gate, the remaining way to reach a
+post-start mismatch is an explicit override — a user who deliberately
+pointed the extension at a Core of their own. Refusing to serve a session
+somebody deliberately configured is worse than telling them what does not
+match and letting them judge, and it is not the shape §0 is about: the
+answers are not wrong, they are answers from a build the extension did
+not expect.
+
+So it reports and continues, which is what the documents now say. The
+split between the two deciders remains real and is `024.65`'s question,
+which is about which decider owns the *notification* — not about which
+owns the verdict.
 
 ## 024.56 A publish can land after the panel has been cleared, and after a newer one
 
@@ -3720,7 +3815,7 @@ anyway; hence the target.
 ## 024.68 Three rounds of guards on a hand-rolled grammar, each blind one assumption deeper
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -3730,6 +3825,7 @@ user-visible-note: >
   guard attempts were rolled back; this entry is the record the
   roll-back rule names as the deliverable.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/spec/meta/deferred_findings_spec.rb` (the
@@ -3788,7 +3884,7 @@ reading the register should know that, which is this note's job.
 ## 024.69 The two suites that drive a real editor are run by nobody but the maintainer
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -3796,6 +3892,7 @@ user-visible-note: >
   the suites still pass once run, and 0.2.3's gate ran them. What is
   missing is anything that runs them between releases.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `.github/workflows/ci.yml` (the `vscode` job),
@@ -3841,6 +3938,62 @@ CI jobs during a release gate is an addition, not a fix, and the
 `macos-14` half costs paid runner minutes on every run, which is a
 trade-off this entry does not get to make on its own.
 
+**Fixed in 0.2.12** by a `vscode-integration` job that runs
+`npm run test:integration` on every pull request and push --
+`xvfb-run` for the display, and Ruby with the bundle installed because
+the extension spawns the real Core Server, which is the half a unit test
+cannot reach.
+
+The measurement this entry is really about is not the suites passing; it
+is **who runs them**. Twice a month, by one person, on one machine, is
+how a harness stays broken across four VS Code releases while the tree
+records the gate items about it as green.
+
+**And the job asserts the count, not just the exit code.** `runTest.js`
+exits 0 when the extension host reports no failures, and no failures is
+also what zero examples looks like -- so a harness that stops discovering
+tests, or an activation that quietly never happens, would read as a pass.
+Adding the job without that check would have replaced "nobody runs them"
+with "CI runs them and would not notice if it stopped", which is the same
+defect wearing a green tick. The core job has carried the equivalent
+guard since 0.2.5. First run: **5 passing**, against a real VS Code
+1.134.0 driving a real Core.
+
+**And the first guarded run reported green with `1 failing` in its log**,
+which is worth recording rather than quietly fixing. `xvfb-run … | tee`
+takes its exit status from `tee`, so the job added to stop a suite going
+unrun spent one commit being a suite that ran and was not listened to --
+the same defect the entry is about, one layer out. `set -o pipefail`.
+
+The failing example was a real flake and is fixed in the same change:
+`createFileSystemWatcher` registers asynchronously, so a file written
+immediately afterwards can be created before anything is listening, and a
+create event for a file that already exists never arrives however long
+the test waits. It now rewrites each still-unseen file each time round
+the loop, which turns the race into a retry. It had passed on the run
+before, and locally -- **two runs of a new job found a flake that no
+amount of reading would have.**
+
+
+**Fixed in 0.2.12, by deleting the grammar rather than guarding it a
+fourth time.** The block is fenced ` ```yaml `, and it was being scanned
+with `/^([a-z-]+): *(.*)$/` under a comment saying "deliberately not a
+YAML parser". Every one of the three guards was an attempt to
+re-implement, in that scanner, something a yaml parser does for free —
+which is why each was blind one assumption deeper than the last.
+
+`DeferredFindings.entries` now calls `YAML.safe_load` and checks the keys
+against `KNOWN_KEYS`, the set the legend defines. `Target:` and
+`user_visible:` are keys like any other and fail as unknown; a key
+indented under another is a nested mapping and fails the same way; a
+block that is not valid yaml raises rather than parsing to nothing.
+Four examples pin it, including the control that the real register still
+parses.
+
+The one shape that needed care: yaml turns an unquoted `yes` into `true`,
+and every caller compares against the string `"no"`. Values are
+stringified back, which is a real behaviour and is why the control
+example exists.
 
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 
@@ -4090,7 +4243,7 @@ for the same reason.
 ## 024.75 A documented field selects nothing
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -4098,6 +4251,7 @@ user-visible-note: >
   interpreter from a workspace file -- does not exist, so no user is
   affected by it working differently than described.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `vscode/src/rubyResolver.ts` — `RubyResolverEnv.workspaceRoot`
@@ -4110,10 +4264,23 @@ that is a security property worth keeping.
 
 So the comment describes a feature that does not exist, in the file
 someone would read to check whether interpreter selection can be
-influenced by the workspace. **Direction:** delete the field and the
-comment, or implement the lookup deliberately and gate it on trust like
-everything else that lets a workspace choose what runs. Deleting is the
-likely answer; the field was added in anticipation and never wired.
+influenced by the workspace. **Fixed in 0.2.12 by deleting it** -- the field was added in
+anticipation and never wired, and implementing the lookup instead would
+be a real feature that has to be gated on trust like everything else that
+lets a workspace choose what runs.
+
+**And the property it obscured is now stated where it can be checked.**
+`resolveRuby and the workspace` asserts that `RubyResolverEnv` has
+exactly four fields -- `platform`, `home`, `pathEnv`, `existsSync` -- so
+a fifth arriving is a change someone has to argue for rather than one a
+reader has to notice.
+
+The check deliberately does *not* forbid the string `.ruby-version`,
+which the first draft did and which failed: chruby reads
+`~/.ruby-version`, under `env.home`, and a file in the user's own home
+directory is not something a cloned repository can write. The invariant
+is about the resolver's **inputs**, not about which filenames it knows,
+and writing the first version taught the difference.
 ## 024.76 Fifty-four `unknown-method` reports over real gem source, and all of them false
 
 ```yaml
@@ -4418,7 +4585,7 @@ inferred `Unknown` and completed to nothing.
 ## 024.80 An unresolved hierarchy edge is expressible as a method owner
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -4427,6 +4594,7 @@ user-visible-note: >
   in 0.2.5. What is open is the representation that made it possible,
   and there is no second live instance known today.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb` (`AncestorEntry`),
@@ -4467,13 +4635,32 @@ The second form is worth more than this entry alone: it is also what
 `024.76` needs — `closed_nominal?` cannot currently tell "no ancestor"
 from "an ancestor I could not name", and that is the same conflation one
 level up.
+**Fixed in 0.2.12, and the fix found three readers rather than the two
+the entry named.** The member is `identified_name` and the accessor is
+`#name`, which raises `Semantic::UnidentifiedAncestor` on an edge nobody
+resolved — so "the owner of an unresolved edge" is not a thing that can
+be spelled. `AncestorEntry.unidentified(origin:, location:)` is the only
+way to make one, and `#name_or_nil` is there for the readers that
+legitimately want a dedupe key or a log line, named so that reaching for
+it is a decision.
+
+The two guards the entry describes were `MethodResolver#build_candidate`
+and `#names_for_type`. Making the value refuse turned up three more the
+same run: `#rooted_instance_chain?`, which would have compared `nil`
+against `::BasicObject`; `Engine#declared_signature_for`, which asked RBS
+for a signature under the `nil` owner — the owner a *top-level* `def` is
+indexed under, so it took whatever the top level happened to declare;
+and one in the singleton tail. Each had been waiting for the bug to be
+found a third time.
+
 ## 024.81 An ancestor reference carries no lexical context, so an ambiguous name is picked rather than resolved
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/index/ancestor_fact.rb` (its shape),
@@ -4536,6 +4723,28 @@ against it, which is what Ruby does. The review notes the alternative
 worth weighing first: if an authoritative constant-reference
 representation already exists elsewhere in the index, `AncestorFact`
 should reference it rather than growing a second lexical model.
+**Fixed in 0.2.12.** `AncestorFact` carries `nesting` — `Module.nesting`
+at the point the constant was written, innermost first — and
+`#ancestor_entries_for` asks `WorkspaceIndex#nested_type_name` before it
+considers refusing. That is the same rule and the same reader
+`024.103` uses for a bare constant in ordinary code, which is the point:
+one lookup rule, two callers, rather than a second implementation.
+
+So `include Helpers` inside `Rackish::Request` names
+`Rackish::Request::Helpers` whatever other namespace has a `Helpers`,
+and the module's members are back in completion, hover and go to
+definition. The refusal stays for the case nesting genuinely cannot
+decide — a bare name no enclosing frame declares, claimed by two
+strangers — and `ambiguous_ancestor_spec.rb` now pins both directions.
+
+`nesting` is defaulted, so a fact rebuilt from a cache written before
+0.2.12 behaves exactly as it did.
+
+Corpus, four gems, control `unresolved-constant` identical at 1,099:
+`unknown-method` 84 → 84, **0 added and 0 removed** — these gems do not
+contain the shape, so the number is a control and the evidence is the
+examples run against the interpreter.
+
 ## 024.82 `Foo = Class.new(Bar)` is not a type the index knows
 
 ```yaml
@@ -5032,10 +5241,11 @@ one.
 ## 024.97 A later pass at the same version overwrites a corrected answer
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#publish_findings`)
@@ -5575,7 +5785,7 @@ check accepts it. `024.99`'s sibling, and the same `037` C2 seam.
 ## 024.109 Specs whose fixture cannot distinguish the behaviour they pin
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -5583,6 +5793,7 @@ user-visible-note: >
   observe today; what it removes is the guarantee that the next refactor
   cannot silently change the behaviour underneath it.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/spec/` (0.2.9's change set)
@@ -5624,6 +5835,29 @@ and reject any fixture where the two answers are equal. The spec-deletion
 pass of `scripts/hunk_sweep.rb` finds files that pin nothing; this is the
 narrower question of an example that pins less than it claims, and the
 two are worth running together.
+
+**The remaining two are named, and the way they were found is the
+point.** 0.2.12 built the mechanism this entry has always wanted — a
+spec names the mutation it claims to catch, and
+`scripts/check_pinned_mutations.rb` applies it and requires the failure
+— and then pointed it at 0.2.9's own decisions.
+
+**Third:** `member_availability_spec.rb`'s "is frozen, so a reader cannot
+be handed one that changes under it" asserted
+`described_class.absent` is frozen. A `Data` is frozen whatever this
+class does, so the example passed with every `freeze` in the file
+removed. It now asserts the *candidates array* — the thing a caller is
+handed and could push onto — for all three states.
+
+**Fourth:** the alias-visibility rule the round had designed **was never
+in the tree at all.** The mutation could not be written because the
+method it was supposed to invert did not exist, and the register carried
+`024.105`, `024.107` and `024.108` as fixed while completion offered a
+name that raises. Recorded and fixed as `024.123`.
+
+So the count is four of four, and the two nobody could name were found
+by a machine rather than by re-reading. That is what this entry was
+really about.
 
 ## 024.110 The macro is reported, and what it might define is not
 
@@ -5923,10 +6157,11 @@ the enclosing class — and the two want deciding together. Found by
 ## 024.118 `WorkspaceIndex#stale?` compares versions across buffers
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/workspace_index.rb` (`#stale?`),
@@ -5950,6 +6185,293 @@ the `attack` round had reported the funnel unbreakable — which it is, in
 isolation. The lesson is the one `024.100` keeps making: a fix belongs
 where the *question* is answered, and "which buffer is this" is answered
 in two places.
+
+## 024.119 Twenty-eight spec files assemble their own analysis stack
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Not a defect a user meets. It is the reason an example can pass while
+  the shipped server answers differently, which is how several defects a
+  user does meet reached a release -- so it is recorded as a defect
+  rather than as a chore.
+target: 0.2.12
+released-in: 0.2.12
+```
+
+**Area:** the twenty-eight files named in
+`core/spec/meta/analysis_stack_spec.rb`'s `NOT_YET_MIGRATED`
+
+0.2.12 made `Ovallsp::AnalysisStack` the one place the analysis
+collaborators are wired together, and `Server#initialize` and
+`scripts/corpus_diagnostics.rb` now assemble nothing — those are the two
+places where measuring against the wrong program actually happened
+(`024.103`, `024.112`).
+
+The spec files still write the constructors out, and most are missing
+one. `open_surface_spec.rb`'s `LocalInferencer` has no `signatures:`, no
+`workspace_index:` and no `hierarchy_index:`; the server's has all three.
+An example there is therefore green against a program that is not the one
+that ships, which is `024.109`'s category arriving through the wiring
+instead of through a fixture — and invisible, because nothing compared
+the two lists until the check existed.
+
+**Migrated in one commit rather than twenty-eight**, because a
+half-migrated suite runs two programs, which is the condition being
+removed. The named list the check carried while that was in flight is
+gone with it: a list that can only shrink is still a list, and keeping an
+empty one invites the next file to be added to it.
+
+Two of the twenty-eight needed more than a mechanical rewrite and are
+worth naming, because both were the defect in miniature:
+`visibility_spec.rb` built a `QueryService` around a `MethodResolver`
+that no `LocalInferencer` in the file shared, and `literal_types_spec.rb`
+called `LocalInferencer.new` with no collaborators at all to answer a
+question about literal types — which is the one shape where that happens
+to be right, and indistinguishable from the shapes where it is not.
+
+## 024.120 The integration watcher example could not retry, and it looked like a Linux defect
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  A test defect, not a product one. It is recorded because it produced a
+  confident and wrong diagnosis of the product for two CI runs, and the
+  wrong diagnosis was written into KNOWN_LIMITATIONS in both languages
+  before the next run disproved it.
+target: 0.2.12
+released-in: 0.2.12
+```
+
+**Area:** `vscode/src/test/integration/watcher.spec.ts`
+
+When `024.69` first put the integration suite on CI, this example failed
+on Linux -- and failed on a **different file each run**. The first
+diagnosis was that `db/migrate/*.rb` alone produced no event, which was
+written up as a possible product gap on Linux and documented as a known
+limitation in both languages. The next run failed on the `.rbs` instead,
+which disproved it.
+
+The real cause is in the example. `createFileSystemWatcher` registers
+asynchronously, so whichever file is written before registration
+completes misses its event -- *which* file varying with runner load. The
+retry loop added to handle exactly that could not work, because it
+rewrites a file that now exists and VS Code reports a rewrite as a
+**change**, while the subscription was `onDidCreate` alone.
+
+Fixed by subscribing to both. That is faithful to what the example is
+for: the question is whether `WATCHED_FILES_GLOB` reaches these paths at
+all, not which kind of event it reaches them with.
+
+**The lesson is about the diagnosis, not the fix.** Two runs of a new job
+produced a plausible, specific, user-visible-sounding defect
+("migrations do not refresh on Linux") that did not exist. What
+distinguished it was the *third* run failing somewhere else. A single
+observation of a nondeterministic failure describes the run, not the
+system -- the same rule `026` records for measurements, arriving through
+a test.
+
+## 024.121 Nothing measures how much of this tree no test would notice changing
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing an editor user meets directly. What it costs is that a
+  behaviour can be broken silently, which every user-visible entry in
+  this register that began "and no test noticed" was downstream of.
+target: 0.3.0
+```
+
+**Area:** `scripts/check_pinned_mutations.rb`, `scripts/hunk_sweep.rb`,
+`.github/workflows/ci.yml`
+
+Three review rounds in a row, across three releases, have found an
+example that could not fail under the change it was written to guard
+against. The maintainer's question — *can this be made structurally
+impossible to miss, rather than found again next time?* — is the right
+one, and the honest answer is that two of the three layers exist and the
+third does not.
+
+**Layer 1, per change set: `hunk_sweep.rb`.** Reverse-applies each hunk
+of a change set and requires something to fail. Exists, `CLAUDE.md`
+requires it. Covers *changed* lines only, is run by hand, and has a
+recorded blind spot: reverting a hunk that adds a whole method removes
+its only call site too, so the decisions inside it are never exercised.
+
+**Layer 2, per commit: `check_pinned_mutations.rb`.** Added in 0.2.12.
+An example that claims to distinguish two behaviours names the mutation
+it claims to catch, and CI applies it and requires the failure. This is
+the layer that makes a *stated* claim unable to be false — and it caught
+a dead clause on its first working run.
+
+**It is opt-in, and that is the gap.** A decision nobody thought to add
+to the manifest is exactly as unprotected as before. Layer 2 turns "a
+reviewer might notice the comment is wrong" into "the comment cannot be
+wrong", which is real, but it does not turn "someone must think of it"
+into "nobody has to".
+
+**Layer 3, periodic and missing: every behavioural line, no manifest.**
+Mutate each one mechanically — flip a boolean, drop a guard, swap a
+comparison — and require some example to fail. That is ordinary mutation
+testing, and it is the only form that needs nobody to remember anything.
+
+Its cost is why it is not layer 2: a 2,276-example suite at roughly three
+minutes, times thousands of mutants, is hours rather than minutes. So it
+does not gate a commit. It runs on a schedule, and **what gates is a
+ratchet**: the surviving-mutant count is recorded in the tree, CI fails
+if a change makes it worse, and lowering it is the only edit allowed.
+That is what converts "someone should look" into "the build says no",
+and it is the same shape as the `<!-- measured: -->` markers this
+register already uses — a number that is derived rather than typed, and
+may only move one way.
+
+Two things to settle when it is built, both learned the expensive way
+here: run it on a schedule and never beside another tree-mutating run
+(`026`), and seed the ratchet from a measured run rather than a guess,
+because a number recorded from one run of a load-dependent quantity is
+`040`'s own correction.
+
+`024.71` is a precondition worth naming: at three minutes serial the
+periodic run is hours, and the fixture isolation that entry describes
+takes the suite to about a minute, which takes this from overnight to
+lunchtime.
+
+## 024.122 A failure is turned into a plausible value, in 72 measured places
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.13
+```
+
+**Area:** `core/lib` (239 `rescue` sites), `vscode/src` (21 `catch`
+sites), and `CLAUDE.md`, which does not say what the rule is
+
+Raised by the maintainer, who had noticed the pattern across the
+codebase rather than in one place. Counted rather than estimated —
+every `rescue` in `core/lib`, classified by what the first statement of
+its handler does:
+
+| what the handler does | sites |
+|---|---|
+| **returns a plausible value, silently** | **72** |
+| logs, then usually returns a value | 44 |
+| other (sets a flag, retries, cleans up) | 39 |
+| re-raises as a typed error | 4 |
+
+134 of the 239 are `rescue StandardError` — the widest catch there is —
+and 13 are a bare `rescue`. `vscode/src` has 21 `catch` blocks outside
+its tests, uncounted here.
+
+**Why this is a defect and not a style preference.** A swallowed failure
+does not produce a wrong answer that someone eventually notices. It
+produces *the answer that would be right if nothing had gone wrong*, and
+this project has now been bitten by that at every layer:
+
+- `Cache::Store#load` rescued a "struct size differs" into a silent
+  whole-cache miss, so a schema bump that was never made looked exactly
+  like a cache that was working. `SCHEMA_VERSION`'s own comment records
+  it.
+- `Signatures::Environment#ancestors` answering `[]` on failure is
+  indistinguishable from a type with no ancestors, which is `024.35`'s
+  whole shape and half of what `042`'s D2 is about.
+- 0.2.12's own `check_pinned_mutations.rb` reported all four mutations
+  uncaught on its first run — because it could not load the code it was
+  mutating. **A checker that cannot see the thing it checks reports
+  exactly what a working checker reports when nothing is pinned.** That
+  is this defect happening to the thing built to prevent a different one.
+- `prune_generations` swallowing every error by design is what made
+  `.not_to raise_error` an assertion that could not fail, in the spec
+  that deleted the maintainer's applications. `CLAUDE.md` records the
+  incident and does not draw this conclusion from it.
+
+**The task, in the order it has to happen:**
+
+1. **Enumerate.** Every `rescue` in `core/lib` and every `catch` in
+   `vscode/src`, one at a time, with the count above as the control —
+   an enumeration that comes out at a different total has missed
+   something or double-counted. Each site gets one of three verdicts:
+   *surfaces* (raises, or reports through a channel a user or a log
+   reader sees), *deliberate and argued* (the failure genuinely has no
+   consequence, and the reason is written at the site), or *swallows*.
+2. **Fix every site in the third group.** Not by adding a log line —
+   44 sites already log and still return a plausible value, and a log
+   nobody reads is a swallow with extra steps. The value returned has to
+   be one a caller cannot mistake for a real answer: `unknown` where
+   there is a three-state answer, a raise where there is not.
+3. **Then write the policy**, in `CLAUDE.md`, as a mandatory section:
+   catching an exception and continuing is not allowed by default; a
+   site that does it names, in place, what the failure cannot affect and
+   how a reader would find out it happened. And a check that a new
+   `rescue StandardError` without such a note fails the build, because
+   this register's whole history says a prose rule alone does not hold.
+
+**Order matters and step 3 is last.** Declaring the policy before the
+tree obeys it makes a rule with 72 exceptions on the day it is written,
+which is the arrangement `CLAUDE.md`'s own preamble warns about.
+
+**Why 0.2.13 rather than later.** A swallowed failure makes a
+*measurement* silently measure nothing, and `042`'s sequencing already
+puts the apparatus classes first for exactly that reason. This belongs
+with them; it did not go into 0.2.12 only because that release was
+already scoped and under review when the maintainer raised it.
+
+## 024.123 A private alias was offered, and the register said it was not
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.2.12
+released-in: 0.2.12
+```
+
+**Area:** `core/lib/ovallsp/semantic/method_resolver.rb`,
+`core/lib/ovallsp/parser_service.rb`,
+`core/lib/ovallsp/index/alias_fact.rb`
+
+```ruby
+class A
+  def build; end
+  alias_method :aka, :build
+  private :aka
+end
+```
+
+`A.new.aka` raises; completion offered `aka`. `024.107` put aliases into
+completion and `024.108` filtered private and protected, both released in
+0.2.9 — and **neither made the two meet**, because an alias has no
+declaration of its own and the visibility rule reads declarations. So the
+lookup found `nil` for it and let it through.
+
+**How it was found is the part worth recording.** 0.2.9's review round
+identified this and a fix was written for it; the fix never reached a
+commit, and the register carried `024.105`, `024.107` and `024.108` as
+`fixed` while the tree offered a name that raises. Reading the register
+could not reveal that, and neither could reading the specs — the
+`visibility_spec.rb` examples all passed.
+
+It surfaced while writing a `pinned_mutations.yml` entry for the alias
+rule: the mutation could not be written, because the method it was
+supposed to invert did not exist. **A checker built to ask "does this
+example catch this change" found a fix that was not there at all.** That
+is `042`'s D7 doing something its own charter did not claim.
+
+**Fixed**, with the shape 0.2.9's round had designed:
+`MethodResolver#visibility_of` is the one place that answers what a
+name's visibility is, so the filter cannot be right about declarations
+and wrong about aliases; `AliasFact` carries the alias's *own*
+visibility; and `private :aka` writes it — including inside
+`class << self`, which the instance-side guard used to return before
+reaching, and which is safe for an alias because an `AliasFact` carries
+`singleton` itself.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

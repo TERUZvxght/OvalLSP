@@ -597,8 +597,8 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     end
 
     def entry(origin)
-      Ovallsp::Semantic::AncestorEntry.new(
-        name: "Tenantable", kind: :module, origin: origin, location: nil
+      Ovallsp::Semantic::AncestorEntry.identified(
+name: "Tenantable", kind: :module, origin: origin, location: nil
       )
     end
 

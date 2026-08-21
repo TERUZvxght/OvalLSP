@@ -89,6 +89,29 @@ const rubyResolutions = new Map<string, RubyResolution>();
 // `ovallspInfo` -- kept purely so `OvalLSP: Show Version Information`
 // can display it without re-running the comparison.
 const versionDiagnostics = new Map<string, VersionDiagnostic>();
+
+/**
+ * Every start-up handshake this session has written a note for, in order.
+ *
+ * **This exists to be observed, and `024.64` is why.** Three review
+ * rounds in a row found the handshake call site deletable with the whole
+ * unit suite green, and each countermeasure moved code *out of* this file
+ * — which pins the code and never the wiring, because nothing in
+ * `src/test/unit` can import `extension.ts` at all. Round 37 moved the
+ * call inside `if (!diagnostic.compatible)`, restoring `024.49`'s symptom
+ * exactly, and 186 tests passed.
+ *
+ * `activate()` returns it, so the integration suite — which runs
+ * `activate()` for real, and runs in CI as of `024.69` — can assert the
+ * call happened for a folder whose Core *is* compatible. That is the one
+ * assertion the three countermeasures could not make.
+ */
+const handshakes: Array<{ folder: string; compatible: boolean }> = [];
+
+/** What `activate()` returns, for the integration suite to read. */
+export interface OvallspApi {
+  readonly handshakes: ReadonlyArray<{ folder: string; compatible: boolean }>;
+}
 // Every folder's stop->start replacement is serialized through this
 // chain. Without it, two Restart Server commands can interleave so the
 // first command overwrites the second command's already-running client,
@@ -115,7 +138,6 @@ function resolveRubyForFolder(folder: vscode.WorkspaceFolder): { command: string
     platform: process.platform,
     home: process.env.HOME ?? process.env.USERPROFILE,
     pathEnv: process.env.PATH,
-    workspaceRoot: folder.uri.fsPath,
     existsSync: fs.existsSync
   });
   return { command: resolution.executable, resolution };
@@ -475,6 +497,7 @@ function runVersionHandshake(
   // True of the combination but not wrong with it -- a Ruby the bundled
   // payload was not built for, which the Core is nonetheless running
   // under. Worth a line; not worth a toast.
+  handshakes.push({ folder: folder.name, compatible: diagnostic.compatible });
   writeHandshakeLines(outputChannel, diagnostic, folder.name);
 
   if (!diagnostic.compatible) {
@@ -737,17 +760,18 @@ function restartClientForFolder(
   });
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): OvallspApi {
   // Module state survives deactivate() inside a live extension host, and
   // a closed barrier refuses every start. Reopen it before anything can
   // ask to spawn Core.
   shutdownBarrier.reset();
+  handshakes.length = 0;
   const outputChannel = vscode.window.createOutputChannel('OvalLSP');
   context.subscriptions.push(outputChannel);
 
   const config = vscode.workspace.getConfiguration('ovallsp');
   if (config.get<boolean>('enabled') === false) {
-    return;
+    return { handshakes };
   }
 
   registerObservationCommands(context, outputChannel);
@@ -800,6 +824,8 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     })
   );
+
+  return { handshakes };
 }
 
 export async function deactivate(): Promise<void> {

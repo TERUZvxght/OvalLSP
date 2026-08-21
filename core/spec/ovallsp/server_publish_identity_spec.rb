@@ -109,4 +109,58 @@ RSpec.describe "Ovallsp::Server publish identity (037 C3)" do
 
     expect(published).to be_empty
   end
+  # `024.97`. The funnel lets the *same* version through twice on purpose:
+  # a later pass usually knows more, not less -- the Agent has answered,
+  # routes have arrived -- and refusing a repeat would switch correction
+  # off. So two answers about one version were ordered only by arrival,
+  # and the slower one won. Pause on a file large enough to take seconds
+  # and the `*_path` reports made *before* routes arrived land after the
+  # corrected ones.
+  #
+  # The version is the wrong key. What distinguishes the two answers is
+  # what was *known* when each was computed, which the engine already
+  # tracks as `generation` on every `Finding`.
+  describe "two answers about one version" do
+    def finding_at(generation)
+      Ovallsp::Diagnostics::Finding.new(
+        code: "x", message: "m", range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+        severity: :warning, confidence: :high, evidence: {}, generation: generation
+      )
+    end
+
+    # The store's own document, not a lookalike: the funnel compares
+    # `buffer_id`, so a `TextDocument` built beside the store is a
+    # different buffer and is refused before generation is reached.
+    let(:document) { store.open(uri: uri, text: "class A\nend\n", version: 4, language_id: "ruby") }
+
+    before { document }
+
+    it "refuses an answer computed from less than the one already published" do
+      server.send(:publish_findings, uri, [finding_at(1)], document: document)
+      server.send(:publish_findings, uri, [finding_at(0)], document: document)
+
+      expect(published).to eq([[4, 1]])
+    end
+
+    # The control, and the repeat this must not refuse: a *later*
+    # generation is the correction the same-version repeat exists for. An
+    # implementation that simply refused every repeat would pass the
+    # example above and fail this one.
+    it "still publishes an answer computed from more" do
+      server.send(:publish_findings, uri, [finding_at(0)], document: document)
+      server.send(:publish_findings, uri, [finding_at(1)], document: document)
+
+      expect(published).to eq([[4, 1], [4, 1]])
+    end
+
+    # And a publish with nothing to date it by is not refused: an empty
+    # finding list is the ordinary "this file is clean now", and it has no
+    # generation to read.
+    it "publishes a clean result that carries no generation" do
+      server.send(:publish_findings, uri, [finding_at(1)], document: document)
+      server.send(:publish_findings, uri, [], document: document)
+
+      expect(published).to eq([[4, 1], [4, 0]])
+    end
+  end
 end

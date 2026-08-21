@@ -24,8 +24,6 @@ export interface RubyResolverEnv {
   home: string | undefined;
   /** `process.env.PATH`, using this platform's own separator already. */
   pathEnv: string | undefined;
-  /** The workspace folder being resolved for — used for `.tool-versions`/`.ruby-version`. */
-  workspaceRoot: string;
   existsSync: (candidatePath: string) => boolean;
 }
 

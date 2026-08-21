@@ -200,6 +200,36 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0212">
+          <div class="tl-version">
+            <span class="v">0.2.12</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>The apparatus, and what it found</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A private alias is no longer offered by completion.</strong> Two earlier releases fixed the halves of this separately &mdash; one put aliases into completion, one filtered private and protected &mdash; and neither made them meet, because an alias has no declaration of its own and the visibility rule reads declarations.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A class method your workspace adds to <code>Object</code> is reachable again.</strong> The one shape the changelog has described as <em>worse</em> than 0.1.14 since 0.1.15.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A module included by a bare name keeps its methods.</strong> Ruby looks the name up where you wrote it; so does this now, rather than refusing when another namespace shares it.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            No capability is added. What the release is for: three review
+            rounds in a row had found an example that could not fail under the
+            change it guarded against. A spec can now name the mutation it
+            claims to catch, and CI applies it. On its first working run it
+            found a documented &ldquo;deliberate trade-off&rdquo; that was dead code, and
+            then a fix recorded as shipped that had never been written.
+          </p>
+        </article>
+
         <article class="tl-item" id="v0211">
           <div class="tl-version">
             <span class="v">0.2.11</span>

@@ -20,7 +20,7 @@
 RSpec.describe "Ovallsp::Semantic::HierarchyIndex and an ambiguous ancestor name" do
   def build(sources)
     index = Ovallsp::WorkspaceIndex.new
-    hierarchy = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: index)
+    hierarchy = build_analysis_stack(workspace_index: index).hierarchy_index
     sources.each do |uri, text|
       document = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
       summary = Ovallsp::ParserService.new.summarize(document)
@@ -56,18 +56,38 @@ RSpec.describe "Ovallsp::Semantic::HierarchyIndex and an ambiguous ancestor name
   it "does not put a stranger's module in the chain" do
     _index, hierarchy = build("file:///aaa.rb" => stranger, "file:///rackish.rb" => own)
 
-    names = hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name)
+    names = hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name_or_nil)
 
     expect(names).not_to include("::Aaa::Helpers")
   end
 
-  # The chain must also stop claiming to be complete. Dropping the wrong
-  # entry without saying anything would leave `closed_nominal?` reporting
-  # the same methods missing, for a new reason.
-  it "reports the chain as incomplete when an ancestor name is ambiguous" do
+  # **This stopped being the ambiguous case in 0.2.12.** The refusal was
+  # a stand-in for a lookup this index could not do: `AncestorFact` did
+  # not carry `Module.nesting`, so `include Helpers` inside
+  # `Rackish::Request` could only be *picked* between two `Helpers`. It
+  # carries it now (`024.81`), and Ruby's lexical rule decides -- so the
+  # right module is in the chain and the chain is complete.
+  it "resolves the nested module rather than reporting the chain incomplete" do
     _index, hierarchy = build("file:///aaa.rb" => stranger, "file:///rackish.rb" => own)
 
-    expect(hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name)).to include(nil)
+    names = hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name_or_nil)
+
+    expect(names).to include("::Rackish::Request::Helpers")
+    expect(names).not_to include(nil)
+  end
+
+  # And the refusal is still there for the case nesting cannot decide:
+  # a bare name no enclosing frame declares, claimed by two strangers.
+  # Dropping it silently would leave `closed_nominal?` reporting the same
+  # methods missing, for a new reason.
+  it "reports the chain as incomplete when no nesting frame can decide" do
+    _index, hierarchy = build(
+      "file:///aaa.rb" => "module Aaa\n  module Loose; end\nend\n",
+      "file:///bbb.rb" => "module Bbb\n  module Loose; end\nend\n",
+      "file:///consumer.rb" => "class Consumer\n  include Loose\nend\n"
+    )
+
+    expect(hierarchy.ancestors("Consumer", singleton: false).map(&:name_or_nil)).to include(nil)
   end
 
   # The control: with no competing name, the correct module still
@@ -76,7 +96,7 @@ RSpec.describe "Ovallsp::Semantic::HierarchyIndex and an ambiguous ancestor name
   it "still resolves an unambiguous include" do
     _index, hierarchy = build("file:///rackish.rb" => own)
 
-    names = hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name)
+    names = hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name_or_nil)
 
     expect(names).to include("::Rackish::Request::Helpers")
   end

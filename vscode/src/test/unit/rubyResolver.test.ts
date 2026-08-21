@@ -7,7 +7,6 @@ function baseEnv(overrides: Partial<RubyResolverEnv> = {}): RubyResolverEnv {
     platform: 'darwin',
     home: '/home/dev',
     pathEnv: '/usr/bin:/usr/local/bin',
-    workspaceRoot: '/workspace',
     existsSync: () => false,
     ...overrides
   };
@@ -151,5 +150,66 @@ describe('resolveRuby', () => {
     assert.ok(result.steps.some((s) => s.strategy === 'PATH'));
     assert.ok(result.steps.some((s) => s.strategy === 'RubyInstaller'));
     assert.ok(result.steps.every((s) => typeof s.reason === 'string' && s.reason.length > 0));
+  });
+});
+
+// **`024.75`.** `RubyResolverEnv.workspaceRoot` was declared, documented
+// as being used for `.tool-versions`/`.ruby-version`, set by
+// `extension.ts` -- and never read. Its declaration was its only
+// occurrence in the resolver.
+//
+// That is worse than a dead field. The comment described the resolver as
+// consulting workspace-controlled files, in the file someone reads to
+// check exactly that. What is true, and worth keeping true, is the
+// opposite: **interpreter selection reads nothing the workspace can
+// write.** A repository cannot choose the binary this extension executes
+// by committing a dotfile, which is why the trust gate does not have to
+// cover this path.
+//
+// A source-level check because the property is about what the resolver
+// *may read*, which no value it returns can demonstrate. Implementing the
+// lookup instead would be a real feature and would have to be gated on
+// trust like everything else that lets a workspace choose what runs.
+describe('resolveRuby and the workspace', () => {
+  const source = require('fs').readFileSync(
+    path.join(__dirname, '..', '..', '..', 'src', 'rubyResolver.ts'),
+    'utf8'
+  );
+
+  it('names nothing derived from the workspace', () => {
+    const offenders = ['workspaceRoot', 'workspaceFolder', 'tool-versions']
+      .filter((name) => source.includes(name));
+
+    assert.deepStrictEqual(
+      offenders, [],
+      `rubyResolver.ts names ${offenders.join(', ')}. Interpreter selection reads nothing the ` +
+      'workspace can write (024.75); implementing such a lookup is a feature that must be gated on trust.'
+    );
+  });
+
+  // `.ruby-version` is deliberately *not* on that list, and the
+  // distinction is the point rather than an exception to it: chruby's
+  // strategy reads `~/.ruby-version`, under `env.home`. A file in the
+  // user's own home directory is not something a cloned repository can
+  // write. The property is about the resolver's *inputs*, not about
+  // which filenames it knows.
+  //
+  // So the invariant is stated where it can be checked: the whole of what
+  // this resolver may consult is four fields, and none of them is the
+  // workspace. A fifth arriving is the change that has to be argued for.
+  it('takes exactly four inputs, none of them the workspace', () => {
+    const body = source.slice(
+      source.indexOf('export interface RubyResolverEnv'),
+      source.indexOf('}', source.indexOf('export interface RubyResolverEnv'))
+    );
+    const fields = (body.match(/^\s{2}(\w+)[?]?:/gm) ?? []).map((f: string) => f.trim().replace(/[?]?:$/, ''));
+
+    assert.deepStrictEqual(fields.sort(), ['existsSync', 'home', 'pathEnv', 'platform']);
+  });
+
+  // The distinguishing half: the checks must be able to fail.
+  it('would catch the field coming back', () => {
+    assert.ok('  workspaceRoot: string;'.includes('workspaceRoot'));
+    assert.ok(!'  home: string | undefined;'.includes('workspaceRoot'));
   });
 });

@@ -44,7 +44,7 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
 
     def label_for(name)
       Ovallsp::Semantic::QueryService.new(
-        local_inferencer: Ovallsp::LocalInferencer.new, signatures: project
+        local_inferencer: build_analysis_stack(signatures: project).local_inferencer, signatures: project
       ).signatures_of(Ovallsp::Types::Nominal.new(name: "Untyped"), name).first[:label]
     end
 
@@ -193,7 +193,7 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
   # into it.
   it "does not label a keyword-only method as taking no arguments" do
     query_service = Ovallsp::Semantic::QueryService.new(
-      local_inferencer: Ovallsp::LocalInferencer.new, signatures: signatures
+      local_inferencer: build_analysis_stack(signatures: signatures).local_inferencer, signatures: signatures
     )
 
     label = query_service.signatures_of(Ovallsp::Types::Nominal.new(name: "Array"), "shuffle").first[:label]
@@ -206,7 +206,7 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
 
   it "does not label a `(?)` method as taking no arguments" do
     query_service = Ovallsp::Semantic::QueryService.new(
-      local_inferencer: Ovallsp::LocalInferencer.new, signatures: signatures
+      local_inferencer: build_analysis_stack(signatures: signatures).local_inferencer, signatures: signatures
     )
 
     label = query_service.signatures_of(Ovallsp::Types::Nominal.new(name: "Proc"), "call").first[:label]
@@ -222,7 +222,7 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
   # was the one field of the seven nothing pinned).
   it "labels a `(?)` method as `...` and nothing else" do
     query_service = Ovallsp::Semantic::QueryService.new(
-      local_inferencer: Ovallsp::LocalInferencer.new, signatures: signatures
+      local_inferencer: build_analysis_stack(signatures: signatures).local_inferencer, signatures: signatures
     )
 
     label = query_service.signatures_of(Ovallsp::Types::Nominal.new(name: "Proc"), "call").first[:label]
@@ -234,9 +234,9 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
   # reported as one nobody declares.
   it "does not report `__send__` as an unknown method on a workspace class" do
     workspace_index = Ovallsp::WorkspaceIndex.new
-    hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
-    method_resolver = Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index,
-                                                            hierarchy_index: hierarchy_index)
+    stack = build_analysis_stack(workspace_index: workspace_index)
+    hierarchy_index = stack.hierarchy_index
+    method_resolver = stack.method_resolver
     [["file:///p.rb", "class Plain\nend\n"], ["file:///u.rb", "Plain.new.__send__(:x)\n"]].each do |uri, text|
       document = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
       summary = Ovallsp::ParserService.new.summarize(document)
@@ -247,7 +247,7 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
                                          version: 1, language_id: "ruby")
     context = Ovallsp::Diagnostics::SemanticContext.new(
       workspace_index: workspace_index, hierarchy_index: hierarchy_index, method_resolver: method_resolver,
-      local_inferencer: Ovallsp::LocalInferencer.new(method_resolver: method_resolver),
+      local_inferencer: stack.local_inferencer,
       model_registry: Ovallsp::Models::ModelRegistry.new, route_registry: Ovallsp::Routes::RouteRegistry.new,
       signatures: signatures, generation: 1
     )

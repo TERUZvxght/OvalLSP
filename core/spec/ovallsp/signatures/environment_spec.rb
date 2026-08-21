@@ -132,7 +132,8 @@ RSpec.describe Ovallsp::Signatures::Environment do
         environment.load(workspace_root: root)
 
         query_service = Ovallsp::Semantic::QueryService.new(
-          local_inferencer: Ovallsp::LocalInferencer.new, signatures: environment
+          local_inferencer: build_analysis_stack(signatures: environment).local_inferencer,
+          signatures: environment
         )
         label = query_service.signatures_of(Ovallsp::Types::Nominal.new(name: "Widget"), "combine").first[:label]
 

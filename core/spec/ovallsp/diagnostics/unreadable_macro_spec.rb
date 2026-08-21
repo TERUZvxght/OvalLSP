@@ -11,21 +11,13 @@
 # parser cannot follow.
 RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
-  let(:method_resolver) do
-    Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
-  end
+  # One stack, assembled where the server assembles its own (042's D8).
+  let(:stack) { build_analysis_stack(workspace_index: workspace_index, model_registry: model_registry, signatures: signatures) }
+  let(:hierarchy_index) { stack.hierarchy_index }
+  let(:method_resolver) { stack.method_resolver }
+  let(:local_inferencer) { stack.local_inferencer }
   let(:model_registry) { Ovallsp::Models::ModelRegistry.new }
   let(:signatures) { Ovallsp::Signatures::Environment.new.tap { |e| e.load(workspace_root: nil) } }
-  let(:local_inferencer) do
-    Ovallsp::LocalInferencer.new(
-      model_registry: model_registry, method_resolver: method_resolver, workspace_index: workspace_index,
-      method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(
-        workspace_index: workspace_index, method_resolver: method_resolver,
-        summary_store: Ovallsp::Semantic::MethodSummaryStore.new
-      )
-    )
-  end
 
   def index(text, uri: "file:///a.rb")
     document = Ovallsp::TextDocument.new(uri: uri, text: text, version: 1, language_id: "ruby")
@@ -133,6 +125,27 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
 
   # The control that keeps this from being "stop reporting class-level
   # calls": a class whose body ran nothing unreadable still answers.
+  # **A link's side, asked of the link rather than recomputed.** `extend M`
+  # and the `Class`/`Module`/`Object`/`Kernel`/`BasicObject` tail both put
+  # *instance* methods on a class-level chain, and both readers of that
+  # rule had it written out by hand -- three review rounds in a row found
+  # one of them wrong. Ruby:
+  #
+  #   $ ruby -e '
+  #   class Object; def method_missing(n, *a) = :mm; end
+  #   class Widget; end
+  #   p Widget.nope
+  #   '
+  #   # => :mm
+  #   # ruby 3.4.10
+  it "says nothing about a class-level call when a workspace Object declares method_missing" do
+    index("class Object\n  def method_missing(name, *args); end\nend\n", uri: "file:///oe.rb")
+    index("class Widget\nend\n", uri: "file:///widget.rb")
+    document = index("Widget.nope\n", uri: "file:///caller.rb")
+
+    expect(unknown_methods(document)).to be_empty
+  end
+
   it "still reports a class-level typo on a class whose body it could read" do
     index("class Plain\n  def self.known; end\nend\n", uri: "file:///plain.rb")
     document = index("Plain.known\nPlain.nope_x\n", uri: "file:///use.rb")

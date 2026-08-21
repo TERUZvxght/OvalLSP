@@ -61,7 +61,8 @@ module Ovallsp
     #   there is no declaration to record.
     FileSummary = Data.define(:uri, :content_hash, :document_version, :declarations, :diagnostics, :source,
                                :read_sequence, :ancestor_facts, :alias_facts, :reference_candidates,
-                               :generated_method_facts, :open_surface_owners, :module_function_names) do
+                               :generated_method_facts, :open_surface_owners, :module_function_names,
+                               :buffer_id) do
       # `module_function_names`: `[owner, name]` pairs this file wrote a
       # `module_function :name` for. A *fact*, not a rewrite, because the
       # method it names may be declared in a different file -- which is
@@ -70,11 +71,23 @@ module Ovallsp
       # so cross-file never worked and `Reopened.r_a` was reported as
       # missing (`024.114`). `WorkspaceIndex` applies these once every
       # file is in, the way it already does for `open_surface_owners`.
+      # `buffer_id`: which *buffer* the `document_version` counts within.
+      # Nil for a disk read, which has no buffer and is ordered by
+      # `read_sequence` instead.
+      #
+      # Without it `#stale?` compared two buffers' version integers as
+      # though they were one sequence, and a reopen at version 1 lost to
+      # the closed buffer's version 20 -- so a file reopened without a
+      # close stopped updating until its numbering passed where the last
+      # one left off (`024.118`). 0.2.10 fixed the same category error in
+      # the publish funnel and this layer kept it.
       def initialize(source: :buffer, read_sequence: 0, ancestor_facts: [], alias_facts: [], reference_candidates: [],
-                      generated_method_facts: [], open_surface_owners: [], module_function_names: [], **rest)
+                      generated_method_facts: [], open_surface_owners: [], module_function_names: [],
+                      buffer_id: nil, **rest)
         super(source: source, read_sequence: read_sequence, ancestor_facts: ancestor_facts, alias_facts: alias_facts,
               reference_candidates: reference_candidates, generated_method_facts: generated_method_facts,
-              open_surface_owners: open_surface_owners, module_function_names: module_function_names, **rest)
+              open_surface_owners: open_surface_owners, module_function_names: module_function_names,
+              buffer_id: buffer_id, **rest)
       end
     end
   end

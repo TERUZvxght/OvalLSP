@@ -29,22 +29,14 @@ RSpec.describe "Ovallsp::Diagnostics::Engine against a project's own sig/ (0.1.1
   end
 
   let(:workspace_index) { Ovallsp::WorkspaceIndex.new }
-  let(:hierarchy_index) { Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index) }
-  let(:method_resolver) do
-    Ovallsp::Semantic::MethodResolver.new(workspace_index: workspace_index, hierarchy_index: hierarchy_index)
-  end
+  # One stack, assembled where the server assembles its own (042's D8).
+  let(:stack) { build_analysis_stack(workspace_index: workspace_index, model_registry: model_registry, signatures: signatures) }
+  let(:hierarchy_index) { stack.hierarchy_index }
+  let(:method_resolver) { stack.method_resolver }
+  let(:local_inferencer) { stack.local_inferencer }
   let(:model_registry) { Ovallsp::Models::ModelRegistry.new }
   let(:signatures) do
     Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace_root: @workspace_root) }
-  end
-  let(:local_inferencer) do
-    Ovallsp::LocalInferencer.new(
-      model_registry: model_registry, method_resolver: method_resolver, signatures: signatures,
-      method_analyzer: Ovallsp::Semantic::MethodAnalyzer.new(
-        workspace_index: workspace_index, method_resolver: method_resolver,
-        summary_store: Ovallsp::Semantic::MethodSummaryStore.new
-      )
-    )
   end
 
   def context

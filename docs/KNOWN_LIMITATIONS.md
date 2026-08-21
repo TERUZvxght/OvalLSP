@@ -262,13 +262,6 @@ Seven more are older than this release and untouched by it:
   the 14** wrong-argument-count reports over the corpus below are this
   shape, among them `net/http.rb`'s `HTTP.start`
   (024.32). <!-- documents: 024.32 -->
-- **A `def self.` the workspace adds to `Object` is not reachable**, so
-  `Widget.foo` is reported for a method every class really has. 0.1.14
-  did not report this, by an accident of the same mis-kinded lookup that
-  made it report `class Object; def blank?; end` — a far more common
-  shape — on code that runs. 0.1.15 trades the accident back for the fix,
-  which is why this is the one shape it makes *worse* than 0.1.14
-  (024.26). <!-- documents: 024.26 -->
 - **A class that includes a module the workspace has not read still has
   its class-level macros reported.** `include SomeGem::Model` followed by
   `validate :ensure_ok` is reported, though the Concern installs
@@ -434,31 +427,13 @@ Treat those answers as unreliable until the mismatch is resolved, and run
 
 The check that runs *before* the Core Server starts does stop: as of
 0.2.10, a Ruby that cannot load this build's bundled dependencies means
-the Core Server is not started at all, and you are told so. <!-- documents: 024.55 -->
+the Core Server is not started at all, and you are told so.
 
-## Diagnostics that come back after you clear or close a file
-
-**Fixed in 0.2.7, for the half that was a mistake.** Closing a file used
-to be able to leave its errors in the Problems panel for the rest of the
-session: a re-analysis pass running in the background decided which files
-to visit before it started, so one already in flight republished a file
-you had just closed, and nothing republishes a file nobody has open. A
-publish from a buffer now has to find that buffer still open, and closing
-a file always wins.
-
-**What still happens, and is deliberate:** close a saved file that has
-findings and they come back — recomputed from what is on disk, because
-since 0.2.0 this extension reports on files you have not opened. That is
-the same answer it would give you before you ever opened the file. What
-was fixed is the *stale* copy from the buffer you just closed.
-
-**Still true, and this release does not change it.** If you paused on a
-file big enough to take seconds to analyse, the `*_path` reports made
-before routes arrived can be written back over the corrected ones. Both
-answers describe the same version of your text, and the check that orders
-publishes deliberately lets the same version through twice — a later pass
-usually knows *more*, not less, which is how the corrected answer arrives
-in the first place. The next edit clears it. <!-- documents: 024.97 -->
+**The difference is deliberate, and 0.2.12 recorded why.** The Core ships
+inside the extension, so the only way to reach a post-start mismatch is
+to point `ovallsp.serverPath` at a Core of your own — and refusing to
+serve a session you deliberately configured is worse than telling you
+what does not match.
 
 ## How long an edit takes to re-analyse
 
@@ -537,20 +512,21 @@ defines is correctly left alone; the line that defines it is not.
 silenced `Foo.bar` checking across the whole workspace whenever any file
 reopened `Module`, `Object` or `Kernel`. <!-- documents: 024.110 -->
 
-## Reopening a file without closing it
-
-If your editor sends a second `didOpen` for a file it never closed, and
-the new buffer's version numbering starts below the old one's,
-diagnostics for that file stop arriving until the numbering passes where
-it left off. VS Code sends `didClose` first, so this needs an unusual
-client. <!-- documents: 024.118 -->
-
 ## Methods made by `define_singleton_method`
 
 A class whose class methods are made by `define_singleton_method` is no
 longer reported for calling them — but hover, go to definition and
 completion still answer nothing there, because the names are not in the
 index. You get silence rather than an answer. <!-- documents: 024.116 -->
+
+## Something can fail without you being told
+
+In 72 measured places this extension catches a failure and carries on
+with a value that looks like a real answer — an empty list, a `nil`, a
+`false`. When one of those fires you get a plausible answer rather than
+an error, so a missing hover or a silent check may be a failure nothing
+reported rather than a limit of what this engine knows. The Output
+channel is the place to look, and it will not always have a line. <!-- documents: 024.122 -->
 
 ## A macro called inside a block in a class body
 
@@ -707,20 +683,6 @@ arguments. <!-- documents: 024.89 -->
 - A scope defined inside a concern's `included do` has no type.
 - Passing a positional argument to a keyword-only method says it "takes 0
   arguments". <!-- documents: 024.90 -->
-
-## A module whose name is shared is dropped from the class that includes it
-
-If your class `include`s a module by a bare name — `include Helpers` —
-and any other namespace in the workspace declares a `Helpers` too, this
-extension refuses to guess which one you meant. That is the right answer
-for a diagnostic: reporting your class's own methods as missing, which is
-what it used to do, is worse. But the refusal also reaches completion and
-go-to-definition, so that module's methods disappear from the list and
-jumping to one of them lands nowhere.
-
-`Helpers`, `Base`, `Error` and `Node` are shared often enough that this
-is worth knowing about. Writing the include with its namespace —
-`include Rackish::Request::Helpers` — restores it. <!-- documents: 024.81 -->
 
 ## A class created by assignment is invisible
 

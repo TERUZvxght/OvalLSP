@@ -252,6 +252,102 @@ jobs:
         working-directory: vscode
         run: npm run test:unit
 
+  # **The only tests that launch a real VS Code and drive the extension
+  # against a real Core**, and until 0.2.12 they ran nowhere between
+  # releases -- only when a maintainer ran the pre-publish bundle on an
+  # Apple Silicon Mac (`024.69`). That is how the harness came to be
+  # broken for every VS Code release since 1.110 while the tree recorded
+  # the gate items about it as green: the only thing that could have
+  # contradicted that was the gate itself, run twice a month.
+  #
+  # `xvfb-run` because VS Code needs a display and this runner has none.
+  # Ruby and the bundle are installed because the extension spawns the
+  # real Core Server, which is the half a unit test cannot reach.
+  vscode-integration:
+    name: VS Code extension (integration, real editor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: core
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: vscode/package-lock.json
+
+      - name: Install dependencies
+        working-directory: vscode
+        run: npm ci
+
+      # `set -o pipefail`, and it is not decoration. Without it the exit
+      # status of `... | tee` is `tee`'s, so a failing integration run
+      # reported green -- which this job's own first guarded run did, with
+      # "1 failing" in the log and a passing tick beside it. The job added
+      # to stop a suite going unrun spent one commit being a suite that
+      # ran and was not listened to.
+      - name: Integration tests (monorepo-relative Core)
+        working-directory: vscode
+        shell: bash
+        run: |
+          set -o pipefail
+          xvfb-run -a npm run test:integration 2>&1 | tee integration.log
+
+      # **A green run is a measurement, and it can be green because it did
+      # not run.** `runTest.js` exits 0 when the extension host reports no
+      # failures, and no failures is also what zero examples looks like --
+      # so a harness that stops discovering tests, or an activation that
+      # quietly never happens, would read as a pass. That is the same
+      # hazard the core job guards with "Fail if the real-Rails or
+      # capability suites were skipped instead of run", and this job would
+      # otherwise replace "nobody runs them" with "CI runs them and would
+      # not notice if it stopped".
+      - name: Fail if the integration suite reported no examples
+        working-directory: vscode
+        run: |
+          count=$(grep -oE '[0-9]+ passing' integration.log | tail -1 | grep -oE '[0-9]+' || echo 0)
+          echo "integration examples: $count"
+          if [ "${count:-0}" -lt 1 ]; then
+            echo "The integration suite reported no passing examples. A real VS Code launching and"
+            echo "discovering nothing exits 0, which is why this check exists (024.69)." >&2
+            exit 1
+          fi
+
+  # `042`'s D7. An example whose fixture cannot distinguish the two
+  # candidate behaviours passes under both, and reading cannot find that:
+  # 0.2.11's third round found one in the spec written to close `024.110`,
+  # whose own comment promised it would fail under the change it guarded
+  # against and which passed under it.
+  #
+  # This applies each mutation the manifest names and requires the example
+  # that names it to fail. It is a job of its own rather than part of the
+  # suite because it writes to `core/lib` and restores it -- an
+  # interrupted rspec would leave a working tree wrong, and a developer's
+  # tree is not a thing to risk for a check. The manifest's own shape is
+  # checked in the suite (`spec/meta/pinned_mutations_spec.rb`), so a
+  # renamed example fails locally rather than here.
+  #
+  # It gates. A mutation nothing catches is the defect `024.109` is about.
+  pinned-mutations:
+    name: Pinned mutations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: core
+
+      - name: Every named mutation is caught by the example that names it
+        run: ruby scripts/check_pinned_mutations.rb
+
   # The site check compares the version the index pages advertise
   # against vscode/package.json, and it must run when *either* side of
   # that comparison moves. Until 0.2.3 the deploy workflow that also

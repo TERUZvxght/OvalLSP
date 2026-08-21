@@ -111,7 +111,8 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
   describe "a class including the concern" do
     def chain(*sources)
       workspace_index = Ovallsp::WorkspaceIndex.new
-      hierarchy_index = Ovallsp::Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      stack = build_analysis_stack(workspace_index: workspace_index)
+      hierarchy_index = stack.hierarchy_index
       sources.each_with_index do |text, i|
         summary = Ovallsp::ParserService.new.summarize(
           Ovallsp::TextDocument.new(uri: "file:///f#{i}.rb", text: text, version: 1, language_id: "ruby")
@@ -125,7 +126,7 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
     it "reaches the concern's ClassMethods on its class-level chain" do
       hierarchy_index = chain(block_form, "class Article\n  include Taggable\nend\n")
 
-      expect(hierarchy_index.ancestors("::Article", singleton: true).map(&:name))
+      expect(hierarchy_index.ancestors("::Article", singleton: true).map(&:name_or_nil))
         .to include("::Taggable::ClassMethods")
     end
 
@@ -135,8 +136,8 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
       block = chain(block_form, "class Article\n  include Taggable\nend\n")
       spelled = chain(module_form, "class Article\n  include Taggable\nend\n")
 
-      expect(block.ancestors("::Article", singleton: true).map(&:name))
-        .to eq(spelled.ancestors("::Article", singleton: true).map(&:name))
+      expect(block.ancestors("::Article", singleton: true).map(&:name_or_nil))
+        .to eq(spelled.ancestors("::Article", singleton: true).map(&:name_or_nil))
     end
 
     # **The pre-`ActiveSupport::Concern` spelling.** 0.2.11 narrowed the
@@ -163,7 +164,7 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
         "class UOld\n  include OldStyle\nend\n"
       )
 
-      expect(hierarchy_index.ancestors("::UOld", singleton: true).map(&:name))
+      expect(hierarchy_index.ancestors("::UOld", singleton: true).map(&:name_or_nil))
         .to include("::OldStyle::ClassMethods")
     end
 
@@ -179,7 +180,7 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
         "    def outer_cm; end\n  end\nend\n",
         "class UTrans\n  include OuterC\nend\n"
       )
-      names = hierarchy_index.ancestors("::UTrans", singleton: true).map(&:name)
+      names = hierarchy_index.ancestors("::UTrans", singleton: true).map(&:name_or_nil)
 
       expect(names).to include("::OuterC::ClassMethods", "::Inner::ClassMethods")
     end
@@ -194,7 +195,7 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
         "class UWrap\n  include UWrapMod\nend\n"
       )
 
-      expect(hierarchy_index.ancestors("::UWrap", singleton: true).map(&:name))
+      expect(hierarchy_index.ancestors("::UWrap", singleton: true).map(&:name_or_nil))
         .not_to include("::Inner::ClassMethods")
     end
 
@@ -213,7 +214,7 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
         "class UsesBare\n  include ActiveSupport::Bare\nend\n"
       )
 
-      expect(hierarchy_index.ancestors("::UsesBare", singleton: true).map(&:name))
+      expect(hierarchy_index.ancestors("::UsesBare", singleton: true).map(&:name_or_nil))
         .to include("::ActiveSupport::Bare::ClassMethods")
     end
 
@@ -244,7 +245,7 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
         "class UsesMixed\n  include Mixed\nend\n"
       )
 
-      expect(hierarchy_index.ancestors("::UsesMixed", singleton: true).map(&:name))
+      expect(hierarchy_index.ancestors("::UsesMixed", singleton: true).map(&:name_or_nil))
         .not_to include("::Mixed::ClassMethods")
     end
 
@@ -256,8 +257,8 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
       hierarchy_index = chain("module Plain\n  def helper; end\nend\n",
                               "class Article\n  include Plain\nend\n")
 
-      expect(hierarchy_index.ancestors("::Article", singleton: true).map(&:name))
-        .to eq(["::Article", "Class", "Module", "Object", "Kernel", "BasicObject"])
+      expect(hierarchy_index.ancestors("::Article", singleton: true).map(&:name_or_nil))
+        .to eq(["::Article", "Object", "BasicObject", "Class", "Module", "Object", "Kernel", "BasicObject"])
     end
   end
 

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "yaml"
+
 # Every entry in `docs/design/tasks/024-deferred-review-findings.md`
 # carries a fenced `yaml` block stating its status, its kind, and whether
 # it has a user-visible half. This guard reads those blocks.
@@ -41,13 +43,40 @@ module DeferredFindings
 
   def headings(markdown) = markdown.scan(ENTRY_HEADING).flatten
 
-  # Deliberately not a YAML parser: the grammar is `key: value` lines and
-  # one folded `>` block, and accepting more than that would be accepting
-  # shapes nobody writes and nothing checks.
+  # Raised when an entry names a key the legend does not define.
+  UnknownKey = Class.new(StandardError)
+
+  # Every key the legend defines. A new one is a deliberate edit here and
+  # in the legend, which is the point: `024.68` is a typo'd key silently
+  # un-routing an entry, and three guards bolted onto a hand-rolled
+  # `key: value` scanner were each broken by the next round -- one blind
+  # outside its own `[a-z-]` character class, one skipping every indented
+  # line as a folded note's continuation.
+  #
+  # **This is not a fourth guard.** The block is `yaml` and is parsed as
+  # yaml, so `Target:`, `user_visible:` and a key indented under another
+  # are keys like any other and are checked like any other. The grammar
+  # the guards were guarding does not exist any more.
+  KNOWN_KEYS = %w[status kind target released-in user-visible user-visible-note].freeze
+
   def entries(markdown)
     markdown.scan(METADATA_BLOCK).to_h do |number, block|
-      fields = block.scan(/^([a-z-]+): *(.*)$/).to_h
-      [number, fields]
+      parsed =
+        begin
+          YAML.safe_load(block)
+        rescue Psych::SyntaxError => e
+          raise UnknownKey, "#{number}'s metadata is not valid yaml: #{e.message}"
+        end
+      raise UnknownKey, "#{number}'s metadata is not a mapping" unless parsed.is_a?(Hash)
+
+      unknown = parsed.keys.map(&:to_s) - KNOWN_KEYS
+      raise UnknownKey, "#{number} names #{unknown.join(", ")}, which the legend does not define" if unknown.any?
+
+      # Stringified because every caller compares against `"open"`,
+      # `"defect"`, `"no"` -- and yaml turns an unquoted `yes` into
+      # `true`, which is the one shape this file writes that would
+      # otherwise change meaning.
+      [number, parsed.transform_values { |v| v == true ? "yes" : (v == false ? "no" : v.to_s) }]
     end
   end
 
@@ -158,6 +187,45 @@ RSpec.describe "deferred findings metadata" do
     def entry(number, **fields)
       body = fields.map { |k, v| "#{k.to_s.tr("_", "-")}: #{v}" }.join("\n")
       "## #{number} A finding\n\n```yaml\n#{body}\n```\n\nprose\n\n"
+    end
+
+    # **`024.68`. Three guards were bolted onto the hand-rolled grammar
+    # and each was broken by the next round, one assumption deeper: a
+    # `KNOWN_KEYS` filter blind outside its own `[a-z-]` class, a
+    # stray-line check that skipped every indented line, and a third
+    # that the fourth round got round again.
+    #
+    # This is not a fourth guard. The block is `yaml`, so it is parsed as
+    # yaml and its keys are checked against the set the legend defines --
+    # `Target:` and `user_visible:` are then keys like any other, and
+    # unknown ones fail. The grammar the guards were guarding is gone.
+    it "refuses a key the legend does not define, whatever its case" do
+      planted = entry("024.30", status: "open", kind: "defect") .sub("status:", "Target:")
+
+      expect { DeferredFindings.entries(planted) }
+        .to raise_error(DeferredFindings::UnknownKey, /Target/)
+    end
+
+    it "refuses an underscored spelling of a hyphenated key" do
+      planted = "## 024.30 A finding\n\n```yaml\nstatus: open\nkind: defect\nuser_visible: yes\n```\n\nprose\n\n"
+
+      expect { DeferredFindings.entries(planted) }
+        .to raise_error(DeferredFindings::UnknownKey, /user_visible/)
+    end
+
+    # The one the round-11 guard skipped as "the folded note's
+    # continuation". A real parser cannot skip it: it is a nested key.
+    it "refuses a key indented under another" do
+      planted = "## 024.30 A finding\n\n```yaml\nstatus: open\nkind: defect\n  target: 0.2.4\n```\n\nprose\n\n"
+
+      expect { DeferredFindings.entries(planted) }
+        .to raise_error(DeferredFindings::UnknownKey, /target|mapping|scan/i)
+    end
+
+    # And the control: the real file parses, so the rule is not "refuse
+    # everything".
+    it "accepts every key the real register uses" do
+      expect { DeferredFindings.entries(deferred) }.not_to raise_error
     end
 
     it "reads an entry's fields" do
