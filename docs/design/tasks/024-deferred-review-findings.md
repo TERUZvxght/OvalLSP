@@ -224,7 +224,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | fixed | 0.2.6 | Completion did not get the fix hover and diagnostics did |
 | [`024.79`](#02479-model-first-completes-to-nothing) | fixed | 0.2.6 | `Model.first` completes to nothing |
 | [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | fixed | 0.2.12 | An unresolved hierarchy edge is expressible as a method owner |
-| [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | open | 0.2.12 | An ancestor reference carries no lexical context, so an ambiguous na… |
+| [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | fixed | 0.2.12 | An ancestor reference carries no lexical context, so an ambiguous na… |
 | [`024.82`](#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | open | 0.3.0 | `Foo = Class.new(Bar)` is not a type the index knows |
 | [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.3.0 | The undefined-method check is loudest exactly where no Runtime Agent… |
 | [`024.84`](#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | open | 0.3.0 | A constant is typed as a class object whatever it holds |
@@ -4563,10 +4563,11 @@ found a third time.
 ## 024.81 An ancestor reference carries no lexical context, so an ambiguous name is picked rather than resolved
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/index/ancestor_fact.rb` (its shape),
@@ -4629,6 +4630,28 @@ against it, which is what Ruby does. The review notes the alternative
 worth weighing first: if an authoritative constant-reference
 representation already exists elsewhere in the index, `AncestorFact`
 should reference it rather than growing a second lexical model.
+**Fixed in 0.2.12.** `AncestorFact` carries `nesting` — `Module.nesting`
+at the point the constant was written, innermost first — and
+`#ancestor_entries_for` asks `WorkspaceIndex#nested_type_name` before it
+considers refusing. That is the same rule and the same reader
+`024.103` uses for a bare constant in ordinary code, which is the point:
+one lookup rule, two callers, rather than a second implementation.
+
+So `include Helpers` inside `Rackish::Request` names
+`Rackish::Request::Helpers` whatever other namespace has a `Helpers`,
+and the module's members are back in completion, hover and go to
+definition. The refusal stays for the case nesting genuinely cannot
+decide — a bare name no enclosing frame declares, claimed by two
+strangers — and `ambiguous_ancestor_spec.rb` now pins both directions.
+
+`nesting` is defaulted, so a fact rebuilt from a cache written before
+0.2.12 behaves exactly as it did.
+
+Corpus, four gems, control `unresolved-constant` identical at 1,099:
+`unknown-method` 84 → 84, **0 added and 0 removed** — these gems do not
+contain the shape, so the number is a control and the evidence is the
+examples run against the interpreter.
+
 ## 024.82 `Foo = Class.new(Bar)` is not a type the index knows
 
 ```yaml

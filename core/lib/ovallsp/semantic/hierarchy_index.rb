@@ -554,11 +554,19 @@ module Ovallsp
         #
         # The durable fix is 024.81: carry the lexical context, so this is
         # a lookup again rather than a refusal.
-        if @workspace_index.ambiguous_type_name?(fact.target)
+        # **Ruby's own lookup first, as of 0.2.12.** `AncestorFact` carries
+        # `Module.nesting` at the point the constant was written, so
+        # `include Helpers` inside `Rackish::Request` names
+        # `Rackish::Request::Helpers` whatever other namespace has a
+        # `Helpers` -- which is what Ruby does, and what the refusal below
+        # was standing in for. Same rule and same reader as `024.103`'s.
+        target = @workspace_index.nested_type_name(fact.target, nesting: fact.nesting) || fact.target
+
+        if @workspace_index.ambiguous_type_name?(target)
           return [AncestorEntry.unidentified(origin: fact.relation, location: fact.location)]
         end
 
-        compute_ancestors_locked(fact.target, singleton: false, visited: visited, origin_for_self: fact.relation)
+        compute_ancestors_locked(target, singleton: false, visited: visited, origin_for_self: fact.relation)
       end
 
       def kind_of(canonical)

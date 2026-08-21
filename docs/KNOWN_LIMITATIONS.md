@@ -678,20 +678,6 @@ arguments. <!-- documents: 024.89 -->
 - Passing a positional argument to a keyword-only method says it "takes 0
   arguments". <!-- documents: 024.90 -->
 
-## A module whose name is shared is dropped from the class that includes it
-
-If your class `include`s a module by a bare name — `include Helpers` —
-and any other namespace in the workspace declares a `Helpers` too, this
-extension refuses to guess which one you meant. That is the right answer
-for a diagnostic: reporting your class's own methods as missing, which is
-what it used to do, is worse. But the refusal also reaches completion and
-go-to-definition, so that module's methods disappear from the list and
-jumping to one of them lands nowhere.
-
-`Helpers`, `Base`, `Error` and `Node` are shared often enough that this
-is worth knowing about. Writing the include with its namespace —
-`include Rackish::Request::Helpers` — restores it. <!-- documents: 024.81 -->
-
 ## A class created by assignment is invisible
 
 `Error = Class.new(StandardError)` declares a class as surely as

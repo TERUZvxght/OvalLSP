@@ -854,8 +854,7 @@ module Ovallsp
 
         @ancestor_facts << Index::AncestorFact.new(
           owner: owner, relation: :superclass, target: raw_constant_name(node.superclass),
-          location: Index::SourceLocation.to_range(node.superclass.location, @lines)
-        )
+          location: Index::SourceLocation.to_range(node.superclass.location, @lines), nesting: current_nesting)
       end
 
       # `module_function` makes each method reachable on the module *as
@@ -941,8 +940,7 @@ module Ovallsp
 
         @ancestor_facts << Index::AncestorFact.new(
           owner: current_owner, relation: :concern_class_methods, target: name,
-          location: Index::SourceLocation.to_range(target.location, @lines)
-        )
+          location: Index::SourceLocation.to_range(target.location, @lines), nesting: current_nesting)
       end
 
       def record_ancestor_call(node)
@@ -967,8 +965,7 @@ module Ovallsp
 
           @ancestor_facts << Index::AncestorFact.new(
             owner: current_owner, relation: relation, target: target,
-            location: Index::SourceLocation.to_range(arg.location, @lines)
-          )
+            location: Index::SourceLocation.to_range(arg.location, @lines), nesting: current_nesting)
         end
       end
 
@@ -989,8 +986,7 @@ module Ovallsp
       def record_extend_self(node)
         @ancestor_facts << Index::AncestorFact.new(
           owner: current_owner, relation: :extend, target: current_owner,
-          location: Index::SourceLocation.to_range(node.arguments.arguments.first.location, @lines)
-        )
+          location: Index::SourceLocation.to_range(node.arguments.arguments.first.location, @lines), nesting: current_nesting)
       end
 
       # An ancestor decided at runtime leaves a surface that cannot be
@@ -1384,6 +1380,11 @@ module Ovallsp
       # The one value every recorder is handed, rather than the six stacks
       # they each used to reassemble from. See `Index::Cref`.
       attr_reader :cref
+
+      # `Module.nesting` at the point being visited, innermost first --
+      # what `AncestorFact` needs to identify a bare constant the way
+      # Ruby does (`024.81`).
+      def current_nesting = @cref.nesting
 
       def current_owner
         @cref.owner
