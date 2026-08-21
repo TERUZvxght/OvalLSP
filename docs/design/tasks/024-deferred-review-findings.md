@@ -253,7 +253,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | fixed | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
-| [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | open | 0.2.13 | The macro is reported, and what it might define is not |
+| [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | fixed | 0.2.13 | The macro is reported, and what it might define is not |
 | [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.13 | A visibility section written inside a block does not reach the body … |
 | [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | fixed | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | fixed | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
@@ -5862,10 +5862,11 @@ really about.
 ## 024.110 The macro is reported, and what it might define is not
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.13
+released-in: 0.2.13
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
@@ -5923,6 +5924,41 @@ ancestor is not evidence about a specific class, and the current
 representation — a flat `[owner, side]` set consulted through the whole
 chain — cannot express the difference. That is the change, and it is
 bigger than one line.
+
+**Fixed in 0.2.13, and what made it fixable is `042`'s D2.** The
+one-line version — a bare class-body call opens the owner's *class*
+surface as well as its instance one — is right, and 0.2.11 shipped it and
+rolled it back the same release. What was wrong was the *reader*:
+`MethodResolver#open_surface?` consulted every link in the chain, and
+`Class`, `Module`, `Object`, `Kernel` and `BasicObject` are in every
+class's. One bare `alias_method` in a `core_ext` file then said "I cannot
+enumerate" about the whole workspace.
+
+`#open_surface?` ignores a **synthesised** link now — one the workspace
+did not write. A reopening of `Module` *is* real, and a method it defines
+really would be reachable from `Widget`; what the exclusion trades is
+that truth for a check that can run at all in a workspace with a
+`core_ext` directory, which is most Rails applications. The narrower
+claim it leaves standing is the one this entry was always about: **the
+owner whose own body could not be read is declined about, and only that
+owner.**
+
+Measured over the 16-gem corpus, 1,659 files, with `unresolved-constant`
+identical at 4,600 and both argument checks identical as controls:
+
+| | main `9033ed2` | branch |
+|---|---|---|
+| `unknown-method` | 506 | **395** |
+| added / removed | — | **0 / 111** |
+
+Three of the removals checked against the interpreter —
+`ActionCable::Server::Base.config`,
+`ActionController::Parameters.permit_all_parameters=`,
+`ActionDispatch::Request::Utils.perform_deep_munge` — all real methods,
+all false reports. And **`ActiveRecord::Promise.wrap`, the real latent
+`NoMethodError` 0.2.11's version silenced, is still reported on both
+sides.** That is the difference between this fix and that one, in one
+line.
 
 ## 024.111 A visibility section written inside a block does not reach the body it runs in
 

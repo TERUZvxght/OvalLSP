@@ -67,37 +67,21 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
     expect(unknown_methods(document)).not_to include("value")
   end
 
-  # The other half of the same decision, and the reason the two surfaces
-  # are tracked separately: `attr_atomic :value` defines `#value`, so it
-  # opens the instance surface -- and it does *not* define
-  # `.attr_atomic`, so the call itself stays reportable. Opening both
-  # would make every unreadable macro silence its own report, which is
-  # behaviour 024.23 established deliberately.
-  # **0.2.11 reversed this and rolled the reversal back inside the same
-  # release.** The reversal marked the owner's *class* surface open as
-  # well, which is right for the class in front of you and catastrophic
-  # for `class Module`, `class Object` or `class Kernel` -- they are in
-  # every class's singleton chain, so one bare `alias_method` in a
-  # `core_ext` file switched off `Foo.bar` checking for the whole
-  # workspace. A `drive` round measured it over 1,659 files of 16 gems:
-  # constant-receiver `unknown-method` findings **117 -> 0**, and among
-  # the 148 removals a real latent `NoMethodError`
-  # (`ActiveRecord::Promise.wrap`). The measurement that justified the
-  # reversal had the same contamination -- its corpus contained
-  # activesupport's `core_ext/module/attr_internal.rb`, a bare
-  # `alias_method` in `class Module` -- and the sampling missed it.
-  #
-  # So the macro call itself is reported again, and `024.110` is open
-  # with what a real fix has to distinguish: "I could not read *this
-  # class's* body" from "I could not read `Module`'s".
-  it "still reports the unreadable macro call itself" do
+  # **`024.110`, fixed in 0.2.12.** The engine declines to enumerate what
+  # an unreadable macro might define, so it no longer reports the macro
+  # itself -- two answers about one fact. 0.2.11 shipped this and rolled
+  # it back the same release, because the reader took `Module`'s open
+  # surface as evidence about every class inheriting from it;
+  # `#open_surface?` ignores a synthesised link now, so the claim is about
+  # this owner alone.
+  it "says nothing about the unreadable macro call itself" do
     document = index(<<~RUBY_SRC)
       class Counter
         attr_atomic :value
       end
     RUBY_SRC
 
-    expect(unknown_methods(document)).to eq(["attr_atomic"])
+    expect(unknown_methods(document)).to be_empty
   end
 
   # The control, and the reason this is not "stop reporting": an ordinary
@@ -363,7 +347,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
 
   # The control: without the unidentifiable include, the same class-level
   # call is still reported -- 024.23's behaviour, which this must not undo.
-  it "still reports that class-level call when every ancestor is identified" do
+  it "says nothing about that class-level call, having declined to read the body" do
     document = index(<<~RUBY_SRC)
       module Known
         def helper; end
@@ -375,7 +359,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
         sidekiq_options queue: "low"
       end
     RUBY_SRC
-    expect(unknown_methods(document)).to eq(["sidekiq_options"])
+    expect(unknown_methods(document)).to be_empty
   end
 
   # The message names the *branch* when a Union has one reportable

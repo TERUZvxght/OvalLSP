@@ -29,12 +29,12 @@
 # throwaway copy of `core/lib` and runs the named example against it. The live
 # tree is never modified: the copy goes first on the load path.
 
-- why: "024.110's reversal -- marking the owner's class surface open as well as its instance one, which silences every `Foo.bar` in a workspace that reopens `Module`."
-  file: core/lib/ovallsp/parser_service.rb
-  from: "        return if kind.nil?\n\n        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]"
-  to: "        return if kind.nil?\n\n        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]\n        if node.receiver.nil? && kind == :instance\n          @open_surface_owners << [Index::SymbolId.bare_name(current_owner), :singleton]\n        end"
+- why: "024.110's per-owner claim -- reading a synthesised link's open surface, which makes one `alias_method` in a core_ext file decline about every class in the workspace."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "        return false if synthesised_link?(entry)\n"
+  to: ""
   spec: spec/ovallsp/diagnostics/unreadable_macro_spec.rb
-  example: "does not let a reopened core class silence an unrelated class's class-level call"
+  example: "declines about the owner whose own body was unreadable, and only that owner"
 
 - why: "024.116's side remap -- asking a `:class_object` or `:extend` link about its singleton side, which misses a workspace `class Object; def method_missing`."
   file: core/lib/ovallsp/semantic/method_resolver.rb

@@ -501,17 +501,6 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
-## A macro this extension cannot read is reported as a missing method
-
-If a class or module body calls a macro that comes from a gem, a
-`Concern`, or an `extend` this extension cannot follow — `attr_atomic
-:thing` — the *call itself* is reported as an unknown method. Whatever it
-defines is correctly left alone; the line that defines it is not.
-
-0.2.11 tried silencing it and took the attempt back out: the fix also
-silenced `Foo.bar` checking across the whole workspace whenever any file
-reopened `Module`, `Object` or `Kernel`. <!-- documents: 024.110 -->
-
 ## Methods made by `define_singleton_method`
 
 A class whose class methods are made by `define_singleton_method` is no

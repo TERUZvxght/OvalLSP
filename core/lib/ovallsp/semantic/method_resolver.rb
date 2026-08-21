@@ -281,7 +281,26 @@ module Ovallsp
       # could not read `Module`'s". Written out here rather than left as
       # a difference a reader has to notice, because three rounds in a
       # row found one of these two call sites hand-rolling the side.
+      # **Not a link the workspace wrote.** `Class`, `Module`, `Object`,
+      # `Kernel` and `BasicObject` are in *every* class's chain, so
+      # reading their open surface makes one bare `alias_method` in a
+      # `core_ext` file say "I cannot enumerate" about every class in the
+      # workspace. Measured over 1,659 files of 16 gems: constant-receiver
+      # `unknown-method` findings 117 -> 0, one real latent
+      # `NoMethodError` among the losses (`024.110`).
+      #
+      # A reopening of `Module` *is* real, and a method it defines really
+      # would be reachable from `Widget`. What the exclusion trades is
+      # that truth for a check that can run at all in a workspace with a
+      # `core_ext` directory, which is most Rails applications. The
+      # narrower claim it leaves standing is the one that matters and the
+      # one D2 is about: **the owner whose own body could not be read is
+      # declined about, and only that owner.**
+      def synthesised_link?(entry) = entry.synthesised?
+
       def open_surface?(entry, singleton)
+        return false if synthesised_link?(entry)
+
         @workspace_index.open_surface?(entry.name, singleton: entry.origin == :extend ? false : singleton)
       end
 
