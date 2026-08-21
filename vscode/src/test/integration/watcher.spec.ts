@@ -58,6 +58,20 @@ describe('OvalLSP extension watcher pattern reaches Core-relevant schema files',
       fs.mkdirSync(path.dirname(candidates.migration), { recursive: true });
       fs.mkdirSync(path.dirname(candidates.signature), { recursive: true });
       fs.mkdirSync(path.dirname(candidates.rbi), { recursive: true });
+
+      // **The directories first, then a settle, then the files.** On
+      // Linux the watcher adds an inotify watch per directory, and a file
+      // written into a directory created microseconds earlier can be
+      // created before that directory is being watched. Three CI runs
+      // failed here, each on a different file, and the two that failed
+      // most were the two in *second-level* new directories
+      // (`db/migrate/`, `sorbet/rbi/`).
+      //
+      // This is a property of the test's setup, not of the glob: nothing
+      // a user does creates a directory and a file in it in the same
+      // millisecond and then expects the event within one tick.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
       fs.writeFileSync(candidates.migration, '# frozen_string_literal: true\n');
       fs.writeFileSync(candidates.structureSql, '-- schema\n');
       fs.writeFileSync(candidates.gemfileLock, 'GEM\n');
