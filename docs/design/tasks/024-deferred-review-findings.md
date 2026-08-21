@@ -171,7 +171,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.23`](#02423-the-singleton-chain-did-not-model-class-module) | fixed | 0.1.14 | The singleton chain did not model `Class`/`Module` |
 | [`024.24`](#02424-every-path-url-call-is-a-missing-route-when-no-routes-are-loaded) | fixed | 0.2.0 | Every `*_path`/`*_url` call is a missing route when no routes are lo… |
 | [`024.25`](#02425-a-markdown-parsing-spec-is-the-wrong-shape-for-these-two-documents-must-agree) | open | 0.2.12 | A Markdown-parsing spec is the wrong shape for "these two documents … |
-| [`024.26`](#02426-a-workspace-def-object-foo-is-reachable-from-every-class-in-ruby-and-from-none-here) | open | 0.2.12 | A workspace `def Object.foo` is reachable from every class in Ruby a… |
+| [`024.26`](#02426-a-workspace-def-object-foo-is-reachable-from-every-class-in-ruby-and-from-none-here) | fixed | 0.2.12 | A workspace `def Object.foo` is reachable from every class in Ruby a… |
 | [`024.27`](#02427-documentsymbol-lists-one-outline-entry-per-name-a-macro-declares) | open | — | `documentSymbol` lists one outline entry per name a macro declares |
 | [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | — | Rename refuses on a macro-declared method rather than editing it |
 | [`024.29`](#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | open | — | Two features were written for 0.1.15 and cut from it |
@@ -1316,10 +1316,11 @@ claims about it were rolled back.
 ## 024.26 A workspace `def Object.foo` is reachable from every class in Ruby and from none here
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`
@@ -1354,6 +1355,24 @@ standard library or the gems measured for it hits this shape.
 expressed at all. Worth doing with 024.13 rather than alone, since both
 are about what a chain says when the workspace has reopened a core class.
 
+
+**Fixed in 0.2.12.** The chain a class's singleton side ends in now
+carries the two links Ruby puts before `Class` — the singleton classes of
+`Object` and `BasicObject`, as `origin: :singleton_of`, which keeps them
+on the singleton side rather than the `:class_object` tail's instance
+one. A workspace `class Object; def self.foo` is reachable from every
+class, as Ruby makes it.
+
+`Object` appears twice in a singleton chain now, once as its singleton
+class and once as the class the class object is an instance of. They are
+two different links and the index tells them apart by which side each
+contributes, which `#dedupe_named` already keys on — the name alone was
+never enough, and 0.2.11 learned that from `extend self`.
+
+Corpus, four gems, control `unresolved-constant` identical at 1,099:
+`unknown-method` 84 → 84, **0 added and 0 removed**. The rule fires only
+where a workspace declares a class method on `Object` itself, which none
+of these gems do.
 
 ## 024.27 `documentSymbol` lists one outline entry per name a macro declares
 

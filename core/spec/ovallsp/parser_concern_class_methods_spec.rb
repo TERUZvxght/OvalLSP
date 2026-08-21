@@ -258,7 +258,7 @@ RSpec.describe "Ovallsp::ParserService and ActiveSupport::Concern's class_method
                               "class Article\n  include Plain\nend\n")
 
       expect(hierarchy_index.ancestors("::Article", singleton: true).map(&:name_or_nil))
-        .to eq(["::Article", "Class", "Module", "Object", "Kernel", "BasicObject"])
+        .to eq(["::Article", "Object", "BasicObject", "Class", "Module", "Object", "Kernel", "BasicObject"])
     end
   end
 

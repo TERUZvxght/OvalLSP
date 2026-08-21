@@ -462,7 +462,7 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     index("class Widget\nend\nmodule Helper\nend\n")
 
     expect(hierarchy_index.ancestors("Widget", singleton: true).map(&:name_or_nil))
-      .to eq(["::Widget", "Class", "Module", "Object", "Kernel", "BasicObject"])
+      .to eq(["::Widget", "Object", "BasicObject", "Class", "Module", "Object", "Kernel", "BasicObject"])
     expect(hierarchy_index.ancestors("Helper", singleton: true).map(&:name_or_nil))
       .to eq(["::Helper", "Module", "Object", "Kernel", "BasicObject"])
   end
@@ -475,7 +475,7 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     index("class Base\nend\nclass Widget < Base\nend\n")
 
     expect(hierarchy_index.ancestors("Widget", singleton: true).map(&:name_or_nil))
-      .to eq(["::Widget", "::Base", "Class", "Module", "Object", "Kernel", "BasicObject"])
+      .to eq(["::Widget", "::Base", "Object", "BasicObject", "Class", "Module", "Object", "Kernel", "BasicObject"])
   end
 
   # A name the workspace never declared is neither a class nor a module,

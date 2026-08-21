@@ -88,12 +88,24 @@ RSpec.describe Ovallsp::Semantic::HierarchyIndex do
     index_source("module Helpers\nend\n\nclass Widget\n  extend Helpers\nend\n")
 
     expect(names(index.ancestors("Widget"))).to eq(%w[::Widget Object Kernel BasicObject])
-    # The tail after `::Helpers` is what a class object *is* -- a Class,
-    # which is a Module -- and is where `private`/`attr_reader` are found
-    # (024.23). The extended module still comes first, which is this
-    # example's point.
+    # The tail after `::Helpers` is Ruby's, in Ruby's order: the
+    # singleton classes of `Object` and `BasicObject` -- which is where a
+    # workspace `class Object; def self.foo` lives (`024.26`) -- and then
+    # what a class object *is*, a Class, which is a Module, where
+    # `private`/`attr_reader` are found (`024.23`). `Object` appears
+    # twice because those are two different links; the chain tells them
+    # apart by which side each contributes, not by name.
+    #
+    #   $ ruby -e 'class Widget; end
+    #              p Widget.singleton_class.ancestors'
+    #   # => [#<Class:Widget>, #<Class:Object>, #<Class:BasicObject>,
+    #   #     Class, Module, Object, Kernel, BasicObject]
+    #   # ruby 3.4.10
+    #
+    # The extended module still comes first, which is this example's
+    # point.
     expect(names(index.ancestors("Widget", singleton: true)))
-      .to eq(%w[::Widget ::Helpers Class Module Object Kernel BasicObject])
+      .to eq(%w[::Widget ::Helpers Object BasicObject Class Module Object Kernel BasicObject])
   end
 
   it "carries a singleton chain through the superclass' own singleton class" do
@@ -101,7 +113,7 @@ RSpec.describe Ovallsp::Semantic::HierarchyIndex do
 
     # One tail, at the end of the whole chain -- not one per class in it.
     expect(names(index.ancestors("Sub", singleton: true)))
-      .to eq(%w[::Sub ::Base ::Helpers Class Module Object Kernel BasicObject])
+      .to eq(%w[::Sub ::Base ::Helpers Object BasicObject Class Module Object Kernel BasicObject])
   end
 
   it "degrades to a partial ancestor chain instead of crashing on an unresolved superclass" do

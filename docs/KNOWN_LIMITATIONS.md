@@ -262,13 +262,6 @@ Seven more are older than this release and untouched by it:
   the 14** wrong-argument-count reports over the corpus below are this
   shape, among them `net/http.rb`'s `HTTP.start`
   (024.32). <!-- documents: 024.32 -->
-- **A `def self.` the workspace adds to `Object` is not reachable**, so
-  `Widget.foo` is reported for a method every class really has. 0.1.14
-  did not report this, by an accident of the same mis-kinded lookup that
-  made it report `class Object; def blank?; end` — a far more common
-  shape — on code that runs. 0.1.15 trades the accident back for the fix,
-  which is why this is the one shape it makes *worse* than 0.1.14
-  (024.26). <!-- documents: 024.26 -->
 - **A class that includes a module the workspace has not read still has
   its class-level macros reported.** `include SomeGem::Model` followed by
   `validate :ensure_ok` is reported, though the Concern installs

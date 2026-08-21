@@ -93,7 +93,7 @@ module Ovallsp
 
       # Not a link the workspace wrote, so it cannot be one the workspace
       # reopened.
-      def synthesised? = %i[default class_object].include?(origin)
+      def synthesised? = %i[default class_object singleton_of].include?(origin)
     end
 
     # Aggregates AncestorFact/AliasFact (Task 009, extracted by
@@ -132,7 +132,29 @@ module Ovallsp
       # A module's singleton side is the same list without `Class`: a
       # module is a `Module` but not a `Class`, which is why `superclass`
       # answers on one and not the other.
+      # **The two links Ruby puts before `Class`**, and which an entry
+      # naming a *type* could not express: the singleton classes of
+      # `Object` and `BasicObject`.
+      #
+      #   $ ruby -e '
+      #   class Object; def self.foo; :ok; end; end
+      #   class Widget; end
+      #   p [Widget.foo, Widget.singleton_class.ancestors.first(3)]
+      #   '
+      #   # => [:ok, [#<Class:Widget>, #<Class:Object>, #<Class:BasicObject>]]
+      #   # ruby 3.4.10
+      #
+      # `origin: :singleton_of` keeps them on the *singleton* side, which
+      # is what distinguishes them from the `:class_object` tail below --
+      # that tail is there because the class object is an *instance* of
+      # `Class`/`Module`/`Object`, and contributes those classes' instance
+      # methods. These two contribute `Object`'s and `BasicObject`'s
+      # `def self.` methods, which is what makes a workspace
+      # `class Object; def self.foo` reachable from every class, as Ruby
+      # makes it (`024.26`).
       DEFAULT_CLASS_SINGLETON_CHAIN = [
+        AncestorEntry.identified(name: "Object", kind: :class, origin: :singleton_of, location: nil),
+        AncestorEntry.identified(name: "BasicObject", kind: :class, origin: :singleton_of, location: nil),
         AncestorEntry.identified(name: "Class", kind: :class, origin: :class_object, location: nil),
         AncestorEntry.identified(name: "Module", kind: :class, origin: :class_object, location: nil),
         *DEFAULT_OBJECT_CHAIN.map { |entry| entry.with(origin: :class_object) }
