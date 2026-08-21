@@ -427,7 +427,13 @@ Treat those answers as unreliable until the mismatch is resolved, and run
 
 The check that runs *before* the Core Server starts does stop: as of
 0.2.10, a Ruby that cannot load this build's bundled dependencies means
-the Core Server is not started at all, and you are told so. <!-- documents: 024.55 -->
+the Core Server is not started at all, and you are told so.
+
+**The difference is deliberate, and 0.2.12 recorded why.** The Core ships
+inside the extension, so the only way to reach a post-start mismatch is
+to point `ovallsp.serverPath` at a Core of your own — and refusing to
+serve a session you deliberately configured is worse than telling you
+what does not match.
 
 ## How long an edit takes to re-analyse
 

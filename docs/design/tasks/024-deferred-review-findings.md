@@ -200,7 +200,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.52`](#02452-a-publish-could-outlive-the-document-it-was-about) | fixed | reverted | A publish could outlive the document it was about |
 | [`024.53`](#02453-the-absent-workspace-grace-measured-the-wrong-clock) | fixed | 0.2.2 | The absent-workspace grace measured the wrong clock |
 | [`024.54`](#02454-an-edit-that-changed-nothing-discarded-the-edit-before-it) | fixed | reverted | An edit that changed nothing discarded the edit before it |
-| [`024.55`](#02455-a-version-mismatch-is-reported-and-then-ignored) | open | 0.2.12 | A version mismatch is reported and then ignored |
+| [`024.55`](#02455-a-version-mismatch-is-reported-and-then-ignored) | fixed | 0.2.12 | A version mismatch is reported and then ignored |
 | [`024.56`](#02456-a-publish-can-land-after-the-panel-has-been-cleared-and-after-a-newer-one) | fixed | 0.2.7 | A publish can land after the panel has been cleared, and after a new… |
 | [`024.57`](#02457-the-debounce-and-why-it-was-rolled-back) | open | 0.3.0 | The debounce, and why it was rolled back |
 | [`024.58`](#02458-bin-ovallsp-loaded-every-abi-s-vendored-gems-not-the-running-one-s) | fixed | 0.2.2 | `bin/ovallsp` loaded every ABI's vendored gems, not the running one's |
@@ -2918,10 +2918,11 @@ the panel showing a clean file whose text had a syntax error.
 ## 024.55 A version mismatch is reported and then ignored
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Target slipped.** Written for 0.2.4 and still open five releases later; retargeted to 0.2.10 rather than left naming a release that has shipped.
@@ -2980,6 +2981,32 @@ change, with the two paths separated:
    an integrity failure, a core-version mismatch after a Marketplace update
    is usually a stale process that a restart fixes.
 
+
+**Closed in 0.2.12, and the post-start half is closed by a decision
+rather than by code.**
+
+The defect this entry names is that four documents said OvalLSP "stops
+before sending any feature request" and it did not. Both halves of that
+are now settled: 0.2.10 made the *pre-start* verdict fatal, and 0.2.11
+corrected every document to describe the two checks separately, since
+they have different failure modes.
+
+**What was left was a question, not a bug: should a post-start version
+mismatch stop the session too?** The answer is no, and the reason is
+reachability. The Core ships *inside the VSIX* and
+`ServerConfig#defaultServerPath` uses it unless `ovallsp.serverPath` is
+set. After 0.2.10's pre-start gate, the remaining way to reach a
+post-start mismatch is an explicit override — a user who deliberately
+pointed the extension at a Core of their own. Refusing to serve a session
+somebody deliberately configured is worse than telling them what does not
+match and letting them judge, and it is not the shape §0 is about: the
+answers are not wrong, they are answers from a build the extension did
+not expect.
+
+So it reports and continues, which is what the documents now say. The
+split between the two deciders remains real and is `024.65`'s question,
+which is about which decider owns the *notification* — not about which
+owns the verdict.
 
 ## 024.56 A publish can land after the panel has been cleared, and after a newer one
 
