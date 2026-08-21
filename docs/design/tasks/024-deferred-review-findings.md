@@ -263,7 +263,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.13 | The two spellings of a class-body macro get opposite answers |
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | open | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
-| [`024.120`](#024120-no-create-event-for-a-migration-file-on-linux) | open | 0.2.13 | No create event for a migration file on Linux |
+| [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -6050,41 +6050,48 @@ called `LocalInferencer.new` with no collaborators at all to answer a
 question about literal types — which is the one shape where that happens
 to be right, and indistinguishable from the shapes where it is not.
 
-## 024.120 No create event for a migration file on Linux
+## 024.120 The integration watcher example could not retry, and it looked like a Linux defect
 
 ```yaml
-status: open
+status: fixed
 kind: defect
-user-visible: yes
-target: 0.2.13
+user-visible: no
+user-visible-note: >
+  A test defect, not a product one. It is recorded because it produced a
+  confident and wrong diagnosis of the product for two CI runs, and the
+  wrong diagnosis was written into KNOWN_LIMITATIONS in both languages
+  before the next run disproved it.
+target: 0.2.12
+released-in: 0.2.12
 ```
 
-**Area:** `vscode/src/watchedFiles.ts` (`WATCHED_FILES_GLOB`),
-`vscode/src/test/integration/watcher.spec.ts`
+**Area:** `vscode/src/test/integration/watcher.spec.ts`
 
-Creating `db/migrate/20260101000000_create_widgets.rb` produces **no
-create event** from `vscode.workspace.createFileSystemWatcher` on the CI
-Linux runner. In the same example, in the same tick, four other files do:
-`db/structure.sql`, a `.rbs` under a newly created `sig/`, and a `.rbi`
-under a newly created `sorbet/rbi/`. On macOS all five fire.
+When `024.69` first put the integration suite on CI, this example failed
+on Linux -- and failed on a **different file each run**. The first
+diagnosis was that `db/migrate/*.rb` alone produced no event, which was
+written up as a possible product gap on Linux and documented as a known
+limitation in both languages. The next run failed on the `.rbs` instead,
+which disproved it.
 
-**Not the registration race** the example's retry loop handles -- that
-one was real, was fixed in the same change, and the retry demonstrably
-works for the four that fire. This one persists across every retry for
-ten seconds.
+The real cause is in the example. `createFileSystemWatcher` registers
+asynchronously, so whichever file is written before registration
+completes misses its event -- *which* file varying with runner load. The
+retry loop added to handle exactly that could not work, because it
+rewrites a file that now exists and VS Code reports a rewrite as a
+**change**, while the subscription was `onDidCreate` alone.
 
-The glob is `**/{*.rb,*.rbs,*.rbi,*.erb,Gemfile.lock,db/structure.sql}`,
-so a migration matches through the bare `*.rb` alternative rather than
-through a `db/` entry. Whether that is an inotify recursion difference in
-newly created nested directories, or a real gap in what reaches the Core
-Server on Linux, is the open question -- **and the second would be
-user-visible**: editing migrations is how a Rails schema changes, and a
-missed watch event means the model registry does not refresh.
+Fixed by subscribing to both. That is faithful to what the example is
+for: the question is whether `WATCHED_FILES_GLOB` reaches these paths at
+all, not which kind of event it reaches them with.
 
-Found the day `024.69` put the integration suite on CI, which is the
-entry's own argument: nobody had run these on Linux, ever. The example
-skips this one assertion on Linux with this number cited, so the job
-gates on the rest rather than being switched off.
+**The lesson is about the diagnosis, not the fix.** Two runs of a new job
+produced a plausible, specific, user-visible-sounding defect
+("migrations do not refresh on Linux") that did not exist. What
+distinguished it was the *third* run failing somewhere else. A single
+observation of a nondeterministic failure describes the run, not the
+system -- the same rule `026` records for measurements, arriving through
+a test.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

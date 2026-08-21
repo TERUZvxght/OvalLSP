@@ -552,15 +552,6 @@ longer reported for calling them — but hover, go to definition and
 completion still answer nothing there, because the names are not in the
 index. You get silence rather than an answer. <!-- documents: 024.116 -->
 
-## Creating a migration file on Linux may not refresh anything
-
-Adding a file under `db/migrate/` produces no file-watch event on Linux,
-so this extension is not told the schema may have changed and does not
-refresh what it knows about your models. Editing an existing migration,
-and every other watched file — `db/structure.sql`, `.rb`, `.rbs`, `.rbi`,
-`Gemfile.lock` — behave normally. Reloading the window picks up the
-change. Not reproduced on macOS. <!-- documents: 024.120 -->
-
 ## A macro called inside a block in a class body
 
 A macro this extension cannot read is left alone when you write it

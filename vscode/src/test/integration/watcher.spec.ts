@@ -30,8 +30,19 @@ describe('OvalLSP extension watcher pattern reaches Core-relevant schema files',
       new vscode.RelativePattern(workspaceFolder!, WATCHED_FILES_GLOB)
     );
 
+    // **Create *and* change**, because the retry below rewrites a file
+    // that already exists and VS Code reports that as a change. Listening
+    // to creates alone made the retry unable to succeed for any file
+    // whose first write beat the watcher's registration -- and which file
+    // that was varied per run, which is what made it look like a
+    // migration-specific defect for two CI runs.
+    //
+    // Both are faithful to what this example is for: the question is
+    // whether `WATCHED_FILES_GLOB` reaches these paths at all, not which
+    // kind of event it reaches them with.
     const seen = new Set<string>();
-    const disposable = watcher.onDidCreate((uri) => seen.add(uri.fsPath));
+    const record = (uri: vscode.Uri) => seen.add(uri.fsPath);
+    const disposable = vscode.Disposable.from(watcher.onDidCreate(record), watcher.onDidChange(record));
 
     try {
       const dbDir = path.join(workspaceFolder!.uri.fsPath, 'db');
@@ -85,24 +96,10 @@ describe('OvalLSP extension watcher pattern reaches Core-relevant schema files',
         [...seen].some((p) => p.endsWith('structure.sql')),
         `expected a create event for db/structure.sql; saw: ${[...seen].join(', ')}`
       );
-      // **Skipped on Linux, and `024.120` says why rather than the skip
-      // being silent.** The other four files -- `db/structure.sql`, the
-      // `.rbs` under `sig/`, the `.rbi` under `sorbet/rbi/` -- all fire
-      // there, including ones in directories created in the same tick, so
-      // this is not the registration race the retry loop above handles.
-      // A migration under `db/migrate/` alone produces no create event on
-      // the CI runner and produces one on macOS.
-      //
-      // That is either an inotify-recursion difference or a real gap in
-      // what reaches the Core Server on Linux, and the second would be
-      // user-visible. It is written down as an open question instead of
-      // being answered by guesswork in a CI file.
-      if (process.platform !== 'linux') {
-        assert.ok(
-          [...seen].some((p) => p.endsWith('20260101000000_create_widgets.rb')),
-          `expected a create event for the migration file; saw: ${[...seen].join(', ')}`
-        );
-      }
+      assert.ok(
+        [...seen].some((p) => p.endsWith('20260101000000_create_widgets.rb')),
+        `expected an event for the migration file; saw: ${[...seen].join(', ')}`
+      );
       assert.ok(
         [...seen].some((p) => p.endsWith('watcher_test.rbs')),
         `expected a create event for a project RBS file; saw: ${[...seen].join(', ')}`
