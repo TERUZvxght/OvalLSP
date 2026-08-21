@@ -175,7 +175,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.27`](#02427-documentsymbol-lists-one-outline-entry-per-name-a-macro-declares) | open | — | `documentSymbol` lists one outline entry per name a macro declares |
 | [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | — | Rename refuses on a macro-declared method rather than editing it |
 | [`024.29`](#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | open | — | Two features were written for 0.1.15 and cut from it |
-| [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | open | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
+| [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | fixed | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
 | [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | open | — | A declaration written inside a block has no owner this parser can na… |
 | [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | open | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
 | [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | open | — | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
@@ -1525,10 +1525,11 @@ it changes an answer a user sees; the one taken here says it does not.
 ## 024.30 0.1.15's hunk sweep: three hunks that cannot be pinned, and why
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 target: 0.2.12
+released-in: 0.2.12
 user-visible-note: >
   A record of which lines no test holds, and the reasoning for leaving
   each. Nothing here changes what the engine answers.
@@ -1612,6 +1613,25 @@ broken tree; none of them stops a run from leaving one. The script traps
 4.5-minute suite is nearly two hours, which is worth knowing before
 starting rather than after.
 
+
+**Closed in 0.2.12, and one of its two claims was checked rather than
+believed.** The fourth sweep guard this entry describes is in the tree:
+`scripts/hunk_sweep.rb`'s `at_exit` restores `core/` and `vscode/` when
+an interrupted run leaves the working tree mutated.
+
+The other claim — "the fixture writes it directly in `class << self` now,
+and fails when the term is removed" — is prose about a test, which is
+exactly what `042`'s D7 says not to trust. It is now an entry in
+`core/spec/meta/pinned_mutations.yml`: replacing
+`node.receiver.nil? ? nil : false` with `nil` must fail
+`class_body_macro_spec.rb`'s "reads an instance_eval block on an explicit
+receiver as an instance", and CI applies it.
+
+Worth noting how the entry was written into the manifest: the first
+attempt named an example in `parser_cref_spec.rb` that reads well and is
+about a *different* decision, and the checker reported it uncaught. A
+prose claim about which example pins what is a claim about this tree,
+and this one was wrong in a way no reader would have questioned.
 
 ## 024.31 A declaration written inside a block has no owner this parser can name
 

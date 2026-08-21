@@ -92,3 +92,10 @@
   spec: spec/ovallsp/diagnostics/visibility_spec.rb
   example: "is not offered when the alias itself is made private"
 
+- why: "024.30's last unpinned decision -- `#block_self_is_module`'s explicit-receiver term, which two sweeps missed and a third round pinned."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "node.receiver.nil? ? nil : false"
+  to: "nil"
+  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
+  example: "reads an instance_eval block on an explicit receiver as an instance"
+
