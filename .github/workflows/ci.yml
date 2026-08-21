@@ -318,6 +318,36 @@ jobs:
             exit 1
           fi
 
+  # `042`'s D7. An example whose fixture cannot distinguish the two
+  # candidate behaviours passes under both, and reading cannot find that:
+  # 0.2.11's third round found one in the spec written to close `024.110`,
+  # whose own comment promised it would fail under the change it guarded
+  # against and which passed under it.
+  #
+  # This applies each mutation the manifest names and requires the example
+  # that names it to fail. It is a job of its own rather than part of the
+  # suite because it writes to `core/lib` and restores it -- an
+  # interrupted rspec would leave a working tree wrong, and a developer's
+  # tree is not a thing to risk for a check. The manifest's own shape is
+  # checked in the suite (`spec/meta/pinned_mutations_spec.rb`), so a
+  # renamed example fails locally rather than here.
+  #
+  # It gates. A mutation nothing catches is the defect `024.109` is about.
+  pinned-mutations:
+    name: Pinned mutations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+          working-directory: core
+
+      - name: Every named mutation is caught by the example that names it
+        run: ruby scripts/check_pinned_mutations.rb
+
   # The site check compares the version the index pages advertise
   # against vscode/package.json, and it must run when *either* side of
   # that comparison moves. Until 0.2.3 the deploy workflow that also

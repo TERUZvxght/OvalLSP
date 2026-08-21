@@ -406,14 +406,17 @@ module Ovallsp
       # methods. Fourteen of the fifteen false reports a `reproduce`
       # round measured this release adding.
       #
-      # The bare spelling is accepted only when a `Concern` really is the
-      # last segment: a workspace `Foo::Concern` of its own would be
-      # accepted too, which is the same trade every other name-shaped
-      # rule in this index makes and errs towards answering rather than
-      # towards inventing a name that raises.
+      # `#canonical_name` is what does the work, and it is enough on its
+      # own: it resolves the bare `Concern` written inside
+      # `module ActiveSupport` to `::ActiveSupport::Concern`, so the
+      # suffix test matches. 0.2.11 added `|| name.split("::").last ==
+      # "Concern"` beside it and documented the loosening as a deliberate
+      # trade -- it was dead code, and the trade was never being made.
+      # Found by `scripts/check_pinned_mutations.rb` on its first run:
+      # removing the clause left the example that supposedly needed it
+      # passing.
       def concern_marker_name?(target)
-        name = Index::SymbolId.bare_name(canonical_name(target).to_s)
-        name.end_with?("ActiveSupport::Concern") || name.split("::").last == "Concern"
+        Index::SymbolId.bare_name(canonical_name(target).to_s).end_with?("ActiveSupport::Concern")
       end
 
       # What the *receiver* is, which is what its singleton chain ends in:

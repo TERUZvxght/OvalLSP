@@ -125,6 +125,27 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
 
   # The control that keeps this from being "stop reporting class-level
   # calls": a class whose body ran nothing unreadable still answers.
+  # **A link's side, asked of the link rather than recomputed.** `extend M`
+  # and the `Class`/`Module`/`Object`/`Kernel`/`BasicObject` tail both put
+  # *instance* methods on a class-level chain, and both readers of that
+  # rule had it written out by hand -- three review rounds in a row found
+  # one of them wrong. Ruby:
+  #
+  #   $ ruby -e '
+  #   class Object; def method_missing(n, *a) = :mm; end
+  #   class Widget; end
+  #   p Widget.nope
+  #   '
+  #   # => :mm
+  #   # ruby 3.4.10
+  it "says nothing about a class-level call when a workspace Object declares method_missing" do
+    index("class Object\n  def method_missing(name, *args); end\nend\n", uri: "file:///oe.rb")
+    index("class Widget\nend\n", uri: "file:///widget.rb")
+    document = index("Widget.nope\n", uri: "file:///caller.rb")
+
+    expect(unknown_methods(document)).to be_empty
+  end
+
   it "still reports a class-level typo on a class whose body it could read" do
     index("class Plain\n  def self.known; end\nend\n", uri: "file:///plain.rb")
     document = index("Plain.known\nPlain.nope_x\n", uri: "file:///use.rb")
