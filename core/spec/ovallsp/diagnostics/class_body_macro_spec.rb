@@ -121,7 +121,7 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   it "ends a class's chain in Class even when its ancestors end at a module" do
     index("module Mixinish\nend\nclass Base < Mixinish\nend\nclass Derived < Base\nend\n")
 
-    expect(hierarchy_index.ancestors("Derived", singleton: true).map(&:name).last(5))
+    expect(hierarchy_index.ancestors("Derived", singleton: true).map(&:name_or_nil).last(5))
       .to eq(["Class", "Module", "Object", "Kernel", "BasicObject"])
   end
 
@@ -461,9 +461,9 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   it "ends a class's singleton chain in Class and a module's in Module" do
     index("class Widget\nend\nmodule Helper\nend\n")
 
-    expect(hierarchy_index.ancestors("Widget", singleton: true).map(&:name))
+    expect(hierarchy_index.ancestors("Widget", singleton: true).map(&:name_or_nil))
       .to eq(["::Widget", "Class", "Module", "Object", "Kernel", "BasicObject"])
-    expect(hierarchy_index.ancestors("Helper", singleton: true).map(&:name))
+    expect(hierarchy_index.ancestors("Helper", singleton: true).map(&:name_or_nil))
       .to eq(["::Helper", "Module", "Object", "Kernel", "BasicObject"])
   end
 
@@ -474,7 +474,7 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   it "appends the tail once, after the whole superclass chain" do
     index("class Base\nend\nclass Widget < Base\nend\n")
 
-    expect(hierarchy_index.ancestors("Widget", singleton: true).map(&:name))
+    expect(hierarchy_index.ancestors("Widget", singleton: true).map(&:name_or_nil))
       .to eq(["::Widget", "::Base", "Class", "Module", "Object", "Kernel", "BasicObject"])
   end
 
@@ -485,7 +485,7 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   it "appends no tail to a name the workspace does not declare" do
     index("class Widget\nend\n")
 
-    expect(hierarchy_index.ancestors("NeverDeclared", singleton: true).map(&:name)).to eq(["NeverDeclared"])
+    expect(hierarchy_index.ancestors("NeverDeclared", singleton: true).map(&:name_or_nil)).to eq(["NeverDeclared"])
   end
 
   # An unresolvable parent leaves the method set unbounded, so claiming
@@ -495,6 +495,6 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   it "appends no tail when the superclass is an expression" do
     index("class Widget < Struct.new(:a)\nend\n")
 
-    expect(hierarchy_index.ancestors("Widget", singleton: true).map(&:name)).to eq(["::Widget", nil])
+    expect(hierarchy_index.ancestors("Widget", singleton: true).map(&:name_or_nil)).to eq(["::Widget", nil])
   end
 end

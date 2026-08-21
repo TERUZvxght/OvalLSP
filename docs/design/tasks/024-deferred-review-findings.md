@@ -223,7 +223,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.77`](#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | open | 0.3.0 | A call to a method that does not exist is missed through a relation |
 | [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | fixed | 0.2.6 | Completion did not get the fix hover and diagnostics did |
 | [`024.79`](#02479-model-first-completes-to-nothing) | fixed | 0.2.6 | `Model.first` completes to nothing |
-| [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | open | 0.2.12 | An unresolved hierarchy edge is expressible as a method owner |
+| [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | fixed | 0.2.12 | An unresolved hierarchy edge is expressible as a method owner |
 | [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | open | 0.2.12 | An ancestor reference carries no lexical context, so an ambiguous na… |
 | [`024.82`](#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | open | 0.3.0 | `Foo = Class.new(Bar)` is not a type the index knows |
 | [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.3.0 | The undefined-method check is loudest exactly where no Runtime Agent… |
@@ -4473,7 +4473,7 @@ inferred `Unknown` and completed to nothing.
 ## 024.80 An unresolved hierarchy edge is expressible as a method owner
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -4482,6 +4482,7 @@ user-visible-note: >
   in 0.2.5. What is open is the representation that made it possible,
   and there is no second live instance known today.
 target: 0.2.12
+released-in: 0.2.12
 ```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb` (`AncestorEntry`),
@@ -4522,6 +4523,24 @@ The second form is worth more than this entry alone: it is also what
 `024.76` needs — `closed_nominal?` cannot currently tell "no ancestor"
 from "an ancestor I could not name", and that is the same conflation one
 level up.
+**Fixed in 0.2.12, and the fix found three readers rather than the two
+the entry named.** The member is `identified_name` and the accessor is
+`#name`, which raises `Semantic::UnidentifiedAncestor` on an edge nobody
+resolved — so "the owner of an unresolved edge" is not a thing that can
+be spelled. `AncestorEntry.unidentified(origin:, location:)` is the only
+way to make one, and `#name_or_nil` is there for the readers that
+legitimately want a dedupe key or a log line, named so that reaching for
+it is a decision.
+
+The two guards the entry describes were `MethodResolver#build_candidate`
+and `#names_for_type`. Making the value refuse turned up three more the
+same run: `#rooted_instance_chain?`, which would have compared `nil`
+against `::BasicObject`; `Engine#declared_signature_for`, which asked RBS
+for a signature under the `nil` owner — the owner a *top-level* `def` is
+indexed under, so it took whatever the top level happened to declare;
+and one in the singleton tail. Each had been waiting for the bug to be
+found a third time.
+
 ## 024.81 An ancestor reference carries no lexical context, so an ambiguous name is picked rather than resolved
 
 ```yaml

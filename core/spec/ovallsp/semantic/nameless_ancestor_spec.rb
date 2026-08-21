@@ -37,7 +37,7 @@ RSpec.describe "Ovallsp::Semantic::MethodResolver and a parent it cannot name" d
   it "records the unidentifiable parent as a nameless entry" do
     _index, hierarchy = build(sources)
 
-    expect(hierarchy.ancestors("Unknowable", singleton: false).map(&:name)).to include(nil)
+    expect(hierarchy.ancestors("Unknowable", singleton: false).map(&:name_or_nil)).to include(nil)
   end
 
   it "does not offer the workspace's top-level methods as members of that class" do

@@ -25,7 +25,55 @@ module Ovallsp
     # - location: the LSP range of the statement that introduced this
     #   ancestor (the `include Foo` call, the `< Foo` superclass clause),
     #   or nil for the implicit default root.
-    AncestorEntry = Data.define(:name, :kind, :origin, :location) do
+    # Raised by `AncestorEntry#name` on an edge nobody resolved. Declared
+    # here rather than inside the `Data.define` block because a constant
+    # assigned in that block lands in the *lexical* scope, not on the
+    # class -- so `AncestorEntry::Unidentified` would not exist, and the
+    # rescue that named it would never match.
+    UnidentifiedAncestor = Class.new(StandardError)
+
+    AncestorEntry = Data.define(:identified_name, :kind, :origin, :location) do
+      #
+      # `024.80`. An ancestor this index could not identify used to be an
+      # entry whose `name` is `nil` -- and `nil` is also the owner a
+      # *top-level* `def` is indexed under, so asking one for its members
+      # answered with every top-level method in the workspace, offered as
+      # completions on a class that has none of them. Two readers guarded
+      # it by hand, each guard added after the same bug was found in that
+      # reader.
+      #
+      # So the member is `identified_name` and the accessor is `#name`:
+      # there is no way to *spell* "the owner of an edge nobody
+      # resolved". A reader that forgets `#identified?` raises here,
+      # where the suite sees it, rather than answering plausibly.
+      # Reads well at a call site, and keeps `identified_name` from being
+      # spelled out anywhere but here.
+      def self.identified(name:, kind:, origin:, location:)
+        new(identified_name: name, kind: kind, origin: origin, location: location)
+      end
+
+      # A parent this index could not resolve -- `class Foo < <expression>`,
+      # or an `include` of a name nothing declares. Kept in the chain
+      # rather than omitted: omitting it makes the class look parentless
+      # and therefore fully known, which is what made every Rails
+      # migration report its own DSL calls as undefined methods.
+      def self.unidentified(origin:, location:)
+        new(identified_name: nil, kind: nil, origin: origin, location: location)
+      end
+
+      def identified? = !identified_name.nil?
+
+      def name
+        raise UnidentifiedAncestor, "an ancestor reached by #{origin} could not be identified" unless identified?
+
+        identified_name
+      end
+
+      # For the readers that legitimately want "the name, or nothing" --
+      # a dedupe key, a log line. Named so that reaching for it is a
+      # decision rather than a habit.
+      def name_or_nil = identified_name
+
       # Which declaration kind a lookup should ask this ancestor for, and
       # the one place that knows the rule -- it was written out at two
       # call sites and both had it wrong for the `:class_object` tail.
@@ -66,9 +114,9 @@ module Ovallsp
     # mutex, mirroring WorkspaceIndex's own concurrency contract.
     class HierarchyIndex
       DEFAULT_OBJECT_CHAIN = [
-        AncestorEntry.new(name: "Object", kind: :class, origin: :default, location: nil),
-        AncestorEntry.new(name: "Kernel", kind: :module, origin: :default, location: nil),
-        AncestorEntry.new(name: "BasicObject", kind: :class, origin: :default, location: nil)
+        AncestorEntry.identified(name: "Object", kind: :class, origin: :default, location: nil),
+        AncestorEntry.identified(name: "Kernel", kind: :module, origin: :default, location: nil),
+        AncestorEntry.identified(name: "BasicObject", kind: :class, origin: :default, location: nil)
       ].freeze
       private_constant :DEFAULT_OBJECT_CHAIN
 
@@ -85,14 +133,14 @@ module Ovallsp
       # module is a `Module` but not a `Class`, which is why `superclass`
       # answers on one and not the other.
       DEFAULT_CLASS_SINGLETON_CHAIN = [
-        AncestorEntry.new(name: "Class", kind: :class, origin: :class_object, location: nil),
-        AncestorEntry.new(name: "Module", kind: :class, origin: :class_object, location: nil),
+        AncestorEntry.identified(name: "Class", kind: :class, origin: :class_object, location: nil),
+        AncestorEntry.identified(name: "Module", kind: :class, origin: :class_object, location: nil),
         *DEFAULT_OBJECT_CHAIN.map { |entry| entry.with(origin: :class_object) }
       ].freeze
       private_constant :DEFAULT_CLASS_SINGLETON_CHAIN
 
       DEFAULT_MODULE_SINGLETON_CHAIN = [
-        AncestorEntry.new(name: "Module", kind: :class, origin: :class_object, location: nil),
+        AncestorEntry.identified(name: "Module", kind: :class, origin: :class_object, location: nil),
         *DEFAULT_OBJECT_CHAIN.map { |entry| entry.with(origin: :class_object) }
       ].freeze
       private_constant :DEFAULT_MODULE_SINGLETON_CHAIN
@@ -204,7 +252,7 @@ module Ovallsp
       def dedupe_named(entries, singleton)
         seen = Set.new
         entries.select do |entry|
-          entry.name.nil? || seen.add?([entry.name, entry.declaration_kind(singleton: singleton)])
+          !entry.identified? || seen.add?([entry.name, entry.declaration_kind(singleton: singleton)])
         end
       end
 
@@ -266,7 +314,7 @@ module Ovallsp
         entries = []
         @prepends_by_owner.fetch(canonical, []).reverse_each { |fact| entries.concat(ancestor_entries_for(fact, visited)) }
 
-        entries << AncestorEntry.new(name: canonical, kind: kind_of(canonical), origin: origin_for_self, location: nil)
+        entries << AncestorEntry.identified(name: canonical, kind: kind_of(canonical), origin: origin_for_self, location: nil)
 
         @includes_by_owner.fetch(canonical, []).reverse_each { |fact| entries.concat(ancestor_entries_for(fact, visited)) }
 
@@ -278,7 +326,7 @@ module Ovallsp
           # omitting it makes the class look parentless and therefore
           # fully known -- which is what made every Rails migration report
           # its own DSL calls as undefined methods.
-          entries << AncestorEntry.new(name: nil, kind: nil, origin: :superclass, location: nil)
+          entries << AncestorEntry.unidentified(origin: :superclass, location: nil)
         elsif superclass_fact && ROOT_SUPERCLASS_NAMES.include?(superclass_fact.target)
           entries.concat(DEFAULT_OBJECT_CHAIN)
         elsif superclass_fact
@@ -293,7 +341,7 @@ module Ovallsp
       end
 
       def singleton_ancestors_locked(canonical, visited, origin_for_self)
-        entries = [AncestorEntry.new(name: canonical, kind: kind_of(canonical), origin: origin_for_self, location: nil)]
+        entries = [AncestorEntry.identified(name: canonical, kind: kind_of(canonical), origin: origin_for_self, location: nil)]
 
         @extends_by_owner.fetch(canonical, []).reverse_each { |fact| entries.concat(ancestor_entries_for(fact, visited)) }
         entries.concat(concern_class_method_entries(canonical, visited))
@@ -303,7 +351,7 @@ module Ovallsp
           # Unbounded parent: no tail, for the same reason the instance
           # side omits one. Appending Class/Module here would say the
           # chain is fully accounted for when its middle is not.
-          entries << AncestorEntry.new(name: nil, kind: nil, origin: :superclass, location: nil)
+          entries << AncestorEntry.unidentified(origin: :superclass, location: nil)
         elsif superclass_fact && !ROOT_SUPERCLASS_NAMES.include?(superclass_fact.target)
           # The tail is not appended here at all: `#ancestors` adds it
           # once, from the receiver's own kind.
@@ -432,7 +480,7 @@ module Ovallsp
       # and a chain with an unbounded link is not one we can say ends
       # anywhere at all.
       def singleton_tail_for(type_name, entries)
-        return [] if entries.any? { |entry| entry.name.nil? }
+        return [] if entries.any? { |entry| !entry.identified? }
 
         canonical = canonical_name(type_name)
         case kind_of(canonical)
@@ -485,7 +533,7 @@ module Ovallsp
         # The durable fix is 024.81: carry the lexical context, so this is
         # a lookup again rather than a refusal.
         if @workspace_index.ambiguous_type_name?(fact.target)
-          return [AncestorEntry.new(name: nil, kind: nil, origin: fact.relation, location: fact.location)]
+          return [AncestorEntry.unidentified(origin: fact.relation, location: fact.location)]
         end
 
         compute_ancestors_locked(fact.target, singleton: false, visited: visited, origin_for_self: fact.relation)

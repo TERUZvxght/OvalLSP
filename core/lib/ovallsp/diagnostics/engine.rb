@@ -1057,6 +1057,15 @@ module Ovallsp
         # the shape it replaced (`any?`) short-circuited, and turning it
         # into a value lookup lost that.
         context.hierarchy_index.ancestors(receiver_type.name, singleton: candidate.singleton).each do |entry|
+          # An edge nobody resolved has no owner to look a signature up
+          # under, and `nil` is the owner a *top-level* `def` is indexed
+          # under -- so this used to ask RBS about the top level and take
+          # whatever it found. One of three readers `024.80` found the
+          # moment an unidentified entry stopped being able to answer
+          # `#name` at all; two hand-written guards existed elsewhere and
+          # none was here.
+          next unless entry.identified?
+
           kind = entry.declaration_kind(singleton: candidate.singleton)
           # `owner:` is not qualified here: `SymbolId#initialize` does it
           # (0.1.12). This call site needed it before that existed, and

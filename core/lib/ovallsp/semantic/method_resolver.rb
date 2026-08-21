@@ -72,7 +72,7 @@ module Ovallsp
         return [] unless nominal
 
         @hierarchy_index.ancestors(nominal.name, singleton: singleton).filter_map do |entry|
-          next if entry.name.nil?
+          next unless entry.identified?
 
           [entry.name, entry.declaration_kind(singleton: singleton) == :singleton_method]
         end
@@ -180,8 +180,8 @@ module Ovallsp
         # A singleton lookup depends on the instance chain too: `include`
         # puts a module there, and `included`/`extended` hooks are how a
         # module adds class methods.
-        return :ancestor_not_identified if singleton && instance_entries.any? { |e| e.name.nil? }
-        return :ancestor_not_identified if entries.any? { |e| e.name.nil? }
+        return :ancestor_not_identified if singleton && instance_entries.any? { |e| !e.identified? }
+        return :ancestor_not_identified if entries.any? { |e| !e.identified? }
 
         return :responds_at_call_time if entries.any? { |e| declares_method_missing?(e, singleton) }
         return :surface_open if entries.any? { |e| open_surface?(e, singleton) }
@@ -242,7 +242,13 @@ module Ovallsp
       # `024.106`'s second half is open again and records what a real
       # completeness proof for a module would have to be.
       def rooted_instance_chain?(type, instance_entries, _singleton)
-        instance_entries.any? { |e| Index::SymbolId.qualify_owner(e.name) == "::BasicObject" }
+        # `#identified?` first: an edge nobody resolved is certainly not
+        # `::BasicObject`, and asking it for a name now raises rather
+        # than answering `nil`. This reader was the third one holding
+        # that assumption, and the one no guard had been added to --
+        # which is the whole of `024.80`: two guards existed because the
+        # bug had been found twice, and the third site was waiting.
+        instance_entries.any? { |e| e.identified? && Index::SymbolId.qualify_owner(e.name) == "::BasicObject" }
       end
 
       # **The side matters.** `def self.method_missing` answers class-level
@@ -384,7 +390,7 @@ module Ovallsp
         # workspace. Ruby's own `un.rb` defines a top-level `mv`, and
         # `rubygems/package_task.rb`'s `mv gem_file, ".."` was reported as
         # passing two arguments to a method that takes none.
-        return nil if entry.name.nil?
+        return nil unless entry.identified?
 
         kind = symbol_kind_for(entry, singleton)
         resolved_name = resolve_alias(entry.name, method_name, kind)
@@ -456,7 +462,7 @@ module Ovallsp
           # other had not. The durable answer is that an unresolved
           # hierarchy edge should not be expressible as an owner at all
           # (`024.80`); this is the guard until it is not.
-          next if entry.name.nil?
+          next unless entry.identified?
 
           kind = symbol_kind_for(entry, singleton)
           method_names_for_owner(entry.name, kind).each do |name|

@@ -56,7 +56,7 @@ RSpec.describe "Ovallsp::Semantic::HierarchyIndex and an ambiguous ancestor name
   it "does not put a stranger's module in the chain" do
     _index, hierarchy = build("file:///aaa.rb" => stranger, "file:///rackish.rb" => own)
 
-    names = hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name)
+    names = hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name_or_nil)
 
     expect(names).not_to include("::Aaa::Helpers")
   end
@@ -67,7 +67,7 @@ RSpec.describe "Ovallsp::Semantic::HierarchyIndex and an ambiguous ancestor name
   it "reports the chain as incomplete when an ancestor name is ambiguous" do
     _index, hierarchy = build("file:///aaa.rb" => stranger, "file:///rackish.rb" => own)
 
-    expect(hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name)).to include(nil)
+    expect(hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name_or_nil)).to include(nil)
   end
 
   # The control: with no competing name, the correct module still
@@ -76,7 +76,7 @@ RSpec.describe "Ovallsp::Semantic::HierarchyIndex and an ambiguous ancestor name
   it "still resolves an unambiguous include" do
     _index, hierarchy = build("file:///rackish.rb" => own)
 
-    names = hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name)
+    names = hierarchy.ancestors("Rackish::Request", singleton: false).map(&:name_or_nil)
 
     expect(names).to include("::Rackish::Request::Helpers")
   end
