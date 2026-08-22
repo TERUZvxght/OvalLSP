@@ -101,7 +101,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**122 entries below** <!-- measured: register-entries = 122 -->,
+**123 entries below** <!-- measured: register-entries = 123 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -184,7 +184,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.36`](#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
 | [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | — | The argument-type check reports nothing on measured real Ruby |
 | [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | — | `scope_at` copies the whole environment once per descent step |
-| [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.2.12 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
+| [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.3.0 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | open | — | Every `argument-count` report on the measurement corpus is false |
 | [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | open | — | Typing a `.` reports a method on the *next* line |
 | [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | — | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
@@ -208,7 +208,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.60`](#02460-four-test-fixtures-raced-macos-first-execution-scan) | fixed | 0.2.3 | Four test fixtures raced macOS' first-execution scan |
 | [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.3.0 | Two per-file stores are separated by nothing but their payload |
 | [`024.63`](#02463-the-dispatch-layer-owns-view-inference-and-it-has-broken-the-query-layer-s-one-guarantee-twice) | open | 0.3.0 | The dispatch layer owns view inference, and it has broken the query … |
-| [`024.64`](#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | open | 0.2.12 | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
+| [`024.64`](#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | open | 0.3.0 | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
 | [`024.65`](#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
 | [`024.66`](#02466-a-marketing-card-kept-carrying-claims-about-what-an-error-s-text-says) | fixed | 0.2.3 | A marketing card kept carrying claims about what an error's text says |
 | [`024.67`](#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | fixed | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
@@ -249,12 +249,12 @@ nobody can search is the recording habit without the benefit.
 | [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | fixed | 0.2.10 | A bare class name inside a namespace answers with an arbitrary same-… |
 | [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | fixed | 0.2.10 | `class_methods do` in a concern is attributed to the instance side |
 | [`024.105`](#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | fixed | 0.2.9 | Visibility is not recorded for singleton methods at all |
-| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.13 | `module_function` and `extend self` produce nothing |
+| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.3.0 | `module_function` and `extend self` produce nothing |
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | fixed | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
 | [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | fixed | 0.2.13 | The macro is reported, and what it might define is not |
-| [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.13 | A visibility section written inside a block does not reach the body … |
+| [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.3.0 | A visibility section written inside a block does not reach the body … |
 | [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | fixed | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | fixed | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
 | [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | fixed | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
@@ -267,6 +267,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.0 | Nothing measures how much of this tree no test would notice changing |
 | [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | fixed | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
 | [`024.123`](#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
+| [`024.124`](#024124-four-entries-named-a-release-that-had-already-shipped-for-the-third-time) | fixed | 0.3.0 | Four entries named a release that had already shipped, for the third… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -2211,7 +2212,7 @@ source assertion -- since reversing it changes no answer.
 status: open
 kind: defect
 user-visible: no
-target: 0.2.12
+target: 0.3.0
 user-visible-note: >
   No wrong answer has been produced. A reviewer ran 2,000 concurrent
   `infer_at` pairs and 400 `scope_at`/`infer_at` pairs in both size
@@ -3660,7 +3661,7 @@ architecture as described has one path, and the code has four.
 status: open
 kind: defect
 user-visible: no
-target: 0.2.12
+target: 0.3.0
 user-visible-note: >
   The tree is correct today; round 37 confirmed the behaviour, not a
   regression. What is recorded is that two countermeasures in a row
@@ -5849,7 +5850,7 @@ Neighbour of `024.99`; both are the visibility half of `037`'s C2.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.13
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/semantic/method_resolver.rb`
@@ -6105,7 +6106,7 @@ line.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.13
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (`#visit_block_node`)
@@ -6857,6 +6858,45 @@ visibility; and `private :aka` writes it — including inside
 `class << self`, which the instance-side guard used to return before
 reaching, and which is safe for an alias because an `AliasFact` carries
 `singleton` itself.
+
+## 024.124 Four entries named a release that had already shipped, for the third time
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Register hygiene. Nothing an editor user meets; what it costs is that
+  "what is left for this release" stops being answerable from the file
+  that is supposed to answer it.
+target: 0.3.0
+released-in: 0.3.0
+```
+
+**Area:** `docs/design/tasks/024-deferred-review-findings.md` (the
+`target:` values), `core/spec/meta/deferred_findings_spec.rb`
+
+Found by the maintainer asking what 0.2.x had done and what had carried
+over. `024.39` and `024.64` still named 0.2.12; `024.106` and `024.111`
+still named 0.2.13. Both had shipped.
+
+**This is the third time**, which is what makes it an entry rather than a
+correction. 0.2.9's preparation found three entries targeting a release
+that had not been built; 0.2.12's found four naming releases that had
+shipped; this is four more. Each time the fix was to retarget them by
+hand, and each time the next release re-created the situation.
+
+**The mechanical countermeasure, and why it is not simply "fail on a
+shipped target".** An entry legitimately names a shipped release for the
+whole time that release is being prepared — the value only becomes wrong
+once the tag exists. So the check compares `target:` against
+`docs/RELEASE_ARTIFACTS.md`, which lists what has actually been
+published, and fails on an **open** entry whose target is in that table.
+A fixed entry keeps its target as history, which is what
+`released-in:` is beside it for.
+
+`deferred_findings_spec.rb` enforces it, so the next release cannot
+inherit the situation the way three have.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

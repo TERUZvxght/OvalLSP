@@ -92,6 +92,19 @@ module DeferredFindings
                           .reject { |number| documents.all? { |doc| documents?(doc, number) } }
   end
 
+  # Every version `docs/RELEASE_ARTIFACTS.md` records as published. An
+  # *open* entry naming one of these is claiming a release that has
+  # already gone out (`024.124`).
+  def published_versions(markdown) = markdown.scan(/^\| (\d+\.\d+\.\d+) \| `/).flatten
+
+  def open_entries_targeting_a_shipped_release(markdown, artifacts)
+    published = published_versions(artifacts)
+    open_defects(markdown).filter_map do |number, fields|
+      target = fields["target"]
+      "#{number} (#{target})" if target && published.include?(target)
+    end
+  end
+
   def resolved(markdown)
     entries(markdown).select { |_, fields| RESOLVED.include?(fields["status"]) }
   end
@@ -180,6 +193,7 @@ RSpec.describe "deferred findings metadata" do
   def read_utf8(name) = File.read(File.expand_path("../../../#{name}", __dir__), encoding: "UTF-8")
 
   let(:deferred) { read_utf8("docs/design/tasks/024-deferred-review-findings.md") }
+  let(:artifacts) { read_utf8("docs/RELEASE_ARTIFACTS.md") }
   let(:english) { read_utf8("docs/KNOWN_LIMITATIONS.md") }
   let(:japanese) { read_utf8("docs/KNOWN_LIMITATIONS.ja.md") }
 
@@ -395,5 +409,38 @@ RSpec.describe "deferred findings metadata" do
                        "#{stale.join(", ")}. Remove the paragraph, in both languages -- a limitation " \
                        "naming a defect the release does not have is worse than none."
     end
+  end
+  # `024.124`. Three releases in a row inherited entries naming a version
+  # that had already shipped -- 0.2.9's preparation found three, 0.2.12's
+  # found four, and 0.2.13's found four more, each time fixed by hand.
+  #
+  # Not "fail on any shipped target": an entry legitimately names a
+  # release for the whole time that release is being prepared, and the
+  # value only becomes wrong once the tag exists. So the comparison is
+  # against `RELEASE_ARTIFACTS.md`, which lists what was actually
+  # published, and only *open* entries are checked -- a fixed one keeps
+  # its target as history, which is what `released-in:` sits beside it
+  # for.
+  # The distinguishing pair: it must fire, and it must not fire on an
+  # entry whose target is a release still being prepared.
+  it "notices an open entry planted on a shipped release" do
+    planted = deferred.sub("target: 0.3.0", "target: 0.2.13")
+
+    expect(DeferredFindings.open_entries_targeting_a_shipped_release(planted, artifacts)).not_to be_empty
+  end
+
+  it "leaves an open entry targeting a release that has not shipped alone" do
+    planted = deferred.sub("target: 0.3.0", "target: 9.9.9")
+
+    expect(DeferredFindings.open_entries_targeting_a_shipped_release(planted, artifacts))
+      .not_to include(a_string_including("9.9.9"))
+  end
+
+  it "has no open entry naming a release that has already shipped" do
+    stale = DeferredFindings.open_entries_targeting_a_shipped_release(deferred, artifacts)
+
+    expect(stale).to be_empty,
+                     "open findings targeting a released version: #{stale.join(", ")}. " \
+                     "Retarget them at a release that has not shipped, or mark them fixed."
   end
 end
