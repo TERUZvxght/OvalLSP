@@ -56,6 +56,13 @@ The block exists because the previous attempt at this check parsed the
 file's *prose* and had to be rolled back — 024.25 records why, and this
 format is the direction that entry recommended.
 
+**One entry states one defect, with one Area and one reproduction.**
+`024.90` held nine, under one `user-visible: yes` and one anchor — and
+that anchor documented seven of them, so two live defects were documented
+nowhere while the guard read green. A number cited once covers everything
+filed under it, which is why nine cannot share one. Not machine-checked:
+a rule counting bullets would be guessing at intent.
+
 A resolved entry is deleted once nothing in the tree cites it. It is
 **not** deleted while source or spec comments still name it by number:
 those comments say "this is the way it is because of 024.N", and the
@@ -120,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**125 entries below** <!-- measured: register-entries = 125 -->,
+**134 entries below** <!-- measured: register-entries = 134 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -252,7 +259,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.3.0 | A relation stops being a relation after one hop |
 | [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.3.0 | Completion unions a union's members; the diagnostic intersects them |
 | [`024.89`](#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | open | 0.3.0 | Signature help strips the parameter kinds and never advances |
-| [`024.90`](#02490-smaller-answers-a-review-round-measured) | open | 0.3.0 | Smaller answers a review round measured |
+| [`024.90`](#02490-smaller-answers-a-review-round-measured) | fixed | 0.2.14 | Smaller answers a review round measured |
 | [`024.91`](#02491-the-undefined-method-check-reports-on-ordinary-ruby-it-cannot-read) | open | 0.3.0 | The undefined-method check reports on ordinary Ruby it cannot read |
 | [`024.92`](#02492-a-plugin-chooses-how-much-memory-the-parent-allocates) | fixed | 0.2.6 | A plugin chooses how much memory the parent allocates |
 | [`024.93`](#02493-process-kill-sig-0-signals-the-caller-s-own-process-group) | fixed | 0.2.6 | `Process.kill(sig, 0)` signals the caller's own process group |
@@ -289,6 +296,15 @@ nobody can search is the recording habit without the benefit.
 | [`024.124`](#024124-four-entries-named-a-release-that-had-already-shipped-for-the-third-time) | fixed | 0.3.0 | Four entries named a release that had already shipped, for the third… |
 | [`024.125`](#024125-the-packaged-core-is-never-driven-end-to-end-and-two-gates-say-it-is) | open | 0.3.0 | The packaged Core is never driven end to end, and two gates say it is |
 | [`024.126`](#024126-a-text-scanner-matches-its-own-prose-exempts-itself-and-stops-checking-a-file-that-can-hold-the-real-thing) | fixed | 0.2.14 | A text scanner matches its own prose, exempts itself, and stops chec… |
+| [`024.127`](#024127-hover-answers-an-empty-string-where-lsp-expects-null) | open | 0.3.0 | Hover answers an empty string where LSP expects null |
+| [`024.128`](#024128-integer-arithmetic-answers-a-four-way-union) | open | 0.3.0 | Integer arithmetic answers a four-way union |
+| [`024.129`](#024129-no-undefined-method-report-on-a-core-library-receiver) | open | 0.3.0 | No undefined-method report on a core-library receiver |
+| [`024.130`](#024130-a-hover-label-drops-the-namespace-when-the-name-was-written-bare) | open | 0.3.0 | A hover label drops the namespace when the name was written bare |
+| [`024.131`](#024131-b-nil-b-x-hovers-nothing) | open | 0.3.0 | `b = nil; b ||= "x"` hovers nothing |
+| [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 0.3.0 | A scope defined in a concern's `included do` has no type |
+| [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | open | 0.3.0 | A positional argument to a keyword-only method reads as nonsense |
+| [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | open | 0.3.0 | `wait_until_ready` never returns for a non-Rails workspace |
+| [`024.135`](#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | open | 0.3.0 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -5130,47 +5146,45 @@ real server by a review round of 0.2.6.
 ## 024.90 Smaller answers a review round measured
 
 ```yaml
-status: open
+status: fixed
 kind: defect
-user-visible: yes
-target: 0.3.0
+user-visible: no
+user-visible-note: >
+  Split rather than fixed. The nine defects it held are now nine entries,
+  each with its own Area and its own user-visible half; this number
+  survives only so the citations to it resolve.
+target: 0.2.14
+released-in: 0.2.14
 ```
 
-**Area:** various; each line names its own
+**Area:** superseded — see `024.127` through `024.135`
 
-Kept as one entry because each is small and none has been separated out
-by anything but its size. All measured through the real server by a
-review round of 0.2.6.
+**Split in 0.2.14.** This held **nine unrelated defects under one
+number**, with one `user-visible: yes` and one `KNOWN_LIMITATIONS`
+anchor. That anchor documents **seven** of them — so two live defects,
+`core/spec/e2e/lsp_client.rb#wait_until_ready`'s hang and
+`observation/runner.rb`'s `Marshal.load`, were documented **nowhere**
+while the guard read green.
 
-- **Hover answers an empty string rather than `null`** for a position it
-  knows nothing about, including inside a comment. LSP expects `null`.
-- **Integer arithmetic answers a four-way union.** `price * qty` hovers
-  `Complex | Float | Integer | Rational`; RBS overloads are collected
-  without narrowing on the argument type. Nothing false is asserted — the
-  union contains the truth — but it is not an answer a reader can use,
-  and completion after it offers 209 members drawn from all four.
-- **No undefined-method report on a core-library receiver.**
-  `"hello".no_such_method`, `[1,2,3].no_such_array_method`, `42.upcase`:
-  nothing, in either mode, while completion at the same position knows
-  the receiver exactly. `024.13` is why, and the trade is deliberate; it
-  is recorded here because section 0.1 names this check as half of what
-  1.0.0 is and Pylance flags the same typo.
-- **A hover label drops the namespace when the name was written bare.**
-  In `Billing::Invoice`, `Order.new` hovers `Order` while
-  `Shipping::Order.new` hovers `Shipping::Order`, so with two `Order`s
-  the label does not say which was meant.
-- **`b = nil; b ||= "x"`** hovers `""`.
-- **A scope defined in a concern's `included do`** has no type.
-- **`kwargs("positional")` against `def kwargs(name:, size: 1, **rest)`**
-  reports "takes 0 arguments, but 1 given", which reads as nonsense next
-  to a method that plainly takes several.
-- **`core/spec/e2e/lsp_client.rb#wait_until_ready` never returns for a
-  non-Rails workspace**: it accepts only `ready`/`ready-rails`, and a
-  plain Ruby project settles on `ready-static`. Any future e2e example
-  pointed at a non-Rails fixture hangs to its timeout instead of failing.
-- **`core/lib/ovallsp/observation/runner.rb` still uses `Marshal.load`**
-  on a subprocess's output. Adjacent to `024.73` and not covered by it;
-  the same reasoning applies, and the same fix shape would.
+That is the failure mode of a grab-bag entry: the guard checks that the
+*number* is cited, and a number cited once covers everything filed under
+it. Nine numbers cannot hide behind one anchor.
+
+| now | was |
+|---|---|
+| `024.127` | hover answers `""` where LSP expects `null` |
+| `024.128` | integer arithmetic answers a four-way union |
+| `024.129` | no undefined-method report on a core-library receiver |
+| `024.130` | a hover label drops the namespace |
+| `024.131` | `b = nil; b ||= "x"` hovers nothing |
+| `024.132` | a scope in a concern's `included do` has no type |
+| `024.133` | a positional argument to a keyword-only method |
+| `024.134` | `wait_until_ready` hangs on a non-Rails workspace |
+| `024.135` | `Marshal.load` in `Observation::Runner` |
+
+The legend gained the rule this cost: **one entry states one defect, with
+one Area and one reproduction.** Not machine-checked — a rule counting
+bullets would guess at intent — and `046` records why.
 
 ## 024.91 The undefined-method check reports on ordinary Ruby it cannot read
 
@@ -7015,6 +7029,186 @@ exemptions would be guessing at intent, and this project has rolled back
 one countermeasure aimed at the wrong level (`024.47`). Six scanners is a
 set a reviewer can hold; what makes it durable is that each now says at
 its own site why it is exempt and where the compensating example is.
+
+## 024.127 Hover answers an empty string where LSP expects null
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#hover_result`)
+
+For a position it knows nothing about — inside a comment, on
+whitespace — hover answers `""` rather than `null`. The LSP specification
+says `null`, and a client is entitled to treat an empty-string hover as a
+hover that exists.
+
+Measured through the real server by a 0.2.6 review round.
+
+**Was one of nine bullets under `024.90` until 0.2.14.**
+
+## 024.128 Integer arithmetic answers a four-way union
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/signatures/environment.rb`, `core/lib/ovallsp/local_inferencer.rb`
+
+`price * qty` hovers `Complex | Float | Integer | Rational`: the RBS
+overloads are collected without narrowing on the argument type.
+
+**Nothing false is asserted** — the union contains the truth — but it is
+not an answer a reader can use, and completion after it offers 209
+members drawn from all four.
+
+**Was one of nine bullets under `024.90` until 0.2.14.**
+
+## 024.129 No undefined-method report on a core-library receiver
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+
+`"hello".no_such_method`, `[1,2,3].no_such_array_method`, `42.upcase`:
+nothing, in either mode, while completion at the same position knows the
+receiver exactly.
+
+`024.13` is why, and the trade is deliberate. It is recorded as its own
+entry because section 0.1 names this check as half of what 1.0.0 is, and
+because another editor flags the same typo.
+
+**Was one of nine bullets under `024.90` until 0.2.14.**
+
+## 024.130 A hover label drops the namespace when the name was written bare
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#hover_result`), `core/lib/ovallsp/local_inferencer.rb`
+
+In `Billing::Invoice`, `Order.new` hovers `Order` while
+`Shipping::Order.new` hovers `Shipping::Order` — so with two `Order`s in
+the workspace the label does not say which was meant.
+
+Adjacent to `024.81`, which is about *resolving* such a name; this is
+about *labelling* one that resolved.
+
+**Was one of nine bullets under `024.90` until 0.2.14.**
+
+## 024.131 `b = nil; b ||= "x"` hovers nothing
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb`
+
+The `||=` write is not joined with the preceding `nil` assignment, so
+the local has no type at the position after it.
+
+**Was one of nine bullets under `024.90` until 0.2.14.**
+
+## 024.132 A scope defined in a concern's `included do` has no type
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb`, `core/lib/ovallsp/models/model_registry.rb`
+
+`included do scope :recent, -> { … } end` defines a scope on every
+including class, and the engine gives it no type — so the chain from it
+answers nothing.
+
+Adjacent to `024.87`, which is about a relation losing its type after one
+hop; this is about never having one.
+
+**Was one of nine bullets under `024.90` until 0.2.14.**
+
+## 024.133 A positional argument to a keyword-only method reads as nonsense
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`#argument_count_findings`)
+
+`kwargs("positional")` against `def kwargs(name:, size: 1, **rest)`
+reports *takes 0 arguments, but 1 given*, which reads as nonsense beside a
+method that plainly takes several. The count is arithmetically right —
+zero *positional* parameters — and the sentence does not say so.
+
+**Was one of nine bullets under `024.90` until 0.2.14.**
+
+## 024.134 `wait_until_ready` never returns for a non-Rails workspace
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  A spec helper, not shipped code. What it costs is that the next e2e example pointed at a non-Rails fixture hangs to its timeout instead of failing with a reason.
+target: 0.3.0
+```
+
+**Area:** `core/spec/e2e/lsp_client.rb` (`#wait_until_ready`)
+
+It accepts only `ready` and `ready-rails`. A plain Ruby project settles
+on `ready-static`, so the helper waits forever.
+
+No example hits it today because every e2e fixture is a Rails one — which
+is exactly why it will be found by whoever writes the first that is not.
+**Documented nowhere until 0.2.14**: it was one of nine bullets under
+`024.90`, whose single `KNOWN_LIMITATIONS` anchor documents the seven
+user-visible ones.
+
+**Was one of nine bullets under `024.90` until 0.2.14.**
+
+## 024.135 `Observation::Runner` deserialises a subprocess's output with `Marshal.load`
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  The subprocess is one this extension spawned, running code from the user's own workspace, so there is no boundary crossed that the workspace itself does not already cross. What it costs is that the shape `024.73` removed elsewhere survives here.
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/observation/runner.rb`
+
+`Marshal.load` on a subprocess's output. Adjacent to `024.73` and not
+covered by it; the same reasoning applies and the same fix shape would —
+`Plugins::Wire`'s JSON envelope.
+
+**Documented nowhere until 0.2.14**, for the same reason as `024.134`.
+
+**Was one of nine bullets under `024.90` until 0.2.14.**
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
