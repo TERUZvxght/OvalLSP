@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# Enumerated with `RepoFiles`, not `git ls-files` — `024.147`. A file you
+# have just written is untracked until `git add`, and `preflight` runs
+# before the commit, so a check that lists only tracked files is blind to
+# exactly the file being worked on.
+require_relative "../../../scripts/repo_files"
+
 require "spec_helper"
 
 # **`042`'s D8: the thing under test must be the thing that ships.**
@@ -42,7 +48,7 @@ RSpec.describe "the analysis stack" do
 
   it "is assembled in exactly one place" do
     repo_root = File.expand_path("../../..", __dir__)
-    tracked = Dir.chdir(repo_root) { `git ls-files "*.rb"`.lines.map(&:chomp) }
+    tracked = RepoFiles.list(repo_root, "*.rb")
     pattern = /\bOvallsp::(?:#{Regexp.union(ASSEMBLED)})\.new|^\s*(?:#{Regexp.union(ASSEMBLED)})\.new/
 
     offenders = tracked.reject { |path| permitted?(path) }.select do |path|

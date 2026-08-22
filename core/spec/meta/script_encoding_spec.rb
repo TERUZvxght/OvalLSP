@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# Enumerated with `RepoFiles`, not `git ls-files` — `024.147`. A file you
+# have just written is untracked until `git add`, and `preflight` runs
+# before the commit, so a check that lists only tracked files is blind to
+# exactly the file being worked on.
+require_relative "../../../scripts/repo_files"
+
 require "tmpdir"
 
 # Ruby hands back a String in `Encoding.default_external`, which is
@@ -32,9 +38,8 @@ RSpec.describe "scripts and the invoking shell's locale" do
   SCRIPT_ENCODING_EXEMPT = %w[scripts/utf8.rb].freeze
 
   def self.scripts
-    IO.popen(%w[git ls-files scripts/*.rb], chdir: SCRIPT_ENCODING_ROOT, &:read)
-      .split("\n")
-      .reject { |rel| SCRIPT_ENCODING_EXEMPT.include?(rel) }
+    RepoFiles.list(SCRIPT_ENCODING_ROOT, "scripts/*.rb")
+             .reject { |rel| SCRIPT_ENCODING_EXEMPT.include?(rel) }
   end
 
   it "every script sets the encoding before it reads anything" do

@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# Enumerated with `RepoFiles`, not `git ls-files` — `024.147`. A file you
+# have just written is untracked until `git add`, and `preflight` runs
+# before the commit, so a check that lists only tracked files is blind to
+# exactly the file being worked on.
+require_relative "../../../scripts/repo_files"
+
 # `046`'s C6. `docs/RELEASE_CHECKLIST.md`'s gate table has an evidence
 # column naming what enforces each item. Until 0.2.14 seven rows named
 # `make-final-review-bundle.sh` -- 919 lines that nothing invoked: not
@@ -74,7 +80,7 @@ RSpec.describe "RELEASE_CHECKLIST's evidence column" do
   # covers every file here.
   def haystack
     @haystack ||= begin
-      specs = IO.popen(%w[git ls-files core/spec scripts], chdir: RELEASE_GATE_ROOT, &:read).split("\n")
+      specs = RepoFiles.list(RELEASE_GATE_ROOT, "core/spec", "scripts")
       (RELEASE_GATE_CALLERS + specs)
         .map { |rel| self.class.read(rel) }
         .join("\n")
@@ -91,7 +97,7 @@ RSpec.describe "RELEASE_CHECKLIST's evidence column" do
       cell.scan(RELEASE_GATE_EXECUTABLE).flatten.compact.uniq.filter_map do |cited|
         base = File.basename(cited)
         exists = cited.start_with?("test:") ||
-                 !IO.popen(["git", "ls-files", "*#{base}"], chdir: RELEASE_GATE_ROOT, &:read).strip.empty?
+                 !RepoFiles.list(RELEASE_GATE_ROOT, "*#{base}").empty?
         next "gate #{number}: #{cited} is cited as evidence and does not exist" unless exists
         # A spec is invoked by the suite by existing; nothing names it,
         # and that is not the same as nothing running it.
@@ -118,11 +124,21 @@ RSpec.describe "RELEASE_CHECKLIST's evidence column" do
     expect(cited.uniq.length).to be >= 8
   end
 
+  # The planted name is assembled, never spelled. This file is scanned by
+  # the haystack it builds, so a name written whole is *in* the haystack
+  # and the example asserts the opposite of what it means.
+  #
+  # It shipped that way: the suite was green when run, because the file
+  # was still untracked and `git ls-files` could not see it, and red the
+  # moment it was committed. `024.126` (a scanner matching its own prose)
+  # and `024.147` (a check blind to a file until it is committed) meeting
+  # in one example.
   it "would catch a row citing a script nothing runs" do
-    planted = "| 99 | a gate | ✅ `scripts/nothing_runs_this.rb` |"
+    absent = "scripts/#{%w[nothing runs this].join("_")}.rb"
+    planted = "| 99 | a gate | ✅ `#{absent}` |"
     cited = planted.scan(RELEASE_GATE_EXECUTABLE).flatten.compact
 
-    expect(cited).to eq(["scripts/nothing_runs_this.rb"])
-    expect(haystack).not_to include("nothing_runs_this.rb")
+    expect(cited).to eq([absent])
+    expect(haystack).not_to include(absent)
   end
 end

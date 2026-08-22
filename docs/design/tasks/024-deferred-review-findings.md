@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**145 entries below** <!-- measured: register-entries = 145 -->,
+**146 entries below** <!-- measured: register-entries = 146 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -316,6 +316,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.144`](#024144-a-design-document-restating-a-manifest-is-two-copies-with-nothing-between-them) | fixed | 0.2.14 | A design document restating a manifest is two copies with nothing be… |
 | [`024.145`](#024145-re-deriving-the-example-count-was-three-hand-edits-per-commit) | fixed | 0.2.14 | Re-deriving the example count was three hand edits per commit |
 | [`024.146`](#024146-a-script-crashes-under-a-locale-less-shell-on-the-input-a-check-exists-to-report) | fixed | 0.2.14 | A script crashes under a locale-less shell, on the input a check exi… |
+| [`024.147`](#024147-every-check-was-blind-to-a-file-until-it-was-committed-and-the-commit-gate-runs-before-that) | fixed | 0.2.14 | Every check was blind to a file until it was committed, and the comm… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -7064,7 +7065,43 @@ what would say otherwise.
 synthetic register entry, and writing `024.999` in the spec made
 `measured_claims_spec`'s pointer guard report a dangling register
 citation — in the file that tests the register. Assembled from parts
-instead. Four instances, one repair shape, still no exemption.
+instead.
+
+### Seven times in one release, and what that finally bought
+
+Instances five, six and seven all arrived in the checks written for
+`024.147`:
+
+| # | where | what it matched |
+|---|---|---|
+| 5 | `release_gate_spec.rb` | its own planted script name, once the file was tracked |
+| 6 | `untracked_visibility_spec.rb` | its own needle, `ls-files`, in the line that searches for it |
+| 7 | `untracked_visibility_spec.rb` | its fixture paths, read by `check_doc_links` |
+
+**The rule was right every time and it kept not being applied.** Seven
+occurrences, seven identical repairs, no exemption ever needed — the
+level is correct. What failed was *remembering to apply it while writing
+an example*, and a rule you must remember at the moment of writing is
+the weakest kind.
+
+So it stops being something to remember. `core/spec/support/unspellable.rb`
+gives every spec `unspellable("docs", "brand_new.md")` and
+`unspellable_number(999)`, which return the string at runtime and leave
+nothing in the source for another check to match. It refuses a single
+argument, because one part is a literal.
+
+*This is the countermeasure the entry declined to build at three
+instances, on the grounds that a rule counting `__FILE__` exemptions
+would be guessing at intent. That reasoning still holds — this does not
+count exemptions or guess at anything. It removes the occasion.*
+
+**Instance eight was the helper's own doc comment**, which showed what
+`unspellable_number(999)` returns and thereby wrote a dangling register
+citation into the file whose subject is that exact failure. It is the
+residue the helper cannot reach: *a call can be assembled, an
+illustration has to be legible.* The comment now describes the result
+rather than spelling it, and says why — which is the only defence a
+prose example has.
 
 ## 024.127 Hover answers an empty string where LSP expects null
 
@@ -7783,6 +7820,73 @@ requires it to come *before* anything that reads or shells out.
 - The example that proves the fix works is paired with one that proves
   the same probe **fails without it**. Otherwise it demonstrates only
   that Ruby works.
+
+
+## 024.147 Every check was blind to a file until it was committed, and the commit gate runs before that
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Internal, and it is how 0.2.14 shipped a red suite under a commit
+  message stating 2,374 examples and 0 failures. Nothing a user runs is
+  affected; everything this project uses to decide whether a change is
+  sound was.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `scripts/repo_files.rb`,
+`core/spec/meta/untracked_visibility_spec.rb`
+
+Ten checks — two scripts and eight specs — enumerated their input with
+`git ls-files`, which lists **tracked** files only. A file you have just
+written is untracked until `git add`. And `scripts/preflight.rb`, the
+gate whose entire purpose is to run *before* a commit, runs in exactly
+that window.
+
+**So the suite could be green before a commit and red after it**, having
+examined different sets of files. Not hypothetically:
+
+- `release_gate_spec.rb`'s planted example asserted that a fabricated
+  script name is absent from the haystack it builds. The haystack is
+  built from `git ls-files core/spec scripts`. While the spec file was
+  untracked it was not in its own haystack and the example passed;
+  `git commit` put it there and the example began failing.
+- `preflight` ran, reported **2,374 examples, 0 failures**, and the
+  commit was made on that. The commit message says so. It was false the
+  instant it was written.
+- Five independent reviewers in round 1 opened with it.
+
+**Demonstrated as a class, not inferred from the one case.** An
+untracked Markdown file carrying a duplicated heading *and* a citation
+of a document that has never existed passes `duplicate_headings_spec`
+and `check_doc_links` both, each reporting the tree clean:
+
+```
+3 examples, 0 failures
+check-doc-links: every documentation path resolves.
+```
+
+**Fixed** by `RepoFiles.list`, which adds `--others --exclude-standard`
+— files git does not yet track and would not ignore — and by converting
+all ten sites to it. `untracked_visibility_spec.rb` pins three things:
+that a brand-new file is listed, that a `.gitignore`d one still is not,
+and that **nothing enumerates the repository the old way**, because the
+defect returns looking like ordinary code.
+
+**What this says about the other checks in this release.** Every one of
+the nine was verified by planting the defect it hunts — and every one of
+those plants was written into a file that was untracked at the time. The
+verification was real, but it was performed in the blind window. Each
+was re-run after this fix; `release_gate_spec` is the one that had
+actually been affected.
+
+*The general form is worth more than the fix: a check's answer must not
+depend on git state that changes between running it and committing. If
+it does, the run that gates the commit and the run that CI performs are
+answering different questions.*
 
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)

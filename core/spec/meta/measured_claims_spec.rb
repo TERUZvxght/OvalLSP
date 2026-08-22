@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# Enumerated with `RepoFiles`, not `git ls-files` — `024.147`. A file you
+# have just written is untracked until `git add`, and `preflight` runs
+# before the commit, so a check that lists only tracked files is blind to
+# exactly the file being worked on.
+require_relative "../../../scripts/repo_files"
+
 require "open3"
 require "tmpdir"
 
@@ -162,8 +168,7 @@ RSpec.describe "numbers documented about this tree" do
     # numbers that did resolve. A guard whose scope is a list somebody
     # remembered has the defect it was built to catch.
     def scanned_files
-      tracked, = Open3.capture2("git", "ls-files", "-z", chdir: TREE_ROOT)
-      tracked.split("\0")
+      RepoFiles.list(TREE_ROOT)
              .select { |path| path.match?(/\.(rb|ts|js|md|json|yml|yaml|sh|erb)\z/) }
              .reject { |path| path.end_with?("024-deferred-review-findings.md") }
              .reject { |path| path.end_with?(File.basename(__FILE__)) }

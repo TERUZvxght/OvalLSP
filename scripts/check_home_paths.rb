@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require_relative "utf8"
+require_relative "repo_files"
 
 # One scanner for "a real home directory path was committed", read by
 # both of the places that have to agree about it:
@@ -74,7 +75,7 @@ module HomePaths
   end
 
   def tracked_files
-    Dir.chdir(ROOT) { as_utf8(`git ls-files -z`).split(NUL) }
+    RepoFiles.list(ROOT)
   end
 
   # Every file this scanner declined to read, and why. A skip is a file

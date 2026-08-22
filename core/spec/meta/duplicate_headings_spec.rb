@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# Enumerated with `RepoFiles`, not `git ls-files` — `024.147`. A file you
+# have just written is untracked until `git add`, and `preflight` runs
+# before the commit, so a check that lists only tracked files is blind to
+# exactly the file being worked on.
+require_relative "../../../scripts/repo_files"
+
 require "tmpdir"
 
 # `024.140`. A scripted edit with a bad end boundary pastes a block back
@@ -45,8 +51,8 @@ RSpec.describe "tracked Markdown documents" do
   end
 
   def self.tracked_markdown
-    out = IO.popen(["git", "ls-files", "*.md"], chdir: DUP_HEADINGS_ROOT, &:read)
-    out.split("\n").reject { |f| f.start_with?("core/vendor/", "vscode/node_modules/") }
+    RepoFiles.list(DUP_HEADINGS_ROOT, "*.md")
+             .reject { |f| f.start_with?("core/vendor/", "vscode/node_modules/") }
   end
 
   it "never state one heading twice, which is what a pasted block looks like" do

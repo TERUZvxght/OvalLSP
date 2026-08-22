@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# Enumerated with `RepoFiles`, not `git ls-files` — `024.147`. A file you
+# have just written is untracked until `git add`, and `preflight` runs
+# before the commit, so a check that lists only tracked files is blind to
+# exactly the file being worked on.
+require_relative "../../../scripts/repo_files"
+
 require "json"
 
 # `046`'s C5. `docs/design/docs/07-vscode-extension.md` listed eight
@@ -69,9 +75,7 @@ RSpec.describe "design documents that restate something the code owns" do
   # shows a plugin author calling must exist.
   it "plugin-sdk.md names only registration methods that exist" do
     named = self.class.read("docs/design/plugin-sdk.md").scan(/\b(register_[a-z_]+)\b/).flatten.uniq
-    defined = IO.popen(%w[git ls-files core/lib/ovallsp/plugins core/lib/ovallsp/plugins.rb],
-                       chdir: DESIGN_DRIFT_ROOT, &:read)
-                .split("\n")
+    defined = RepoFiles.list(DESIGN_DRIFT_ROOT, "core/lib/ovallsp/plugins", "core/lib/ovallsp/plugins.rb")
                 .flat_map { |rel| self.class.read(rel).scan(/^\s*def (register_[a-z_]+)/).flatten }
                 .uniq
 

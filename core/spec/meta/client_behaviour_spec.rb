@@ -1,5 +1,11 @@
 # frozen_string_literal: true
 
+# Enumerated with `RepoFiles`, not `git ls-files` — `024.147`. A file you
+# have just written is untracked until `git add`, and `preflight` runs
+# before the commit, so a check that lists only tracked files is blind to
+# exactly the file being worked on.
+require_relative "../../../scripts/repo_files"
+
 require "open3"
 
 # `docs/CLIENT_BEHAVIOUR.md` collects every behaviour this project relies
@@ -87,8 +93,7 @@ RSpec.describe "what we rely on the client to do" do
 
   it "is stated in one document, which the rest of the tree points at" do
     root = File.expand_path("../../..", __dir__)
-    tracked, = Open3.capture2("git", "ls-files", "-z", chdir: root)
-    restated = tracked.split("\0")
+    restated = RepoFiles.list(root)
                       .select { |path| path.match?(/\.(rb|ts|md)\z/) }
                       .reject { |path| path.include?("CLIENT_BEHAVIOUR") }
                       .reject { |path| path.start_with?("docs/design/tasks/") }

@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require_relative "utf8"
+require_relative "repo_files"
 
 # Every documentation path named in tracked content must resolve to a file
 # that exists.
@@ -77,8 +78,14 @@ end
 shallow, = run("git", "rev-parse", "--is-shallow-repository")
 refuse("this is a shallow clone; a citation census over part of a tree is not a census.") if shallow.strip == "true"
 
-tracked, status = run("git", "ls-files")
-refuse("could not list tracked files") unless status.success?
+# Tracked files *and* files not yet added — `024.147`. A citation added
+# in a file you have not committed is exactly the citation this exists to
+# catch, and `git ls-files` alone cannot see it.
+begin
+  tracked_files = RepoFiles.list(ROOT)
+rescue StandardError => e
+  refuse("could not list files: #{e.message}")
+end
 
 # Binary and vendored trees hold no citations anybody maintains, and
 # `core/vendor` alone is thousands of files.
@@ -109,7 +116,7 @@ def ever_existed?(path)
   @ever_existed[path] = status.success? && !out.strip.empty?
 end
 
-files = tracked.split("\n").reject { |f| f.match?(SKIP) }
+files = tracked_files.reject { |f| f.match?(SKIP) }
 
 dangling = []
 inspected = 0
@@ -148,7 +155,7 @@ files.each do |rel|
   end
 end
 
-puts "check-doc-links: #{inspected} tracked file(s) inspected, #{citations} documentation citation(s), " \
+puts "check-doc-links: #{inspected} file(s) inspected, #{citations} documentation citation(s), " \
      "#{recorded_deletions} naming a deleted file on a line marked as recording the deletion."
 
 if dangling.empty?
