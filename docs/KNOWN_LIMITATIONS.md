@@ -257,10 +257,6 @@ Seven more are older than this release and untouched by it:
   its class-level macros reported.** `include SomeGem::Model` followed by
   `validate :ensure_ok` is reported, though the Concern installs
   `validate`. Introduced by 0.1.14 and not fixed here (024.35). <!-- documents: 024.35 -->
-- **`K.instance_eval { attr_accessor :x }` is reported** where
-  `K.class_eval { attr_accessor :x }` is not, though both define the same
-  methods. The rule behind it is right for `object.instance_eval`, which
-  is what it was written for (024.33). <!-- documents: 024.33 -->
 - **A method a loop defines is reported as unknown.** `EVENTS.each { |id,
   _| alias_method "on_#{id}", :_dispatch_1 }` is idiomatic in generated
   code, and the name is not a literal, so the index records nothing and

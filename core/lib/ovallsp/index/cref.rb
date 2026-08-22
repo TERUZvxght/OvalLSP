@@ -234,6 +234,35 @@ module Ovallsp
         shares_self ? self : with(block_depth: block_depth + 1)
       end
 
+      # `K.instance_eval { ... }` / `K.class_eval { ... }`. Self inside is
+      # the receiver, so a macro written there is a *call on that
+      # constant* -- `K.attr_accessor :x`, which defines an instance
+      # accessor on K. Ruby says both spellings do the same:
+      #
+      #   $ ruby -e '
+      #   class K; end
+      #   K.instance_eval { attr_accessor :k_x }
+      #   p [K.respond_to?(:k_x), K.new.respond_to?(:k_x)]
+      #   class L; end
+      #   L.class_eval { attr_accessor :l_x }
+      #   p [L.respond_to?(:l_x), L.new.respond_to?(:l_x)]
+      #   '
+      #   # => [false, true]
+      #   # => [false, true]
+      #   # ruby 3.4.10
+      #
+      # `024.33`: they were answered differently, because the visitor
+      # could say only *whether* self was a module and not *which*. A
+      # written constant says which. `owner: nil` for a receiver this
+      # parser cannot name, so `#surface_for` answers nil and nothing is
+      # recorded -- rather than the enclosing class's name being invented
+      # for it, which is `024.31`.
+      def in_eval_block(owner)
+        with(owner: owner, nesting: owner ? [owner, *nesting].freeze : nesting,
+             singleton_context: false, self_is_module: true, in_method_body: false,
+             block_depth: block_depth + 1, visibility: :public, module_function: false)
+      end
+
       # Ruby keeps *one* scope-visibility value, so naming any of
       # `public`/`private`/`protected` replaces a `module_function` that
       # was open. Two independent flags said otherwise, and the engine

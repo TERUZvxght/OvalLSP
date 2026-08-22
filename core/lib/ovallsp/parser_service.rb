@@ -646,6 +646,26 @@ module Ovallsp
         Prism::HashNode, Prism::StringNode, Prism::SymbolNode
       ].freeze
 
+      # `instance_eval`/`class_eval`/`module_eval` and their `_exec`
+      # spellings all set self to their receiver, so a macro inside is a
+      # call on *that*. Returns the owner name, `:unnameable` for a
+      # receiver this parser cannot name, or nil when the call is not one
+      # of these.
+      EVAL_BLOCK_CALLS = %i[instance_eval instance_exec class_eval class_exec module_eval module_exec].freeze
+
+      def eval_block_owner
+        call = @block_owning_call
+        return nil unless call && EVAL_BLOCK_CALLS.include?(call.name)
+
+        receiver = call.receiver
+        # Receiverless, the receiver is the enclosing self and the cref is
+        # already right -- `instance_eval { attr_accessor :x }` in a class
+        # body is as legal as the line above it.
+        return nil if receiver.nil? || receiver.is_a?(Prism::SelfNode)
+
+        raw_constant_name(receiver) ? receiver_owner_name(receiver) : :unnameable
+      end
+
       def iterates_a_literal?(_node)
         receiver = @block_owning_call&.receiver
         return false if receiver.nil?
@@ -676,7 +696,12 @@ module Ovallsp
         # really does take the enclosing section's visibility. Inheriting
         # keeps that case right while still containing the leak.
         previous_cref = @cref
-        @cref = @cref.in_block(shares_self: iterates_a_literal?(node))
+        @cref =
+          if (owner = eval_block_owner)
+            @cref.in_eval_block(owner == :unnameable ? nil : owner)
+          else
+            @cref.in_block(shares_self: iterates_a_literal?(node))
+          end
         super
       ensure
         @cref = previous_cref

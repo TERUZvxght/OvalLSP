@@ -178,7 +178,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | fixed | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
 | [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | open | — | A declaration written inside a block has no owner this parser can na… |
 | [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | fixed | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
-| [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | open | — | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
+| [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | fixed | — | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
 | [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
 | [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | open | — | A class that includes a module the workspace cannot resolve still re… |
 | [`024.36`](#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
@@ -1809,7 +1809,7 @@ owner at all is that entry's subject.
 ## 024.33 `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` is not
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 ```
@@ -1836,6 +1836,40 @@ apart, which is its own reason not to ship it.
 boolean; with that, `K.instance_eval` opens `K` and this answers itself.
 Worth doing with 024.31 rather than separately.
 
+
+**Fixed in 0.2.13.** The entry says the two spellings were split and the
+split was dropped, because "this visitor cannot say *which* module self
+is". A **written constant says which**, and that is the whole fix.
+
+Ruby treats the two the same, because `attr_accessor` is a call on self
+and self is the receiver either way:
+
+    $ ruby -e '
+    class K; end
+    K.instance_eval { attr_accessor :k_x }
+    p [K.respond_to?(:k_x), K.new.respond_to?(:k_x)]
+    class L; end
+    L.class_eval { attr_accessor :l_x }
+    p [L.respond_to?(:l_x), L.new.respond_to?(:l_x)]
+    '
+    # => [false, true]
+    # => [false, true]
+    # ruby 3.4.10
+
+Both define an *instance* accessor on the named class, and both are
+recorded that way now. `Cref#in_eval_block(owner)` carries the receiver,
+which is `042`'s D5 in its smallest useful form: a block was given a
+boolean and needed a receiver.
+
+**And the control found `024.31` in the same place.** An eval block on an
+*expression* — `other.instance_eval { attr_accessor :o_x }` — was
+recording accessors on the *enclosing* class, inventing an owner for a
+receiver nothing can name. `in_eval_block(nil)` makes `#surface_for`
+answer nil there, so nothing is recorded. That is one shape of `024.31`
+closed; the anonymous-class one (`Class.new { ... }`) is not, and stays.
+
+Corpus, 16 gems, control identical at 4,600: **0 added, 113 removed**
+against main — two more than before this fix.
 
 ## 024.34 `attr_*` inside a `def` inside `class << self` is kinded singleton
 

@@ -113,3 +113,10 @@
   spec: spec/ovallsp/diagnostics/unreadable_macro_spec.rb
   example: "opens the owner's surface for an unreadable macro called inside a block"
 
+- why: "024.33's receiver -- an eval block on a constant carrying the enclosing owner instead of the constant self is set to."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "          if (owner = eval_block_owner)\n            @cref.in_eval_block(owner == :unnameable ? nil : owner)\n          else\n"
+  to: "          if false\n            nil\n          else\n"
+  spec: spec/ovallsp/diagnostics/eval_on_constant_spec.rb
+  example: "records an instance accessor on the constant for instance_eval"
+

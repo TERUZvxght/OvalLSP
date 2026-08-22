@@ -247,10 +247,6 @@ b = "str"        # → Article has no method named `b=`
   レベルのマクロが報告されます。** `include SomeGem::Model` に続く
   `validate :ensure_ok` は、Concern が `validate` を入れるにもかかわらず報告
   されます。0.1.14 で入り、本リリースでは直していません(024.35)。 <!-- documents: 024.35 -->
-- **`K.instance_eval { attr_accessor :x }` は報告されます。**
-  `K.class_eval { attr_accessor :x }` は報告されず、どちらも同じメソッドを
-  定義するにもかかわらずです。この規則自体は `object.instance_eval` に対して
-  正しく、そのために書かれたものです(024.33)。 <!-- documents: 024.33 -->
 - **ループで定義したメソッドは未定義として報告されます。**
   `EVENTS.each { |id, _| alias_method "on_#{id}", :_dispatch_1 }` は生成
   コードでよくある形ですが、名前がリテラルでないため索引には何も残らず、
