@@ -7133,6 +7133,22 @@ one countermeasure aimed at the wrong level (`024.47`). Six scanners is a
 set a reviewer can hold; what makes it durable is that each now says at
 its own site why it is exempt and where the compensating example is.
 
+### A third instance, in the spec written to test the fix
+
+`doc_links_spec.rb` grew two examples that plant citations in a
+throwaway repository, and the fixture paths were spelled out in the
+source. The scanner read the spec, found two paths that resolve to
+nothing, and failed on the file whose entire subject is paths that
+resolve to nothing.
+
+Repaired the same way rather than a new way — `DIR`, `NEVER` and `ONCE`
+are assembled from parts, so no contiguous path string exists in the
+file — which is the point worth recording: **the rule above held on a
+case its author did not anticipate.** Three instances, one repair
+shape, no exemption added. That is the evidence that the rule is at the
+right level; a fourth instance needing a fourth *different* repair is
+what would say otherwise.
+
 ## 024.127 Hover answers an empty string where LSP expects null
 
 ```yaml

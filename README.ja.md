@@ -10,8 +10,7 @@
 > [CONTRIBUTING.ja.md](CONTRIBUTING.ja.md)を参照してください。
 
 Ruby/Rails向けセマンティック言語サーバーのmonorepo。設計の背景と全体方針は
-[`docs/design/README.md`](docs/design/README.md)(日本語、内部設計文書) と
-[`docs/design/START_HERE.md`](docs/design/START_HERE.md)(同上) を参照。
+[`docs/design/README.md`](docs/design/README.md)(日本語、内部設計文書) を参照。
 
 ## Layout
 

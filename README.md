@@ -13,8 +13,7 @@
 A monorepo for a semantic Ruby/Rails language server. Design background
 and overall direction are documented in
 [`docs/design/README.md`](docs/design/README.md) (Japanese, internal
-design docs) and
-[`docs/design/START_HERE.md`](docs/design/START_HERE.md) (same).
+design docs).
 
 ## Layout
 

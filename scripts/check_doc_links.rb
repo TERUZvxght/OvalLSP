@@ -26,7 +26,12 @@
 require "set"
 require "shellwords"
 
-ROOT = File.expand_path("..", __dir__)
+# The repository to scan. Overridable so the marker's own guarantee can
+# be pinned: a spec builds a throwaway git repository holding a citation
+# that no commit ever carried, marks it as a recorded deletion, and
+# requires this to fail anyway. Without the override that property could
+# only be checked by damaging this tree.
+ROOT = File.expand_path(ENV.fetch("CHECK_DOC_LINKS_ROOT", File.expand_path("..", __dir__)))
 
 # `docs/<NN>-<name>.md` is an established shorthand for
 # `docs/design/docs/<NN>-<name>.md`, used 91 times across 39 files since
@@ -77,11 +82,37 @@ refuse("could not list tracked files") unless status.success?
 # `core/vendor` alone is thousands of files.
 SKIP = %r{\A(core/vendor/|vscode/node_modules/|core/spec/fixtures/rails_real/|.*\.(png|ico|svg|lock|vsix|sqlite3)\z)}
 
+# A record of a deletion has to be able to name what was deleted, and a
+# release document that says "this file went away" is the one place a
+# path *should* resolve to nothing. Marking the line says so.
+#
+# The marker is not a blanket exemption, and this is the whole design:
+# it admits a path that **once existed in this repository's history**
+# and no longer does. A path that has never existed in any commit is
+# still a failure with the marker present -- which is the case this
+# check was built for, since all 19 of its founding citations were
+# names no commit had ever carried. A pointer to a *renamed* file is
+# also still a failure, because the marker is a deliberate edit on the
+# line that needs it rather than a mode the file is in.
+DELETED_MARKER = "<!-- deleted -->"
+
+# Whether a path ever existed. `--diff-filter=D` alone misses a file
+# deleted in a commit that git recorded as a rename, so this asks the
+# cheaper and more direct question: does any commit's tree name it?
+def ever_existed?(path)
+  @ever_existed ||= {}
+  return @ever_existed[path] if @ever_existed.key?(path)
+
+  out, status = run("git", "log", "--all", "--pretty=format:%H", "-1", "--", path)
+  @ever_existed[path] = status.success? && !out.strip.empty?
+end
+
 files = tracked.split("\n").reject { |f| f.match?(SKIP) }
 
 dangling = []
 inspected = 0
 citations = 0
+recorded_deletions = 0
 
 files.each do |rel|
   path = File.join(ROOT, rel)
@@ -105,12 +136,18 @@ files.each do |rel|
       target = raw.sub(SHORTHAND) { "docs/design/docs/#{Regexp.last_match(1)}" }
       next if File.file?(File.join(ROOT, target))
 
+      if line.include?(DELETED_MARKER) && ever_existed?(target)
+        recorded_deletions += 1
+        next
+      end
+
       dangling << { file: rel, line: number, cited: raw, resolved: target, text: line.strip[0, 110] }
     end
   end
 end
 
-puts "check-doc-links: #{inspected} tracked file(s) inspected, #{citations} documentation citation(s)."
+puts "check-doc-links: #{inspected} tracked file(s) inspected, #{citations} documentation citation(s), " \
+     "#{recorded_deletions} naming a deleted file on a line marked as recording the deletion."
 
 if dangling.empty?
   puts "check-doc-links: every documentation path resolves."
@@ -125,4 +162,6 @@ by_name.sort_by { |name, _| name }.each do |name, hits|
 end
 warn("check-doc-links: fix the citation or restore the file. A path that resolves to nothing " \
      "sends the next reader -- or the next agent -- somewhere that does not exist.")
+warn("check-doc-links: if a line is *recording* a deletion, mark it #{DELETED_MARKER} -- " \
+     "which admits only a path some commit in this history actually carried.")
 exit 1
