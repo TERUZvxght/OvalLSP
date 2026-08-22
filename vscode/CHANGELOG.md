@@ -6,6 +6,54 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.13 — what a class's own body says, and failures that stop being silent
+
+- **A class that runs a macro this extension cannot read no longer
+  reports the macro itself.** It already declined to report anything the
+  macro might define; reporting the call that opened that door was the
+  same fact answered two ways. Measured over 1,659 files of 16 installed
+  gems, `unknown-method` false reports fell from 506 to 389 — 119 gone,
+  none added, and the one real latent `NoMethodError` in that corpus is
+  still reported.
+- **`attr_accessor` written inside a `def` inside `class << self`** is
+  read the way Ruby reads it — an instance accessor — instead of a class
+  one, so calling it from an instance method stops being reported. Real
+  code has the shape: ActiveRecord's `has_and_belongs_to_many` builder,
+  `csv/parser.rb`, `cgi/core.rb`, Devise.
+- **`def Foo.bar` is a class method.** It was recorded as an instance
+  one, so both answers were inverted: the call Ruby runs was reported and
+  the call Ruby raises on was accepted.
+- **`private`, `module_function` and `attr_accessor` written in an
+  ordinary loop** — `%w[a b].each { … }` — reach the class around them,
+  as Ruby makes them.
+- **`K.instance_eval { attr_accessor :x }` and `K.class_eval { … }` get
+  the same answer**, which is what Ruby gives them, and neither is
+  attributed to the class the call is *written* in.
+- **A `Struct.new`/`Class.new` block's methods stop appearing on the
+  class around it.** They belong to the class being built.
+- **`define_method(:name)` puts the name in hover, go to definition and
+  completion**, instead of only silencing reports about it.
+
+### Details
+
+**What the release was for.** Every fix above is one shape of a single
+question: *when this engine cannot enumerate something, does it say so,
+or does it answer as though nothing went wrong?*
+
+The second half is the part with no user-visible bullet. Every `rescue`
+in the Core Server was enumerated — 158 of them — and each now records
+what it does with the failure: it surfaces, or it carries an argument for
+why no caller can turn the value into a claim about your code. **Three of
+them failed that test and were changed**: a parse failure was making
+`defined?(@x)` report, another was quietly removing one file's instance
+variables from the set the check compares against, and a third was saying
+"RBS does not know this name" about a question it had not been able to
+ask.
+
+A check keeps the list complete, and this project's own working
+agreement now says that catching a failure and carrying on is not the
+default.
+
 ## 0.2.12 — the apparatus, and what it found
 
 Nothing in this release changes what OvalLSP answers about your code. It
