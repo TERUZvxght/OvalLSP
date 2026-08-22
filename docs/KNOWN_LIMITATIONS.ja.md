@@ -233,16 +233,6 @@ b = "str"        # → Article has no method named `b=`
 
 さらに7つ、本リリースより古く、本リリースが手を付けていない形があります。
 
-- **ブロックの中に書かれた宣言は、そのブロックを書いたクラスのものになります。**
-  ブロックの本当のレシーバが何であってもです。`class Outer` の中の
-  `Struct.new(:x) do attr_reader :label end` は `Outer` に対して `label` を
-  補完に出し、定義ジャンプはブロックの中に着地します。`def setup;
-  attr_accessor :never_real; end` は `never_real` を記録するので、その呼び出しは
-  報告されません。しかもRubyはこれをどの経路でも定義できません。`attr_accessor`
-  は `Module` のメソッドで、インスタンスメソッドの中の `self` はモジュールでは
-  ないためです。字句的に帰属
-  させるのは `def` が以前からしていることで、`attr_*` だけを賢くしようとした
-  3度の試みは、いずれも誤報告を生みました(024.31)。 <!-- documents: 024.31 -->
 - **ワークスペースが読んでいないモジュールを include したクラスでは、クラス
   レベルのマクロが報告されます。** `include SomeGem::Model` に続く
   `validate :ensure_ok` は、Concern が `validate` を入れるにもかかわらず報告

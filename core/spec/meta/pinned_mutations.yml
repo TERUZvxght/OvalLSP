@@ -115,8 +115,15 @@
 
 - why: "024.33's receiver -- an eval block on a constant carrying the enclosing owner instead of the constant self is set to."
   file: core/lib/ovallsp/parser_service.rb
-  from: "          if (owner = eval_block_owner)\n            @cref.in_eval_block(owner == :unnameable ? nil : owner)\n          else\n"
-  to: "          if false\n            nil\n          else\n"
+  from: "          elsif (owner = eval_block_owner)\n            @cref.in_eval_block(owner == :unnameable ? nil : owner)\n          else\n"
+  to: "          elsif false\n            nil\n          else\n"
   spec: spec/ovallsp/diagnostics/eval_on_constant_spec.rb
   example: "records an instance accessor on the constant for instance_eval"
+
+- why: "024.31's owner -- a Struct.new / Class.new block attributing its declarations to the lexically enclosing class, which does not have them."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "          if creates_a_class?\n            @cref.in_eval_block(nil)\n"
+  to: "          if false\n            nil\n"
+  spec: spec/ovallsp/diagnostics/class_creating_block_spec.rb
+  example: "records nothing on the enclosing class for a Struct.new block"
 

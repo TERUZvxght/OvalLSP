@@ -176,7 +176,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | — | Rename refuses on a macro-declared method rather than editing it |
 | [`024.29`](#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | open | — | Two features were written for 0.1.15 and cut from it |
 | [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | fixed | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
-| [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | open | — | A declaration written inside a block has no owner this parser can na… |
+| [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | fixed | — | A declaration written inside a block has no owner this parser can na… |
 | [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | fixed | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
 | [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | fixed | — | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
 | [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
@@ -1636,7 +1636,7 @@ and this one was wrong in a way no reader would have questioned.
 ## 024.31 A declaration written inside a block has no owner this parser can name
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 ```
@@ -1704,6 +1704,45 @@ Until then, do not add a name to any block allowlist without a corpus run
 in both directions across ActiveRecord and ActiveSupport, and without
 asking what `def` in the same position does.
 
+
+**Fixed in 0.2.13, in two halves and by the same mechanism.** The entry
+asks for a block to carry a *receiver* rather than a boolean, and that is
+what `Cref#in_eval_block(owner)` is.
+
+`024.33` closed the eval-on-an-expression half: `other.instance_eval {
+attr_accessor :o_x }` was recording accessors on the *enclosing* class.
+
+This closes the class-creating half. `Class.new`, `Struct.new`,
+`Module.new` and `Data.define` with a block define on the new class,
+which has no name until the assignment completes and may never get one:
+
+    $ ruby -e '
+    class Outer
+      Seed = Struct.new(:x) do
+        attr_reader :label
+      end
+    end
+    p [Outer.new.respond_to?(:label), Outer::Seed.new(1).respond_to?(:label)]
+    '
+    # => [false, true]
+    # ruby 3.4.10
+
+The accessor belongs to the Struct and was being recorded on `Outer` —
+the direction that *invents* a member, which this engine refuses
+everywhere else.
+
+The control is in the same file and is what "drop every block" would
+break: `included do attr_accessor :tracked_at end` really does define on
+the concern, and an ordinary class-body `attr_accessor` is untouched.
+
+**Corpus, 16 gems, control identical at 4,600: 119 removed and 2 added.**
+The two are worth naming rather than netting off. Both are
+`ActionDispatch::Routing::RouteSet` calling `Kernel#URI`, one of the four
+`Kernel` names `024.91` records as an RBS signature-set gap — a
+pre-existing false positive that had been *masked* by this class's
+surface being spuriously opened by a `Class.new` block inside it.
+Removing a wrong silencer shows what it was silencing, and the finding
+underneath belongs to `024.91`.
 
 ## 024.32 `def Foo.bar` is recorded as an instance method, so both answers are inverted
 

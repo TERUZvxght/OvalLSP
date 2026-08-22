@@ -257,6 +257,12 @@ module Ovallsp
       # parser cannot name, so `#surface_for` answers nil and nothing is
       # recorded -- rather than the enclosing class's name being invented
       # for it, which is `024.31`.
+      # Inside a block whose owner this parser cannot name -- a
+      # `Class.new { }`, an `other.instance_eval { }`. A *top-level* `def`
+      # also has no owner and must still be recorded, which is why the
+      # block depth is part of the question rather than the owner alone.
+      def nameless_context? = owner.nil? && block_depth.positive?
+
       def in_eval_block(owner)
         with(owner: owner, nesting: owner ? [owner, *nesting].freeze : nesting,
              singleton_context: false, self_is_module: true, in_method_body: false,

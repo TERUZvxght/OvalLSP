@@ -242,17 +242,6 @@ than carried into this release (024.23).
 
 Seven more are older than this release and untouched by it:
 
-- **A declaration written inside a block belongs to the class the block is
-  written in**, whatever the block's real receiver is. `Struct.new(:x) do
-  attr_reader :label end` inside `class Outer` offers `label` on an
-  `Outer`, and go-to-definition on it lands in the block; `def setup;
-  attr_accessor :never_real; end` records `never_real`, so calling it is
-  not reported — and here Ruby cannot define it by any path, since
-  `attr_accessor` is `Module`'s and `self` inside an instance method is
-  not a module. Attributing
-  lexically is what `def` has always done, and three attempts to be
-  cleverer for `attr_*` alone each produced false reports instead
-  (024.31). <!-- documents: 024.31 -->
 - **A class that includes a module the workspace has not read still has
   its class-level macros reported.** `include SomeGem::Model` followed by
   `validate :ensure_ok` is reported, though the Concern installs

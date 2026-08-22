@@ -308,6 +308,23 @@ module Ovallsp
       end
 
       def visit_def_node(node)
+        # A `def` inside a block whose owner nothing can name belongs to
+        # that owner, not to the top level and not to the lexically
+        # enclosing class. Recording it under `nil` put it in the same
+        # bucket as every genuine top-level `def`, which is `024.80`'s
+        # collision arriving from the other side. Its body is still
+        # walked; only the declaration is withheld (`024.31`).
+        #
+        # `previous_cref` is assigned *first*: this method has a
+        # method-level `ensure` that restores it, so an early `return`
+        # above the assignment sets `@cref` to nil for the rest of the
+        # parse. That failed no example -- the cold indexer swallows a
+        # per-file parse error into a log line -- and was found only
+        # because an unrelated example counted how many times the logger
+        # was called. `024.122` is what that swallow is.
+        previous_cref = @cref
+        return super if @cref.nameless_context?
+
         owner_receiver = node.receiver
         # **A written receiver is a singleton definition, whatever it
         # names.** `def Foo.bar` defines a singleton method on `Foo`, and
@@ -374,7 +391,6 @@ module Ovallsp
         # not retroactively rewrite a declaration. Restored rather than
         # cleared, since `private def foo; ...; end` nests a def inside a
         # call inside a def in the argument-form case.
-        previous_cref = @cref
         # Inside `def self.x` self is still the class, so a `private`
         # written there is Module's, exactly as in the body around it.
 
@@ -654,6 +670,36 @@ module Ovallsp
       # of these.
       EVAL_BLOCK_CALLS = %i[instance_eval instance_exec class_eval class_exec module_eval module_exec].freeze
 
+      # A block that *creates* a class or module: its body defines on the
+      # new one, which has no name until the assignment completes and may
+      # never get one. Ruby:
+      #
+      #   $ ruby -e '
+      #   class Outer
+      #     Seed = Struct.new(:x) do
+      #       attr_reader :label
+      #     end
+      #   end
+      #   p [Outer.new.respond_to?(:label), Outer::Seed.new(1).respond_to?(:label)]
+      #   '
+      #   # => [false, true]
+      #   # ruby 3.4.10
+      #
+      # The accessor belongs to the Struct, and it was being recorded on
+      # `Outer` -- the direction that *invents* a member, which this
+      # engine refuses everywhere else (`024.31`).
+      CLASS_CREATING_BLOCK_RECEIVERS = {
+        "Class" => :new, "Module" => :new, "Struct" => :new, "Data" => :define
+      }.freeze
+
+      def creates_a_class?
+        call = @block_owning_call
+        return false unless call
+
+        name = call.receiver && raw_constant_name(call.receiver)
+        CLASS_CREATING_BLOCK_RECEIVERS[Index::SymbolId.bare_name(name.to_s)] == call.name
+      end
+
       def eval_block_owner
         call = @block_owning_call
         return nil unless call && EVAL_BLOCK_CALLS.include?(call.name)
@@ -698,7 +744,9 @@ module Ovallsp
         # keeps that case right while still containing the leak.
         previous_cref = @cref
         @cref =
-          if (owner = eval_block_owner)
+          if creates_a_class?
+            @cref.in_eval_block(nil)
+          elsif (owner = eval_block_owner)
             @cref.in_eval_block(owner == :unnameable ? nil : owner)
           else
             @cref.in_block(shares_self: iterates_a_literal?(node))
