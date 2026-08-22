@@ -315,14 +315,20 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     expect(unknown_methods(source)).to be_empty
   end
 
-  # An ordinary block does *not* change self, so a class body's block
-  # still resolves against the class. Without this, "treat every block as
-  # an instance" would pass the two examples above.
-  it "still reads an ordinary block in a class body as the class" do
-    source = "class Widget\n  [1, 2].each { definitely_not_a_macro }\nend\n"
-
-    expect(unknown_methods(source)).to eq(["definitely_not_a_macro"])
-  end
+  # **The example that used to sit here could no longer distinguish
+  # anything, and is gone rather than adjusted.** It asserted that
+  # `[1, 2].each { definitely_not_a_macro }` in a class body reports the
+  # call -- true when a block isolated the cref, and false since 0.2.13
+  # made a literal iteration share it (`024.117`), because the call is
+  # then the class body's own and `024.110` declines about an owner whose
+  # body it could not read.
+  #
+  # That is `024.110`'s recorded cost arriving in a spec rather than in a
+  # corpus, and the honest response is to say so. What the example was
+  # *for* -- an ordinary block resolves against the class and not an
+  # instance -- is still distinguished by the two `define_method`
+  # examples above and the `instance_eval` pair below, whose fixtures do
+  # not turn on an unreadable call.
 
   # A `define_method` block written inside `class << self` defines a
   # *singleton* method, so its body's self is the class object -- still a

@@ -120,6 +120,30 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
     expect(unknown_methods(document)).to be_empty
   end
 
+  # `024.117`. One construct, two spellings, opposite answers: the bare
+  # `validates :title` silenced the owner and
+  # `%i[title body].each { |f| validates f }` -- a mainstream spelling of
+  # exactly the thing `024.110` decided to stop reporting -- did not,
+  # because `#defines_surface?` requires `block_depth.zero?`.
+  #
+  # Opening a surface is the "I could not read this" direction, so a
+  # block is safe to include: it silences, never invents. The *other*
+  # thing a block frame contains -- a `private` section that must not
+  # leak into the enclosing class -- is untouched, and is `024.111`.
+  it "opens the owner's surface for an unreadable macro called inside a block" do
+    document = index("class B2\n  %w[a b].each { |n| the_macro(n) }\nend\nB2.tpyo\n")
+
+    expect(unknown_methods(document)).to be_empty
+  end
+
+  # The control: a block in a class body is not a licence to silence
+  # everything. A *readable* block leaves the owner alone.
+  it "leaves the owner alone when the block calls nothing it cannot read" do
+    document = index("class B3\n  %w[a b].each { |n| puts n }\nend\nB3.tpyo\n")
+
+    expect(unknown_methods(document)).to eq(["tpyo"])
+  end
+
   it "still reports a class-level typo on a class whose body it could read" do
     index("class Plain\n  def self.known; end\nend\n", uri: "file:///plain.rb")
     document = index("Plain.known\nPlain.nope_x\n", uri: "file:///use.rb")

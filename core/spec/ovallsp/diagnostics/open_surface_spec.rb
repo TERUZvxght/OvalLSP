@@ -252,10 +252,23 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and an unrecognised class-body macr
     expect(unknown_methods(document)).to include("definitely_not_defined_zzz")
   end
 
+  # **Somebody else's block, meaning one whose receiver this parser cannot
+  # vouch for.** A constant could be anything, and whatever `each` it
+  # answers may rebind self, so a call inside that block says nothing
+  # about the enclosing class's members.
+  #
+  # A block iterating a *literal* is the other case and is not this one:
+  # `%w[a b].each { validates ... }` keeps self, Ruby applies the macro to
+  # the class, and 0.2.13 made the two spellings of that construct agree
+  # (`024.117`).
   it "is not opened by a receiverless call inside somebody else's block" do
     document = index(<<~RUBY_SRC)
+      CASES = [1, 2]
+
       class Suite
-        [1, 2].each { |n| some_helper(n) }
+        CASES.each do |n|
+          some_helper(n)
+        end
 
         def run
           definitely_not_defined_zzz

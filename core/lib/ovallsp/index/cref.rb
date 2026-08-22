@@ -106,6 +106,20 @@ module Ovallsp
       # owning call is what actually decides.
       def defines_surface? = !owner.nil? && !in_method_body && block_depth.zero?
 
+      # **The same question, asked about a call this parser could not
+      # read.** `#defines_surface?` decides where a *definition* lands and
+      # rightly refuses inside a block, whose owning call is what actually
+      # decides. Opening a surface is a different claim -- "I could not
+      # enumerate this owner's members" -- and a block is safe there,
+      # because it silences and never invents.
+      #
+      # `024.117`: without this, `validates :title` silenced the owner and
+      # `%i[title body].each { |f| validates f }` did not, so one
+      # construct written two ways got opposite answers. The other thing
+      # the block frame contains -- a `private` section that must not leak
+      # into the enclosing class -- is untouched, and is `024.111`.
+      def opens_surface? = defines_surface?
+
       # Which surface that call would add to. `attr_atomic :value` in a
       # class body defines `#value`, never `.attr_atomic`; written inside
       # `class << self` the same call defines singleton methods.
@@ -189,7 +203,36 @@ module Ovallsp
       # A block or lambda body. Visibility is inherited rather than reset:
       # a plain iterator block does not open a new cref, so a `def` inside
       # it really does take the enclosing section's visibility.
-      def in_block = with(block_depth: block_depth + 1)
+      # **A block that provably keeps self does not open a frame.** Ruby:
+      #
+      #   $ ruby -e '
+      #   module BMF; 1.times { module_function }; def y; end; end
+      #   p [BMF.respond_to?(:y), BMF.private_instance_methods(false)]
+      #   class BV; [1].each { private }; def x; end; end
+      #   p BV.private_instance_methods(false)
+      #   class BS; [1].each { attr_accessor :bs_x }; end
+      #   p [BS.new.respond_to?(:bs_x), BS.respond_to?(:bs_x)]
+      #   '
+      #   # => [true, [:y]]
+      #   # => [:x]
+      #   # => [true, false]
+      #   # ruby 3.4.10
+      #
+      # A visibility section, a `module_function` and an `attr_accessor`
+      # written in an ordinary iterator block all reach the enclosing body,
+      # and the frame was containing all three (`024.111`, `024.117`).
+      #
+      # `shares_self` is decided by a *shape*, not a list of names: the
+      # owning call's receiver is a literal -- `%w[a b].each`, `[1].each`,
+      # `(1..3).map`. Nobody's DSL rebinds self on a core object, and a
+      # list could only ever hold the calls somebody has already seen.
+      # Everything else still gets a frame, which is what keeps
+      # `included do ... end` and `concerning ... do` from leaking a
+      # `private` into the class body -- the regression that frame exists
+      # for.
+      def in_block(shares_self: false)
+        shares_self ? self : with(block_depth: block_depth + 1)
+      end
 
       # Ruby keeps *one* scope-visibility value, so naming any of
       # `public`/`private`/`protected` replaces a `module_function` that

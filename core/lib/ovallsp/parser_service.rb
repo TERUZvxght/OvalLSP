@@ -255,6 +255,7 @@ module Ovallsp
         @open_surface_owners = Set.new
         @module_function_names = Set.new
         @included_hook_parameter = nil
+        @block_owning_call = nil
         @recorded_a_declaration = false
         # How many block or lambda bodies enclose the node being visited.
         # A block's meaning belongs to the call that owns it, so
@@ -461,6 +462,17 @@ module Ovallsp
       # was never opened -- so the visibility has to travel with the
       # nesting, the way `@pending_visibility_names` carries `private def`.
       def visit_call_node(node)
+        # The call a block belongs to, so `#visit_block_node` can ask what
+        # its receiver is: Prism hands the visitor a `BlockNode` with no
+        # way back to the call that owns it. Set here and restored on the
+        # way out, so a nested call inside a block sees its own.
+        #
+        # `ensure` on the method body rather than a wrapper, because every
+        # `return super` below has to keep resolving to `Prism::Visitor`'s
+        # own `#visit_call_node`.
+        previous_block_owning_call = @block_owning_call
+        @block_owning_call = node
+
         if node.receiver.nil?
           if node.arguments.nil?
             update_visibility(node)
@@ -548,6 +560,8 @@ module Ovallsp
         ensure
           @cref = previous_cref
         end
+      ensure
+        @block_owning_call = previous_block_owning_call
       end
 
       # `ActiveSupport::Concern`'s `class_methods do ... end` is sugar for
@@ -622,6 +636,23 @@ module Ovallsp
         end
       end
 
+      # Whether this block's owning call iterates a *literal* -- and so
+      # provably keeps self, whatever the method is called. `%w[a b].each`,
+      # `[1].each`, `(1..3).map`. A shape rather than a list of method
+      # names, for the reason `#record_open_surface` gives about setters:
+      # a list can only ever hold the calls somebody has already seen.
+      LITERAL_RECEIVER_NODES = [
+        Prism::ArrayNode, Prism::RangeNode, Prism::IntegerNode,
+        Prism::HashNode, Prism::StringNode, Prism::SymbolNode
+      ].freeze
+
+      def iterates_a_literal?(_node)
+        receiver = @block_owning_call&.receiver
+        return false if receiver.nil?
+
+        LITERAL_RECEIVER_NODES.any? { |klass| receiver.is_a?(klass) }
+      end
+
       def visit_block_node(node)
         if @skip_block_frame
           @skip_block_frame = false
@@ -645,7 +676,7 @@ module Ovallsp
         # really does take the enclosing section's visibility. Inheriting
         # keeps that case right while still containing the leak.
         previous_cref = @cref
-        @cref = @cref.in_block
+        @cref = @cref.in_block(shares_self: iterates_a_literal?(node))
         super
       ensure
         @cref = previous_cref

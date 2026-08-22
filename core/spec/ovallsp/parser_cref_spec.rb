@@ -119,8 +119,17 @@ RSpec.describe "Ovallsp::ParserService and the cref a declaration is recorded ag
       expect(cref_at("class Widget\n  def go\n    marker\n  end\nend\n", "marker").defines_surface?).to be(false)
     end
 
+    # **Somebody else's block, meaning one whose receiver this parser
+    # cannot vouch for.** A block iterating a *literal* is the class
+    # body's own loop and shares its cref as of 0.2.13 -- Ruby applies a
+    # `private`, a `module_function` and an `attr_accessor` written there
+    # to the enclosing body (`024.117`). A constant could be anything.
     it "cannot, inside somebody else's block" do
-      expect(cref_at("class Widget\n  [1].each { marker }\nend\n", "marker").defines_surface?).to be(false)
+      expect(cref_at("class Widget\n  SOME.each { marker }\nend\n", "marker").defines_surface?).to be(false)
+    end
+
+    it "can, inside the class body's own loop over a literal" do
+      expect(cref_at("class Widget\n  [1].each { marker }\nend\n", "marker").defines_surface?).to be(true)
     end
 
     it "cannot at the top level, where there is no owner" do

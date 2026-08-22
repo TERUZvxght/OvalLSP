@@ -260,7 +260,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | fixed | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | fixed | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
 | [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.13 | `def self.method_missing` and `define_singleton_method` do not open … |
-| [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.13 | The two spellings of a class-body macro get opposite answers |
+| [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | fixed | 0.2.13 | The two spellings of a class-body macro get opposite answers |
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | fixed | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
@@ -6050,6 +6050,23 @@ extending it is a change to a rule three releases have adjusted.
 and this is the shape `CLAUDE.md` says to record rather than add to a
 change set under review. Found by the `attack` round.
 
+**Narrowed in 0.2.13.** The literal-receiver half is fixed with
+`024.117`: `[1].each { private }` and `1.times { module_function }` reach
+the enclosing body now, which is what Ruby does, because a block
+iterating a literal opens no cref frame.
+
+**What stays open is the receiver this parser cannot vouch for.**
+`SOME_CONST.each { private }` and `helper { private }` still get a frame,
+and they must: `included do ... end` and `concerning ... do` run their
+`private` against a different module, and without the frame every method
+written after such a block was recorded private — which silently dropped
+real controller actions and their ivars vanished from the corresponding
+views.
+
+Telling the two apart needs to know what the *call* does with the block,
+which is `024.31` and `024.33`'s question — a block wants a receiver, not
+a boolean — and remains the shape this entry is waiting on.
+
 ## 024.112 A bare constant is not looked up through the enclosing class's ancestors
 
 ```yaml
@@ -6210,10 +6227,11 @@ parser change with its own measurement.
 ## 024.117 The two spellings of a class-body macro get opposite answers
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.13
+released-in: 0.2.13
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (`#record_open_surface`)
@@ -6238,6 +6256,52 @@ Not fixed in 0.2.11 because the block guard is `024.111`'s territory —
 the frame exists so `included do ... end` cannot leak a `private` into
 the enclosing class — and the two want deciding together. Found by
 0.2.11's `attack` round.
+
+**Fixed in 0.2.13, by asking Ruby what a block actually does.** The
+entry says the two want deciding with `024.111`, and running them settled
+both halves at once:
+
+    $ ruby -e '
+    module BMF; 1.times { module_function }; def y; end; end
+    p [BMF.respond_to?(:y), BMF.private_instance_methods(false)]
+    class BV; [1].each { private }; def x; end; end
+    p BV.private_instance_methods(false)
+    class BS; [1].each { attr_accessor :bs_x }; end
+    p [BS.new.respond_to?(:bs_x), BS.respond_to?(:bs_x)]
+    '
+    # => [true, [:y]]
+    # => [:x]
+    # => [true, false]
+    # ruby 3.4.10
+
+A visibility section, a `module_function` and an `attr_accessor` written
+in an ordinary iterator block **all reach the enclosing body**, and the
+frame was containing all three.
+
+`Cref#in_block(shares_self:)` opens no frame when the owning call's
+receiver is a **literal** — `%w[a b].each`, `[1].each`, `(1..3).map`.
+That is a shape rather than a list of method names, for the reason
+`#record_open_surface` already gives about setters: a list can only ever
+hold the calls somebody has already seen. Nobody's DSL rebinds self on a
+core object.
+
+Everything else still gets a frame, which is what keeps `included do ...
+end` and `concerning ... do` from leaking a `private` into the class
+body — the regression that frame exists for, and the half of `024.111`
+that stays open: a constant receiver could be anything, and this parser
+cannot say what its `each` does with self.
+
+Corpus, 16 gems, 1,659 files, control `unresolved-constant` identical at
+4,600: **0 added, 111 removed** — unchanged from before this fix, which
+is what it should be, since these gems iterate literals in class bodies
+without calling anything unreadable in them.
+
+One example was **deleted rather than adjusted**:
+`class_body_macro_spec.rb`'s "still reads an ordinary block in a class
+body as the class" turned on an unreadable call, so once the block shared
+the cref, `024.110` declined about the owner and the example could no
+longer distinguish anything. That is `024.110`'s recorded cost arriving
+in a spec instead of a corpus, and the comment left in its place says so.
 
 ## 024.118 `WorkspaceIndex#stale?` compares versions across buffers
 

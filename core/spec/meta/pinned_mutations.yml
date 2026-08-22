@@ -106,3 +106,10 @@
   spec: spec/ovallsp/diagnostics/attr_in_singleton_def_spec.rb
   example: "records no singleton accessor"
 
+- why: "024.117's block rule -- isolating a block that iterates a literal, which Ruby says shares the enclosing body's self."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "@cref.in_block(shares_self: iterates_a_literal?(node))"
+  to: "@cref.in_block(shares_self: false)"
+  spec: spec/ovallsp/diagnostics/unreadable_macro_spec.rb
+  example: "opens the owner's surface for an unreadable macro called inside a block"
+

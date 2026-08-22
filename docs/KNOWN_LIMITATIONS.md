@@ -501,19 +501,19 @@ an error, so a missing hover or a silent check may be a failure nothing
 reported rather than a limit of what this engine knows. The Output
 channel is the place to look, and it will not always have a line. <!-- documents: 024.122 -->
 
-## A macro called inside a block in a class body
-
-A macro this extension cannot read is left alone when you write it
-plainly — `validates :title` — and reported as a missing method when you
-write the same thing in a loop: `%i[title body].each { |f| validates f }`.
-One construct, two spellings, opposite answers. <!-- documents: 024.117 -->
-
 ## A `private` or `module_function` written inside a block
 
-If you write one inside an ordinary block — `1.times { module_function }`,
-`[1].each { private }` — this extension does not apply it to the methods
-that follow, though Ruby does. Written directly in the class or module
-body, both work. <!-- documents: 024.111 -->
+If you write one inside a block whose receiver this extension cannot
+vouch for — `SOME_CONST.each { private }`, `helper { private }` — it does
+not apply it to the methods that follow, though Ruby may. Written
+directly in the class or module body it works, and as of 0.2.13 so does
+a block iterating a literal (`[1].each { private }`,
+`%w[a b].each { module_function }`).
+
+The remaining case is one this extension cannot decide without knowing
+what the call does with the block: `included do ... end` really does run
+its `private` against a different module, and treating those alike is
+what used to make every method after such a block private. <!-- documents: 024.111 -->
 
 ## A typo in a call on a module
 
