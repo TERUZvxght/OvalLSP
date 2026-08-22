@@ -111,6 +111,15 @@ RSpec.describe "what we rely on the client to do" do
   # neither, which is the shape of every parity guard this project has had
   # to add: `privacy_parity_spec`, `changelog_parity_spec`,
   # `roadmap_parity_spec`.
+  # The check is only worth having if it would catch what it was written
+  # for, and this file exempts itself from it -- so the matcher is run
+  # against a planted restatement rather than trusted.
+  it "would catch a restatement outside the one document" do
+    expect(PHRASINGS.any? { |phrase| "the staleness filter drops it".match?(phrase) }).to be(true)
+    expect(PHRASINGS.any? { |phrase| "陳腐化フィルタが落とす".match?(phrase) }).to be(true)
+    expect(PHRASINGS.any? { |phrase| "an unrelated sentence about versions".match?(phrase) }).to be(false)
+  end
+
   describe "the Japanese edition" do
     ENGLISH = File.expand_path("../../../docs/CLIENT_BEHAVIOUR.md", __dir__)
     JAPANESE = File.expand_path("../../../docs/CLIENT_BEHAVIOUR.ja.md", __dir__)

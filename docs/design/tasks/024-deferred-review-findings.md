@@ -120,7 +120,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**124 entries below** <!-- measured: register-entries = 124 -->,
+**125 entries below** <!-- measured: register-entries = 125 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -288,6 +288,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.123`](#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.124`](#024124-four-entries-named-a-release-that-had-already-shipped-for-the-third-time) | fixed | 0.3.0 | Four entries named a release that had already shipped, for the third… |
 | [`024.125`](#024125-the-packaged-core-is-never-driven-end-to-end-and-two-gates-say-it-is) | open | 0.3.0 | The packaged Core is never driven end to end, and two gates say it is |
+| [`024.126`](#024126-a-text-scanner-matches-its-own-prose-exempts-itself-and-stops-checking-a-file-that-can-hold-the-real-thing) | fixed | 0.2.14 | A text scanner matches its own prose, exempts itself, and stops chec… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -6957,6 +6958,63 @@ its own number rather than keeping an entry open for it, which is what
 Code download the unpackaged integration job already pays for, plus a
 `vsce package` step — or stop marking rows 1 and 5 ✅ and say what really
 covers them. `046`'s C6 makes the second impossible to leave implicit.
+
+## 024.126 A text scanner matches its own prose, exempts itself, and stops checking a file that can hold the real thing
+
+```yaml
+status: fixed
+kind: friction
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it costs is that a check quietly stops
+  covering one file -- and the file it stops covering is the one whose
+  author was thinking about that exact defect.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `scripts/check_doc_links.rb`,
+`core/spec/meta/tmpdir_hygiene_spec.rb`,
+`core/spec/meta/client_behaviour_spec.rb`
+
+Found while building `046`'s A0, and then swept across every scanner in
+the tree, which is what the maintainer's instruction for this pass asks
+for: *if you find a problem from another angle, inspect the whole scope
+from that angle.*
+
+**The shape.** A check that scans tracked content scans **itself**. Its
+own failure message, example, or `it` description spells the thing it
+hunts — so it reports itself. The obvious repair is to exempt the file,
+and that is the trap: the exemption removes coverage from the one file
+whose author was demonstrably thinking about this defect, so a *real*
+violation added there is invisible.
+
+`check_doc_links.rb` hit it twice in five minutes. The comment written to
+*explain* the first hit became the second, by quoting the bad form in
+order to name it.
+
+**The sweep, over all six scanners in the tree:**
+
+| scanner | state |
+|---|---|
+| `check_doc_links.rb` | had it. Fixed by making the example unspellable as a path — `docs/<NN>-<name>.md` — rather than exempting a file that carries four real citations |
+| `tmpdir_hygiene_spec.rb` | had it, as a blanket `__FILE__` exemption. Fixed by **parsing instead of grepping**: a call inside a string or a comment is not a call, so the exemption's reason disappears. A planted `Dir.mktmpdir` in the same example proves the matcher still fires |
+| `client_behaviour_spec.rb` | had it, and a regex is not spellable another way. Exemption kept, with the reason at the site, and **paid for** by a new example that runs the matcher against a planted restatement |
+| `no_wall_clock_thresholds_spec.rb` | **already right** — exemption stated with its reason, and a second example runs the matcher against the two assertions it replaced |
+| `analysis_stack_spec.rb` | **already right** — no exemption, and a "would catch a harness that assembled its own" example |
+| `check_home_paths.rb` | **already right** — a `SYNTHETIC` allowlist that is a deliberate edit with a reason, not a file exemption |
+
+**The rule that came out of it.** A scanner may exempt itself only if a
+second example runs its matcher against a planted instance. Two of the
+six already did this; the sweep brought the other four to it. Where the
+scan is for *code*, parse rather than grep and the question does not
+arise.
+
+**Not machine-checked, deliberately.** A rule that counted `__FILE__`
+exemptions would be guessing at intent, and this project has rolled back
+one countermeasure aimed at the wrong level (`024.47`). Six scanners is a
+set a reviewer can hold; what makes it durable is that each now says at
+its own site why it is exempt and where the compensating example is.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

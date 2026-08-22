@@ -41,18 +41,54 @@ RSpec.describe "spec suite tmpdir hygiene" do
     File.binread(path).force_encoding(Encoding::UTF_8).scrub.lines
   end
 
+  # **Parsed, not grepped, and this file is no longer exempt.** It used to
+  # scan lines and skip `spec_helper.rb` *and itself*, because its own
+  # example description and failure message spell the call it hunts -- so
+  # a real violation added to this file would have been invisible.
+  #
+  # Reading the AST removes the reason for the exemption: a call inside a
+  # string or a comment is not a call. That is the durable form, and
+  # `046` records the class -- a text scanner matches its own prose,
+  # exempts itself, and stops checking a file that can hold the real
+  # thing.
+  class BlocklessMktmpdir < Prism::Visitor
+    attr_reader :hits
+
+    def initialize(path)
+      @path = path
+      @hits = []
+      super()
+    end
+
+    def visit_call_node(node)
+      if node.name == :mktmpdir && node.receiver.is_a?(Prism::ConstantReadNode) &&
+         node.receiver.name == :Dir && node.block.nil?
+        @hits << "#{@path}:#{node.location.start_line}"
+      end
+      super
+    end
+  end
+
   it "never calls Dir.mktmpdir without a block (spec_helper's example_tmpdir instead)" do
-    exempt = [File.join(spec_root, "spec_helper.rb"), __FILE__] # define/describe the helper itself
+    # `spec_helper.rb` defines the replacement, so it is the one file that
+    # legitimately makes the call.
+    exempt = [File.join(spec_root, "spec_helper.rb")]
 
     offenders = Dir.glob(File.join(spec_root, "**", "*.rb")).sort.flat_map do |path|
       next [] if exempt.include?(path)
 
-      source_lines(path).filter_map.with_index(1) do |line, number|
-        next if line.lstrip.start_with?("#")
-
-        "#{path.delete_prefix("#{spec_root}/")}:#{number}: #{line.strip}" if line.match?(blockless_mktmpdir)
-      end
+      visitor = BlocklessMktmpdir.new(path.delete_prefix("#{spec_root}/"))
+      Prism.parse(File.read(path, encoding: "UTF-8")).value.accept(visitor)
+      visitor.hits
     end
+
+    # The check that the change above did not simply stop looking: this
+    # file spells `Dir.mktmpdir` twice in prose, and a *real* one added
+    # here must still be caught.
+    planted = Prism.parse("Dir.mktmpdir\n").value
+    planted_visitor = BlocklessMktmpdir.new("planted")
+    planted.accept(planted_visitor)
+    expect(planted_visitor.hits).not_to be_empty
 
     expect(offenders).to be_empty, lambda {
       "Dir.mktmpdir without a block never removes the directory it creates. Use " \
