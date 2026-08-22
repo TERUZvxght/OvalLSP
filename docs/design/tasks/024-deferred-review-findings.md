@@ -7903,8 +7903,30 @@ defect returns looking like ordinary code.
 the nine was verified by planting the defect it hunts — and every one of
 those plants was written into a file that was untracked at the time. The
 verification was real, but it was performed in the blind window. Each
-was re-run after this fix; `release_gate_spec` is the one that had
-actually been affected.
+was re-run after this fix.
+
+### Two commits shipped red, not one
+
+This entry originally named `release_gate_spec` as "the one that had
+actually been affected". **Round 3 checked out every commit on the
+branch and ran the meta suite at each.** Two are red, from the same
+cause:
+
+| commit | red because |
+|---|---|
+| `26243e0` (`046 A0`) | `check_doc_links.rb` reports its own two comment lines as citations resolving to nothing. It was untracked when preflight ran, so it did not scan itself; `git commit` put it into its own input. `doc_links_spec` shells out to it — **1 example, 1 failure**. Repaired at `1bf897b` |
+| `7c92b05` (`046 B`) | `release_gate_spec`'s planted name inside its own haystack. Repaired at `23196a8`, the commit this entry documents |
+
+`26243e0`'s message also states "inspects 527 tracked files and 661
+citations" — numbers taken inside the same blind window. A clean
+checkout of that commit prints 529 and 663, and exits 1.
+
+**Neither the commit that repaired the first nor this entry said HEAD
+had been red.** The first was noticed because a spec failed under it;
+the second only because round 3 was asked to *re-derive rather than
+read*, and ran the suite at every commit instead of trusting the record.
+That is the difference between a claim and a measurement, arriving
+inside the entry written about exactly that.
 
 *The general form is worth more than the fix: a check's answer must not
 depend on git state that changes between running it and committing. If
