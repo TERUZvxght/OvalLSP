@@ -265,7 +265,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
 | [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.0 | Nothing measures how much of this tree no test would notice changing |
-| [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | open | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
+| [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | fixed | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
 | [`024.123`](#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
@@ -6567,10 +6567,11 @@ lunchtime.
 ## 024.122 A failure is turned into a plausible value, in 72 measured places
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.13
+released-in: 0.2.13
 ```
 
 **Area:** `core/lib` (159 `rescue` sites), `vscode/src` (21 `catch`
@@ -6743,6 +6744,33 @@ means writing down what happens to the failure, in a file a reviewer
 reads, and `swallows` is something somebody types rather than a default
 nobody notices. Emptying the column is the work; this is what stops it
 refilling behind the work's back.
+
+### Step 3, and the column is empty
+
+All 158 sites carry a verdict: **60 surface, 98 contained, none
+swallowing.** `scripts/check_swallowed_failures.rb` now *fails* on a
+`swallows` verdict as well as on a missing one, so the column that would
+hold an unargued site stays empty — and `swallows` remains spellable only
+so the failure message can name it.
+
+`CLAUDE.md` carries the policy, written after the tree obeyed it rather
+than before. That order was the entry's own condition and it was the
+right one: writing it first would have produced a rule with 111
+exceptions on the day it appeared.
+
+**What the argument has to be.** Not "this failure is unimportant" — that
+sentence is true of most of them and proves nothing. It is that **no
+caller can turn the value into an assertion about the user's code**:
+`Types::UNKNOWN`, a `nil` every reader already treats as "cannot say", a
+cache miss that recomputes, a prune that leaves the file. Three sites
+failed that test and were changed rather than argued, and all three had
+the same shape — the fallback *was* the reporting value.
+
+**An honest limit.** Ninety-eight arguments were written by one author in
+one pass. A `contained` that turns out to be wrong is an ordinary
+finding, and the file is where to record that it was; the mechanism this
+entry is really about is that such a finding now has somewhere to land
+and a check that will not let a new site avoid the question.
 
 ## 024.123 A private alias was offered, and the register said it was not
 

@@ -67,6 +67,15 @@ found.each do |site|
                 "core/spec/meta/rescue_verdicts.yml -- surfaces, contained, or swallows."
   elsif !VERDICT_KINDS.include?(verdict.to_s.split(":").first)
     problems << "#{site["file"]}:#{site["line"]}  verdict #{verdict.inspect} is not one of #{VERDICT_KINDS.join(", ")}."
+  elsif verdict.to_s.split(":").first == "swallows"
+    # **The column is empty, and stays empty.** Every one of the 158
+    # sites either surfaces or carries an argument for why the failure
+    # cannot become an assertion. `swallows` remains spellable so that
+    # this message can name it, not so that a site can sit in it.
+    problems << "#{site["file"]}:#{site["line"]}  #{site["source"]}\n      is marked `swallows`. " \
+                "Catching a failure and continuing is not allowed by default (CLAUDE.md): make it surface, " \
+                "or write the argument for why no caller can assert from the value it returns and mark it " \
+                "`contained: <why>`."
   end
 end
 
@@ -78,7 +87,7 @@ found.each { |s| counts[recorded[s["key"]].to_s.split(":").first] += 1 }
 
 if problems.empty?
   puts "check-swallowed-failures: #{found.length} rescue site(s) -- " \
-       "#{counts["surfaces"]} surface, #{counts["contained"]} contained, #{counts["swallows"]} swallow."
+       "#{counts["surfaces"]} surface, #{counts["contained"]} contained, and none swallowing."
   exit 0
 end
 

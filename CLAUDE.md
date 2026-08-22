@@ -172,6 +172,57 @@ the example named a directory anyone cared about; the path from it to
 test could not reveal that, and reading the method it called could not
 either — only the two together.
 
+## Catching a failure and continuing is not the default (mandatory)
+
+A swallowed failure does not produce a wrong answer somebody eventually
+notices. It produces **the answer that would be right if nothing had gone
+wrong**, and this project has been bitten by that at every layer:
+
+- `Cache::Store#load` rescued a "struct size differs" into a silent
+  whole-cache miss, so a schema bump that was never made looked exactly
+  like a cache that was working.
+- `LocalInferencer#assigned_ivar_names` answered `[]` when its parse
+  raised, and the check that reads it builds a *union* — so one
+  unreadable ancestor file silently removed its ivars and every read of
+  one became a false report. The layer above already knew to decline; the
+  failure was being caught one layer below the layer that knows what to
+  do with it, which is the commonest form of this and the hardest to see.
+- `scripts/check_pinned_mutations.rb` reported all four mutations
+  uncaught on its first run, because it could not load the code it was
+  mutating. **A checker that cannot see the thing it checks reports
+  exactly what a working checker reports when nothing is pinned.**
+- `prune_generations` swallowing every error by design is what made
+  `.not_to raise_error` an assertion that could not fail, in the spec
+  that deleted the maintainer's installed applications.
+
+**Every `rescue` in `core/lib` carries a verdict** in
+`core/spec/meta/rescue_verdicts.yml`, and
+`scripts/check_swallowed_failures.rb` fails on one that does not — in the
+suite and as a CI job. Two verdicts are allowed:
+
+- **`surfaces`** — it raises, or reports through a channel a person sees:
+  a published diagnostic, an error notification, the Output channel.
+- **`contained: <why>`** — the argument, written at the site as well as
+  in the file. And the argument that counts is not "this failure is
+  unimportant". It is that **no caller can turn the value into an
+  assertion about the user's code**: `Types::UNKNOWN`, a `nil` every
+  reader already treats as "cannot say", a cache miss that recomputes, a
+  prune that leaves the file.
+
+The test to run a site against is not *is this failure important* but
+**does the fallback let a caller assert something**. Enumerating is what
+decides whether to assert, so a failure to enumerate has to decline —
+which is section 0 applied to this class. `Engine#rbs_known_constant?`
+answering `false` on failure said "RBS does not know this name", an
+assertion made from a question that could not be asked; it answers `true`
+now.
+
+*The 158 sites were enumerated and argued in 0.2.13 (`024.122`). The
+column that would hold an unargued one is empty and the check keeps it
+that way. Many of those arguments are one author's, reviewed by nobody
+else yet — a `contained` that turns out to be wrong is an ordinary
+finding, and the file is where to record that it was.*
+
 ## General implementation discipline (reaffirmed by Task 008.6)
 
 - Fix the underlying design, not the symptom. A local `if` patch that suppresses a symptom without addressing the structural cause is not an acceptable fix in this codebase.
