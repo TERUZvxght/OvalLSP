@@ -52,15 +52,27 @@ module DocumentedCounts
     Integer(count)
   end
 
+  def grouped(count) = count.to_s.reverse.scan(/\d{1,3}/).join(",").reverse
+
+  # The substitution itself, as a pure function: text in, text out, and
+  # **nil when the pattern matched nothing**.
+  #
+  # Pure so it can be tested without touching a tracked document.
+  # `024.151` is why it needs testing at all: the caller below used to
+  # report every stale document as re-derived whether or not anything was
+  # written, so a document whose wording moved out from under its pattern
+  # was counted as a success and the command exited 0.
+  def substituted(text, pattern, count)
+    updated = text.gsub(pattern) { |match| match.sub(Regexp.last_match(1), grouped(count)) }
+    updated == text ? nil : updated
+  end
+
   # Rewrites only inside a match of that document's own pattern, so a
   # number that happens to equal the old count elsewhere in the file is
   # left alone.
   def rewrite(document, count)
-    text = read(document)
-    updated = text.gsub(PATTERNS.fetch(document)) do |match|
-      match.sub(Regexp.last_match(1), count.to_s.reverse.scan(/\d{1,3}/).join(",").reverse)
-    end
-    return false if updated == text
+    updated = substituted(read(document), PATTERNS.fetch(document), count)
+    return false if updated.nil?
 
     File.write(File.join(ROOT, document), updated)
     true

@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**149 entries below** <!-- measured: register-entries = 149 -->,
+**150 entries below** <!-- measured: register-entries = 150 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -320,6 +320,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.148`](#024148-the-check-for-did-the-suite-actually-run-could-not-fail-in-the-case-it-existed-for) | fixed | 0.2.14 | The check for "did the suite actually run" could not fail in the cas… |
 | [`024.149`](#024149-a-review-harness-that-reports-nothing-found-when-its-own-post-processing-crashed) | fixed | 0.2.14 | A review harness that reports "nothing found" when its own post-proc… |
 | [`024.150`](#024150-agents-md-paraphrases-claude-md-and-the-paraphrase-drifts) | open | 0.3.0 | `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts |
+| [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices) | open | 0.3.0 | A check can be disabled, and no check notices |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -8097,6 +8098,93 @@ that decides between two different jobs:
 
 Measure the overlap before choosing. Deciding without that is what
 produced the assertion this entry replaces.
+
+
+## 024.151 A check can be disabled, and no check notices
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Internal, and it is the largest single class this project has
+  recorded: 55 confirmed instances from one review round. Nothing a
+  user meets; everything this project uses to decide whether a change
+  is sound.
+target: 0.3.0
+```
+
+**Area:** `core/spec/meta/pinned_mutations.yml`,
+`scripts/check_pinned_mutations.rb`
+
+0.2.14's round 2 took twelve guarantees and tried to make each false
+while every check stayed green. **It succeeded against all twelve.** The
+individual breaks are recorded in
+`docs/design/tasks/046-0.2.14-making-the-record-true.md`; the class is
+one sentence:
+
+> The checks are correct. Their **reachability** is not defended.
+
+The sharpest instance, and the one that shows the shape: `SKIP` in
+`check_doc_links.rb` was an ordinary constant. Widening it dropped
+inspection from 537 files to 117, left a dangling citation in a
+`core/lib` source comment unreported, and all four examples passed —
+because the examples asserted *outcomes on fixtures*, and none asserted
+*how much of the tree was read*. The file's headline claim, "source
+comments are in scope, deliberately", was one edit away from false and
+nothing in the tree could tell.
+
+**This is `CLAUDE.md`'s oldest rule, applied one level up.** *Behaviour
+that no test fails on when it is reverted counts as a defect* — the
+checks are behaviour, and almost none of them was pinned.
+
+### What was built in 0.2.14, and why it is not enough
+
+- **Coverage floors.** A scanner reports what it read, per root, and a
+  spec asserts each is non-zero. Structural, so not a number to
+  maintain, and not a second copy of the exclusion. Applied to
+  `check_doc_links`.
+- **The mutation manifest reaches `scripts/`.** `042`'s D7 exists to ask
+  *does this example fail when the decision it names is inverted*, and
+  until now it could only ask that of `core/lib` — so no decision inside
+  a check could be pinned by the one mechanism built for pinning
+  decisions. Seven entries added: `SKIP`, the relative-link pass,
+  `--others`, the pending test, the `NOT YET` exemption, the
+  re-derivation refusal, the SBOM comparison.
+- Not the specs. The applier writes to the real file and restores it,
+  which is safe for a script a spec shells out to and is **not** safe
+  for a spec file, where the mutation could remove the example being
+  run. A decision inside a spec needs a second example instead.
+
+**What remains open is most of it.** 55 confirmed findings, and the
+honest statement is that they were fixed at the rate of one mechanism
+per class, not one patch per finding. In particular:
+
+- Several checks prove wiring by **substring search** — an error
+  message, an exemption comment, or a script's own usage string
+  satisfies them. `release_gate_spec` and `script_encoding_spec` are
+  both this shape.
+- `preflight.rb` is 178 lines of gate that no spec reads: the whole
+  thing can be reduced to a no-op with every check green.
+- Several scanners' scopes are hand-written glob or extension lists —
+  the exact defect the citation scanner was fixed for, in the scanners
+  that check the citation scanner.
+
+**Direction.** Not 55 patches. Two mechanisms, in this order:
+
+1. **Every check states its own coverage, and a spec asserts a floor on
+   it.** `check_doc_links` is the worked example. This kills the whole
+   "narrow the input" family at once.
+2. **Wiring is proved by execution, not by text.** A check that claims
+   something is invoked should invoke it, or read a manifest that does,
+   rather than grepping for its name. Every substring-based instance
+   collapses into this one.
+
+*Recorded rather than done, deliberately. `CLAUDE.md` bounds a review
+loop at three rounds finding defects and then says to ship with what is
+open written down — a 55-finding sweep started at round 2 is exactly the
+unbounded loop that rule exists to prevent, and the countermeasures
+above are worth more than the patches would be.*
 
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)

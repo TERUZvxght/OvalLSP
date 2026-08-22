@@ -66,8 +66,20 @@ entries.each_with_index do |entry, i|
 
   source = File.join(ROOT, entry["file"])
   fail_with("entry #{i + 1}: #{entry["file"]} does not exist") unless File.file?(source)
-  unless entry["file"].start_with?("core/lib/")
-    fail_with("entry #{i + 1}: #{entry["file"]} is not under core/lib -- only the copied tree can be mutated")
+  # `core/lib` was the whole scope until 0.2.14. Round 2's method was to
+  # take a guarantee and try to make it false with the suite green, and
+  # it succeeded against nearly every check in `scripts/` -- because the
+  # manifest that exists to ask "does this example fail when the decision
+  # it names is inverted" could not name a decision in a check.
+  #
+  # `scripts/` is added, and nothing else: the applier writes to the real
+  # file and restores it, which is safe for a script a spec shells out
+  # to, and is *not* safe for a spec file, where mutating the source
+  # could delete the example being run. A decision inside a spec is
+  # pinned by a second example, not by this.
+  unless entry["file"].start_with?("core/lib/", "scripts/")
+    fail_with("entry #{i + 1}: #{entry["file"]} is under neither core/lib nor scripts -- " \
+              "a spec file cannot be mutated here, because the mutation could remove the example")
   end
 
   # Read as UTF-8 explicitly: these files carry en dashes, and a

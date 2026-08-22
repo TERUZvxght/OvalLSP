@@ -127,3 +127,57 @@
   spec: spec/ovallsp/diagnostics/class_creating_block_spec.rb
   example: "records nothing on the enclosing class for a Struct.new block"
 
+# --- checks in `scripts/`, added in 0.2.14 ---------------------------
+#
+# `042`'s D7 asks "does *this example* fail when the decision it names is
+# inverted". Until 0.2.14 it could only ask that of `core/lib`, so no
+# decision inside a check could be pinned by it -- and round 2's attack
+# method broke nearly every check in `scripts/` with the suite green.
+#
+# `scripts/` only, not the specs: the applier writes to the real file and
+# restores it, which is safe for a script a spec shells out to and is not
+# safe for a spec file, where the mutation could remove the example being
+# run. A decision inside a spec is pinned by a second example instead.
+
+- why: "check_doc_links' SKIP -- widening it to exclude core/ drops inspection from 537 files to 117 and a dangling citation in a core/lib source comment goes unreported, which is round 2's break verbatim."
+  file: scripts/check_doc_links.rb
+  from: "|core/spec/fixtures/rails_real/"
+  to: "|core/|"
+  spec: spec/meta/doc_links_spec.rb
+  example: "reads every part of the tree it claims to, so narrowing its input is a failure"
+- why: "check_doc_links' relative-link pass -- 107 links between task files resolve through it, and nothing else reads them."
+  file: scripts/check_doc_links.rb
+  from: "    line.scan(RELATIVE_LINK) do\n"
+  to: "    [].each do\n"
+  spec: spec/meta/doc_links_spec.rb
+  example: "resolves a relative Markdown link against the citing file's own directory"
+- why: "repo_files' --others -- without it every check is blind again to a file that has not been committed, which is 024.147."
+  file: scripts/repo_files.rb
+  from: "     git(root, %W[ls-files -z --others --exclude-standard] + pathspec)).uniq.sort"
+  to: "     []).uniq.sort"
+  spec: spec/meta/untracked_visibility_spec.rb
+  example: "RepoFiles sees a file git does not track"
+- why: "check_suites_ran's pending test -- a fully skipped suite reports examples and zero failures, so without this the check cannot fail in the case it exists for (024.148)."
+  file: scripts/check_suites_ran.rb
+  from: "        ex.fetch(\"status\") == \"pending\" && !ex.fetch(\"pending_message\").to_s.include?(ALLOWED_PENDING)"
+  to: "        false"
+  spec: spec/meta/suites_ran_spec.rb
+  example: "fails when every example was skipped for want of an environment"
+- why: "check_suites_ran's NOT YET exemption -- docs/EXTENSION_CAPABILITIES.md defines a state authors are told to use, and failing on it would make that state unexpressible."
+  file: scripts/check_suites_ran.rb
+  from: "  ALLOWED_PENDING = \"NOT YET\""
+  to: "  ALLOWED_PENDING = \"\\u0000never-matches\""
+  spec: spec/meta/suites_ran_spec.rb
+  example: "allows a pending example that declares itself NOT YET"
+- why: "documented_counts' nil-on-no-match -- without it a document whose wording moved out from under its pattern reports as rewritten, is counted as success, and the command exits 0."
+  file: scripts/documented_counts.rb
+  from: "    updated == text ? nil : updated\n"
+  to: "    updated\n"
+  spec: spec/meta/documented_counts_spec.rb
+  example: "reports nothing written when a document's wording moved out from under its pattern"
+- why: "generate_sbom's --check comparison -- without it the SBOM gate passes on any content at all."
+  file: scripts/generate_sbom.rb
+  from: "  if current == rendered"
+  to: "  if true"
+  spec: spec/meta/sbom_spec.rb
+  example: "reports a divergence rather than passing on anything"

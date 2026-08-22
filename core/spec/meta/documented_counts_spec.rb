@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "tmpdir"
+
 # The example counts documents cite, against the suite that produces them.
 #
 # Three releases running, a document has stated a suite size that was true
@@ -82,6 +84,24 @@ RSpec.describe "documented example counts" do
                              "#{document} says #{stated.uniq.join(', ')} and the suite has #{actual}. " \
                              "Run: ruby scripts/documented_counts.rb"
     end
+  end
+
+  # `024.151`. The tool reports what it *wrote*, not what it found
+  # stale: the substitution returns nil when its pattern matched
+  # nothing, which is a document whose wording moved out from under it --
+  # classed stale, never written to, and until round 1 found it, still
+  # counted in the success line and exited 0.
+  #
+  # Tested through the pure function rather than a document, so the
+  # refusal path is reachable without a tracked file being left wrong if
+  # this example fails.
+  it "reports nothing written when a document's wording moved out from under its pattern" do
+    pattern = DocumentedCounts::PATTERNS.fetch("docs/SUPPORT_MATRIX.md")
+
+    expect(DocumentedCounts.substituted("the suite has 1,833 examples", pattern, 2000))
+      .to eq("the suite has 2,000 examples")
+    expect(DocumentedCounts.substituted("the suite has examples: 1,833 of them", pattern, 2000))
+      .to be_nil
   end
 
   # The tool that re-derives the number must agree with this guard about
