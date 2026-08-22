@@ -118,6 +118,18 @@ module DeferredFindings
     end
   end
 
+  # The `**Area:**` line of an entry, as the paths it names. Backticked,
+  # comma-separated, sometimes with a parenthetical naming the method.
+  AREA_LINE = /^\*\*Area:\*\*(.+?)(?=\n\n)/m
+  AREA_PATH = %r{`((?:core|vscode|scripts|docs|site|\.github)/[A-Za-z0-9._/-]+)`}
+
+  def area_paths(markdown)
+    markdown.scan(/^## (024\.\S+)(.*?)(?=^## 024\.|\z)/m).to_h do |number, body|
+      line = body[AREA_LINE, 1].to_s
+      [number, line.scan(AREA_PATH).flatten]
+    end
+  end
+
   def resolved(markdown)
     entries(markdown).select { |_, fields| RESOLVED.include?(fields["status"]) }
   end
@@ -472,5 +484,28 @@ RSpec.describe "deferred findings metadata" do
     expect(stale).to be_empty,
                      "open findings targeting a released version: #{stale.join(", ")}. " \
                      "Retarget them at a release that has not shipped, or mark them fixed."
+  end
+  # `046`'s C3. An open entry's `**Area:**` is the first thing whoever
+  # picks it up will open, and nothing checked that those paths exist.
+  # `024.87` -- open and user-visible -- named
+  # `semantic/built_in_generic_rules.rb`, which has never been committed;
+  # the real file is `semantic/generic_rule_registry.rb`.
+  #
+  # Open entries only. A resolved entry's Area is history and may name a
+  # file that has since been renamed or deleted, which is the ordinary
+  # outcome of fixing something.
+  it "names only paths that exist, in every open entry's Area" do
+    open_numbers = DeferredFindings.open_defects(deferred).keys
+    areas = DeferredFindings.area_paths(deferred)
+    root = File.expand_path("../../..", __dir__)
+
+    missing = open_numbers.flat_map do |number|
+      areas.fetch(number, []).reject { |path| File.exist?(File.join(root, path)) }
+           .map { |path| "#{number}: #{path}" }
+    end
+
+    expect(missing).to be_empty,
+                       "open entries whose Area names a path that does not exist: #{missing.join(", ")}. " \
+                       "That path is the first thing whoever picks the entry up will open."
   end
 end

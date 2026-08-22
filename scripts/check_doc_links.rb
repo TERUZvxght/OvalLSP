@@ -28,12 +28,25 @@ require "shellwords"
 
 ROOT = File.expand_path("..", __dir__)
 
-# `docs/NN-name.md` is an established shorthand for
-# `docs/design/docs/NN-name.md`, used 91 times across 39 files since the
-# design documents moved. It is a shorthand, not an error: rewriting 91
-# lines would cost more than it buys and would make the citations longer
-# at every reading. Normalised here so the check can be strict about
-# everything else.
+# `docs/<NN>-<name>.md` is an established shorthand for
+# `docs/design/docs/<NN>-<name>.md`, used 91 times across 39 files since
+# the design documents moved. It is a shorthand, not an error: rewriting
+# 91 lines would cost more than it buys and would make the citations
+# longer at every reading. Normalised here so the check can be strict
+# about everything else.
+#
+# **The placeholders are written with angle brackets deliberately.** This
+# script scans every tracked file, which includes itself, so an example
+# path spelled the way a real one is spelled becomes a finding about the
+# checker's own comment. Without the brackets these two lines were
+# exactly that, on the first run of the spec -- and so, on the second
+# run, was the sentence written to explain it, which quoted the bad form
+# in order to name it.
+#
+# Any checker that reads all tracked content has this problem. The fix is
+# to make an example unspellable as a path, not to exempt the file:
+# exempting it would stop checking a file that does carry real citations,
+# and this one carries four.
 SHORTHAND = %r{\Adocs/(\d{2}-[a-z0-9-]+\.md)\z}
 
 # What a documentation path looks like, inside backticks or a Markdown

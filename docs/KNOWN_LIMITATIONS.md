@@ -379,6 +379,15 @@ and completion stopped answering for such a class as of 0.2.1. That
 described an arrangement built and rolled back *inside* 0.2.1's review
 loop; what 0.2.1 actually shipped is the silence described above.)
 
+## The packaged extension is smoke-tested, not driven
+
+The Core Server inside the VSIX — the one you install, with its own
+vendored native extensions — is exercised at publish time by a smoke test
+that checks hover, go to definition and a clean shutdown. It is not
+driven through a full editor session on every change the way the
+repository copy is. A defect that appears only in the packaged build is
+therefore caught at publish rather than in review. <!-- documents: 024.125 -->
+
 ## What a version mismatch actually does
 
 **It tells you, and then carries on** — for the mismatches found *after*

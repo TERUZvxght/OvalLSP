@@ -120,7 +120,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**123 entries below** <!-- measured: register-entries = 123 -->,
+**124 entries below** <!-- measured: register-entries = 124 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -227,7 +227,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.60`](#02460-four-test-fixtures-raced-macos-first-execution-scan) | fixed | 0.2.3 | Four test fixtures raced macOS' first-execution scan |
 | [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.3.0 | Two per-file stores are separated by nothing but their payload |
 | [`024.63`](#02463-the-dispatch-layer-owns-view-inference-and-it-has-broken-the-query-layer-s-one-guarantee-twice) | open | 0.3.0 | The dispatch layer owns view inference, and it has broken the query … |
-| [`024.64`](#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | open | 0.3.0 | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
+| [`024.64`](#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | fixed | 0.2.12 | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
 | [`024.65`](#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
 | [`024.66`](#02466-a-marketing-card-kept-carrying-claims-about-what-an-error-s-text-says) | fixed | 0.2.3 | A marketing card kept carrying claims about what an error's text says |
 | [`024.67`](#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | fixed | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
@@ -287,6 +287,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | fixed | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
 | [`024.123`](#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.124`](#024124-four-entries-named-a-release-that-had-already-shipped-for-the-third-time) | fixed | 0.3.0 | Four entries named a release that had already shipped, for the third… |
+| [`024.125`](#024125-the-packaged-core-is-never-driven-end-to-end-and-two-gates-say-it-is) | open | 0.3.0 | The packaged Core is never driven end to end, and two gates say it is |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -3677,15 +3678,15 @@ architecture as described has one path, and the code has four.
 ## 024.64 Three rounds on `extension.ts`'s wiring, and the countermeasure was aimed at the symptom
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
-target: 0.3.0
+target: 0.2.12
+released-in: 0.2.12
 user-visible-note: >
-  The tree is correct today; round 37 confirmed the behaviour, not a
-  regression. What is recorded is that two countermeasures in a row
-  failed to pin it, so the next edit to this wiring is as unprotected as
-  it was before round 33.
+  Never reached a user; round 37 confirmed the behaviour, not a
+  regression. What it recorded was that two countermeasures in a row
+  failed to pin the call site, which 0.2.12 closed.
 ```
 
 **Area:** `vscode/src/extension.ts` (the handshake note call site),
@@ -3719,7 +3720,7 @@ stays free.
 `activate()` in CI. That is one of:
 
 1. `test:integration` in the CI workflow, which needs a VS Code download
-   and a display; the reason it was never added is cost, not principle.
+   and a display. **This is what shipped**, in 0.2.12, as `024.69`.
 2. A seam that lets the wiring be driven without `vscode` — `activate()`
    split so the per-folder start path is a pure function of injected
    collaborators, with `extension.ts` reduced to the part that only wires
@@ -3736,26 +3737,27 @@ site unmutable. The claim is what is being rolled back, and the comment
 in `versionInfo.ts` asserting it should be corrected rather than left to
 mislead the next reader.
 
-### Round 40: the same root, one file over
+### Fixed in 0.2.12
 
-`core/bin/ovallsp`'s call into `VendorBootstrap` is unpinned by the same
-absence. Reverting the script wholesale to `main`'s unscoped
-`vendor/bundle/**/gems/*/lib` leaves the Core suite at 1,953 examples, 0
-failures — nothing in `core/spec` builds a vendor payload and runs the
-script, and the only suites that drive a packaged Core are `vscode`'s two
-integration suites, which `ci.yml` does not run.
+Direction 1 shipped as `024.69`: `ci.yml` runs
+`xvfb-run -a npm run test:integration`, with a gate that fails the job
+when the suite reports no examples. `activate()` returns an `OvallspApi`
+carrying the handshakes it recorded, and
+`vscode/src/test/integration/handshake.spec.ts` asserts one happened for
+a folder whose Core *is* compatible — **the assertion the three
+countermeasures could not make**, because the notes are written on the
+compatible path too, so round 37's mutation makes that fixture silent.
 
-So this release's headline ABI fix has a spec for the module and none for
-the call, exactly as `extension.ts` has tests for the formatting and none
-for the wiring. A regression there is either the `LoadError: linked to
-incompatible libruby` this release exists to remove, or — if the
-`activate!` call is dropped rather than reverted — a packaged Core that
-does not start at all.
+Not the full `activate()` split direction 2 describes. What is bought is
+that the wiring is observable at all from a suite that executes it.
 
-The direction is unchanged and is still option 1 above: something in CI
-that executes the packaged path. Two files now wait on it, which is worth
-knowing when it is scheduled.
-
+**A "Round 40" section stood here until 0.2.14 and was stale when it was
+written.** It said `core/bin/ovallsp`'s call into `VendorBootstrap` was
+unpinned by the same absence; `core/spec/ovallsp/bin_vendor_bootstrap_wiring_spec.rb`
+parses the script and asserts the `VendorBootstrap.activate!` call, and
+has since before that section was added. Deleted rather than corrected —
+the claim had no surviving half. `046`'s C3 is the check that would have
+caught it.
 
 ## 024.65 A different Ruby engine produces two error toasts where it produced one
 
@@ -5057,7 +5059,7 @@ user-visible: yes
 target: 0.3.0
 ```
 
-**Area:** `core/lib/ovallsp/semantic/built_in_generic_rules.rb`,
+**Area:** `core/lib/ovallsp/semantic/generic_rule_registry.rb`,
 `core/lib/ovallsp/local_inferencer.rb`
 
 `Post.where(published: true)` infers `Relation[Post]`;
@@ -6916,6 +6918,45 @@ A fixed entry keeps its target as history, which is what
 
 `deferred_findings_spec.rb` enforces it, so the next release cannot
 inherit the situation the way three have.
+
+## 024.125 The packaged Core is never driven end to end, and two gates say it is
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `vscode/package.json` (`test:integration:packaged`),
+`.github/workflows/ci.yml`, `docs/RELEASE_CHECKLIST.md` rows 1 and 5
+
+`vscode/package.json` defines `test:integration:packaged`, which drives a
+VS Code host against the **packaged** Core — the one in the VSIX, with
+its vendored native extensions — rather than the repository copy. No CI
+job invokes it. `git grep test:integration:packaged` finds it named in
+six documents and run by nothing.
+
+`docs/RELEASE_CHECKLIST.md` marks rows 1 and 5 ✅ against it.
+
+**Why this is user-visible and not merely a gap.** The packaged Core is
+what a user installs, and it differs from the repository copy in exactly
+the way that has broken before: `023.5` is a packaged-only update
+regression, and `024.64`'s Round 40 was about a packaged-only load path.
+`vsix_semantic_smoke.rb` does drive the packaged artifact at publish
+time, which is why this is a gap rather than an absence — but it runs at
+publish, not on a pull request, so a change that breaks the packaged path
+is found after the decision to ship rather than before it.
+
+**This is the half of `024.64` that survived.** That entry's other
+direction shipped as `024.69`; this one is a different subject and gets
+its own number rather than keeping an entry open for it, which is what
+`024.90` did nine times over.
+
+**Direction:** either run it in CI — it needs the same `xvfb-run` and VS
+Code download the unpackaged integration job already pays for, plus a
+`vsce package` step — or stop marking rows 1 and 5 ✅ and say what really
+covers them. `046`'s C6 makes the second impossible to leave implicit.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
