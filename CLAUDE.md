@@ -15,9 +15,14 @@ Every rule below is subordinate to two things, and exists to serve them:
    principle that a wrong answer is worse than no answer *but letting
    1.0.0 recede forever in pursuit of accuracy is worse than either*.
 
-**Section 0 is the trusted root; this file is not.** These rules were
-each written after a real incident, which makes them hard to question and
-is exactly why they need a root to be checked against. If following a
+**Section 0 is the trusted root; this file is not.** Most of these rules
+were written after a real incident, which makes them hard to question and
+is exactly why they need a root to be checked against. **Not all of them
+were**: some are inferences drawn from measurement, or from another
+rule, and those are the ones most worth re-checking — an inference
+carries the authority of an incident without having paid for it. Where a
+rule below does not name what it cost, that is the first thing to ask
+about it. If following a
 rule here starts working against section 0 — most often by making the
 release recede — **the rule is what changes**. Section 0.6 says how to
 check one, and how to write one without manufacturing a false rule from

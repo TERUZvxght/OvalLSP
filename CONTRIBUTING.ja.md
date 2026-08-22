@@ -118,11 +118,12 @@ cd vscode && npm run test:integration
 ruby scripts/preflight.rb
 ```
 
-commit前に真であるべきものを全て実行します — フルスイート、実Rails
-依存の2つのsuiteを個別に(ローカルに`rails`と`sqlite3`が無いと丸ごと
-skipし、それでも`rspec`は0で終了するため、exit statusではなくexample数
-が0でないことを確認します)、home path検査、ドキュメントリンク解決、
-レジスタの索引、rescue verdict、siteリンク。それぞれが何を実行したかを
+commit前に真であるべきものを全て実行します: 文書中のexample数、フル
+スイート、環境依存の3つのsuite(ローカルに`rails`/`sqlite3`/
+`vscode/node_modules`が無いと丸ごとskipし、それでも`rspec`は0で終了
+するため、example数ではなく各exampleの**status**を読みます —
+skipされたexampleもexampleだからです)、home path検査、ドキュメント
+リンク解決、レジスタの索引、rescue verdict、siteリンク。それぞれが何を実行したかを
 出力するので、commit messageには記憶ではなく実行結果を引用できます。
 
 git hookとして1度だけ入れる場合:

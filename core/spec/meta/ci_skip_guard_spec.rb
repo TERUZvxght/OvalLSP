@@ -44,7 +44,14 @@ RSpec.describe "the CI guard against a silently skipped suite" do
   # which is 024.16's gap, reopened.
   let(:guard) { guard_step&.fetch("run") }
 
-  let(:suite_table) { guard && guard[/\{\n.*?\}\.each do \|label, path\|/m] }
+  # `024.148`. The logic used to be forty lines of Ruby inline in this
+  # step; it is `scripts/check_suites_ran.rb` now, because `preflight.rb`
+  # needed the same rule and -- unable to call it -- wrote a weaker one
+  # that could not fail. So these examples now assert two links: the step
+  # runs the script, and the script still carries each guarantee.
+  let(:checker) do
+    File.read(File.expand_path("../../../scripts/check_suites_ran.rb", __dir__), encoding: "UTF-8")
+  end
 
   it "still runs in the core job at all" do
     expect(guard_step).not_to be_nil,
@@ -54,33 +61,37 @@ RSpec.describe "the CI guard against a silently skipped suite" do
   # Both paths, and both must be the *real* spec files -- a typo'd path
   # yields zero examples, which the guard's own "contributed zero
   # examples" branch turns into a failure rather than a silent pass.
-  it "checks both suites that can skip themselves for want of an environment" do
-    expect(suite_table).not_to be_nil, "the guard no longer iterates a table of suite paths"
+  it "runs the shared checker rather than a copy of its logic" do
+    expect(guard).to include("scripts/check_suites_ran.rb"),
+                     "the step no longer runs the shared checker -- a second copy of this rule is how " \
+                     "024.148 happened"
+  end
 
-    %w[spec/integration/real_rails_spec.rb spec/e2e/capabilities_spec.rb].each do |path|
+  # All three, and each must be a *real* spec file -- a typo'd path
+  # yields zero examples, which the checker's own "contributed zero
+  # examples" branch turns into a failure rather than a silent pass.
+  it "checks every suite that can skip itself for want of an environment" do
+    %w[
+      spec/integration/real_rails_spec.rb
+      spec/e2e/capabilities_spec.rb
+      spec/meta/client_behaviour_spec.rb
+    ].each do |path|
       expect(File).to exist(File.expand_path("../../#{path}", __dir__))
-      expect(suite_table).to include(path)
+      expect(checker).to include(path)
     end
   end
 
   it "fails the build on a skip rather than only reporting it" do
-    # The *skip* branch's own `exit 1`, sliced out: the guard has a
-    # second one for the zero-examples branch, so asking whether the step
-    # contains the string anywhere passes with the skip branch reduced to
-    # a warning -- which is the whole failure being guarded against.
-    skip_branch = guard[/unless skipped\.empty\?.*?\n\s*end/m]
+    expect(checker).to include("exit 1")
+    expect(checker).to include('ex.fetch("status") == "pending"')
+  end
 
-    expect(skip_branch).to include("exit 1")
-    expect(guard).to include('ex.fetch("status") != "pending"')
-
-    # And the other branch, on its own terms. A path that stops matching
-    # any example -- a typo, a renamed spec file -- is the failure the
-    # example above cites as its reason for checking the paths, so
-    # leaving its `exit 1` unasserted would pin the reason and not the
-    # mechanism.
-    empty_branch = guard[/if examples\.empty\?.*?\n\s*end/m]
-
-    expect(empty_branch).to include("exit 1")
+  # A path that stops matching any example -- a typo, a renamed spec file
+  # -- is the failure the example above cites as its reason for checking
+  # the paths, so leaving it unasserted would pin the reason and not the
+  # mechanism.
+  it "treats a suite that contributed nothing as a failure" do
+    expect(checker).to include("contributed zero examples")
   end
 
   # docs/EXTENSION_CAPABILITIES.md tells authors to mark a row that cannot
@@ -89,7 +100,8 @@ RSpec.describe "the CI guard against a silently skipped suite" do
   # documented state unexpressible, so the exemption is part of the
   # contract between the two, not an oversight.
   it "leaves the documented NOT YET status expressible" do
-    expect(guard).to include('pending_message").to_s.include?("NOT YET")')
+    expect(checker).to include("ALLOWED_PENDING")
+    expect(checker).to include('"NOT YET"')
   end
 
   # The exemption is an authoring rule -- a pending row has to *say* `NOT

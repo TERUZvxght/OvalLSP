@@ -124,12 +124,13 @@ itself.
 ruby scripts/preflight.rb
 ```
 
-Runs everything that has to be true before a commit — the full suite,
-the two real-Rails-backed suites separately (they skip in full without
-local `rails` and `sqlite3` while `rspec` still exits 0, so it checks
-the example count is non-zero rather than trusting the exit status), the
-home-path scan, the documentation-link resolver, the register index, the
-rescue verdicts and the site links. It prints what each one ran, so a
+Runs everything that has to be true before a commit: the documented
+example counts, the full suite, the three environment-dependent suites
+(they skip in full without local `rails`, `sqlite3` or
+`vscode/node_modules` while `rspec` still exits 0 — so it reads each
+example's *status*, not the count, because a skipped example is still an
+example), the home-path scan, the documentation-link resolver, the
+register index, the rescue verdicts and the site links. It prints what each one ran, so a
 commit message can quote a run rather than a recollection.
 
 Install it as a git hook once:

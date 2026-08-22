@@ -75,7 +75,10 @@ MVPでは1とsystem Rubyだけでもよい。環境解決は独立moduleにす�
 
 ## 5. Status Bar
 
-`vscode/src/clientPresentation.ts` の `STATUS_LABELS` が唯一の定義:
+`vscode/src/clientPresentation.ts` が唯一の定義。ただし**2つの定数に
+分かれている** — 上4つが `STATUS_LABELS`、最後の1つが
+`STATUS_ERROR_TEXT` である（同ファイルのコメントも「The four states」と
+書いている）:
 
 ```text
 $(sync~spin) OvalLSP: Indexing

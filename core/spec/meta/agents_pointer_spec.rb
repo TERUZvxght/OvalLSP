@@ -36,6 +36,40 @@ RSpec.describe "AGENTS.md's work-in-progress pointer" do
     text[start...finish]
   end
 
+  # The same class, one paragraph up. `AGENTS.md`'s goal section used to
+  # say "The release being prepared now is **0.3.0, on `feat/0.3.0`**"
+  # and was wrong within one release — HEAD was `feat/0.2.14` — in the
+  # paragraph the file itself designates as the defence against a
+  # compaction losing the path.
+  #
+  # Citations of task documents stay allowed here: `042`, `045` and
+  # `036` are references to a document, not claims about where the work
+  # currently is. What may not appear is a version-and-branch assertion,
+  # which is the thing that decays.
+  def goal_paragraph
+    text = File.read(AGENTS_MD, encoding: "UTF-8")
+    start = text.index("**The distance to 1.0.0 is written down**")
+    raise "AGENTS.md's goal paragraph is gone" if start.nil?
+
+    finish = text.index("\n## ", start) || text.length
+    text[start...finish]
+  end
+
+  it "does not assert which release is being prepared, or on which branch" do
+    claims = goal_paragraph.scan(/`feat\/[0-9]+\.[0-9]+\.[0-9]+`|being prepared now is \*\*[0-9]/)
+
+    expect(claims).to be_empty,
+                      "the goal paragraph names a release or branch: #{claims.join(', ')}. " \
+                      "`git branch --show-current` and the highest-numbered task file say it, and " \
+                      "cannot go stale."
+  end
+
+  it "would catch the claim coming back" do
+    planted = "The release being prepared now is **0.3.0, on `feat/0.3.0`** — the first"
+
+    expect(planted.scan(/`feat\/[0-9]+\.[0-9]+\.[0-9]+`|being prepared now is \*\*[0-9]/)).not_to be_empty
+  end
+
   it "does not name a task file by number" do
     named = bullet.scan(AGENTS_TASK_FILE)
 

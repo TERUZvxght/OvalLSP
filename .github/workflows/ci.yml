@@ -111,46 +111,15 @@ jobs:
       # failures, 41 pending" and exit status 0, which is exactly what
       # EXTENSION_CAPABILITIES.md's "a capability whose row is skipped is
       # not shipped" exists to prevent (024.16).
+      # `024.148`. This was forty lines of Ruby embedded here, tested by
+      # nothing and callable by nothing else -- and `preflight.rb`, added
+      # in the same release, guarded the same property with a weaker rule
+      # (a non-zero example count) that could not fail in the one case it
+      # existed for, because a skipped example is still an example. One
+      # script, both callers, and `core/spec/meta/suites_ran_spec.rb`
+      # tests it against the exact all-skipped shape.
       - name: Fail if the real-Rails or capability suites were skipped instead of run
-        working-directory: core
-        run: |
-          ruby -rjson -e '
-            result = JSON.parse(File.read("tmp/rspec.json", encoding: "UTF-8"))
-            {
-              "real-Rails integration" => "spec/integration/real_rails_spec.rb",
-              "capability E2E" => "spec/e2e/capabilities_spec.rb",
-              # Same failure mode, found a release later: these read the
-              # client'"'"'s own source and skipped when node_modules was
-              # absent, which was every run here. The comment in that file
-              # claimed the example count would notice; it counts skipped
-              # examples, so nothing did.
-              "client-behaviour" => "spec/meta/client_behaviour_spec.rb"
-            }.each do |label, path|
-              examples = result.fetch("examples").select { |ex| ex.fetch("file_path").include?(path) }
-              if examples.empty?
-                warn "#{path} contributed zero examples -- was it even loaded?"
-                exit 1
-              end
-              # Not every pending example. docs/EXTENSION_CAPABILITIES.md
-              # defines a `NOT YET` row as one that is "specified, has an
-              # E2E row, currently failing or pending" -- a state the
-              # document tells authors to use, and that
-              # capability_coverage_spec.rb accepts. Failing on those
-              # would make the documented state unexpressible. What this
-              # guard is actually about is the environment skip, so a
-              # pending example has to say `NOT YET` to be allowed
-              # through, and anything else -- including the
-              # rails/sqlite3 skip, whose message does not -- is a
-              # failure.
-              skipped = examples.reject { |ex| ex.fetch("status") != "pending" || ex.fetch("pending_message").to_s.include?("NOT YET") }
-              unless skipped.empty?
-                warn "#{skipped.size}/#{examples.size} #{label} examples were skipped in CI. Either rails/sqlite3 are missing (they must be installed here, not optional), or a deliberately pending row does not say NOT YET in its message, which docs/EXTENSION_CAPABILITIES.md requires:"
-                skipped.each { |ex| warn "  - #{ex.fetch("full_description")} (#{ex.fetch("pending_message")})" }
-                exit 1
-              end
-              puts "All #{examples.size} #{label} examples ran (none skipped for want of an environment)."
-            end
-          '
+        run: ruby scripts/check_suites_ran.rb core/tmp/rspec.json
 
   core-ruby-4:
     name: Core Server (Ruby 4.0, informational)

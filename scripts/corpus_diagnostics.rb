@@ -102,8 +102,11 @@ end
 control_expectations = []
 corpus_args = []
 ARGV.each do |arg|
-  # `--expect-control unresolved-constant=9550`: a category the change
-  # under test cannot affect, and the count it must come out at. 0.2.1's
+  # `--expect-control=unresolved-constant:9550`: a category the change
+  # under test cannot affect, and the count it must come out at. Written
+  # `=` then `:`, which is what the two lines below parse -- this comment
+  # spelled it the other way round until round 1 found that following it
+  # gets the run refused. 0.2.1's
   # control was exactly this and it is what made that comparison
   # readable. A control asserted after the fact is a control chosen to
   # agree.

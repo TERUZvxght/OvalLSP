@@ -5,6 +5,7 @@
 # before the commit, so a check that lists only tracked files is blind to
 # exactly the file being worked on.
 require_relative "../../../scripts/repo_files"
+require_relative "../../../scripts/deferred_findings"
 
 require "open3"
 require "tmpdir"
@@ -42,7 +43,22 @@ require "tmpdir"
 RSpec.describe "numbers documented about this tree" do
   TREE_ROOT = File.expand_path("../../..", __dir__)
 
-  MARKER = /<!--\s*measured:\s*(?<name>[a-z0-9-]+)\s*=\s*(?<value>[0-9]+)\s*-->/
+  # `@<rev>` makes the claim historical: it is derived from the file as
+  # it stood at that revision, not as it stands now.
+  #
+  # Round 1 found why this is needed. `037` is 0.2.7's record, and its
+  # sentence "N open defects ... sort into eight classes" is a statement
+  # about the register *as the classification was made*. Bound to a
+  # present-tense deriver, every later release rewrote it — so a
+  # historical document ended up asserting a number nobody had measured
+  # against the thing it describes, and the eight classes were derived
+  # from a register a hundred entries smaller.
+  #
+  # The alternative was an unmarked hand-typed number, which is what the
+  # sentence *had* before and what got it wrong (53 against the deriver's
+  # own answer). A dated claim stays checkable; an undated one is a
+  # promise to remember.
+  MARKER = /<!--\s*measured:\s*(?<name>[a-z0-9-]+)(?:@(?<rev>[0-9a-f]{7,40}))?\s*=\s*(?<value>[0-9]+)\s*-->/
 
   # Each deriver answers the current truth. Keep them cheap: this runs on
   # every suite run.
@@ -50,29 +66,41 @@ RSpec.describe "numbers documented about this tree" do
     # Every `Mutex.new` in the shipped library. The architecture
     # document's threading section states the lock order and was wrong
     # about this count on the release that introduced it.
-    "mutex-sites" => lambda {
+    "mutex-sites" => lambda { |_rev = nil|
       Dir.glob(File.join(TREE_ROOT, "core", "lib", "**", "*.rb"))
          .sum { |f| File.read(f, encoding: "UTF-8").scan("Mutex.new").length }
     },
-    # Entries in the deferred-findings register.
-    "register-entries" => lambda {
-      File.read(File.join(TREE_ROOT, "docs", "design", "tasks", "024-deferred-review-findings.md"), encoding: "UTF-8")
-          .scan(/^## 024\.[0-9R]+ /).length
-    },
-    # Open defects in it -- the number a reader of `036` is deciding
-    # against.
-    "register-open-defects" => lambda {
-      blocks = File.read(File.join(TREE_ROOT, "docs", "design", "tasks", "024-deferred-review-findings.md"),
-                         encoding: "UTF-8").split(/^(?=## 024\.)/)
-      blocks.count do |block|
-        yaml = block[/```yaml\n(.*?)```/m, 1]
-        next false unless yaml
-
-        fields = yaml.scan(/^([a-z-]+):\s*(.*)$/).to_h
-        fields["kind"] == "defect" && !%w[fixed done].include?(fields["status"])
-      end
-    }
+    # Entries in the deferred-findings register, and the open defects in
+    # it -- the number a reader of `036` is deciding against.
+    #
+    # Both read through `DeferredFindings`, which `046`'s C4 made the
+    # single parser of this file. They did not until round 1 found them:
+    # this file carried a *third* and *fourth* reader, a heading regex
+    # that could not match a sub-numbered entry and a hand-rolled
+    # `key: value` scanner -- the same scanner C4 had just deleted from
+    # `reindex_findings.rb`, with the same divergence. A quoted
+    # `status: "fixed"` reads as `"fixed"` with its quotes, fails the
+    # resolved test, and counts a closed entry as open.
+    #
+    # **And the failure mode is inverted, which is why it matters.** The
+    # deriver is the side that would be wrong, so the *correct*
+    # documented number is what fails, and the message below tells the
+    # author to write the false count into the document.
+    "register-entries" => ->(rev = nil) { DeferredFindings.headings(register(rev)).length },
+    "register-open-defects" => ->(rev = nil) { DeferredFindings.open_defects(register(rev)).length }
   }.freeze
+
+  REGISTER = "docs/design/tasks/024-deferred-review-findings.md"
+
+  # At `rev` when the claim is dated, otherwise as it stands.
+  def self.register(rev = nil)
+    return File.read(File.join(TREE_ROOT, REGISTER), encoding: "UTF-8") if rev.nil?
+
+    out = IO.popen(["git", "show", "#{rev}:#{REGISTER}"], chdir: TREE_ROOT, err: %i[child out], &:read)
+    raise "cannot read #{REGISTER} at #{rev}: #{out}" unless $?.success?
+
+    out
+  end
 
   def claims
     patterns = %w[docs/**/*.md core/lib/**/*.rb core/spec/**/*.rb vscode/src/**/*.ts]
@@ -84,7 +112,8 @@ RSpec.describe "numbers documented about this tree" do
       File.read(path, encoding: "UTF-8").lines.each_with_index.filter_map do |line, index|
         next unless (m = line.match(MARKER))
 
-        { path: path.delete_prefix("#{TREE_ROOT}/"), line: index + 1, name: m[:name], value: Integer(m[:value]) }
+        { path: path.delete_prefix("#{TREE_ROOT}/"), line: index + 1, name: m[:name],
+          rev: m[:rev], value: Integer(m[:value]) }
       end
     end
   end
@@ -99,7 +128,7 @@ RSpec.describe "numbers documented about this tree" do
 
   it "matches what the tree actually says" do
     wrong = claims.select { |c| DERIVERS.key?(c[:name]) }.filter_map do |c|
-      actual = DERIVERS.fetch(c[:name]).call
+      actual = DERIVERS.fetch(c[:name]).call(c[:rev])
       next if actual == c[:value]
 
       "#{c[:path]}:#{c[:line]}: #{c[:name]} says #{c[:value]}, the tree has #{actual}"

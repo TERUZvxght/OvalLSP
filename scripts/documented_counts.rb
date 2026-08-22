@@ -83,6 +83,22 @@ if __FILE__ == $PROGRAM_NAME
     exit 1
   end
 
-  stale.each { |d| puts "documented-counts: #{d} -> #{count}" if DocumentedCounts.rewrite(d, count) }
-  puts "documented-counts: re-derived #{count} into #{stale.length} document(s)."
+  # Report what was *written*, not what was found stale. `rewrite`
+  # returns false when its gsub matched nothing, which is a document
+  # whose wording moved out from under the pattern -- classed stale,
+  # never written to, and until round 1 found it, still counted in the
+  # success line and exited 0.
+  rewritten = stale.select { |d| DocumentedCounts.rewrite(d, count).tap { |ok| puts "documented-counts: #{d} -> #{count}" if ok } }
+  missed = stale - rewritten
+
+  unless missed.empty?
+    missed.each do |d|
+      warn "documented-counts: #{d} matched #{DocumentedCounts::PATTERNS.fetch(d).inspect} nowhere -- nothing was written."
+    end
+    warn "documented-counts: the document's wording moved out from under its pattern. " \
+         "Fix the pattern here, or the sentence there; do not leave the number unstated."
+    exit 1
+  end
+
+  puts "documented-counts: re-derived #{count} into #{rewritten.length} document(s)."
 end

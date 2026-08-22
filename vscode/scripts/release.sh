@@ -198,6 +198,13 @@ node "$VSCODE_DIR/scripts/verify-packaged-payload-hash.js" "$UNPACK_DIR/extensio
 echo "-- ruby scripts/vsix_semantic_smoke.rb --"
 ruby "$REPO_ROOT/scripts/vsix_semantic_smoke.rb" "$UNPACK_DIR/extension"
 
+# RELEASE_CHECKLIST gates 8 and 11 cite this script as their evidence,
+# and until 0.2.14 nothing ran it -- the SBOM was checked against the
+# lockfiles by the suite and against the shipped artifact by nobody.
+# This is the only point where the real artifact exists on disk.
+echo "-- ruby scripts/verify_sbom_against_vsix.rb --"
+ruby "$REPO_ROOT/scripts/verify_sbom_against_vsix.rb" "$UNPACK_DIR/extension"
+
 echo "-- SHA-256 --"
 SHA256="$(shasum -a 256 "$VSIX_PATH" | awk '{print $1}')"
 echo "$SHA256  $(basename "$VSIX_PATH")"

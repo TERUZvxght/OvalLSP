@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**146 entries below** <!-- measured: register-entries = 146 -->,
+**149 entries below** <!-- measured: register-entries = 149 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -317,6 +317,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.145`](#024145-re-deriving-the-example-count-was-three-hand-edits-per-commit) | fixed | 0.2.14 | Re-deriving the example count was three hand edits per commit |
 | [`024.146`](#024146-a-script-crashes-under-a-locale-less-shell-on-the-input-a-check-exists-to-report) | fixed | 0.2.14 | A script crashes under a locale-less shell, on the input a check exi… |
 | [`024.147`](#024147-every-check-was-blind-to-a-file-until-it-was-committed-and-the-commit-gate-runs-before-that) | fixed | 0.2.14 | Every check was blind to a file until it was committed, and the comm… |
+| [`024.148`](#024148-the-check-for-did-the-suite-actually-run-could-not-fail-in-the-case-it-existed-for) | fixed | 0.2.14 | The check for "did the suite actually run" could not fail in the cas… |
+| [`024.149`](#024149-a-review-harness-that-reports-nothing-found-when-its-own-post-processing-crashed) | fixed | 0.2.14 | A review harness that reports "nothing found" when its own post-proc… |
+| [`024.150`](#024150-agents-md-paraphrases-claude-md-and-the-paraphrase-drifts) | open | 0.3.0 | `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -6921,7 +6924,7 @@ user-visible-note: >
   "what is left for this release" stops being answerable from the file
   that is supposed to answer it.
 target: 0.3.0
-released-in: 0.3.0
+released-in: 0.2.14
 ```
 
 **Area:** `docs/design/tasks/024-deferred-review-findings.md` (the
@@ -7887,6 +7890,194 @@ actually been affected.
 depend on git state that changes between running it and committing. If
 it does, the run that gates the commit and the run that CI performs are
 answering different questions.*
+
+
+## 024.148 The check for "did the suite actually run" could not fail in the case it existed for
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Internal. Its cost is that the local gate for "a capability row is
+  true because its E2E example ran" would have passed on a machine
+  where that example never ran.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `scripts/check_suites_ran.rb`,
+`core/spec/meta/suites_ran_spec.rb`, `scripts/preflight.rb`,
+`.github/workflows/ci.yml`
+
+Three spec files skip themselves when their environment is absent, and
+`rspec` still exits 0:
+
+| file | needs |
+|---|---|
+| `spec/integration/real_rails_spec.rb` | local `rails` + `sqlite3` |
+| `spec/e2e/capabilities_spec.rb` | the same fixture |
+| `spec/meta/client_behaviour_spec.rb` | `vscode/node_modules` |
+
+`preflight.rb` guarded this by asserting a **non-zero example count**.
+That cannot work, and the reason is one sentence: **a skipped example is
+still an example.** Measured — a fully skipped file reports:
+
+```
+2 examples, 0 failures, 2 pending
+```
+
+exit status 0. So the count is 2, the guard passes, and the check whose
+entire purpose is to catch this case cannot fail in it. It is
+`CLAUDE.md`'s "an assertion that cannot fail is not a test", written by
+someone who had just quoted that rule in the same file's header.
+
+**The working logic already existed** — forty lines of Ruby embedded in
+`ci.yml`, reading the JSON formatter's per-example status and treating a
+pending example as a skip unless its message says `NOT YET`. Embedded in
+YAML, it was tested by nothing and callable by nothing else, so the
+second caller wrote a weaker rule rather than reusing it. `042`'s D8
+shape: a thing assembled twice diverges.
+
+**Fixed** by extracting it to `scripts/check_suites_ran.rb`, which
+`ci.yml` and `preflight.rb` both run, and `suites_ran_spec.rb` tests
+against the exact all-skipped shape. Verified against a real report with
+all 16 `real_rails` examples marked pending, which the old rule accepted
+and the new one refuses.
+
+**The `NOT YET` exemption is kept and is not a weakening.**
+`docs/EXTENSION_CAPABILITIES.md` defines a `NOT YET` row as specified,
+carrying an E2E row, and currently failing or pending — a state the
+document tells authors to use. Failing on those would make a documented
+state unexpressible. The environment skip is what this is about, and its
+message does not say `NOT YET`.
+
+*Found by review round 1. Two of five reviewers reached it
+independently, and neither was looking at the same thing.*
+
+
+## 024.149 A review harness that reports "nothing found" when its own post-processing crashed
+
+```yaml
+status: fixed
+kind: friction
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it cost is that a review round which had
+  found 84 defects returned the number 0, and the only thing between
+  that number and being believed was reading the diagnostics.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** the review harness for 0.2.14's rounds (a `Workflow` script,
+not tracked here), `docs/design/tasks/046-0.2.14-making-the-record-true.md`
+
+Round 1's harness passed **promises** where the API wanted **thunks**,
+so all thirty verification calls failed. The round's return value was:
+
+```json
+{"method":"diff","raised":0,"survived":[],"refuted":[]}
+```
+
+**`raised: 0` meant "the post-processing crashed", and it is indistinguishable
+from "five reviewers read the change set and found nothing".** The
+findings existed the whole time and were recoverable only from the run's
+journal. Had the summary been taken at face value, the round would have
+been recorded as clean — and round 1 had found a red suite at HEAD under
+a commit message claiming 2,374 examples and 0 failures.
+
+**This is the release's own subject, arriving in the tooling that
+measures the release.** `CLAUDE.md` already carries it three times over:
+*a checker that cannot see the thing it checks reports exactly what a
+working checker reports when nothing is pinned*; *a green suite can be
+green because it did not run*; *catching a failure and continuing is not
+the default*. None of those is about a review harness, and that is the
+gap — the rules are written about the product's code and the harness is
+not the product's code.
+
+**Two things follow, and only the second is worth much:**
+
+- The immediate fix is a corrected script, which is nothing.
+- The durable one: **a round's result is read from its journal, not from
+  its summary.** The journal records each agent's actual return value;
+  the summary is a computation over them and can fail on its own. The
+  same distinction as a corpus run's stdout versus the script that
+  diffs it, and `026` is four recorded instances of trusting the second.
+
+**Two more process failures from the same round, recorded because the
+standing instruction for this pass is that raising without recording is
+not allowed:**
+
+- **The tree was mutated mid-round.** `046` was edited while five
+  reviewers were reading the working tree. `CLAUDE.md` says never to run
+  the hunk sweep while another agent is mutating the tree; it does not
+  say the same about reviewers, and it should. The exposure was one
+  added section and the round was scoped to the committed diff, but a
+  finding about that section would have been manufactured rather than
+  found.
+- **Five reviewers each ran the full suite concurrently** — six `rspec`
+  processes, load average 9.6, and a foreground `preflight` starved into
+  a timeout. Nothing told them the suite costs eight minutes or that
+  four others were doing the same. Rounds 2 and 3 tell each agent the
+  cost, ask for single spec files, and state the full run already
+  recorded at that revision — which is `CLAUDE.md`'s corpus-list rule
+  (*say what has been measured and at which revision*), not an
+  exclusion.
+
+
+## 024.150 `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Internal. What it costs is that the file a session reads first can
+  state something the file it paraphrases has since corrected, and
+  nothing compares them.
+target: 0.3.0
+```
+
+**Area:** `AGENTS.md`, `CLAUDE.md`
+
+`AGENTS.md` is a condensed operational restatement of `CLAUDE.md`'s
+rules — twelve bullets, each a shortened form of a section. Two copies
+of one set of rules, with no relationship between them, which is the
+shape this release's C4 and C5 are both about.
+
+**One measurement, from round 1 of 0.2.14's review:** `AGENTS.md`'s goal
+paragraph named the release being prepared and its branch, and named the
+*next* release while HEAD was on the current one — in the paragraph the
+file itself designates as the defence against a compaction losing the
+path. Fixed by making it derivable (`git branch --show-current` and the
+highest-numbered task file), and pinned by `agents_pointer_spec.rb`.
+
+**That is one drift, found by accident.** Nothing looked for others, and
+nothing would.
+
+**Why it is open rather than done.** `046` asserted that the paraphrase
+would shrink in 0.2.14. It grew by 15 words, and the assertion sat in
+the plan as if it were a disposition until round 1 measured it — which
+is the same defect as the ones this release exists to fix, so it is
+recorded rather than quietly executed. Restructuring the file a session
+reads first is also an **add**, and `CLAUDE.md` says *during a review
+loop, fix; do not add*.
+
+**Direction, and it is not "shrink it".** The question to answer first is
+whether the paraphrase carries anything `CLAUDE.md` does not, because
+that decides between two different jobs:
+
+- If it is purely a restatement, it should become pointers, and the
+  drift class disappears with it.
+- If it carries operational sequencing a full read would bury — which is
+  the argument for having it at all — then it stays and needs a
+  *relationship*: a check that every rule it names still exists in
+  `CLAUDE.md`, in the shape `client_behaviour_spec.rb` already uses for
+  a claim stated in one document and pointed at from everywhere else.
+
+Measure the overlap before choosing. Deciding without that is what
+produced the assertion this entry replaces.
 
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)

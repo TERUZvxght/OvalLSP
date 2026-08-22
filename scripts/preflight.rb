@@ -29,6 +29,8 @@ require_relative "utf8"
 #   message can quote a run rather than a recollection.
 
 require "open3"
+require "json"
+require_relative "check_suites_ran"
 
 ROOT = File.expand_path("..", __dir__)
 CORE = File.join(ROOT, "core")
@@ -45,6 +47,23 @@ NON_EMPTY_SUITE = lambda do |out|
   return "0 examples ran -- the suite skipped rather than executed" if count == "0"
 
   nil
+end
+
+# `024.148`. The count above is not enough on its own and this is the
+# check that needs more: a **skipped example is still an example**, so a
+# fully skipped `real_rails_spec.rb` reports "45 examples, 0 failures, 41
+# pending" and satisfies any count-based rule. The first version of this
+# file had only the count, and therefore could not fail in the one case
+# it existed for -- found by review round 1.
+#
+# `scripts/check_suites_ran.rb` reads the JSON formatter's per-example
+# status, and is the same script ci.yml runs.
+SUITES_RAN = lambda do |_out|
+  report_path = File.join(CORE, "tmp", "rspec.json")
+  return "no #{report_path} -- the run did not produce a JSON report" unless File.file?(report_path)
+
+  complaints = CheckSuitesRan.complaints(JSON.parse(File.read(report_path, encoding: "UTF-8")))
+  complaints.empty? ? nil : complaints.join("\n    ")
 end
 
 CHECKS = [
@@ -64,11 +83,12 @@ CHECKS = [
     dir: CORE, command: %w[bundle exec rspec --order random], expect: NON_EMPTY_SUITE
   ),
   Check.new(
-    name: "real-Rails and capability suites actually ran",
-    why: "without local rails and sqlite3 both skip in full and rspec still exits 0",
+    name: "environment-dependent suites actually ran",
+    why: "without local rails/sqlite3/node_modules these skip in full and rspec still exits 0",
     dir: CORE,
-    command: %w[bundle exec rspec spec/integration/real_rails_spec.rb spec/e2e/capabilities_spec.rb],
-    expect: NON_EMPTY_SUITE
+    command: %w[bundle exec rspec spec/integration/real_rails_spec.rb spec/e2e/capabilities_spec.rb
+                spec/meta/client_behaviour_spec.rb --format json --out tmp/rspec.json --format progress],
+    expect: SUITES_RAN
   ),
   Check.new(
     name: "no real home path in tracked content",

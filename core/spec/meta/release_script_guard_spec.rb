@@ -52,6 +52,21 @@ RSpec.describe "the release script's own guards" do
   # `make-final-review-bundle.sh`, which nothing invoked. 046 deleted
   # that script and moved the gate here, to the one path that actually
   # publishes.
+  # `RELEASE_CHECKLIST` gates 8 and 11 both cite
+  # `scripts/verify_sbom_against_vsix.rb` as their evidence, and until
+  # 0.2.14 nothing ran it -- `046` line 94 says so in the same release
+  # that cited it. Round 1 found that C6 reported it wired anyway,
+  # because the script's own usage string names it in a non-comment line.
+  #
+  # Wired here rather than marked unwired: the check needs an unpacked
+  # VSIX, `release.sh` already has one on disk for the semantic smoke,
+  # and a gate that can run is worth more than a gate that is honestly
+  # labelled as not running.
+  it "verifies the SBOM against the packaged artifact before publishing" do
+    expect(code).to include("verify_sbom_against_vsix.rb")
+    expect(code).to match(/verify_sbom_against_vsix\.rb.*UNPACK_DIR/m)
+  end
+
   it "refuses to publish from a tree with uncommitted changes, from inside that check" do
     block = block_containing(/diff --quiet/)
 
@@ -123,9 +138,15 @@ RSpec.describe "the release script's own guards" do
   # refuses on an implausible count. That converts "aimed at nothing"
   # from silent into visible.
   it "makes the artifact check say what it inspected, and refuse an implausible count" do
-    block = block_containing(/files inspected/)
-
+    # Both halves. The refusal was pinned and **the reporting was not**:
+    # the first line here computed a window and never read it, so
+    # deleting release.sh's `echo "PASS: ... (${INSPECTED} files
+    # inspected)"` left this file at 8 examples, 0 failures. That echo is
+    # the countermeasure's visible half -- the thing that turns "aimed at
+    # nothing" from silent into seen -- and it was the half no example
+    # touched. Round 1 found it by deleting the line.
     expect(code).to include("INSPECTED=")
+    expect(code).to match(/echo[^\n]*files inspected/)
     expect(block_containing(/INSPECTED\" -lt/)).to include("exit 1")
   end
 

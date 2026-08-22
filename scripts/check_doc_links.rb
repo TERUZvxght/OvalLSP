@@ -59,11 +59,25 @@ SHORTHAND = %r{\Adocs/(\d{2}-[a-z0-9-]+\.md)\z}
 
 # What a documentation path looks like, inside backticks or a Markdown
 # link. Anchors and trailing punctuation are stripped by the caller.
+#
+# Two forms, because until 0.2.14 only the first was matched and the
+# header claimed to check "every documentation path named in tracked
+# content". It did not: **105 relative links were outside the check
+# entirely**, including ten between task files that cite each other
+# constantly (`](042-second-enumeration.md)`) and `docs/ROADMAP.md`'s
+# own link to the register. Round 1 measured it. A guarantee stated
+# without a caveat has to be the guarantee, or the caveat has to be
+# stated.
 CITATION = %r{
   (?<path>
     docs/(?:design/)?(?:tasks/|adrs/|docs/)?[A-Za-z0-9._-]+\.md
   )
 }x
+
+# A Markdown link whose target is relative -- resolved against the
+# citing file's own directory, which is why it needs the second pass
+# below rather than a wider version of the pattern above.
+RELATIVE_LINK = %r{\]\((?<path>(?!https?://|/|\#)[A-Za-z0-9._/-]+\.md)(?:\#[^)]*)?\)}
 
 def run(*args)
   out = IO.popen(args, chdir: ROOT, err: %i[child out], &:read)
@@ -122,6 +136,8 @@ dangling = []
 inspected = 0
 citations = 0
 recorded_deletions = 0
+unreadable = []
+relative_citations = 0
 
 files.each do |rel|
   path = File.join(ROOT, rel)
@@ -129,11 +145,19 @@ files.each do |rel|
 
   begin
     content = File.read(path, encoding: "UTF-8")
-    next unless content.valid_encoding?
-  rescue StandardError
+    unless content.valid_encoding?
+      unreadable << { file: rel, reason: "not valid UTF-8" }
+      next
+    end
+  rescue StandardError => e
     # A file this cannot read holds no citation it can check, and saying
-    # so is the honest answer -- but not raising here would make an
-    # unreadable file look clean. Counted, and reported at the end.
+    # so is the honest answer -- but dropping it silently makes an
+    # unreadable file indistinguishable from a clean one. **Counted and
+    # reported**, which until 0.2.14 this comment claimed and nothing
+    # did: `inspected` was incremented after the skip and the summary
+    # printed neither branch, so a file that took its citations with it
+    # left the gate printing "every documentation path resolves".
+    unreadable << { file: rel, reason: "#{e.class}: #{e.message}" }
     next
   end
 
@@ -152,11 +176,46 @@ files.each do |rel|
 
       dangling << { file: rel, line: number, cited: raw, resolved: target, text: line.strip[0, 110] }
     end
+
+    # Relative links, resolved against the citing file's own directory.
+    next unless rel.end_with?(".md")
+
+    line.scan(RELATIVE_LINK) do
+      raw = Regexp.last_match[:path]
+      next if raw.start_with?("docs/") # already counted by the pass above
+
+      citations += 1
+      relative_citations += 1
+      target = File.join(File.dirname(rel), raw)
+      target = target.split("/").each_with_object([]) { |part, acc| part == ".." ? acc.pop : (acc << part unless part == ".") }.join("/")
+      next if File.file?(File.join(ROOT, target))
+
+      if line.include?(DELETED_MARKER) && ever_existed?(target)
+        recorded_deletions += 1
+        next
+      end
+
+      dangling << { file: rel, line: number, cited: raw, resolved: target, text: line.strip[0, 110] }
+    end
   end
 end
 
 puts "check-doc-links: #{inspected} file(s) inspected, #{citations} documentation citation(s), " \
+     "#{relative_citations} of them relative, " \
      "#{recorded_deletions} naming a deleted file on a line marked as recording the deletion."
+
+# It fails rather than reporting, because the sentence below is the whole
+# output of this check and it cannot be said about a file that was not
+# read. `CLAUDE.md`'s test for a swallowed failure is not "is this
+# failure important" but "does the fallback let a caller assert
+# something" -- and here the caller asserts *every* path resolves.
+unless unreadable.empty?
+  warn("check-doc-links: #{unreadable.length} file(s) could not be read, so their citations were not checked:")
+  unreadable.each { |u| warn("    #{u[:file]}  (#{u[:reason]})") }
+  warn("check-doc-links: a file this cannot read is not a file it found clean. Fix its encoding, " \
+       "or add it to SKIP with a reason if it is genuinely not authored text.")
+  exit 1
+end
 
 if dangling.empty?
   puts "check-doc-links: every documentation path resolves."

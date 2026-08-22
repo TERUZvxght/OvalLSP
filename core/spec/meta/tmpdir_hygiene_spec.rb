@@ -22,24 +22,12 @@
 RSpec.describe "spec suite tmpdir hygiene" do
   let(:spec_root) { File.expand_path("..", __dir__) }
 
-  # `Dir.mktmpdir` immediately followed by a `do` or `{` block (allowing
-  # for an argument list in between) is the self-cleaning form and is
-  # always fine. Anything else returns a path nothing will ever remove.
-  #
-  # The argument list is matched *possessively* (`?+`) on purpose: an
-  # ordinary `?` lets the engine give the parentheses back and then
-  # satisfy the negative lookahead against the `(` it just released, so
-  # `Dir.mktmpdir("x") do |d|` -- the correct form -- would be reported
-  # as an offender.
-  let(:blockless_mktmpdir) { /Dir\.mktmpdir(?:\([^)]*\))?+(?!\s*(?:do\b|\{))/ }
-
-  # Scrubbed rather than read as text: spec/fixtures/ holds deliberately
-  # malformed sources, so a byte sequence that isn't valid in the default
-  # external encoding must not be the thing that decides whether this
-  # rule runs.
-  def source_lines(path)
-    File.binread(path).force_encoding(Encoding::UTF_8).scrub.lines
-  end
+  # *The regex this used to grep with, the scrubbing helper it needed,
+  # and the two comments explaining both were deleted in 0.2.14. They had
+  # been dead since the switch to a Prism visitor: nothing referenced
+  # them, and one of them documented a regex-backtracking hazard as if it
+  # governed the live check, which reads the AST. `024.126`'s note that a
+  # revert leaves prose behind, arriving from a rewrite instead.*
 
   # **Parsed, not grepped, and this file is no longer exempt.** It used to
   # scan lines and skip `spec_helper.rb` *and itself*, because its own

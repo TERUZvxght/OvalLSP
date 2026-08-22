@@ -31,13 +31,20 @@ most-useful-first, say — are 2.x.x.
 
 **The distance to 1.0.0 is written down**, derived from those two and
 nothing else: [`docs/design/tasks/036-road-to-1.0.0.md`](docs/design/tasks/036-road-to-1.0.0.md).
-The release being prepared now is **0.3.0, on `feat/0.3.0`** — the first
+**Which release is being prepared is not written here.** `git branch
+--show-current` names it, and the highest-numbered file in
+`docs/design/tasks/` records it — read that file first. This paragraph
+used to name the release and its branch, and it named the *next* one
+while HEAD was on the current one — in the very paragraph designated
+below as the defence against a compaction losing the path. A pointer
+that must be edited every release is wrong most of the time. (The
+specific numbers are deliberately not repeated here: naming them would
+make this sentence match the check that keeps the paragraph honest.)
+
+`docs/ROADMAP.md` is what each version is *for*, and
+[`045`](docs/design/tasks/045-0.3.0-scope.md) scopes 0.3.0 — the first
 release that may add capability, and the one every accuracy release so
-far has been clearing the way for. Its scope is
-[`docs/design/tasks/045-0.3.0-scope.md`](docs/design/tasks/045-0.3.0-scope.md).
-0.2.13 shipped 042's D5, D10 and the parser's half of D2, and is recorded
-in
-[`docs/design/tasks/044-0.2.13-what-a-body-says.md`](docs/design/tasks/044-0.2.13-what-a-body-says.md).
+far has been clearing the way for.
 **Read [`042`](docs/design/tasks/042-second-enumeration.md) before
 touching anything it names.**
 Read it when a session opens, so the path is seen rather than inferred —

@@ -41,6 +41,27 @@ RSpec.describe "documentation links" do
     expect(ok).to be(true), output
   end
 
+  # Relative links are the half this check did not have until round 1
+  # measured it: 105 of them in tracked Markdown, including ten between
+  # task files that cite each other constantly, while the header above
+  # claimed "every documentation path named in tracked content".
+  it "resolves a relative Markdown link against the citing file's own directory" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, DOC_LINKS_DIR))
+      File.write(File.join(root, DOC_LINKS_DIR, "here.md"),
+                 "A link to [a sibling](#{["999-absent", "md"].join(".")})\n")
+      system("git", "init", "-q", root, out: File::NULL)
+      system("git", "-C", root, "add", "-A", out: File::NULL)
+      system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
+             "commit", "-qm", "one", out: File::NULL)
+
+      output, ok = check(root: root)
+
+      expect(ok).to be(false), "a broken relative link was not reported:\n#{output}"
+      expect(output).to include("999-absent")
+    end
+  end
+
   # The `<!-- deleted -->` marker is the one way a citation may resolve
   # to nothing, and its whole design is that it admits only a path some
   # commit in this history actually carried. If it ever degraded into a

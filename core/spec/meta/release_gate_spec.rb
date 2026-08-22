@@ -78,16 +78,28 @@ RSpec.describe "RELEASE_CHECKLIST's evidence column" do
   #
   # Ruby, YAML and shell all comment with `#`, which is why one rule
   # covers every file here.
-  def haystack
-    @haystack ||= begin
-      specs = RepoFiles.list(RELEASE_GATE_ROOT, "core/spec", "scripts")
-      (RELEASE_GATE_CALLERS + specs)
-        .map { |rel| self.class.read(rel) }
-        .join("\n")
-        .each_line
-        .reject { |line| line.strip.start_with?("#", "//") }
-        .join
-    end
+  # A file naming *itself* is not an invocation. `verify_sbom_against_vsix.rb`
+  # line 23 is `fail!("usage: verify_sbom_against_vsix.rb ...")` -- a
+  # non-comment line carrying its own basename -- so a haystack that
+  # included the script's own text reported gate 11 wired while `046`
+  # itself records that the script is invoked by nothing.
+  #
+  # This was C6 failing in the exact way C6 exists to catch, and round 1
+  # found it: a check that passes for a reason other than the one it
+  # states. So the haystack is built *per candidate*, excluding the
+  # candidate's own file.
+  def haystack_excluding(base)
+    @sources ||= (RELEASE_GATE_CALLERS + RepoFiles.list(RELEASE_GATE_ROOT, "core/spec", "scripts"))
+                 .uniq
+                 .to_h { |rel| [rel, self.class.read(rel)] }
+
+    @sources
+      .reject { |rel, _| File.basename(rel) == base }
+      .values
+      .join("\n")
+      .each_line
+      .reject { |line| line.strip.start_with?("#", "//") }
+      .join
   end
 
   it "cites only executables that exist and that something actually runs" do
@@ -102,7 +114,7 @@ RSpec.describe "RELEASE_CHECKLIST's evidence column" do
         # A spec is invoked by the suite by existing; nothing names it,
         # and that is not the same as nothing running it.
         next if base.end_with?("_spec.rb", ".test.ts")
-        next if haystack.include?(base)
+        next if haystack_excluding(base).include?(base)
 
         "gate #{number}: #{cited} exists but nothing invokes it"
       end
@@ -139,6 +151,6 @@ RSpec.describe "RELEASE_CHECKLIST's evidence column" do
     cited = planted.scan(RELEASE_GATE_EXECUTABLE).flatten.compact
 
     expect(cited).to eq([absent])
-    expect(haystack).not_to include(absent)
+    expect(haystack_excluding(File.basename(absent))).not_to include(absent)
   end
 end
