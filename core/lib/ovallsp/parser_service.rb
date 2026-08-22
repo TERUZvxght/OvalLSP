@@ -445,15 +445,16 @@ module Ovallsp
         # direction that resolves the helper methods such a block calls;
         # inheriting class-level self reported them instead.
         #
-        # A constant receiver is the case this gets wrong:
-        # `K.instance_eval { attr_accessor :x }` is legal Ruby and is
-        # reported, while `K.class_eval { attr_accessor :x }` -- which
-        # takes the inherit path -- is not. Splitting the two was tried
-        # and dropped: this visitor cannot say *which* module self is, so
-        # the module answer resolves against the enclosing owner, and no
-        # fixture could distinguish the branch. Recorded as 024.33; it is
-        # not a regression, 0.1.14 reported it too.
-        node.receiver.nil? ? nil : false
+        # **The explicit-receiver term was removed in 0.2.13.** It read
+        # `node.receiver.nil? ? nil : false`, and `024.33`'s fix took over
+        # every case it decided: an eval-family call with a receiver now
+        # gets `Cref#in_eval_block`, which carries the constant when there
+        # is one and `nil` when there is not. Removing the term left the
+        # whole suite green except the mutation manifest, which is how it
+        # was found -- an unpinned behavioural line is a defect in its own
+        # right, and this one had stopped being reachable rather than
+        # stopped being pinned.
+        nil
       end
 
       # `private attr_reader :x` reaches the attr recorder as a *nested*

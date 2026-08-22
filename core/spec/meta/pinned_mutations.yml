@@ -92,12 +92,12 @@
   spec: spec/ovallsp/diagnostics/visibility_spec.rb
   example: "is not offered when the alias itself is made private"
 
-- why: "024.30's last unpinned decision -- `#block_self_is_module`'s explicit-receiver term, which two sweeps missed and a third round pinned."
+- why: "024.30's last unpinned decision, which 024.33's fix took over: an eval block on a receiver nothing can name must record no owner rather than invent one."
   file: core/lib/ovallsp/parser_service.rb
-  from: "node.receiver.nil? ? nil : false"
-  to: "nil"
-  spec: spec/ovallsp/diagnostics/class_body_macro_spec.rb
-  example: "reads an instance_eval block on an explicit receiver as an instance"
+  from: "        raw_constant_name(receiver) ? receiver_owner_name(receiver) : :unnameable\n"
+  to: "        receiver_owner_name(receiver)\n"
+  spec: spec/ovallsp/diagnostics/eval_on_constant_spec.rb
+  example: "records nothing for an eval block on an expression"
 
 - why: "024.34's question -- asking the cref whether it declares a singleton, rather than asking what surface a definition written here lands on."
   file: core/lib/ovallsp/parser_service.rb
