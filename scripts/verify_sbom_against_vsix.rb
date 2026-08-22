@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # Verifies docs/SBOM.md actually matches what a packaged, unpacked VSIX
 # contains -- not just what scripts/generate_sbom.rb computed from
 # Gemfile.lock/package-lock.json/ovallsp.gemspec in isolation. Compares

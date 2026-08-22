@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**140 entries below** <!-- measured: register-entries = 140 -->,
+**145 entries below** <!-- measured: register-entries = 145 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -311,6 +311,11 @@ nobody can search is the recording habit without the benefit.
 | [`024.139`](#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
 | [`024.140`](#024140-a-scripted-edit-doubled-a-register-entry-and-every-check-stayed-green) | fixed | 0.2.14 | A scripted edit doubled a register entry, and every check stayed gre… |
 | [`024.141`](#024141-publishing-md-documented-the-publish-command-that-shipped-a-corrupt-v0-1-2) | fixed | 0.2.14 | `PUBLISHING.md` documented the publish command that shipped a corrup… |
+| [`024.142`](#024142-a-corpus-run-did-not-say-what-it-had-run) | fixed | 0.2.14 | A corpus run did not say what it had run |
+| [`024.143`](#024143-did-i-run-everything-was-answered-from-memory) | fixed | 0.2.14 | "Did I run everything?" was answered from memory |
+| [`024.144`](#024144-a-design-document-restating-a-manifest-is-two-copies-with-nothing-between-them) | fixed | 0.2.14 | A design document restating a manifest is two copies with nothing be… |
+| [`024.145`](#024145-re-deriving-the-example-count-was-three-hand-edits-per-commit) | fixed | 0.2.14 | Re-deriving the example count was three hand edits per commit |
+| [`024.146`](#024146-a-script-crashes-under-a-locale-less-shell-on-the-input-a-check-exists-to-report) | fixed | 0.2.14 | A script crashes under a locale-less shell, on the input a check exi… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -7055,6 +7060,12 @@ shape, no exemption added. That is the evidence that the rule is at the
 right level; a fourth instance needing a fourth *different* repair is
 what would say otherwise.
 
+**The fourth arrived, and took the same repair.** `046`'s C4 needed a
+synthetic register entry, and writing `024.999` in the spec made
+`measured_claims_spec`'s pointer guard report a dangling register
+citation — in the file that tests the register. Assembled from parts
+instead. Four instances, one repair shape, still no exemption.
+
 ## 024.127 Hover answers an empty string where LSP expects null
 
 ```yaml
@@ -7502,6 +7513,276 @@ someone doing this by hand.
 
 `DOCUMENTATION_MAP` has no row for "the release procedure changed",
 which is why nothing pointed at it. `046`'s C6 is where that goes.
+
+
+## 024.142 A corpus run did not say what it had run
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets, and everything the maintainer's decisions rest
+  on: five recorded false corpus results, three of which produced
+  confident findings that did not exist.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `scripts/corpus_diagnostics.rb`
+
+`026-0.2.1-review-loop.md` records five false results, and the shape is
+the same every time — **the run was not what the reader thought it
+was**:
+
+| what happened | what it produced |
+|---|---|
+| diff computed from a file still being written | 79 invented findings |
+| diff between two *different* corpora, one holding this repo's `core/lib` | 10 invented |
+| a `cd` that persisted, so both sides ran from the baseline worktree | reported a real fix as doing nothing |
+| two runs started concurrently, writing the same output files | implausibly low totals |
+| a rewritten script leaving both sides in the baseline tree | the two sides came out *identical* |
+
+**None would have been caught by re-reading the numbers.** Two were
+caught because a number was implausible and one because it contradicted
+a spec already watched failing. That is not a method.
+
+**Fixed** by making the run state what it is, on stderr — stdout is the
+stream being diffed and is byte-for-byte unchanged:
+
+- `cwd`, `revision`, `dirty-tracked-files` (with a warning when
+  non-zero, because a dirty tree means `revision` does not describe the
+  code about to run), `ovallsp-version`, `signature-root`;
+- `corpus-files` and **`corpus-sha256`, a digest of the file list** —
+  which is what makes "both sides were given the identical corpus"
+  checkable rather than asserted;
+- a per-code count, so a control needs no separate pass.
+
+**And two refusals**, both of which produce an empty or near-empty diff
+that reads as *"this change altered nothing"* — the most expensive wrong
+answer this script can give:
+
+- a corpus matching no `.rb` files;
+- a path that does not exist. This one was live: anything not a
+  directory was taken as a file, so a typo'd path became a corpus of
+  one, and the run looked like a run.
+
+**`--expect-control=CODE:N`** states before the run what a category the
+change cannot affect must come out at, and fails the run if it does not.
+0.2.1's control was `unresolved-constant`, identical at 9,550 on both
+sides. Given on the command line rather than checked afterwards, because
+a control read after the fact is a control chosen to agree.
+
+Pinned by `core/spec/meta/corpus_diagnostics_spec.rb` over a throwaway
+corpus — including that two runs over *different* corpora produce
+different digests, which is the one guarantee a single run cannot
+demonstrate.
+
+## 024.143 "Did I run everything?" was answered from memory
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  A working-practice defect. Its cost is commits made on partial
+  evidence -- twice in one session, both already pushed.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `scripts/preflight.rb`, `CONTRIBUTING.md` + `.ja.md`
+
+Seven things must be true before a commit here: the full suite, the two
+real-Rails-backed suites having actually *run*, the home-path scan, the
+documentation-link resolver, the register index, the rescue verdicts and
+the site links. They live in seven places and nothing but a person held
+the list together.
+
+Twice in the 0.2.13 session that person was wrong the same way: the
+suite had been run for the directory being worked in, it was green, and
+the full run afterwards was not. Both times the tree was already pushed.
+
+**Neither was carelessness in a form more care would fix.** The list is
+longer than the working memory of whoever is mid-task, and the failure
+mode is not "forgot to run tests" — it is "ran tests, and the thing that
+ran was not the thing that decides".
+
+`scripts/preflight.rb` runs all seven, prints what each one ran, and
+installs as a pre-commit hook with `--install`. Two properties it needed:
+
+- **A skipped check is reported, never assumed passed.** The real-Rails
+  and capability suites skip in full without local `rails` and `sqlite3`
+  while `rspec` still exits 0. It asserts a non-zero example count
+  rather than reading the exit status — `CLAUDE.md` already said to do
+  this by hand, which is exactly the kind of instruction that gets
+  skipped.
+- **Its own output must survive a locale-less shell.** The first version
+  crashed with `invalid byte sequence in US-ASCII` on a failure message
+  containing Japanese — so the gate that exists to catch a failure died
+  on one. `scripts/generate_sbom.rb` carries the same fix, found the
+  same way in Task 023.8. Verified under `LC_ALL=C`.
+
+
+## 024.144 A design document restating a manifest is two copies with nothing between them
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Internal. What it cost is that the document describing the extension
+  described an extension that does not exist, and was read and cited
+  for a year without anyone noticing.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `core/spec/meta/design_doc_drift_spec.rb`,
+`docs/design/docs/07-vscode-extension.md`
+
+Measured at 0.2.14, against `vscode/package.json` and
+`clientPresentation.ts`:
+
+| `07` restated | how many were real |
+|---|---|
+| 8 command ids | **0** |
+| 10 settings | 2 |
+| 7 status-bar strings | **0** — the extension produces five, none of them these |
+| 2 activation events | 2 of the 3 that exist |
+
+**Nothing could have noticed.** A design document listing command ids is
+a second copy of `package.json`, and there was no relationship between
+the copies — no generation, no check, not even a comment on either side
+saying the other existed. `CLAUDE.md`'s countermeasure rule names this
+exact shape: *two scanners that had to agree about the same text,
+replaced by one both read.* Here the two cannot be collapsed into one —
+a design document is not generated from a manifest and should not be —
+so the relationship is made instead.
+
+`design_doc_drift_spec.rb` compares four lists against the code that
+owns them, and `plugin-sdk.md`'s registration methods against
+`core/lib/ovallsp/plugins`. Each example is set equality both ways, so
+an id added to the manifest and not to the document fails as loudly as
+the reverse.
+
+**Checked by restoring the pre-0.2.14 command list** and watching it
+fail, rather than by trusting that a passing check means anything.
+
+**A sixth example exists because the other five compare two lists**, and
+two empty lists are equal. A renamed heading or a reformatted fenced
+block would make every extractor return nothing and every comparison
+pass — which is the failure this whole release is about, arriving inside
+the check written to prevent it.
+
+
+## 024.145 Re-deriving the example count was three hand edits per commit
+
+```yaml
+status: fixed
+kind: friction
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it cost is that a correct guard made every
+  commit that adds an example more expensive than it needed to be, and
+  the cost was paid at the end of an eight-minute suite run.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `scripts/documented_counts.rb`, `scripts/preflight.rb`,
+`core/spec/meta/documented_counts_spec.rb`
+
+Three documents state `core/`'s example count, and
+`documented_counts_spec` fails when any disagrees with the running
+suite. **The guard is right.** The figure was 895 for six releases, then
+1,776 taken mid-branch, then 1,833 with two commits still to come; a
+line saying "measure this every time" sat beside it through all three.
+
+What it left in place was the work: adding one example means editing
+three documents, in two languages, by hand — and finding out you had to
+**at the end of an eight-minute run**, since the check needs the whole
+suite to know the number. In one 0.2.14 session that happened four
+times.
+
+**Fixed** by `rspec --dry-run`, which loads every spec file and counts
+without running one: **0.4 seconds** against the suite's eight minutes,
+and the same number `RSpec.world.example_count` reports from inside a
+real run — which is asserted rather than assumed.
+
+- `ruby scripts/documented_counts.rb` re-derives it into all three.
+- `--check` is the first check `preflight.rb` runs, so a stale count is
+  a second-long failure at the start rather than an eight-minute one at
+  the end.
+- The document list and its patterns live in the script, and the spec
+  reads them from there. Writing that table twice — inside the release
+  whose C4 is *"two readers, one text, two grammars"* — would have been
+  a poor joke.
+
+**Why this is `kind: friction` and not a defect.** Nothing was ever
+wrong in the tree; the numbers were true at every commit. What was wrong
+is that keeping them true was a tax on the wrong activity, paid at the
+worst moment. The maintainer's standing instruction for this pass is
+that *this* counts as a problem, and that raising one without recording
+it is not allowed.
+
+## 024.146 A script crashes under a locale-less shell, on the input a check exists to report
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Internal, and sharp: the failure mode is not a wrong answer but a
+  crash, and it happens precisely when a check has something to say.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `scripts/utf8.rb`, `core/spec/meta/script_encoding_spec.rb`
+
+Ruby returns a String in `Encoding.default_external`, which is whatever
+the invoking shell's locale says. Under `LC_ALL=C`, a cron job, or a CI
+step with no locale, that is **US-ASCII** — and the first `String#[]`,
+`#scan` or `#include?` against a byte above 127 raises `invalid byte
+sequence in US-ASCII`.
+
+This tree is substantially non-ASCII: the Japanese documents, the
+Japanese halves of `KNOWN_LIMITATIONS`, `SUPPORT_MATRIX` and
+`CONTRIBUTING`, and the Japanese failure messages the suite prints.
+
+**The shape is what makes it worth a countermeasure.** The script does
+not read the file wrongly. It *crashes* — on exactly the input the check
+exists to report. `preflight.rb`'s first version died this way while
+printing a suite failure whose message contained Japanese: the gate
+built to catch a failure, killed by one.
+
+**Found four separate times, fixed four separate times, each fix
+correct and local and no help to the next:**
+
+| where | how it was found |
+|---|---|
+| `generate_sbom.rb` | Task 023.8, running the release gate under a locale-less shell |
+| `preflight.rb` | its first real run |
+| `documented_counts.rb` | its first real run, twenty minutes later |
+| a hand-run probe | the same session, again |
+
+`CLAUDE.md` says the third occurrence buys a countermeasure rather than
+a third fix. `scripts/utf8.rb` is one line — `Encoding.default_external
+= Encoding::UTF_8` — which fixes every `File.read` and every `IO.popen`
+in the process at once, rather than each call site remembering.
+`script_encoding_spec.rb` requires it of every script in `scripts/`, and
+requires it to come *before* anything that reads or shells out.
+
+**Two things learned writing the check itself:**
+
+- A `.rb` file's source encoding is UTF-8 whatever the locale says;
+  `ruby -e` source is read in the locale's encoding. The first version of
+  the probe used `-e` with a Japanese literal in it and failed for a
+  reason unrelated to what it was testing.
+- The example that proves the fix works is paired with one that proves
+  the same probe **fails without it**. Otherwise it demonstrates only
+  that Ruby works.
 
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)

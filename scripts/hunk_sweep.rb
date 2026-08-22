@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # Reverse-applies each behavioural hunk of a change set on its own and
 # runs the suite, so a line no test fails on is found by a machine
 # instead of by a reviewer. CLAUDE.md calls that an unpinned behavioural

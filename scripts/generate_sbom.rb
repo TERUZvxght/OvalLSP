@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # Generates docs/SBOM.md -- a dependency + license manifest for exactly what
 # a packaged VSIX ships to an end user: core/'s own runtime gem dependencies
 # (vendored into vscode/core/vendor/bundle by vscode/scripts/copy-core.js,

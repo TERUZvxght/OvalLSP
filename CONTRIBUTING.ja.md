@@ -112,9 +112,36 @@ cd vscode && npm run test:integration
 - 本当のtrade-offを伴う設計判断(自明な実装詳細ではなく)は
   `docs/design/adrs/`配下にADRとして記録する。
 
+## commitの前に: `preflight`
+
+```bash
+ruby scripts/preflight.rb
+```
+
+commit前に真であるべきものを全て実行します — フルスイート、実Rails
+依存の2つのsuiteを個別に(ローカルに`rails`と`sqlite3`が無いと丸ごと
+skipし、それでも`rspec`は0で終了するため、exit statusではなくexample数
+が0でないことを確認します)、home path検査、ドキュメントリンク解決、
+レジスタの索引、rescue verdict、siteリンク。それぞれが何を実行したかを
+出力するので、commit messageには記憶ではなく実行結果を引用できます。
+
+git hookとして1度だけ入れる場合:
+
+```bash
+ruby scripts/preflight.rb --install
+```
+
+`PREFLIGHT_SKIP=1 git commit …` で1回分スキップできます。
+
+これがあるのは、「全部走らせたか?」を記憶で答えていたからです。ある
+セッションでは2度その答えが間違っていました — 作業していたディレクトリ
+だけスイートを走らせてgreenを見て commit し、後からのフル実行が
+greenではなかった。検査は7箇所に散っており、リストを繋いでいたのは人間
+だけでした。
+
 ## PRを開く前に
 
-1. 上記の関連テストスイートを実行する。
+1. `ruby scripts/preflight.rb` を実行する。
 2. VSIX packagingに影響する変更の場合、`cd vscode && npm run package`
    を実行し成功することを確認する。
 3. 何を・なぜ変更したか、実行したテストを記載する。

@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # Verifies a packaged, unpacked VSIX's bundled Core can actually answer a
 # *real* semantic LSP request -- not merely complete initialize/shutdown.
 #

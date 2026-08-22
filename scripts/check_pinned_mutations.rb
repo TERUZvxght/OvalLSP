@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # `042`'s D7. An example that claims to distinguish two behaviours names
 # the mutation it claims to catch, and this applies that mutation and
 # requires the example to fail.

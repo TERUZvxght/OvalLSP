@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # Every documentation path named in tracked content must resolve to a file
 # that exists.
 #

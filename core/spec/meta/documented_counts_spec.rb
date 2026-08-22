@@ -63,27 +63,35 @@ RSpec.describe "documented example counts" do
   # from this file. `skip` rather than an early return so that step has
   # something to see.
 
-  # `1,833` and `1833` are the same claim; the documents use the first and
-  # a future one may use the second.
-  def counts_in(text, pattern)
-    text.scan(pattern).flatten.map { |number| Integer(number.delete(",")) }
-  end
+  # The documents and their patterns live in `scripts/documented_counts.rb`,
+  # which both this guard and the re-deriving tool read. Two readers of
+  # one text with two grammars is `046`'s C4, and writing the table twice
+  # inside C4's own release would be a poor joke.
+  require_relative "../../../scripts/documented_counts"
 
-  {
-    "docs/SUPPORT_MATRIX.md" => /([\d,]+) examples/,
-    "docs/SUPPORT_MATRIX.ja.md" => /([\d,]+) examples/,
-    "docs/RELEASE_CHECKLIST.md" => /`core\/`: ([\d,]+) examples/
-  }.each do |document, pattern|
+  DocumentedCounts::PATTERNS.each_key do |document|
     it "states this suite's size correctly in #{document}" do
       skip "run the whole suite for this check" unless whole_suite?
 
       actual = RSpec.world.example_count
-      stated = counts_in(read(document), pattern)
+      stated = DocumentedCounts.stated(document)
 
       expect(stated).not_to be_empty,
                             "#{document} no longer states a Core example count -- update this guard or the document"
       expect(stated.uniq).to eq([actual]),
-                             "#{document} says #{stated.uniq.join(', ')} and the suite has #{actual}"
+                             "#{document} says #{stated.uniq.join(', ')} and the suite has #{actual}. " \
+                             "Run: ruby scripts/documented_counts.rb"
     end
+  end
+
+  # The tool that re-derives the number must agree with this guard about
+  # what the number *is*. It reads it from `rspec --dry-run`, which loads
+  # every spec file and counts without running one -- 0.4 seconds against
+  # this suite's eight minutes, which is what makes it usable before a
+  # commit rather than after one.
+  it "derives the same count from --dry-run as this run reports" do
+    skip "run the whole suite for this check" unless whole_suite?
+
+    expect(DocumentedCounts.actual).to eq(RSpec.world.example_count)
   end
 end

@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # Counts how many `publishDiagnostics` a burst of edits produces, and how
 # long the burst takes to go quiet -- 037's C9 measured rather than
 # recalled. 0.2.8's drive round reported 22 publishes for one method name

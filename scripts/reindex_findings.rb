@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # Sorts the deferred-findings register by number and regenerates the
 # index at its head.
 #
@@ -18,6 +20,8 @@
 #
 #   ruby scripts/reindex_findings.rb          # rewrite in place
 #   ruby scripts/reindex_findings.rb --check  # exit 1 if not current
+require_relative "deferred_findings"
+
 module ReindexFindings
   ROOT = File.expand_path("..", __dir__)
   PATH = File.join(ROOT, "docs", "design", "tasks", "024-deferred-review-findings.md")
@@ -35,19 +39,20 @@ module ReindexFindings
 
   def title_of(block) = block[/\A## 024\.[0-9R]+ (.*)/, 1].to_s.strip
 
-  # The yaml block is this file's own grammar rather than real YAML (see
-  # the register's legend), so only the flat `key: value` lines are read
-  # and a folded `>` value is skipped rather than guessed at.
+  # `046`'s C4. This used to be a second, hand-rolled `key: value`
+  # scanner, under a comment saying the yaml block was "this file's own
+  # grammar rather than real YAML (see the register's legend)". True when
+  # written; false from 0.2.12, when `024.68` replaced the guard's side
+  # with `YAML.safe_load` and deleted that legend rule. The two grammars
+  # then disagreed -- a quoted `status: "fixed"` rendered in this index
+  # as `"fixed"` while every check read `fixed` -- and nothing could
+  # notice, because each was the only reader of its own result.
+  #
+  # `DeferredFindings.entries` is now the single parser. It is stricter
+  # than the scanner was (an unknown key raises), which is the point: the
+  # index is regenerated from the same reading the checks make.
   def metadata_of(block)
-    raw = block[/```yaml\n(.*?)```/m, 1]
-    return {} unless raw
-
-    raw.lines.each_with_object({}) do |line, acc|
-      key, value = line.strip.match(/\A([a-z-]+):\s*(.*)\z/)&.captures
-      next if key.nil? || value.to_s.empty? || value.start_with?(">")
-
-      acc[key] = value.split("#").first.strip
-    end
+    DeferredFindings.entries(block).values.first || {}
   end
 
   def anchor_for(number, title)

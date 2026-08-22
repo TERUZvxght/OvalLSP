@@ -417,6 +417,33 @@ run those two files and check the example count is non-zero, exactly as
 the rule above says to do for a corpus diff. `CONTRIBUTING.md` carries
 the install command.
 
+## Two working-practice traps, each of which cost a session (mandatory)
+
+Neither is repository state, so neither can be checked by the
+repository. Both are here because they were paid for.
+
+- **`git checkout <file>` discards uncommitted work, silently and
+  unrecoverably.** It is the natural way to undo an experiment and it
+  does not distinguish an experiment from an hour of work in the same
+  file. Use `git stash` (recoverable), or copy the file aside first. The
+  rule generalises: *before running a command whose effect is "make this
+  file match something else", know what the file currently holds.*
+
+- **A completion check reads whatever the output file holds now, which
+  may be a truncated prefix.** A background run's output file was read,
+  its tail looked like a suite still going, and the wait loop ran for ten
+  hours against a process that had already exited. Do not poll a file to
+  decide whether work finished; the harness reports completion, and that
+  report is the answer. If something must be waited on, wait on the
+  process, not on the shape of its output.
+
+**And before committing, run `ruby scripts/preflight.rb`.** It runs the
+full suite, the two real-Rails suites separately with a non-zero
+example-count assertion, and the five scripted checks. Twice in one
+session a commit was made on a partial run — the suite had been run for
+one directory, it was green, and the full run afterwards was not.
+`--install` puts it in a pre-commit hook.
+
 ## Documentation is part of the change (mandatory)
 
 Before finishing any change a user could notice, open

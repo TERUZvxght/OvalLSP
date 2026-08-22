@@ -10,7 +10,7 @@ Task 022の受け入れ基準(「1.0 release checklistが全項目判定可能�
 
 | # | 項目 | 状態 | 根拠/備考 |
 |---|---|---|---|
-| 1 | all unit/component/integration tests green | ✅ 判定可能・green | `core/`: 2,348 examples, 0 failures(`bundle exec rspec --order random`)。`vscode/`: `test:unit` / `test:integration`(source Core)/ `test:integration:packaged`(packaged Core)、いずれも0 failures。**core側の数は `core/spec/meta/documented_counts_spec.rb` が実行中のスイートと突き合わせます** — 890/895/1,776/1,833 と三度陳腐化し、「毎回測り直すこと」と書いた行自体がまた陳腐化したため、覚えておくのをやめて検査させることにした。vscode側の数はここから消した。増える数字を2箇所に書く理由がない |
+| 1 | all unit/component/integration tests green | ✅ 判定可能・green | `core/`: 2,374 examples, 0 failures(`bundle exec rspec --order random`)。`vscode/`: `test:unit` / `test:integration`(source Core)/ `test:integration:packaged`(packaged Core)、いずれも0 failures。**core側の数は `core/spec/meta/documented_counts_spec.rb` が実行中のスイートと突き合わせます** — 890/895/1,776/1,833 と三度陳腐化し、「毎回測り直すこと」と書いた行自体がまた陳腐化したため、覚えておくのをやめて検査させることにした。vscode側の数はここから消した。増える数字を2箇所に書く理由がない |
 | 2 | compatibility matrix green or documented | ✅ 判定可能・文書化済み | `docs/SUPPORT_MATRIX.md`。実際に検証済みなのはmacOS(darwin-arm64) + Ruby 3.4(3.4.5/3.4.7/3.4.10) + Rails 8.1のみ — Ruby 3.3は`required_ruby_version >= 3.3`が拒否しないというだけで実際の動作確認実績ではないため、Task 023.1/023.4でsupported表から外した。VSIXのnative payloadはdarwin-arm64 + Ruby 3.4.x専用。それ以外では、0.2.1 以降は起動前に `prism`/`rbs` の有無を確認し、あればそちらで動かして Output に記録する。無ければ診断を出す(ADR-0005 と 0.2.1 の変更)。以前の版がRails 7.1を"supported"としていた誤りと、GitHub Actions未実行にもかかわらず"CIで実行"としていた誤りは修正済み |
 | 3 | benchmark regression within threshold | ✅ 判定可能・report-only | `docs/design/tasks/021-persistent-cache-notes.md`。1k/5kファイル規模での実測は未実施(既知のギャップとして記録済み) |
 | 4 | no known P0/P1 | ✅ 判定可能・green | Task 022.2(Bundler境界分離)は round 1-31 の独立レビューで収束、`docs/design/tasks/022.2-collector-tracepoint-state-machine.md`の最終release gateセクションに全不具合の重大度分類を記録。Packaging/Support Matrix整備(本ドキュメント更新の対象作業)自体の独立レビューは次アクション参照 |
@@ -26,6 +26,22 @@ Task 022の受け入れ基準(「1.0 release checklistが全項目判定可能�
 - ✅ 判定可能・green: 実装・テストが存在し、現時点でパスしている
 - ⚠️ 要確認/部分検証: 一部は実装済みだが、完全な検証には至っていない
 - ❌ 未着手: このセッションでは着手していない
+
+## リリースを切る前に: そのリリースを target にしているエントリの再現を走らせる
+
+```bash
+ruby scripts/deferred_findings.rb --targeting <version>
+```
+
+`024` の open エントリのうち、そのバージョンを `target:` にしているもの
+を Area 付きで列挙します。**列挙されたエントリの再現手順を、切ろうと
+している tree に対して実際に走らせ、結果をエントリへ書き戻すこと。**
+
+`046` の C3b。`024.41` の再現は15リリースにわたって引用され続け、記録
+されていた6ケースのうち2つが逆方向に動いていました — 1つはもうその欠陥
+ではなくなり、1つはエントリが主張していたより**広い**欠陥になっていた。
+誰も走らせ直さなかったのは、どのエントリを走らせ直すべきかを言うものが
+無かったからです。
 
 ## Apple Silicon Marketplace Preview Release Gate (Task 023)
 
@@ -63,7 +79,7 @@ Marketplace Preview公開)固有の22項目のゲートを設ける。各項目�
 | 14.1 | 出荷する artifact 自身へのパス検査 | ✅ 0.2.5 で追加 | `release.sh` が unpack 後の実 artifact に `$HOME` 検査を掛け、native 拡張以外に一致があれば publish を拒否する。**それまで CI は ubuntu ビルドしか見ておらず**（`$HOME` が `/home/runner`、vendoring される native 拡張も別物）、実際に配布する darwin-arm64 成果物は一度も検査されていなかった。`grep` はシェルが解決する名前ではなく `/usr/bin/grep` を絶対パスで呼ぶ — ugrep ラッパーはバイナリを無言で飛ばす。`core/spec/meta/release_script_guard_spec.rb` がこのステップの存在を pin する(コメントアウトでも落ちることを実測確認済み) |
 | 15 | `vsce ls --tree`内容検査PASS | ✅ CI の `package-contents-inspection` ジョブ + `release.sh` の `vsce ls --tree` でmkmf.log等のテキストベースのリーク(Task 023.6で修正済み)はhard failで検出する。`prism.bundle`/`rbs_extension.bundle`自体がこのビルドマシンのrbenv libruby絶対パスを`LC_LOAD_DYLIB`として埋め込んでいる件(`otool -L`で確認)は、独立レビュー(Review B)で「別マシンでの動的リンク解決を壊す可能性が高い」と指摘され、実際にこのマシン上の異なるRuby 3.4.xインストール間で`LoadError`を再現して確認した。1回目の修正案(`DYLD_LIBRARY_PATH`を設定するがrbenv shim自体をそのまま起動)は同じレビューで「macOSは`/bin/bash`を経由するプロセスに対し`DYLD_*`環境変数を無効化するため効果がない」と再度指摘され、実際にrbenv shim経由で無効化されることを確認した。最終的に、解決されたRubyの`RbConfig::CONFIG["bindir"]`/`["libdir"]`を問い合わせ、shimではなく実体の`<bindir>/ruby`を直接起動する方式(`vscode/src/platformCompatibility.ts#queryRubyConfigPaths`、Task 023.8)へ修正し、実際のrbenv shim経由での再現・修正確認まで完了した。埋め込みパス自体は残るがwarningとして報告し続け、機能的な影響は解消済み |
 | 16 | darwin-arm64 target確認 | ✅ `vscode/package.json` の `package` スクリプト自体が `--target darwin-arm64` 固定 + `release.sh` が生成された VSIX のファイル名を検証する |
-| 17 | clean install/update/uninstall PASS | ⚠️ 手動確認のみ — `vscode/scripts/verify-installed-extension.sh` を手で走らせる。0.2.14 以前は `make-final-review-bundle.sh` の "VS Code isolated install" ステップに数えられていたが、そのスクリプトも呼ばれていなかったので実態は当時から手動である(`024.125` の隣にある同種のギャップ) |
+| 17 | clean install/update/uninstall PASS | ⚠️ 手動確認のみ — `vscode/scripts/verify-installed-extension.sh` を手で走らせる。0.2.14 以前は `make-final-review-bundle.sh` の "VS Code isolated install" ステップに数えられていたが、そのスクリプトも呼ばれていなかったので実態は当時から手動である(`024.125` の隣にある同種のギャップ) | <!-- unwired -->
 | 18 | no process leftover | ✅ `scripts/vsix_semantic_smoke.rb`のprocess group kill(0)確認+`clientLifecycle.test.ts`のlifecycle race修正 |
 | 19 | README/Support Matrix/CHANGELOG整合性 | ✅ 目視確認(Task 023.6、Ruby 3.3の扱いをSUPPORT_MATRIX.md/RELEASE_CHECKLIST.md/README.md/KNOWN_LIMITATIONS.mdで統一) |
 | 19.1 | Workspace Trust: an untrusted folder cannot choose what is executed | ✅ 0.2.4 で追加・実機検証済み | `vscode/src/test/unit/workspaceTrust.test.ts` が manifest 側を fail-closed で固定(設定が増えたら restricted 宣言か「実行に影響し得ない」論証のどちらかを強制)。実機手順は下の節を参照 — **対照(公開版で再現すること)を必ず取る**。0.2.3 は約2秒後に7回実行、0.2.4 は0回、信頼済みでは7回(正当な機能が生きていること)|

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # Drives the diagnostics engine over a corpus of real Ruby and prints
 # every finding, one per line, in a form two revisions' runs can be
 # diffed against each other:
@@ -16,13 +18,28 @@
 #
 # Usage, from `core/`:
 #
-#   bundle exec ruby ../scripts/corpus_diagnostics.rb <dir-or-file>...
+#   bundle exec ruby ../scripts/corpus_diagnostics.rb \
+#     [--expect-control=CODE:N] <dir-or-file>...
 #
 # Compare by running it once here and once from a `git worktree` of the
 # other revision, pointing *both* at the same corpus directory, then
 # `comm` the sorted outputs. A line only the new side produces is a report
 # the change introduced; a line only the old side produces is one it
 # removed. Both are worth reading; the first is worth reading first.
+#
+# **Before reading any diff, check the two runs' stderr against each
+# other.** Each prints its own cwd, revision, dirty-file count, ovallsp
+# version, signature root, file count and a sha256 of the file list. The
+# two `corpus-sha256` lines must be identical and the two `revision`
+# lines must not be -- which is, between them, every one of the five
+# false results `026` records. One measurement at a time, in the
+# foreground, per `CLAUDE.md`.
+#
+# `--expect-control=unresolved-constant:9550` states before the run what
+# a category the change cannot affect must come out at, and fails the run
+# if it does not. 0.2.1's comparison used exactly that control at exactly
+# that number. Given on the command line rather than checked afterwards
+# because a control read after the fact is a control chosen to agree.
 #
 # Every path in the corpus is indexed into one workspace before anything
 # is analysed, which is what makes cross-file resolution behave as it does
@@ -61,12 +78,86 @@
 $LOAD_PATH.unshift(File.expand_path("lib", Dir.pwd))
 require "ovallsp"
 
-if ARGV.empty?
-  warn "usage: bundle exec ruby ../scripts/corpus_diagnostics.rb <dir-or-file>..."
+# `046`'s C8. Every false corpus result this project has recorded came
+# from the run not being what the reader thought it was --
+# `026-0.2.1-review-loop.md` lists five: a diff computed from a file
+# still being written, a diff between two *different* corpora, a `cd`
+# that persisted so both sides ran from the same worktree, two processes
+# writing the same output files, and a rewritten script that left both
+# sides in the baseline tree. Not one would have been caught by
+# re-reading the numbers, and three produced confident findings that did
+# not exist.
+#
+# So the run states what it is, on **stderr** -- the stream being diffed
+# is stdout and must stay exactly as it was. Print the thing you are
+# asserting, which is `CLAUDE.md`'s rule; this makes it automatic rather
+# than remembered.
+def provenance(key, value) = warn("corpus-diagnostics: #{key}=#{value}")
+
+def git(*args)
+  out = IO.popen(["git", *args], err: %i[child out], &:read)
+  $?.success? ? out.strip : nil
+end
+
+control_expectations = []
+corpus_args = []
+ARGV.each do |arg|
+  # `--expect-control unresolved-constant=9550`: a category the change
+  # under test cannot affect, and the count it must come out at. 0.2.1's
+  # control was exactly this and it is what made that comparison
+  # readable. A control asserted after the fact is a control chosen to
+  # agree.
+  if arg.start_with?("--expect-control=")
+    control_expectations << arg.split("=", 2).last
+  else
+    corpus_args << arg
+  end
+end
+
+if corpus_args.empty?
+  warn "usage: bundle exec ruby ../scripts/corpus_diagnostics.rb [--expect-control=CODE:N] <dir-or-file>..."
   exit 1
 end
 
-paths = ARGV.flat_map { |arg| File.directory?(arg) ? Dir.glob(File.join(arg, "**", "*.rb")) : [arg] }.sort
+# A typo'd path used to become a corpus of one, because anything that is
+# not a directory was taken as a file. The run then produced almost
+# nothing and looked like a run.
+missing = corpus_args.reject { |arg| File.exist?(arg) }
+unless missing.empty?
+  warn "corpus-diagnostics: #{missing.join(", ")} does not exist."
+  warn "corpus-diagnostics: refusing to run rather than measuring the paths that do."
+  exit 1
+end
+
+paths = corpus_args.flat_map { |arg| File.directory?(arg) ? Dir.glob(File.join(arg, "**", "*.rb")) : [arg] }.sort
+
+# An empty corpus produces an empty diff, which reads as "the change
+# altered nothing" -- the most expensive wrong answer this script can
+# give, and the one a typo'd path produces.
+if paths.empty?
+  warn "corpus-diagnostics: #{corpus_args.join(", ")} matched no .rb files."
+  warn "corpus-diagnostics: refusing to run. An empty corpus produces an empty diff, " \
+       "which reads as 'this change altered nothing'."
+  exit 1
+end
+
+require "digest"
+
+provenance("cwd", Dir.pwd)
+provenance("revision", git("rev-parse", "HEAD") || "(not a git repository)")
+dirty = git("status", "--porcelain", "--untracked-files=no").to_s.lines.length
+provenance("dirty-tracked-files", dirty)
+warn("corpus-diagnostics: WARNING -- the tree has uncommitted changes, so `revision` does not " \
+     "describe the code that is about to run.") if dirty.positive?
+provenance("ovallsp-version", Ovallsp::VERSION)
+provenance("signature-root", ENV.fetch("OVALLSP_SIGNATURE_ROOT", Dir.pwd))
+provenance("corpus-files", paths.length)
+# The two sides of a comparison must be given the identical corpus, and
+# "I passed the same argument" is not that -- `026`'s second false result
+# was a diff between two corpora one of which had this repository's own
+# `core/lib` in it. This digest is over the file list itself, so the two
+# sides can be compared without trusting either invocation.
+provenance("corpus-sha256", Digest::SHA256.hexdigest(paths.join("\n")))
 
 workspace_index = Ovallsp::WorkspaceIndex.new
 model_registry = Ovallsp::Models::ModelRegistry.new
@@ -114,12 +205,39 @@ rescue StandardError => e
 end
 
 engine = Ovallsp::Diagnostics::Engine.new
+counts = Hash.new(0)
 
 documents.each do |path, document|
   engine.analyze(document: document, semantic_context: context, mode: :standard).each do |finding|
+    counts[finding.code] += 1
     position = finding.range[:start]
     puts "#{finding.code}\t#{path}:#{position[:line]}:#{position[:character]}\t#{finding.message.gsub(/\s+/, " ")}"
   end
 rescue StandardError => e
   warn "ANALYZE-ERROR #{path}: #{e.class}: #{e.message}"
+end
+
+counts.sort_by { |code, n| [-n, code] }.each { |code, n| provenance("count.#{code}", n) }
+
+failed = control_expectations.filter_map do |expectation|
+  code, expected = expectation.split(":", 2)
+  if expected.nil? || !expected.match?(/\A\d+\z/)
+    warn "corpus-diagnostics: --expect-control wants CODE:N, got #{expectation.inspect}"
+    exit 1
+  end
+
+  actual = counts[code]
+  if actual == expected.to_i
+    warn "corpus-diagnostics: control #{code} = #{actual}, as expected."
+    nil
+  else
+    "#{code}: expected #{expected}, got #{actual}"
+  end
+end
+
+unless failed.empty?
+  warn "corpus-diagnostics: CONTROL FAILED -- #{failed.join("; ")}."
+  warn "corpus-diagnostics: a control is a category the change under test cannot affect. " \
+       "If it moved, the two sides are not comparable and the diff means nothing yet."
+  exit 1
 end

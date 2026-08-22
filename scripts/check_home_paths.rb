@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # One scanner for "a real home directory path was committed", read by
 # both of the places that have to agree about it:
 #

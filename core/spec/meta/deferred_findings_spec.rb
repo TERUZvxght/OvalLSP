@@ -1,187 +1,20 @@
 # frozen_string_literal: true
 
-require "yaml"
-
-# Every entry in `docs/design/tasks/024-deferred-review-findings.md`
-# carries a fenced `yaml` block stating its status, its kind, and whether
-# it has a user-visible half. This guard reads those blocks.
+# `046`'s C4. The register's grammar lives in `scripts/deferred_findings.rb`
+# and is read from there by both this guard and `scripts/reindex_findings.rb`.
 #
-# It exists because the previous attempt did not have them to read.
-# 024.25 records that attempt in full: two specs that parsed the file's
-# *prose* -- headings, `**Status:**` lines, an opt-out marker written
-# mid-sentence -- and were rolled back after each review round found
-# another shape the regexes mishandled. The difference here is not a
-# better regex. It is that the data now has a grammar with unambiguous
-# delimiters, so there is one shape to parse instead of however many
-# prose can take.
+# It used to live here, and `reindex_findings.rb` -- which renders the
+# index every reader navigates by -- had a second, hand-rolled
+# `key: value` scanner of its own, under a comment saying "the yaml block
+# is this file's own grammar rather than real YAML". That was true when
+# it was written and stopped being true in 0.2.12, when `024.68` replaced
+# the scanner on this side with `YAML.safe_load`. The two then disagreed:
+# a quoted `status: "fixed"` renders in the index as `"fixed"` while
+# every check here reads `fixed`.
 #
-# Three rules follow from that history and are load-bearing:
-#
-# - **An entry with no block is a failure, not a skip.** The old guard
-#   silently dropped a heading it did not recognise, so an entry could be
-#   added and never checked. `parses every entry` compares the block count
-#   to the heading count for exactly that reason.
-# - **The opt-out must say why.** The old guard documented that
-#   requirement in three places and enforced it nowhere.
-# - **The other end of the check needs a grammar too.** Until 0.2.1 this
-#   half was a bare-number search, which is prose-parsing wearing a
-#   different hat -- see `#documents?`.
-#
-# Read with an explicit encoding, never the locale's: the Japanese file is
-# almost entirely non-ASCII, and under a C/POSIX locale `File.read` hands
-# back US-ASCII and every scan raises.
-module DeferredFindings
-  module_function
-
-  ENTRY_HEADING = /^## (024\.[0-9R][0-9.]*) /
-  # `[^\n]*` for the title, not `.*`: under `/m` -- which the block body
-  # needs -- a dot matches newlines, and the title would swallow the file
-  # down to the last block, leaving one entry parsed and every other one
-  # reported as missing.
-  METADATA_BLOCK = /^## (024\.[0-9R][0-9.]*) [^\n]*\n\n```yaml\n(.*?)\n```$/m
-  RESOLVED = %w[fixed done].freeze
-
-  def headings(markdown) = markdown.scan(ENTRY_HEADING).flatten
-
-  # Raised when an entry names a key the legend does not define.
-  UnknownKey = Class.new(StandardError)
-
-  # Every key the legend defines. A new one is a deliberate edit here and
-  # in the legend, which is the point: `024.68` is a typo'd key silently
-  # un-routing an entry, and three guards bolted onto a hand-rolled
-  # `key: value` scanner were each broken by the next round -- one blind
-  # outside its own `[a-z-]` character class, one skipping every indented
-  # line as a folded note's continuation.
-  #
-  # **This is not a fourth guard.** The block is `yaml` and is parsed as
-  # yaml, so `Target:`, `user_visible:` and a key indented under another
-  # are keys like any other and are checked like any other. The grammar
-  # the guards were guarding does not exist any more.
-  KNOWN_KEYS = %w[status kind target released-in user-visible user-visible-note].freeze
-
-  # `defect` is a fault in what the product answers; `roadmap` is a plan;
-  # `friction` is something that made *working here* harder. A kind the
-  # legend does not define is a typo that would silently route an entry
-  # out of every check that filters on kind -- `open_defects` reads
-  # `kind == "defect"`, so `kind: defct` makes an open defect invisible
-  # to the KNOWN_LIMITATIONS guard.
-  KNOWN_KINDS = %w[defect roadmap friction].freeze
-
-  def entries(markdown)
-    markdown.scan(METADATA_BLOCK).to_h do |number, block|
-      parsed =
-        begin
-          YAML.safe_load(block)
-        rescue Psych::SyntaxError => e
-          raise UnknownKey, "#{number}'s metadata is not valid yaml: #{e.message}"
-        end
-      raise UnknownKey, "#{number}'s metadata is not a mapping" unless parsed.is_a?(Hash)
-
-      unknown = parsed.keys.map(&:to_s) - KNOWN_KEYS
-      raise UnknownKey, "#{number} names #{unknown.join(", ")}, which the legend does not define" if unknown.any?
-
-      kind = parsed["kind"].to_s
-      unless kind.empty? || KNOWN_KINDS.include?(kind)
-        raise UnknownKey, "#{number} has kind #{kind.inspect}, which is not one of #{KNOWN_KINDS.join(", ")}"
-      end
-
-      # Stringified because every caller compares against `"open"`,
-      # `"defect"`, `"no"` -- and yaml turns an unquoted `yes` into
-      # `true`, which is the one shape this file writes that would
-      # otherwise change meaning.
-      [number, parsed.transform_values { |v| v == true ? "yes" : (v == false ? "no" : v.to_s) }]
-    end
-  end
-
-  def open_defects(markdown)
-    entries(markdown).select do |_, fields|
-      fields["kind"] == "defect" && !RESOLVED.include?(fields["status"])
-    end
-  end
-
-  def undocumented(markdown, *documents)
-    open_defects(markdown).reject { |_, fields| fields["user-visible"] == "no" }
-                          .keys
-                          .reject { |number| documents.all? { |doc| documents?(doc, number) } }
-  end
-
-  # Every version `docs/RELEASE_ARTIFACTS.md` records as published. An
-  # *open* entry naming one of these is claiming a release that has
-  # already gone out (`024.124`).
-  def published_versions(markdown) = markdown.scan(/^\| (\d+\.\d+\.\d+) \| `/).flatten
-
-  def open_entries_targeting_a_shipped_release(markdown, artifacts)
-    published = published_versions(artifacts)
-    open_defects(markdown).filter_map do |number, fields|
-      target = fields["target"]
-      "#{number} (#{target})" if target && published.include?(target)
-    end
-  end
-
-  # The `**Area:**` line of an entry, as the paths it names. Backticked,
-  # comma-separated, sometimes with a parenthetical naming the method.
-  AREA_LINE = /^\*\*Area:\*\*(.+?)(?=\n\n)/m
-  AREA_PATH = %r{`((?:core|vscode|scripts|docs|site|\.github)/[A-Za-z0-9._/-]+)`}
-
-  def area_paths(markdown)
-    markdown.scan(/^## (024\.\S+)(.*?)(?=^## 024\.|\z)/m).to_h do |number, body|
-      line = body[AREA_LINE, 1].to_s
-      [number, line.scan(AREA_PATH).flatten]
-    end
-  end
-
-  def resolved(markdown)
-    entries(markdown).select { |_, fields| RESOLVED.include?(fields["status"]) }
-  end
-
-  # The other direction, and the one the 0.2.x work found missing. This
-  # guard only ever asked whether an *open* finding is cited, so retiring
-  # one left its paragraph in `KNOWN_LIMITATIONS` with nothing to
-  # complain -- and the 0.2.4-bound branch's loop found three such
-  # paragraphs standing at once, each telling a reader to expect
-  # behaviour that had just been removed. Worse than no limitation at
-  # all: it sends them looking for something that is not there.
-  #
-  # `CLAUDE.md` states the lesson as "a revert is the change most likely
-  # to leave documentation behind". This is that lesson mechanised, so
-  # it does not depend on anyone remembering it.
-  def wrongly_documented(markdown, *documents)
-    resolved(markdown).keys.select { |number| documents.any? { |doc| anchors(doc, number).any? } }
-  end
-
-  # What counts as documenting a finding, as opposed to mentioning it.
-  #
-  # The bare number was the whole test until 0.2.1, and it cannot tell the
-  # two apart: 024.20's user-facing half -- the largest false-positive
-  # family the engine had -- appeared nowhere in `KNOWN_LIMITATIONS`,
-  # while its number appeared in a paragraph about a *different*
-  # consequence, and the guard was green for twenty-two rounds.
-  #
-  # No regex reads prose well enough to judge that, and 024.25 records
-  # what happens when one tries. So the writer says it instead: an
-  # `<!-- documents: 024.N -->` marker at the end of the line that
-  # documents the finding. A machine cannot check that the paragraph is
-  # *adequate*, but it can insist the claim was made deliberately, which
-  # a number occurring in a sentence never is. Written inline rather than
-  # on its own line because a comment between two list items ends the
-  # list in most Markdown renderers.
-  #
-  # Exactly once per document: two markers for one number mean two
-  # paragraphs each claiming to be the place, and no way to tell which
-  # one a later edit should keep.
-  ANCHOR_PREFIX = "documents:"
-
-  def anchors(document, number)
-    document.scan(/^([^\n]*?)<!-- #{ANCHOR_PREFIX} #{Regexp.escape(number)}(?!\.?\d) *-->/)
-  end
-
-  # The capture is whatever the marker's own line holds in front of it: a
-  # marker alone on a line, or opening one, anchors nothing.
-  def documents?(document, number)
-    found = anchors(document, number)
-    found.length == 1 && found.first.first.match?(/\S/)
-  end
-end
+# One text, one parser. `CLAUDE.md`'s countermeasure shape -- two
+# scanners that had to agree, replaced by one both read.
+require_relative "../../../scripts/deferred_findings"
 
 RSpec.describe "deferred findings metadata" do
   # Sorting and indexing are mechanical, so they are checked mechanically
@@ -230,6 +63,42 @@ RSpec.describe "deferred findings metadata" do
       expect(doubled).to be_empty,
                          "entries whose body appears more than once: #{doubled.join(", ")}. " \
                          "An entry states one Area; a second one means a block was duplicated."
+    end
+
+    # `046`'s C4. The index and the checks must read one entry the same
+    # way. They did not between 0.2.12 and 0.2.14: `reindex_findings.rb`
+    # kept a hand-rolled `key: value` scanner while this side moved to
+    # yaml, and a quoted value rendered with its quotes in the index and
+    # without them everywhere else.
+    #
+    # A quoted status is the cheapest shape that distinguishes them, and
+    # it is written into a synthetic entry rather than the register so
+    # the example proves the *parser* agrees rather than that this
+    # particular file happens to contain no quotes.
+    it "renders the index from the same reading the checks make" do
+      require_relative "../../../scripts/reindex_findings"
+
+      # Assembled, never spelled: `measured_claims_spec` requires every
+      # register number in tracked content to resolve to an entry, and a
+      # synthetic one written whole would be a dangling pointer in the
+      # file that tests the register. `024.126`'s rule -- make the
+      # example unspellable rather than exempt the file.
+      number = ["024", "999"].join(".")
+      entry = <<~MD
+        ## #{number} A synthetic entry with a quoted status
+
+        ```yaml
+        status: "fixed"
+        kind: defect
+        user-visible: no
+        user-visible-note: >
+          Synthetic.
+        target: 0.2.14
+        ```
+      MD
+
+      expect(ReindexFindings.metadata_of(entry)).to eq(DeferredFindings.entries(entry).fetch(number))
+      expect(ReindexFindings.metadata_of(entry)["status"]).to eq("fixed")
     end
 
     it "indexes every entry, so the table cannot silently omit one" do

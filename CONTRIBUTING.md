@@ -118,9 +118,37 @@ itself.
 - Design decisions with real trade-offs (not obvious implementation
   details) are recorded as ADRs under `docs/design/adrs/`.
 
+## Before committing: `preflight`
+
+```bash
+ruby scripts/preflight.rb
+```
+
+Runs everything that has to be true before a commit — the full suite,
+the two real-Rails-backed suites separately (they skip in full without
+local `rails` and `sqlite3` while `rspec` still exits 0, so it checks
+the example count is non-zero rather than trusting the exit status), the
+home-path scan, the documentation-link resolver, the register index, the
+rescue verdicts and the site links. It prints what each one ran, so a
+commit message can quote a run rather than a recollection.
+
+Install it as a git hook once:
+
+```bash
+ruby scripts/preflight.rb --install
+```
+
+`PREFLIGHT_SKIP=1 git commit …` skips it for one commit.
+
+It exists because "did I run it all?" was being answered from memory,
+and twice in one session the answer was wrong: the suite had been run
+for a single directory, was green, and the full run afterwards was not.
+The checks live in seven places, and nothing but a person was holding
+the list together.
+
 ## Before opening a PR
 
-1. Run the relevant test suites above.
+1. Run `ruby scripts/preflight.rb`.
 2. If your change affects VSIX packaging, run `cd vscode && npm run
    package` and confirm it succeeds.
 3. Describe what changed and why, and list the tests you ran.

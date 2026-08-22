@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # Verifies every internal link and asset reference in `site/` before it is
 # published to GitHub Pages.
 #

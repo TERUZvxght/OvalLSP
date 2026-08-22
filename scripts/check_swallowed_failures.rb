@@ -1,6 +1,8 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+require_relative "utf8"
+
 # `042`'s D10 / `024.122`. A failure caught and turned into a plausible
 # value does not produce a wrong answer somebody eventually notices. It
 # produces *the answer that would be right if nothing had gone wrong* --
