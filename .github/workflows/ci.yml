@@ -343,8 +343,18 @@ jobs:
   # that rule would have had 111 exceptions the day it was written. What
   # gates is that the decision is *made*, in a file a reviewer reads.
   #
-  # Cheap, so it runs here as well as in the suite: the suite is where a
-  # contributor meets it, and this is where a push cannot get round it.
+  # It runs here as well as in `core/spec/meta/swallowed_failures_spec.rb`,
+  # which shells out to the same script -- so this job cannot disagree
+  # with the suite about the answer. What it adds is a *separate* red:
+  # when the suite is failing for an unrelated reason, "Rescue verdicts"
+  # still reports whether this guarantee specifically holds, by name, in
+  # the checks list. Same reason as `doc-links` and `site-consistency`.
+  #
+  # It used to say the reason was that "a push cannot get round it". That
+  # was not true -- the `core` job runs the suite on the same triggers,
+  # so neither could a push get round the spec. 0.2.14 corrected it
+  # rather than deleting the job, because the job does buy something and
+  # the sentence was what was wrong.
   swallowed-failures:
     name: Rescue verdicts
     runs-on: ubuntu-latest

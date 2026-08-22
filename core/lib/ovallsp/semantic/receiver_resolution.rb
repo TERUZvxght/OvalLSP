@@ -34,26 +34,28 @@ module Ovallsp
         end
       end
 
-      # Drops only the leading "::" ParserService's own #current_owner
-      # always prefixes fully-qualified names with -- never any inner
-      # namespace segment. Collapsing to the *simple* name (an earlier
-      # version of this logic) threw away exactly the information that
-      # disambiguates two same-named classes in different namespaces
-      # (e.g. a closed top-level `Bar` vs. an open `Api::Bar`),
-      # resolving to whichever candidate WorkspaceIndex#resolve_type_name
-      # happened to index first. WorkspaceIndex#resolve_type_symbol_locked
-      # already does its own exact-full-name-first matching internally,
-      # so passing the full (colon-stripped) name through lets that
-      # matching actually work; ModelRegistry's own keys (Rails' own
-      # `model.name`) never carry a leading "::" either, so this is also
-      # what #resolve_via_model_registry needs.
-      # Delegates rather than restating: `Index::SymbolId` owns both
-      # directions of this one decision, and this is the semantic layer's
-      # name for reading it. Round 7 of the 0.1.12 review found eleven
-      # hand-written copies of the rule still in the tree, across its three
-      # directions. This method's old body was one of the two that were
-      # byte-identical to what it now calls; `ModelRegistry#lookup_key`
-      # was the other (0.1.12).
+      # The semantic layer's name for one decision `Index::SymbolId` owns:
+      # drop the leading "::" that ParserService's #current_owner prefixes
+      # every fully-qualified name with, and **nothing else** -- never an
+      # inner namespace segment. Delegates rather than restating, because
+      # round 7 of the 0.1.12 review found eleven hand-written copies of
+      # this rule across its three directions; this method's old body was
+      # one of two byte-identical to what it now calls (`ModelRegistry
+      # #lookup_key` was the other).
+      #
+      # Why not the simple name, which an earlier version used: it threw
+      # away exactly what distinguishes two same-named classes in
+      # different namespaces (a closed top-level `Bar` from an open
+      # `Api::Bar`), so resolution went to whichever
+      # WorkspaceIndex#resolve_type_name had indexed first.
+      # #resolve_type_symbol_locked does exact-full-name-first matching
+      # internally, and passing the full colon-stripped name is what lets
+      # that work. ModelRegistry's keys (Rails' own `model.name`) carry no
+      # leading "::" either, so #resolve_via_model_registry needs the same.
+      #
+      # (Until 0.2.14 these were two paragraphs run together with no break,
+      # the first describing the body this method no longer has. A reader
+      # could not tell which one was about the code underneath.)
       def canonical_receiver_name(name)
         Index::SymbolId.bare_name(name)
       end

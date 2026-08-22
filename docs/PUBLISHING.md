@@ -181,8 +181,28 @@ Before treating this as a release candidate:
 package, verifies `core/` was actually vendored (the exact thing that
 broke in v0.1.0), runs `vsce ls --tree` and the packaged semantic smoke
 test, computes the SHA-256, and only then prompts for a typed `yes`
-before running `vsce publish --target darwin-arm64 --pre-release`. It
-reads the PAT from `vscode/.vsce-pat.local` (gitignored — see
+before running:
+
+```
+vsce publish --packagePath <the vsix it just verified> --pre-release
+```
+
+**`--packagePath`, never `--target`**, and the difference is the whole
+point of the step. `vsce publish --target ...` runs `vscode:prepublish`
+(`copy-core` → `tsc`) *again*, on top of the run `npm run package`
+already did, rebuilding Core's vendored native extensions from scratch a
+second time. Native-extension compilation is not byte-reproducible run
+to run, so what reaches the Marketplace is a different binary from the
+one that was just smoke-tested and hashed — which is exactly how v0.1.2
+shipped a `PLATFORM_MANIFEST.json` that did not match its own payload,
+and users saw a "Payload hash mismatch… may be corrupted" warning that
+was true. `--packagePath` uploads the verified file as-is.
+
+*This paragraph documented the `--target` form until 0.2.14 — the one
+`release.sh`'s own comment says must never be used. Anyone publishing by
+hand from this document would have reproduced v0.1.2.*
+
+It reads the PAT from `vscode/.vsce-pat.local` (gitignored — see
 Credentials below) rather than requiring it typed in each time.
 
 ```bash

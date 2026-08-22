@@ -1107,17 +1107,6 @@ module Ovallsp
       def qualified_owner(name)
         Index::SymbolId.qualify_owner(name)
       end
-
-      # `#ancestor_known?`, `#open_surface_for?` and
-      # `#declares_method_missing?` lived here until 0.2.11 and had no
-      # callers: `#closed_nominal?`'s own note records that all six
-      # reasons moved to `MethodResolver#unenumerable_reason` in 0.2.9,
-      # and these three stayed behind as copies. The last of them still
-      # stated the *pre*-`024.116` rule -- asking for instance methods
-      # whichever side the lookup was on -- so a reader who grepped for
-      # the rule and landed here got the answer 0.2.10 gave. Two copies
-      # of a rule that must not diverge is the shape `CLAUDE.md`'s
-      # same-place rule is about; deleted rather than kept in step.
     end
   end
 end

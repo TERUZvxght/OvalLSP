@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**139 entries below** <!-- measured: register-entries = 139 -->,
+**140 entries below** <!-- measured: register-entries = 140 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -310,6 +310,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.138`](#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | open | — | No test mixes a schema change and a model-file change in one batch |
 | [`024.139`](#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
 | [`024.140`](#024140-a-scripted-edit-doubled-a-register-entry-and-every-check-stayed-green) | fixed | 0.2.14 | A scripted edit doubled a register entry, and every check stayed gre… |
+| [`024.141`](#024141-publishing-md-documented-the-publish-command-that-shipped-a-corrupt-v0-1-2) | fixed | 0.2.14 | `PUBLISHING.md` documented the publish command that shipped a corrup… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -7457,6 +7458,51 @@ truthfully said 0 failures. `CLAUDE.md`'s rule about a green suite not
 being a blast radius is the same observation from the other side — here
 the suite was green because nothing it contained could have been
 otherwise.
+
+## 024.141 `PUBLISHING.md` documented the publish command that shipped a corrupt v0.1.2
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Not something an editor user meets, but the closest thing to it a
+  document can be: following this document by hand would have published
+  an artifact whose own payload hash did not match, which users of
+  v0.1.2 did see as a "may be corrupted" warning.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `docs/PUBLISHING.md`, `docs/PUBLISHING.ja.md`
+
+Both languages said `release.sh` "runs `vsce publish --target
+darwin-arm64 --pre-release`". It does not, and `release.sh`'s own
+comment at the call site says that form must **never** be used:
+
+```
+vsce publish --packagePath "$VSIX_PATH" --pre-release
+```
+
+`vsce publish --target ...` runs `vscode:prepublish` (`copy-core` →
+`tsc`) again on top of the run `npm run package` already did, rebuilding
+the vendored native extensions from scratch. That compilation is not
+byte-reproducible, so the upload is a different binary from the one just
+smoke-tested and hashed — which is how v0.1.2 shipped a
+`PLATFORM_MANIFEST.json` that did not match its own payload. The bug was
+found by downloading the published VSIX and rehashing its `core/`.
+
+**What makes this its own entry rather than a typo.** The fix for
+v0.1.2 went into the script *and its comment*, and stopped there. The
+document describing the script kept the pre-fix command for eleven
+releases. A fix applied at the place that runs and not at the place that
+*tells a person what to run* leaves the failure reachable by anyone who
+reads instead of executing — and `PUBLISHING.md`'s whole audience is
+someone doing this by hand.
+
+`DOCUMENTATION_MAP` has no row for "the release procedure changed",
+which is why nothing pointed at it. `046`'s C6 is where that goes.
+
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

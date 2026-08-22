@@ -163,10 +163,29 @@ packaging前に`tsc`自身のcompileステップをローカルで明示的に�
 `vscode/scripts/release.sh`が一連の手順を自動化します: packageをビルド
 し、`core/`が実際にvendoringされていること(v0.1.0で実際に壊れた点その
 もの)を検証し、`vsce ls --tree`とpackage済みsemantic smokeを実行し、
-SHA-256を計算した上で、最後に`yes`の入力を求めてから初めて`vsce publish
---target darwin-arm64 --pre-release`を実行します。PATは毎回入力する
-代わりに`vscode/.vsce-pat.local`(gitignore対象、下記Credentials参照)
-から読み込みます。
+SHA-256を計算した上で、最後に`yes`の入力を求めてから初めて次を実行します:
+
+```
+vsce publish --packagePath <検証済みのvsix> --pre-release
+```
+
+**`--target`ではなく`--packagePath`**であり、この違いがこの手順の核心
+です。`vsce publish --target ...`は`vscode:prepublish`(`copy-core` →
+`tsc`)を**もう一度**走らせます — `npm run package`が既に実行した上に
+重ねて、Coreのvendored native拡張を一から再ビルドします。native拡張の
+コンパイルは実行ごとにバイト単位で再現しないため、Marketplaceへ届くのは
+直前にsmoke testとhash計算を通した成果物とは別のバイナリになります。
+v0.1.2が自身のpayloadと一致しない`PLATFORM_MANIFEST.json`を出荷し、
+利用者に「Payload hash mismatch… may be corrupted」という**正しい**警告
+が出たのはこれが原因でした。`--packagePath`は検証済みのファイルをその
+まま上げます。
+
+*0.2.14まで、この段落は`--target`形式を記載していました — `release.sh`
+自身のコメントが「絶対に使うな」と書いている方です。この文書を見て手で
+publishした人は、v0.1.2を再現したことになります。*
+
+PATは毎回入力する代わりに`vscode/.vsce-pat.local`(gitignore対象、下記
+Credentials参照)から読み込みます。
 
 ```bash
 vscode/scripts/release.sh
