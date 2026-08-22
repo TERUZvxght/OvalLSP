@@ -26,19 +26,19 @@
 "core/lib/ovallsp/benchmark/cold_index_benchmark.rb#run": swallows
 "core/lib/ovallsp/build_manifest.rb#load": swallows
 "core/lib/ovallsp/cache/key.rb#canonical_root": swallows
-"core/lib/ovallsp/cache/store.rb#self.mark_workspace": swallows
-"core/lib/ovallsp/cache/store.rb#self.prune_generations": swallows
+"core/lib/ovallsp/cache/store.rb#self.mark_workspace": "contained: housekeeping; a failure loses a timestamp, never an entry"
+"core/lib/ovallsp/cache/store.rb#self.prune_generations": "contained: a failed prune keeps files, which is the direction this class was rewritten to prefer"
 "core/lib/ovallsp/cache/store.rb#self.age_for_sort": "contained: 0.0 sorts the entry oldest, so a failure prunes rather than keeps -- the safe direction for a cache"
-"core/lib/ovallsp/cache/store.rb#self.prune_workspaces": swallows
+"core/lib/ovallsp/cache/store.rb#self.prune_workspaces": "contained: same"
 "core/lib/ovallsp/cache/store.rb#self.seconds_since_write": "contained: 0 reads as just written, so nothing is pruned on a failed stat"
-"core/lib/ovallsp/cache/store.rb#self.tighten": swallows
-"core/lib/ovallsp/cache/store.rb#self.tighten_tree": swallows
+"core/lib/ovallsp/cache/store.rb#self.tighten": "contained: a failed chmod leaves permissions as they were; the cache holds nothing secret"
+"core/lib/ovallsp/cache/store.rb#self.tighten_tree": "contained: same"
 "core/lib/ovallsp/cache/store.rb#self.remove_within": "contained: a removal that fails leaves the file, which is the direction this class was rewritten to prefer"
 "core/lib/ovallsp/cache/store.rb#self.children_of": "contained: an unreadable directory contributes no children, so nothing is removed from it"
-"core/lib/ovallsp/cache/store.rb#load": swallows
-"core/lib/ovallsp/cache/store.rb#save": swallows
-"core/lib/ovallsp/cache/store.rb#ensure_directory": swallows
-"core/lib/ovallsp/cache/store.rb#prune_if_over_bound": swallows
+"core/lib/ovallsp/cache/store.rb#load": "contained: a cache miss recomputes; correctness-neutral, and the shape it once hid is guarded by schema_version_spec"
+"core/lib/ovallsp/cache/store.rb#save": "contained: failing to save means no cache, never a wrong cache"
+"core/lib/ovallsp/cache/store.rb#ensure_directory": "contained: reason written at the site -- a read-only filesystem means the cache never activates"
+"core/lib/ovallsp/cache/store.rb#prune_if_over_bound": "contained: housekeeping; a failure leaves the cache larger, never wrong"
 "core/lib/ovallsp/child_process.rb#signal": swallows
 "core/lib/ovallsp/child_process.rb#close_quietly": swallows
 "core/lib/ovallsp/child_process.rb#join_quietly": swallows
@@ -47,10 +47,10 @@
 "core/lib/ovallsp/cold_indexer.rb#each_candidate_file": swallows
 "core/lib/ovallsp/cold_indexer.rb#index_file": swallows
 "core/lib/ovallsp/cold_indexer.rb#safe_realpath": swallows
-"core/lib/ovallsp/diagnostics/engine.rb#ivar_names_tested_for_existence": swallows
-"core/lib/ovallsp/diagnostics/engine.rb#ivar_writes": swallows
-"core/lib/ovallsp/diagnostics/engine.rb#operator_expression?": swallows
-"core/lib/ovallsp/diagnostics/engine.rb#rbs_known_constant?": swallows
+"core/lib/ovallsp/diagnostics/engine.rb#ivar_names_tested_for_existence": "contained: nil, distinct from the empty list a file that tests nothing gives, and the caller declines on it"
+"core/lib/ovallsp/diagnostics/engine.rb#ivar_writes": "contained: nil reads as cannot enumerate, and the check declines"
+"core/lib/ovallsp/diagnostics/engine.rb#operator_expression?": "contained: true suppresses a report, which is the declining direction"
+"core/lib/ovallsp/diagnostics/engine.rb#rbs_known_constant?": "contained: true, so a question that cannot be asked declines rather than reports"
 "core/lib/ovallsp/io/framed_reader.rb#input_ready?": swallows
 "core/lib/ovallsp/io/framed_reader.rb#parse_body": surfaces
 "core/lib/ovallsp/io/framed_reader.rb#fill_buffer": surfaces

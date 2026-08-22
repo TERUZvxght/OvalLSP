@@ -6708,7 +6708,32 @@ cache's failures all prune rather than keep, which is the direction that
 class was rewritten to prefer after it deleted the maintainer's
 applications.
 
-**84 remain.**
+**Two more fixes, both of the same shape as the first**: a check asked a
+question, could not get an answer, and used the *reporting* value as the
+fallback.
+
+- `Engine#ivar_names_tested_for_existence` answered `[]`, which reads as
+  "this file is defensive about nothing" — so a failure turned every
+  `defined?(@x)` into an unassigned-ivar report. It answers `nil` now,
+  which is not the value a file that tests nothing gives, and the caller
+  declines on it.
+- `Engine#rbs_known_constant?` answered `false`, which reads as "RBS does
+  not know this name" — an assertion about the user's code made from a
+  question that could not be asked. It answers `true`, so the check
+  declines.
+
+**Enumerating is what decides whether to assert, so a failure to
+enumerate has to decline.** That sentence is the whole of §0 applied to
+this class, and it is the test to run each remaining site against: not
+"is this failure important" but "does the fallback value let a caller
+assert something".
+
+Thirteen more are `contained` with their arguments — the cache's, which
+all leave files rather than remove them, and two more of the engine's
+that already fail towards silence.
+
+**71 remain**, and `unresolved-constant` is unmoved at 4,600 over the
+16-gem corpus, which is the control these two changes had to keep.
 
 **The mechanism is deliberately not "no rescue may swallow".** That rule
 would have had 111 exceptions on the day it was written, which is the

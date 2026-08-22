@@ -12,7 +12,8 @@
 # was being caught one layer below the layer that knows what to do with
 # it.
 RSpec.describe "Ovallsp::LocalInferencer and a document it cannot parse" do
-  let(:inferencer) { Ovallsp::LocalInferencer.new(model_registry: Ovallsp::Models::ModelRegistry.new) }
+  # One stack, assembled where the server assembles its own (042's D8).
+  let(:inferencer) { build_analysis_stack.local_inferencer }
 
   def document(text)
     Ovallsp::TextDocument.new(uri: "file:///a.rb", text: text, version: 1, language_id: "ruby")
