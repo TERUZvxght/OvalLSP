@@ -42,9 +42,18 @@ meaning of both.
 
 | Position | Changes when | Examples |
 |---|---|---|
-| patch (`0.1.**7**`) | Nothing new is announced — the release makes the extension do what the previous one already claimed | Bug fixes, performance, refactoring, documentation. **A capability row may be added or turned ✅** when it names something the previous release was already understood to do and did not: 0.2.1 added `G17` this way, for a capability 0.2.0 shipped without a row. What it must not do is announce a capability nobody was promised — 0.2.1 added three such rows during its review loop and moved all three back to the roadmap before shipping |
+| patch (`0.1.**7**`) | Nothing new is announced — the release makes the extension do what **some earlier release** already claimed | Bug fixes, performance, refactoring, documentation. **A capability row may be added or turned ✅** when it names something the previous release was already understood to do and did not: 0.2.1 added `G17` this way, for a capability 0.2.0 shipped without a row. What it must not do is announce a capability nobody was promised — 0.2.1 added three such rows during its review loop and moved all three back to the roadmap before shipping |
 | minor (`0.**1**.5`) | A capability is added | A new row in the capability matrix, a `NOT YET` becoming ✅, a new setting or command |
 | major (`**0**.1.5`) | Something a user already relies on stops working | A setting or command removed or renamed, a supported environment tier dropped, an older protocol version no longer accepted, a ✅ row removed |
+
+**"Some earlier release", not "the previous one".** A patch may close a
+gap against any claim the product has ever made, however long ago.
+Written as *the previous* release until 0.2.14, and that reading made a
+patch nearly impossible to construct: the only way to find a defect in
+`0.N.0` is to be working on `0.N+1`, by which point the defect belongs
+to a release two behind. Bug fixes would have had nowhere to go. The
+version position answers *what kind of change is this*, not *which
+release introduced the problem*.
 
 Note what the patch row does **not** say: that nothing a user sees
 changes. A bug fix changes what a user sees — that is the whole point of
@@ -58,6 +67,31 @@ because the extension gained no capability it did not already claim.
 also what README's matrix summarises. That is deliberate: the version
 number and the capability list move together, so "what changed" is
 answerable from the two of them without reading the diff.
+
+### What a minor may ship unfinished
+
+**A minor release ships with no open, user-visible defect that has no
+`target:`.** Anything not fixed either names the release that will fix
+it, or becomes a `NOT YET` row — which says plainly that the extension
+is not claimed to do it.
+
+This is the condition that makes the patch definition above coherent.
+That definition presupposes an earlier release claimed more than it did,
+and nothing constrained *how much* more — so the patch stream was
+structurally guaranteed rather than incidental, and each `0.N.0` was
+implicitly permitted to ship known-broken.
+
+Measured at 0.2.14, before the rule existed: **18 open, user-visible
+defects carried no target at all** (`024.153`). They were published as
+limitations with no release undertaking to fix them. That is the state
+this condition makes unreachable.
+
+It does not mean a minor is defect-free. Defects found *after* it ships
+are unavoidable, and section 0 is explicit that letting 1.0.0 recede in
+pursuit of accuracy is worse than the defects being pursued. What the
+condition rules out is shipping a capability while *knowingly* leaving
+an unscheduled, user-visible gap in it — the difference between a bug
+nobody had found and a bug nobody had assigned.
 
 It follows that a planned capability names a minor release exactly —
 `0.2.0`, not `0.2.x`. A range spelt with `x` puts the unknown in the

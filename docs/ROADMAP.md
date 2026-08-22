@@ -16,7 +16,24 @@ planned, are in
 [`design/tasks/024-deferred-review-findings.md`](design/tasks/024-deferred-review-findings.md)
 (024.R3).
 
+## 0.2.15 — the accuracy line
+
+- **Open engine defects, and nothing announced.** A patch closes the gap
+  between what the extension already claimed and what it does — and from
+  0.2.14, against **any** earlier claim rather than only the previous
+  release's. No capability is added here; that is what makes it a patch.
+
+0.2.15 is where the open engine defects live — see
+[`design/tasks/047-0.2.15-scope.md`](design/tasks/047-0.2.15-scope.md).
+Nothing here announces a capability; that is what makes it a patch.
+
 ## 0.3.0 — Knowing what the gems define
+
+*Capability only.* The accuracy work that had been aimed at 0.3.0 moved
+to the patch line in 0.2.14, because a release cannot both add
+capability and absorb everything unscheduled. A minor now ships with no
+open, user-visible defect that has no release assigned to it.
+
 
 - **Unknown methods are reported on classes that inherit from a gem** —
   `ApplicationController`, and so most controllers and jobs. Today the

@@ -26,6 +26,8 @@ RSpec.describe "deferred findings metadata" do
   # `scripts/reindex_findings.rb` is the single implementation; this reads
   # it rather than reimplementing the ordering, so the two cannot diverge
   # about what "in order" means.
+  RESOLVED_STATUSES = %w[fixed done].freeze
+
   describe "the register stays findable" do
     it "is in numeric order with its index current" do
       require_relative "../../../scripts/reindex_findings"
@@ -110,6 +112,28 @@ RSpec.describe "deferred findings metadata" do
 
       expect(ReindexFindings.metadata_of(entry)).to eq(DeferredFindings.entries(entry).fetch(number))
       expect(ReindexFindings.metadata_of(entry)["status"]).to eq("fixed")
+    end
+
+    # `024.153`. `target:` was optional, so "nobody has decided" and
+    # "deliberately unscheduled" were the same value — the absence of a
+    # key, which carries no argument and which no check could read.
+    # Measured before the rule: 26 open entries in no release, 18 of them
+    # user-visible and published as limitations with no one undertaking
+    # to fix them.
+    #
+    # `unscheduled` is a legal target and is the point of the rule: it
+    # says so in a value, with the reason in the entry's body, which a
+    # reader can disagree with. An absent key cannot be disagreed with.
+    it "gives every open entry a release, so a queue cannot form in the gaps" do
+      untargeted = DeferredFindings.entries(deferred)
+                                   .reject { |_, f| RESOLVED_STATUSES.include?(f["status"]) }
+                                   .reject { |_, f| f["target"].to_s != "" }
+                                   .keys
+
+      expect(untargeted).to be_empty,
+                            "open entries with no `target:`: #{untargeted.join(", ")}. " \
+                            "Name the release that will fix it, or write `target: unscheduled` " \
+                            "and say why in the entry."
     end
 
     it "indexes every entry, so the table cannot silently omit one" do
@@ -373,14 +397,39 @@ RSpec.describe "deferred findings metadata" do
   # for.
   # The distinguishing pair: it must fire, and it must not fire on an
   # entry whose target is a release still being prepared.
-  it "notices an open entry planted on a shipped release" do
-    planted = deferred.sub("target: 0.3.0", "target: 0.2.13")
+  # **Built, not substituted.** These used to plant by replacing the
+  # first `target: 0.3.0` in the real register, which silently depended
+  # on that occurrence belonging to an *open* entry. 0.2.14's retargeting
+  # made the first one a resolved entry, and the example stopped
+  # distinguishing anything while still passing its own description --
+  # `CLAUDE.md`'s "a fixture that cannot distinguish the two candidate
+  # behaviours" arriving in the spec written to catch a stale target.
+  def entry_with(target:, status: "open")
+    <<~MD
+      ## #{unspellable_number(997)} A synthetic entry
 
-    expect(DeferredFindings.open_entries_targeting_a_shipped_release(planted, artifacts)).not_to be_empty
+      ```yaml
+      status: #{status}
+      kind: defect
+      user-visible: no
+      user-visible-note: >
+        Synthetic.
+      target: #{target}
+      ```
+
+      **Area:** `core/lib`
+    MD
+  end
+
+  it "notices an open entry planted on a shipped release" do
+    planted = deferred + "\n" + entry_with(target: "0.2.13")
+
+    expect(DeferredFindings.open_entries_targeting_a_shipped_release(planted, artifacts))
+      .to include(a_string_including("0.2.13"))
   end
 
   it "leaves an open entry targeting a release that has not shipped alone" do
-    planted = deferred.sub("target: 0.3.0", "target: 9.9.9")
+    planted = deferred + "\n" + entry_with(target: "9.9.9")
 
     expect(DeferredFindings.open_entries_targeting_a_shipped_release(planted, artifacts))
       .not_to include(a_string_including("9.9.9"))

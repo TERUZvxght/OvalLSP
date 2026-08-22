@@ -398,6 +398,15 @@ holds the same lock indexing uses, it can also delay indexing that is
 running at the same time. Symbol search *within* a file, and go to
 definition, use a different path and are unaffected. <!-- documents: 024.137 -->
 
+## Some known limitations have no release assigned to them
+
+18 of the limitations listed here are recorded as open defects that no
+release has undertaken to fix — the register entry describing each one
+carries no target version. That is not a judgement that they will never
+be fixed; it is that nobody has yet said when. The project has recorded
+this as a defect in its own scheduling (`024.153`) rather than leaving
+it implied by the absence of a date. <!-- documents: 024.153 -->
+
 ## The packaged extension is smoke-tested, not driven
 
 The Core Server inside the VSIX — the one you install, with its own
