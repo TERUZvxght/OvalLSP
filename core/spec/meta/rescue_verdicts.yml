@@ -28,13 +28,13 @@
 "core/lib/ovallsp/cache/key.rb#canonical_root": swallows
 "core/lib/ovallsp/cache/store.rb#self.mark_workspace": swallows
 "core/lib/ovallsp/cache/store.rb#self.prune_generations": swallows
-"core/lib/ovallsp/cache/store.rb#self.age_for_sort": swallows
+"core/lib/ovallsp/cache/store.rb#self.age_for_sort": "contained: 0.0 sorts the entry oldest, so a failure prunes rather than keeps -- the safe direction for a cache"
 "core/lib/ovallsp/cache/store.rb#self.prune_workspaces": swallows
-"core/lib/ovallsp/cache/store.rb#self.seconds_since_write": swallows
+"core/lib/ovallsp/cache/store.rb#self.seconds_since_write": "contained: 0 reads as just written, so nothing is pruned on a failed stat"
 "core/lib/ovallsp/cache/store.rb#self.tighten": swallows
 "core/lib/ovallsp/cache/store.rb#self.tighten_tree": swallows
-"core/lib/ovallsp/cache/store.rb#self.remove_within": swallows
-"core/lib/ovallsp/cache/store.rb#self.children_of": swallows
+"core/lib/ovallsp/cache/store.rb#self.remove_within": "contained: a removal that fails leaves the file, which is the direction this class was rewritten to prefer"
+"core/lib/ovallsp/cache/store.rb#self.children_of": "contained: an unreadable directory contributes no children, so nothing is removed from it"
 "core/lib/ovallsp/cache/store.rb#load": swallows
 "core/lib/ovallsp/cache/store.rb#save": swallows
 "core/lib/ovallsp/cache/store.rb#ensure_directory": swallows
@@ -54,17 +54,16 @@
 "core/lib/ovallsp/io/framed_reader.rb#input_ready?": swallows
 "core/lib/ovallsp/io/framed_reader.rb#parse_body": surfaces
 "core/lib/ovallsp/io/framed_reader.rb#fill_buffer": surfaces
-"core/lib/ovallsp/local_inferencer.rb#scope_at": swallows
-"core/lib/ovallsp/local_inferencer.rb#infer_at": swallows
-"core/lib/ovallsp/local_inferencer.rb#infer_ivars_for_method_node": swallows
+"core/lib/ovallsp/local_inferencer.rb#scope_at": "contained: the partial scope captured so far, which is a subset and never a wrong binding"
+"core/lib/ovallsp/local_inferencer.rb#infer_at": "contained: answers Types::UNKNOWN, the engine's own three-valued not-knowing, which no caller can assert from"
+"core/lib/ovallsp/local_inferencer.rb#infer_ivars_for_method_node": "contained: falls back to the initial env, a subset of what a full walk would find"
 "core/lib/ovallsp/local_inferencer.rb#method_nodes": swallows
 "core/lib/ovallsp/local_inferencer.rb#before_action_operations": swallows
-"core/lib/ovallsp/local_inferencer.rb#static_render_target_for_node": swallows
-"core/lib/ovallsp/local_inferencer.rb#assigned_ivar_names": swallows
+"core/lib/ovallsp/local_inferencer.rb#static_render_target_for_node": "contained: nil means no render target found, and the view link is simply not offered"
 "core/lib/ovallsp/local_inferencer.rb#class_body_call_names": swallows
-"core/lib/ovallsp/local_inferencer.rb#eval_constant": swallows
-"core/lib/ovallsp/local_inferencer.rb#resolve_signature_call": swallows
-"core/lib/ovallsp/local_inferencer.rb#constant_receiver_name": swallows
+"core/lib/ovallsp/local_inferencer.rb#eval_constant": "contained: Types::UNKNOWN, same"
+"core/lib/ovallsp/local_inferencer.rb#resolve_signature_call": "contained: nil reads as no signature to check against, so the argument checks decline"
+"core/lib/ovallsp/local_inferencer.rb#constant_receiver_name": "contained: nil reads as a receiver this engine cannot name, which is already its refusing shape"
 "core/lib/ovallsp/logger.rb#write": swallows
 "core/lib/ovallsp/observation/collector.rb#handle": swallows
 "core/lib/ovallsp/observation/collector.rb#defined_method": swallows

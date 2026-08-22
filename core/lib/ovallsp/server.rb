@@ -2105,6 +2105,9 @@ module Ovallsp
         document = open_document || load_document_from_disk(uri)
         next unless document
 
+        # A failure here has to reach `#assigned_ivars_for`'s rescue,
+        # which switches the check off for the view rather than checking
+        # against a set that is quietly short by one file (`024.122`).
         names = @local_inferencer.assigned_ivar_names(document)
         @helper_ivars[uri] = [fingerprint, names] if fingerprint
         names

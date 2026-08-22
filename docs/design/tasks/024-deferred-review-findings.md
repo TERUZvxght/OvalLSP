@@ -6686,7 +6686,29 @@ ancestor chain is what a type RBS does not declare gives, and
 shape of argument `contained` is for, and it is written at each site
 rather than only here.
 
-**96 remain.**
+**Then a first real fix, and it is the shape the whole entry is about.**
+`LocalInferencer#assigned_ivar_names` answered `[]` when its parse
+raised, and both callers build a *union* the unassigned-ivar check
+compares a view's reads against. An empty list from a failed parse is
+indistinguishable from a document that assigns none — so one unreadable
+ancestor file silently removed its ivars from the union and every read of
+one became a **false report**.
+
+`Server#assigned_ivars_for` already refuses in that situation, answering
+`nil` and switching the check off for that view. **The failure was being
+caught one layer below the layer that knows what to do with it**, which
+is the commonest form this defect takes: not "nobody handles it" but
+"somebody handles it too early". The rescue is gone and the two examples
+that pin it include the distinguishing one — a failure must not look like
+"this document assigns nothing".
+
+Eleven more are `contained` with their arguments: `Types::UNKNOWN` from
+the inferencer is the engine's own three-valued not-knowing, and the
+cache's failures all prune rather than keep, which is the direction that
+class was rewritten to prefer after it deleted the maintainer's
+applications.
+
+**84 remain.**
 
 **The mechanism is deliberately not "no rescue may swallow".** That rule
 would have had 111 exceptions on the day it was written, which is the
