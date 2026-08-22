@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**134 entries below** <!-- measured: register-entries = 134 -->,
+**138 entries below** <!-- measured: register-entries = 138 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -212,7 +212,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | — | `scope_at` copies the whole environment once per descent step |
 | [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.3.0 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | open | — | Every `argument-count` report on the measurement corpus is false |
-| [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | open | — | Typing a `.` reports a method on the *next* line |
+| [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | open | 0.3.0 | Typing a `.` reports a method on the *next* line |
 | [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | — | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
 | [`024.43`](#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | open | — | Signature help answers nothing for a receiverless stdlib call |
 | [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | — | A partial's local is not resolved, and C11's stated basis names it |
@@ -223,7 +223,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.49`](#02449-a-release-record-kept-asserting-durations-it-could-not-witness-ending) | fixed | 0.2.3 | A release record kept asserting durations it could not witness ending |
 | [`024.50`](#02450-the-marketplace-description-promises-the-behaviour-0-2-1-removed) | fixed | 0.2.3 | The Marketplace description promises the behaviour 0.2.1 removed |
 | [`024.51`](#02451-the-first-launch-after-an-upgrade-blocks-while-it-sweeps-the-old-cache) | fixed | 0.2.2 | The first launch after an upgrade blocks while it sweeps the old cac… |
-| [`024.52`](#02452-a-publish-could-outlive-the-document-it-was-about) | fixed | reverted | A publish could outlive the document it was about |
+| [`024.52`](#02452-a-publish-could-outlive-the-document-it-was-about-folded-into-024-56) | fixed | reverted | A publish could outlive the document it was about — folded into `024… |
 | [`024.53`](#02453-the-absent-workspace-grace-measured-the-wrong-clock) | fixed | 0.2.2 | The absent-workspace grace measured the wrong clock |
 | [`024.54`](#02454-an-edit-that-changed-nothing-discarded-the-edit-before-it) | fixed | reverted | An edit that changed nothing discarded the edit before it |
 | [`024.55`](#02455-a-version-mismatch-is-reported-and-then-ignored) | fixed | 0.2.12 | A version mismatch is reported and then ignored |
@@ -305,6 +305,10 @@ nobody can search is the recording habit without the benefit.
 | [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | open | 0.3.0 | A positional argument to a keyword-only method reads as nonsense |
 | [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | open | 0.3.0 | `wait_until_ready` never returns for a non-Rails workspace |
 | [`024.135`](#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | open | 0.3.0 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
+| [`024.136`](#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | open | — | A route's optional segments are detected by matching the literal `(.… |
+| [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | — | `WorkspaceIndex#search` scans every symbol in the workspace |
+| [`024.138`](#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | open | — | No test mixes a schema change and a model-file change in one batch |
+| [`024.139`](#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -1325,25 +1329,6 @@ The EN/JA README divergence found in round 2 is real and remains
 unguarded for the same reason. Prefer 1 if this is taken up; it is the
 only one of the two that would also have caught that.
 
-### Re-measured for 0.2.10, twice, and the first re-measurement was wrong
-
-The table above is this entry's own measurement of the *rolled-back
-debounce*, and it stands.
-
-A first attempt to re-derive `024.101`'s "22 wrong intermediate
-publishes" typed by appending a comment, found ten correct publishes, and
-concluded the claim did not reproduce. **That conclusion was withdrawn.**
-The scenario was not `024.101`'s: typing a method name one character at a
-time makes every intermediate state a call to a prefix that really is
-undefined, and appending a comment makes none of them anything at all.
-
-In the right scenario, 12 keystrokes 0.03 s apart on a 3,907-line file:
-**12 publishes, all 12 reporting the unfinished name**, a hover asked
-during the burst answered in 1.430 s median, and the client's own writes
-taking 15.93 s to send 12 edits because the server was not reading. After
-C9: one publish, 0.042 s, 0.52 s. `040` records both measurements and why
-the first was wrong.
-
 ### What was kept
 
 Everything the rounds established about the *product* stayed: 024.21
@@ -2336,6 +2321,7 @@ on gems.
 status: open
 kind: defect
 user-visible: yes
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`analyze`'s parse
@@ -2351,9 +2337,28 @@ a.
 b = "str"
 ```
 
-→ ``Article has no method named `b=` ``. Also reported for a next line
-of `value`, `if true` and `return 1`; not for `puts 1` or
-`other_thing(1)`.
+→ ``Article has no method named `b=` ``.
+
+**Re-run against 0.2.13**, with a control that removes the trailing `.`
+and reports nothing for any of the six:
+
+| next line | reported |
+|---|---|
+| `b = "str"` | ``no method named `b=` `` |
+| `value` | ``no method named `value` `` |
+| `return 1` | ``no method named `return` `` |
+| `other_thing(1)` | ``no method named `other_thing` `` |
+| `if true … end` | `syntax-error`, not a method report |
+| `puts 1` | nothing |
+
+**Two of the six moved since this entry was written**, in opposite
+directions, and neither move was noticed because nobody re-ran it.
+`if true` now trips the clean-parse gate instead — `a.if` is not
+parseable — so that case is `024.41`-shaped no longer. And
+`other_thing(1)` was recorded as *not* reported and now is: the false
+report reaches an ordinary method call on the next line, which is a
+wider surface than the entry claimed. `puts 1` stays silent because
+`Kernel#puts` really is a method `Article` has.
 
 The `end` half -- `a.` at the end of a method, where recovery invents
 `a.end` -- was fixed in 0.2.1 by gating semantic checks on a clean parse.
@@ -2370,14 +2375,22 @@ suppresses "a call whose message is on a different line from its
 receiver" would also suppress the leading-dot chain style, which is
 ordinary Ruby.
 
-(0.2.3's merge note: the debounce named above was since **built and
-rolled back** on the 0.2.4-bound branch -- discarded edits, a publish
-that could outlive its document, and a measured 140x cost on the
-correction it forced; that branch's register and review record hold the
-thread, and its re-analysis reclassifies this entry as a product
-decision for 0.4.0 rather than an engine defect. The reclassification
-lands with that branch's release; until then this entry stands, with
-the direction above known to be harder than it reads.)
+**The debounce was built, and rolled back.** 0.2.2 shipped it, rounds
+32--35 each found a defect in it — discarded edits, a publish that could
+outlive its document, and a measured 140x cost on the correction it
+forced — and `CLAUDE.md`'s same-place rule rolled the thread back.
+`024.57` is that record, and its Area is "whatever replaces the
+deferral", which is this entry's Direction. They are one piece of work
+and now carry one target.
+
+*Until 0.2.14 this paragraph said the reclassification to 0.4.0 "lands
+with that branch's release". 0.2.4 shipped fifteen releases ago, the
+ROADMAP's 0.4.0 section never gained the item, and the entry kept its
+`kind: defect` throughout — so the sentence described a future that had
+already not happened. Deciding it here instead: it stays a defect,
+because what a user sees is a false report on code they are in the
+middle of typing, and it targets 0.3.0 beside `024.57` rather than
+adding scope of its own.*
 
 Round 23 found it, round 24 found it again and widened it, and it existed
 only in `026-0.2.1-review-loop.md` until now -- which is why it is an
@@ -2878,65 +2891,24 @@ loses its warm cache. The method's comment calls each removal "a fact
 rather than a guess", and this one is a guess.
 
 
-## 024.52 A publish could outlive the document it was about
+## 024.52 A publish could outlive the document it was about — folded into `024.56`
 
 ```yaml
 status: fixed
 released-in: reverted
 kind: defect
-user-visible: yes
+user-visible: no
 user-visible-note: >
-  The *waiter* path this was found on was rolled back before shipping
-  (024.57). The symptom is not gone: `#republish_open_diagnostics` has
-  the same race and every build has it -- that half is 024.56, which is
-  open and documented.
+  Folded into 024.56, which is the same race on the path that shipped.
+  This entry's own path -- the debounce waiter -- was rolled back before
+  release (024.57), so nothing a user runs has ever had this half.
 ```
 
-**Area:** `core/lib/ovallsp/server.rb` (`#await_and_publish`,
-`#handle_did_close`)
+**Area:** `docs/design/tasks/024-deferred-review-findings.md` (`024.56`)
 
-Debouncing moved `didChange`'s publish onto a waiter thread. `didClose`
-stayed on the dispatch thread, where it clears the file's diagnostics.
-Nothing ordered the two, and the gap is the analysis itself -- 2--5 s on a
-large file by 024.45's own measurement. Close a tab a second or two after
-pausing, and the clear lands first and the findings after it: errors in
-the Problems panel for a file nobody has open, for the rest of the
-session. Nothing republishes an unsaved buffer or a deleted file.
-
-Round 32 reproduced it by widening the window and reading the order:
-
-```
-publish 0: version=1 count=0
-publish 1: version=nil count=0        <- didClose's clear
-publish 2: version=2 count=1          <- the debounced publish, after
-```
-
-**What made it possible** is stated one line above the code that
-introduced it. `#publish_diagnostics`' comment says the buffer path is
-"computed and published synchronously, in the same dispatch turn ... so
-[never publish a stale version] holds by construction". That was true and
-0.2.2 stopped it being true, and appended a paragraph about the debounce
-to the same comment block without correcting the sentence above it.
-
-**Fixed** by making the property checked rather than structural: the
-analysis runs outside the lock, and the re-read of the document store and
-the write happen together under `@pending_publish_mutex`, which
-`#handle_did_close` also takes -- after closing the store, before
-clearing. Both orders are then right. Publish-then-clear ends clear;
-close-then-publish sees the closed store and writes nothing.
-
-Pinned by `server_diagnostics_debounce_spec.rb`. The example needed two
-tries and both failures are worth knowing:
-
-- **A rendezvous, not two sleeps.** The waiter has to have read the
-  document *before* `didClose` runs. Started near each other, the
-  dispatch thread wins every time and the example passes without
-  exercising anything.
-- **A syntax error, not an unknown-method report.** `didClose` removes the
-  file's index contribution, so a *semantic* finding computed after it
-  comes back empty -- the stale publish still happens, carrying nothing,
-  and an assertion about counts passes. A syntax error needs no index.
-
+Kept as a tombstone so the number resolves. `024.56` carries the defect,
+the fix, and the two lessons this entry contributed about writing the
+example.
 
 ## 024.53 The absent-workspace grace measured the wrong clock
 
@@ -3193,6 +3165,20 @@ is not a regression of any release. That branch's debounce work gave its
 own waiter path the same race, fixed it there, and the fix did not reach
 here -- which is how the shape came to be understood at all.
 
+`#republish_open_diagnostics` publishes on a background thread when
+routes or models land or the Agent becomes ready. If the dispatch thread
+computed findings for version V before routes arrived, and the republish
+for the same V lands during its 2--5 s analysis, the dispatch publish
+writes last and puts the pre-routes findings back.
+`docs/EXTENSION_CAPABILITIES.md`'s G12 row promises "the route diagnostic
+clears once routes arrive, without touching the file"; in that
+interleaving it clears and comes back.
+
+**What a user sees:** close a tab a second or two after routes or models
+land, or after the Runtime Agent becomes ready, and the Problems panel
+keeps that file's errors for the rest of the session. Nothing republishes
+an unsaved buffer or a deleted file.
+
 ### Fixed in 0.2.7, and it needed two rules rather than one
 
 `#publish_findings` keeps a per-uri record of the last version published,
@@ -3221,32 +3207,32 @@ show nothing until edited nine times.
 Rests on `029`'s M-2, landed in the same release: ordering by a version
 number is only meaningful once text and version cannot be read torn.
 
-`#republish_open_diagnostics` publishes on a background thread when
-routes or models land or the Agent becomes ready. If the dispatch thread
-computed findings for version V before routes arrived, and the republish
-for the same V lands during its 2--5 s analysis, the dispatch publish
-writes last and puts the pre-routes findings back.
-`docs/EXTENSION_CAPABILITIES.md`'s G12 row promises "the route diagnostic
-clears once routes arrive, without touching the file"; in that
-interleaving it clears and comes back.
+### The Direction this was recorded with, and what it cost to follow
 
-**What a user sees:** close a tab a second or two after routes or models
-land, or after the Runtime Agent becomes ready, and the Problems panel
-keeps that file's errors for the rest of the session. Nothing republishes
-an unsaved buffer or a deleted file.
+Recorded open, the entry said the fix was "one writer, not another
+comparison" — a per-uri memory in `#publish_findings` refusing a write
+older than the last, with a clear always winning. That is what shipped,
+and it was **not sufficient on its own**: the open-buffer requirement
+is a second rule the Direction did not foresee, and the bypassing
+`#clear_diagnostics` is a third. A Direction that reads as one small
+piece of state is worth keeping as a Direction; it is not worth reading
+back as an estimate of the work.
 
-**The real fix is one writer, not another comparison.** There are three
-publishers to one stream (the dispatch thread, the workspace pass, the
-republish) and only some pairs are ordered. What they all lack is a
-record of *what has already been published for this uri*:
-`#publish_findings` could hold it, refuse a write whose version is older
-than the last one written for that uri, and let a clear always win. That
-is a small piece of state in one place.
+**`024.52` is folded in here.** It was the same race on the debounce
+waiter path, fixed on the 0.2.4-bound branch and rolled back with the
+debounce (`024.57`), so its defect is this one and its code is not in
+the tree. What survives it is how to write the example, both learned
+from a version that passed without exercising anything:
 
-Recorded rather than done because the 0.2.4-bound branch's loop ran
-under fix, don't add, and because a rule about which publish wins wants
-its own change set and its own corpus run -- it can silence a publish,
-which is the direction that does not announce itself.
+- **A rendezvous, not two sleeps.** The background writer has to have
+  reached the point under test before the dispatch thread runs.
+  Started near each other, the dispatch thread wins every time.
+  `server_publish_ordering_spec.rb:147` is a `Queue` pair for exactly
+  this.
+- **A finding that survives the close.** `didClose` removes the file's
+  index contribution, so a *semantic* finding computed after it comes
+  back empty — the stale publish still happens, carrying nothing, and an
+  assertion about counts passes. A syntax error needs no index.
 
 
 ## 024.57 The debounce, and why it was rolled back
@@ -3278,6 +3264,25 @@ it was for. Round 35, on this machine:
 | 32 edits 0.15 s apart (faster than the debounce) | **1 analysis** |
 | 12 edits 0.4 s apart, 1.72 s analysis | **12 analyses, 5 concurrent** |
 | 32 edits 0.4 s apart, 5.25 s analysis | **32 analyses, 13 concurrent** |
+
+### Re-measured for 0.2.10, twice, and the first re-measurement was wrong
+
+The table above is this entry's own measurement of the *rolled-back
+debounce*, and it stands.
+
+A first attempt to re-derive `024.101`'s "22 wrong intermediate
+publishes" typed by appending a comment, found ten correct publishes, and
+concluded the claim did not reproduce. **That conclusion was withdrawn.**
+The scenario was not `024.101`'s: typing a method name one character at a
+time makes every intermediate state a call to a prefix that really is
+undefined, and appending a comment makes none of them anything at all.
+
+In the right scenario, 12 keystrokes 0.03 s apart on a 3,907-line file:
+**12 publishes, all 12 reporting the unfinished name**, a hover asked
+during the burst answered in 1.430 s median, and the client's own writes
+taking 15.93 s to send 12 edits because the server was not reading. After
+C9: one publish, 0.042 s, 0.52 s. `040` records both measurements and why
+the first was wrong.
 
 ### What went wrong, in the order it was found
 
@@ -3980,11 +3985,10 @@ status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
-  The hole is register hygiene: a typo'd or mis-indented metadata key
-  in this file silently un-routes an entry, and nothing an editor user
-  sees is involved. It is deliberately unguarded again after three
-  guard attempts were rolled back; this entry is the record the
-  roll-back rule names as the deliverable.
+  Register hygiene: a typo'd or mis-indented metadata key silently
+  un-routes an entry, and nothing an editor user sees is involved.
+  Closed in 0.2.12 by deleting the grammar the three rolled-back guards
+  were guarding.
 target: 0.2.12
 released-in: 0.2.12
 ```
@@ -4041,6 +4045,30 @@ recreate a recorded defect. Until the direction above lands, key
 typos in this file are once again caught by nothing; a reviewer
 reading the register should know that, which is this note's job.
 
+**Fixed in 0.2.12, by deleting the grammar rather than guarding it a
+fourth time.** The block is fenced ` ```yaml `, and it was being scanned
+with `/^([a-z-]+): *(.*)$/` under a comment saying "deliberately not a
+YAML parser". Every one of the three guards was an attempt to
+re-implement, in that scanner, something a yaml parser does for free —
+which is why each was blind one assumption deeper than the last.
+
+`DeferredFindings.entries` now calls `YAML.safe_load` and checks the keys
+against `KNOWN_KEYS`, the set the legend defines. `Target:` and
+`user_visible:` are keys like any other and fail as unknown; a key
+indented under another is a nested mapping and fails the same way; a
+block that is not valid yaml raises rather than parsing to nothing.
+Four examples pin it, including the control that the real register still
+parses.
+
+The one shape that needed care: yaml turns an unquoted `yes` into `true`,
+and every caller compares against the string `"no"`. Values are
+stringified back, which is a real behaviour and is why the control
+example exists.
+
+**This paragraph was filed under `024.69` until 0.2.14**, so an entry
+read on its own said the register was "deliberately unguarded again"
+while its fix had shipped two releases earlier. `046`'s RC-4 is the
+class: nothing re-reads an entry after it is written.
 
 ## 024.69 The two suites that drive a real editor are run by nobody but the maintainer
 
@@ -4136,25 +4164,100 @@ before, and locally -- **two runs of a new job found a flake that no
 amount of reading would have.**
 
 
-**Fixed in 0.2.12, by deleting the grammar rather than guarding it a
-fourth time.** The block is fenced ` ```yaml `, and it was being scanned
-with `/^([a-z-]+): *(.*)$/` under a comment saying "deliberately not a
-YAML parser". Every one of the three guards was an attempt to
-re-implement, in that scanner, something a yaml parser does for free —
-which is why each was blind one assumption deeper than the last.
+# 024.69 The two suites that drive a real editor are run by nobody but the maintainer
 
-`DeferredFindings.entries` now calls `YAML.safe_load` and checks the keys
-against `KNOWN_KEYS`, the set the legend defines. `Target:` and
-`user_visible:` are keys like any other and fail as unknown; a key
-indented under another is a nested mapping and fails the same way; a
-block that is not valid yaml raises rather than parsing to nothing.
-Four examples pin it, including the control that the real register still
-parses.
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing an editor user sees. The gap is in verification coverage:
+  the suites still pass once run, and 0.2.3's gate ran them. What is
+  missing is anything that runs them between releases.
+target: 0.2.12
+released-in: 0.2.12
+```
 
-The one shape that needed care: yaml turns an unquoted `yes` into `true`,
-and every caller compares against the string `"no"`. Values are
-stringified back, which is a real behaviour and is why the control
-example exists.
+**Area:** `.github/workflows/ci.yml` (the `vscode` job),
+`vscode/package.json`'s `test:integration` / `test:integration:packaged`
+
+CI runs `npm run test:unit` for the extension and nothing else. Both
+integration suites — the only tests that launch a real VS Code and
+drive the extension against a real Core, and the ones
+`RELEASE_CHECKLIST`'s Task 023 gate items #4 and #5 are about — run
+only when a maintainer runs `make-final-review-bundle.sh` on an Apple
+Silicon Mac. Between releases they are executed by nothing.
+
+**How it surfaced.** 0.2.3's pre-publish gate aborted at
+`test:integration` with `spawn .../Contents/MacOS/Electron ENOENT`.
+VS Code renamed the macOS bundle's main executable from `Electron` to
+`Code` in 1.110, `runTest.ts` pins no version so it always downloads
+current stable (1.133.0 on the day), and the pinned
+`@vscode/test-electron@2.5.2` still computed the old path. The
+harness had been broken for every VS Code release since 1.110 and the
+tree recorded gate #4/#5 as green throughout, because the only thing
+that could have contradicted that was the gate itself. Fixed here by
+the bump to `@vscode/test-electron@^3.1.0`, which resolves the
+executable by product name with a "sole regular file in
+`Contents/MacOS/`" fallback — but the bump is the instance, not the
+class.
+
+**Why this is the same shape as a green suite that did not run.**
+CLAUDE.md already carries that rule for the real-Rails and capability
+suites, whose failure mode is skipping to zero examples while `rspec`
+exits 0. This is the same failure with the reporting removed
+entirely: not a suite that reports nothing, a suite that no automated
+run ever reaches. The asymmetry is what made it durable — CI is green
+on every PR, so nothing prompts anyone to doubt the row.
+
+**Direction:** run both suites in CI on a schedule at minimum, and on
+release PRs at best. `test:integration` needs a display on
+`ubuntu-latest` (`xvfb-run`, the usual arrangement for
+`@vscode/test-electron`); `test:integration:packaged` additionally
+needs the vendoring step, whose native gems are built per platform,
+so the packaged variant is honest only on macOS and wants a
+`macos-14` runner. Deferred rather than done here because adding two
+CI jobs during a release gate is an addition, not a fix, and the
+`macos-14` half costs paid runner minutes on every run, which is a
+trade-off this entry does not get to make on its own.
+
+**Fixed in 0.2.12** by a `vscode-integration` job that runs
+`npm run test:integration` on every pull request and push --
+`xvfb-run` for the display, and Ruby with the bundle installed because
+the extension spawns the real Core Server, which is the half a unit test
+cannot reach.
+
+The measurement this entry is really about is not the suites passing; it
+is **who runs them**. Twice a month, by one person, on one machine, is
+how a harness stays broken across four VS Code releases while the tree
+records the gate items about it as green.
+
+**And the job asserts the count, not just the exit code.** `runTest.js`
+exits 0 when the extension host reports no failures, and no failures is
+also what zero examples looks like -- so a harness that stops discovering
+tests, or an activation that quietly never happens, would read as a pass.
+Adding the job without that check would have replaced "nobody runs them"
+with "CI runs them and would not notice if it stopped", which is the same
+defect wearing a green tick. The core job has carried the equivalent
+guard since 0.2.5. First run: **5 passing**, against a real VS Code
+1.134.0 driving a real Core.
+
+**And the first guarded run reported green with `1 failing` in its log**,
+which is worth recording rather than quietly fixing. `xvfb-run … | tee`
+takes its exit status from `tee`, so the job added to stop a suite going
+unrun spent one commit being a suite that ran and was not listened to --
+the same defect the entry is about, one layer out. `set -o pipefail`.
+
+The failing example was a real flake and is fixed in the same change:
+`createFileSystemWatcher` registers asynchronously, so a file written
+immediately afterwards can be created before anything is listening, and a
+create event for a file that already exists never arrives however long
+the test waits. It now rewrites each still-unseen file each time round
+the loop, which turns the race into a retry. It had passed on the run
+before, and locally -- **two runs of a new job found a flake that no
+amount of reading would have.**
+
+
 
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 
@@ -7209,6 +7312,148 @@ covered by it; the same reasoning applies and the same fix shape would —
 **Documented nowhere until 0.2.14**, for the same reason as `024.134`.
 
 **Was one of nine bullets under `024.90` until 0.2.14.**
+
+## 024.136 A route's optional segments are detected by matching the literal `(.:format)`
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/runtime_agent/agent.rb` (`optionalParts`)
+
+The Agent has Rails' own route object in hand and reads its optional
+parts with a substring test:
+
+```ruby
+optionalParts: route.path.spec.to_s.include?("(.:format)") ? ["format"] : []
+```
+
+Any other optional segment is reported as having none. `get
+"/posts(/:page)"` has an optional `page`, and Signature Help for
+`posts_path` offers no parameter for it; a route whose format segment is
+constrained (`(.:format)` written any other way) loses `format` too.
+
+**What a user sees:** Signature Help understating a path helper's
+parameters — a wrong answer, not an absent one, since the helper is
+shown with a complete-looking signature.
+
+**Direction:** `route.path.spec` is a `Journey::Nodes::Node` tree and
+Rails walks it itself; `route.required_parts` is already read from the
+route object rather than pattern-matched, and the optional parts should
+come from the same place. The two halves of one question are being
+answered by two different methods, which is `042`'s D5 shape.
+
+**Where this came from:** `008.5`'s `## 残課題`, written during Task
+008.5 and never converted into an entry, so no release ever considered
+it. See `024.139`.
+
+## 024.137 `WorkspaceIndex#search` scans every symbol in the workspace
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+```
+
+**Area:** `core/lib/ovallsp/workspace_index.rb` (`#search`)
+
+`workspace/symbol` runs a `downcase.include?` over every key of
+`@by_symbol`, under `@mutex`, on every keystroke in the symbol picker.
+`#find` has `@by_simple_name` for exact lookups; substring search has no
+equivalent and cannot use that one.
+
+**What a user sees:** the "Go to Symbol in Workspace" picker slowing as
+the workspace grows, and — because the scan holds `@mutex` — it is the
+same lock indexing takes, so a large workspace's picker can stall the
+indexing behind it rather than only itself.
+
+**Direction:** not a second index by default. Measure first: this is
+recorded with no measurement at all, and `CLAUDE.md` says a claim about
+this tree's numbers is derived rather than typed. The cheap
+countermeasure if it does matter is to snapshot the key set under the
+lock and filter outside it, which removes the interference without
+adding an index to keep consistent.
+
+**Where this came from:** `008.5`'s `## 残課題`. See `024.139`.
+
+## 024.138 No test mixes a schema change and a model-file change in one batch
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  A coverage gap, not a reproduced defect: the code path was read and
+  judged correct when this was written, and nothing has exercised the
+  combination since.
+```
+
+**Area:** `core/spec/ovallsp/server_rails_invalidation_spec.rb`
+(`describe "schema changes"`), `core/lib/ovallsp/server.rb`
+(`#refresh_all_models` and the per-model path)
+
+A schema change refreshes every model in one bulk round trip; a model
+file change refreshes that model. `server_rails_invalidation_spec.rb`
+covers each alone and the coalescing of several model changes. Nothing
+covers a batch holding both, where a bulk refresh and a targeted one are
+queued for the same generation.
+
+**Direction:** one example, and it is cheap. The value of writing it is
+that the two paths reach the same registry through different call sites,
+and `024.138` is exactly the shape the mutation manifest exists for —
+whichever ordering rule the code relies on is currently pinned by
+nothing.
+
+**Where this came from:** `008.6`'s `## 残っているKnown Issue`. See
+`024.139`.
+
+## 024.139 Task documents grew their own findings sections, outside the register
+
+```yaml
+status: fixed
+kind: friction
+user-visible: no
+user-visible-note: >
+  Purely a record-keeping defect. Its cost is that three real findings
+  sat unregistered for the whole of 0.1.x and 0.2.x -- no release
+  considered them, because nothing that decides a release's scope reads
+  a task document's own trailing section.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `docs/design/tasks/008.5-runtime-and-index-corrections.md`,
+`docs/design/tasks/008.6-agent-and-index-hardening.md`
+
+`008.5` ended with `## 残課題` and `008.6` with
+`## 残っているKnown Issue` — six items between them, written when this
+register did not yet exist and left there after it did. They are a
+second collection point for exactly what `024` holds, and
+`deferred_findings_spec.rb` cannot see them.
+
+**What the six turned out to be**, checked against the tree in 0.2.14
+rather than assumed:
+
+| item | verdict |
+|---|---|
+| `optionalParts` matches `(.:format)` literally | **live** → `024.136` |
+| `WorkspaceIndex#search` scans linearly | **live** → `024.137` |
+| no schema-plus-model batch test | **live** → `024.138` |
+| `AgentProcessManager` `#stop`/`#mark_unavailable` TOCTOU | resolved — the final write goes through `@status_mutex` and wins unconditionally, argued at `agent_process_manager.rb:318` |
+| Runtime Plugin mechanism 未着手 (twice) | **false** — Task 018 shipped it; `server_plugins_spec.rb` and `Plugins::CURRENT_PROTOCOL_VERSION` |
+
+Three of six were real and unregistered; two restated a "not started"
+that has since been done. Both sections are deleted, and this entry is
+where they went.
+
+**The general form:** a document that records work has no reason not to
+end with what is left over, which is why this happened twice in adjacent
+files and why it would happen again. `046`'s C4 is the countermeasure —
+the register's parser moving to `scripts/` so a check can assert that
+`docs/design/tasks/*.md` other than `024` carry no findings section of
+their own.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

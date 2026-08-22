@@ -379,6 +379,25 @@ and completion stopped answering for such a class as of 0.2.1. That
 described an arrangement built and rolled back *inside* 0.2.1's review
 loop; what 0.2.1 actually shipped is the silence described above.)
 
+## A path helper's optional segments are understated
+
+Signature Help for a route helper lists the parameters the route
+requires, and — for optional ones — only `format`. The Runtime Agent
+detects optional segments by looking for the literal `(.:format)` in the
+route's path, so a route written `get "/posts(/:page)"` is reported as
+having no optional parameter at all, and its helper's signature looks
+complete without `page`. The required parameters are read from Rails
+itself and are correct. <!-- documents: 024.136 -->
+
+## "Go to Symbol in Workspace" scans every symbol
+
+The workspace symbol picker matches your query against every symbol name
+in the index, on every keystroke, rather than using an index built for
+it. On a large workspace the picker becomes slow, and because the scan
+holds the same lock indexing uses, it can also delay indexing that is
+running at the same time. Symbol search *within* a file, and go to
+definition, use a different path and are unaffected. <!-- documents: 024.137 -->
+
 ## The packaged extension is smoke-tested, not driven
 
 The Core Server inside the VSIX — the one you install, with its own

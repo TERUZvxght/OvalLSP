@@ -76,17 +76,18 @@ carried in a conversation.
 - Write tests first: a test must be observed failing before the code that makes it pass is written. Behaviour that no test fails on when it is reverted counts as a defect. See `CLAUDE.md` for the full rule and for how to verify it mechanically.
 - When asking another agent for an independent review, do not tell it what not to count, where to concentrate, or that finding nothing is fine. Each of those narrows what it can report, and a falling defect count then measures the instructions rather than the code. See `CLAUDE.md` for the rule and 024.36 for the control run that established it.
 - **Work in progress lives in `docs/design/tasks/`, not in a transcript.**
-  The open findings of the current review loop are in the highest-numbered
-  `NNN-*.md` there — and **check which branch you are on before trusting
-  a number**. On `main` the highest is `031-0.2.4-workspace-trust.md`
-  (the shipped security patch); the 0.2.5 foundation work and its
-  `030-0.2.4-review-loop.md` live on `feat/0.2.5`. This line pointed at
-  `030` from a branch that did not contain it, which is the dangling
-  pointer the residency rule below exists to prevent — created, of all
-  things, while fixing this same line. Anything a reviewer reported and
-  nobody has fixed exists only in that file; agent reports are not kept.
-  Read it before deciding what to do next, and add to it before a long
-  session ends.
+  The open findings of the current review loop are in the
+  highest-numbered `NNN-*.md` there — **list the directory on the branch
+  you are on** rather than trusting a number written down anywhere,
+  including here. Anything a reviewer reported and nobody has fixed
+  exists only in that file; agent reports are not kept. Read it before
+  deciding what to do next, and add to it before a long session ends.
+
+  *This bullet used to name the current file by number, and went stale
+  three times — twice pointing at a file the branch did not contain,
+  once created while fixing the same line. A pointer that has to be
+  edited every release is a pointer that will be wrong most of the time;
+  the instruction to list the directory cannot go stale.*
 - **And it lives on a named, pushed branch.** Before starting or
   resuming release work: `git fetch --all --prune`, list the remote
   branches, and read the highest-numbered task file on every branch
