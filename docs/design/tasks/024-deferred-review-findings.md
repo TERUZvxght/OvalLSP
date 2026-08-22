@@ -5601,6 +5601,23 @@ decided in `HierarchyIndex` and in a Prism node-class test -- and it
 holds a class open until its entries stop reproducing, measured, rather
 than until its mechanism ships.
 
+## The rule working, 0.2.13: a class shed five entries before it built anything
+
+`042`'s first rule is that an entry belongs to a class only if the wrong
+value is produced *inside that class's mechanism*. 0.2.13 applied it to
+D2, which claimed eleven entries, and **five of them are somewhere else**:
+`024.18` and `024.22` need a different source of knowledge entirely (the
+Runtime Agent, which is their own Direction), `024.27` and `024.28` are
+`selectionRange`/`name_location` on a generated declaration, and `024.77`
+is a receiver's type after a relation hop, which is D3's.
+
+That is the difference from `024.102`, stated as plainly as it can be:
+**C1 discovered its two miscategorised entries by building the mechanism
+and finding they had not moved.** D2 discovered its five by asking where
+the value is produced, before spending the release on them. The cost of
+the first was a release; the cost of the second was an afternoon's
+reading.
+
 ## The stocktake, 0.2.11: the mechanisms are built and the instances are not gone
 
 Asked for by the maintainer, after this entry had been read for two
