@@ -50,7 +50,12 @@ RSpec.describe "design documents that restate something the code owns" do
 
   it "07 §7 lists exactly the settings package.json contributes" do
     documented = block_in("docs/design/docs/07-vscode-extension.md", "## 7. Settings")
-                 .scan(/"(ovallsp\.[A-Za-z.]+)":/).flatten
+                 # `[A-Za-z0-9._-]`, not `[A-Za-z.]`: an id with a digit,
+                 # hyphen or underscore would otherwise be dropped from the
+                 # documented side and the comparison would pass while the
+                 # document omitted it. None of today's five has one, which
+                 # is exactly why nothing noticed.
+                 .scan(/"(ovallsp\.[A-Za-z0-9._-]+)":/).flatten
     real = manifest.fetch("contributes").fetch("configuration").fetch("properties").keys
 
     expect(documented.sort).to eq(real.sort)
@@ -59,7 +64,15 @@ RSpec.describe "design documents that restate something the code owns" do
   it "07 §5 lists exactly the status-bar strings clientPresentation defines" do
     documented = block_in("docs/design/docs/07-vscode-extension.md", "## 5. Status Bar").lines.map(&:strip).reject(&:empty?)
     source = self.class.read("vscode/src/clientPresentation.ts")
-    real = source.scan(/'(\$\([a-z~-]+\) OvalLSP: [^']+)'/).flatten
+    # Any quoted `OvalLSP: ...` label, single or double quoted, with or
+    # without a `$(icon)` prefix. The narrower form saw only the shape
+    # today's five happen to take, so a new status string added in any
+    # other shape would be invisible on the code side and the document
+    # could omit it with this example green.
+    real = source.scan(/["'](\$\([a-z~-]+\)\s*)?(OvalLSP: [^"']+)["']/)
+                 .map { |icon, label| "#{icon}#{label}" }
+                 .reject { |s| s.include?("\#{") }
+                 .uniq
 
     expect(documented.sort).to eq(real.sort)
   end

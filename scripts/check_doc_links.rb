@@ -57,6 +57,16 @@ ROOT = File.expand_path(ENV.fetch("CHECK_DOC_LINKS_ROOT", File.expand_path("..",
 # and this one carries four.
 SHORTHAND = %r{\Adocs/(\d{2}-[a-z0-9-]+\.md)\z}
 
+# Binary and vendored trees hold no citations anybody maintains, and
+# `core/vendor` alone is thousands of files.
+#
+# `.gitignore` and `.gitattributes` hold *patterns*, not prose. A glob
+# ending in a Markdown extension is not a reference to anything, and
+# reading one as a citation reports a dangling path that never was one.
+# (The example is described rather than quoted: writing the glob here
+# would make this comment the finding.)
+SKIP = %r{\A(core/vendor/|vscode/node_modules/|core/spec/fixtures/rails_real/|(.*/)?\.gitignore\z|(.*/)?\.gitattributes\z|.*\.(png|ico|svg|lock|vsix|sqlite3)\z)}
+
 # What a documentation path looks like, inside backticks or a Markdown
 # link. Anchors and trailing punctuation are stripped by the caller.
 #
@@ -70,7 +80,23 @@ SHORTHAND = %r{\Adocs/(\d{2}-[a-z0-9-]+\.md)\z}
 # stated.
 CITATION = %r{
   (?<path>
-    docs/(?:design/)?(?:tasks/|adrs/|docs/)?[A-Za-z0-9._-]+\.md
+    docs/(?:design/)?(?:tasks/|adrs/|docs/|schemas/)?[A-Za-z0-9._-]+\.md
+    |
+    # Documents that live outside `docs/`. Round 2 found the check could
+    # not name any of them: twenty tracked Markdown files -- `CLAUDE.md`,
+    # `AGENTS.md`, both READMEs, both CONTRIBUTINGs, `SECURITY`,
+    # `SUPPORT`, `CODE_OF_CONDUCT`, and six under `vscode/` -- cited
+    # hundreds of times across the tree, none of it checked. The header
+    # said "every documentation path named in tracked content"; it meant
+    # "every path beginning `docs/`".
+    #
+    # Matched **structurally**, not from a list of what exists. Deriving
+    # the set from the tree would make this self-defeating: a citation of
+    # a *deleted* root document would stop matching the moment the file
+    # went away, which is the one case the check is for. Upper-case
+    # initial with an optional `.ja` and an optional `vscode/` prefix
+    # covers every one of them and matches little else.
+    (?:vscode/)?[A-Z][A-Z0-9_]*(?:\.ja)?\.md
   )
 }x
 
@@ -101,9 +127,6 @@ rescue StandardError => e
   refuse("could not list files: #{e.message}")
 end
 
-# Binary and vendored trees hold no citations anybody maintains, and
-# `core/vendor` alone is thousands of files.
-SKIP = %r{\A(core/vendor/|vscode/node_modules/|core/spec/fixtures/rails_real/|.*\.(png|ico|svg|lock|vsix|sqlite3)\z)}
 
 # A record of a deletion has to be able to name what was deleted, and a
 # release document that says "this file went away" is the one place a
@@ -122,6 +145,37 @@ DELETED_MARKER = "<!-- deleted -->"
 # Whether a path ever existed. `--diff-filter=D` alone misses a file
 # deleted in a commit that git recorded as a rename, so this asks the
 # cheaper and more direct question: does any commit's tree name it?
+# Where a citation may resolve. The two-digit design-doc form is an established
+# shorthand for `docs/design/docs/`; a bare upper-case name like
+# `KNOWN_LIMITATIONS.md` is prose shorthand for the file wherever it
+# actually lives, which for most of them is `docs/`. Returns nil when it
+# resolves, or the path it could not find.
+def candidates_for(raw)
+  list = [raw]
+  list << "docs/design/docs/#{Regexp.last_match(1)}" if raw.match(SHORTHAND)
+  list.concat(["docs/#{raw}", "vscode/#{raw}", "docs/design/#{raw}"]) unless raw.include?("/")
+  list
+end
+
+def resolve(raw)
+  list = candidates_for(raw)
+  return nil if list.any? { |c| File.file?(File.join(ROOT, c)) }
+
+  list.first
+end
+
+# The same candidate list, against history. A citation written as a bare
+# document name may refer to a file git only ever carried under a
+# directory -- so asking history about the bare path answers no, and the
+# deletion marker cannot admit a deletion it is correctly recording.
+#
+# (No filename appears in this comment on purpose. This script scans
+# itself, and naming the deleted file here would make the comment a
+# finding about the comment -- which is what it did on the first run.)
+def ever_existed_anywhere?(raw)
+  candidates_for(raw).any? { |c| ever_existed?(c) }
+end
+
 def ever_existed?(path)
   @ever_existed ||= {}
   return @ever_existed[path] if @ever_existed.key?(path)
@@ -166,10 +220,10 @@ files.each do |rel|
     line.scan(CITATION) do
       raw = Regexp.last_match[:path]
       citations += 1
-      target = raw.sub(SHORTHAND) { "docs/design/docs/#{Regexp.last_match(1)}" }
-      next if File.file?(File.join(ROOT, target))
+      target = resolve(raw)
+      next if target.nil?
 
-      if line.include?(DELETED_MARKER) && ever_existed?(target)
+      if line.include?(DELETED_MARKER) && ever_existed_anywhere?(raw)
         recorded_deletions += 1
         next
       end
@@ -203,6 +257,25 @@ end
 puts "check-doc-links: #{inspected} file(s) inspected, #{citations} documentation citation(s), " \
      "#{relative_citations} of them relative, " \
      "#{recorded_deletions} naming a deleted file on a line marked as recording the deletion."
+
+# Coverage, per top-level root, so that **what this read is a claim and
+# not an assumption**.
+#
+# Round 2 broke this check by widening `SKIP`: inspection dropped from
+# 537 files to 117, a dangling citation in a `core/lib` source comment
+# went unreported, and every example stayed green. `SKIP` was an unpinned
+# constant, and the headline of this file -- "source comments are in
+# scope, deliberately" -- was one edit away from false.
+#
+# A floor stated as a total would be a number to keep updating. Stated
+# per root it is structural: this check is worthless if it stops reading
+# any of these, and none of them will ever legitimately fall to zero.
+# `doc_links_spec.rb` asserts each is non-zero, which is an assertion
+# `SKIP` cannot satisfy by shrinking the input.
+coverage = files.group_by { |f| f.split("/").first }.transform_values(&:length)
+%w[core vscode scripts docs site].each do |root|
+  puts "check-doc-links: coverage.#{root}=#{coverage.fetch(root, 0)}"
+end
 
 # It fails rather than reporting, because the sentence below is the whole
 # output of this check and it cannot be said about a file that was not

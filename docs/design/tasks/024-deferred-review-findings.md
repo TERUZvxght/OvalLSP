@@ -1569,6 +1569,9 @@ user-visible-note: >
   each. Nothing here changes what the engine answers.
 ```
 
+**Area:** `core/lib` (0.1.15's whole change set — this entry is the
+sweep's record rather than a defect in one place)
+
 Reverse-applying each of 0.1.15's 24 `core/lib` hunks against a green
 baseline: **21 caught, 3 survived**, the tree verified byte-identical
 after every one. The survivors, and what was done about each:
@@ -7097,6 +7100,22 @@ argument, because one part is a literal.
 instances, on the grounds that a rule counting `__FILE__` exemptions
 would be guessing at intent. That reasoning still holds — this does not
 count exemptions or guess at anything. It removes the occasion.*
+
+### Twelve, and the rule moves to `CLAUDE.md`
+
+Instances nine through twelve all arrived during round 2's fixes:
+`AGENTS.md`'s prose naming the two branches it was explaining, and three
+separate comments in `check_doc_links.rb` — one quoting a shorthand
+path, one quoting a `.gitignore` glob, one naming a deleted document
+while explaining how deleted documents are matched.
+
+**Twelve occurrences, nine files, one release, one author who had the
+rule in front of them.** That is no longer a series of accidents, and it
+is not fixed by being more careful: the moment of writing an
+illustration is the moment the rule is furthest from mind. So it is in
+`CLAUDE.md` now, as its own section, with the two repairs separated —
+`Unspellable` for a spec, *describe rather than quote* for a comment,
+and never an exemption.
 
 **Instance eight was the helper's own doc comment**, which showed what
 `unspellable_number(999)` returns and thereby wrote a dangling register

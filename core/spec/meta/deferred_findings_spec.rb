@@ -52,17 +52,28 @@ RSpec.describe "deferred findings metadata" do
       require_relative "../../../scripts/reindex_findings"
 
       body = File.read(ReindexFindings::PATH, encoding: "UTF-8")
+      kinds = DeferredFindings.entries(body).transform_values { |f| f["kind"] }
       doubled = body.split(/^## (?=024\.[0-9R]+ )/).filter_map do |chunk|
         number = chunk[/\A(024\.[0-9R]+) /, 1]
         next unless number
+        # A roadmap entry describes a plan, not a place, and legitimately
+        # names no Area. A defect or a friction always has one: it is
+        # where to go and look.
+        next if kinds[number] == "roadmap"
 
+        # `!= 1`, not `> 1`. Zero passed until round 2 attacked it, so
+        # "every entry states one Area" was enforced only against saying
+        # it twice -- and deleting the line entirely was invisible, which
+        # is the cheaper mutation of the two, and which two entries had
+        # actually done.
         count = chunk.scan(/^\*\*Area:\*\*/).length
-        "#{number} (#{count} Area lines)" if count > 1
+        "#{number} (#{count} Area lines)" if count != 1
       end
 
       expect(doubled).to be_empty,
-                         "entries whose body appears more than once: #{doubled.join(", ")}. " \
-                         "An entry states one Area; a second one means a block was duplicated."
+                         "entries not stating exactly one Area: #{doubled.join(", ")}. " \
+                         "A defect or friction states one — twice means a block was duplicated, " \
+                         "none means there is nowhere to go and look."
     end
 
     # `046`'s C4. The index and the checks must read one entry the same

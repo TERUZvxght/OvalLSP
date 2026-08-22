@@ -41,6 +41,31 @@ RSpec.describe "documentation links" do
     expect(ok).to be(true), output
   end
 
+  # Round 2 gutted this check by widening `SKIP`: inspection fell from
+  # 537 files to 117, a dangling citation in a `core/lib` source comment
+  # went unreported, and all four examples stayed green. `SKIP` was an
+  # unpinned constant, and this file's headline claim — *source comments
+  # are in scope, deliberately* — was one edit away from false.
+  #
+  # The floor is stated **per root** rather than as a total, so it is not
+  # a number to keep updating: this check is worthless if it stops
+  # reading any of these, and none will legitimately fall to zero. It is
+  # also not a second copy of `SKIP` — it asserts coverage, which is the
+  # property, rather than restating the exclusion, which is the
+  # mechanism.
+  it "reads every part of the tree it claims to, so narrowing its input is a failure" do
+    output, ok = check
+
+    expect(ok).to be(true), output
+    %w[core vscode scripts docs site].each do |root|
+      count = output[/coverage\.#{root}=(\d+)/, 1]
+      expect(count).not_to be_nil, "the checker no longer reports coverage for #{root}:\n#{output}"
+      expect(count.to_i).to be > 0,
+                            "the checker inspected no file under #{root}/. Source comments are in scope " \
+                            "deliberately — all 19 of the citations this was built for lived in them."
+    end
+  end
+
   # Relative links are the half this check did not have until round 1
   # measured it: 105 of them in tracked Markdown, including ten between
   # task files that cite each other constantly, while the header above

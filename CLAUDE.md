@@ -422,6 +422,35 @@ run those two files and check the example count is non-zero, exactly as
 the rule above says to do for a corpus diff. `CONTRIBUTING.md` carries
 the install command.
 
+## Writing a check means writing bait for the other checks (mandatory)
+
+Every check here scans tracked content, and a check is tracked content.
+So an example, a fixture path, a register number or a scanner's needle,
+**spelled the way a real one is spelled, becomes a finding about the
+file that hunts it.**
+
+This happened **twelve times during 0.2.14**, in nine different files,
+to an author who had the rule in front of them and had just written the
+entry describing it. It is not a lapse of attention; the moment of
+writing an illustration is the moment the rule is furthest from mind.
+
+Two forms, and the repair differs:
+
+- **In a spec** — use `core/spec/support/unspellable.rb`.
+  `unspellable("docs", "brand_new.md")` and `unspellable_number(999)`
+  build the string at runtime and leave no literal in the source. It
+  refuses a single argument, because one part is a literal.
+- **In a comment** — there is no helper, and there cannot be: a call can
+  be assembled, an illustration has to be legible. **Describe the shape
+  instead of quoting it**, and say in the comment that you did, so the
+  next person does not "fix" it back.
+
+**Never exempt the file.** That is the trap the trap sets: exempting
+stops checking a file that carries real citations, and the file whose
+author was demonstrably thinking about this defect is the last one to
+stop checking. `024.126` has the twelve instances and the sweep across
+every scanner.
+
 ## Two working-practice traps, each of which cost a session (mandatory)
 
 Neither is repository state, so neither can be checked by the
