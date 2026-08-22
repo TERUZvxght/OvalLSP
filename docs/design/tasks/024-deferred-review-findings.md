@@ -176,10 +176,10 @@ nobody can search is the recording habit without the benefit.
 | [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | — | Rename refuses on a macro-declared method rather than editing it |
 | [`024.29`](#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | open | — | Two features were written for 0.1.15 and cut from it |
 | [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | fixed | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
-| [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | open | — | A declaration written inside a block has no owner this parser can na… |
-| [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | open | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
-| [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | open | — | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
-| [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | open | — | `attr_*` inside a `def` inside `class << self` is kinded singleton |
+| [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | fixed | — | A declaration written inside a block has no owner this parser can na… |
+| [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | fixed | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
+| [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | fixed | — | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
+| [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
 | [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | open | — | A class that includes a module the workspace cannot resolve still re… |
 | [`024.36`](#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
 | [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | — | The argument-type check reports nothing on measured real Ruby |
@@ -253,19 +253,19 @@ nobody can search is the recording habit without the benefit.
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | fixed | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
-| [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | open | 0.2.13 | The macro is reported, and what it might define is not |
+| [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | fixed | 0.2.13 | The macro is reported, and what it might define is not |
 | [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.13 | A visibility section written inside a block does not reach the body … |
 | [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | fixed | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | fixed | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
 | [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | fixed | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | fixed | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
-| [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.13 | `def self.method_missing` and `define_singleton_method` do not open … |
-| [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | open | 0.2.13 | The two spellings of a class-body macro get opposite answers |
+| [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | fixed | 0.2.13 | `def self.method_missing` and `define_singleton_method` do not open … |
+| [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | fixed | 0.2.13 | The two spellings of a class-body macro get opposite answers |
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | fixed | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
 | [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.0 | Nothing measures how much of this tree no test would notice changing |
-| [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | open | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
+| [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | fixed | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
 | [`024.123`](#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
@@ -1636,7 +1636,7 @@ and this one was wrong in a way no reader would have questioned.
 ## 024.31 A declaration written inside a block has no owner this parser can name
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 ```
@@ -1705,10 +1705,49 @@ in both directions across ActiveRecord and ActiveSupport, and without
 asking what `def` in the same position does.
 
 
+**Fixed in 0.2.13, in two halves and by the same mechanism.** The entry
+asks for a block to carry a *receiver* rather than a boolean, and that is
+what `Cref#in_eval_block(owner)` is.
+
+`024.33` closed the eval-on-an-expression half: `other.instance_eval {
+attr_accessor :o_x }` was recording accessors on the *enclosing* class.
+
+This closes the class-creating half. `Class.new`, `Struct.new`,
+`Module.new` and `Data.define` with a block define on the new class,
+which has no name until the assignment completes and may never get one:
+
+    $ ruby -e '
+    class Outer
+      Seed = Struct.new(:x) do
+        attr_reader :label
+      end
+    end
+    p [Outer.new.respond_to?(:label), Outer::Seed.new(1).respond_to?(:label)]
+    '
+    # => [false, true]
+    # ruby 3.4.10
+
+The accessor belongs to the Struct and was being recorded on `Outer` —
+the direction that *invents* a member, which this engine refuses
+everywhere else.
+
+The control is in the same file and is what "drop every block" would
+break: `included do attr_accessor :tracked_at end` really does define on
+the concern, and an ordinary class-body `attr_accessor` is untouched.
+
+**Corpus, 16 gems, control identical at 4,600: 119 removed and 2 added.**
+The two are worth naming rather than netting off. Both are
+`ActionDispatch::Routing::RouteSet` calling `Kernel#URI`, one of the four
+`Kernel` names `024.91` records as an RBS signature-set gap — a
+pre-existing false positive that had been *masked* by this class's
+surface being spuriously opened by a `Class.new` block inside it.
+Removing a wrong silencer shows what it was silencing, and the finding
+underneath belongs to `024.91`.
+
 ## 024.32 `def Foo.bar` is recorded as an instance method, so both answers are inverted
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 ```
@@ -1780,10 +1819,36 @@ kinds, which is what 0.1.14 and 0.1.15 were both spent on, and it wants
 a corpus run in both directions.
 
 
+**Fixed in 0.2.13.** Both halves. A written receiver makes the definition
+a singleton one whatever it names — the test was
+`node.receiver.is_a?(Prism::SelfNode)`, so `def Foo.bar` fell through to
+*instance*, inverting both answers. And the owner is resolved through the
+nesting before falling back to qualifying: `def Fetcher.start` inside
+`class Fetcher` named `::Fetcher::Fetcher`, a class that does not exist,
+and every later lookup failed against it.
+
+Only nesting frames this parser has seen declared are matched, which is
+the honest limit of doing it in the parser; a constant declared elsewhere
+still falls back to the previous behaviour.
+
+**And it surfaced a second decision that had to move with it.** The
+16-gem corpus came back +3, all in
+`activerecord/associations/builder/has_and_belongs_to_many.rb`, where
+`Class.new(Base) { class << self; attr_accessor :left_model; end }` is
+written inside a `def`. `024.34`'s new `Cref#surface_for` reads
+"in a method body" as the instance side, which is right for
+`def setup; attr_accessor :x; end` and wrong once a `class << self`
+intervenes — that opens a definition context of its own. `#in_singleton_class`
+resets `in_method_body` now, and the corpus returns to 0 added.
+
+The entry the residue belongs to is `024.31`: those accessors are really
+the *anonymous* class's, and attributing them to the lexically enclosing
+owner at all is that entry's subject.
+
 ## 024.33 `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` is not
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 ```
@@ -1811,11 +1876,47 @@ boolean; with that, `K.instance_eval` opens `K` and this answers itself.
 Worth doing with 024.31 rather than separately.
 
 
+**Fixed in 0.2.13.** The entry says the two spellings were split and the
+split was dropped, because "this visitor cannot say *which* module self
+is". A **written constant says which**, and that is the whole fix.
+
+Ruby treats the two the same, because `attr_accessor` is a call on self
+and self is the receiver either way:
+
+    $ ruby -e '
+    class K; end
+    K.instance_eval { attr_accessor :k_x }
+    p [K.respond_to?(:k_x), K.new.respond_to?(:k_x)]
+    class L; end
+    L.class_eval { attr_accessor :l_x }
+    p [L.respond_to?(:l_x), L.new.respond_to?(:l_x)]
+    '
+    # => [false, true]
+    # => [false, true]
+    # ruby 3.4.10
+
+Both define an *instance* accessor on the named class, and both are
+recorded that way now. `Cref#in_eval_block(owner)` carries the receiver,
+which is `042`'s D5 in its smallest useful form: a block was given a
+boolean and needed a receiver.
+
+**And the control found `024.31` in the same place.** An eval block on an
+*expression* — `other.instance_eval { attr_accessor :o_x }` — was
+recording accessors on the *enclosing* class, inventing an owner for a
+receiver nothing can name. `in_eval_block(nil)` makes `#surface_for`
+answer nil there, so nothing is recorded. That is one shape of `024.31`
+closed; the anonymous-class one (`Class.new { ... }`) is not, and stays.
+
+Corpus, 16 gems, control identical at 4,600: **0 added, 113 removed**
+against main — two more than before this fix.
+
 ## 024.34 `attr_*` inside a `def` inside `class << self` is kinded singleton
 
 ```yaml
-status: open
+status: fixed
 kind: defect
+target: 0.2.13
+released-in: 0.2.13
 user-visible: yes
 ```
 
@@ -1859,6 +1960,27 @@ Real code has the shape:
 behaviour change on its own, so it wants its own corpus run in both
 directions rather than a ride on a correction release.
 
+
+**Fixed in 0.2.13, and it is the entry the 0.2.11 stocktake called the
+most informative of C1's five.** `Cref#defines_surface?` already answered
+the question this needs and was read at *one* site in the parser, while
+`#declares_singleton?` was read at *seven* — and
+`#record_attribute_methods` read the second. The stocktake's verdict on
+C1 was that collecting six flags into one value collected the *storage*
+and not the *question*, and this is that sentence made concrete.
+
+`Cref#surface_for` is the question a recorder actually has: `[owner,
+side]` for a definition written here, or nil where there is nothing to
+attribute it to. The two answers differ in exactly one place, which is
+this one — inside a `def` written in `class << self` the cref is still
+the singleton class, but self at run time is the class object, so
+`attr_accessor` there is `Module#attr_accessor` and defines an *instance*
+accessor.
+
+The control is in the same file: written *directly* in `class << self`,
+`attr_accessor` still records a singleton accessor, which is what Ruby
+does and what an implementation that simply stopped answering singleton
+would break.
 
 ## 024.35 A class that includes a module the workspace cannot resolve still reads as closed
 
@@ -5479,6 +5601,23 @@ decided in `HierarchyIndex` and in a Prism node-class test -- and it
 holds a class open until its entries stop reproducing, measured, rather
 than until its mechanism ships.
 
+## The rule working, 0.2.13: a class shed five entries before it built anything
+
+`042`'s first rule is that an entry belongs to a class only if the wrong
+value is produced *inside that class's mechanism*. 0.2.13 applied it to
+D2, which claimed eleven entries, and **five of them are somewhere else**:
+`024.18` and `024.22` need a different source of knowledge entirely (the
+Runtime Agent, which is their own Direction), `024.27` and `024.28` are
+`selectionRange`/`name_location` on a generated declaration, and `024.77`
+is a receiver's type after a relation hop, which is D3's.
+
+That is the difference from `024.102`, stated as plainly as it can be:
+**C1 discovered its two miscategorised entries by building the mechanism
+and finding they had not moved.** D2 discovered its five by asking where
+the value is produced, before spending the release on them. The cost of
+the first was a release; the cost of the second was an afternoon's
+reading.
+
 ## The stocktake, 0.2.11: the mechanisms are built and the instances are not gone
 
 Asked for by the maintainer, after this entry had been read for two
@@ -5862,10 +6001,11 @@ really about.
 ## 024.110 The macro is reported, and what it might define is not
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.13
+released-in: 0.2.13
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
@@ -5924,6 +6064,41 @@ representation — a flat `[owner, side]` set consulted through the whole
 chain — cannot express the difference. That is the change, and it is
 bigger than one line.
 
+**Fixed in 0.2.13, and what made it fixable is `042`'s D2.** The
+one-line version — a bare class-body call opens the owner's *class*
+surface as well as its instance one — is right, and 0.2.11 shipped it and
+rolled it back the same release. What was wrong was the *reader*:
+`MethodResolver#open_surface?` consulted every link in the chain, and
+`Class`, `Module`, `Object`, `Kernel` and `BasicObject` are in every
+class's. One bare `alias_method` in a `core_ext` file then said "I cannot
+enumerate" about the whole workspace.
+
+`#open_surface?` ignores a **synthesised** link now — one the workspace
+did not write. A reopening of `Module` *is* real, and a method it defines
+really would be reachable from `Widget`; what the exclusion trades is
+that truth for a check that can run at all in a workspace with a
+`core_ext` directory, which is most Rails applications. The narrower
+claim it leaves standing is the one this entry was always about: **the
+owner whose own body could not be read is declined about, and only that
+owner.**
+
+Measured over the 16-gem corpus, 1,659 files, with `unresolved-constant`
+identical at 4,600 and both argument checks identical as controls:
+
+| | main `9033ed2` | branch |
+|---|---|---|
+| `unknown-method` | 506 | **395** |
+| added / removed | — | **0 / 111** |
+
+Three of the removals checked against the interpreter —
+`ActionCable::Server::Base.config`,
+`ActionController::Parameters.permit_all_parameters=`,
+`ActionDispatch::Request::Utils.perform_deep_munge` — all real methods,
+all false reports. And **`ActiveRecord::Promise.wrap`, the real latent
+`NoMethodError` 0.2.11's version silenced, is still reported on both
+sides.** That is the difference between this fix and that one, in one
+line.
+
 ## 024.111 A visibility section written inside a block does not reach the body it runs in
 
 ```yaml
@@ -5964,6 +6139,23 @@ extending it is a change to a rule three releases have adjusted.
 **Not fixed in 0.2.10** because the release was already in a review loop
 and this is the shape `CLAUDE.md` says to record rather than add to a
 change set under review. Found by the `attack` round.
+
+**Narrowed in 0.2.13.** The literal-receiver half is fixed with
+`024.117`: `[1].each { private }` and `1.times { module_function }` reach
+the enclosing body now, which is what Ruby does, because a block
+iterating a literal opens no cref frame.
+
+**What stays open is the receiver this parser cannot vouch for.**
+`SOME_CONST.each { private }` and `helper { private }` still get a frame,
+and they must: `included do ... end` and `concerning ... do` run their
+`private` against a different module, and without the frame every method
+written after such a block was recorded private — which silently dropped
+real controller actions and their ivars vanished from the corresponding
+views.
+
+Telling the two apart needs to know what the *call* does with the block,
+which is `024.31` and `024.33`'s question — a block wants a receiver, not
+a boolean — and remains the shape this entry is waiting on.
 
 ## 024.112 A bare constant is not looked up through the enclosing class's ancestors
 
@@ -6090,10 +6282,11 @@ the loop, and because narrowing a rule wants its own corpus measurement.
 ## 024.116 `def self.method_missing` and `define_singleton_method` do not open a surface
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.13
+released-in: 0.2.13
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb`
@@ -6122,13 +6315,32 @@ and not the right one. Recording those names is the fix, and it is a
 parser change with its own measurement.
 
 
+**The residue is closed in 0.2.13.** `define_method(:x)` and
+`define_singleton_method(:x)` name their method as plainly as a `def`
+does, and only the open surface was being recorded — so calls stopped
+being reported while hover, go-to-definition and completion all answered
+nothing. Silence instead of an answer, which is the safe direction and
+not the right one.
+
+A literal symbol or string argument is recorded as a generated
+declaration on the side `Cref#surface_kind` gives. **The surface still
+opens either way**, and the control example says why: a *computed* name
+is exactly what this parser cannot read, and one such call in a body
+makes the whole owner unenumerable however many literal ones sit beside
+it.
+
+Corpus unchanged at 0 added / 119 removed — these gems name their
+`define_method` calls dynamically, which is the shape the surface exists
+for.
+
 ## 024.117 The two spellings of a class-body macro get opposite answers
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.13
+released-in: 0.2.13
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (`#record_open_surface`)
@@ -6153,6 +6365,52 @@ Not fixed in 0.2.11 because the block guard is `024.111`'s territory —
 the frame exists so `included do ... end` cannot leak a `private` into
 the enclosing class — and the two want deciding together. Found by
 0.2.11's `attack` round.
+
+**Fixed in 0.2.13, by asking Ruby what a block actually does.** The
+entry says the two want deciding with `024.111`, and running them settled
+both halves at once:
+
+    $ ruby -e '
+    module BMF; 1.times { module_function }; def y; end; end
+    p [BMF.respond_to?(:y), BMF.private_instance_methods(false)]
+    class BV; [1].each { private }; def x; end; end
+    p BV.private_instance_methods(false)
+    class BS; [1].each { attr_accessor :bs_x }; end
+    p [BS.new.respond_to?(:bs_x), BS.respond_to?(:bs_x)]
+    '
+    # => [true, [:y]]
+    # => [:x]
+    # => [true, false]
+    # ruby 3.4.10
+
+A visibility section, a `module_function` and an `attr_accessor` written
+in an ordinary iterator block **all reach the enclosing body**, and the
+frame was containing all three.
+
+`Cref#in_block(shares_self:)` opens no frame when the owning call's
+receiver is a **literal** — `%w[a b].each`, `[1].each`, `(1..3).map`.
+That is a shape rather than a list of method names, for the reason
+`#record_open_surface` already gives about setters: a list can only ever
+hold the calls somebody has already seen. Nobody's DSL rebinds self on a
+core object.
+
+Everything else still gets a frame, which is what keeps `included do ...
+end` and `concerning ... do` from leaking a `private` into the class
+body — the regression that frame exists for, and the half of `024.111`
+that stays open: a constant receiver could be anything, and this parser
+cannot say what its `each` does with self.
+
+Corpus, 16 gems, 1,659 files, control `unresolved-constant` identical at
+4,600: **0 added, 111 removed** — unchanged from before this fix, which
+is what it should be, since these gems iterate literals in class bodies
+without calling anything unreadable in them.
+
+One example was **deleted rather than adjusted**:
+`class_body_macro_spec.rb`'s "still reads an ordinary block in a class
+body as the class" turned on an unreadable call, so once the block shared
+the cref, `024.110` declined about the owner and the example could no
+longer distinguish anything. That is `024.110`'s recorded cost arriving
+in a spec instead of a corpus, and the comment left in its place says so.
 
 ## 024.118 `WorkspaceIndex#stale?` compares versions across buffers
 
@@ -6345,13 +6603,14 @@ lunchtime.
 ## 024.122 A failure is turned into a plausible value, in 72 measured places
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.13
+released-in: 0.2.13
 ```
 
-**Area:** `core/lib` (239 `rescue` sites), `vscode/src` (21 `catch`
+**Area:** `core/lib` (159 `rescue` sites), `vscode/src` (21 `catch`
 sites), and `CLAUDE.md`, which does not say what the rule is
 
 Raised by the maintainer, who had noticed the pattern across the
@@ -6366,8 +6625,16 @@ its handler does:
 | other (sets a flag, retries, cleans up) | 39 |
 | re-raises as a typed error | 4 |
 
-134 of the 239 are `rescue StandardError` — the widest catch there is —
-and 13 are a bare `rescue`. `vscode/src` has 21 `catch` blocks outside
+**The count was first written down as 239 and that was wrong.** It came
+from `grep -c rescue`, which counts the word wherever it appears —
+including in the prose of comments explaining a rescue, of which this
+tree has many. Counting `rescue` *statements* gives **159**, and the
+breakdown above was computed that way and is unchanged. Corrected here
+rather than quietly, because a measured claim that nobody re-derives is
+the thing `026` is about, and this one lasted one release.
+
+**133 of the 159 are `rescue StandardError`** — the widest catch there is —
+and the remaining 26 name a type. There are no bare `rescue` statements; the 13 that grep found were the keyword inside comments and one-line modifier prose. `vscode/src` has 21 `catch` blocks outside
 its tests, uncounted here.
 
 **Why this is a defect and not a style preference.** A swallowed failure
@@ -6422,6 +6689,124 @@ which is the arrangement `CLAUDE.md`'s own preamble warns about.
 puts the apparatus classes first for exactly that reason. This belongs
 with them; it did not go into 0.2.12 only because that release was
 already scoped and under review when the maintainer raised it.
+
+### Step 1 shipped in 0.2.13: the enumeration is a checked artefact
+
+`core/spec/meta/rescue_verdicts.yml` names every `rescue` statement in
+`core/lib` and what it does with the failure — `surfaces`, `contained`,
+or `swallows`. `scripts/check_swallowed_failures.rb` fails on a rescue
+with no verdict and on a verdict whose rescue is gone; it runs in the
+suite and gates in CI.
+
+Keyed by the enclosing `def` and an ordinal within it, not by line
+number — a line number rots on the next edit above it, and 42 of these
+live in one file where `rescue StandardError` is not a distinguishing
+string.
+
+First-pass verdicts, assigned mechanically: **48 surface** and **111
+swallow**, with nothing `contained` — deliberately, because `contained`
+means *somebody argued it* and nobody had.
+
+**The first pass was wrong about nine of them, and the second pass is
+part of the record.** It looked for a logger and missed
+`diagnostics << { severity: :error, … }` — the channel the server
+*publishes* to the editor, which is a person seeing it more reliably than
+a log line. Counting that as surfacing: **57 surface, 102 swallow**.
+
+**Six are now `contained`, argued in place**, all in
+`Signatures::Environment`. What makes them safe is not that the failure
+is unimportant: it is that every one produces *less knowledge* and no
+consumer can turn it into an assertion about the user's code. An empty
+ancestor chain is what a type RBS does not declare gives, and
+`TypeNameResolution` then declines to call a name shadowed while
+`MethodResolver` reaches `:ancestor_not_declared_anywhere`. That is the
+shape of argument `contained` is for, and it is written at each site
+rather than only here.
+
+**Then a first real fix, and it is the shape the whole entry is about.**
+`LocalInferencer#assigned_ivar_names` answered `[]` when its parse
+raised, and both callers build a *union* the unassigned-ivar check
+compares a view's reads against. An empty list from a failed parse is
+indistinguishable from a document that assigns none — so one unreadable
+ancestor file silently removed its ivars from the union and every read of
+one became a **false report**.
+
+`Server#assigned_ivars_for` already refuses in that situation, answering
+`nil` and switching the check off for that view. **The failure was being
+caught one layer below the layer that knows what to do with it**, which
+is the commonest form this defect takes: not "nobody handles it" but
+"somebody handles it too early". The rescue is gone and the two examples
+that pin it include the distinguishing one — a failure must not look like
+"this document assigns nothing".
+
+Eleven more are `contained` with their arguments: `Types::UNKNOWN` from
+the inferencer is the engine's own three-valued not-knowing, and the
+cache's failures all prune rather than keep, which is the direction that
+class was rewritten to prefer after it deleted the maintainer's
+applications.
+
+**Two more fixes, both of the same shape as the first**: a check asked a
+question, could not get an answer, and used the *reporting* value as the
+fallback.
+
+- `Engine#ivar_names_tested_for_existence` answered `[]`, which reads as
+  "this file is defensive about nothing" — so a failure turned every
+  `defined?(@x)` into an unassigned-ivar report. It answers `nil` now,
+  which is not the value a file that tests nothing gives, and the caller
+  declines on it.
+- `Engine#rbs_known_constant?` answered `false`, which reads as "RBS does
+  not know this name" — an assertion about the user's code made from a
+  question that could not be asked. It answers `true`, so the check
+  declines.
+
+**Enumerating is what decides whether to assert, so a failure to
+enumerate has to decline.** That sentence is the whole of §0 applied to
+this class, and it is the test to run each remaining site against: not
+"is this failure important" but "does the fallback value let a caller
+assert something".
+
+Thirteen more are `contained` with their arguments — the cache's, which
+all leave files rather than remove them, and two more of the engine's
+that already fail towards silence.
+
+**71 remain**, and `unresolved-constant` is unmoved at 4,600 over the
+16-gem corpus, which is the control these two changes had to keep.
+
+**The mechanism is deliberately not "no rescue may swallow".** That rule
+would have had 111 exceptions on the day it was written, which is the
+arrangement `CLAUDE.md`'s preamble warns about, and it is why step 3 is
+last. What gates now is that the *decision is made*: writing a rescue
+means writing down what happens to the failure, in a file a reviewer
+reads, and `swallows` is something somebody types rather than a default
+nobody notices. Emptying the column is the work; this is what stops it
+refilling behind the work's back.
+
+### Step 3, and the column is empty
+
+All 158 sites carry a verdict: **60 surface, 98 contained, none
+swallowing.** `scripts/check_swallowed_failures.rb` now *fails* on a
+`swallows` verdict as well as on a missing one, so the column that would
+hold an unargued site stays empty — and `swallows` remains spellable only
+so the failure message can name it.
+
+`CLAUDE.md` carries the policy, written after the tree obeyed it rather
+than before. That order was the entry's own condition and it was the
+right one: writing it first would have produced a rule with 111
+exceptions on the day it appeared.
+
+**What the argument has to be.** Not "this failure is unimportant" — that
+sentence is true of most of them and proves nothing. It is that **no
+caller can turn the value into an assertion about the user's code**:
+`Types::UNKNOWN`, a `nil` every reader already treats as "cannot say", a
+cache miss that recomputes, a prune that leaves the file. Three sites
+failed that test and were changed rather than argued, and all three had
+the same shape — the fallback *was* the reporting value.
+
+**An honest limit.** Ninety-eight arguments were written by one author in
+one pass. A `contained` that turns out to be wrong is an ordinary
+finding, and the file is where to record that it was; the mechanism this
+entry is really about is that such a finding now has somewhere to land
+and a check that will not let a new site avoid the question.
 
 ## 024.123 A private alias was offered, and the register said it was not
 

@@ -210,12 +210,21 @@ module Ovallsp
     # |format|`, inside a `case`, inside a `rescue`, and a multiple
     # assignment all reached that second question and each produced a
     # warning on a view that renders (0.2.0).
+    # **No rescue, deliberately** (`024.122`). This answers "which ivars
+    # does this document assign", and both callers build a *union* the
+    # unassigned-ivar check compares against. An empty list from a failed
+    # parse is indistinguishable from a document that assigns none, so a
+    # single unreadable ancestor file silently removed its ivars from the
+    # union and every read of one became a false report -- the direction
+    # `Server#assigned_ivars_for` already refuses, by answering `nil` and
+    # switching the check off for that view.
+    #
+    # Letting it raise is what reaches that refusal. The failure was being
+    # caught one layer below the layer that knows what to do with it.
     def assigned_ivar_names(document)
       collector = Diagnostics::Engine::IvarWriteCollector.new
       Prism.parse(document.text).value.accept(collector)
       collector.names.uniq
-    rescue StandardError
-      []
     end
 
     # One parse, remembered, because the argument-type check asks for a

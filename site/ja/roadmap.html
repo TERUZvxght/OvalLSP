@@ -195,6 +195,36 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0213">
+          <div class="tl-version">
+            <span class="v">0.2.13</span>
+            <span class="mark mark--yes">リリース済み</span>
+          </div>
+          <h3>クラス自身の本体が言っていること、そして沈黙をやめた失敗</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>読めないマクロを実行しているクラスについて、そのマクロ自体を報告しなくなりました。</strong> そのマクロが定義しうるものについては既に何も言わないことにしていたので、扉を開けた呼び出しの方を報告するのは1つの事実に2つの答えを返していたことになります。16 gem・1,659ファイルで <code>unknown-method</code> の誤報告は 506 件から 389 件へ。そのコーパスにある唯一の本物の潜在的 <code>NoMethodError</code> は引き続き報告されます。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>def Foo.bar</code> はクラスメソッド</strong>で、<code>class &lt;&lt; self</code> の中の <code>def</code> の中の <code>attr_accessor</code> はインスタンス側です。どちらも逆に記録されていたため、両方の答えが反転していました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>Struct.new</code> や <code>Class.new</code> のブロックのメソッドが、周囲のクラスに現れなくなりました。</strong> また <code>define_method(:name)</code> の名前が、報告を黙らせるだけでなくホバー・定義ジャンプ・補完に出ます。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            機能の追加はありません。ここでの修正はすべて、たった1つの問いの
+            異なる形です — この解析エンジンは、何かを列挙できなかったとき、
+            そう言うのか、何事もなかったかのように答えるのか。Core Server の
+            <code>rescue</code> 158箇所すべてを洗い出し、各箇所が失敗をどう扱うかを
+            記録しました。3箇所は、フォールバック値が報告する側の値だったため
+            修正されています。
+          </p>
+        </article>
+
         <article class="tl-item" id="v0212">
           <div class="tl-version">
             <span class="v">0.2.12</span>

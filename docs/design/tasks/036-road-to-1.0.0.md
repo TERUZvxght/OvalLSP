@@ -226,7 +226,7 @@ forbids exactly that.
 `024.25`, `024.26`, `024.30`, `024.39`, `024.55`, `024.64`, `024.68`,
 `024.69`, `024.75`, `024.80`, `024.81`, `024.97`, `024.109`, `024.118`.
 
-### 0.2.13 — what an owner's own body says, and failures that stop being silent *(axis B)* — **next, on `feat/0.2.13`**
+### 0.2.13 — what an owner's own body says, and failures that stop being silent *(axis B)* — **shipped**
 
 042's **D2** and **D5**. The largest group and C1's axis done as
 questions rather than storage: a member set produced *with* its
@@ -249,11 +249,24 @@ mutating. `024.122` is the task, and its third step is the one that has to
 come last: the policy is written into `CLAUDE.md` *after* the tree obeys
 it, not before, so the rule does not arrive with 72 exceptions.
 
-### 0.3.0 — the first release that may add capability *(axis B)*
+### 0.3.0 — the first release that may add capability *(axis B)* — **next, on `feat/0.3.0`**
 
-Whatever the roadmap holds once the foundation is sound. Deliberately not
-enumerated here: enumerating features before the foundation is measured
-is how a release recedes.
+Enumerated now, in
+[`045-0.3.0-scope.md`](045-0.3.0-scope.md), because the foundation is
+measured: 042's D5, D10 and the parser's half of D2 shipped in 0.2.13,
+and the 16-gem corpus went 506 → 389 with the one real latent
+`NoMethodError` in it still reported.
+
+Nine promises in `docs/ROADMAP.md`, and **five of them wait on the same
+one** (`024.R7`, the gem index). The scope file starts with `024.85` —
+the smallest thing a user meets daily that needs nothing new — and puts
+`024.R7` last and on its own, so the release is not one long piece of
+work with nothing shippable in the middle.
+
+Two of the nine are blocked by 042's **D3**, and the scope file says so
+rather than letting it be discovered: `Article.all.` completing and
+`@ivar` completion both answer *about a position*, and D3 records that
+"one query per position" was built as one query about a *type*.
 
 ### Before 1.0.0 — the environment half *(axis A, and PUBLISHING.md)*
 

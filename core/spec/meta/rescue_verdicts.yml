@@ -1,0 +1,175 @@
+# Every `rescue` statement in `core/lib`, and what it does with the failure.
+#
+# `042`'s D10 / `024.122`. The key is `<file>:<the rescue statement>`; the
+# value is one of `surfaces`, `contained` or `swallows`, optionally followed
+# by `: <why>` -- and for `contained`, the why is not optional in review.
+#
+#   surfaces  -- raises, or reports through a channel a person sees
+#   contained -- the failure genuinely has no consequence, said in place
+#   swallows  -- neither. This is the group `024.122` exists to empty
+#
+# `scripts/check_swallowed_failures.rb` fails on a rescue with no verdict,
+# so adding one becomes an edit somebody makes on purpose. The verdicts
+# below are a *first pass*: every site whose handler raises or reports was
+# marked `surfaces` mechanically, and the rest are marked `swallows` --
+# which is the safe default and the honest one, since nothing has yet been
+# argued. Moving one to `contained` is the review work `024.122` describes.
+
+"core/lib/ovallsp/agent_process_manager.rb#stop_registered_at_exit": "contained: at_exit teardown"
+"core/lib/ovallsp/agent_process_manager.rb#start": surfaces
+"core/lib/ovallsp/agent_process_manager.rb#read_loop": "contained: pushes :eof, which ends the loop the way a closed pipe does"
+"core/lib/ovallsp/agent_process_manager.rb#read_loop[2]": surfaces
+"core/lib/ovallsp/agent_process_manager.rb#log_stderr": "contained: a log drain that stops costs log lines, not answers"
+"core/lib/ovallsp/agent_process_manager.rb#request_locked": surfaces
+"core/lib/ovallsp/agent_process_manager.rb#wait_for_exit": "contained: true means treat it as exited, and the caller then stops waiting"
+"core/lib/ovallsp/background_tasks.rb#safely": "contained: the wrapper a background thread uses so one failure does not take the session down; the work is simply not done"
+"core/lib/ovallsp/benchmark/cold_index_benchmark.rb#run": "contained: a benchmark script, not part of the served product"
+"core/lib/ovallsp/build_manifest.rb#load": "contained: nil means no build manifest, and every reader treats that as an unpackaged tree"
+"core/lib/ovallsp/cache/key.rb#canonical_root": "contained: falls back to the expanded path, which is a less canonical key and never a wrong one -- two roots that are the same would cache separately"
+"core/lib/ovallsp/cache/store.rb#self.mark_workspace": "contained: housekeeping; a failure loses a timestamp, never an entry"
+"core/lib/ovallsp/cache/store.rb#self.prune_generations": "contained: a failed prune keeps files, which is the direction this class was rewritten to prefer"
+"core/lib/ovallsp/cache/store.rb#self.age_for_sort": "contained: 0.0 sorts the entry oldest, so a failure prunes rather than keeps -- the safe direction for a cache"
+"core/lib/ovallsp/cache/store.rb#self.prune_workspaces": "contained: same"
+"core/lib/ovallsp/cache/store.rb#self.seconds_since_write": "contained: 0 reads as just written, so nothing is pruned on a failed stat"
+"core/lib/ovallsp/cache/store.rb#self.tighten": "contained: a failed chmod leaves permissions as they were; the cache holds nothing secret"
+"core/lib/ovallsp/cache/store.rb#self.tighten_tree": "contained: same"
+"core/lib/ovallsp/cache/store.rb#self.remove_within": "contained: a removal that fails leaves the file, which is the direction this class was rewritten to prefer"
+"core/lib/ovallsp/cache/store.rb#self.children_of": "contained: an unreadable directory contributes no children, so nothing is removed from it"
+"core/lib/ovallsp/cache/store.rb#load": "contained: a cache miss recomputes; correctness-neutral, and the shape it once hid is guarded by schema_version_spec"
+"core/lib/ovallsp/cache/store.rb#save": "contained: failing to save means no cache, never a wrong cache"
+"core/lib/ovallsp/cache/store.rb#ensure_directory": "contained: reason written at the site -- a read-only filesystem means the cache never activates"
+"core/lib/ovallsp/cache/store.rb#prune_if_over_bound": "contained: housekeeping; a failure leaves the cache larger, never wrong"
+"core/lib/ovallsp/child_process.rb#signal": "contained: false means the signal did not land, which the caller retries or gives up on"
+"core/lib/ovallsp/child_process.rb#close_quietly": "contained: closing an already-closed fd"
+"core/lib/ovallsp/child_process.rb#join_quietly": "contained: true means stop waiting for a thread that is already gone"
+"core/lib/ovallsp/child_process.rb#reap": "contained: true means the child is no longer ours to reap"
+"core/lib/ovallsp/cold_indexer.rb#run": "contained: sets @scan_complete = false, which is the index recording that it is partial"
+"core/lib/ovallsp/cold_indexer.rb#each_candidate_file": "contained: same"
+"core/lib/ovallsp/cold_indexer.rb#index_file": "contained: same"
+"core/lib/ovallsp/cold_indexer.rb#safe_realpath": "contained: nil skips a path that cannot be resolved"
+"core/lib/ovallsp/diagnostics/engine.rb#ivar_names_tested_for_existence": "contained: nil, distinct from the empty list a file that tests nothing gives, and the caller declines on it"
+"core/lib/ovallsp/diagnostics/engine.rb#ivar_writes": "contained: nil reads as cannot enumerate, and the check declines"
+"core/lib/ovallsp/diagnostics/engine.rb#operator_expression?": "contained: true suppresses a report, which is the declining direction"
+"core/lib/ovallsp/diagnostics/engine.rb#rbs_known_constant?": "contained: true, so a question that cannot be asked declines rather than reports"
+"core/lib/ovallsp/io/framed_reader.rb#input_ready?": "contained: false means analyse now rather than wait, which is what every release before the settled-state drain did"
+"core/lib/ovallsp/io/framed_reader.rb#parse_body": surfaces
+"core/lib/ovallsp/io/framed_reader.rb#fill_buffer": surfaces
+"core/lib/ovallsp/local_inferencer.rb#scope_at": "contained: the partial scope captured so far, which is a subset and never a wrong binding"
+"core/lib/ovallsp/local_inferencer.rb#infer_at": "contained: answers Types::UNKNOWN, the engine's own three-valued not-knowing, which no caller can assert from"
+"core/lib/ovallsp/local_inferencer.rb#infer_ivars_for_method_node": "contained: falls back to the initial env, a subset of what a full walk would find"
+"core/lib/ovallsp/local_inferencer.rb#method_nodes": "contained: an empty map means no method bodies to walk, so nothing is inferred"
+"core/lib/ovallsp/local_inferencer.rb#before_action_operations": "contained: an empty list means no filters found, so none are applied"
+"core/lib/ovallsp/local_inferencer.rb#static_render_target_for_node": "contained: nil means no render target found, and the view link is simply not offered"
+"core/lib/ovallsp/local_inferencer.rb#class_body_call_names": "contained: an empty list means no class-body calls seen, which opens no surface either way"
+"core/lib/ovallsp/local_inferencer.rb#eval_constant": "contained: Types::UNKNOWN, same"
+"core/lib/ovallsp/local_inferencer.rb#resolve_signature_call": "contained: nil reads as no signature to check against, so the argument checks decline"
+"core/lib/ovallsp/local_inferencer.rb#constant_receiver_name": "contained: nil reads as a receiver this engine cannot name, which is already its refusing shape"
+"core/lib/ovallsp/logger.rb#write": "contained: a logger that cannot write loses log lines; asserting anything from it is impossible"
+"core/lib/ovallsp/observation/collector.rb#handle": "contained: an observation that cannot be recorded contributes nothing, and the static answer stands"
+"core/lib/ovallsp/observation/collector.rb#defined_method": "contained: nil records no observation for that method"
+"core/lib/ovallsp/observation/collector.rb#workspace_method?": "contained: false records nothing rather than recording it against the wrong owner"
+"core/lib/ovallsp/observation/collector.rb#fingerprint_for": "contained: nil means the observation is not reused across runs"
+"core/lib/ovallsp/observation/collector.rb#positional_param_names": "contained: an empty list records no parameter names, so nothing is checked against them"
+"core/lib/ovallsp/observation/collector.rb#positional_param_types": "contained: Types::UNKNOWN, the engine's own not-knowing"
+"core/lib/ovallsp/observation/collector.rb#positional_param_types[2]": "contained: same"
+"core/lib/ovallsp/observation/fingerprint.rb#file_digest": "contained: nil means the observation is not reused, so it is recomputed"
+"core/lib/ovallsp/observation/harness.rb#install": "contained: the harness not installing means no observations"
+"core/lib/ovallsp/observation/harness.rb#finish": "contained: same"
+"core/lib/ovallsp/observation/harness.rb#dump": "contained: same"
+"core/lib/ovallsp/observation/runner.rb#run": "contained: the run produces no observations"
+"core/lib/ovallsp/observation/runner.rb#discard_quietly": "contained: draining a pipe nobody reads"
+"core/lib/ovallsp/observation/runner.rb#spawn_and_collect": surfaces
+"core/lib/ovallsp/observation/runner.rb#wait_for_exit": surfaces
+"core/lib/ovallsp/observation/runner.rb#wait_for_exit[2]": "contained: :unknown is recorded as an unknown exit rather than a clean one"
+"core/lib/ovallsp/observation/runner.rb#read_results": surfaces
+"core/lib/ovallsp/parser_service.rb#walk": "contained: an empty visitor records nothing, so the file contributes no declarations"
+"core/lib/ovallsp/parser_service.rb#raw_constant_name": "contained: nil means a constant this parser cannot name, which every caller already handles"
+"core/lib/ovallsp/parser_service.rb#constant_full_name": "contained: same"
+"core/lib/ovallsp/plugins/loader.rb#guarded": surfaces
+"core/lib/ovallsp/plugins/loader.rb#safe_load_manifest": surfaces
+"core/lib/ovallsp/plugins/loader.rb#run_isolated": "contained: the plugin contributes nothing and the child is reaped"
+"core/lib/ovallsp/plugins/loader.rb#fork_plugin_child": "contained: returns ok:false, which the caller reports"
+"core/lib/ovallsp/plugins/loader.rb#deliver_result": "contained: writes ok:false back to the parent"
+"core/lib/ovallsp/plugins/loader.rb#isolate_child_io": "contained: best-effort fd hygiene in a child about to exec"
+"core/lib/ovallsp/plugins/loader.rb#isolate_child_io[2]": "contained: same"
+"core/lib/ovallsp/plugins/loader.rb#read_isolated_result": "contained: kills the child, so a hung plugin cannot hold the session"
+"core/lib/ovallsp/plugins/loader.rb#read_isolated_result[2]": "contained: returns ok:false, which the caller reports"
+"core/lib/ovallsp/plugins/manifest.rb#self.load": surfaces
+"core/lib/ovallsp/plugins/manifest.rb#self.load[2]": surfaces
+"core/lib/ovallsp/rails_bootstrap.rb#populate_registries": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#run": "contained: break ends the agent loop, and the engine falls back to its static answers"
+"core/lib/ovallsp/runtime_agent/agent.rb#dispatch": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#eager_load_models!": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#active_record_api": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#names_taking_arguments": "contained: false omits the arity hint"
+"core/lib/ovallsp/runtime_agent/agent.rb#resolve_owner": "contained: nil omits the observation rather than attributing it wrongly"
+"core/lib/ovallsp/runtime_agent/agent.rb#model_method_extras": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#extract_columns": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#safely": "contained: the wrapper this file uses to omit one section of a reply"
+"core/lib/ovallsp/runtime_agent/agent.rb#normalize_source_location": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#reload_routes_section": surfaces
+"core/lib/ovallsp/runtime_agent/agent.rb#reload_models_section": surfaces
+"core/lib/ovallsp/semantic/method_analyzer.rb#eval_constant_receiver_call": "contained: sets ctx[:degraded], which is this analyser's own way of saying the answer is partial"
+"core/lib/ovallsp/semantic_tokens.rb#collect": "contained: no tokens leaves the editor's own grammar in charge"
+"core/lib/ovallsp/server.rb#run": "contained: EOF breaks the loop, which is how a closed client ends a session"
+"core/lib/ovallsp/server.rb#run[2]": "surfaces: a malformed frame is logged and the settled analysis drained before the loop continues"
+"core/lib/ovallsp/server.rb#shutdown_background_tasks": "contained: teardown; a thread that will not stop cannot make an answer wrong"
+"core/lib/ovallsp/server.rb#shutdown_background_tasks[2]": "contained: same"
+"core/lib/ovallsp/server.rb#dispatch": "surfaces: `#handle_dispatch_error` sends the client a JSON-RPC error and logs it"
+"core/lib/ovallsp/server.rb#reindex": surfaces
+"core/lib/ovallsp/server.rb#publish_diagnostics": surfaces
+"core/lib/ovallsp/server.rb#publish_diagnostics[2]": surfaces
+"core/lib/ovallsp/server.rb#workspace_findings_for": surfaces
+"core/lib/ovallsp/server.rb#publish_workspace_diagnostics_later": surfaces
+"core/lib/ovallsp/server.rb#drive_workspace_passes": surfaces
+"core/lib/ovallsp/server.rb#answer_pending_ancestry_questions": "contained: the claim is discarded and re-raised, so the next receiver is not left silent for the session"
+"core/lib/ovallsp/server.rb#run_ancestry_questions": surfaces
+"core/lib/ovallsp/server.rb#run_ancestry_questions[2]": surfaces
+"core/lib/ovallsp/server.rb#current_observation_fingerprint": "contained: nil means recompute rather than reuse, which costs time and never an answer"
+"core/lib/ovallsp/server.rb#ensure_reference_index_current": surfaces
+"core/lib/ovallsp/server.rb#start_cold_index": surfaces
+"core/lib/ovallsp/server.rb#build_cache_store": surfaces
+"core/lib/ovallsp/server.rb#build_cache_store[2]": surfaces
+"core/lib/ovallsp/server.rb#gemfile_lock_digest": "contained: a cache key that cannot be computed means do not cache"
+"core/lib/ovallsp/server.rb#rbs_digest": "contained: same"
+"core/lib/ovallsp/server.rb#load_signatures_environment": surfaces
+"core/lib/ovallsp/server.rb#maybe_start_agent": surfaces
+"core/lib/ovallsp/server.rb#maybe_start_agent[2]": surfaces
+"core/lib/ovallsp/server.rb#assigned_ivars_for": surfaces
+"core/lib/ovallsp/server.rb#renders_something?": "contained: true, and the caller returns nil on it -- the declining direction"
+"core/lib/ovallsp/server.rb#load_document_from_disk": surfaces
+"core/lib/ovallsp/server.rb#declaration_at_cursor": "contained: an empty list answers no definition, never a wrong one"
+"core/lib/ovallsp/server.rb#compute_structural_tokens": "contained: no semantic tokens leaves the editor's own grammar in charge"
+"core/lib/ovallsp/server.rb#compute_non_code_spans": "contained: an empty mask makes the def-position test answer true, which suppresses signature help rather than offering it"
+"core/lib/ovallsp/server.rb#analyze_changed_files_later": surfaces
+"core/lib/ovallsp/server.rb#reindex_from_disk": surfaces
+"core/lib/ovallsp/server.rb#refresh_routes": surfaces
+"core/lib/ovallsp/server.rb#refresh_models": "contained: one model's failure is caught per model so the batch is not lost, which is why the rescue is where it is"
+"core/lib/ovallsp/server.rb#refresh_models[2]": "contained: falls back to the name as written, a narrower answer"
+"core/lib/ovallsp/server.rb#refresh_models[3]": surfaces
+"core/lib/ovallsp/server.rb#refresh_all_models": surfaces
+"core/lib/ovallsp/server.rb#restart_agent": surfaces
+"core/lib/ovallsp/server.rb#republish_open_diagnostics": surfaces
+"core/lib/ovallsp/server.rb#receiverless_call_at?": "contained: false, and both callers return early on it -- the declining direction"
+"core/lib/ovallsp/server.rb#documentation_at": surfaces
+"core/lib/ovallsp/server.rb#completion_resolve_result": surfaces
+"core/lib/ovallsp/signatures/environment.rb#load_environment": surfaces
+"core/lib/ovallsp/signatures/environment.rb#load_stdlib_only": surfaces
+"core/lib/ovallsp/signatures/environment.rb#type_parameters": "contained: no parameters known reads as non-generic, which is the same conclusion a type with none produces"
+"core/lib/ovallsp/signatures/environment.rb#load_rbi_methods": surfaces
+"core/lib/ovallsp/signatures/environment.rb#add_project_sig": surfaces
+"core/lib/ovallsp/signatures/environment.rb#add_gem_signatures": surfaces
+"core/lib/ovallsp/signatures/environment.rb#add_gem_signatures[2]": surfaces
+"core/lib/ovallsp/signatures/environment.rb#build_signature_method": surfaces
+"core/lib/ovallsp/signatures/environment.rb#build_definition": "contained: nil reads as no signature, which is what a type without one gives"
+"core/lib/ovallsp/signatures/environment.rb#signature_location": "contained: nil means hover shows no source link, never a wrong one"
+"core/lib/ovallsp/signatures/environment.rb#compute_member_names": "contained: falls back to the RBI half, a narrower answer rather than a wrong one"
+"core/lib/ovallsp/signatures/environment.rb#compute_ancestors": "contained: an empty chain is what a type RBS does not declare produces, and every consumer reads it as less knowledge"
+"core/lib/ovallsp/signatures/environment.rb#rbs_type_name": "contained: nil reads as a type RBS does not name"
+"core/lib/ovallsp/signatures/rbi_parser.rb#parse": surfaces
+"core/lib/ovallsp/signatures/rbi_parser.rb#handle_sig": surfaces
+"core/lib/ovallsp/signatures/rbi_parser.rb#convert_type_expr": "contained: Types::UNKNOWN, the engine's own not-knowing"
+"core/lib/ovallsp/signatures/type_converter.rb#convert": "contained: same"
+"core/lib/ovallsp/uri_util.rb#to_path": "contained: nil means a uri this engine cannot turn into a path, and every caller skips it"
+"core/lib/ovallsp/vendor_compatibility.rb#check": "surfaces: returns a Result carrying `compatible?: false` and a reason the extension shows"
+"core/lib/ovallsp/workspace_diagnostics.rb#publish_for": surfaces

@@ -88,28 +88,15 @@ RSpec.describe "a class object is an instance of Class (024.23 follow-up)" do
     expect(unknown_methods("class Victim\n  Victim.only_on_class_object\nend\n")).to eq(["only_on_class_object"])
   end
 
-  # The tail must not turn every unknown class-level call into a
-  # resolvable one: without this, "look up instance methods on the tail"
-  # could be implemented as "resolve anything" and pass the three above.
-  # **0.2.11 reversed this and rolled the reversal back inside the same
-  # release.** The reversal marked the owner's *class* surface open as
-  # well, which is right for the class in front of you and catastrophic
-  # for `class Module`, `class Object` or `class Kernel` -- they are in
-  # every class's singleton chain, so one bare `alias_method` in a
-  # `core_ext` file switched off `Foo.bar` checking for the whole
-  # workspace. A `drive` round measured it over 1,659 files of 16 gems:
-  # constant-receiver `unknown-method` findings **117 -> 0**, and among
-  # the 148 removals a real latent `NoMethodError`
-  # (`ActiveRecord::Promise.wrap`). The measurement that justified the
-  # reversal had the same contamination -- its corpus contained
-  # activesupport's `core_ext/module/attr_internal.rb`, a bare
-  # `alias_method` in `class Module` -- and the sampling missed it.
-  #
-  # So the macro call itself is reported again, and `024.110` is open
-  # with what a real fix has to distinguish: "I could not read *this
-  # class's* body" from "I could not read `Module`'s".
-  it "still reports a class-level call nothing declares" do
-    expect(unknown_methods("class Widget\n  definitely_not_a_macro :a\nend\n")).to eq(["definitely_not_a_macro"])
+  # **`024.110`, fixed in 0.2.12.** The engine declines to enumerate what
+  # an unreadable macro might define, so it no longer reports the macro
+  # itself -- two answers about one fact. 0.2.11 shipped this and rolled
+  # it back the same release, because the reader took `Module`'s open
+  # surface as evidence about every class inheriting from it;
+  # `#open_surface?` ignores a synthesised link now, so the claim is about
+  # this owner alone.
+  it "says nothing about a class-level call in a body it could not read" do
+    expect(unknown_methods("class Widget\n  definitely_not_a_macro :a\nend\n")).to be_empty
   end
 
   # A call on a *receiver* is not evidence about the receiver's own body,

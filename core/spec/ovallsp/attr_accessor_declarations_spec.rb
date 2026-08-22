@@ -97,9 +97,7 @@ end
     "instance_eval" => "instance_eval do",
     "an ActiveSupport::Concern hook" => "included do",
     "concerning" => "concerning :Extra do",
-    "an ordinary iterator" => "[1].each do",
-    "a Struct builder" => "Struct.new(:x) do",
-    "a Class builder" => "Class.new do"
+    "an ordinary iterator" => "[1].each do"
   }.each do |label, opener|
     it "records an attribute written inside #{label}" do
       source = "class Outer\n  #{opener}\n    attr_reader :inside\n  end\nend\n"
@@ -108,11 +106,46 @@ end
     end
   end
 
+  # **The two that were in the table above until 0.2.13, and should not
+  # have been.** A builder block defines on the class it is *making*, not
+  # on the one it is written in:
+  #
+  #   $ ruby -e '
+  #   class Outer
+  #     Seed = Struct.new(:x) do
+  #       attr_reader :inside
+  #     end
+  #   end
+  #   p [Outer.new.respond_to?(:inside), Outer::Seed.new(1).respond_to?(:inside)]
+  #   '
+  #   # => [false, true]
+  #   # ruby 3.4.10
+  #
+  # Recording it on `Outer` invented a member, which is `024.31` and the
+  # direction this engine refuses everywhere else. The table pinned the
+  # defect because both halves of it were written at once.
+  {
+    "a Struct builder" => "Struct.new(:x) do",
+    "a Class builder" => "Class.new do"
+  }.each do |label, opener|
+    it "records nothing on the enclosing class for #{label}" do
+      source = "class Outer\n  #{opener}\n    attr_reader :inside\n  end\nend\n"
+
+      expect(declared(source)).to be_empty
+    end
+  end
+
   # The same shape ActiveRecord builds its habtm association class with:
   # a `def self.` and an `attr_accessor` in one block, inside a method.
   # Whatever owner the block really has, both halves must get the same
   # one, or the `def`'s body reports the `attr_accessor`'s method missing.
-  it "gives a def and an attr_accessor in one block the same owner" do
+  #
+  # **Since 0.2.13 that owner is *nothing*, for both halves.** The block
+  # makes a new class, and neither declaration belongs to `Builder`
+  # (`024.31`). Recording the `def` under `nil` instead would have put it
+  # in the same bucket as every genuine top-level `def`, which is
+  # `024.80`'s collision arriving from the other side.
+  it "records neither half of a builder block on the enclosing class" do
     source = <<~'RUBY'
       class Builder
         def build
@@ -128,11 +161,10 @@ end
         end
       end
     RUBY
-    owners = summarize(source).declarations
-                              .select { |d| d.symbol_id.kind == :singleton_method }
-                              .map { |d| d.symbol_id.owner }.uniq
 
-    expect(owners).to eq(["::Builder"])
+    recorded = summarize(source).declarations.map { |d| [d.symbol_id.kind, d.symbol_id.owner, d.symbol_id.name] }
+
+    expect(recorded).to eq([[:class, nil, "::Builder"], [:instance_method, "::Builder", "build"]])
   end
 
   it "still records one written directly in the class body" do

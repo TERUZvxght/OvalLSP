@@ -115,6 +115,26 @@ at all: the macro's owner is incomplete, so nothing is asserted about it,
 and `Module` being incomplete says nothing about `Widget` because the
 completeness is per-owner rather than per-chain.
 
+**Re-derived in 0.2.13, against the rule this document sets for itself.**
+D2 claimed eleven entries. Two are discharged by its mechanism —
+`024.110` and `024.116` — and **five of the remaining nine are not this
+class**, which is the miscategorisation 042 exists to catch *before*
+building rather than after:
+
+| entry | where its decision is actually made |
+|---|---|
+| `024.18`, `024.22` | the unassigned-ivar check needs a *different source of knowledge* — the entry's own Direction is "ask the Runtime Agent". Carrying completeness on a set this engine cannot compute at all is not the same problem |
+| `024.27`, `024.28` | `selectionRange` and `name_location` on a generated declaration. An outline that lists one node per name, and a rename with nothing to edit. Nothing to do with an enumeration's completeness |
+| `024.77` | a receiver's *type* after a relation hop, which is D3's axis |
+
+**Four are genuinely D2 and are not done:** `024.76`, `024.83`, `024.91`
+and `024.106`'s second half. What they share is that the completeness
+proof has to come from a layer *above* the parser — the index knowing it
+has seen every file that reopens a module, the RBS loader knowing its
+signature set is short. 0.2.13 built the parser's half, which is what
+`024.110` and `024.116` needed; the other half is a real piece of work
+and it is what D2 still names.
+
 **Acceptance:** the four-line `class Module; alias_method …` reproduction
 in `unreadable_macro_spec.rb` keeps `Widget.tpyo_class` reported while
 `HostC`'s own macro is not; `024.91`'s Struct/Data/alias shapes stop
@@ -304,7 +324,7 @@ requires exactly one edit; `024.69`'s two suites fail CI when skipped.
 
 **Entries:** `024.122`, and it is upstream of `024.35` and part of D2
 
-**Where the decision is made:** 239 `rescue` sites in `core/lib` and 21
+**Where the decision is made:** 159 `rescue` sites in `core/lib` and 21
 `catch` blocks in `vscode/src`. Counted: **72 return a plausible value
 silently**, 44 log and then return one, 4 re-raise as a typed error.
 
@@ -324,7 +344,7 @@ Where the caller already has a three-state answer, the failure becomes
 `unknown` — which is the machinery D2 builds, pointed at the other
 source of not-knowing.
 
-**Acceptance:** the enumeration comes out at the same 239 + 21 it started
+**Acceptance:** the enumeration comes out at the same 159 + 21 it started
 from; no site in the third group remains; `CLAUDE.md` carries the rule;
 and a deliberately-added bare `rescue StandardError` fails CI.
 

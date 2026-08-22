@@ -31,14 +31,15 @@ most-useful-first, say — are 2.x.x.
 
 **The distance to 1.0.0 is written down**, derived from those two and
 nothing else: [`docs/design/tasks/036-road-to-1.0.0.md`](docs/design/tasks/036-road-to-1.0.0.md).
-The release being prepared now is **0.2.13, on `feat/0.2.13`** —
-[`042`](docs/design/tasks/042-second-enumeration.md)'s **D2, D5 and
-D10**: a member set produced with its own completeness, a `Cref` that
-exposes questions rather than storage, and the 72 measured places where a
-failure becomes a plausible value. 0.2.12 shipped 042's four apparatus
-classes and is recorded in
-[`docs/design/tasks/043-0.2.12-the-apparatus.md`](docs/design/tasks/043-0.2.12-the-apparatus.md).
-**Read 042 before starting any of it.**
+The release being prepared now is **0.3.0, on `feat/0.3.0`** — the first
+release that may add capability, and the one every accuracy release so
+far has been clearing the way for. Its scope is
+[`docs/design/tasks/045-0.3.0-scope.md`](docs/design/tasks/045-0.3.0-scope.md).
+0.2.13 shipped 042's D5, D10 and the parser's half of D2, and is recorded
+in
+[`docs/design/tasks/044-0.2.13-what-a-body-says.md`](docs/design/tasks/044-0.2.13-what-a-body-says.md).
+**Read [`042`](docs/design/tasks/042-second-enumeration.md) before
+touching anything it names.**
 Read it when a session opens, so the path is seen rather than inferred —
 an inferred path is what a compaction loses.
 

@@ -39,6 +39,7 @@ updated in the same change, not "later".
 | **Which thread owns what, or which lock guards what** — a new background thread, a mutex added or reordered, a state object made mutable or immutable | `docs/design/docs/02-architecture.md`'s threading section, which states the ownership map and the lock order in one place, and `core/lib/ovallsp/document_store.rb`'s own note, which cites it | — |
 | **A behaviour relied on from outside this tree** — the client, VS Code, the LSP spec, the Marketplace | `docs/CLIENT_BEHAVIOUR.md` + `.ja.md`, which is the only place such a fact is stated; everything else points at it | `core/spec/meta/client_behaviour_spec.rb` (the greppable rows against `vscode/node_modules`, and that nothing else restates one) |
 | **A working agreement** (how this project is built, reviewed or released) | `CLAUDE.md`, `AGENTS.md`, `CONTRIBUTING.md` + `.ja.md` | — |
+| **A `rescue` added to `core/lib`, or one removed** | `core/spec/meta/rescue_verdicts.yml` — a verdict, and for `contained` the argument at the site as well | `core/spec/meta/swallowed_failures_spec.rb` and ci.yml's rescue-verdicts job, which fail on a site with no verdict, a verdict with no site, and any verdict of `swallows` (`024.122`) |
 
 ## The site is documentation
 

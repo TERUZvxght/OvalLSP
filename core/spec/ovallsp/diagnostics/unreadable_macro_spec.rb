@@ -82,49 +82,23 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
     end
   end
 
-  # **Rolled back inside 0.2.11, and this example records why.** The fix
-  # marked the owner's *class* surface open as well as its instance one.
-  # That is right for the class in front of you and catastrophic for
-  # `class Module`, `class Object` or `class Kernel`: they are in every
-  # class's singleton chain, so one bare `alias_method` in a `core_ext`
-  # file switched off `Foo.bar` checking for the whole workspace. A
-  # `drive` round measured it over 1,659 files of 16 gems --
-  # constant-receiver `unknown-method` findings **117 -> 0**, and among
-  # the removals a real latent `NoMethodError`
-  # (`ActiveRecord::Promise.wrap`).
+  # **`024.110`, and 0.2.12 is the release that could finally hold it.**
+  # The engine used to give two answers about one fact: it declined to
+  # report anything an unreadable macro *might* define, and reported the
+  # macro itself. 0.2.11 fixed that and rolled the fix back the same
+  # release, because the reader then took `Module`'s open surface as
+  # evidence about every class that inherits from it -- constant-receiver
+  # findings 117 -> 0 over 16 gems, with a real latent `NoMethodError`
+  # among the losses.
   #
-  # The measurement that justified the reversal had the same
-  # contamination: its corpus contained activesupport's
-  # `core_ext/module/attr_internal.rb`, a bare `alias_method` in
-  # `class Module`, and the sampling missed it. So the engine still
-  # contradicts itself about one fact -- `024.110`, open, with what a real
-  # fix has to distinguish written down.
-  it "still reports the macro itself, which is what 024.110 is about" do
+  # `#open_surface?` ignores a synthesised link now, so the claim is
+  # per-owner: *this* class's body was unreadable, and nobody else's.
+  it "says nothing about the macro it could not read" do
     document = index("class HostC\n  attr_atomic :thing\nend\n")
 
-    expect(unknown_methods(document)).to eq(["attr_atomic"])
+    expect(unknown_methods(document)).to be_empty
   end
 
-  # **The reproduction that decided it**, and the one that keeps
-  # `#open_surface?` asking the narrower question. `Widget` has no macros
-  # and lives in another file; the only unreadable call in the workspace
-  # is in a reopened `Module`. Asking the *correct* side for the
-  # `:class_object` tail -- which `#declares_method_missing?` now does,
-  # and which is right for a question about a declared method -- would
-  # silence this, because `Module`'s instance surface really is open and
-  # its instance methods really are on every class's singleton chain.
-  # That is `024.110`'s open problem stated as a test.
-  it "does not let a reopened core class silence an unrelated class's class-level call" do
-    index("class Module\n  def blank_slate?; false; end\n  alias_method :blank?, :blank_slate?\nend\n",
-          uri: "file:///core_ext.rb")
-    index("class Widget\n  def go; 1; end\nend\n", uri: "file:///widget.rb")
-    document = index("Widget.tpyo_class\n", uri: "file:///caller.rb")
-
-    expect(unknown_methods(document)).to eq(["tpyo_class"])
-  end
-
-  # The control that keeps this from being "stop reporting class-level
-  # calls": a class whose body ran nothing unreadable still answers.
   # **A link's side, asked of the link rather than recomputed.** `extend M`
   # and the `Class`/`Module`/`Object`/`Kernel`/`BasicObject` tail both put
   # *instance* methods on a class-level chain, and both readers of that
@@ -146,6 +120,30 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
     expect(unknown_methods(document)).to be_empty
   end
 
+  # `024.117`. One construct, two spellings, opposite answers: the bare
+  # `validates :title` silenced the owner and
+  # `%i[title body].each { |f| validates f }` -- a mainstream spelling of
+  # exactly the thing `024.110` decided to stop reporting -- did not,
+  # because `#defines_surface?` requires `block_depth.zero?`.
+  #
+  # Opening a surface is the "I could not read this" direction, so a
+  # block is safe to include: it silences, never invents. The *other*
+  # thing a block frame contains -- a `private` section that must not
+  # leak into the enclosing class -- is untouched, and is `024.111`.
+  it "opens the owner's surface for an unreadable macro called inside a block" do
+    document = index("class B2\n  %w[a b].each { |n| the_macro(n) }\nend\nB2.tpyo\n")
+
+    expect(unknown_methods(document)).to be_empty
+  end
+
+  # The control: a block in a class body is not a licence to silence
+  # everything. A *readable* block leaves the owner alone.
+  it "leaves the owner alone when the block calls nothing it cannot read" do
+    document = index("class B3\n  %w[a b].each { |n| puts n }\nend\nB3.tpyo\n")
+
+    expect(unknown_methods(document)).to eq(["tpyo"])
+  end
+
   it "still reports a class-level typo on a class whose body it could read" do
     index("class Plain\n  def self.known; end\nend\n", uri: "file:///plain.rb")
     document = index("Plain.known\nPlain.nope_x\n", uri: "file:///use.rb")
@@ -160,10 +158,31 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
   # Verified mechanically by the round: re-applying the change and
   # running the file failed the two examples above and passed this one.
   # `024.109`'s category, in the spec written to close `024.110`.
-  it "still reports a typo on a class that also ran an unreadable macro" do
-    index("class Mixed\n  attr_atomic :thing\n  def self.known; end\nend\n", uri: "file:///mixed.rb")
-    document = index("Mixed.known\nMixed.tpyo_class\n", uri: "file:///ok.rb")
+  # **The other half of the same reproduction**, and what `042`'s D2 is
+  # for. `HostC`'s own body ran a macro this parser cannot read, so
+  # nothing it might define is asserted about. `Widget`'s body is
+  # readable, and the only unreadable thing in its *chain* is a reopened
+  # `Module` -- a link the workspace did not write, and one every class
+  # in every workspace has.
+  it "declines about the owner whose own body was unreadable, and only that owner" do
+    index("class Module\n  def blank_slate?; false; end\n  alias_method :blank?, :blank_slate?\nend\n",
+          uri: "file:///core_ext.rb")
+    index("class HostC\n  attr_atomic :thing\nend\n", uri: "file:///host.rb")
+    index("class Widget\n  def go; 1; end\nend\n", uri: "file:///widget.rb")
+    document = index("HostC.whatever\nWidget.tpyo_class\n", uri: "file:///caller.rb")
 
     expect(unknown_methods(document)).to eq(["tpyo_class"])
+  end
+
+  # **The distinguishing pair.** One class ran a macro this parser cannot
+  # read; the other did not. An implementation that declined about the
+  # workspace rather than about the owner would silence both, and one
+  # that declined about neither would report both.
+  it "declines about the class that ran the macro and not about its neighbour" do
+    index("class Mixed\n  attr_atomic :thing\n  def self.known; end\nend\n", uri: "file:///mixed.rb")
+    index("class Plain\n  def self.known; end\nend\n", uri: "file:///plain.rb")
+    document = index("Mixed.tpyo_one\nPlain.tpyo_two\n", uri: "file:///ok.rb")
+
+    expect(unknown_methods(document)).to eq(["tpyo_two"])
   end
 end

@@ -242,34 +242,10 @@ than carried into this release (024.23).
 
 Seven more are older than this release and untouched by it:
 
-- **A declaration written inside a block belongs to the class the block is
-  written in**, whatever the block's real receiver is. `Struct.new(:x) do
-  attr_reader :label end` inside `class Outer` offers `label` on an
-  `Outer`, and go-to-definition on it lands in the block; `def setup;
-  attr_accessor :never_real; end` records `never_real`, so calling it is
-  not reported — and here Ruby cannot define it by any path, since
-  `attr_accessor` is `Module`'s and `self` inside an instance method is
-  not a module. Attributing
-  lexically is what `def` has always done, and three attempts to be
-  cleverer for `attr_*` alone each produced false reports instead
-  (024.31). <!-- documents: 024.31 -->
-- **`def Foo.bar` is recorded as an instance method**, so `Foo.bar` is
-  reported as unknown while `Foo.new.bar` is accepted — both answers
-  inverted. **56** of Ruby's own standard-library reports are this. The
-  same declaration is also filed under a namespace that does not exist
-  (`def Fetcher.start` inside `class Fetcher` lands on
-  `Fetcher::Fetcher`), which the argument-count check then reads: **10 of
-  the 14** wrong-argument-count reports over the corpus below are this
-  shape, among them `net/http.rb`'s `HTTP.start`
-  (024.32). <!-- documents: 024.32 -->
 - **A class that includes a module the workspace has not read still has
   its class-level macros reported.** `include SomeGem::Model` followed by
   `validate :ensure_ok` is reported, though the Concern installs
   `validate`. Introduced by 0.1.14 and not fixed here (024.35). <!-- documents: 024.35 -->
-- **`K.instance_eval { attr_accessor :x }` is reported** where
-  `K.class_eval { attr_accessor :x }` is not, though both define the same
-  methods. The rule behind it is right for `object.instance_eval`, which
-  is what it was written for (024.33). <!-- documents: 024.33 -->
 - **A method a loop defines is reported as unknown.** `EVENTS.each { |id,
   _| alias_method "on_#{id}", :_dispatch_1 }` is idiomatic in generated
   code, and the name is not a literal, so the index records nothing and
@@ -286,13 +262,6 @@ Seven more are older than this release and untouched by it:
   this shape -- and the 7 written here until 0.2.1's last day was itself
   a number taken once and not re-measured. A number recorded and not re-measured after the fix that
   invalidated it.)
-- **`attr_accessor` written inside a `def` inside `class << self` is
-  recorded as declaring class-level methods**, where Ruby defines
-  instance ones — the macro runs when that method is *called*, with the
-  class as `self`. Reading the attribute from an instance method is then
-  reported as unknown. Real code has the shape: ActiveRecord's
-  `has_and_belongs_to_many` builder, `csv/parser.rb`, `cgi/core.rb` and
-  Devise (024.34). <!-- documents: 024.34 -->
 
 ## What 0.2.0's new checks deliberately do not cover
 
@@ -501,46 +470,19 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
-## A macro this extension cannot read is reported as a missing method
-
-If a class or module body calls a macro that comes from a gem, a
-`Concern`, or an `extend` this extension cannot follow — `attr_atomic
-:thing` — the *call itself* is reported as an unknown method. Whatever it
-defines is correctly left alone; the line that defines it is not.
-
-0.2.11 tried silencing it and took the attempt back out: the fix also
-silenced `Foo.bar` checking across the whole workspace whenever any file
-reopened `Module`, `Object` or `Kernel`. <!-- documents: 024.110 -->
-
-## Methods made by `define_singleton_method`
-
-A class whose class methods are made by `define_singleton_method` is no
-longer reported for calling them — but hover, go to definition and
-completion still answer nothing there, because the names are not in the
-index. You get silence rather than an answer. <!-- documents: 024.116 -->
-
-## Something can fail without you being told
-
-In 72 measured places this extension catches a failure and carries on
-with a value that looks like a real answer — an empty list, a `nil`, a
-`false`. When one of those fires you get a plausible answer rather than
-an error, so a missing hover or a silent check may be a failure nothing
-reported rather than a limit of what this engine knows. The Output
-channel is the place to look, and it will not always have a line. <!-- documents: 024.122 -->
-
-## A macro called inside a block in a class body
-
-A macro this extension cannot read is left alone when you write it
-plainly — `validates :title` — and reported as a missing method when you
-write the same thing in a loop: `%i[title body].each { |f| validates f }`.
-One construct, two spellings, opposite answers. <!-- documents: 024.117 -->
-
 ## A `private` or `module_function` written inside a block
 
-If you write one inside an ordinary block — `1.times { module_function }`,
-`[1].each { private }` — this extension does not apply it to the methods
-that follow, though Ruby does. Written directly in the class or module
-body, both work. <!-- documents: 024.111 -->
+If you write one inside a block whose receiver this extension cannot
+vouch for — `SOME_CONST.each { private }`, `helper { private }` — it does
+not apply it to the methods that follow, though Ruby may. Written
+directly in the class or module body it works, and as of 0.2.13 so does
+a block iterating a literal (`[1].each { private }`,
+`%w[a b].each { module_function }`).
+
+The remaining case is one this extension cannot decide without knowing
+what the call does with the block: `included do ... end` really does run
+its `private` against a different module, and treating those alike is
+what used to make every method after such a block private. <!-- documents: 024.111 -->
 
 ## A typo in a call on a module
 

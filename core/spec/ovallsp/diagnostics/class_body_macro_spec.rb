@@ -261,25 +261,21 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
   # The point of the check is to still catch what is genuinely absent.
   # Without this, "report nothing on a singleton receiver" would pass
   # every example above.
-  # **0.2.11 reversed this and rolled the reversal back inside the same
-  # release.** The reversal marked the owner's *class* surface open as
-  # well, which is right for the class in front of you and catastrophic
-  # for `class Module`, `class Object` or `class Kernel` -- they are in
-  # every class's singleton chain, so one bare `alias_method` in a
-  # `core_ext` file switched off `Foo.bar` checking for the whole
-  # workspace. A `drive` round measured it over 1,659 files of 16 gems:
-  # constant-receiver `unknown-method` findings **117 -> 0**, and among
-  # the 148 removals a real latent `NoMethodError`
-  # (`ActiveRecord::Promise.wrap`). The measurement that justified the
-  # reversal had the same contamination -- its corpus contained
-  # activesupport's `core_ext/module/attr_internal.rb`, a bare
-  # `alias_method` in `class Module` -- and the sampling missed it.
+  # **`024.110`, and the distinction 0.2.12 built to hold it.** 0.2.11
+  # made a bare class-body call open the owner's class surface too, and
+  # rolled it back the same release: `#open_surface?` read that through
+  # the `Class`/`Module`/`Object` tail of every chain, so one bare
+  # `alias_method` in a `core_ext` file silenced `Foo.bar` for the whole
+  # workspace -- 117 constant-receiver findings to 0 over 16 gems, with a
+  # real latent `NoMethodError` among the losses.
   #
-  # So the macro call itself is reported again, and `024.110` is open
-  # with what a real fix has to distinguish: "I could not read *this
-  # class's* body" from "I could not read `Module`'s".
-  it "still reports a singleton call that nothing declares" do
-    expect(unknown_methods("class Widget\n  definitely_not_a_macro :a\nend\n")).to eq(["definitely_not_a_macro"])
+  # The reader ignores a *synthesised* link now, so the claim is about
+  # this owner and nobody who merely inherits from `Module`. The macro is
+  # not reported, because the engine has already declined to enumerate
+  # what it might define -- two answers about one fact, which is what the
+  # entry was always about.
+  it "says nothing about a singleton call in a body it could not read" do
+    expect(unknown_methods("class Widget\n  definitely_not_a_macro :a\nend\n")).to be_empty
   end
 
   it "still reports an absent class method on a constant receiver" do
@@ -319,14 +315,20 @@ RSpec.describe "class-body macros are not unknown methods (024.23)" do
     expect(unknown_methods(source)).to be_empty
   end
 
-  # An ordinary block does *not* change self, so a class body's block
-  # still resolves against the class. Without this, "treat every block as
-  # an instance" would pass the two examples above.
-  it "still reads an ordinary block in a class body as the class" do
-    source = "class Widget\n  [1, 2].each { definitely_not_a_macro }\nend\n"
-
-    expect(unknown_methods(source)).to eq(["definitely_not_a_macro"])
-  end
+  # **The example that used to sit here could no longer distinguish
+  # anything, and is gone rather than adjusted.** It asserted that
+  # `[1, 2].each { definitely_not_a_macro }` in a class body reports the
+  # call -- true when a block isolated the cref, and false since 0.2.13
+  # made a literal iteration share it (`024.117`), because the call is
+  # then the class body's own and `024.110` declines about an owner whose
+  # body it could not read.
+  #
+  # That is `024.110`'s recorded cost arriving in a spec rather than in a
+  # corpus, and the honest response is to say so. What the example was
+  # *for* -- an ordinary block resolves against the class and not an
+  # instance -- is still distinguished by the two `define_method`
+  # examples above and the `instance_eval` pair below, whose fixtures do
+  # not turn on an unreadable call.
 
   # A `define_method` block written inside `class << self` defines a
   # *singleton* method, so its body's self is the class object -- still a

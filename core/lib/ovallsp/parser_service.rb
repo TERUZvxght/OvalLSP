@@ -255,6 +255,7 @@ module Ovallsp
         @open_surface_owners = Set.new
         @module_function_names = Set.new
         @included_hook_parameter = nil
+        @block_owning_call = nil
         @recorded_a_declaration = false
         # How many block or lambda bodies enclose the node being visited.
         # A block's meaning belongs to the call that owns it, so
@@ -307,11 +308,35 @@ module Ovallsp
       end
 
       def visit_def_node(node)
-        singleton = node.receiver.is_a?(Prism::SelfNode) || (@cref.declares_singleton? && node.receiver.nil?)
+        # A `def` inside a block whose owner nothing can name belongs to
+        # that owner, not to the top level and not to the lexically
+        # enclosing class. Recording it under `nil` put it in the same
+        # bucket as every genuine top-level `def`, which is `024.80`'s
+        # collision arriving from the other side. Its body is still
+        # walked; only the declaration is withheld (`024.31`).
+        #
+        # `previous_cref` is assigned *first*: this method has a
+        # method-level `ensure` that restores it, so an early `return`
+        # above the assignment sets `@cref` to nil for the rest of the
+        # parse. That failed no example -- the cold indexer swallows a
+        # per-file parse error into a log line -- and was found only
+        # because an unrelated example counted how many times the logger
+        # was called. `024.122` is what that swallow is.
+        previous_cref = @cref
+        return super if @cref.nameless_context?
+
         owner_receiver = node.receiver
+        # **A written receiver is a singleton definition, whatever it
+        # names.** `def Foo.bar` defines a singleton method on `Foo`, and
+        # this recorded an *instance* method -- so both answers inverted:
+        # the call Ruby runs was reported and the call Ruby raises on was
+        # accepted. Ten of the fourteen wrong-argument-count reports over
+        # the 0.2.1 corpus were this shape, `net/http.rb`'s `HTTP.start`
+        # among them (`024.32`).
+        singleton = !owner_receiver.nil? || (@cref.declares_singleton? && owner_receiver.nil?)
         owner =
           if owner_receiver && !owner_receiver.is_a?(Prism::SelfNode)
-            constant_full_name(owner_receiver) || current_owner
+            receiver_owner_name(owner_receiver) || current_owner
           else
             current_owner
           end
@@ -366,7 +391,6 @@ module Ovallsp
         # not retroactively rewrite a declaration. Restored rather than
         # cleared, since `private def foo; ...; end` nests a def inside a
         # call inside a def in the argument-form case.
-        previous_cref = @cref
         # Inside `def self.x` self is still the class, so a `private`
         # written there is Module's, exactly as in the body around it.
 
@@ -437,15 +461,16 @@ module Ovallsp
         # direction that resolves the helper methods such a block calls;
         # inheriting class-level self reported them instead.
         #
-        # A constant receiver is the case this gets wrong:
-        # `K.instance_eval { attr_accessor :x }` is legal Ruby and is
-        # reported, while `K.class_eval { attr_accessor :x }` -- which
-        # takes the inherit path -- is not. Splitting the two was tried
-        # and dropped: this visitor cannot say *which* module self is, so
-        # the module answer resolves against the enclosing owner, and no
-        # fixture could distinguish the branch. Recorded as 024.33; it is
-        # not a regression, 0.1.14 reported it too.
-        node.receiver.nil? ? nil : false
+        # **The explicit-receiver term was removed in 0.2.13.** It read
+        # `node.receiver.nil? ? nil : false`, and `024.33`'s fix took over
+        # every case it decided: an eval-family call with a receiver now
+        # gets `Cref#in_eval_block`, which carries the constant when there
+        # is one and `nil` when there is not. Removing the term left the
+        # whole suite green except the mutation manifest, which is how it
+        # was found -- an unpinned behavioural line is a defect in its own
+        # right, and this one had stopped being reachable rather than
+        # stopped being pinned.
+        nil
       end
 
       # `private attr_reader :x` reaches the attr recorder as a *nested*
@@ -454,6 +479,17 @@ module Ovallsp
       # was never opened -- so the visibility has to travel with the
       # nesting, the way `@pending_visibility_names` carries `private def`.
       def visit_call_node(node)
+        # The call a block belongs to, so `#visit_block_node` can ask what
+        # its receiver is: Prism hands the visitor a `BlockNode` with no
+        # way back to the call that owns it. Set here and restored on the
+        # way out, so a nested call inside a block sees its own.
+        #
+        # `ensure` on the method body rather than a wrapper, because every
+        # `return super` below has to keep resolving to `Prism::Visitor`'s
+        # own `#visit_call_node`.
+        previous_block_owning_call = @block_owning_call
+        @block_owning_call = node
+
         if node.receiver.nil?
           if node.arguments.nil?
             update_visibility(node)
@@ -541,6 +577,8 @@ module Ovallsp
         ensure
           @cref = previous_cref
         end
+      ensure
+        @block_owning_call = previous_block_owning_call
       end
 
       # `ActiveSupport::Concern`'s `class_methods do ... end` is sugar for
@@ -615,6 +653,73 @@ module Ovallsp
         end
       end
 
+      # Whether this block's owning call iterates a *literal* -- and so
+      # provably keeps self, whatever the method is called. `%w[a b].each`,
+      # `[1].each`, `(1..3).map`. A shape rather than a list of method
+      # names, for the reason `#record_open_surface` gives about setters:
+      # a list can only ever hold the calls somebody has already seen.
+      LITERAL_RECEIVER_NODES = [
+        Prism::ArrayNode, Prism::RangeNode, Prism::IntegerNode,
+        Prism::HashNode, Prism::StringNode, Prism::SymbolNode
+      ].freeze
+
+      # `instance_eval`/`class_eval`/`module_eval` and their `_exec`
+      # spellings all set self to their receiver, so a macro inside is a
+      # call on *that*. Returns the owner name, `:unnameable` for a
+      # receiver this parser cannot name, or nil when the call is not one
+      # of these.
+      EVAL_BLOCK_CALLS = %i[instance_eval instance_exec class_eval class_exec module_eval module_exec].freeze
+
+      # A block that *creates* a class or module: its body defines on the
+      # new one, which has no name until the assignment completes and may
+      # never get one. Ruby:
+      #
+      #   $ ruby -e '
+      #   class Outer
+      #     Seed = Struct.new(:x) do
+      #       attr_reader :label
+      #     end
+      #   end
+      #   p [Outer.new.respond_to?(:label), Outer::Seed.new(1).respond_to?(:label)]
+      #   '
+      #   # => [false, true]
+      #   # ruby 3.4.10
+      #
+      # The accessor belongs to the Struct, and it was being recorded on
+      # `Outer` -- the direction that *invents* a member, which this
+      # engine refuses everywhere else (`024.31`).
+      CLASS_CREATING_BLOCK_RECEIVERS = {
+        "Class" => :new, "Module" => :new, "Struct" => :new, "Data" => :define
+      }.freeze
+
+      def creates_a_class?
+        call = @block_owning_call
+        return false unless call
+
+        name = call.receiver && raw_constant_name(call.receiver)
+        CLASS_CREATING_BLOCK_RECEIVERS[Index::SymbolId.bare_name(name.to_s)] == call.name
+      end
+
+      def eval_block_owner
+        call = @block_owning_call
+        return nil unless call && EVAL_BLOCK_CALLS.include?(call.name)
+
+        receiver = call.receiver
+        # Receiverless, the receiver is the enclosing self and the cref is
+        # already right -- `instance_eval { attr_accessor :x }` in a class
+        # body is as legal as the line above it.
+        return nil if receiver.nil? || receiver.is_a?(Prism::SelfNode)
+
+        raw_constant_name(receiver) ? receiver_owner_name(receiver) : :unnameable
+      end
+
+      def iterates_a_literal?(_node)
+        receiver = @block_owning_call&.receiver
+        return false if receiver.nil?
+
+        LITERAL_RECEIVER_NODES.any? { |klass| receiver.is_a?(klass) }
+      end
+
       def visit_block_node(node)
         if @skip_block_frame
           @skip_block_frame = false
@@ -638,7 +743,14 @@ module Ovallsp
         # really does take the enclosing section's visibility. Inheriting
         # keeps that case right while still containing the leak.
         previous_cref = @cref
-        @cref = @cref.in_block
+        @cref =
+          if creates_a_class?
+            @cref.in_eval_block(nil)
+          elsif (owner = eval_block_owner)
+            @cref.in_eval_block(owner == :unnameable ? nil : owner)
+          else
+            @cref.in_block(shares_self: iterates_a_literal?(node))
+          end
         super
       ensure
         @cref = previous_cref
@@ -826,6 +938,30 @@ module Ovallsp
       # the Task 014-018 independent review.
       def namespace_name_location(constant_path_node)
         constant_path_node.respond_to?(:name_loc) ? constant_path_node.name_loc : constant_path_node.location
+      end
+
+      # The owner `def Const.name` names, resolved the way Ruby resolves a
+      # constant: through the nesting, innermost first, before falling
+      # back to qualifying under the current owner.
+      #
+      # `#qualify` alone gave `::Fetcher::Fetcher` for `def Fetcher.start`
+      # written inside `class Fetcher` -- a class that does not exist, and
+      # one every later lookup then failed against. Ruby finds the
+      # enclosing `Fetcher`, because `Fetcher::Fetcher` is not declared.
+      #
+      # Only the frames *this parser has seen declared* are matched, which
+      # is the honest limit of doing it here: a nesting frame is a name
+      # this file wrote, and a constant declared elsewhere still falls
+      # back. `024.32`.
+      def receiver_owner_name(receiver)
+        written = raw_constant_name(receiver)
+        return constant_full_name(receiver) if written.nil? || written.start_with?("::")
+
+        head = written.split("::").first
+        frame = @cref.nesting.find { |f| Index::SymbolId.bare_name(f).split("::").last == head }
+        return Index::SymbolId.qualify_owner(frame) if frame && written == head
+
+        constant_full_name(receiver)
       end
 
       def qualify(local_path)
@@ -1090,6 +1226,18 @@ module Ovallsp
 
       def record_open_surface(node)
         if (kind = method_defining_surface(node))
+          # **The name, when there is one** (`024.116`). `define_method(:x)`
+          # names its method as plainly as a `def` does, and recording
+          # only the open surface meant calls to `x` stopped being
+          # reported while hover, go-to-definition and completion all
+          # answered nothing -- silence instead of an answer, which is the
+          # safe direction and not the right one.
+          #
+          # The surface still opens either way: a *computed* name is
+          # exactly what this parser cannot read, and one such call in the
+          # body makes the whole owner unenumerable however many literal
+          # ones sit beside it.
+          record_defined_method_name(node, kind)
           return @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
         end
 
@@ -1117,7 +1265,32 @@ module Ovallsp
         kind = open_surface_kind(node)
         return if kind.nil?
 
-        @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
+        owner = Index::SymbolId.bare_name(current_owner)
+        @open_surface_owners << [owner, kind]
+
+        # **And the other side, for a receiverless call.** A macro written
+        # bare in a class body is itself a call on that owner's class
+        # side, and one this engine could not identify -- so the same
+        # evidence that says "I cannot enumerate this owner's instance
+        # members" says "I cannot enumerate its class members either",
+        # because whatever supplies the macro is exactly the thing that
+        # could not be read. Without it the engine gave two contradictory
+        # answers about one fact: it declined to report anything the macro
+        # *might* define and reported the macro itself (`024.110`).
+        #
+        # **0.2.11 shipped this line and rolled it back the same
+        # release**, because `#open_surface?` then read it through the
+        # `Class`/`Module`/`Object` tail of every chain: one bare
+        # `alias_method` in a `core_ext` file switched off `Foo.bar`
+        # checking for the whole workspace, 117 constant-receiver findings
+        # to 0 over 16 gems. That reader ignores a synthesised link now,
+        # so this says something about *this owner* and nothing about
+        # anyone who merely inherits from `Module`.
+        #
+        # Only receiverless: `Other.class_eval { }` says nothing about
+        # this owner's class side, and `singleton_class.send` is already
+        # about the class side alone.
+        @open_surface_owners << [owner, :singleton] if node.receiver.nil? && kind == :instance
       end
 
       # Which surface the call could have added to, or nil for a call that
@@ -1145,6 +1318,17 @@ module Ovallsp
         end
       end
 
+      def record_defined_method_name(node, kind)
+        name = attribute_name(node.arguments&.arguments&.first)
+        return unless name
+
+        add_generated_method(
+          node: node, name: name, kind: kind == :singleton ? :singleton_method : :instance_method,
+          return_type: Types::UNKNOWN, origin: node.name, visibility: nil,
+          parameters: []
+        )
+      end
+
       def record_attribute_methods(node)
         return unless node.arguments
         # No guard, deliberately: `attr_*` is attributed exactly as `def`
@@ -1165,7 +1349,16 @@ module Ovallsp
         # rather than inventing one. That is the direction this engine
         # chooses everywhere else. 024.31 records the shared defect.
 
-        singleton = @cref.declares_singleton?
+        # **`#surface_for`, not `#declares_singleton?`.** They differ in
+        # exactly one place and it is this one: inside a `def` written in
+        # `class << self`, the cref is still the singleton class, but
+        # self *at run time* is the class object -- so `attr_accessor`
+        # there is `Module#attr_accessor` and defines an instance
+        # accessor. `S.attr_x` was reported on code that runs (`024.34`).
+        owner_for_attrs, side = @cref.surface_for
+        return if owner_for_attrs.nil?
+
+        singleton = side == :singleton
         # `private attr_reader :x` is one call taking another as its
         # argument (Ruby 3.0+). The open section still applies when it is
         # written on its own line.

@@ -250,7 +250,12 @@ module Ovallsp
         # ivar that may not be there. By name rather than by location: a
         # file defensive about a name is defensive about it, and the typo
         # this check exists for appears in no `defined?`.
+        # A failure here would leave `tested` empty, which reads as "this
+        # file is defensive about nothing" and turns every `defined?(@x)`
+        # into a report. Enumerating is what decides whether to assert,
+        # so a failure to enumerate has to decline (`024.122`).
         tested = ivar_names_tested_for_existence(document)
+        return [] if tested.nil?
 
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :ivar
@@ -268,12 +273,15 @@ module Ovallsp
       end
 
       # Every ivar named inside a `defined?`, in one parse of the document.
+      # Nil, not `[]`, when it cannot look: see the caller. `[]` is the
+      # answer for a file that tests nothing, and the two must not be the
+      # same value.
       def ivar_names_tested_for_existence(document)
         collector = DefinedIvarCollector.new
         Prism.parse(document.text).value.accept(collector)
         collector.names
       rescue StandardError
-        []
+        nil
       end
 
       class DefinedIvarCollector < Prism::Visitor
@@ -687,10 +695,16 @@ module Ovallsp
         end
       end
 
+      # **`true` on failure, not `false`** (`024.122`). This decides
+      # whether to *report* an unresolved constant, and `false` means
+      # "RBS does not know this name" -- which is an assertion about the
+      # user's code made from a question that could not be asked. Failing
+      # towards "known" declines instead, which is the direction §0 asks
+      # for and the one every other refusal in this file takes.
       def rbs_known_constant?(name, signatures)
         !signatures.ancestors(qualified_owner(name)).empty?
       rescue StandardError
-        false
+        true
       end
 
       def unknown_route_helper_findings(summary, resolved_locations, context)

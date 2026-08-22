@@ -119,8 +119,17 @@ RSpec.describe "Ovallsp::ParserService and the cref a declaration is recorded ag
       expect(cref_at("class Widget\n  def go\n    marker\n  end\nend\n", "marker").defines_surface?).to be(false)
     end
 
+    # **Somebody else's block, meaning one whose receiver this parser
+    # cannot vouch for.** A block iterating a *literal* is the class
+    # body's own loop and shares its cref as of 0.2.13 -- Ruby applies a
+    # `private`, a `module_function` and an `attr_accessor` written there
+    # to the enclosing body (`024.117`). A constant could be anything.
     it "cannot, inside somebody else's block" do
-      expect(cref_at("class Widget\n  [1].each { marker }\nend\n", "marker").defines_surface?).to be(false)
+      expect(cref_at("class Widget\n  SOME.each { marker }\nend\n", "marker").defines_surface?).to be(false)
+    end
+
+    it "can, inside the class body's own loop over a literal" do
+      expect(cref_at("class Widget\n  [1].each { marker }\nend\n", "marker").defines_surface?).to be(true)
     end
 
     it "cannot at the top level, where there is no owner" do
@@ -131,6 +140,53 @@ RSpec.describe "Ovallsp::ParserService and the cref a declaration is recorded ag
       cref = cref_at("class Widget\n  class << self\n    marker\n  end\nend\n", "marker")
 
       expect([cref.defines_surface?, cref.surface_kind]).to eq([true, :singleton])
+    end
+  end
+
+  # `024.34`. `attr_accessor` written inside a `def` inside `class << self`
+  # runs when that method runs, and defines an *instance* accessor on the
+  # class -- `self` at that moment is the class object, and `attr_accessor`
+  # is `Module#attr_accessor`. Ruby:
+  #
+  #   $ ruby -e '
+  #   class S
+  #     class << self
+  #       def setup
+  #         attr_accessor :attr_x
+  #       end
+  #     end
+  #   end
+  #   S.setup
+  #   p [S.new.respond_to?(:attr_x), S.respond_to?(:attr_x)]
+  #   '
+  #   # => [true, false]
+  #   # ruby 3.4.10
+  #
+  # `#declares_singleton?` says `true` there, because the *cref* is still
+  # the singleton class -- which is the right answer to a different
+  # question, the one a bare `def` asks. `#surface_for` is the question a
+  # recorder actually has, and it is the only one they can ask now.
+  describe "#surface_for, the question a recorder has" do
+    it "names the instance side inside a def written in `class << self`" do
+      cref = cref_at("class S\n  class << self\n    def setup\n      marker\n    end\n  end\nend\n", "marker")
+
+      expect(cref.surface_for).to eq(["::S", :instance])
+    end
+
+    it "names the singleton side directly in `class << self`" do
+      cref = cref_at("class S\n  class << self\n    marker\n  end\nend\n", "marker")
+
+      expect(cref.surface_for).to eq(["::S", :singleton])
+    end
+
+    it "names the instance side in an ordinary class body" do
+      cref = cref_at("class S\n  marker\nend\n", "marker")
+
+      expect(cref.surface_for).to eq(["::S", :instance])
+    end
+
+    it "names nothing at the top level, where there is no owner" do
+      expect(cref_at("marker\n", "marker").surface_for).to be_nil
     end
   end
 

@@ -200,6 +200,36 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0213">
+          <div class="tl-version">
+            <span class="v">0.2.13</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>What a class&rsquo;s own body says, and failures that stop being silent</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A class that runs a macro this extension cannot read no longer reports the macro itself.</strong> It already declined to report anything the macro might define; reporting the call that opened that door was one fact answered two ways. Over 1,659 files of 16 installed gems, false <code>unknown-method</code> reports fell from 506 to 389 &mdash; and the one real latent <code>NoMethodError</code> in that corpus is still reported.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>def Foo.bar</code> is a class method</strong>, and <code>attr_accessor</code> inside a <code>def</code> inside <code>class &lt;&lt; self</code> is an instance one &mdash; both were recorded the other way round, so both answers were inverted.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A <code>Struct.new</code> or <code>Class.new</code> block&rsquo;s methods stop appearing on the class around it</strong>, and <code>define_method(:name)</code> puts the name in hover, go to definition and completion instead of only silencing reports about it.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            No capability is added. Every fix here is one shape of a single
+            question: when this engine cannot enumerate something, does it say
+            so, or answer as though nothing went wrong? All 158 <code>rescue</code>
+            statements in the Core Server were enumerated and each now records
+            what it does with the failure &mdash; three were changed because their
+            fallback was the reporting value.
+          </p>
+        </article>
+
         <article class="tl-item" id="v0212">
           <div class="tl-version">
             <span class="v">0.2.12</span>
