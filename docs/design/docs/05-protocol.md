@@ -189,9 +189,15 @@ pluginやRails内部の変化でsnapshot generationが変わったとき。
 
 ## 6. Cancellation
 
-Coreは長いrequestに`$/cancelRequest`互換notificationを送る。
+**未実装。** `$/cancelRequest` 相当のものは Core にも Agent にも無い
+(`grep -r cancelRequest core/lib vscode/src` が0件)。長い request の
+唯一の打ち切り手段は `AgentProcessManager` の request timeout であり、
+それは応答を待つのをやめるだけで、Agent 側の処理は走り続ける。
 
-Agentはrequestごとのtokenを保持する。Rails reflection APIが中断不能な場合、結果送信だけを破棄する。
+この節はかつて実装済みの仕様として書かれていた。0.2.14 で事実に
+書き換えたが、節そのものは残す — 番号を詰めると `section 7` を指す
+ソースコメントが壊れるためであり、また「無い」ことは仕様の一部だから
+である。
 
 ## 7. Message ordering
 
@@ -203,13 +209,24 @@ Agentはrequestごとのtokenを保持する。Rails reflection APIが中断不�
 
 ## 8. Limits
 
-- max message: 32MB
-- max model batch: 500
-- max route count: 100,000
-- max error backtrace: 50 frames
-- strings are UTF-8
+**この4つの数値は実装されていない。** 0.2.14 に確認した時点で、
+`core/lib` と `vscode/src` のどこにも message サイズ上限・model batch
+上限・route 数上限・backtrace フレーム数上限は無い。`coreProcess.ts` の
+`SNAPSHOT_MAX_BUFFER_BYTES = 32 * 1024 * 1024` は名前が似ているが、
+`ps` の出力を読む `execFile` の `maxBuffer` であってプロトコルとは
+関係がない。
 
-超過時はpartial resultまたは明示error。
+実際に効いている制約は2つだけである:
+
+- **文字列は UTF-8**。これは本当で、`agent.rb` が明示エンコーディングで
+  読み書きする。
+- **request timeout**。`AgentProcessManager#request` が待つのをやめる。
+  超過時に "partial result または明示 error" が返るという記述も
+  実装されていない — 返るのは timeout であり、呼び出し側は
+  `MemberAvailability` の `unknown` に落とす。
+
+上限を入れるならこの節を仕様として書き直してから入れること。逆順に
+なっていたのが 0.2.14 以前の状態である。
 
 ## 9. LSP custom methods
 

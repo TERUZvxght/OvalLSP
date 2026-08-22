@@ -36,130 +36,27 @@ Rails Runtime Agent内で動作する。
 
 Observation Runner内で動作する。初期版では非公開。
 
-## 3. Manifest
+## 3〜8. API・Manifest・Discovery — `plugin-sdk.md` を見ること
 
-```yaml
-name: aasm
-version: 0.1.0
-protocol_version: 1
-static_entrypoint: lib/ovallsp/plugins/aasm/static.rb
-runtime_entrypoint: lib/ovallsp/plugins/aasm/runtime.rb
-requires:
-  gems:
-    aasm: ">= 5.0"
-capabilities:
-  - generated_methods
-  - runtime_model_metadata
-```
+**この6節にあった仕様は実装されなかった。** 0.2.14 でまとめて削除した。
+削除した内容と、実際に Task 018 が実装したものの対応:
 
-## 4. Static Plugin API
+| 旧 §  | 書かれていたもの | 実際 |
+|---|---|---|
+| §3 | YAML の `plugin.yml` | JSON の `plugin-manifest.json`。フィールド名はほぼ同じ。schema は `docs/design/schemas/plugin-manifest.schema.json` |
+| §4 | `register_index_enhancer` / `register_call_rule` / `register_type_provider` / `register_definition_provider` / `register_diagnostic_provider` | **5つとも存在しない。** 実際の static API は `register_declarations` / `register_generic_rules` / `register_diagnostics` の3つ(`plugins/static_context.rb`) |
+| §5 | `register_snapshot_section` と `register_request` | 前者は実在、後者は存在しない。runtime API は `register_snapshot_section` / `register_reload_hook` の2つ(`plugins/runtime_context.rb`) |
+| §6 | `Fact = Data.define(:kind, :subject, :attributes, :location, :evidence)` | この型は存在しない。plugin が渡すのは `Index::Declaration` と `Index::GeneratedMethodFact` で、どちらも他の索引寄与と同じ型である |
+| §7 | `Ovallsp::Plugin.require_api!(">= 1.0", "< 2.0")` による semantic versioning | 存在しない。互換性は整数1つの完全一致(`Manifest::CURRENT_PROTOCOL_VERSION`)。失敗隔離は実在し、`plugin-sdk.md` の "Failure isolation" が正確 |
+| §8 | workspace → bundle 内 gem → user 設定、の3段 discovery | **実装されていないだけでなく、意図的に逆の決定がされている。** Core は `initializationOptions.pluginManifests` にクライアントが明示列挙した manifest しか読まない — 「自動検出したGemだけを理由にコード実行しない」(`server.rb`)。この節の通りに実装すると、その決定を取り消すことになる |
 
-```ruby
-class Plugin
-  def activate(context)
-    context.register_index_enhancer(...)
-    context.register_call_rule(...)
-    context.register_type_provider(...)
-    context.register_definition_provider(...)
-    context.register_diagnostic_provider(...)
-  end
+**正確な記述は [`docs/design/plugin-sdk.md`](../plugin-sdk.md) にある**
+— Manifest、static/runtime plugin、loading、failure isolation、動く例。
+公開 SDK 文書であり、実装と一緒に書かれている。
 
-  def deactivate
-  end
-end
-```
-
-### register_index_enhancer
-
-DSL callからDeclaration/Factsを返す。
-
-```ruby
-context.register_index_enhancer(
-  receiver: "ActiveRecord::Base",
-  method: :belongs_to
-) do |call, semantic_context|
-  # GeneratedDeclaration[]を返す
-end
-```
-
-### register_call_rule
-
-既知メソッドの型関係を登録する。
-
-```ruby
-context.register_call_rule(owner: "ActiveRecord::Relation", method: :first) do |receiver, args|
-  receiver.type_argument(0).nilable
-end
-```
-
-### register_type_provider
-
-symbolまたはexpressionへ追加Type Evidenceを返す。
-
-### register_definition_provider
-
-generated methodからDSL declarationへ移動するために使う。
-
-## 5. Runtime Plugin API
-
-```ruby
-class RuntimePlugin
-  def activate(registry)
-    registry.register_snapshot_section("aasm") { ... }
-    registry.register_request("modelStates") { |params| ... }
-  end
-end
-```
-
-Runtime Pluginはstdoutへ書かない。返り値はJSON serializableでなければならない。
-
-## 6. Fact形式
-
-```ruby
-Fact = Data.define(
-  :kind,
-  :subject,
-  :attributes,
-  :location,
-  :evidence
-)
-```
-
-例:
-
-```ruby
-Fact.new(
-  kind: :generated_method,
-  subject: "::Order#may_pay?",
-  attributes: { return_type: "Boolean" },
-  location: dsl_location,
-  evidence: Evidence.new(source: :plugin, authority: 90, ...)
-)
-```
-
-Pluginが直接SymbolIndexへ書かないことで、generation rollbackとplugin disableを可能にする。
-
-## 7. 互換性
-
-Plugin APIはsemantic versioningする。
-
-```ruby
-Ovallsp::Plugin.require_api!(">= 1.0", "< 2.0")
-```
-
-- incompatible pluginは起動失敗させず無効化する。
-- plugin例外はplugin IDとrequestを記録する。
-- automatic requestで一定時間を超えたpluginをsession中無効化できる。
-
-## 8. Discovery
-
-優先順位:
-
-1. workspace `.ovallsp/plugins/`
-2. bundle内gemの`ovallsp/plugin.yml`
-3. user設定で明示したpath
-
-Workspace Trustがない場合、workspace pluginとruntime pluginをロードしない。
+**なぜ表として残すのか。** 単に消すと、次に読む人が「§4 の API は
+まだ無いから作ろう」と読み違える余地が残る。実装されなかったのではなく
+**別の形で実装された**ということが、この6節について知るべきことである。
 
 ## 9. Built-in adapters
 

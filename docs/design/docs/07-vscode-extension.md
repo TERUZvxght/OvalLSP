@@ -33,19 +33,22 @@ vitest
 {
   "activationEvents": [
     "onLanguage:ruby",
-    "workspaceContains:Gemfile"
+    "workspaceContains:Gemfile",
+    "workspaceContains:**/*.erb"
   ]
 }
 ```
 
-実際のCore起動はRuby workspace判定後に行う。
+`*.erb` が3つ目にある — ERB しか開いていない workspace でも起動する
+必要があるため。この節はかつて2つしか挙げていなかった。
 
-判定候補:
-
-- `.ruby-version`
-- `Gemfile`
-- `*.gemspec`
-- `config/application.rb`
+**「実際のCore起動はRuby workspace判定後に行う」という段は削除した。**
+`.ruby-version` / `*.gemspec` / `config/application.rb` を見て起動を
+決める処理は存在しない。activation は `activationEvents` がすべてで、
+その後は `startupGate.ts` が Ruby 実行環境を解決できるかどうかだけを
+見る。`.ruby-version` は `rubyResolver.ts` が **どの Ruby を使うか**を
+決めるために読むもので、workspace かどうかの判定ではない — 名前が
+似ているために取り違えられていた。
 
 ## 4. Language Client
 
@@ -72,65 +75,69 @@ MVPでは1とsystem Rubyだけでもよい。環境解決は独立moduleにす�
 
 ## 5. Status Bar
 
-状態:
+`vscode/src/clientPresentation.ts` の `STATUS_LABELS` が唯一の定義:
 
 ```text
-OvalLSP: Starting
-OvalLSP: Static
-OvalLSP: Rails loading
-OvalLSP: Ready
-OvalLSP: Rails stale
-OvalLSP: Rails failed
-OvalLSP: Crashed
+$(sync~spin) OvalLSP: Indexing
+$(check) OvalLSP: Ready (static)
+$(check) OvalLSP: Ready (Rails)
+$(warning) OvalLSP: Agent unavailable
+$(error) OvalLSP: Configuration error
 ```
 
-クリック時にQuick Pick:
-
-- Show status
-- Restart Core
-- Restart Rails Agent
-- Open logs
-- Clear caches
-- Explain current symbol
+クリックで開くのは Quick Pick ではなく Output channel である。
 
 ## 6. Commands
 
+`vscode/package.json` の `contributes.commands` が唯一の定義:
+
 ```text
-ovallsp.restart
-ovallsp.restartRuntimeAgent
-ovallsp.showStatus
-ovallsp.showEvidence
-ovallsp.explainType
-ovallsp.clearCaches
-ovallsp.runObservation
-ovallsp.openLogs
+ovallsp.restartServer
+ovallsp.restartAgent
+ovallsp.reindexWorkspace
+ovallsp.showLogs
+ovallsp.showEnvironmentDiagnostics
+ovallsp.showVersionInformation
+ovallsp.observation.runTests
+ovallsp.observation.clearTypes
+ovallsp.observation.showEvidence
 ```
 
 ## 7. Settings
+
+`vscode/package.json` の `contributes.configuration` が唯一の定義:
 
 ```jsonc
 {
   "ovallsp.enabled": true,
   "ovallsp.ruby.command": null,
-  "ovallsp.rails.enabled": true,
-  "ovallsp.rails.environment": "development",
-  "ovallsp.rails.bootTimeoutMs": 60000,
-  "ovallsp.runtimeObservation.enabled": false,
-  "ovallsp.diagnostics.strictness": "safe",
-  "ovallsp.completion.showUncertain": true,
-  "ovallsp.trace.server": "off",
-  "ovallsp.plugins.enabled": []
+  "ovallsp.rubyExecutablePath": null,
+  "ovallsp.server.path": null,
+  "ovallsp.observation.testCommand": null
 }
 ```
 
 ## 8. Workspace Trust
 
-untrusted workspace:
+`vscode/package.json` の `capabilities.untrustedWorkspaces` が実体で、
+`supported: "limited"` である。
 
-- Core static serverは起動可能。
-- Bundler command、Rails Agent、runtime plugin、observationを起動しない。
-- Statusを`Static (untrusted workspace)`とする。
-- trustを求める通知は一度だけ。
+- 静的解析(parse・completion・definition)は untrusted でも動く。
+- workspace 自身の Rails/Bundler コードを実行する Runtime Agent は、
+  trust 後にしか起動しない。
+- **バイナリやコマンドを指すsettingは、trust するまで workspace scope
+  から無視される** — `restrictedConfigurations` に
+  `ovallsp.rubyExecutablePath` / `ovallsp.ruby.command` /
+  `ovallsp.server.path` / `ovallsp.observation.testCommand` の4つが
+  列挙されている。これは untrusted な folder が「何が実行されるか」を
+  選べないということであり、この節がかつて書いていた内容より強い。
+
+status bar は `Static (untrusted workspace)` にはならない — そのような
+文字列は存在しない。§5 の5つのうち Rails 由来でないものが出る。
+
+`vscode/src/test/unit/workspaceTrust.test.ts` が manifest 側を
+fail-closed で pin する: 設定が増えたら restricted 宣言か「実行に
+影響し得ない」論証のどちらかを強制する。
 
 ## 9. Ruby LSPとの共存
 
@@ -154,38 +161,39 @@ untrusted workspace:
 
 ## 10. Custom UI
 
-### Explain Type
+### Evidence
 
-現在式についてWebviewではなくMarkdown hover/Outputで以下を表示する。
+`ovallsp.observation.showEvidence` が実在する。observation で観測した
+型の evidence を Output channel へ出す。
 
-```text
-Expression: user.company.orders.first
-Type: Order | nil
-Evidence:
-1. user -> User (assignment, 100%)
-2. User#company -> Company (Rails association, 98%)
-3. Company#orders -> Relation[Order] (Rails association, 98%)
-4. Relation[T]#first -> T | nil (built-in rule, 100%)
-Runtime snapshot: generation 12, fresh
-```
+**"Explain Type" は存在しない。** かつてこの節にあった
+`Expression:` / `Type:` / `Evidence:` の整形出力と、そこに書かれていた
+`user.company.orders.first` の推論チェーン例は、実装されなかった仕様
+である。近いものは通常の hover で、書式は違う。
 
 ### Evidence decorations
 
-常時表示しない。command実行時だけにする。
+常時表示しない。これは実装どおり — decoration は command 実行時だけ。
 
 ## 11. Crash policy
 
-- Core crash: 10秒内最大3回まで自動再起動
-- Rails Agent crash: Coreが管理。Extensionは状態通知のみ受ける
-- crash loop: 自動停止しログを案内
+**「10秒内最大3回」という自動再起動ポリシーは実装されていない。**
+再起動は `vscode-languageclient` 既定の挙動と、利用者が
+`OvalLSP: Restart Server` を押すことによる。
+
+実在するのは Core が Agent に対して持つ側のポリシーで、
+`AgentProcessManager` の再起動と `mark_unavailable` — Agent が落ちても
+Core は静的解析を続け、status bar が `Agent unavailable` になる
+(`docs/design/docs/02-architecture.md`)。
 
 ## 12. Packaging
 
-Core Ruby codeをVSIXへ同梱する方式と、gemとして導入する方式を分離する。
+**この節は [ADR-0004](../adrs/0004-vsix-bundles-core-with-dual-run-mode.md)
+が置き換えた。** かつてここにあった「VSIXにbootstrap Ruby scriptを同梱し、
+実体はRubyGemsからversion固定で導入」は、検討の結果**採らなかった**方の
+案である。
 
-MVP推奨:
-
-- VSIXにbootstrap Ruby scriptを同梱
-- 実体はRubyGemsからversion固定で導入、または開発中はrepository path指定
-
-release時にはsupply-chainとoffline利用を再検討する。
+実際に採ったのは、Coreのsourceとgem payloadをVSIXへ同梱し、bundle-free
+起動とproject Gemfile統合の両方を持たせる方式。理由と経緯はADR-0004に
+ある。ADRが決定の記録であり、この節はその前段の検討メモだった、という
+関係になる。

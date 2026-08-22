@@ -7416,10 +7416,39 @@ Every check was about an entry's **metadata**. Nothing was about its
 well-formed by every definition the tree had. Found by an unrelated
 grep printing the same sentence at two line numbers.
 
-**The countermeasure** is one line of the body that must appear exactly
-once: an entry states one `**Area:**`. That is enforced now, and the
-example was checked by planting the actual defect — the same block
-pasted at the same place — rather than a synthetic one.
+**The first countermeasure** was one line of the body that must appear
+exactly once: an entry states one `**Area:**`. Checked by planting the
+actual defect rather than a synthetic one.
+
+### It happened again the same day, and that moved the countermeasure
+
+Rewriting `07-vscode-extension.md`'s §12, the end boundary passed to the
+same helper was `"\n"` — which matches at the top of the file. The
+result was **the entire document pasted twice**. Same failure, different
+file, an hour apart.
+
+So the `**Area:**` rule was aimed at the symptom: it guards one file, and
+the class is "a scripted edit whose boundary silently misses". The
+countermeasure is now `core/spec/meta/duplicate_headings_spec.rb` — **no
+tracked Markdown document states the same heading twice** — which is the
+check both instances would have failed, and which needs no rule about how
+edits are performed.
+
+Two things it had to get right, and both were found by running it:
+
+- **Fenced blocks are not headings.** `10-ai-execution-guide.md` quotes a
+  task template and a report template that each contain `## Tests`. A
+  line-based scan reports that file, and the natural response would be to
+  exempt it — `024.126`'s trap exactly. It tracks fences instead.
+- **It found a real one immediately.**
+  `040-0.2.10-what-an-answer-was-computed-from.md` ended with a second
+  `## Review` heading and its opening paragraph, and nothing after it —
+  an orphaned stub of the section that already exists 100 lines above.
+  Removed.
+
+*Two rounds, one place, then a mechanical countermeasure at the level of
+the class rather than the instance — `CLAUDE.md`'s rule, applied to a
+defect in the documents rather than in the engine.*
 
 **Why not "be careful with slices".** Because the failure mode is
 silent: `find` returning `-1` produces a *plausible* result, and the
