@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**150 entries below** <!-- measured: register-entries = 150 -->,
+**151 entries below** <!-- measured: register-entries = 151 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -299,8 +299,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.127`](#024127-hover-answers-an-empty-string-where-lsp-expects-null) | open | 0.3.0 | Hover answers an empty string where LSP expects null |
 | [`024.128`](#024128-integer-arithmetic-answers-a-four-way-union) | open | 0.3.0 | Integer arithmetic answers a four-way union |
 | [`024.129`](#024129-no-undefined-method-report-on-a-core-library-receiver) | open | 0.3.0 | No undefined-method report on a core-library receiver |
-| [`024.130`](#024130-a-hover-label-drops-the-namespace-when-the-name-was-written-bare) | open | 0.3.0 | A hover label drops the namespace when the name was written bare |
-| [`024.131`](#024131-b-nil-b-x-hovers-nothing) | open | 0.3.0 | `b = nil; b ||= "x"` hovers nothing |
+| [`024.130`](#024130-a-hover-label-drops-the-namespace-when-the-name-was-written-bare-withdrawn-it-does-not-reproduce) | fixed | 0.2.14 | A hover label drops the namespace when the name was written bare — w… |
+| [`024.131`](#024131-after-on-a-nil-local-hover-answers-nil-a-wrong-answer-not-an-absent-one) | open | 0.3.0 | After `||=` on a nil local, hover answers `nil` — a wrong answer, no… |
 | [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 0.3.0 | A scope defined in a concern's `included do` has no type |
 | [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | open | 0.3.0 | A positional argument to a keyword-only method reads as nonsense |
 | [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | open | 0.3.0 | `wait_until_ready` never returns for a non-Rails workspace |
@@ -321,6 +321,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.149`](#024149-a-review-harness-that-reports-nothing-found-when-its-own-post-processing-crashed) | fixed | 0.2.14 | A review harness that reports "nothing found" when its own post-proc… |
 | [`024.150`](#024150-agents-md-paraphrases-claude-md-and-the-paraphrase-drifts) | open | 0.3.0 | `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts |
 | [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices) | open | 0.3.0 | A check can be disabled, and no check notices |
+| [`024.152`](#024152-a-leak-check-counted-every-descriptor-in-the-process-and-flaked-under-load) | fixed | 0.2.14 | A leak check counted every descriptor in the process, and flaked und… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -7187,7 +7188,53 @@ because another editor flags the same typo.
 
 **Was one of nine bullets under `024.90` until 0.2.14.**
 
-## 024.130 A hover label drops the namespace when the name was written bare
+## 024.130 A hover label drops the namespace when the name was written bare — withdrawn, it does not reproduce
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Withdrawn rather than fixed: the defect is not there. It was
+  published to users as a limitation in both languages between the
+  0.2.14 split and this correction, which is the only user-visible
+  half and it was a false one.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `docs/design/tasks/024-deferred-review-findings.md`
+
+The claim was: in `Billing::Invoice`, `Order.new` hovers `Order` while
+`Shipping::Order.new` hovers `Shipping::Order`.
+
+**Driven at 0.2.14 and it does not happen.** `QueryService#type_at` — the
+call `#hover_result` makes — returns `Billing::Order` for the bare name,
+across four shapes of the scenario: the two classes in separate files,
+both nested in one file, the compact `class Billing::Order` form, and
+hovering the constant itself. `#hover_lines` renders `type.to_s`, so the
+qualified name is what a user sees. Probably fixed by 0.2.5, whose entry
+records that it "stopped RBS type names losing their namespace".
+
+### How a claim nobody had checked came to be published
+
+It was one of nine bullets in `024.90`, a grab-bag written several
+releases earlier. **0.2.14 split that entry into nine numbered ones and
+re-verified none of them** — the split gave each bullet a number, a
+`target:`, a `user-visible: yes`, and a paragraph in
+`docs/KNOWN_LIMITATIONS.md` and `.ja.md`.
+
+*Splitting a stale grab-bag does not make its contents true. It gives
+nine unverified claims the authority of numbered entries, and publishes
+the user-visible ones.* Round 3 caught this one; the other eight were
+then driven too — **seven reproduce exactly as written**, and `024.131`
+was wrong in a different and worse direction.
+
+**The rule this buys:** an entry may not be promoted — split out, given
+a target, or marked user-visible — without its reproduction being run
+against the tree it is promoted into. Promotion is a claim.
+
+## 024.131 After `||=` on a nil local, hover answers `nil` — a wrong answer, not an absent one
 
 ```yaml
 status: open
@@ -7196,32 +7243,38 @@ user-visible: yes
 target: 0.3.0
 ```
 
-**Area:** `core/lib/ovallsp/server.rb` (`#hover_result`), `core/lib/ovallsp/local_inferencer.rb`
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`#eval_type`)
 
-In `Billing::Invoice`, `Order.new` hovers `Order` while
-`Shipping::Order.new` hovers `Shipping::Order` — so with two `Order`s in
-the workspace the label does not say which was meant.
-
-Adjacent to `024.81`, which is about *resolving* such a name; this is
-about *labelling* one that resolved.
-
-**Was one of nine bullets under `024.90` until 0.2.14.**
-
-## 024.131 `b = nil; b ||= "x"` hovers nothing
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.0
+```ruby
+b = nil
+b ||= "x"
+b            # hovers `nil`
 ```
 
-**Area:** `core/lib/ovallsp/local_inferencer.rb`
+At that third line `b` is a `String`. The engine answers `nil`.
 
-The `||=` write is not joined with the preceding `nil` assignment, so
-the local has no type at the position after it.
+**This entry said "hovers nothing" until 0.2.14 round 3 drove it.** The
+difference is the whole of section 0: *a wrong answer is worse than no
+answer.* An empty hover is the product declining; `nil` for a local that
+is definitely a `String` is the product asserting something false, and
+the entry's own wording argued for the lower of the two triages.
 
-**Was one of nine bullets under `024.90` until 0.2.14.**
+**The stated mechanism was wrong too.** It said the `||=` write "is not
+joined with the preceding `nil` assignment, so the local has no type at
+the position after it". The local *does* have a type — `Types::NilType`
+— and nothing is joined or attempted: `#eval_type` has cases for
+`Prism::LocalVariableWriteNode` and `InstanceVariableWriteNode` and **no
+case at all** for `LocalVariableOrWriteNode`, so the `||=` is not seen
+and the earlier `nil` stands unchallenged.
+
+**Direction:** `a ||= b` is `a || (a = b)`, so the type after it is the
+union of the non-nil part of `a` and the type of `b` — here `String`.
+The missing `eval_type` case is the whole of it; the union rule already
+exists for branches.
+
+**Was one of nine bullets under `024.90` until 0.2.14**, and was
+published to users as an absent answer for as long as that entry stood.
+`024.130` records what the split did and the rule it bought.
 
 ## 024.132 A scope defined in a concern's `included do` has no type
 
@@ -8207,6 +8260,57 @@ loop at three rounds finding defects and then says to ship with what is
 open written down — a 55-finding sweep started at round 2 is exactly the
 unbounded loop that rule exists to prevent, and the countermeasures
 above are worth more than the patches would be.*
+
+
+## 024.152 A leak check counted every descriptor in the process, and flaked under load
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  A test defect. Nothing a user meets, and the guarantee it pins --
+  that a failed plugin load leaks no pipe -- was never in doubt.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `core/spec/ovallsp/plugins/loader_spec.rb`
+(`#load_static kills and reaps the plugin child …`)
+
+Found by a full-suite run failing while eight verification agents were
+saturating the machine. It passed alone five times, passed under the
+whole plugins directory, and passed under **its own failing seed** —
+so it is not order-dependent, it is load-dependent.
+
+The measurement was:
+
+```ruby
+before_fds = Dir.children("/dev/fd").size
+...
+leaked = Dir.children("/dev/fd").size - before_fds
+```
+
+`/dev/fd` is the **whole process's** descriptor table. Anything else
+opening or closing one between the two reads moves the delta —
+rspec's own output, a lazily-opened file, a finalized IO. On an idle
+machine nothing does; under load something does.
+
+**Fixed by asking the question the example is about.** What
+`#run_isolated` can leak is a *pipe pair*, so it now takes the set of
+open **pipe** descriptors before and after and requires the difference
+to be empty. Other activity in the process stops mattering, and a
+failure names the descriptors instead of only counting them.
+
+Still catches the real thing: deleting the two
+`ChildProcess.close_quietly` calls from the `ensure` gives
+*"#run_isolated leaked 1 pipe descriptor(s) (6)"*.
+
+*`CLAUDE.md` says a flake found while working on something else is
+fixed in the same session rather than deferred. This one is also worth
+its own entry because the defect is a measurement whose scope was wider
+than its question — the same shape as several of round 2's findings,
+arriving in a spec rather than a check.*
 
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)

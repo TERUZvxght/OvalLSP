@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "set"
+
 RSpec.describe Ovallsp::Plugins::Loader do
   let(:logger) { instance_double(Ovallsp::Logger, info: nil, warn: nil, error: nil) }
   let(:fixtures_root) { File.expand_path("../../fixtures/plugins", __dir__) }
@@ -277,12 +279,34 @@ RSpec.describe Ovallsp::Plugins::Loader do
     # own docs name Errno::EMFILE as reachable. Pinned below (round 15,
     # stress-testing round 14's own regression test, the same way round 14
     # stress-tested round 13's and round 13 stress-tested round 12's).
+    # **Pipes, by fd number — not a count of every descriptor.**
+    #
+    # This measured `Dir.children("/dev/fd").size` before and after, which
+    # is a whole-*process* count: anything else opening or closing a
+    # descriptor between the two reads moves the delta. Under a loaded
+    # machine it did, and the example failed in a full-suite run while
+    # passing alone and under its own failing seed. It is the leak of a
+    # *pipe pair* that `#run_isolated` can cause, so that is what this
+    # asks about — other activity in the process stops mattering, and a
+    # failure now names the descriptors instead of only counting them.
+    #
+    # `rescue nil` per fd: `/dev/fd` is a live view, and an entry can be
+    # gone by the time it is stat'd, which is the same race one level
+    # down.
+    def open_pipe_fds
+      Dir.children("/dev/fd").select do |fd|
+        File.stat("/dev/fd/#{fd}").pipe?
+      rescue SystemCallError
+        false
+      end.to_set
+    end
+
     it "kills and reaps the plugin child even when the read path fails in a way #guarded swallows" do
       forked = nil
       allow(Process).to receive(:fork).and_wrap_original { |original, &blk| forked = original.call(&blk) }
       allow(Timeout).to receive(:timeout).and_raise(Errno::EIO)
 
-      before_fds = Dir.children("/dev/fd").size
+      before_pipes = open_pipe_fds
       contexts = :unset
       expect { contexts = loader.load_static([manifest_path("slow")]) }.not_to raise_error
 
@@ -293,8 +317,10 @@ RSpec.describe Ovallsp::Plugins::Loader do
                                       "plugin child #{forked} survived #load_static -- nothing tracks its pid any more"
       # Deliberately no GC.start: an unreferenced IO is eventually finalized,
       # which would mask the leak here exactly as it masked it in production.
-      leaked = Dir.children("/dev/fd").size - before_fds
-      expect(leaked).to eq(0), "#run_isolated leaked #{leaked} descriptor(s) -- its pipe ends were never closed"
+      leaked = open_pipe_fds - before_pipes
+      expect(leaked).to be_empty,
+                        "#run_isolated leaked #{leaked.size} pipe descriptor(s) (#{leaked.join(', ')}) -- " \
+                        "its pipe ends were never closed"
     ensure
       kill_leaked_child(forked)
     end

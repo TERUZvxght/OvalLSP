@@ -37,11 +37,21 @@ require "shellwords"
 ROOT = File.expand_path(ENV.fetch("CHECK_DOC_LINKS_ROOT", File.expand_path("..", __dir__)))
 
 # `docs/<NN>-<name>.md` is an established shorthand for
-# `docs/design/docs/<NN>-<name>.md`, used 91 times across 39 files since
-# the design documents moved. It is a shorthand, not an error: rewriting
-# 91 lines would cost more than it buys and would make the citations
-# longer at every reading. Normalised here so the check can be strict
-# about everything else.
+# the fully-qualified form, used **45 times across 20 files** since the
+# design documents moved.
+#
+# Re-derived in round 3. It was written as "91 times across 39 files",
+# which is a raw count of the short form anywhere — a pattern that also
+# matches the *tail* of the fully-qualified path, i.e. the form that is
+# not a shorthand at all. (Neither is spelled here: this script scans
+# itself, and quoting either makes the comment the finding.) The argument the
+# number supports (rewriting them costs more than it buys) survives at
+# 45; the number did not.
+#
+# It is a shorthand, not an error: rewriting those 45 lines would cost
+# more than it buys and would make the citations longer at every
+# reading. Normalised here so the check can be strict about everything
+# else.
 #
 # **The placeholders are written with angle brackets deliberately.** This
 # script scans every tracked file, which includes itself, so an example

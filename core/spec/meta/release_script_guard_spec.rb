@@ -67,6 +67,68 @@ RSpec.describe "the release script's own guards" do
     expect(code).to match(/verify_sbom_against_vsix\.rb.*UNPACK_DIR/m)
   end
 
+  # **Executed, not matched.** Round 3 deleted the whole refusal and
+  # replaced it with an unrelated `if` block carrying `# diff --quiet` as
+  # a trailing comment; all eight examples stayed green. The mutation the
+  # commit message cited -- replacing the condition with `if false` -- is
+  # caught, but it is the one a text match cannot miss. The cheaper
+  # deletion is the one that matters, and only running the script sees
+  # it.
+  #
+  # Safe to run: the refusal sits above `npm ci` and everything that
+  # follows, so the script exits 1 having done nothing but read git.
+  # The scratch tree is a throwaway repository with a copy of the script,
+  # a fake PAT at mode 600, and one modified tracked file.
+  it "actually refuses, when run against a tree with uncommitted changes" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "vscode", "scripts"))
+      FileUtils.cp(SCRIPT, File.join(root, "vscode", "scripts", "release.sh"))
+      File.chmod(0o755, File.join(root, "vscode", "scripts", "release.sh"))
+
+      pat = File.join(root, "vscode", ".vsce-pat.local")
+      File.write(pat, "not-a-real-token")
+      File.chmod(0o600, pat)
+
+      File.write(File.join(root, "tracked.txt"), "one\n")
+      system("git", "init", "-q", root, out: File::NULL)
+      system("git", "-C", root, "add", "-A", out: File::NULL)
+      system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
+             "commit", "-qm", "one", out: File::NULL)
+      File.write(File.join(root, "tracked.txt"), "two\n")
+
+      out = IO.popen(["bash", File.join(root, "vscode", "scripts", "release.sh")],
+                     err: %i[child out], &:read)
+
+      expect($?).not_to be_success, "release.sh did not refuse a dirty tree:\n#{out}"
+      expect(out).to include("uncommitted changes")
+      expect(out).to include("buildCommit")
+    end
+  end
+
+  # The other half: the same scratch tree, committed clean, must get
+  # *past* this refusal. Without it the example above would pass on a
+  # script that refuses everything.
+  it "does not refuse a clean tree at that check" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, "vscode", "scripts"))
+      FileUtils.cp(SCRIPT, File.join(root, "vscode", "scripts", "release.sh"))
+      pat = File.join(root, "vscode", ".vsce-pat.local")
+      File.write(pat, "not-a-real-token")
+      File.chmod(0o600, pat)
+      File.write(File.join(root, "tracked.txt"), "one\n")
+      system("git", "init", "-q", root, out: File::NULL)
+      system("git", "-C", root, "add", "-A", out: File::NULL)
+      system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
+             "commit", "-qm", "one", out: File::NULL)
+
+      out = IO.popen(["bash", File.join(root, "vscode", "scripts", "release.sh")],
+                     err: %i[child out], &:read)
+
+      expect(out).not_to include("uncommitted changes"),
+                         "a clean tree was refused as dirty:\n#{out}"
+    end
+  end
+
   it "refuses to publish from a tree with uncommitted changes, from inside that check" do
     block = block_containing(/diff --quiet/)
 

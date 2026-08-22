@@ -647,9 +647,9 @@ arguments. <!-- documents: 024.89 -->
 - A typo on a core-library receiver is not reported: `"hello".upcse` and
   `[1,2].siz` are silent, though completion at the same spot knows the
   type exactly. <!-- documents: 024.129 -->
-- A class name written without its namespace hovers without it too, so
-  with two `Order`s the label does not say which one. <!-- documents: 024.130 -->
-- `b = nil; b ||= "x"` hovers nothing. <!-- documents: 024.131 -->
+- `b = nil; b ||= "x"` then hovering `b` answers **`nil`**, though `b`
+  is a `String` there. This is a wrong answer rather than a missing one,
+  which the project ranks as the more serious of the two. <!-- documents: 024.131 -->
 - A scope defined inside a concern's `included do` has no type. <!-- documents: 024.132 -->
 - Passing a positional argument to a keyword-only method says it "takes 0
   arguments". <!-- documents: 024.133 -->

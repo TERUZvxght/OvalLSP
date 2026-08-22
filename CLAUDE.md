@@ -422,6 +422,33 @@ run those two files and check the example count is non-zero, exactly as
 the rule above says to do for a corpus diff. `CONTRIBUTING.md` carries
 the install command.
 
+## Promoting a finding is making a claim (mandatory)
+
+Splitting a grab-bag entry, giving one a `target:`, marking one
+`user-visible: yes`, or writing its paragraph into `KNOWN_LIMITATIONS`
+— each of these **restates the finding in the present tense**, with more
+authority than it had, in a tree that has moved since it was written.
+
+**Run the reproduction against the tree you are promoting it into.**
+
+0.2.14 split `024.90`'s nine bullets into nine numbered entries and
+verified none of them. Driven afterwards, seven reproduced exactly as
+written, and two did not:
+
+- `024.130` did not reproduce at all. The engine had answered correctly
+  for several releases, and the split published a limitation the product
+  does not have — in both languages.
+- `024.131` reproduced, but backwards. It said hover "answers nothing";
+  it answers `nil` for a local that is a `String`. That is the
+  difference between the product declining and the product asserting
+  something false, and **section 0 ranks those in the opposite order to
+  the way the entry read** — so the wording argued for the lower triage
+  of the two.
+
+The second is the one worth remembering. A stale entry that *understates*
+its defect is harder to catch than one that is simply wrong, because
+nothing about it looks incorrect.
+
 ## Writing a check means writing bait for the other checks (mandatory)
 
 Every check here scans tracked content, and a check is tracked content.
@@ -472,8 +499,18 @@ repository. Both are here because they were paid for.
   process, not on the shape of its output.
 
 **And before committing, run `ruby scripts/preflight.rb`.** It runs the
-full suite, the two real-Rails suites separately with a non-zero
-example-count assertion, and the five scripted checks. Twice in one
+documented example counts, the full suite, the **three**
+environment-dependent suites separately — `real_rails_spec`,
+`capabilities_spec` and `client_behaviour_spec` — and five scripted
+checks.
+
+It reads **each example's status**, not the count. A count cannot see
+this: a skipped example is still an example, so a fully skipped file
+reports "45 examples, 0 failures, 41 pending" and satisfies any
+count-based rule. This paragraph described the count-based version until
+round 3 found it — which meant the operating document was instructing a
+reader to rely on the exact check `024.148` records as unable to fail in
+the case it existed for. Twice in one
 session a commit was made on a partial run — the suite had been run for
 one directory, it was green, and the full run afterwards was not.
 `--install` puts it in a pre-commit hook.
