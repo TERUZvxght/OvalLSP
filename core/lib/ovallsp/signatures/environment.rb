@@ -324,6 +324,14 @@ module Ovallsp
         chain = @definition_builder.ancestor_builder.instance_ancestors(type_name)
         chain.ancestors.filter_map { |a| a.respond_to?(:name) ? TypeConverter.simple_name(a.name) : nil }
       rescue StandardError
+        # **Contained** (`024.122`): an empty chain is what a type RBS does
+        # not declare produces, and every consumer reads it as *less*
+        # knowledge -- `TypeNameResolution` declines to call a name
+        # shadowed, `MethodResolver` reaches
+        # `:ancestor_not_declared_anywhere`. Neither can turn it into an
+        # assertion about the user's code, which is the property that
+        # makes this safe to swallow rather than the failure being
+        # unimportant.
         []
       end
 

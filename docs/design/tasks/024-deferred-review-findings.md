@@ -6666,12 +6666,27 @@ number — a line number rots on the next edit above it, and 42 of these
 live in one file where `rescue StandardError` is not a distinguishing
 string.
 
-First-pass verdicts, assigned mechanically: **48 surface** (the handler
-raises, or reports through a channel a person sees) and **111 swallow**.
-Nothing is `contained` yet, and that is deliberate: `contained` means
-*somebody argued it*, and nobody has. The mechanical pass marks the safe,
-honest default and leaves the argument to the review this entry
-describes.
+First-pass verdicts, assigned mechanically: **48 surface** and **111
+swallow**, with nothing `contained` — deliberately, because `contained`
+means *somebody argued it* and nobody had.
+
+**The first pass was wrong about nine of them, and the second pass is
+part of the record.** It looked for a logger and missed
+`diagnostics << { severity: :error, … }` — the channel the server
+*publishes* to the editor, which is a person seeing it more reliably than
+a log line. Counting that as surfacing: **57 surface, 102 swallow**.
+
+**Six are now `contained`, argued in place**, all in
+`Signatures::Environment`. What makes them safe is not that the failure
+is unimportant: it is that every one produces *less knowledge* and no
+consumer can turn it into an assertion about the user's code. An empty
+ancestor chain is what a type RBS does not declare gives, and
+`TypeNameResolution` then declines to call a name shadowed while
+`MethodResolver` reaches `:ancestor_not_declared_anywhere`. That is the
+shape of argument `contained` is for, and it is written at each site
+rather than only here.
+
+**96 remain.**
 
 **The mechanism is deliberately not "no rescue may swallow".** That rule
 would have had 111 exceptions on the day it was written, which is the

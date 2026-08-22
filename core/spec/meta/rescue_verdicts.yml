@@ -154,21 +154,21 @@
 "core/lib/ovallsp/server.rb#receiverless_call_at?": swallows
 "core/lib/ovallsp/server.rb#documentation_at": surfaces
 "core/lib/ovallsp/server.rb#completion_resolve_result": surfaces
-"core/lib/ovallsp/signatures/environment.rb#load_environment": swallows
-"core/lib/ovallsp/signatures/environment.rb#load_stdlib_only": swallows
-"core/lib/ovallsp/signatures/environment.rb#type_parameters": swallows
-"core/lib/ovallsp/signatures/environment.rb#load_rbi_methods": swallows
-"core/lib/ovallsp/signatures/environment.rb#add_project_sig": swallows
-"core/lib/ovallsp/signatures/environment.rb#add_gem_signatures": swallows
-"core/lib/ovallsp/signatures/environment.rb#add_gem_signatures[2]": swallows
-"core/lib/ovallsp/signatures/environment.rb#build_signature_method": swallows
-"core/lib/ovallsp/signatures/environment.rb#build_definition": swallows
-"core/lib/ovallsp/signatures/environment.rb#signature_location": swallows
-"core/lib/ovallsp/signatures/environment.rb#compute_member_names": swallows
-"core/lib/ovallsp/signatures/environment.rb#compute_ancestors": swallows
-"core/lib/ovallsp/signatures/environment.rb#rbs_type_name": swallows
-"core/lib/ovallsp/signatures/rbi_parser.rb#parse": swallows
-"core/lib/ovallsp/signatures/rbi_parser.rb#handle_sig": swallows
+"core/lib/ovallsp/signatures/environment.rb#load_environment": surfaces
+"core/lib/ovallsp/signatures/environment.rb#load_stdlib_only": surfaces
+"core/lib/ovallsp/signatures/environment.rb#type_parameters": "contained: no parameters known reads as non-generic, which is the same conclusion a type with none produces"
+"core/lib/ovallsp/signatures/environment.rb#load_rbi_methods": surfaces
+"core/lib/ovallsp/signatures/environment.rb#add_project_sig": surfaces
+"core/lib/ovallsp/signatures/environment.rb#add_gem_signatures": surfaces
+"core/lib/ovallsp/signatures/environment.rb#add_gem_signatures[2]": surfaces
+"core/lib/ovallsp/signatures/environment.rb#build_signature_method": surfaces
+"core/lib/ovallsp/signatures/environment.rb#build_definition": "contained: nil reads as no signature, which is what a type without one gives"
+"core/lib/ovallsp/signatures/environment.rb#signature_location": "contained: nil means hover shows no source link, never a wrong one"
+"core/lib/ovallsp/signatures/environment.rb#compute_member_names": "contained: falls back to the RBI half, a narrower answer rather than a wrong one"
+"core/lib/ovallsp/signatures/environment.rb#compute_ancestors": "contained: an empty chain is what a type RBS does not declare produces, and every consumer reads it as less knowledge"
+"core/lib/ovallsp/signatures/environment.rb#rbs_type_name": "contained: nil reads as a type RBS does not name"
+"core/lib/ovallsp/signatures/rbi_parser.rb#parse": surfaces
+"core/lib/ovallsp/signatures/rbi_parser.rb#handle_sig": surfaces
 "core/lib/ovallsp/signatures/rbi_parser.rb#convert_type_expr": swallows
 "core/lib/ovallsp/signatures/type_converter.rb#convert": swallows
 "core/lib/ovallsp/uri_util.rb#to_path": swallows
