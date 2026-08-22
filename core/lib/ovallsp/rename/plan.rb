@@ -5,7 +5,7 @@ module Ovallsp
     # The result of planning a rename -- a testable internal
     # representation, deliberately separate from the LSP WorkspaceEdit
     # shape Server converts it into
-    # (docs/design/tasks/016-guarded-rename-and-preview.md required
+    # (docs/design/tasks/016-guarded-rename.md required
     # interface: "rename planをテスト可能な内部表現として持つ").
     #
     # - target: the SymbolId being renamed (nil if nothing renameable

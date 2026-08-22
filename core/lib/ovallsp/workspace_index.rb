@@ -188,7 +188,7 @@ module Ovallsp
     # #replace_file for the same uri — this deliberately doesn't track
     # that pairing itself, so there is nothing for a new caller to forget
     # to wire in the way a separate caller-maintained "previous
-    # declarations" cache could be (docs/design/tasks/013-unified-semantic-query-and-lsp-integration.md
+    # declarations" cache could be (docs/design/tasks/013-unified-semantic-queries-and-lsp-features.md
     # review: a Server-side shadow hash for this left Cold Index's
     # first-ever index of a file unable to seed invalidation for it).
     def declarations_for_uri(uri)

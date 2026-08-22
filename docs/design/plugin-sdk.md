@@ -2,7 +2,7 @@
 
 A minimal, explicitly-opt-in way to teach OvalLSP Core about a Gem- or
 project-specific DSL, without editing Core itself. See
-`docs/design/tasks/018-static-runtime-plugin-api-and-sdk.md` for the
+`docs/design/tasks/018-plugin-api-and-sdk.md` for the
 full design; this is the short "how do I write one" version.
 
 ## Manifest

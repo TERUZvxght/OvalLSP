@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # A tiny stand-in for ActiveRecord::Base. Real `activerecord` isn't a
-# dependency of this repo (docs/design/tasks/007-active-record-model-and-local-inference.md),
+# dependency of this repo (docs/design/tasks/007-active-record-snapshot.md),
 # so this exposes just enough of the real interface for
 # Ovallsp::RuntimeAgent::Agent's model extraction to work unchanged against
 # it and against real ActiveRecord later: `.columns` (name/type/null),

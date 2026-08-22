@@ -8,7 +8,7 @@ module Ovallsp
     # compared against a manifest's `protocol_version` before loading
     # anything, so an incompatible plugin is refused with a clear reason
     # instead of loaded and failing in some more confusing way later
-    # (docs/design/tasks/018-static-runtime-plugin-api-and-sdk.md
+    # (docs/design/tasks/018-plugin-api-and-sdk.md
     # acceptance: "API version不一致を明確に報告する").
     CURRENT_PROTOCOL_VERSION = 1
 

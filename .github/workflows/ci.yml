@@ -318,6 +318,26 @@ jobs:
             exit 1
           fi
 
+  # `046`'s C1. Every documentation path in tracked content resolves.
+  # Nineteen citations across seventeen files named five task filenames
+  # that had never existed in any commit, every one of them in a source
+  # comment -- so a check that read only Markdown would have called the
+  # tree clean. `check_site_links.rb` had bought this for `site/` alone.
+  doc-links:
+    name: Documentation links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+
+      - name: Every documentation path resolves
+        run: ruby scripts/check_doc_links.rb
+
   # `042`'s D10 / `024.122`. Every `rescue` in `core/lib` carries a
   # verdict, and a new one with none fails. Not "no rescue may swallow" --
   # that rule would have had 111 exceptions the day it was written. What

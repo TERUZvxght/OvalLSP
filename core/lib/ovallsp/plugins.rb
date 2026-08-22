@@ -4,7 +4,7 @@ module Ovallsp
   # The SDK surface a plugin entrypoint file itself calls into --
   # `Ovallsp::Plugins.register_static("my-plugin") { |context| ... }` --
   # rather than a fixed class-name convention Loader would otherwise
-  # have to guess at (docs/design/tasks/018-static-runtime-plugin-api-and-sdk.md).
+  # have to guess at (docs/design/tasks/018-plugin-api-and-sdk.md).
   # A plain module-level Hash, not an instance: entrypoint files are
   # loaded via a bare `Kernel#load` (Plugins::Loader), so there's no
   # object of the plugin's own to hold this on.

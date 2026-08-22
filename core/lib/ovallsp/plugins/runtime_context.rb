@@ -11,7 +11,7 @@ module Ovallsp
     # contribute, in a form Plugins::Loader keeps isolated the same way
     # static contributions are, but nothing in Server actually forwards
     # these into RailsBootstrap/AgentProcessManager yet
-    # (docs/design/tasks/018-static-runtime-plugin-api-and-sdk.md).
+    # (docs/design/tasks/018-plugin-api-and-sdk.md).
     #
     # What *is* real and enforced here: a runtime plugin's entrypoint is
     # never loaded at all for an untrusted workspace -- "Runtime plugin

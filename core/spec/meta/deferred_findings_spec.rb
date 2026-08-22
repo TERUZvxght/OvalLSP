@@ -59,6 +59,14 @@ module DeferredFindings
   # the guards were guarding does not exist any more.
   KNOWN_KEYS = %w[status kind target released-in user-visible user-visible-note].freeze
 
+  # `defect` is a fault in what the product answers; `roadmap` is a plan;
+  # `friction` is something that made *working here* harder. A kind the
+  # legend does not define is a typo that would silently route an entry
+  # out of every check that filters on kind -- `open_defects` reads
+  # `kind == "defect"`, so `kind: defct` makes an open defect invisible
+  # to the KNOWN_LIMITATIONS guard.
+  KNOWN_KINDS = %w[defect roadmap friction].freeze
+
   def entries(markdown)
     markdown.scan(METADATA_BLOCK).to_h do |number, block|
       parsed =
@@ -71,6 +79,11 @@ module DeferredFindings
 
       unknown = parsed.keys.map(&:to_s) - KNOWN_KEYS
       raise UnknownKey, "#{number} names #{unknown.join(", ")}, which the legend does not define" if unknown.any?
+
+      kind = parsed["kind"].to_s
+      unless kind.empty? || KNOWN_KINDS.include?(kind)
+        raise UnknownKey, "#{number} has kind #{kind.inspect}, which is not one of #{KNOWN_KINDS.join(", ")}"
+      end
 
       # Stringified because every caller compares against `"open"`,
       # `"defect"`, `"no"` -- and yaml turns an unquoted `yes` into
@@ -240,6 +253,23 @@ RSpec.describe "deferred findings metadata" do
     # everything".
     it "accepts every key the real register uses" do
       expect { DeferredFindings.entries(deferred) }.not_to raise_error
+    end
+
+    # A kind the legend does not define routes an entry out of every check
+    # that filters on kind: `open_defects` reads `kind == "defect"`, so
+    # `kind: defct` makes an open user-visible defect invisible to the
+    # KNOWN_LIMITATIONS guard while the suite stays green.
+    it "refuses a kind the legend does not define" do
+      planted = entry("024.30", status: "open", kind: "defct")
+
+      expect { DeferredFindings.entries(planted) }
+        .to raise_error(DeferredFindings::UnknownKey, /defct/)
+    end
+
+    it "accepts friction, which is a kind the legend defines" do
+      parsed = DeferredFindings.entries(entry("024.30", status: "open", kind: "friction"))
+
+      expect(parsed["024.30"]["kind"]).to eq("friction")
     end
 
     it "reads an entry's fields" do

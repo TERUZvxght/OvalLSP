@@ -5,7 +5,7 @@ require_relative "plan"
 module Ovallsp
   module Rename
     # Turns a resolved SymbolId into a Rename::Plan
-    # (docs/design/tasks/016-guarded-rename-and-preview.md).
+    # (docs/design/tasks/016-guarded-rename.md).
     #
     # Every edit location comes from exactly two places: WorkspaceIndex's
     # own declarations for `symbol_id` (the `def`/`class`/`@ivar =`

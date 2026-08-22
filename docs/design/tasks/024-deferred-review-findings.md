@@ -20,11 +20,30 @@ narrative and does not restate it:
 
 ```yaml
 status: open        # open | fixed | done. Anything else reads as open.
-kind: defect        # defect | roadmap. Roadmap items are plans, not faults.
+kind: defect        # defect | roadmap | friction. See below.
 released-in: 0.1.14 # only on a resolved entry
 user-visible: yes   # on an open defect: does a user see this?
 target: 0.2.4       # optional on an open entry: the release its fix is routed to
 ```
+
+**`kind`** is one of three. **`defect`** is a fault in what the product
+answers. **`roadmap`** is a plan, not a fault. **`friction`** is
+something that made *working in this repository* harder — a document that
+misled, a name that had to be looked up twice, a step whose order was not
+obvious, a check whose failure did not say what to do. It is a first-class
+kind rather than a `defect` with `user-visible: no` because the two are
+triaged differently and by different people: a user never meets friction,
+and only somebody working here can report it.
+
+**Anyone may raise one — planner, implementer or reviewer — and raising
+one without recording it is not allowed.** A finding that is mentioned in
+a message and not written down here is lost at the next compaction, which
+is how `024.109`'s two unnamed examples were lost and how `024.122`'s own
+first count survived a release. If it was worth saying, it is worth an
+entry; an entry costs four lines.
+
+A friction entry needs no `user-visible` half — it is `user-visible: no`
+with a note, like any other entry a user does not meet.
 
 An open defect with `user-visible: yes` must be cited by number in
 `docs/KNOWN_LIMITATIONS.md` **and** `.ja.md`, so a finding recorded here

@@ -7,7 +7,7 @@ module Ovallsp
   module Plugins
     # What a static plugin's entrypoint actually gets -- never the real
     # WorkspaceIndex object itself
-    # (docs/design/tasks/018-static-runtime-plugin-api-and-sdk.md
+    # (docs/design/tasks/018-plugin-api-and-sdk.md
     # "pluginへ内部WorkspaceIndex objectを直接渡さない"), only a narrow
     # write-only surface a plugin can contribute *to*. Everything a
     # plugin registers here is collected, never applied directly --

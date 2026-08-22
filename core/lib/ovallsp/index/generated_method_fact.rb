@@ -5,7 +5,7 @@ module Ovallsp
     # A method a Rails DSL macro (`enum`, `scope`, `delegate`, ...)
     # generates at load time, normalized to one common shape rather than
     # handling each DSL as its own special case in Server
-    # (docs/design/tasks/017-rails-dsl-extension.md "各DSLを直接Serverへ
+    # (docs/design/tasks/017-rails-dsl-expansion.md "各DSLを直接Serverへ
     # 分岐追加しない。少なくとも次の共通factへ正規化する").
     #
     # - owner: the fully-qualified class the macro was called in.

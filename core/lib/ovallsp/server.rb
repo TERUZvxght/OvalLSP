@@ -3816,7 +3816,7 @@ module Ovallsp
 
     # Task 013: a real, type-engine-backed hover. Deliberately conservative
     # about what it shows — "情報不足時は断定的な表示を避ける"
-    # (docs/design/tasks/013-unified-semantic-query-and-lsp-integration.md):
+    # (docs/design/tasks/013-unified-semantic-queries-and-lsp-features.md):
     # an unresolved expression gets an empty hover, never a guessed one.
     def hover_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)

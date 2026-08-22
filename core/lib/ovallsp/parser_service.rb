@@ -236,7 +236,7 @@ module Ovallsp
       # Task 017's priority-ordered DSL list, scoped to the three this
       # task actually implements (enum/scope/delegate) -- attribute/
       # store_accessor/has_one/polymorphic/Concern/helper_method/mailer-
-      # job entry points are explicitly deferred (docs/design/tasks/017-rails-dsl-extension.md).
+      # job entry points are explicitly deferred (docs/design/tasks/017-rails-dsl-expansion.md).
       GENERATED_METHOD_DSLS = %i[enum scope delegate].freeze
 
       # The calls this visitor turns into declarations of its own. Exempt

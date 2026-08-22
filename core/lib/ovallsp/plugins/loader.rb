@@ -13,7 +13,7 @@ module Ovallsp
   module Plugins
     # Discovers and loads plugins from explicit manifest paths only --
     # never by scanning installed Gems ("自動検出したGemだけを理由に
-    # コード実行しない" -- docs/design/tasks/018-static-runtime-plugin-api-and-sdk.md).
+    # コード実行しない" -- docs/design/tasks/018-plugin-api-and-sdk.md).
     # Every failure mode (invalid manifest, version mismatch, missing
     # entrypoint, an exception or timeout from the plugin's own code)
     # degrades to "this one plugin contributes nothing", logged, never

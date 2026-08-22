@@ -8,7 +8,7 @@ module Ovallsp
     # file, keyed by SymbolId -- the same per-file replace/remove,
     # mutex-guarded, generation-bumping pattern WorkspaceIndex/
     # HierarchyIndex/ReferenceIndex already use throughout this codebase
-    # (docs/design/tasks/017-rails-dsl-extension.md).
+    # (docs/design/tasks/017-rails-dsl-expansion.md).
     class GeneratedMethodIndex
       def initialize
         @mutex = Mutex.new

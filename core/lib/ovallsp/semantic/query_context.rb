@@ -4,7 +4,7 @@ module Ovallsp
   module Semantic
     # Everything a QueryService call needs to know about *when* it's being
     # asked, not just *what* — the "Staleness" section
-    # (docs/design/tasks/013-unified-semantic-query-and-lsp-integration.md):
+    # (docs/design/tasks/013-unified-semantic-queries-and-lsp-features.md):
     # a caller that captures each subsystem's generation at request time
     # can tell, after a possibly-slow query returns, whether the answer is
     # still current or the workspace/runtime/signature state has since

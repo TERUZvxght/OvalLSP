@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Minimal example plugin (docs/design/tasks/018-static-runtime-plugin-api-and-sdk.md
+# Minimal example plugin (docs/design/tasks/018-plugin-api-and-sdk.md
 # "最小のfixture DSLを定義し、次を生成するpluginを同梱する... `pending?`等の
 # method factを返す"): stands in for a fixture DSL like
 #

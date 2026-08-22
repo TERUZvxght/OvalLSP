@@ -9,7 +9,7 @@ module Ovallsp
     # One completion/member candidate, already carrying enough for a
     # caller to rank and render it without reaching back into whichever
     # subsystem produced it — the "same expression -> same receiver type"
-    # guarantee (docs/design/tasks/013-unified-semantic-query-and-lsp-integration.md
+    # guarantee (docs/design/tasks/013-unified-semantic-queries-and-lsp-features.md
     # acceptance: "同一式についてHoverとCompletionが同じreceiver型を利用する")
     # comes from every one of Completion/Hover/Definition/SignatureHelp
     # calling #type_at the same way, then feeding the result into these
@@ -40,7 +40,7 @@ module Ovallsp
     private_constant :ORIGIN_AUTHORITY
 
     # The shared semantic layer behind Completion/Hover/Definition/
-    # Signature Help (docs/design/tasks/013-unified-semantic-query-and-lsp-integration.md).
+    # Signature Help (docs/design/tasks/013-unified-semantic-queries-and-lsp-features.md).
     # Every one of these calls the *same* #type_at for a given
     # document/position, then answers member/definition/signature queries
     # off that one type — the point being that a hover and a completion
@@ -98,7 +98,7 @@ module Ovallsp
       # it, then — for an Active Record association/column with no
       # physical declaration of its own — the owning model class's
       # declaration as a best-effort "go to the generating type"
-      # (docs/design/tasks/013-unified-semantic-query-and-lsp-integration.md
+      # (docs/design/tasks/013-unified-semantic-queries-and-lsp-features.md
       # "generated symbol自体に物理位置がない場合は、生成元DSLまたはschemaへ移動する").
       def definitions_of(receiver_type, method_name, context: {})
         source = @method_resolver ? @method_resolver.resolve(receiver_type: receiver_type, name: method_name, context: context) : []
