@@ -432,12 +432,6 @@ Rails の concern がまさにこの形でした。メタプログラミング�
 `Order.find(id).no_such_method` だけが通常どおり報告されていました。`T | nil` の
 レシーバを捨てずに枝ごとに問い合わせる形になっています。 <!-- documents: 024.77 -->
 
-## `define_singleton_method` で作られるメソッド
-
-クラスメソッドを `define_singleton_method` で作っているクラスは、それらの呼び出しを
-報告されなくなりました。ただしホバー・定義ジャンプ・補完はそこで何も答えません
-(名前が索引に無いため)。答えの代わりに沈黙が返ります。 <!-- documents: 024.116 -->
-
 ## ブロックの中に書いた `private` / `module_function`
 
 `SOME_CONST.each { private }`、`helper { private }` のように、**この拡張機能が

@@ -259,7 +259,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | fixed | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
 | [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | fixed | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
 | [`024.115`](#024115-include-m-reaches-m-classmethods-whether-or-not-m-is-a-concern) | fixed | 0.2.11 | `include M` reaches `M::ClassMethods` whether or not M is a Concern |
-| [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | open | 0.2.13 | `def self.method_missing` and `define_singleton_method` do not open … |
+| [`024.116`](#024116-def-self-method-missing-and-define-singleton-method-do-not-open-a-surface) | fixed | 0.2.13 | `def self.method_missing` and `define_singleton_method` do not open … |
 | [`024.117`](#024117-the-two-spellings-of-a-class-body-macro-get-opposite-answers) | fixed | 0.2.13 | The two spellings of a class-body macro get opposite answers |
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | fixed | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
@@ -6265,10 +6265,11 @@ the loop, and because narrowing a rule wants its own corpus measurement.
 ## 024.116 `def self.method_missing` and `define_singleton_method` do not open a surface
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.13
+released-in: 0.2.13
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb`
@@ -6296,6 +6297,24 @@ in the index. Silence instead of an answer, which is the safe direction
 and not the right one. Recording those names is the fix, and it is a
 parser change with its own measurement.
 
+
+**The residue is closed in 0.2.13.** `define_method(:x)` and
+`define_singleton_method(:x)` name their method as plainly as a `def`
+does, and only the open surface was being recorded — so calls stopped
+being reported while hover, go-to-definition and completion all answered
+nothing. Silence instead of an answer, which is the safe direction and
+not the right one.
+
+A literal symbol or string argument is recorded as a generated
+declaration on the side `Cref#surface_kind` gives. **The surface still
+opens either way**, and the control example says why: a *computed* name
+is exactly what this parser cannot read, and one such call in a body
+makes the whole owner unenumerable however many literal ones sit beside
+it.
+
+Corpus unchanged at 0 added / 119 removed — these gems name their
+`define_method` calls dynamically, which is the shape the surface exists
+for.
 
 ## 024.117 The two spellings of a class-body macro get opposite answers
 

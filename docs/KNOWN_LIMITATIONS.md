@@ -470,13 +470,6 @@ class's members.
 about each branch of a `T | nil` receiver instead of discarding
 it. <!-- documents: 024.77 -->
 
-## Methods made by `define_singleton_method`
-
-A class whose class methods are made by `define_singleton_method` is no
-longer reported for calling them — but hover, go to definition and
-completion still answer nothing there, because the names are not in the
-index. You get silence rather than an answer. <!-- documents: 024.116 -->
-
 ## A `private` or `module_function` written inside a block
 
 If you write one inside a block whose receiver this extension cannot

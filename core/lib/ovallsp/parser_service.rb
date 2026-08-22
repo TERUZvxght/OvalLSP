@@ -1226,6 +1226,18 @@ module Ovallsp
 
       def record_open_surface(node)
         if (kind = method_defining_surface(node))
+          # **The name, when there is one** (`024.116`). `define_method(:x)`
+          # names its method as plainly as a `def` does, and recording
+          # only the open surface meant calls to `x` stopped being
+          # reported while hover, go-to-definition and completion all
+          # answered nothing -- silence instead of an answer, which is the
+          # safe direction and not the right one.
+          #
+          # The surface still opens either way: a *computed* name is
+          # exactly what this parser cannot read, and one such call in the
+          # body makes the whole owner unenumerable however many literal
+          # ones sit beside it.
+          record_defined_method_name(node, kind)
           return @open_surface_owners << [Index::SymbolId.bare_name(current_owner), kind]
         end
 
@@ -1304,6 +1316,17 @@ module Ovallsp
         when Prism::CallNode
           :singleton if node.receiver.receiver.nil? && node.receiver.name == :singleton_class
         end
+      end
+
+      def record_defined_method_name(node, kind)
+        name = attribute_name(node.arguments&.arguments&.first)
+        return unless name
+
+        add_generated_method(
+          node: node, name: name, kind: kind == :singleton ? :singleton_method : :instance_method,
+          return_type: Types::UNKNOWN, origin: node.name, visibility: nil,
+          parameters: []
+        )
       end
 
       def record_attribute_methods(node)
