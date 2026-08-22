@@ -63,6 +63,26 @@ if [ -z "$VSCE_PAT" ]; then
   exit 1
 fi
 
+# vscode/scripts/copy-core.js bakes `buildCommit: currentGitCommit()`
+# into the packaged Core, so a VSIX built from a dirty tree claims a
+# commit whose content it does not match -- and that SHA is what the
+# installed extension reports and what a published artifact is checked
+# against afterwards. Untracked files are not the concern (a stray
+# .vsix or a scratch file changes nothing about what is packaged);
+# modified tracked content is.
+#
+# RELEASE_CHECKLIST gate #1. It used to say `make-final-review-bundle.sh`
+# enforced this, and nothing invoked that script -- so between its last
+# hand-run and 0.2.14 the gate was enforced by nothing. Pinned by
+# core/spec/meta/release_script_guard_spec.rb.
+if ! git -C "$REPO_ROOT" diff --quiet || ! git -C "$REPO_ROOT" diff --cached --quiet; then
+  echo "release.sh: the tracked tree has uncommitted changes." >&2
+  echo "The packaged Core records the current commit as its buildCommit, so publishing" >&2
+  echo "now would ship an artifact naming a commit it does not match. Commit or stash:" >&2
+  git -C "$REPO_ROOT" status --short >&2
+  exit 1
+fi
+
 VERSION="$(node -p "require('$VSCODE_DIR/package.json').version")"
 PUBLISHER="$(node -p "require('$VSCODE_DIR/package.json').publisher")"
 NAME="$(node -p "require('$VSCODE_DIR/package.json').name")"
@@ -125,10 +145,16 @@ fi
 # build a user installs was the one build nobody inspected -- and this
 # script is the last point where the real thing exists on disk.
 #
-# Compiled extensions are excluded from the hard failure for the reason
-# make-final-review-bundle.sh gives: they embed an absolute LC_LOAD_DYLIB
-# reference to the building Ruby's libruby, which is a real dynamic-linker
-# dependency rather than a removable byproduct, mitigated at spawn time.
+# Compiled extensions are excluded from the hard failure because their
+# embedded path is a real dependency rather than a removable byproduct:
+# prism.bundle and rbs_extension.bundle carry an absolute LC_LOAD_DYLIB
+# reference to the building Ruby's libruby (confirmed with `otool -L`),
+# and it is mitigated at spawn time by resolving the real interpreter's
+# bindir/libdir rather than the rbenv shim -- see
+# vscode/src/platformCompatibility.ts#queryRubyConfigPaths and
+# RELEASE_CHECKLIST gate #15, which records how that mitigation was
+# arrived at. This reason used to be deferred to
+# make-final-review-bundle.sh, which 0.2.14 deleted.
 # They are reported instead, so a reader of this log can see what is in
 # there rather than inferring it from silence.
 #

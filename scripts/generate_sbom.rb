@@ -80,10 +80,12 @@ def gem_rows
 end
 
 def npm_rows
-  # Explicit encoding, not the invoking shell's ambient locale -- see the
-  # same fix (and its rationale) in make-final-review-bundle.sh's
-  # assert_rspec_json_clean, found by actually running that script under
-  # a locale-less shell (Task 023.8).
+  # Explicit encoding, not the invoking shell's ambient locale. Found in
+  # Task 023.8 by running the release gate under a shell with no locale
+  # set: Ruby then reads the file as US-ASCII, and a single non-ASCII
+  # byte anywhere in the lockfile makes `JSON.parse` raise on input that
+  # is perfectly valid. The rationale used to be deferred to
+  # `make-final-review-bundle.sh`, which 0.2.14 deleted.
   lock = JSON.parse(File.read(File.join(ROOT, "vscode", "package-lock.json"), encoding: "UTF-8"))
 
   # `package.json`'s own top-level `dependencies` names only the *direct*
@@ -134,6 +136,47 @@ def render(rows)
 end
 
 rows = gem_rows + npm_rows
-out_path = File.join(ROOT, "docs", "SBOM.md")
-File.write(out_path, render(rows))
+# Overridable so a spec can prove `--check` actually fires. Pointing it
+# at a throwaway copy is the only safe way to plant a divergence: the
+# alternative is mutating the tracked `docs/SBOM.md` and restoring it,
+# which leaves the tree modified whenever the example fails.
+out_path = ENV.fetch("SBOM_PATH", File.join(ROOT, "docs", "SBOM.md"))
+rendered = render(rows)
+
+# `--check` renders and compares without writing, so the suite can hold
+# this gate. It could not before: the script writes `docs/SBOM.md` in
+# place, and a spec that ran it would mutate a tracked file and leave it
+# mutated if the example failed.
+#
+# Until 0.2.14 the only thing enforcing this was a step in
+# `make-final-review-bundle.sh`, which nothing invoked -- so a
+# `docs/SBOM.md` that had drifted from its own generator was caught by
+# nothing. 046's C7.
+if ARGV.include?("--check")
+  current = File.exist?(out_path) ? File.read(out_path) : nil
+  if current == rendered
+    puts "sbom --check: docs/SBOM.md matches a fresh render (#{rows.size} packages)."
+    exit 0
+  end
+
+  warn("sbom --check: docs/SBOM.md does not match what this script would generate.")
+  if current.nil?
+    warn("  docs/SBOM.md does not exist.")
+  else
+    a = current.split("\n")
+    b = rendered.split("\n")
+    (0...[a.length, b.length].max).each do |i|
+      next if a[i] == b[i]
+
+      warn("  line #{i + 1}:")
+      warn("    file:      #{a[i].inspect}")
+      warn("    generated: #{b[i].inspect}")
+    end
+  end
+  warn("sbom --check: run `ruby scripts/generate_sbom.rb` and commit the result. " \
+       "The SBOM states what a packaged VSIX ships to a user; a stale one is a false claim about that.")
+  exit 1
+end
+
+File.write(out_path, rendered)
 puts "wrote #{out_path} (#{rows.size} packages)"

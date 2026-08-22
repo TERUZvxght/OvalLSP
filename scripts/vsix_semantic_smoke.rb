@@ -2,9 +2,12 @@
 # frozen_string_literal: true
 
 # Verifies a packaged, unpacked VSIX's bundled Core can actually answer a
-# *real* semantic LSP request -- not merely complete initialize/shutdown
-# (the existing smoke test embedded in make-final-review-bundle.sh, which
-# this script deliberately does not modify or replace).
+# *real* semantic LSP request -- not merely complete initialize/shutdown.
+#
+# It was written beside an initialize/shutdown-only smoke test embedded
+# in `make-final-review-bundle.sh`, which it deliberately did not
+# replace. 0.2.14 deleted that script, so this is now the only smoke
+# test of the packaged Core, and `release.sh` is what runs it.
 #
 # Two gaps this closes, both found reviewing packaging/release readiness:
 #

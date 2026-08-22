@@ -204,6 +204,34 @@ RSpec.describe "deferred findings metadata" do
                                          "matches the entries. Run: ruby scripts/reindex_findings.rb"
     end
 
+    # A scripted edit doubled `024.69`'s entire body during 0.2.14 -- a
+    # `String#find` that returned -1 when its terminator was absent, so a
+    # slice meant to end at a paragraph ran to the end of the entry and
+    # the "removal" pasted the block back. The file stayed well-formed:
+    # heading count unchanged, index current, yaml parsed, every other
+    # example green, and it was committed. It was noticed only because an
+    # unrelated grep printed the same line at two line numbers.
+    #
+    # Nothing here could see it, because every check was about an entry's
+    # *metadata*. This one is about its body: an entry states its Area
+    # once, so twice means a block was pasted rather than moved.
+    it "states each entry's Area exactly once, so a doubled body cannot pass" do
+      require_relative "../../../scripts/reindex_findings"
+
+      body = File.read(ReindexFindings::PATH, encoding: "UTF-8")
+      doubled = body.split(/^## (?=024\.[0-9R]+ )/).filter_map do |chunk|
+        number = chunk[/\A(024\.[0-9R]+) /, 1]
+        next unless number
+
+        count = chunk.scan(/^\*\*Area:\*\*/).length
+        "#{number} (#{count} Area lines)" if count > 1
+      end
+
+      expect(doubled).to be_empty,
+                         "entries whose body appears more than once: #{doubled.join(", ")}. " \
+                         "An entry states one Area; a second one means a block was duplicated."
+    end
+
     it "indexes every entry, so the table cannot silently omit one" do
       require_relative "../../../scripts/reindex_findings"
 

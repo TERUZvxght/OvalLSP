@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**138 entries below** <!-- measured: register-entries = 138 -->,
+**139 entries below** <!-- measured: register-entries = 139 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -309,6 +309,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | — | `WorkspaceIndex#search` scans every symbol in the workspace |
 | [`024.138`](#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | open | — | No test mixes a schema change and a model-file change in one batch |
 | [`024.139`](#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
+| [`024.140`](#024140-a-scripted-edit-doubled-a-register-entry-and-every-check-stayed-green) | fixed | 0.2.14 | A scripted edit doubled a register entry, and every check stayed gre… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | — | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | — | Feature parity roadmap, measured against Pylance |
@@ -4163,102 +4164,6 @@ the loop, which turns the race into a retry. It had passed on the run
 before, and locally -- **two runs of a new job found a flake that no
 amount of reading would have.**
 
-
-# 024.69 The two suites that drive a real editor are run by nobody but the maintainer
-
-```yaml
-status: fixed
-kind: defect
-user-visible: no
-user-visible-note: >
-  Nothing an editor user sees. The gap is in verification coverage:
-  the suites still pass once run, and 0.2.3's gate ran them. What is
-  missing is anything that runs them between releases.
-target: 0.2.12
-released-in: 0.2.12
-```
-
-**Area:** `.github/workflows/ci.yml` (the `vscode` job),
-`vscode/package.json`'s `test:integration` / `test:integration:packaged`
-
-CI runs `npm run test:unit` for the extension and nothing else. Both
-integration suites — the only tests that launch a real VS Code and
-drive the extension against a real Core, and the ones
-`RELEASE_CHECKLIST`'s Task 023 gate items #4 and #5 are about — run
-only when a maintainer runs `make-final-review-bundle.sh` on an Apple
-Silicon Mac. Between releases they are executed by nothing.
-
-**How it surfaced.** 0.2.3's pre-publish gate aborted at
-`test:integration` with `spawn .../Contents/MacOS/Electron ENOENT`.
-VS Code renamed the macOS bundle's main executable from `Electron` to
-`Code` in 1.110, `runTest.ts` pins no version so it always downloads
-current stable (1.133.0 on the day), and the pinned
-`@vscode/test-electron@2.5.2` still computed the old path. The
-harness had been broken for every VS Code release since 1.110 and the
-tree recorded gate #4/#5 as green throughout, because the only thing
-that could have contradicted that was the gate itself. Fixed here by
-the bump to `@vscode/test-electron@^3.1.0`, which resolves the
-executable by product name with a "sole regular file in
-`Contents/MacOS/`" fallback — but the bump is the instance, not the
-class.
-
-**Why this is the same shape as a green suite that did not run.**
-CLAUDE.md already carries that rule for the real-Rails and capability
-suites, whose failure mode is skipping to zero examples while `rspec`
-exits 0. This is the same failure with the reporting removed
-entirely: not a suite that reports nothing, a suite that no automated
-run ever reaches. The asymmetry is what made it durable — CI is green
-on every PR, so nothing prompts anyone to doubt the row.
-
-**Direction:** run both suites in CI on a schedule at minimum, and on
-release PRs at best. `test:integration` needs a display on
-`ubuntu-latest` (`xvfb-run`, the usual arrangement for
-`@vscode/test-electron`); `test:integration:packaged` additionally
-needs the vendoring step, whose native gems are built per platform,
-so the packaged variant is honest only on macOS and wants a
-`macos-14` runner. Deferred rather than done here because adding two
-CI jobs during a release gate is an addition, not a fix, and the
-`macos-14` half costs paid runner minutes on every run, which is a
-trade-off this entry does not get to make on its own.
-
-**Fixed in 0.2.12** by a `vscode-integration` job that runs
-`npm run test:integration` on every pull request and push --
-`xvfb-run` for the display, and Ruby with the bundle installed because
-the extension spawns the real Core Server, which is the half a unit test
-cannot reach.
-
-The measurement this entry is really about is not the suites passing; it
-is **who runs them**. Twice a month, by one person, on one machine, is
-how a harness stays broken across four VS Code releases while the tree
-records the gate items about it as green.
-
-**And the job asserts the count, not just the exit code.** `runTest.js`
-exits 0 when the extension host reports no failures, and no failures is
-also what zero examples looks like -- so a harness that stops discovering
-tests, or an activation that quietly never happens, would read as a pass.
-Adding the job without that check would have replaced "nobody runs them"
-with "CI runs them and would not notice if it stopped", which is the same
-defect wearing a green tick. The core job has carried the equivalent
-guard since 0.2.5. First run: **5 passing**, against a real VS Code
-1.134.0 driving a real Core.
-
-**And the first guarded run reported green with `1 failing` in its log**,
-which is worth recording rather than quietly fixing. `xvfb-run … | tee`
-takes its exit status from `tee`, so the job added to stop a suite going
-unrun spent one commit being a suite that ran and was not listened to --
-the same defect the entry is about, one layer out. `set -o pipefail`.
-
-The failing example was a real flake and is fixed in the same change:
-`createFileSystemWatcher` registers asynchronously, so a file written
-immediately afterwards can be created before anything is listening, and a
-create event for a file that already exists never arrives however long
-the test waits. It now rewrites each still-unseen file each time round
-the loop, which turns the race into a retry. It had passed on the run
-before, and locally -- **two runs of a new job found a flake that no
-amount of reading would have.**
-
-
-
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 
 ```yaml
@@ -7470,6 +7375,59 @@ files and why it would happen again. `046`'s C4 is the countermeasure —
 the register's parser moving to `scripts/` so a check can assert that
 `docs/design/tasks/*.md` other than `024` carry no findings section of
 their own.
+
+## 024.140 A scripted edit doubled a register entry, and every check stayed green
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it cost is that the register -- the
+  document this project uses to decide what is still broken -- was
+  committed in a corrupted state and the whole meta suite called it
+  clean.
+target: 0.2.14
+released-in: 0.2.14
+```
+
+**Area:** `core/spec/meta/deferred_findings_spec.rb`
+
+Moving a paragraph from `024.69` into `024.68` was done with a python
+slice whose end boundary came from `str.find`, which returns `-1` rather
+than raising when its terminator is absent. `b[lo:-1]` is not the
+paragraph, it is everything to the end of the entry; and the "removal"
+that followed pasted the block back. **`024.69`'s entire body ended up
+in the file twice**, with a stray heading and yaml block in the middle
+of it.
+
+It was committed. Everything passed:
+
+| check | why it saw nothing |
+|---|---|
+| heading count / index order | the duplicate carried `#` rather than `##`, so the heading count did not change and `reindex_findings` had nothing to reorder |
+| yaml key validation | the entry's own metadata block was untouched |
+| `register-entries` measured claim | derived from heading count, which was right |
+| `KNOWN_LIMITATIONS` coverage | keyed on entry number, and the number still existed once |
+| full suite, 2,341 examples | none of them reads an entry's prose |
+
+Every check was about an entry's **metadata**. Nothing was about its
+**body**, so a body could be pasted twice and the file remained
+well-formed by every definition the tree had. Found by an unrelated
+grep printing the same sentence at two line numbers.
+
+**The countermeasure** is one line of the body that must appear exactly
+once: an entry states one `**Area:**`. That is enforced now, and the
+example was checked by planting the actual defect — the same block
+pasted at the same place — rather than a synthetic one.
+
+**Why not "be careful with slices".** Because the failure mode is
+silent: `find` returning `-1` produces a *plausible* result, and the
+plausible result went through a full suite and a commit message that
+truthfully said 0 failures. `CLAUDE.md`'s rule about a green suite not
+being a blast radius is the same observation from the other side — here
+the suite was green because nothing it contained could have been
+otherwise.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

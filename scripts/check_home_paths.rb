@@ -90,8 +90,11 @@ module HomePaths
 
     content = File.binread(absolute)
     # Compiled artefacts embed build-time paths that are not authored
-    # content; make-final-review-bundle.sh inspects those instead, with
-    # otool beside it.
+    # content. What inspects *those* is `vscode/scripts/release.sh`,
+    # which greps the unpacked VSIX and refuses to publish on a match
+    # outside the native extensions -- the check that used to be named
+    # here lived in `make-final-review-bundle.sh`, which nothing invoked
+    # and 0.2.14 deleted.
     if content.include?(NUL)
       skipped_files << { path: relative_path, reason: :binary }
       return []

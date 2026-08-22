@@ -42,6 +42,23 @@ RSpec.describe "the release script's own guards" do
     lines[opener..finish].join
   end
 
+  # `copy-core.js` bakes `buildCommit: currentGitCommit()` into the
+  # packaged Core, so a VSIX built from a dirty tree names a commit whose
+  # content it does not match -- and that SHA is what an installed
+  # extension reports, and what a Marketplace artifact is verified
+  # against after the fact.
+  #
+  # `RELEASE_CHECKLIST`'s gate #1 said this was enforced by
+  # `make-final-review-bundle.sh`, which nothing invoked. 046 deleted
+  # that script and moved the gate here, to the one path that actually
+  # publishes.
+  it "refuses to publish from a tree with uncommitted changes, from inside that check" do
+    block = block_containing(/diff --quiet/)
+
+    expect(block).not_to be_nil, "the clean-tree check is gone, or is no longer an if block"
+    expect(block).to include("exit 1")
+  end
+
   it "refuses to publish a token readable beyond its owner, from inside that check" do
     block = block_containing(/8#077/)
 
