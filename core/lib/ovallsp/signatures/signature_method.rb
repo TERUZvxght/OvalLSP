@@ -13,19 +13,46 @@ module Ovallsp
     Overload = Data.define(
       :required_positionals, :optional_positionals, :trailing_positionals, :rest_positional,
       :required_keywords, :optional_keywords, :rest_keyword,
-      :block_required, :block_type, :return_type, :type_parameters
+      :block_required, :block_type, :return_type, :type_parameters, :declared_return
     ) do
       def initialize(required_positionals: [], optional_positionals: [], trailing_positionals: [],
                       rest_positional: nil,
                       required_keywords: {}, optional_keywords: {}, rest_keyword: nil,
                       block_required: false, block_type: nil, return_type: Types::UNKNOWN,
-                      type_parameters: [])
+                      type_parameters: [], declared_return: nil)
         super(required_positionals: required_positionals, optional_positionals: optional_positionals,
               trailing_positionals: trailing_positionals,
               rest_positional: rest_positional, required_keywords: required_keywords,
               optional_keywords: optional_keywords, rest_keyword: rest_keyword,
               block_required: block_required, block_type: block_type, return_type: return_type,
-              type_parameters: type_parameters)
+              type_parameters: type_parameters, declared_return: declared_return)
+      end
+
+      # `024.42`. What a *reader* should see for this overload's return.
+      #
+      # `TypeConverter` maps `self`, `void`, `untyped`, `top` and
+      # `bottom` all to `Types::UNKNOWN`, which is right for the type
+      # model — nothing downstream can act on any of them — and wrong for
+      # prose: `push(...) -> Unknown` is a worse answer than the word RBS
+      # actually wrote, which is `self`.
+      #
+      # So `declared_return` carries the source's own word and
+      # `return_type` stays the model's value: two answers to two
+      # different questions, rather than one answer bent to serve both.
+      # A producer that records nothing falls back to the type, so no
+      # caller has to know which one built this overload.
+      # **Only where the conversion lost something.** `TypeConverter` maps
+      # `self`, `void`, `untyped`, `top` and `bottom` all to
+      # `Types::UNKNOWN`, and it is exactly there that the model has
+      # nothing to say and the source's own word is the better answer.
+      #
+      # Everywhere else the converted type is what the rest of the tree
+      # renders, and reaching for the declaration would make signature
+      # help the one place that says `::String` where every other reader
+      # says `String`. The first version of this did that, and three
+      # examples caught it.
+      def return_label
+        return_type == Types::UNKNOWN && declared_return ? declared_return : return_type.to_s
       end
     end
 

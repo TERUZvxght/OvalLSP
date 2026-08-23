@@ -464,7 +464,11 @@ module Ovallsp
           { label: offsets }
         end
         label.delete_suffix!(", ") unless parts.empty?
-        { label: "#{label})#{rbs_block_suffix(overload)} -> #{overload.return_type}", parameters: parameters }
+        # `#return_label`, not `#return_type` (`024.42`). The converted
+        # type maps `self`, `void` and `untyped` all to `Unknown`, which
+        # is right for the model and wrong for prose a person reads --
+        # `push(...) -> Unknown` where RBS wrote `-> self`.
+        { label: "#{label})#{rbs_block_suffix(overload)} -> #{overload.return_label}", parameters: parameters }
       end
 
       def rbs_signature_parts(overload)

@@ -18,6 +18,13 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
   # What a `(?)` declaration still *states* -- the two things the
   # conversion has to carry rather than flatten, and which stdlib's own
   # `(?)` methods all return `untyped` from, so they cannot show it.
+  # **`-> void`, not `-> Unknown`, since 0.2.15.** The fixture declares
+  # `-> void`, and `024.42` made the label carry the word the source
+  # wrote rather than what `TypeConverter` maps it to. The four
+  # assertions below had been pinning the old label -- correctly, for
+  # the behaviour of the day, and the behaviour was the defect: `void`
+  # tells a reader the return is not meant to be used, and `Unknown`
+  # tells them nothing.
   describe "what a `(?)` declaration still states" do
     around do |example|
       Dir.mktmpdir do |root|
@@ -102,7 +109,7 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
     # produce this and swapping them rendered `f(?limit:, name:)` with
     # nothing failing (0.1.12, round 9).
     it "lists a required keyword before an optional one" do
-      expect(label_for("both_kw")).to eq("both_kw(name:, ?limit:) -> Unknown")
+      expect(label_for("both_kw")).to eq("both_kw(name:, ?limit:) -> void")
     end
 
     # Positionals before keywords, in the order a call is written. The
@@ -112,13 +119,13 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
     # `pack(?buffer:, string)` with nothing failing. 141 method types in
     # the RBS core this loads have both (0.1.12).
     it "lists positionals before keywords" do
-      expect(label_for("mixed")).to eq("mixed(String, ?count:) -> Unknown")
+      expect(label_for("mixed")).to eq("mixed(String, ?count:) -> void")
     end
 
     # And `...` last: it means "and more beyond what is named", which is
     # only true after the names.
     it "puts the rest marker after the parts it names" do
-      expect(label_for("trailing")).to eq("trailing(String, ...) -> Unknown")
+      expect(label_for("trailing")).to eq("trailing(String, ...) -> void")
     end
 
     # `*rest` and `**rest` each independently mean "accepts more than it
@@ -227,6 +234,12 @@ RSpec.describe "Ovallsp::Signatures untyped RBS functions (0.1.12)" do
 
     label = query_service.signatures_of(Ovallsp::Types::Nominal.new(name: "Proc"), "call").first[:label]
 
+    # `Unknown`, and unlike the four in the group above this one is
+    # right. `Proc#call` reaches the `untyped_overload` fall-back, which
+    # is built without a `declared_return` because there is no declared
+    # return to carry -- so `#return_label` falls back to the converted
+    # type, which is what a reader should see for a signature that
+    # states nothing.
     expect(label).to eq("call(...) -> Unknown")
   end
 

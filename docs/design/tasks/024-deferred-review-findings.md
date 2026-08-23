@@ -213,7 +213,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.2.15 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | open | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
 | [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | open | 0.2.15 | Typing a `.` reports a method on the *next* line |
-| [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.2.15 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
+| [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.2.16 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
 | [`024.43`](#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | open | 0.2.15 | Signature help answers nothing for a receiverless stdlib call |
 | [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.2.16 | A partial's local is not resolved, and C11's stated basis names it |
 | [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.2.15 | Re-analysis after a keystroke is seconds on a large file, against a … |
@@ -2704,7 +2704,10 @@ limitation" row was therefore unenforced for it.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.15
+user-visible-note: >
+  Partly fixed in 0.2.15: the label carries the word RBS wrote where
+  the conversion loses it. The method type variable half is open.
+target: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/signatures/type_converter.rb` (`convert`),
@@ -2731,6 +2734,49 @@ converter — every other reader of it is right to get Unknown. Deferred
 rather than done because it touches the shape a signature is stored in,
 and 0.2.1 was days from release; the two label defects that needed no
 model change (a dropped block, duplicate overloads) are fixed.
+
+### The `self`/`void` half, fixed in 0.2.15
+
+`Overload` carries `declared_return` — the word the source wrote —
+beside `return_type`, which stays the model's value. Two answers to two
+different questions, rather than one answer bent to serve both.
+
+**`#return_label` uses the declared word only where the conversion lost
+something**, that is where the converted type is `Types::UNKNOWN`.
+Everywhere else the converted form is what the rest of the tree renders.
+
+*The first version did not have that restriction and reached for the
+declaration always. Three `query_service_spec` examples caught it
+immediately: `-> ::String` where every other reader in the tree says
+`String`. Signature help would have become the one place using RBS's
+fully-qualified spelling. The entry's complaint was about types that
+lose their meaning in conversion, not about qualification, and the
+restriction is what keeps the fix to the complaint.*
+
+**Five specs were pinning the old labels** — four in
+`untyped_function_spec` reading `-> Unknown` where the fixture declares
+`-> void`, and one in `query_service_spec`. Each was correct for the
+behaviour of the day, and the behaviour was the defect: `void` tells a
+reader the return is not meant to be used, and `Unknown` tells them
+nothing. Updated with the reason recorded at each site.
+
+**And one that stays `Unknown`, correctly**: `Proc#call` reaches the
+`untyped_overload` fall-back, built without a `declared_return` because
+there is no declared return to carry. `Unknown` is what a reader should
+see for a signature that states nothing. A blanket replace had changed
+that one too, and it is restored.
+
+**Measured**: 269 files of real gem source, both sides on corpus digest
+`8143600c…` at different revisions — byte-identical, control
+`unresolved-constant` 1,485 and `unknown-method` 22 on both.
+
+### Still open: the method type variable half
+
+`map() -> Array[U]` still shows `U`, the method's own type variable,
+which means nothing to a reader. That is a different question — what a
+label should say about a type parameter that is unbound at the call site
+— and it is not answered by carrying the source's word, since the source
+wrote `U` too. Left open and retargeted.
 
 
 ## 024.43 Signature help answers nothing for a receiverless stdlib call

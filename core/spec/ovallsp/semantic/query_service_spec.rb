@@ -275,7 +275,12 @@ RSpec.describe Ovallsp::Semantic::QueryService do
 
         signatures_result = service.signatures_of(nominal("Gadget"), "span")
 
-        expect(signatures_result.first[:label]).to eq("span(String, ?Integer, Symbol) -> Unknown")
+        # `-> void`, which is what the fixture on the line above declares.
+        # This read `-> Unknown` until 0.2.15: the label was built from
+        # the converted type, and `TypeConverter` maps `void` to
+        # `Types::UNKNOWN` because nothing downstream can act on it.
+        # Right for the model, wrong for prose -- `024.42`.
+        expect(signatures_result.first[:label]).to eq("span(String, ?Integer, Symbol) -> void")
       end
     end
 

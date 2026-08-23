@@ -256,6 +256,10 @@ module Ovallsp
           block_required: !method_type.block.nil? && method_type.block.required,
           block_type: method_type.block && TypeConverter.convert_function(method_type.block.type),
           return_type: TypeConverter.convert(fn.return_type),
+          # The word RBS wrote, for the label (`024.42`). Taken from the
+          # RBS node rather than reconstructed from the converted type,
+          # because the conversion is exactly what loses it.
+          declared_return: fn.return_type.to_s,
           type_parameters: method_type.type_params.map(&:to_s)
         )
       end
