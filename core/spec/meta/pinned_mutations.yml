@@ -181,3 +181,9 @@
   to: "  if true"
   spec: spec/meta/sbom_spec.rb
   example: "reports a divergence rather than passing on anything"
+- why: "024.40's parameter list -- a define_method recording an empty one, which is not 'unknown' but the assertion that the method takes no arguments."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "          parameters: defined_method_parameters(node)\n"
+  to: "          parameters: []\n"
+  spec: spec/ovallsp/diagnostics/define_method_arity_spec.rb
+  example: "reports the block's own count when a call cannot fit it"

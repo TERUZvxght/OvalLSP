@@ -1325,8 +1325,50 @@ module Ovallsp
         add_generated_method(
           node: node, name: name, kind: kind == :singleton ? :singleton_method : :instance_method,
           return_type: Types::UNKNOWN, origin: node.name, visibility: nil,
-          parameters: []
+          parameters: defined_method_parameters(node)
         )
+      end
+
+      # What `define_method(:x) { |a, b| }` takes is what its block takes,
+      # and Ruby enforces it the way it enforces a `def` -- the block
+      # becomes a method, so its arity is strict rather than a proc's:
+      #
+      #   $ ruby -e '
+      #   class C
+      #     define_method(:two)   { |a, b| }
+      #     define_method(:splat) { |*objs| objs }
+      #   end
+      #   begin; C.new.two(1); rescue ArgumentError => e; puts e.message; end
+      #   p C.new.splat(1, 2, 3)
+      #   '
+      #   wrong number of arguments (given 1, expected 2)
+      #   [1, 2, 3]
+      #   # ruby 3.4.10
+      #
+      # Recorded as taking *nothing*, which is what `024.116` left here,
+      # every call to one was judged against zero parameters. `024.40`:
+      # **109 of the 109** `argument-count` findings over Ruby 3.4.10's
+      # standard library, five Rails 8.1.3.1 gems and minitest -- 2,095
+      # files -- were this one line, and two declarations produced all of
+      # them. `rubygems/core_ext/kernel_warn.rb`'s
+      # `module_function define_method(:warn) {|*messages, **kw| ... }` and
+      # `objspace/trace.rb`'s `define_method(:p) do |*objs|` between them
+      # made every `warn` (94) and every `p` (15) in the corpus a report.
+      #
+      # Where there is no block *literal* -- `define_method(:x, &blk)`,
+      # `define_method(:x, instance_method(:y))` -- the parameter list is
+      # not written here at all, and neither are numbered parameters
+      # (`{ _1 }`), which nothing else in this parser reads.
+      # UNSTATED_PARAMETERS is what says so.
+      def defined_method_parameters(node)
+        block = node.block
+        return UNSTATED_PARAMETERS unless block.is_a?(Prism::BlockNode)
+
+        case block.parameters
+        when nil then []
+        when Prism::BlockParametersNode then extract_parameters(block.parameters.parameters)
+        else UNSTATED_PARAMETERS
+        end
       end
 
       def record_attribute_methods(node)
@@ -1429,7 +1471,10 @@ module Ovallsp
         enum_value_names(node).each do |value_name|
           add_generated_method(
             node: node, name: "#{value_name}?", kind: :instance_method,
-            return_type: Types::Nominal.new(name: "Boolean"), origin: :enum, metadata: { value: value_name }
+            return_type: Types::Nominal.new(name: "Boolean"), origin: :enum, metadata: { value: value_name },
+            # Stated rather than defaulted: an enum predicate really does
+            # take no arguments, and `order.active?(1)` really is an error.
+            parameters: []
           )
         end
       end
@@ -1454,13 +1499,20 @@ module Ovallsp
       # itself is never analyzed ("dynamic body内部型の断定はしない"); only
       # its name and the fact that it returns `Relation[Model]` are
       # statically knowable.
-      # What a macro-generated method takes when the macro forwards rather
-      # than declares: `delegate` passes everything through, and a
-      # `scope`'s arguments are its lambda's. Recorded as a rest
-      # parameter, which the argument-count check bails out on -- the same
-      # answer `def m(...)` gets. Recording *nothing*, as these did, made
-      # the check judge every call to them.
-      FORWARDED_PARAMETERS = [Index::Parameter.new(name: "args", kind: :rest, default_source: nil)].freeze
+      # **The parameter list this parser does not state.** An empty list is
+      # not the absence of an answer, it is the answer "takes nothing", and
+      # every reader treats it as one -- the argument-count check most
+      # sharply. A rest parameter is the shape that declines instead: the
+      # same answer `def m(...)` gets, and the one the check bails out on.
+      #
+      # Three macros want it, for two reasons. `delegate` passes everything
+      # through and a `scope`'s arguments are its lambda's, so the list is
+      # not knowable here; `define_method(:x, &blk)` does not write one
+      # here at all. Each of the three recorded *nothing* at some point and
+      # each made the check judge every call to what it declared -- twice
+      # over now (`024.40`), which is why the name says what the value
+      # means rather than which macro asked for it.
+      UNSTATED_PARAMETERS = [Index::Parameter.new(name: "args", kind: :rest, default_source: nil)].freeze
 
       def record_scope(node)
         return unless node.arguments
@@ -1470,7 +1522,7 @@ module Ovallsp
 
         return_type = Types::Generic.new(name: "Relation", type_arg: Types::Nominal.new(name: qualified_owner_name))
         add_generated_method(node: node, name: name, kind: :singleton_method, return_type: return_type,
-                             origin: :scope, parameters: FORWARDED_PARAMETERS)
+                             origin: :scope, parameters: UNSTATED_PARAMETERS)
       end
 
       # `delegate :name, :age, to: :company, prefix: true, allow_nil: true`.
@@ -1498,7 +1550,7 @@ module Ovallsp
           generated_name = prefix ? "#{target}_#{delegated_name}" : delegated_name
           add_generated_method(
             node: node, name: generated_name, kind: :instance_method, return_type: Types::UNKNOWN, origin: :delegate,
-            parameters: FORWARDED_PARAMETERS,
+            parameters: UNSTATED_PARAMETERS,
             metadata: { to: target, delegated_name: delegated_name, allow_nil: allow_nil }
           )
         end
@@ -1514,7 +1566,15 @@ module Ovallsp
         assoc&.value.is_a?(Prism::TrueNode)
       end
 
-      def add_generated_method(node:, name:, kind:, return_type:, origin:, metadata: {}, parameters: [],
+      # **`parameters:` has no default.** It defaulted to `[]`, and three of
+      # the five recorders that call this took the default while meaning
+      # "not stated here" -- each time declaring that the method takes no
+      # arguments, and each time making the argument-count check report
+      # every call to it (`delegate` and `scope` in 0.1.15,
+      # `define_method` in 0.2.13). The question is not one a recorder can
+      # answer by omission, so it cannot be omitted: state the list, or
+      # state UNSTATED_PARAMETERS.
+      def add_generated_method(node:, name:, kind:, return_type:, origin:, parameters:, metadata: {},
                                visibility: :public)
         symbol_id = Index::SymbolId.new(kind: kind, owner: current_owner, name: name, discriminator: nil)
         location = Index::SourceLocation.to_range(node.location, @lines)

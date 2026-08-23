@@ -268,17 +268,24 @@ Seven more are older than this release and untouched by it:
 Both diagnostics 0.2.0 adds are held to "a wrong report is worse than a
 missed one", so each is narrow on purpose. What that costs a user:
 
-- **The number of arguments** is checked, and every report it produces
-  over the code measured so far is wrong: **14** over Ruby 3.4.7's
-  standard library, five Rails 8.1.3 gems and minitest 6.0.6, measured at
-  0.2.1, each one working Ruby. Ten are
-  `def Const.method` being recorded as an instance method (024.32); the
-  rest are a block's `self` read as the enclosing class and a receiver
-  resolved by name collision. A corpus of gems is close to the worst
-  case for this — their dependencies are absent, so names resolve by
-  substitution — and the check's precision on a real application is
-  unmeasured. What 0.2.0 changes is where you see them: diagnostics now
-  publish for files nobody opened (024.40). <!-- documents: 024.40 -->
+- **The number of arguments** is checked, and on the code measured so far
+  it now reports nothing at all: **0** over Ruby 3.4.10's standard
+  library, five Rails 8.1.3.1 gems and minitest — 2,095 files — where the
+  same corpus produced **109** before, every one of them working Ruby.
+  Read it the way the argument-*type* bullet below reads: something that
+  will not contradict your code rather than something that will catch a
+  mistake in it. Two things it will not judge, both of which used to be
+  reported: a method defined by `define_method` from a block it cannot
+  read, and one a `delegate` or a `scope` generates — those forward their
+  arguments, so nothing here states a count. Every earlier report had its
+  own cause and each is fixed: `def Const.method` recorded as an instance
+  method (024.32), a block's `self` read as the enclosing class (024.31),
+  and `define_method(:warn) { |*messages| }` recorded as taking *no*
+  arguments, which alone made every `warn` and every `p` the corpus calls
+  a report. A corpus of gems is close to the worst case for this — their
+  dependencies are absent, so names resolve by substitution — and the
+  check's precision on a real application is still unmeasured
+  (024.40). <!-- documents: 024.40 -->
 - **Argument types** are checked so narrowly that on the code measured
   so far they are not reported at all. Over Ruby's standard library, five
   Rails gems and minitest — 2,042 files — this check produces

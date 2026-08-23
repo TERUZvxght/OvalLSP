@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**216 entries below** <!-- measured: register-entries = 216 -->,
+**217 entries below** <!-- measured: register-entries = 217 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -387,6 +387,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.215`](#024215-a-scripted-comment-rewrite-in-corpus-diagnostics-rb-cut-a-sentence-mid-clause-and-nothing-in-the-tree-can-see-it) | open | 0.2.16 | A scripted comment rewrite in corpus_diagnostics.rb cut a sentence m… |
 | [`024.216`](#024216-the-register-s-entry-number-is-parsed-by-six-readers-with-three-grammars-so-a-sub-numbered-entry-is-indexed-as-a-duplicate-of-its-parent) | open | 0.2.16 | The register's entry number is parsed by six readers with three gram… |
 | [`024.217`](#024217-rescue-verdicts-yml-s-header-tells-a-reader-the-98-arguments-are-unargued-defaults-and-names-a-verdict-the-checker-rejects-as-the-safe-one) | open | 0.2.16 | `rescue_verdicts.yml`'s header tells a reader the 98 arguments are u… |
+| [`024.218`](#024218-six-isolated-agents-branched-from-the-wrong-commit-and-the-evidence-was-deleted-before-it-was-checked) | fixed | 0.2.15 | Six isolated agents branched from the wrong commit, and the evidence… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -2512,6 +2513,73 @@ index's substitution, which round 22 refused for the *receiver* and for
 a *superclass* but not for an aliased singleton. Fixing 024.32 alone
 removes 10 of the 15. Then re-measure, on a real application rather than
 on gems.
+
+### Re-measured at 0.2.13: the tabled shapes were gone, and the count was 109
+
+The direction above was followed and it worked: 024.32, 024.31 and
+024.33 all shipped in 0.2.13, and **not one** of the shapes tabled above
+is still reported. The count is nevertheless **109**, over Ruby 3.4.10's
+standard library, five Rails 8.1.3.1 gems and minitest 5.25.4 — 2,095
+files, at `57e98da` — and all 109 are a *new* cause the same release
+introduced:
+
+| shape | count | cause |
+|---|---|---|
+| `warn("a", "b")` anywhere in the corpus | 94 | `rubygems/core_ext/kernel_warn.rb`'s `module_function define_method(:warn) {\|*messages, **kw\| … }` |
+| `p :list_start => margin` anywhere in the corpus | 15 | `objspace/trace.rb`'s `define_method(:p) do \|*objs\|` |
+
+**Two declarations produced all 109.** 024.116 taught the parser to
+record the *name* a `define_method` writes — which is what made hover,
+go-to-definition and completion answer for one — and recorded
+`parameters: []` alongside it. An empty parameter list is not "unknown";
+it is the assertion that the method takes no arguments, and the arity
+check reads it as one. Both files above define a method that takes
+`*args`, so every `warn` and every `p` in the corpus was told it takes
+none.
+
+This is the third time this exact mistake has been made in this file:
+`delegate` and `scope` recorded nothing in 0.1.15 and made the check
+judge every call to what they declared, which is what `UNSTATED_PARAMETERS`
+(then `FORWARDED_PARAMETERS`) was introduced for.
+
+**Fixed.** A method defined from a block takes what the block takes —
+Ruby arity-checks it like a `def`, not like a proc — so
+`define_method(:pair) { |a, b| }` declares two required parameters and
+`{ |*objs| }` declares a rest parameter the check bails out on. Where
+there is no block *literal* (`define_method(:x, &blk)`,
+`define_method(:x, instance_method(:y))`) or the block uses numbered
+parameters, nothing states a list here and `UNSTATED_PARAMETERS` says so.
+And `add_generated_method`'s `parameters:` keyword lost its default, so
+the next macro recorder cannot assert an empty list by omission — the
+countermeasure the third repetition calls for, rather than a fourth hand
+fix.
+
+Measured both sides over the identical corpus (`corpus-sha256`
+`acefc6b0798a9c9886a9704dbc86c58bac578bb436d716dbdfc091bb10fe64c4`,
+2,095 files), one run at a time, each printing its own tree and revision:
+
+| | `57e98da` | `57e98da` + the fix |
+|---|---|---|
+| `unresolved-constant` (control) | 10,406 | 10,406 — identical line for line |
+| `unknown-method` (control) | 583 | 583 — identical line for line |
+| `argument-count` | **109** | **0** |
+| removed / added | — | **109 / 0** |
+
+`scripts/hunk_sweep.rb` over the change set: **6 hunks, 6 pinned, 0
+unpinned**, and the spec file it adds pins something the rest of the
+suite does not. The countermeasure needed one round to get there — the
+first sweep reported the required keyword unpinned, because nothing
+expressed it as behaviour; `:keyreq` against `:key` on the recorder's own
+`Method#parameters` is what pins it now.
+
+**Still open, and the entry's title is now the wrong question.** The
+check reports nothing at all on 2,095 files of real Ruby, which is the
+state `024.37` describes for the argument *type* check — not a precision
+of zero, a precision that is undefined. What the 0.2.1 entry asked for is
+still not done: **measure it on a real application**, where the classes
+are the user's own and declared, rather than on gems whose dependencies
+are absent. Until that is run, nothing here says whether G5 catches a
+real mistake.
 
 
 ## 024.41 Typing a `.` reports a method on the *next* line
@@ -10092,6 +10160,69 @@ The header of `rescue_verdicts.yml` describes a state of the file that ended in 
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+## 024.218 Six isolated agents branched from the wrong commit, and the evidence was deleted before it was checked
+
+```yaml
+status: fixed
+kind: friction
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it cost is roughly two and a half hours of
+  parallel work on five engine defects, of which one survived.
+target: 0.2.15
+released-in: 0.2.15
+```
+
+**Area:** the 0.2.15 implementation workflow (a `Workflow` script, not
+tracked here), `docs/design/tasks/047-0.2.15-scope.md`
+
+Six agents were given one engine defect each and run in **isolated git
+worktrees** so they could edit freely without colliding. All six
+reported success. One fix reached the tree.
+
+**Two failures, and the second is what did the damage.**
+
+*They branched from the wrong commit.* Five of the six worktrees were
+created at `57e98da` — "0.2.13 published" — **22 commits behind HEAD**.
+So they implemented against a tree with none of 0.2.14 in it: no
+`RepoFiles`, no corrected documents, a register missing 64 entries, and
+an example count three hundred out of date. Their diffs edit
+`docs/RELEASE_CHECKLIST.md` to say `2,331 examples`. Nothing in the
+launch checked what base the isolation would use, and nothing in the
+result announced it.
+
+*The worktrees were removed before the diffs were confirmed to apply.*
+Only one agent had committed inside its worktree; the other five held
+their work as uncommitted changes. Removing the worktrees destroyed the
+only complete copy. What is left is the diff each returned through a
+JSON field — against a 22-commit-old base, and three of the six arrive
+truncated (`git apply` reports *corrupt patch*).
+
+**What survived:** `024.40`, cherry-picked from the one branch that had
+a commit on it, its `pinned_mutations.yml` entry merged with 0.2.14's
+seven, and its mutation confirmed caught (22 of 22).
+
+**What this says.** Isolation is not free, and its cost is not the disk:
+it is that **the work exists somewhere the main tree cannot see**, so
+every assumption about where it came from and whether it still applies
+has to be checked rather than assumed. Both halves of this failure are
+that one sentence.
+
+**The rule, and it is cheap:**
+
+- **Verify the base before the work, not after.** An isolated agent
+  reports the commit it started from as its first act, and the
+  orchestrator refuses a base that is not the intended one.
+- **Never remove an isolated worktree until its output is in the main
+  tree.** A diff that has been through a serialisation boundary is a
+  copy, not the thing. `git apply --check` on every one *before*
+  cleanup, and the worktree stays until it passes.
+
+*It is the same shape as `024.149` — a result read from a summary rather
+than from the thing itself — with the added cost that here the thing
+itself was then thrown away.*
+
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
