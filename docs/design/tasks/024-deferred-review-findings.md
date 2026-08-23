@@ -302,7 +302,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.130`](#024130-a-hover-label-drops-the-namespace-when-the-name-was-written-bare-withdrawn-it-does-not-reproduce) | fixed | 0.2.14 | A hover label drops the namespace when the name was written bare — w… |
 | [`024.131`](#024131-after-on-a-nil-local-hover-answers-nil-a-wrong-answer-not-an-absent-one) | fixed | 0.2.15 | After `||=` on a nil local, hover answers `nil` — a wrong answer, no… |
 | [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 0.2.15 | A scope defined in a concern's `included do` has no type |
-| [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | open | 0.2.15 | A positional argument to a keyword-only method reads as nonsense |
+| [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | fixed | 0.2.15 | A positional argument to a keyword-only method reads as nonsense |
 | [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | open | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
 | [`024.135`](#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | open | 0.2.15 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
 | [`024.136`](#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | open | 0.2.15 | A route's optional segments are detected by matching the literal `(.… |
@@ -1060,6 +1060,59 @@ unknown-method check uses, or require the resolved name to end with the
 constant path as written. A fixture has to make the simple-name fallback
 fire, which the current spec's RBS shape does not.
 
+
+
+### 0.2.15 assessment: claimed not to reproduce — **not yet confirmed**
+
+An assessment run drove this against HEAD and reported that it does not
+reproduce. The evidence is real and is quoted below. **It has not been
+independently confirmed, and the entry therefore stays open.**
+
+The second attempt at confirmation failed on its own control: a fixture
+that cannot tell *"the defect is gone"* from *"nothing of this kind is
+reported at all"* proves neither. That is the same defect the assessment
+would be closing, one level up.
+
+*This matters here specifically. `024.130` was published to users as a
+limitation the product does not have, because a bullet was promoted to a
+numbered entry without its reproduction being re-run. Closing an entry
+on an unconfirmed claim is the same act in the other direction.*
+
+**What 0.2.15 must do:** re-run this with a control that distinguishes
+the two outcomes, and close it or keep it on that basis.
+
+<details><summary>The assessment's evidence, verbatim</summary>
+
+```
+The entry's own reported instance was driven directly. From core, with no other corpus run in flight (`ps -axo pid=,command= | grep corpus_diagnostics` empty first):
+
+  OVALLSP_SIGNATURE_ROOT=/opt/homebrew/lib/ruby/gems/3.4.0/gems/prism-1.9.0 \
+    bundle exec ruby ../scripts/corpus_diagnostics.rb \
+    /opt/homebrew/lib/ruby/gems/3.4.0/gems/prism-1.9.0/lib
+
+  corpus-diagnostics: cwd=core
+  corpus-diagnostics: revision=5d20fe7877e37862c077f30c101fe7d9dfe2fd38
+  corpus-diagnostics: dirty-tracked-files=0
+  corpus-diagnostics: ovallsp-version=0.2.13
+  corpus-diagnostics: signature-root=/opt/homebrew/lib/ruby/gems/3.4.0/gems/prism-1.9.0
+  corpus-diagnostics: corpus-files=41
+  corpus-diagnostics: corpus-sha256=8447e7cf624dc129d5668f70a2a18bc5cb9ecfcc4638d29b72a6f129630e7a8c
+  corpus-diagnostics: count.unresolved-constant=392
+
+`grep -c '^argument-type' prism.out` => 0. Not one argument-type report over the whole gem, with the gem's own sig loaded.
+
+At the exact reported location — prism-1.9.0/lib/prism/translation/parser.rb line 320, `::Parser::Source::Comment.new(build_range(comment.location, offset_cache))` — the only reports are (0-based line 319):
+
+  unresolved-constant  .../translation/parser.rb:319:28  cannot resolve constant `::Parser::Source::Comment`
+  unresolved-constant  .../translation/parser.rb:319:20  cannot resolve constant `::Parser::Source`
+  unresolved-constant  .../translation/parser.rb:319:12  cannot resolve constant `::Parser`
+
+This also falsifies the entry's own second paragraph, which says "precisely when the fallback fires, the full constant is *not* reported unresolvable. Only its unresolvable prefixes are." The FULL constant is reported, alongside its prefixes.
+
+Fixture-level confirmation (<scratch> and specs_19b.rb, project sig declaring `class Widg
+```
+
+</details>
 
 ## 024.20 `contains?` treats an exclusive end offset as inclusive
 
@@ -2133,6 +2186,58 @@ measuring in both directions first: it will silence genuine class-level
 reports on every class that includes anything unread, which is most of a
 Rails app before the Agent is ready.
 
+
+
+### 0.2.15 assessment: claimed not to reproduce — **not yet confirmed**
+
+An assessment run drove this against HEAD and reported that it does not
+reproduce. The evidence is real and is quoted below. **It has not been
+independently confirmed, and the entry therefore stays open.**
+
+The second attempt at confirmation failed on its own control: a fixture
+that cannot tell *"the defect is gone"* from *"nothing of this kind is
+reported at all"* proves neither. That is the same defect the assessment
+would be closing, one level up.
+
+*This matters here specifically. `024.130` was published to users as a
+limitation the product does not have, because a bullet was promoted to a
+numbered entry without its reproduction being re-run. Closing an entry
+on an unconfirmed claim is the same act in the other direction.*
+
+**What 0.2.15 must do:** re-run this with a control that distinguishes
+the two outcomes, and close it or keep it on that basis.
+
+<details><summary>The assessment's evidence, verbatim</summary>
+
+```
+DOES NOT REPRODUCE — already fixed and pinned; the register entry is stale.
+
+Scratch spec (<scratch>), stack built with build_analysis_stack, run from core at HEAD 5d20fe7 (v0.2.13):
+
+  B => []            # class Configish2; include SomeGem::Model; end  ->  Configish2.some_class_method
+  D => []            # SolidQueue::Configuration includes ActiveModel::Model -> .validates_presence_of
+  A => []            # the entry's own `class Configish; include SomeGem::Model; validate :ensure_ok; end`
+  C => ["tpyo"]      # control: a class including nothing still reports a class-level typo
+  4 examples, 0 failures
+
+The entry's named area no longer exists in that form. `Engine#closed_nominal?` now delegates to `MethodResolver#availability(...).absent?`, and the Direction the entry asked for ("ask ancestor_known? of both chains when the lookup is a singleton one") is implemented in core/lib/ovallsp/semantic/method_resolver.rb#unenumerable_reason, lines 183 and 200:
+
+  return :ancestor_not_identified if singleton && instance_entries.any? { |e| !e.identified? }
+  return :ancestor_not_declared_anywhere if singleton && !instance_entries.all? { |e| accounted_for?(e, signatures) }
+
+Direct probe of the reason (scratchpad/e35b_spec.rb):
+  Configish2 singleton: absent=false reason=:ancestor_not_declared_anywhere
+  Plain35    singleton: absent=true  reason=nil
+  Configish2 instance ancestors: [["::Configish2",true,:class],["SomeGem::Model",true,nil],["Object",true,:class],...]
+
+PINNED. Reverse-applying both lines via a monkeypatch (scratchpad/unpatch35.rb — no repo edit) reproduces the entry verbatim and fails an existing spec:
+  B => ["some_class_method"]
+  D => ["validates_presence_of"]
+  spec/ovallsp/semantic/method_resolver_availability_spec.rb  15 examples, 1 failure
+(spec/ovallsp/diag
+```
+
+</details>
 
 ## 024.36 Instructing a reviewer narrowed what it could find, and a control run proved it
 
@@ -4711,6 +4816,48 @@ headline capability missing on the headline path.
 from completion's — the two disagree at the same position, which means
 one of them is asking a question the other is not. That divergence is the
 defect; the missing report is its symptom.
+
+
+### 0.2.15 assessment: claimed not to reproduce — **not yet confirmed**
+
+An assessment run drove this against HEAD and reported that it does not
+reproduce. The evidence is real and is quoted below. **It has not been
+independently confirmed, and the entry therefore stays open.**
+
+The second attempt at confirmation failed on its own control: a fixture
+that cannot tell *"the defect is gone"* from *"nothing of this kind is
+reported at all"* proves neither. That is the same defect the assessment
+would be closing, one level up.
+
+*This matters here specifically. `024.130` was published to users as a
+limitation the product does not have, because a bullet was promoted to a
+numbered entry without its reproduction being re-run. Closing an entry
+on an unconfirmed claim is the same act in the other direction.*
+
+**What 0.2.15 must do:** re-run this with a control that distinguishes
+the two outcomes, and close it or keep it on that basis.
+
+<details><summary>The assessment's evidence, verbatim</summary>
+
+```
+Driven at HEAD 5d20fe7 with a full AnalysisStack (workspace_index + hierarchy_index + generated_method_index all fed from the parse summary, which matters — see note 1). Fixture: `module Billing; class Order < ApplicationRecord; scope :recent, -> { where("created_at > ?", 1) }; end; end`, model registered in ModelRegistry.
+
+  type Billing::Order.recent                    => Relation[Billing::Order]
+  type Billing::Order.recent.first              => Billing::Order | nil
+  type Billing::Order.find(1)                   => Billing::Order
+  diag Billing::Order.find(1).tracking_label         => ["Billing::Order has no method named `tracking_label`"]
+  diag Billing::Order.recent.first.tracking_label    => ["Billing::Order has no method named `tracking_label`"]
+  diag Billing::Order.first.tracking_label           => ["Billing::Order has no method named `tracking_label`"]
+
+The entry's headline example IS reported. It was closed in 0.2.6 and the tree already says so in three places the register did not get updated from: core/lib/ovallsp/diagnostics/engine.rb:120-131 names `024.77` as the reason `#reportable_branches` exists; core/spec/ovallsp/diagnostics/union_receiver_spec.rb pins it by name; docs/design/tasks/035-0.2.6-honest-diagnostics.md:93 states "`Model.scope.first.missing` is reported (`024.77`)". docs/design/tasks/042-second-enumeration.md:128 had already re-scoped what remains to "a receiver's *type* after a relation hop", i.e. 024.87.
+
+I then tested the entry's stated Direction ("find where the diagnostic path's receiver typing diverges from completion's") directly, comparing QueryService#members_of against the unknown-method finding at the same position:
+
+  Billing::Order.find(1)                    type=Billing::Order           members=9    reported=true
+  Billing::Or
+```
+
+</details>
 
 ## 024.78 Completion did not get the fix hover and diagnostics did
 
@@ -7435,10 +7582,13 @@ hop; this is about never having one.
 ## 024.133 A positional argument to a keyword-only method reads as nonsense
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
+user-visible-note: >
+  Fixed in 0.2.15. The report now says `positional`.
 target: 0.2.15
+released-in: 0.2.15
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`#argument_count_findings`)
@@ -7449,6 +7599,26 @@ method that plainly takes several. The count is arithmetically right —
 zero *positional* parameters — and the sentence does not say so.
 
 **Was one of nine bullets under `024.90` until 0.2.14.**
+
+### Fixed in 0.2.15
+
+`#expected_arity` takes `positional:`, and `#argument_count_findings`
+passes the `declares_keywords` flag it already computes. The message
+becomes ``takes 0 positional arguments, but 1 given``.
+
+**The number was right and the noun was wrong**, which is why the fix is
+one word. Ruby makes the same count and disambiguates it with a clause —
+taken from the interpreter rather than from memory:
+
+```
+$ ruby -e 'def kwargs(name:, size: 1, **rest) = 1; kwargs("positional")'
+wrong number of arguments (given 1, expected 0; required keyword: name)
+```
+
+Pinned by two examples, and the second is the one that matters: an
+ordinary method must *not* gain the word, because "always say positional"
+is a different and equally wrong message.
+
 
 ## 024.134 `wait_until_ready` never returns for a non-Rails workspace
 

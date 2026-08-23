@@ -216,7 +216,8 @@ module Ovallsp
 
           Finding.new(
             code: "argument-count",
-            message: "`#{candidate.name}` takes #{expected_arity(required, maximum)}, but #{passed} given",
+            message: "`#{candidate.name}` takes " \
+                     "#{expected_arity(required, maximum, positional: declares_keywords)}, but #{passed} given",
             range: candidate.location, severity: :warning, confidence: :high,
             evidence: { required: required, maximum: maximum, passed: passed }, generation: context.generation
           )
@@ -644,9 +645,19 @@ module Ovallsp
         overload
       end
 
-      def expected_arity(required, maximum)
+      # `024.133`. "takes 0 arguments" beside `def kwargs(name:, size: 1,
+      # **rest)` reads as nonsense: the method plainly takes several, and
+      # the count is of *positional* parameters only.
+      #
+      # Ruby makes the same count and disambiguates it with a clause --
+      # `wrong number of arguments (given 1, expected 0; required
+      # keyword: name)` -- so the number was right and the noun was
+      # wrong. The word is added only where the method actually declares
+      # keywords; adding it everywhere would be a different wrong
+      # message.
+      def expected_arity(required, maximum, positional: false)
         count = required == maximum ? required.to_s : "#{required}..#{maximum}"
-        "#{count} argument#{maximum == 1 ? '' : 's'}"
+        "#{count}#{positional ? ' positional' : ''} argument#{maximum == 1 ? '' : 's'}"
       end
 
       # The one source declaration this call resolves to, or nil when the

@@ -655,8 +655,6 @@ arguments. <!-- documents: 024.89 -->
   `[1,2].siz` are silent, though completion at the same spot knows the
   type exactly. <!-- documents: 024.129 -->
 - A scope defined inside a concern's `included do` has no type. <!-- documents: 024.132 -->
-- Passing a positional argument to a keyword-only method says it "takes 0
-  arguments". <!-- documents: 024.133 -->
 
 ## A class created by assignment is invisible
 
