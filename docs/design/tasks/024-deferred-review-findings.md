@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**217 entries below** <!-- measured: register-entries = 217 -->,
+**220 entries below** <!-- measured: register-entries = 220 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -280,7 +280,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | fixed | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
 | [`024.110`](#024110-the-macro-is-reported-and-what-it-might-define-is-not) | fixed | 0.2.13 | The macro is reported, and what it might define is not |
-| [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | open | 0.2.15 | A visibility section written inside a block does not reach the body … |
+| [`024.111`](#024111-a-visibility-section-written-inside-a-block-does-not-reach-the-body-it-runs-in) | fixed | 0.2.15 | A visibility section written inside a block does not reach the body … |
 | [`024.112`](#024112-a-bare-constant-is-not-looked-up-through-the-enclosing-class-s-ancestors) | fixed | 0.2.11 | A bare constant is not looked up through the enclosing class's ances… |
 | [`024.113`](#024113-the-publish-funnel-s-memory-is-keyed-by-uri-not-by-buffer) | fixed | 0.2.11 | The publish funnel's memory is keyed by uri, not by buffer |
 | [`024.114`](#024114-module-function-name-cannot-see-a-module-reopened-in-another-file) | fixed | 0.2.11 | `module_function :name` cannot see a module reopened in another file |
@@ -388,6 +388,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.216`](#024216-the-register-s-entry-number-is-parsed-by-six-readers-with-three-grammars-so-a-sub-numbered-entry-is-indexed-as-a-duplicate-of-its-parent) | open | 0.2.16 | The register's entry number is parsed by six readers with three gram… |
 | [`024.217`](#024217-rescue-verdicts-yml-s-header-tells-a-reader-the-98-arguments-are-unargued-defaults-and-names-a-verdict-the-checker-rejects-as-the-safe-one) | open | 0.2.16 | `rescue_verdicts.yml`'s header tells a reader the 98 arguments are u… |
 | [`024.218`](#024218-six-isolated-agents-branched-from-the-wrong-commit-and-the-evidence-was-deleted-before-it-was-checked) | fixed | 0.2.15 | Six isolated agents branched from the wrong commit, and the evidence… |
+| [`024.219`](#024219-a-three-part-claim-shipped-with-one-part-pinned-and-the-other-two-were-false) | fixed | 0.2.15 | A three-part claim shipped with one part pinned, and the other two w… |
+| [`024.220`](#024220-the-interpreter-sessions-pasted-through-this-tree-are-never-re-run) | open | 0.2.16 | The interpreter sessions pasted through this tree are never re-run |
+| [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.2.16 | A block whose receiver cannot be vouched for contains a `private` th… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -6695,10 +6698,11 @@ line.
 ## 024.111 A visibility section written inside a block does not reach the body it runs in
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.15
+released-in: 0.2.15
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (`#visit_block_node`)
@@ -6733,22 +6737,45 @@ extending it is a change to a rule three releases have adjusted.
 and this is the shape `CLAUDE.md` says to record rather than add to a
 change set under review. Found by the `attack` round.
 
-**Narrowed in 0.2.13.** The literal-receiver half is fixed with
-`024.117`: `[1].each { private }` and `1.times { module_function }` reach
-the enclosing body now, which is what Ruby does, because a block
-iterating a literal opens no cref frame.
+**Said to be narrowed in 0.2.13, and it was not.** `024.117` recorded
+that "`[1].each { private }` and `1.times { module_function }` reach the
+enclosing body now". They did not, on that day or since.
+`Cref#in_block(shares_self: true)` returns the same cref and opens no
+frame — but `#visit_block_node` restored `@cref` from a local in an
+`ensure`, **unconditionally**, and `Cref` is an immutable value. The
+section a `private` opens *is* a new cref; the restore threw it away. An
+`attr_accessor` in the same block records its declaration while the
+shared cref is installed, so that half worked, and its working was read
+as evidence for the other two. `024.219` records the claim.
 
-**What stays open is the receiver this parser cannot vouch for.**
-`SOME_CONST.each { private }` and `helper { private }` still get a frame,
-and they must: `included do ... end` and `concerning ... do` run their
-`private` against a different module, and without the frame every method
-written after such a block was recorded private — which silently dropped
-real controller actions and their ivars vanished from the corresponding
-views.
+**Fixed in 0.2.15.** `#visit_block_node` asks the value whether a frame
+was opened — `!block_cref.equal?(@cref)` — and restores only then. Asking
+the returned cref rather than re-deriving `iterates_a_literal?` at the
+restore keeps the rule in one place, which is where 0.2.13 left it.
 
-Telling the two apart needs to know what the *call* does with the block,
-which is `024.31` and `024.33`'s question — a block wants a receiver, not
-a boolean — and remains the shape this entry is waiting on.
+Two constructs neither entry had ever mentioned were broken by the same
+line and fixed by it: `[1].each { protected }` and a `[1].each { public }`
+cancelling an open `private`. They were found by enumerating what a
+self-sharing block carries out instead of fixing the two cases reported —
+`CARRIED_OUT` in `spec/ovallsp/visibility_through_block_spec.rb`, which
+generates its examples from the table and is the countermeasure this
+place earned by being found in two releases running.
+
+**The receiver this parser cannot vouch for stays contained, as it must.**
+`SOME_CONST.each { private }`, `included do ... end`, `class_eval` and
+`concerning ... do` run their `private` against a different module, and
+without the frame every method written after such a block was recorded
+private — which silently dropped real controller actions and their ivars
+vanished from the corresponding views. All four are rows in `CONTAINED`.
+Telling a *nameable* receiver apart from that is still `024.31` and
+`024.33`'s question — a block wants a receiver, not a boolean.
+
+Corpus, 4 Rails gems, 997 files, control `unresolved-constant` identical
+at 2,987: **0 added, 0 removed.** A Prism probe over the stdlib and every
+installed gem — 4,582 files — finds **no instance of the shape at all**,
+so that run bounds the regression risk and says nothing about the fix.
+The mutation check does: reverting the guard fails 5 of 14 examples,
+never restoring fails 4, and forcing `iterates_a_literal?` false fails 5.
 
 ## 024.112 A bare constant is not looked up through the enclosing class's ancestors
 
@@ -6979,6 +7006,18 @@ both halves at once:
 A visibility section, a `module_function` and an `attr_accessor` written
 in an ordinary iterator block **all reach the enclosing body**, and the
 frame was containing all three.
+
+> **This sentence was one third true, and stayed in the register for two
+> releases.** The interpreter session above is right. The `attr_accessor`
+> half really was fixed here. Both visibility halves were **inert on the
+> day they were declared fixed**: `#in_block(shares_self: true)` opens no
+> frame, but `#visit_block_node` restored `@cref` unconditionally in an
+> `ensure`, and `Cref` is an immutable value — so the new cref a
+> `private` produced was thrown away with the restore. An `attr_accessor`
+> records its declaration *while* the shared cref is installed, which is
+> why that one worked and looked like evidence for the other two.
+> Corrected in 0.2.15 with `024.111`; `024.219` records how a three-part
+> claim shipped with one part pinned.
 
 `Cref#in_block(shares_self:)` opens no frame when the owning call's
 receiver is a **literal** — `%w[a b].each`, `[1].each`, `(1..3).map`.
@@ -10561,6 +10600,195 @@ that carry the reason it might be wrong are the ones easiest to skip.
 `024.149` is the same failure against a workflow's summary, and this is
 it against an agent's own report — twice now, one level apart.
 
+
+## 024.219 A three-part claim shipped with one part pinned, and the other two were false
+
+```yaml
+status: fixed
+kind: friction
+user-visible: no
+user-visible-note: >
+  Nothing a user meets directly -- the defect the false claim hid is
+  `024.111`, and that one they did. What this cost is that the
+  register, which is where a worker goes to find out what is already
+  true, asserted a behaviour for two releases that a six-line script
+  disproves.
+target: 0.2.15
+released-in: 0.2.15
+```
+
+**Area:** `docs/design/tasks/024-deferred-review-findings.md`
+(`024.117`, `024.111`), `core/lib/ovallsp/parser_service.rb`
+
+`024.117` closed in 0.2.13 by asking the interpreter, and wrote down what
+it heard:
+
+> A visibility section, a `module_function` and an `attr_accessor`
+> written in an ordinary iterator block **all reach the enclosing body**,
+> and the frame was containing all three.
+
+The interpreter session was right. The sentence about this engine was
+one third right. `Cref#in_block(shares_self: true)` returns `self`, so
+no frame is opened — but `#visit_block_node` restored `@cref` in an
+`ensure` **unconditionally**, and `Cref` is an immutable value. An
+`attr_accessor` inside the block records its declaration *while* the
+shared cref is installed, so its owner came out right and the claim
+looked true. A `private` produces no declaration; it produces a *new
+cref*, which lived in `@cref` until the `ensure` overwrote it. Both
+visibility halves were inert on the day they were declared fixed.
+
+The claim had **four copies**: `024.117`, `Cref#in_block`'s comment, and
+0.2.13's changelog bullet in both languages — the last of which shipped
+to the Marketplace, so it is annotated in place rather than edited, and
+anyone who read the original can see the correction beside it.
+
+`024.111` then copied the claim forward — "**Narrowed in 0.2.13.** The
+literal-receiver half is fixed with `024.117`: `[1].each { private }` and
+`1.times { module_function }` reach the enclosing body now" — and two
+releases of the register asserted a behaviour that a six-line script
+disproves.
+
+**What made it survive:** the three behaviours were established in one
+interpreter session and fixed by one line, so they were treated as one
+thing. They are not: two are state that must outlive the block, one is an
+event inside it. The specs `024.117` added pinned the event. Nothing
+failed, and the register recorded the count of examples rather than the
+count of claims.
+
+**Fixed in 0.2.15** with `024.111`, whose entry now records the correction
+rather than the inherited claim. `visibility_through_block_spec.rb` pins
+each of the three separately, in both directions, with the `included do`
+and `class_eval` controls that say why the frame exists at all.
+
+**The countermeasure is the `CARRIED_OUT` and `CONTAINED` tables** in
+`spec/ovallsp/visibility_through_block_spec.rb`. The list of constructs a
+self-sharing block carries out now exists once; the examples are
+generated from it, so a construct cannot be named without being pinned,
+and `Cref#in_block`'s comment points at the table instead of restating it
+— which is the pair of copies that diverged here. Same shape as
+`Types::LiteralTypes`, and the same reason.
+
+A regression test for `private` alone would not have been one: it pins
+the case that was reported and leaves the next construct to a reviewer,
+which is how `protected` and `public` — never mentioned by either entry,
+both broken, both fixed by the same line — went two releases unnoticed.
+
+**What no mechanical check here would have caught** is the underlying
+mistake: three behaviours were established in one interpreter session and
+fixed by one line, so they were counted as one thing, and the register
+recorded the number of examples rather than the number of claims. Two of
+the three are *state that must outlive the block*; one is an *event
+inside it*. `CLAUDE.md`'s "Promoting a finding is making a claim" is the
+rule that covers that, and it is prose because the count of claims lives
+in a sentence. Saying a table catches it would be the same error again.
+
+## 024.220 The interpreter sessions pasted through this tree are never re-run
+
+```yaml
+status: open
+kind: friction
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it costs is that the evidence a fix
+  rests on is unverifiable text, and the rule that produced it says
+  it exists so the next reader need not trust that somebody checked.
+target: 0.2.16
+```
+
+**Area:** `docs/design/tasks/024-deferred-review-findings.md`,
+`core/lib`, `core/spec` (55 sessions across 26 files), a new
+`scripts/check_interpreter_sessions.rb`
+
+`CLAUDE.md` requires a claim about Ruby's semantics to be taken from
+Ruby, run, and pasted in "so the next reader can see what the
+expectation rests on rather than trusting that somebody checked". The
+rule works — several defects were found by obeying it. It has produced
+55 `$ ruby -e '...'` sessions with their output written beside them, and
+**every one is inert text.** Nothing re-runs them. A mis-transcribed
+result, a session edited out of agreement with the code beside it, and a
+session that stops being true on a later Ruby all read exactly like a
+correct one, and each would be believed — which is the whole point of
+pasting them.
+
+Two shapes are in the tree, and both parse:
+
+    $ ruby -e '...multi-line...'
+    # => value            <- one per line of stdout
+    # ruby 3.4.10
+
+    $ ruby -e 'one-liner'
+    bare output line
+
+A checker extracts each session, runs it, and compares. It must **fail
+on a session it cannot parse rather than skipping it**: a checker that
+passes over what it does not understand reports exactly what a working
+checker reports when everything is fine, which this register already
+records happening twice (`scripts/check_pinned_mutations.rb` on its first
+run, and `024.147`).
+
+**Raised while closing `024.111`, and deliberately not built there.**
+`024.219` is the entry that prompted it, and this would *not* have caught
+`024.219` — there the transcript was right and the engine disagreed with
+it, which no amount of re-running the interpreter can see. It is a
+separate, real class: the evidence a fix rests on ceasing to say what it
+says. Building it means normalising up to 55 sessions across 26 files,
+which is its own change set rather than an addition to one under review.
+
+Cost to be measured before scheduling: 55 subprocesses in the suite is
+not free, and the check may belong in CI plus a `--list` mode locally
+rather than in every `bundle exec rspec`.
+
+## 024.221 A block whose receiver cannot be vouched for contains a `private` that Ruby would let through
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.16
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`#iterates_a_literal?`,
+`#visit_block_node`), `core/lib/ovallsp/index/cref.rb` (`#in_block`)
+
+```ruby
+class Widget
+  SOME_CONST.each { private }
+  def helper; end            # recorded public; Ruby may make it private
+end
+```
+
+`024.111`'s literal-receiver half is fixed in 0.2.15: `[1].each { private }`
+reaches the enclosing body, because a literal's `each` provably does not
+rebind self. Everything else still gets a cref frame, and for
+`included do ... end`, `class_eval`, `concerning ... do` and
+`instance_eval` that is **correct** — they really do run their `private`
+against a different module, and without the frame every method written
+after such a block was recorded private, which silently dropped real
+controller actions and made their ivars vanish from the matching views.
+
+What is left is the receiver in between: `SOME_CONST.each { private }` and
+`helper { private }`, where the call plainly yields with self unchanged
+and containment is therefore wrong. This parser cannot currently tell
+that from `included do`.
+
+**This is the residue of `024.111`, split out rather than left inside it,
+because the two want different work.** `024.111` names a concrete
+reproduction that is fixed and pinned; this names a design question —
+telling a nameable receiver from a self-rebinding one needs to know what
+the *call* does with the block, which is the shape `024.31` and `024.33`
+settled for declarations and never settled for state. A block wants a
+receiver, not a boolean.
+
+The failure direction matters and picks the current default. Containing a
+`private` that should have escaped makes a method look public that is
+private: the engine then answers about a method the user can call from
+somewhere, which is over-permissive but not a false report. Letting one
+escape that should have been contained marks a whole class private and
+**removes** its answers — the 0.2.7 regression. Until the receiver
+question is answered, containing is the side to fail on.
+
+Carried in `docs/KNOWN_LIMITATIONS.md` and `.ja.md`, which described this
+residue under `024.111`'s number until 0.2.15.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

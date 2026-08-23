@@ -742,8 +742,7 @@ module Ovallsp
         # iterator block does not open a new cref, so a `def` inside it
         # really does take the enclosing section's visibility. Inheriting
         # keeps that case right while still containing the leak.
-        previous_cref = @cref
-        @cref =
+        block_cref =
           if creates_a_class?
             @cref.in_eval_block(nil)
           elsif (owner = eval_block_owner)
@@ -751,9 +750,26 @@ module Ovallsp
           else
             @cref.in_block(shares_self: iterates_a_literal?(node))
           end
+        # Whether a frame was opened is asked of the cref rather than
+        # re-derived here: `#in_block(shares_self: true)` returns the
+        # *same* cref, because a block that provably keeps self does not
+        # open one. Restoring unconditionally threw that away -- `Cref`
+        # is an immutable value, so the section a `private` inside such a
+        # block opens lives only in `@cref`, and the `ensure` overwrote
+        # it. `[1].each { private }; def x; end` recorded `x` public
+        # where Ruby makes it private (`024.111`).
+        #
+        # Both locals are set *after* the cref is built and before it is
+        # installed, so an `ensure` reached from a raise part-way through
+        # building it finds `opened_a_frame` false and leaves the
+        # untouched `@cref` alone -- rather than needing a guard here
+        # that no example could ever reach.
+        opened_a_frame = !block_cref.equal?(@cref)
+        previous_cref = @cref
+        @cref = block_cref
         super
       ensure
-        @cref = previous_cref
+        @cref = previous_cref if opened_a_frame
         @scope_stack.pop
       end
 

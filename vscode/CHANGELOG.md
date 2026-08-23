@@ -26,6 +26,13 @@ the disproved approaches are kept below it under **Details**.
 - **`private`, `module_function` and `attr_accessor` written in an
   ordinary loop** — `%w[a b].each { … }` — reach the class around them,
   as Ruby makes them.
+  *Correction, 0.2.15: only `attr_accessor` did. The two visibility
+  halves of this bullet were not true of 0.2.13 or of any release before
+  0.2.15, which is where they were actually fixed. `attr_accessor`
+  records a declaration while the shared context is installed; `private`
+  produces state, and the block frame discarded it on the way out. This
+  note is left rather than the bullet edited, so the correction is
+  visible to anyone who read the original.*
 - **`K.instance_eval { attr_accessor :x }` and `K.class_eval { … }` get
   the same answer**, which is what Ruby gives them, and neither is
   attributed to the class the call is *written* in.

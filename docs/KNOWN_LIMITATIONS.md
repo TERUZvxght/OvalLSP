@@ -513,14 +513,17 @@ it. <!-- documents: 024.77 -->
 If you write one inside a block whose receiver this extension cannot
 vouch for — `SOME_CONST.each { private }`, `helper { private }` — it does
 not apply it to the methods that follow, though Ruby may. Written
-directly in the class or module body it works, and as of 0.2.13 so does
+directly in the class or module body it works, and as of 0.2.15 so does
 a block iterating a literal (`[1].each { private }`,
-`%w[a b].each { module_function }`).
+`%w[a b].each { module_function }`, `[1].each { protected }`). Earlier
+releases said 0.2.13 here; that was wrong, and the fix landed in 0.2.15.
 
 The remaining case is one this extension cannot decide without knowing
 what the call does with the block: `included do ... end` really does run
 its `private` against a different module, and treating those alike is
-what used to make every method after such a block private. <!-- documents: 024.111 -->
+what used to make every method after such a block private — which
+removed real answers rather than adding wrong ones, so this is the side
+it fails on. <!-- documents: 024.221 -->
 
 ## A typo in a call on a module
 

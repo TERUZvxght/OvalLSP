@@ -203,24 +203,26 @@ module Ovallsp
       # A block or lambda body. Visibility is inherited rather than reset:
       # a plain iterator block does not open a new cref, so a `def` inside
       # it really does take the enclosing section's visibility.
-      # **A block that provably keeps self does not open a frame.** Ruby:
+      # **A block that provably keeps self does not open a frame**, so a
+      # visibility section, a `module_function` and an `attr_accessor`
+      # written in an ordinary iterator block all reach the enclosing body
+      # (`024.111`, `024.117`).
       #
-      #   $ ruby -e '
-      #   module BMF; 1.times { module_function }; def y; end; end
-      #   p [BMF.respond_to?(:y), BMF.private_instance_methods(false)]
-      #   class BV; [1].each { private }; def x; end; end
-      #   p BV.private_instance_methods(false)
-      #   class BS; [1].each { attr_accessor :bs_x }; end
-      #   p [BS.new.respond_to?(:bs_x), BS.respond_to?(:bs_x)]
-      #   '
-      #   # => [true, [:y]]
-      #   # => [:x]
-      #   # => [true, false]
-      #   # ruby 3.4.10
+      # *Which* constructs those are is enumerated in one place --
+      # `spec/ovallsp/visibility_through_block_spec.rb`'s `CARRIED_OUT`
+      # and `CONTAINED` tables, each row asked of the interpreter and
+      # driving an example. This comment deliberately does not restate
+      # the list: 0.2.13 restated it here and in `024.117`, both copies
+      # named three constructs, one was pinned, and the two that were not
+      # had never worked (`024.219`).
       #
-      # A visibility section, a `module_function` and an `attr_accessor`
-      # written in an ordinary iterator block all reach the enclosing body,
-      # and the frame was containing all three (`024.111`, `024.117`).
+      # Note what returning `self` does *not* do on its own. `Cref` is an
+      # immutable value, so a caller that saved the previous cref and
+      # restores it unconditionally throws away the section the block
+      # opened, and the shared frame is inert for anything that is state
+      # rather than an event. `ParserService#visit_block_node` asks this
+      # method's return value whether a frame was opened rather than
+      # re-deriving it.
       #
       # `shares_self` is decided by a *shape*, not a list of names: the
       # owning call's receiver is a literal -- `%w[a b].each`, `[1].each`,
