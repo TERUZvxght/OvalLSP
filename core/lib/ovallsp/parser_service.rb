@@ -2133,8 +2133,16 @@ module Ovallsp
         node.name if node.respond_to?(:name)
       end
 
+      # A half-typed default is a `MissingNode`, and its `slice` is the
+      # `=` itself -- so `def f(a = )`, an ordinary buffer mid-edit,
+      # recorded `default_source` as `"="`. Nothing rendered it until
+      # `024.89`, at which point the label would have read `a = =`. The
+      # default is unreadable here, not equal to an equals sign, so
+      # nothing is recorded and `Index::Parameter#label` says the
+      # parameter is optional without inventing a value for it.
       def param(name, kind, default_node = nil)
-        Index::Parameter.new(name: name&.to_s, kind: kind, default_source: default_node&.slice)
+        readable = default_node unless default_node.is_a?(Prism::MissingNode)
+        Index::Parameter.new(name: name&.to_s, kind: kind, default_source: readable&.slice)
       end
     end
     private_constant :Visitor

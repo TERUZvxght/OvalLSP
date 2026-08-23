@@ -427,4 +427,92 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
       end
     end
   end
+
+  # `024.89`'s first half. `#signature_label` joined `parameters.map(&:name)`,
+  # so every default, `*`, `:`, `**` and `&` was dropped and the popup told
+  # the reader `key` was the fourth *positional* argument when it is a
+  # required keyword. Hover shows the same string, because it reads
+  # `signatures_of(...).first`.
+  #
+  # The parser records all of it. Asked of both, for one `def`:
+  #
+  #   $ ruby -e 'def simple(a, b = 2, *rest, key:, opt: 1, **others, &blk); end
+  #              p method(:simple).parameters'
+  #   # => [[:req, :a], [:opt, :b], [:rest, :rest], [:keyreq, :key],
+  #   #     [:key, :opt], [:keyrest, :others], [:block, :blk]]
+  #   # ruby 3.4.10
+  #
+  #   the engine's own Index::Parameter list for the same def:
+  #     "a"      :required          nil
+  #     "b"      :optional          "2"
+  #     "rest"   :rest              nil
+  #     "key"    :keyword           nil
+  #     "opt"    :keyword_optional  "1"
+  #     "others" :keyrest           nil
+  #     "blk"    :block             nil
+  describe "a source-declared signature's label" do
+    SIGNATURE_SOURCE = "class Sig\n" \
+                       "  def simple(a, b = 2, *rest, key:, opt: 1, **others, &blk)\n" \
+                       "  end\n" \
+                       "end\n" \
+                       "Sig.new.simple(\n"
+
+    def signature_label_for
+      input =
+        did_open("file:///sig.rb", SIGNATURE_SOURCE) +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
+          params: { textDocument: { uri: "file:///sig.rb" }, position: { line: 4, character: 15 } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+      sent_messages.first[:result][:signatures].first
+    end
+
+    it "spells every parameter the way the source declares it" do
+      expect(signature_label_for[:label])
+        .to eq("simple(a, b = 2, *rest, key:, opt: 1, **others, &blk)")
+    end
+
+    it "gives each parameter its own label, spelled the same way" do
+      expect(signature_label_for[:parameters].map { |p| p[:label] })
+        .to eq(["a", "b = 2", "*rest", "key:", "opt: 1", "**others", "&blk"])
+    end
+
+    # Hover reads `signatures_of(...).first` and showed the same stripped
+    # string, so the entry named it as a second symptom of one cause.
+    # This pins that it really is one cause: the same fix, no separate
+    # change in the hover path.
+    it "reaches hover, which renders the same signature" do
+      input =
+        did_open("file:///sig.rb", SIGNATURE_SOURCE) +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "textDocument/hover",
+          params: { textDocument: { uri: "file:///sig.rb" }, position: { line: 4, character: 10 } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+      hover = sent_messages.first[:result]
+
+      expect(hover[:contents][:value]).to include("simple(a, b = 2, *rest, key:, opt: 1, **others, &blk)")
+    end
+
+    # Without this the examples above could pass on a renderer that
+    # decorated everything, and the plain case is the common one.
+    it "leaves a signature of plain required parameters alone" do
+      input =
+        did_open("file:///plain.rb", "class P\n  def two(a, b)\n  end\nend\nP.new.two(\n") +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "textDocument/signatureHelp",
+          params: { textDocument: { uri: "file:///plain.rb" }, position: { line: 4, character: 10 } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+
+      expect(sent_messages.first[:result][:signatures].first[:label]).to eq("two(a, b)")
+    end
+  end
 end

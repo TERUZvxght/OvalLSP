@@ -104,7 +104,7 @@ darwin-arm64のパッケージ済みCoreに対しては、スモークチェッ�
 | H2 | Active Recordのファインダ由来のローカル変数(`a = Article.find(id)`)にhoverする | `Article` | PASS |
 | H3 | コントローラのアクションが代入した`@ivar`にビュー内でhoverする | そのアクションで推論された型 | PASS |
 | H4 | リテラル(`"s"`、`1`、`[1]`)にhoverする | `String`、`Integer`、`Array[Integer]` | PASS |
-| H5 | メソッド呼び出しにhoverする | 引数一覧(`documented(first, second)`) | PASS |
+| H5 | メソッド呼び出しにhoverする | 宣言どおりの綴りの引数一覧(`documented(first, second = 1)`) | PASS |
 | H6 | キーワード引数・配列・ハッシュ・`case`・`while`・`return` の内側の式にhoverする | 外側の構造ではなくその式自身の型 | PASS |
 | H7 | 直上にRDoc/YARDコメントがあるメソッドへの*レシーバ付きの呼び出し*にhoverする | 型の下にそのコメントが表示される | PASS |
 

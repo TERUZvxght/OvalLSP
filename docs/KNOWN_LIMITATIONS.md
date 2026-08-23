@@ -682,11 +682,17 @@ is real only on a class of your own.* <!-- documents: 024.88 -->
 
 ## What signature help shows
 
-Defaults, splats, keywords and block parameters are all shown as plain
-positional parameters, so `def simple(a, b = 2, *rest, key:)` presents as
-`simple(a, b, rest, key)` and the popup implies `key` is the fourth
-positional argument. The highlight also never advances as you type
-arguments. <!-- documents: 024.89 -->
+The highlight does not advance as you type arguments: the popup stays on
+the first parameter for the whole call. That is a capability this
+product has not claimed yet rather than something behaving wrongly —
+`docs/ROADMAP.md` carries it under 0.4.0, "Signature help highlights the
+argument the cursor is in".
+
+*Until 0.2.15 the parameters themselves were also shown stripped —
+`def simple(a, b = 2, *rest, key:)` presented as
+`simple(a, b, rest, key)`, implying `key` was the fourth positional
+argument. That is fixed; the signature is now spelled the way you wrote
+it.*
 
 ## Smaller things
 

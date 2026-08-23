@@ -105,7 +105,7 @@ suite in step: every row must have an example, every example a row.
 | H2 | Hovers a local assigned from an Active Record finder (`a = Article.find(id)`) | `Article` | PASS |
 | H3 | Hovers an `@ivar` in a view whose controller action assigned it | the action's inferred type | PASS |
 | H4 | Hovers a literal (`"s"`, `1`, `[1]`) | `String`, `Integer`, `Array[Integer]` | PASS |
-| H5 | Hovers a method call | its parameter list (`documented(first, second)`) | PASS |
+| H5 | Hovers a method call | its parameter list, spelled as declared (`documented(first, second = 1)`) | PASS |
 | H6 | Hovers an expression nested in a keyword argument, array, hash, `case`, `while` or `return` | that expression's own type, not the enclosing structure's | PASS |
 | H7 | Hovers a *call written with a receiver* to a method declared with an RDoc/YARD comment above it | the comment appears in the hover, below the type | PASS |
 

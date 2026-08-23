@@ -394,8 +394,12 @@ module Ovallsp
           decl = callable&.declarations&.first&.last
           next unless decl
 
+          # The per-parameter labels are what `activeParameter` would point
+          # into, so they have to be spelled the same way as the label they
+          # are cut from -- otherwise the highlight names something the
+          # signature line does not contain.
           { label: signature_label(method_name, decl.parameters),
-            parameters: decl.parameters.map { |p| { label: p.name.to_s } } }
+            parameters: decl.parameters.map { |p| { label: p.label } } }
         end.uniq { |signature| signature[:label] }
         signatures.empty? ? nil : signatures
       end
@@ -420,8 +424,11 @@ module Ovallsp
         end.flatten.tap { |result| return nil if result.empty? }
       end
 
+      # `Index::Parameter#label` spells each one the way the source does.
+      # Joining bare names here dropped every default, `*`, `:`, `**` and
+      # `&`, so a required keyword read as a positional (`024.89`).
       def signature_label(method_name, parameters)
-        "#{method_name}(#{parameters.map(&:name).join(', ')})"
+        "#{method_name}(#{parameters.map(&:label).join(', ')})"
       end
 
       # The label is what signature help shows while the user is typing

@@ -190,7 +190,11 @@ RSpec.describe "Extension capabilities", :e2e do
           end
         end
       RUBY
-        expect(@client.hover_text(uri, 5, 6)).to include("documented(first, second)")
+        # `second = 1` rather than `second`. The fixture declares a
+        # default and 0.2.15 shows it -- the row promises "a method's
+        # parameters", and an optional parameter rendered as a required
+        # one is not the parameter the source declares (`024.89`).
+        expect(@client.hover_text(uri, 5, 6)).to include("documented(first, second = 1)")
       end
     end
 
@@ -220,7 +224,9 @@ RSpec.describe "Extension capabilities", :e2e do
           end
         end
       RUBY
-        expect(@client.hover_text(uri, 6, 10)).to include("documented(first, second)")
+        # See the receiverless example above: the default is part of the
+        # parameter, and this row promises the parameters (`024.89`).
+        expect(@client.hover_text(uri, 6, 10)).to include("documented(first, second = 1)")
       end
     end
 

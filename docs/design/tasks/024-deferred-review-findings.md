@@ -258,7 +258,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.86`](#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | open | 0.2.16 | An ivar assigned in another method has no type, except in the view |
 | [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.2.16 | A relation stops being a relation after one hop |
 | [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.2.16 | Completion unions a union's members; the diagnostic intersects them |
-| [`024.89`](#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | open | 0.2.15 | Signature help strips the parameter kinds and never advances |
+| [`024.89`](#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | fixed | 0.2.15 | Signature help strips the parameter kinds and never advances |
 | [`024.90`](#02490-smaller-answers-a-review-round-measured) | fixed | 0.2.14 | Smaller answers a review round measured |
 | [`024.91`](#02491-the-undefined-method-check-reports-on-ordinary-ruby-it-cannot-read) | open | 0.2.15 | The undefined-method check reports on ordinary Ruby it cannot read |
 | [`024.92`](#02492-a-plugin-chooses-how-much-memory-the-parent-allocates) | fixed | 0.2.6 | A plugin chooses how much memory the parent allocates |
@@ -5841,10 +5841,11 @@ own methods. Which quantifier completion wants is exactly the
 ## 024.89 Signature help strips the parameter kinds and never advances
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.15
+released-in: 0.2.15
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#signatures_of`),
@@ -5860,6 +5861,75 @@ And the response carries no `activeParameter` (nor `activeSignature`) at
 any position, so the client has nothing to advance the highlight with and
 the popup stays on parameter 0 for the whole call. Measured through the
 real server by a review round of 0.2.6.
+
+### Two halves, and only one of them was a defect
+
+**The second half is not a defect and should never have been filed as
+one.** `activeParameter` is a capability this product has not claimed.
+`Server#method_signature_help` says so at the site — built during 0.2.1's
+review loop and deferred with the row that names it — and `ROADMAP.md`
+carries it under **0.4.0**: "Signature help highlights the argument the
+cursor is in". One heading held a live defect and a roadmap item under
+one `kind: defect` and one `target: 0.2.15`, which are the two kinds this
+register's own legend says are triaged differently and by different
+people. The same shape as `024.219`. It stays on the roadmap; nothing
+here is owed for it.
+
+### The first half, fixed in 0.2.15
+
+`#signature_label` joined `parameters.map(&:name)`. Everything it needed
+was already recorded — asked of both, for one `def`:
+
+    $ ruby -e 'def simple(a, b = 2, *rest, key:, opt: 1, **others, &blk); end
+               p method(:simple).parameters'
+    # => [[:req, :a], [:opt, :b], [:rest, :rest], [:keyreq, :key],
+    #     [:key, :opt], [:keyrest, :others], [:block, :blk]]
+    # ruby 3.4.10
+
+    the engine's own list for the same def:
+      "a" :required  nil / "b" :optional "2" / "rest" :rest nil /
+      "key" :keyword nil / "opt" :keyword_optional "1" /
+      "others" :keyrest nil / "blk" :block nil
+
+Seven kinds and both defaults, recorded faithfully and thrown away by the
+rendering. `Index::Parameter#label` now spells each one the way the
+source does, and the label reads
+`simple(a, b = 2, *rest, key:, opt: 1, **others, &blk)`.
+
+It lives on the value because two readers need it — the label and the
+per-parameter array, which is what `activeParameter` would one day point
+into, so they must be cut the same way. A third reader,
+`#completion_snippet`, keeps the bare name deliberately: a snippet's tab
+stops want a name, not a spelling.
+
+**Deliberately not shared with `#rbs_signature_parts`.** That renders RBS
+*types* (`?Integer`, `name:`); this renders source *names and defaults*.
+Two renderings of two different things, and merging them because they
+look alike is the move `024.47` had to roll back.
+
+**Hover is fixed by the same change and pinned as such** — it reads
+`signatures_of(...).first`. Reverting the one-word change fails the
+signature-help example and the hover example together, which is what
+makes "one cause, two symptoms" a measurement rather than a claim.
+
+### A latent defect the rendering exposed
+
+`def half(a = )` — an ordinary buffer mid-edit — parses to a
+`Prism::MissingNode` whose `slice` is the `=` itself, so `default_source`
+had been recorded as `"="` since Task 016. Nothing rendered it, so
+nothing saw it; the new label would have read `a = =`.
+
+Fixed where the value is produced: a `MissingNode` records no default,
+and the label says `a = ...` rather than inventing one. Pinned on both
+halves — the recorded value *and* what it renders as — because asserting
+only the label would pass on a parser that still recorded `"="` and a
+renderer that happened to hide it.
+
+*The example for this was written against the server first and moved.
+`def half(a = )` does not index far enough for signature help to answer
+at all, so the server-level example asserted something that position
+cannot show — an assertion that fails for the wrong reason is no better
+than one that cannot fail.*
 
 ## 024.90 Smaller answers a review round measured
 
