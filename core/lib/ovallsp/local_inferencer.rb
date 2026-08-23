@@ -636,6 +636,27 @@ module Ovallsp
       eval_type(node, env)
     end
 
+    # The type of `a` after `a ||= b`, from what Ruby actually does:
+    #
+    #     b = nil;  b ||= "x";  b.class   # => String   (the write runs)
+    #     c = 1;    c ||= "x";  c.class   # => Integer  (it does not)
+    #
+    # Three cases, and the middle one is why this is a union rather than
+    # a replacement: a variable that *may* be nil keeps what it had and
+    # gains the right-hand side.
+    #
+    # `Unknown` in, `Unknown` out: if the prior type is not known, then
+    # whether the write runs is not known either, and a union built on
+    # that guess would be an assertion made from a question that could
+    # not be asked.
+    def or_write_type(existing, written)
+      return written if existing == Types::NIL
+      return Types::UNKNOWN if existing == Types::UNKNOWN
+      return existing unless existing.is_a?(Types::Union) && existing.members.include?(Types::NIL)
+
+      Types.normalize_union([Types.remove_nil(existing), written])
+    end
+
     # Pure with respect to `env`: reads bindings but never mutates them,
     # except for LocalVariableWriteNode, which intentionally does (an
     # assignment's whole point is to bind — see docs' 5.1 "ローカル推論").
@@ -654,6 +675,13 @@ module Ovallsp
         env[node.name] = eval_type(node.value, env)
       when Prism::InstanceVariableReadNode
         env.fetch(node.name, Types::UNKNOWN)
+      # `024.131`. `a ||= b` is `a || (a = b)`. There was no case for
+      # either `OrWrite` node, so the write was never seen and whatever
+      # the variable held before stood -- `b = nil; b ||= "x"` answered
+      # `nil` for a `String`, which is a wrong answer rather than an
+      # absent one.
+      when Prism::LocalVariableOrWriteNode, Prism::InstanceVariableOrWriteNode
+        env[node.name] = or_write_type(env.fetch(node.name, Types::UNKNOWN), eval_type(node.value, env))
       # One table, shared with `MethodAnalyzer#eval_node`. They drifted
       # twice -- `Range`/`Regexp` added to both, then `Lambda`/`!`/`&&`/
       # `||` added here alone -- and each time the symptom was the same

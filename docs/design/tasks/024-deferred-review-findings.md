@@ -296,11 +296,11 @@ nobody can search is the recording habit without the benefit.
 | [`024.124`](#024124-four-entries-named-a-release-that-had-already-shipped-for-the-third-time) | fixed | 0.3.0 | Four entries named a release that had already shipped, for the third… |
 | [`024.125`](#024125-the-packaged-core-is-never-driven-end-to-end-and-two-gates-say-it-is) | open | 0.2.15 | The packaged Core is never driven end to end, and two gates say it is |
 | [`024.126`](#024126-a-text-scanner-matches-its-own-prose-exempts-itself-and-stops-checking-a-file-that-can-hold-the-real-thing) | fixed | 0.2.14 | A text scanner matches its own prose, exempts itself, and stops chec… |
-| [`024.127`](#024127-hover-answers-an-empty-string-where-lsp-expects-null) | open | 0.2.15 | Hover answers an empty string where LSP expects null |
+| [`024.127`](#024127-hover-answers-an-empty-string-where-lsp-expects-null) | fixed | 0.2.15 | Hover answers an empty string where LSP expects null |
 | [`024.128`](#024128-integer-arithmetic-answers-a-four-way-union) | open | 0.2.15 | Integer arithmetic answers a four-way union |
 | [`024.129`](#024129-no-undefined-method-report-on-a-core-library-receiver) | open | 0.2.15 | No undefined-method report on a core-library receiver |
 | [`024.130`](#024130-a-hover-label-drops-the-namespace-when-the-name-was-written-bare-withdrawn-it-does-not-reproduce) | fixed | 0.2.14 | A hover label drops the namespace when the name was written bare — w… |
-| [`024.131`](#024131-after-on-a-nil-local-hover-answers-nil-a-wrong-answer-not-an-absent-one) | open | 0.2.15 | After `||=` on a nil local, hover answers `nil` — a wrong answer, no… |
+| [`024.131`](#024131-after-on-a-nil-local-hover-answers-nil-a-wrong-answer-not-an-absent-one) | fixed | 0.2.15 | After `||=` on a nil local, hover answers `nil` — a wrong answer, no… |
 | [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 0.2.15 | A scope defined in a concern's `included do` has no type |
 | [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | open | 0.2.15 | A positional argument to a keyword-only method reads as nonsense |
 | [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | open | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
@@ -7213,10 +7213,13 @@ prose example has.
 ## 024.127 Hover answers an empty string where LSP expects null
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
+user-visible-note: >
+  Fixed in 0.2.15. Hover returns null where it has nothing to say.
 target: 0.2.15
+released-in: 0.2.15
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#hover_result`)
@@ -7229,6 +7232,27 @@ hover that exists.
 Measured through the real server by a 0.2.6 review round.
 
 **Was one of nine bullets under `024.90` until 0.2.14.**
+
+### Fixed in 0.2.15, and a spec was holding it in place
+
+`#empty_hover` returns `nil`. The protocol declares the result
+`Hover | null`, which `docs/CLIENT_BEHAVIOUR.md` now carries as a row
+derived from the client's own `protocol.d.ts` rather than from memory —
+`CLAUDE.md` requires a claim about the LSP specification to go through
+that document, and this one had not.
+
+**`server_spec.rb` had asserted the defect since Task 013**, under a
+comment calling `{contents: {value: ""}}` "an empty, non-committal
+result rather than a guess". It is not non-committal: it is a `Hover`
+that exists and is blank, and a client may render a frame for it. That
+assertion is why this entry survived from 0.2.6 to 0.2.15 — the
+behaviour was pinned, so nothing could drift it back and nothing could
+notice it was wrong.
+
+*A test can hold a defect in place as firmly as it holds a guarantee,
+and reading it does not distinguish the two: the comment explaining why
+the empty string was correct is what made it look settled.*
+
 
 ## 024.128 Integer arithmetic answers a four-way union
 
@@ -7320,10 +7344,13 @@ against the tree it is promoted into. Promotion is a claim.
 ## 024.131 After `||=` on a nil local, hover answers `nil` — a wrong answer, not an absent one
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
+user-visible-note: >
+  Fixed in 0.2.15. Hover now answers the right-hand side's type.
 target: 0.2.15
+released-in: 0.2.15
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`#eval_type`)
@@ -7358,6 +7385,32 @@ exists for branches.
 **Was one of nine bullets under `024.90` until 0.2.14**, and was
 published to users as an absent answer for as long as that entry stood.
 `024.130` records what the split did and the rule it bought.
+
+### Fixed in 0.2.15
+
+`#eval_type` gained a case for `Prism::LocalVariableOrWriteNode` and
+`InstanceVariableOrWriteNode`, and `#or_write_type` implements what Ruby
+does — verified against the interpreter before the expectation was
+written:
+
+```ruby
+b = nil;  b ||= "x";  b.class   # => String   (the write runs)
+c = 1;    c ||= "x";  c.class   # => Integer  (it does not)
+```
+
+Three cases, and the middle one is why it is a union rather than a
+replacement: a local that *may* be nil keeps what it had and gains the
+right-hand side. `Unknown` in, `Unknown` out — if the prior type is not
+known then whether the write runs is not known either, and a union built
+on that guess would be an assertion made from a question that could not
+be asked.
+
+**Measured**: 269 files of real gem source (prism, bundler), both sides
+over an identical corpus digest with different revisions — output
+**byte-identical**, `unresolved-constant` 1,485 and `unknown-method` 22
+on both. No regression. The improvement is in hover, which a corpus does
+not measure; four examples do.
+
 
 ## 024.132 A scope defined in a concern's `included do` has no type
 

@@ -3833,8 +3833,15 @@ module Ovallsp
       { contents: { kind: "plaintext", value: lines.join("\n") } }
     end
 
+    # `024.127`. `null`, not an empty `Hover`. The protocol declares the
+    # result `Hover | null` -- `docs/CLIENT_BEHAVIOUR.md` carries the row,
+    # derived from the client's own `protocol.d.ts` -- so
+    # `{contents: {value: ""}}` is a hover that *exists* and happens to be
+    # blank, which a client may render a frame for. This answered the
+    # empty object for a position inside a comment, on whitespace, or in a
+    # document the store does not have.
     def empty_hover
-      { contents: { kind: "plaintext", value: "" } }
+      nil
     end
 
     # Same #receiver_type_before_dot Completion/Definition already use

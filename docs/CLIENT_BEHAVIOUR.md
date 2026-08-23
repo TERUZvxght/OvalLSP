@@ -65,6 +65,12 @@ says it — those rows are marked **checked**.
 | **On Windows, libuv searches the cwd before `PATH`.** A bare command name spawned with the workspace folder as cwd would run a binary the workspace supplied. POSIX `execvp` does not search the cwd. | Node/libuv process spawning; `vscode/src/platformCompatibility.ts`'s `spawnCwd` is the guard | |
 | `code --uninstall-extension` does not call `deactivate()` in an already-running window. | VS Code's own extension lifecycle — recorded in `docs/RELEASE_CHECKLIST.md` #7 | |
 
+## Language features
+
+| what we rely on | shown by | |
+|---|---|---|
+| **A request that has nothing to answer returns `null`, not an empty result object.** `textDocument/hover` is declared `Hover \| null`, so `{contents: {value: ""}}` is a hover that *exists* and happens to be blank — a client is entitled to render a frame for it. | `vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.d.ts`, `HoverRequest`: `ProtocolRequestType<HoverParams, Hover \| null, …>` | checked |
+
 ## Startup
 
 | what we rely on | shown by | |

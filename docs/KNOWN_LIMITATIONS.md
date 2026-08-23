@@ -649,16 +649,11 @@ arguments. <!-- documents: 024.89 -->
 
 ## Smaller things
 
-- Hovering somewhere with no answer returns an empty hover rather than
-  nothing at all. <!-- documents: 024.127 -->
 - `price * quantity` hovers `Complex | Float | Integer | Rational` — true
   but not useful. <!-- documents: 024.128 -->
 - A typo on a core-library receiver is not reported: `"hello".upcse` and
   `[1,2].siz` are silent, though completion at the same spot knows the
   type exactly. <!-- documents: 024.129 -->
-- `b = nil; b ||= "x"` then hovering `b` answers **`nil`**, though `b`
-  is a `String` there. This is a wrong answer rather than a missing one,
-  which the project ranks as the more serious of the two. <!-- documents: 024.131 -->
 - A scope defined inside a concern's `included do` has no type. <!-- documents: 024.132 -->
 - Passing a positional argument to a keyword-only method says it "takes 0
   arguments". <!-- documents: 024.133 -->

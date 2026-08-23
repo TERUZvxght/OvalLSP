@@ -43,9 +43,17 @@ RSpec.describe Ovallsp::Server do
     expect(messages[0]).to include(id: 1)
     expect(messages[0][:result][:capabilities][:hoverProvider]).to eq(true)
     expect(messages[1]).to include(id: 2)
-    # A document that was never opened has nothing to hover -- an empty,
-    # non-committal result rather than a guess (Task 013).
-    expect(messages[1][:result][:contents][:value]).to eq("")
+    # A document that was never opened has nothing to hover, and the
+    # protocol's way of saying so is `null` -- the result is declared
+    # `Hover | null` (`docs/CLIENT_BEHAVIOUR.md`).
+    #
+    # **This assertion required the empty string until 0.2.15**, under a
+    # comment calling it "an empty, non-committal result rather than a
+    # guess". `{contents: {value: ""}}` is not non-committal: it is a
+    # `Hover` that exists and is blank, which a client may render a frame
+    # for. The spec was pinning `024.127` in place, which is why the
+    # entry survived from 0.2.6 to here.
+    expect(messages[1][:result]).to be_nil
     expect(messages[2]).to include(id: 3, result: nil)
   end
 

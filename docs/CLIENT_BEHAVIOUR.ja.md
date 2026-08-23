@@ -60,6 +60,12 @@ grep できる主張については、`core/spec/meta/client_behaviour_spec.rb` 
 | **Windows では libuv が `PATH` より先に cwd を探索します。** ワークスペースフォルダを cwd にして裸のコマンド名を spawn すると、ワークスペースが置いたバイナリが動きます。POSIX の `execvp` は cwd を探索しません。 | Node/libuv のプロセス起動。`vscode/src/platformCompatibility.ts` の `spawnCwd` がその防御 | |
 | `code --uninstall-extension` は、既に起動中のウィンドウでは `deactivate()` を呼びません。 | VS Code 自体の拡張機能ライフサイクル — `docs/RELEASE_CHECKLIST.md` #7 に記録 | |
 
+## 言語機能
+
+| 依存している挙動 | 根拠 | |
+|---|---|---|
+| **答えるものが無いリクエストは、空の結果オブジェクトではなく `null` を返す。** `textDocument/hover` は `Hover \| null` と宣言されているので、`{contents: {value: ""}}` は「存在して中身が空の hover」であり、クライアントが枠を描いてよい。 | `vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.d.ts` の `HoverRequest`: `ProtocolRequestType<HoverParams, Hover \| null, …>` | checked |
+
 ## 起動
 
 | 依存している挙動 | 根拠 | |
