@@ -425,15 +425,6 @@ holds the same lock indexing uses, it can also delay indexing that is
 running at the same time. Symbol search *within* a file, and go to
 definition, use a different path and are unaffected. <!-- documents: 024.137 -->
 
-## Some known limitations have no release assigned to them
-
-18 of the limitations listed here are recorded as open defects that no
-release has undertaken to fix — the register entry describing each one
-carries no target version. That is not a judgement that they will never
-be fixed; it is that nobody has yet said when. The project has recorded
-this as a defect in its own scheduling (`024.153`) rather than leaving
-it implied by the absence of a date. <!-- documents: 024.153 -->
-
 ## The packaged extension is smoke-tested, not driven
 
 The Core Server inside the VSIX — the one you install, with its own
@@ -527,12 +518,6 @@ or a constructor argument — used to be a third kind, because an ancestor
 this extension cannot name was recorded as no ancestor at all. It is now
 recorded as one it cannot name, and nothing is reported about that
 class's members.
-
-**A call that does not exist through a relation is now reported.**
-`Order.recent.first.no_such_method` was reported by nothing, while
-`Order.find(id).no_such_method` was reported normally; the check now asks
-about each branch of a `T | nil` receiver instead of discarding
-it. <!-- documents: 024.77 -->
 
 ## A `private` or `module_function` written inside a block
 
