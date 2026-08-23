@@ -20,11 +20,19 @@ module Ovallsp
     # - name_location (Task 016): the identifier's own narrow range --
     #   `location` spans the *whole* declaration (`class Foo\n...\nend`,
     #   `def bar\n...\nend`, `FOO = 1`), which is correct for
-    #   documentSymbol/folding/"Defined: file:line" but would be a
-    #   catastrophic edit range for a rename (replacing an entire class
-    #   body with just its new name). nil for anything Rename::Planner
-    #   never needs to edit in place (a declaration whose identifier span
-    #   isn't tracked separately).
+    #   documentSymbol's `range`, for folding and for
+    #   "Defined: file:line", but would be a catastrophic edit range for
+    #   a rename (replacing an entire class body with just its new
+    #   name). nil for anything Rename::Planner never needs to edit in
+    #   place (a declaration whose identifier span isn't tracked
+    #   separately).
+    #
+    #   **Not documentSymbol's `selectionRange`**, which is a different
+    #   field meaning the name to select and reveal. This comment said
+    #   "documentSymbol" without distinguishing the two, and the outline
+    #   builder wrote `location` into both for four releases, so picking
+    #   a class selected its whole body while `prepareRename` returned
+    #   the narrow range from the same object (`024.27`).
     Declaration = Data.define(:symbol_id, :location, :visibility, :parameters, :origin, :body_source, :name_location) do
       def initialize(body_source: nil, name_location: nil, **rest)
         super(body_source: body_source, name_location: name_location, **rest)

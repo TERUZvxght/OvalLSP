@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**224 entries below** <!-- measured: register-entries = 224 -->,
+**225 entries below** <!-- measured: register-entries = 225 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -198,7 +198,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.24`](#02424-every-path-url-call-is-a-missing-route-when-no-routes-are-loaded) | fixed | 0.2.0 | Every `*_path`/`*_url` call is a missing route when no routes are lo… |
 | [`024.25`](#02425-a-markdown-parsing-spec-is-the-wrong-shape-for-these-two-documents-must-agree) | fixed | 0.2.12 | A Markdown-parsing spec is the wrong shape for "these two documents … |
 | [`024.26`](#02426-a-workspace-def-object-foo-is-reachable-from-every-class-in-ruby-and-from-none-here) | fixed | 0.2.12 | A workspace `def Object.foo` is reachable from every class in Ruby a… |
-| [`024.27`](#02427-documentsymbol-lists-one-outline-entry-per-name-a-macro-declares) | open | 0.2.15 | `documentSymbol` lists one outline entry per name a macro declares |
+| [`024.27`](#02427-documentsymbol-lists-one-outline-entry-per-name-a-macro-declares) | open | 0.2.16 | `documentSymbol` lists one outline entry per name a macro declares |
 | [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | 0.2.16 | Rename refuses on a macro-declared method rather than editing it |
 | [`024.29`](#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | open | 0.2.15 | Two features were written for 0.1.15 and cut from it |
 | [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | fixed | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
@@ -395,6 +395,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.224`](#024224-a-namespaced-type-is-reported-incompatible-with-itself) | open | 0.2.16 | A namespaced type is reported incompatible with itself |
 | [`024.225`](#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | open | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
 | [`024.226`](#024226-an-argument-written-as-a-paren-less-call-is-judged-by-its-own-last-argument) | fixed | 0.2.15 | An argument written as a paren-less call is judged by its own last a… |
+| [`024.227`](#024227-every-outline-symbol-s-selectionrange-was-its-whole-declaration) | fixed | 0.2.15 | Every outline symbol's `selectionRange` was its whole declaration |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -1668,10 +1669,16 @@ of these gems do.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.15
+user-visible-note: >
+  Noise rather than a wrong answer, and the half that was a wrong answer
+  is `024.227`, fixed in 0.2.15. What remains is several outline entries
+  sharing one `range` for one macro call.
+target: 0.2.16
 ```
 
-**Area:** `core/lib/ovallsp/server.rb` (`document_symbol_result`)
+**Area:** `core/lib/ovallsp/index/document_symbol_builder.rb`
+(`#build_children`), `core/lib/ovallsp/parser_service.rb`
+(`#record_attribute_methods`, `#add_generated_method`)
 
 `attr_accessor :a, :b, :c` declares six methods, all at the same source
 range, so the outline shows six children with byte-identical `range` and
@@ -1679,10 +1686,32 @@ range, so the outline shows six children with byte-identical `range` and
 method, so this is noise rather than a wrong answer — but an outline is
 read by eye and six identical ranges read as a bug.
 
-**Direction:** either group the methods a single macro call declares under
-one outline node, or narrow each declaration's `selectionRange` to its own
-symbol argument. The second would also give 024.28's rename something to
-edit.
+**Re-driven in 0.2.15, through the real server.** It reproduces exactly,
+and the shape is narrower than "macros": it is *macros that declare more
+than one name per call*. `attr_accessor :a, :b, :c` gives six children,
+`delegate` three at one range, `enum` two — while `scope` gives each
+call its own distinct range, because each call declares one name.
+
+**Half of this entry was a second defect, and it was not about macros at
+all.** `#build_children` wrote `decl.location` into **both** `range` and
+`selectionRange`, for every symbol — a plain `def`, a `class`, a
+constant. That is `024.227`, fixed in 0.2.15, and it is why the six
+identical ranges were identical in the *second* field as well.
+
+**What stays here** is the first field: six children at one `range`,
+which is a question about how a multi-name macro call should appear in
+an outline rather than about which range a symbol reports. The two
+directions are unchanged — group the names a single call declares under
+one node, or give each its own `range` from the per-argument Prism node
+that `#record_attribute_methods` has in hand at its
+`node.arguments.arguments.each` loop and currently discards, passing
+`node:` (the whole call) instead. The second would also give `024.28`'s
+rename something to edit.
+
+**Retargeted to 0.2.16.** With `024.227` fixed, each of the six now
+selects its own name, so the remaining symptom is duplicate `range`s in
+a list whose entries are correctly labelled — noise, and the cheaper
+half of it is already gone.
 
 
 ## 024.28 Rename refuses on a macro-declared method rather than editing it
@@ -11301,6 +11330,65 @@ correctly for many of them. Relaxing that is a change that *adds*
 reports, and this release is not the place: 0.2.0 produced 795 false
 positives by widening this exact check. Worth its own entry and its own
 corpus run.
+
+## 024.227 Every outline symbol's `selectionRange` was its whole declaration
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.2.15
+released-in: 0.2.15
+```
+
+**Area:** `core/lib/ovallsp/index/document_symbol_builder.rb`
+(`#build_children`), `core/lib/ovallsp/index/declaration.rb` (the
+`name_location` comment), `docs/CLIENT_BEHAVIOUR.md` + `.ja.md`
+
+`#build_children` wrote `decl.location` into **both** `range` and
+`selectionRange`, for every symbol — a class, a module, a constant, a
+plain `def`. Picking a class in the outline therefore selected and
+revealed its entire body.
+
+`selectionRange` is a different field, and the claim is taken from the
+installed types rather than remembered:
+
+    /**
+     * The range that should be selected and revealed when this symbol is
+     * being picked, e.g the name of a function.
+     * Must be contained by the `range`.
+     */
+    selectionRange: Range;
+
+    vscode/node_modules/vscode-languageserver-types/lib/esm/main.d.ts
+
+Writing the whole declaration into both is legal — it *is* contained by
+`range`, being equal to it — and defeats the field entirely. That is why
+nothing caught it: there was no rule to break.
+
+**The narrow range existed the whole time.** `Declaration#name_location`
+is populated for exactly these symbols, and `textDocument/prepareRename`
+already returns it — measured on one document in one server run,
+`class K` reports `(0,6)-(0,7)` for rename and `(0,0)-(4,3)` for the
+outline, from the same `Declaration` object. The product emitted the
+identifier for one feature and discarded it for another.
+
+**Fixed** with `decl.name_location || decl.location`. The fallback is
+the whole range rather than nil because the field is not optional and
+the whole range still satisfies the containment the types require.
+
+**What made it invisible on reading** is corrected in the same change:
+`Declaration`'s own comment said `location` "is correct for
+documentSymbol/folding" without distinguishing `range` from
+`selectionRange`. It is correct for one of them. A row for the protocol
+fact is now in `docs/CLIENT_BEHAVIOUR.md` and `.ja.md`, which is where a
+claim about outside this tree belongs — the file exists because a claim
+about `vscode-languageclient` was quoted forward for two releases and
+was false.
+
+**Split out of `024.27`**, which filed it as part of "one outline entry
+per name a macro declares". It is not about macros: it reproduces on a
+macro-free file, on every symbol kind. `024.27` keeps the macro half.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

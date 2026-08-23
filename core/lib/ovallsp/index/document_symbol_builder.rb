@@ -33,7 +33,20 @@ module Ovallsp
             name: symbol.name.split("::").last,
             kind: SYMBOL_KIND.fetch(symbol.kind, 13),
             range: decl.location,
-            selectionRange: decl.location,
+            # **`selectionRange` is not `range`.** The protocol types call
+            # it "the range that should be selected and revealed when this
+            # symbol is being picked, e.g the name of a function"
+            # (`docs/CLIENT_BEHAVIOUR.md`). Writing `decl.location` into
+            # both meant picking a class in the outline selected its whole
+            # body. `name_location` is populated for these symbols and is
+            # what `prepareRename` already returns from the same
+            # Declaration -- the narrow range was being emitted for one
+            # feature and discarded for another (`024.27`).
+            #
+            # The fallback is `location` rather than nil: the field is not
+            # optional, and the whole range is contained by `range`, which
+            # is what the types require.
+            selectionRange: decl.name_location || decl.location,
             children: namespace ? build_children(symbol.name, by_owner) : []
           }
         end

@@ -70,6 +70,7 @@ says it — those rows are marked **checked**.
 | what we rely on | shown by | |
 |---|---|---|
 | **A request that has nothing to answer returns `null`, not an empty result object.** `textDocument/hover` is declared `Hover \| null`, so `{contents: {value: ""}}` is a hover that *exists* and happens to be blank — a client is entitled to render a frame for it. | `vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.d.ts`, `HoverRequest`: `ProtocolRequestType<HoverParams, Hover \| null, …>` | checked |
+| **`DocumentSymbol#selectionRange` is the identifier, not the symbol's whole range.** The types call it "the range that should be selected and revealed when this symbol is being picked, e.g the name of a function", and require it to be contained by `range`. Writing the whole declaration into both fields is legal and defeats the field: picking a class in the outline selects its entire body. | `vscode/node_modules/vscode-languageserver-types/lib/esm/main.d.ts`, `DocumentSymbol` | checked |
 
 ## Startup
 
