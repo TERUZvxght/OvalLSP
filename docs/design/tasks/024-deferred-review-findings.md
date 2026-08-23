@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**223 entries below** <!-- measured: register-entries = 223 -->,
+**224 entries below** <!-- measured: register-entries = 224 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -191,7 +191,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.17`](#02417-vscode-src-extension-ts-is-covered-by-no-test-that-runs-anywhere) | fixed | 0.1.13 | `vscode/src/extension.ts` is covered by no test that runs anywhere |
 | [`024.18`](#02418-the-unassigned-ivar-check-cannot-enumerate-what-it-needs-to) | open | 0.2.16 | The unassigned-`@ivar` check cannot enumerate what it needs to |
 | [`024.19`](#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | open | 0.2.15 | The argument-type check judges against a class the receiver is not |
-| [`024.20`](#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | open | 0.2.15 | `contains?` treats an exclusive end offset as inclusive |
+| [`024.20`](#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | open | 0.2.16 | `contains?` treats an exclusive end offset as inclusive |
 | [`024.21`](#02421-a-qualified-constant-is-coloured-half-one-way-half-the-other) | fixed | 0.2.15 | A qualified constant is coloured half one way, half the other |
 | [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | 0.2.16 | The unassigned-`@ivar` check is silent in an application `rails new`… |
 | [`024.23`](#02423-the-singleton-chain-did-not-model-class-module) | fixed | 0.1.14 | The singleton chain did not model `Class`/`Module` |
@@ -394,6 +394,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.223`](#024223-one-unresolvable-include-in-a-project-s-own-rbs-turns-its-whole-class-into-false-reports) | fixed | 0.2.15 | One unresolvable `include` in a project's own RBS turns its whole cl… |
 | [`024.224`](#024224-a-namespaced-type-is-reported-incompatible-with-itself) | open | 0.2.16 | A namespaced type is reported incompatible with itself |
 | [`024.225`](#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | open | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
+| [`024.226`](#024226-an-argument-written-as-a-paren-less-call-is-judged-by-its-own-last-argument) | fixed | 0.2.15 | An argument written as a paren-less call is judged by its own last a… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -1151,7 +1152,12 @@ Fixture-level confirmation (<scratch> and specs_19b.rb, project sig declaring `c
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.15
+user-visible-note: >
+  What remains is a decline, not a wrong report: at the `.` after a
+  block, hover, completion and signature help answer nothing for a
+  receiver the inferencer can type. The wrong-answer half is `024.226`,
+  fixed in 0.2.15.
+target: 0.2.16
 ```
 
 **The half that reached users is fixed in 0.2.1**, and it was the
@@ -1196,6 +1202,40 @@ Two things about how this survived twenty-two rounds are worth keeping:
 
 `contains?` itself is still inclusive, and that is what keeps this entry
 open: it blocks a correct answer 0.2.0 had to settle for approximating.
+
+### Re-driven in 0.2.15: the reproduction above is stale, and what remains is a decline
+
+**Neither example this entry gives still reproduces.** `wrap(Widget.new).go`
+and `[w].each` report nothing, in all three modes, against a control
+built through the identical `f.wrap(...).X` shape that *does* fire and
+names `Wrapper` rather than `Widget` — so the receiver resolves
+correctly now, rather than the whole shape being skipped. prism's
+`dispatcher.rb`, where this entry records 604 `unknown-method` reports,
+yields **0**. The paragraph under **Area:** still reads in the present
+tense and should be read as dated to 0.2.0.
+
+**One wrong answer that was downstream of this is fixed separately** and
+has its own entry, because it has its own reproduction and its own fix:
+`024.226`, an argument written as a paren-less call being judged by its
+own last argument.
+
+**What is left is a decline, not a wrong answer**, and the distinction
+decides the triage. At the `.` after a block — `[1, 2].map { |x| x }.first`
+— the position query hands `#infer_at` the block's exclusive end, the
+inclusive `#contains?` enters `locate_in_block`, and the answer is
+`Unknown`; `#receiver_type_before_dot` maps that to nil, so hover,
+completion and signature help say nothing there. Measured: the
+inferencer *can* type that receiver — `Array[Integer]` — and a control
+at `[1, 2].first.first` answers `Integer | nil`, so only the position
+query declines. 422 receivers of that shape in 883 files, 228 of them
+`CallNode -> BlockNode`.
+
+Section 0 ranks a decline below a wrong answer, and making `#contains?`
+exclusive breaks 39 examples because every caller handing it an LSP
+range end depends on the current rule. That is a change to a shared
+position rule with a large blast radius, in service of an answer the
+product currently declines to give — so it is **not** 0.2.15's work.
+Retargeted, and the entry is now about that one thing.
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`contains?`,
 `locate_in_block`), `core/lib/ovallsp/parser_service.rb` (the receiver
@@ -11174,6 +11214,93 @@ habit, and a habit is what `024.126` records twelve failures of in one
 session. A check could plausibly catch it — the shape is "a tracked
 document grew by more than the edit could account for" — and that wants
 designing rather than asserting.
+
+## 024.226 An argument written as a paren-less call is judged by its own last argument
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.2.15
+released-in: 0.2.15
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`#infer_span`,
+`#locate`), `core/lib/ovallsp/diagnostics/engine.rb`
+(`#mismatched_arguments`)
+
+With `Widget#label: (String)`, `#resize: (Integer)` and
+`#make: (Integer) -> String` declared in a project `sig/`:
+
+| written | what Ruby passes | what the engine said |
+|---|---|---|
+| `w.label(w.make 1)` | a String, correctly | **reported**: expects String, but Integer is given |
+| `w.resize(w.make 1)` | a String, wrongly | **nothing** |
+| `w.label(w.make(1))` | a String, correctly | nothing — correct |
+| `w.resize(w.make(1))` | a String, wrongly | reported — correct |
+
+One defect in both directions: a false report on code that runs, and a
+real mistake suppressed. Only the paren-less spelling is affected.
+
+**Mechanism**, taken from Prism rather than reasoned about:
+
+    Widget.new.label(Widget.new.make 1)
+    argument "Widget.new.make 1"   17...34
+    its own trailing `1`           33...34   <- both end at 34
+
+`#mismatched_arguments` asked `infer_at(document, range[:end])`, and
+`#infer_at` answers about the **innermost** node at an offset. That is
+the right question for a cursor and the wrong one here: the caller
+already knows which node it means and passing an offset throws that
+away. The end offset was chosen because the *start* of
+`SmallInteger.new` lands on the constant and answers
+`ClassOf[SmallInteger]`; the comment at `engine.rb:441-449` already said
+what the real answer was — "asking for that means carrying the argument
+*node* here rather than a range".
+
+**Fixed by carrying it.** `LocalInferencer#infer_span(document, range)`
+takes both offsets and stops the descent at the node whose location
+matches exactly, then evaluates that node. It reuses the existing
+`#locate` walk rather than adding a second one — the env threads down
+that walk and accumulates bindings, and a parallel walker would be two
+things that must agree about the same descent, which is the shape
+`CLAUDE.md`'s same-place rule names. The stop is one line in `#locate`,
+guarded by an ivar that is nil for every other caller, so a cursor query
+cannot reach it.
+
+**Prevalence, derived here rather than quoted.** Over 997 files of
+activesupport, actionpack, activerecord and railties: 41,332 positional
+arguments examined, 3,117 whose own last descendant ends exactly where
+they do, of which **300 are the `CallNode -> ArgumentsNode` shape** this
+entry is about — a paren-less call written as an argument.
+(A review pass reported 16 using a narrower filter over a different
+file set; the number above is this one, from `prev20.rb`'s walk, and the
+two are not the same measurement.)
+
+**What the corpora could not show.** Rails gems: 0 added, 0 removed,
+control `unresolved-constant` identical at 2,987. rbs 4.0.3 with its own
+`sig/`: 0 added, 0 removed, control identical at 319, `argument-type`
+unchanged at 3 — those three are `024.224`, a different defect. Both
+runs bound the regression risk and neither can exercise the fix: the
+check needs a *declared* parameter type, and the only hand-written-sig
+corpus available has no paren-less call argument at a checked position.
+The spec is what pins the fix, in both directions, with the two
+parenthesised spellings and a plain literal argument as controls.
+
+**Split out of `024.20` rather than filed under it.** `024.20` is about
+`#contains?` being inclusive, which is the *upstream* cause; this is a
+wrong answer with its own reproduction, its own fix, and a
+`KNOWN_LIMITATIONS` paragraph it needs and `024.20` never had — that
+entry is cited only inside a paragraph about blocks having no type,
+which is the entry's own recorded complaint about itself, still true one
+release later.
+
+**Not widened.** `#operator_expression?` still declines an argument
+carrying a top-level operator, and `#infer_span` would now answer
+correctly for many of them. Relaxing that is a change that *adds*
+reports, and this release is not the place: 0.2.0 produced 795 false
+positives by widening this exact check. Worth its own entry and its own
+corpus run.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

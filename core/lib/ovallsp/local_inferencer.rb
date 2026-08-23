@@ -145,10 +145,61 @@ module Ovallsp
       @self_type_stack = []
       @lexical_nesting = []
       @in_singleton_class = false
+      @target_span = nil
 
       locate(result.value.statements, offset, initial_env.dup)
     rescue BudgetExceeded, StandardError
       Types::UNKNOWN
+    end
+
+    # The type of the node spanning exactly `range`, for a caller that
+    # already knows which node it means.
+    #
+    # `#infer_at` answers about the *innermost* node at an offset, which
+    # is the right question for a cursor and the wrong one for an
+    # argument. The end offset was used because the start of
+    # `SmallInteger.new` lands on the constant and answers
+    # `ClassOf[SmallInteger]` -- but for an argument written as a
+    # paren-less call the argument's own end is also its last argument's
+    # end:
+    #
+    #   Widget.new.label(Widget.new.make 1)
+    #   #                ^ argument       17...34
+    #   #                                 ^ its `1`  33...34
+    #
+    # so the innermost node at 34 is the Integer, and a String argument
+    # was reported as an Integer -- while the same mechanism reversed
+    # kept a real String-for-Integer mismatch silent (`024.20`).
+    #
+    # Both offsets, so the answer is decided by the node the caller
+    # named rather than by whatever else happens to touch one end of it.
+    def infer_span(document, range, initial_env: {}, max_steps: nil)
+      start_offset = document.position_to_byte_offset(range[:start])
+      end_offset = document.position_to_byte_offset(range[:end])
+      return Types::UNKNOWN unless start_offset && end_offset
+
+      result = parse_cached(document)
+      @steps = 0
+      @step_budget = max_steps || @max_steps
+      @self_type_stack = []
+      @lexical_nesting = []
+      @in_singleton_class = false
+      @target_span = [start_offset, end_offset]
+
+      locate(result.value.statements, end_offset, initial_env.dup)
+    rescue BudgetExceeded, StandardError
+      # **Contained** (`024.20`): `Types::UNKNOWN` is this engine's own
+      # not-knowing, and the one caller declines to report on it.
+      Types::UNKNOWN
+    ensure
+      @target_span = nil
+    end
+
+    def spans_target?(node)
+      return false unless @target_span
+
+      location = node.location
+      location.start_offset == @target_span[0] && location.end_offset == @target_span[1]
     end
 
     def infer_ivars_for_method_node(method_node, initial_env: {}, self_type_name:, reset_budget: true)
@@ -323,6 +374,12 @@ module Ovallsp
       step!
       capture_scope(env) if @capturing_scope
       return Types::UNKNOWN if node.nil?
+      # `#infer_span` asked about a node it already had, and stopping the
+      # descent here is what lets it keep the env threading this walk
+      # does rather than growing a second walker that has to agree with
+      # it (`024.20`). Nil for every other caller, so the line cannot
+      # fire on a cursor query.
+      return eval_type(node, env) if spans_target?(node)
 
       case node
       when Prism::StatementsNode

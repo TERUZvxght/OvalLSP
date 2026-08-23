@@ -56,6 +56,7 @@
 "core/lib/ovallsp/io/framed_reader.rb#fill_buffer": surfaces
 "core/lib/ovallsp/local_inferencer.rb#scope_at": "contained: the partial scope captured so far, which is a subset and never a wrong binding"
 "core/lib/ovallsp/local_inferencer.rb#infer_at": "contained: answers Types::UNKNOWN, the engine's own three-valued not-knowing, which no caller can assert from"
+"core/lib/ovallsp/local_inferencer.rb#infer_span": "contained: Types::UNKNOWN, this engine's own not-knowing, and the one caller declines to report on it (024.226)"
 "core/lib/ovallsp/local_inferencer.rb#infer_ivars_for_method_node": "contained: falls back to the initial env, a subset of what a full walk would find"
 "core/lib/ovallsp/local_inferencer.rb#method_nodes": "contained: an empty map means no method bodies to walk, so nothing is inferred"
 "core/lib/ovallsp/local_inferencer.rb#before_action_operations": "contained: an empty list means no filters found, so none are applied"

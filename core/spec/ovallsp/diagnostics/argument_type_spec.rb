@@ -40,6 +40,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
         def attach: (Widget other) -> void
         def pair: (String first, Integer second) -> void
         def zoom: (Float factor) -> void
+        def make: (Integer n) -> String
         def hold: (Object value) -> void
         def each_thing: () { () -> void } -> Widget
         def >: (Widget other) -> bool
@@ -629,5 +630,63 @@ RSpec.describe "Ovallsp::Diagnostics::Engine argument type checking (0.2.0)" do
                 candidate, semantic_context)
 
     expect(asked).to eq(["::Widget"])
+  end
+
+  # `024.20`. The argument-type check asks `infer_at(range[:end])`, and
+  # `#infer_at` answers about the *innermost* node at an offset -- the
+  # right question for a cursor and the wrong one here, because the
+  # caller already knows which node it means and passing an offset throws
+  # that away.
+  #
+  # For an argument written as a paren-less call the argument's own end
+  # is also its last argument's end, so the innermost node there is the
+  # trailing literal:
+  #
+  #   w.label(w.make 1)     argument "w.make 1" spans 8...16
+  #                         its IntegerNode spans 15...16
+  #                         both end at 16
+  #
+  # Ruby, run rather than reasoned about:
+  #
+  #   $ ruby -e '
+  #   class Widget
+  #     def label(text) = p([:label_got, text.class])
+  #     def make(n) = "x"
+  #   end
+  #   Widget.new.label(Widget.new.make 1)
+  #   '
+  #   # => [:label_got, String]
+  #   # ruby 3.4.10
+  #
+  # So the engine reports a String argument as an Integer, and -- the
+  # same mechanism facing the other way -- stays silent where a String
+  # really is passed to an Integer parameter.
+  describe "an argument written as a paren-less call" do
+    it "does not report one whose real type matches the declaration" do
+      expect(findings("Widget.new.label(Widget.new.make 1)")).to be_empty
+    end
+
+    it "reports one whose real type does not match" do
+      expect(findings("Widget.new.resize(Widget.new.make 1)").map(&:message))
+        .to contain_exactly(a_string_including("expects Integer here, but String is given"))
+    end
+
+    # The parenthesised spellings, which never had the defect. Without
+    # these the two examples above would pass on an engine that stopped
+    # checking call arguments altogether.
+    it "still gets the parenthesised spelling right, both ways" do
+      aggregate_failures do
+        expect(findings("Widget.new.label(Widget.new.make(1))")).to be_empty
+        expect(findings("Widget.new.resize(Widget.new.make(1))").map(&:message))
+          .to contain_exactly(a_string_including("expects Integer here, but String is given"))
+      end
+    end
+
+    # And a literal argument, where the end offset lands on the argument
+    # itself and always did.
+    it "still reports a plain literal of the wrong class" do
+      expect(findings("Widget.new.label(1)").map(&:message))
+        .to contain_exactly(a_string_including("expects String here, but Integer is given"))
+    end
   end
 end

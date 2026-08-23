@@ -449,7 +449,10 @@ module Ovallsp
           # than one it guesses at.
           next if operator_expression?(document, range)
 
-          actual = context.local_inferencer.infer_at(document, range[:end])
+          # The argument's *node*, not an offset inside it. See
+          # `LocalInferencer#infer_span` for what the end offset
+          # answered about a paren-less call argument (`024.20`).
+          actual = context.local_inferencer.infer_span(document, range)
           next unless actual.is_a?(Types::Nominal)
           # The same rule as the declared side above, and it was applied
           # only there: `Boolean` is what the converter calls RBS's

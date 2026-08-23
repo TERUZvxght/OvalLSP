@@ -189,7 +189,16 @@ block's body turned a latent offset mis-resolution into 230
 unknown-method reports across Ruby's own standard library. Unknown is the
 only one of the three that no check acts on. The offset rule those two
 depend on is being fixed on its own (024.20, still open), after which
-the body can be read. <!-- documents: 024.20 -->
+the body can be read.
+
+That same offset rule has a second consequence you meet directly, and it
+is the one this document did not name until 0.2.15: **a `.` written
+straight after a block answers nothing.** In `[1, 2].map { |x| x }.first`
+the cursor after the block gets no hover, no completion and no signature
+help — even though the engine can type that receiver perfectly well as
+`Array[Integer]`, and does when you ask it anywhere else. It declines
+rather than answering wrongly, which is the right way round, but the
+answer is one it already has. <!-- documents: 024.20 -->
 
 ## Reports that are wrong today
 
