@@ -184,7 +184,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.6`](#0246-the-seen-uris-spec-s-comment-overclaims) | fixed | 0.1.10 | The `seen_uris` spec's comment overclaims |
 | [`024.8`](#0248-ownership-retirement-on-exited-known-size-0-is-unpinned) | fixed | 0.1.10 | Ownership retirement on `exited() && known.size === 0` is unpinned |
 | [`024.10`](#02410-four-extension-ts-behaviours-cannot-be-unit-tested) | fixed | 0.1.10 | Four `extension.ts` behaviours cannot be unit-tested |
-| [`024.13`](#02413-a-reopened-core-class-looks-closed-in-both-directions-0-3-x) | open | 0.2.15 | A reopened core class looks closed, in both directions (0.3.x) |
+| [`024.13`](#02413-a-reopened-core-class-looks-closed-in-both-directions-0-3-x) | open | 0.2.16 | A reopened core class looks closed, in both directions (0.3.x) |
 | [`024.14`](#02414-workspace-wide-diagnostics-do-not-fire-against-the-real-rails-fixture) | fixed | 0.2.1 | Workspace-wide diagnostics do not fire against the real Rails fixture |
 | [`024.15`](#02415-the-index-s-answers-depend-on-which-file-was-edited-last) | fixed | 0.1.13 | The index's answers depend on which file was edited last |
 | [`024.16`](#02416-the-capability-e2e-suite-can-skip-in-full-while-ci-stays-green) | fixed | 0.1.13 | The capability E2E suite can skip in full while CI stays green |
@@ -251,7 +251,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.79`](#02479-model-first-completes-to-nothing) | fixed | 0.2.6 | `Model.first` completes to nothing |
 | [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | fixed | 0.2.12 | An unresolved hierarchy edge is expressible as a method owner |
 | [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | fixed | 0.2.12 | An ancestor reference carries no lexical context, so an ambiguous na… |
-| [`024.82`](#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | open | 0.2.15 | `Foo = Class.new(Bar)` is not a type the index knows |
+| [`024.82`](#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | fixed | 0.2.15 | `Foo = Class.new(Bar)` is not a type the index knows |
 | [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.2.15 | The undefined-method check is loudest exactly where no Runtime Agent… |
 | [`024.84`](#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | open | 0.2.16 | A constant is typed as a class object whatever it holds |
 | [`024.85`](#02485-self-completes-nothing) | open | 0.2.15 | `self.` completes nothing |
@@ -520,7 +520,7 @@ module, or add an integration test host.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.15
+target: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -573,6 +573,30 @@ but the true positives are lost with the false ones.
 distinct from "the workspace owns this class", which is what the Agent
 already answers for 024.R5. Scheduled with 024.R7, since a gem index is
 what makes the answer available without an Agent too.
+
+### 0.2.15: it cannot be observed before `024.129`, so it moves beside it
+
+Attempted, with the entry's own fixture and a control:
+
+```
+without the reopening:  no unknown-method report for `a.second`
+                        or `a.totally_bogus`
+with the reopening:     the same — no report either way
+```
+
+**Nothing is reported on a core-library receiver at all**, which is
+`024.129`. So the experiment cannot distinguish "the reopening wrongly
+closed the chain" from "this receiver is never reported on", and neither
+half of this entry — the false report on `a.second`, the correct one on
+`a.totally_bogus` — is observable yet.
+
+That is a **scheduling fact, not a reprieve**: `024.13` is downstream of
+`024.129`, which is in the design-decision set, so it moves to 0.2.16
+beside it. Fixing it first would mean writing a fix whose effect nothing
+can see, and pinning it with a fixture that passes for the wrong reason.
+
+*Found by trying rather than by reading the two entries side by side.
+The dependency is not stated in either.*
 
 
 ## 024.14 Workspace-wide diagnostics do not fire against the real Rails fixture
@@ -5308,10 +5332,14 @@ examples run against the interpreter.
 ## 024.82 `Foo = Class.new(Bar)` is not a type the index knows
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
+user-visible-note: >
+  Fixed in 0.2.15. A class made by assignment resolves like one made
+  with the keyword.
 target: 0.2.15
+released-in: 0.2.15
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (`#visit_constant_write_node`),
@@ -5343,6 +5371,63 @@ or module declaration at parse time, with the superclass taken from the
 argument when it is a written constant. `CONST = SomeOther` is an alias
 and is a different question — it names an existing type rather than
 declaring one, and answering it needs the alias resolved first.
+
+### Fixed in 0.2.15
+
+`#visit_constant_write_node` records a `Class.new` / `Module.new` /
+`Struct.new` / `Data.define` assignment as a **class**, with its
+superclass from the first argument. The four receivers are the same
+`CLASS_CREATING_BLOCK_RECEIVERS` the block form already reads, so the
+two cannot disagree about what creates a class.
+
+**Reproduced with a control**, which is what made it a defect rather
+than a preference — the two forms given the same two calls:
+
+```
+class Keyworded < Base   ->  reports `definitely_absent`
+Assigned = Class.new(Base) -> reports nothing at all
+```
+
+The engine declined rather than answering wrongly, so this was a missed
+report and not a false one.
+
+### The corpus taught the design, twice
+
+**A form that generates members must not be enumerated.** Naming these
+classes and stopping there added a *false* report immediately —
+``HeredocData has no method named `common_whitespace=` `` on a
+`Struct.new` accessor that plainly exists. Asked of Ruby:
+
+```
+Class.new(B).instance_methods(false)        # => []
+Module.new.instance_methods(false)          # => []
+Struct.new(:a, :b).instance_methods(false)  # => [:a, :a=, :b, :b=]
+Data.define(:x).instance_methods(false)     # => [:x]
+Class.new(B) { def own_m; end }             # => [:own_m]
+```
+
+So `Struct.new`, `Data.define` and **any** of them given a block open
+the surface — `024.110`'s rule one level out, an enumeration carrying
+its own completeness. A plain `Class.new(Base)` generates nothing and
+stays enumerable, which keeps the half worth having.
+
+**The name has to be qualified.** It was recorded as `::HeredocData`
+where the keyword form records `::M::L::HeredocData`, so the open
+surface — keyed on the qualified name — was never found. **A top-level
+fixture cannot tell**: with no enclosing namespace the two are the same
+string, and the spec passed. The corpus caught it, and there is a nested
+example now.
+
+**Measured**: 269 files of real gem source, both sides on corpus digest
+`8143600c…` at different revisions — **13 `unresolved-constant` removed,
+0 added**, `unknown-method` unchanged at 22.
+
+*And one measurement error worth recording: the first baseline was
+captured with `2>&1` while the after-run used `2>file`, so stderr
+concatenated onto the last stdout line and `comm` reported a phantom
+addition. `026`'s class exactly — both sides must be captured the same
+way, not merely run the same way.*
+
 
 ## 024.83 The undefined-method check is loudest exactly where no Runtime Agent can answer
 

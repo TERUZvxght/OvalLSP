@@ -841,14 +841,37 @@ module Ovallsp
       end
 
       def visit_constant_write_node(node)
+        # `024.82`. `Foo = Class.new(Bar)` creates a class as surely as
+        # `class Foo < Bar` does -- Ruby even gives it the name:
+        #
+        #     $ ruby -e 'class B; end; A = Class.new(B); p [A.class, A.superclass, A.name]'
+        #     [Class, B, "A"]
+        #
+        # Recorded as a `:constant`, nothing that looks for a class saw
+        # it, so the undefined-method check declined on every receiver
+        # typed as one. Measured against the keyword form as a control:
+        # `Keyworded.new.definitely_absent` was reported and
+        # `Assigned.new.definitely_absent` was not. Common in real code --
+        # `concurrent/errors.rb` is written this way throughout.
+        kind = class_creating_call?(node.value) ? :class : :constant
+        # A class's name is its **qualified** name, the way
+        # `#visit_class_node` records one -- `::M::L::HeredocData`, not
+        # `::HeredocData`. Written unqualified first, and a top-level
+        # fixture could not tell: with no enclosing namespace the two are
+        # the same string. The corpus could, and did.
+        name = kind == :class ? assigned_class_name(node) : node.name.to_s
         @declarations << Index::Declaration.new(
-          symbol_id: Index::SymbolId.new(kind: :constant, owner: current_owner, name: node.name.to_s, discriminator: nil),
+          symbol_id: Index::SymbolId.new(kind: kind, owner: current_owner, name: name, discriminator: nil),
           location: Index::SourceLocation.to_range(node.location, @lines),
           visibility: nil,
           parameters: [],
           origin: :source,
           name_location: Index::SourceLocation.to_range(node.name_loc, @lines)
         )
+        if kind == :class
+          record_assigned_superclass(node)
+          record_assigned_class_open_surface(node)
+        end
 
         super
       end
@@ -985,6 +1008,85 @@ module Ovallsp
       # check treated it as fully known. Every Rails migration was in that
       # state, and every call in one -- `create_table`, `add_column` --
       # was reported as undefined.
+      # `Class.new`, `Struct.new`, `Data.define` and `Module.new` -- the
+      # same four `CLASS_CREATING_BLOCK_RECEIVERS` already names for the
+      # block form, read here for the assignment form so the two cannot
+      # disagree about what creates a class.
+      def class_creating_call?(value)
+        return false unless value.is_a?(Prism::CallNode)
+
+        name = value.receiver && raw_constant_name(value.receiver)
+        return false unless name
+
+        CLASS_CREATING_BLOCK_RECEIVERS[Index::SymbolId.bare_name(name.to_s)] == value.name
+      end
+
+      # **Some of these forms generate members this parser never sees.**
+      # Asked of Ruby rather than assumed:
+      #
+      #     Class.new(B).instance_methods(false)          # => []
+      #     Module.new.instance_methods(false)            # => []
+      #     Struct.new(:a, :b).instance_methods(false)    # => [:a, :a=, :b, :b=]
+      #     Data.define(:x).instance_methods(false)       # => [:x]
+      #     Class.new(B) { def own_m; end }               # => [:own_m]
+      #
+      # So `Struct.new` and `Data.define` open the surface, and so does
+      # **any** of them given a block — the block's body is read by
+      # `024.31`'s machinery, not attributed here, so from this node's
+      # point of view its members are unknown.
+      #
+      # `Class.new(Base)` with no block generates nothing, and stays
+      # enumerable. That is the half worth keeping: the undefined-method
+      # check goes on working on a plain aliasing assignment.
+      #
+      # **Measured, and this is why the distinction exists.** Over 269
+      # files of real gem source, naming these classes removed six
+      # `unresolved-constant` reports — and, before the surface opened,
+      # added one wrong `unknown-method`:
+      # ``HeredocData has no method named `common_whitespace=` ``, on a
+      # `Struct.new` accessor that plainly exists. `024.110`'s rule
+      # applied one level out: an enumeration carries its own
+      # completeness, and a generated one cannot.
+      GENERATES_MEMBERS = { "Struct" => :new, "Data" => :define }.freeze
+
+      def generates_unreadable_members?(value)
+        return true unless value.block.nil?
+
+        name = value.receiver && raw_constant_name(value.receiver)
+        GENERATES_MEMBERS[Index::SymbolId.bare_name(name.to_s)] == value.name
+      end
+
+      def record_assigned_class_open_surface(node)
+        return unless generates_unreadable_members?(node.value)
+
+        owner = Index::SymbolId.bare_name(assigned_class_name(node))
+        @open_surface_owners << [owner, :instance]
+        @open_surface_owners << [owner, :singleton]
+      end
+
+      # `Class.new(Bar)`'s first argument is the superclass. Only a
+      # statically nameable one is recorded: `Class.new(something_dynamic)`
+      # names an ancestor this parser cannot vouch for, and inventing one
+      # is worse than recording none -- the class is still a class, and
+      # the chain is simply short.
+      def assigned_class_name(node)
+        Index::SymbolId.qualify_owner([current_owner, node.name.to_s].compact.join("::"))
+      end
+
+      def record_assigned_superclass(node)
+        argument = node.value.arguments&.arguments&.first
+        return unless argument
+
+        target = raw_constant_name(argument)
+        return unless target
+
+        owner = assigned_class_name(node)
+        @ancestor_facts << Index::AncestorFact.new(
+          owner: owner, relation: :superclass, target: target,
+          location: Index::SourceLocation.to_range(argument.location, @lines), nesting: current_nesting
+        )
+      end
+
       def record_superclass(node, owner)
         return unless node.superclass
 

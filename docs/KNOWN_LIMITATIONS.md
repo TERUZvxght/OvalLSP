@@ -655,21 +655,6 @@ arguments. <!-- documents: 024.89 -->
   type exactly. <!-- documents: 024.129 -->
 - A scope defined inside a concern's `included do` has no type. <!-- documents: 024.132 -->
 
-## A class created by assignment is invisible
-
-`Error = Class.new(StandardError)` declares a class as surely as
-`class Error < StandardError` does, and this extension does not see it.
-Nothing resolves to such a name: not hover, not go-to-definition, not
-completion's member list. An `app/errors.rb` written in that style is
-entirely invisible, and it is an ordinary Ruby idiom for exception
-hierarchies.
-
-Until 0.2.6 this was hidden rather than absent: a name the index could
-not find was answered by whatever unrelated class shared its last
-segment, so `Concurrent::Error` resolved to somebody else's `Error`. An
-answer, and the wrong one. It is now reported as unresolvable, which is
-the honest state. <!-- documents: 024.82 -->
-
 ## What a partial's local resolves to
 
 **Nothing.** In `_article.html.erb`, `article` is supplied by whatever
