@@ -276,10 +276,15 @@ missed one", so each is narrow on purpose. What that costs a user:
   method (024.32), a block's `self` read as the enclosing class (024.31),
   and `define_method(:warn) { |*messages| }` recorded as taking *no*
   arguments, which alone made every `warn` and every `p` the corpus calls
-  a report. A corpus of gems is close to the worst case for this — their
-  dependencies are absent, so names resolve by substitution — and the
-  check's precision on a real application is still unmeasured
-  (024.40). <!-- documents: 024.40 -->
+  a report. Reporting nothing on committed code is what this check should
+  do — Ruby that runs does not call its own methods with the wrong number
+  of arguments, and the mistake this catches is one you make in the editor
+  and fix seconds later, which no corpus can contain. Measured the other
+  way round, by writing calls that are deliberately wrong: it catches
+  **31 of 31** on a class, and **0 of 16** on a module, for the reason the
+  "typo in a call on a module" section below gives. So a third of the
+  argument-count mistakes in a codebase shaped like this one go
+  unreported, all of them on module receivers.
 - **Argument types** are checked so narrowly that on the code measured
   so far they are not reported at all. Over Ruby's standard library, five
   Rails gems and minitest — 2,042 files — this check produces

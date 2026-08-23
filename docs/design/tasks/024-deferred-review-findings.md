@@ -211,7 +211,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.2.15 | The argument-type check reports nothing on measured real Ruby |
 | [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.2.15 | `scope_at` copies the whole environment once per descent step |
 | [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.2.15 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
-| [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | open | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
+| [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
 | [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | open | 0.2.15 | Typing a `.` reports a method on the *next* line |
 | [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.2.16 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
 | [`024.43`](#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | open | 0.2.15 | Signature help answers nothing for a receiverless stdlib call |
@@ -2525,10 +2525,11 @@ instead of being the one piece of it that wants to be.
 ## 024.40 Every `argument-count` report on the measurement corpus is false
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.15
+released-in: 0.2.15
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`argument_count_findings`,
@@ -2631,14 +2632,63 @@ first sweep reported the required keyword unpinned, because nothing
 expressed it as behaviour; `:keyreq` against `:key` on the recorder's own
 `Method#parameters` is what pins it now.
 
-**Still open, and the entry's title is now the wrong question.** The
-check reports nothing at all on 2,095 files of real Ruby, which is the
-state `024.37` describes for the argument *type* check — not a precision
-of zero, a precision that is undefined. What the 0.2.1 entry asked for is
-still not done: **measure it on a real application**, where the classes
-are the user's own and declared, rather than on gems whose dependencies
-are absent. Until that is run, nothing here says whether G5 catches a
-real mistake.
+### The measurement, run in 0.2.15, and what it could not be
+
+**Precision has nothing to measure.** The check reports **zero** times on
+2,095 files of stdlib and gems and **zero** times on the 90 files of this
+project's own `core/lib` — where the classes *are* the author's own,
+declared, and resolvable, which is the condition the paragraph above
+asked for. That is not a precision of zero; it is a precision that is
+undefined for want of a single positive.
+
+And on reflection that is the expected answer, not a surprising one.
+Committed Ruby that runs does not call its own methods with the wrong
+number of arguments — the mistake is made in an editor and fixed seconds
+later, and no corpus of committed code can hold one. **A corpus can
+never measure this check's precision.** The 0.2.1 entry asked for a
+measurement that does not exist, which is why it sat open for six
+releases; saying so is the answer to it.
+
+**So recall was measured instead**, by `scripts/measure_arity_recall.rb`:
+every `def self.name(a, b)` in a tree whose parameter list is entirely
+required positionals — the shape where a wrong count is unambiguously an
+error — called once with one argument too many and once with one too
+few, in a probe written to a `Dir.mktmpdir` and never into the tree being
+measured.
+
+Over `core/lib`, 26 methods and 47 deliberately wrong calls:
+
+| receiver | caught |
+|---|---|
+| a **class**'s singleton method | **31 / 31** |
+| a **module**'s singleton method | **0 / 16** |
+| total | 31 / 47 |
+
+**The split is exact, and every miss has one cause**: `024.106`, which
+declines on a module because a module's ancestor chain is itself, so this
+engine cannot tell "I have seen everything it declares" from "I have seen
+one file that reopens it". `Ovallsp::Index`, `Ovallsp::Plugins` and
+`Ovallsp::Semantic` are modules; every other owner in the sample is a
+class. There is no second cause and no partial credit anywhere in the
+table.
+
+So G5 does catch a real mistake, on every receiver it is willing to
+answer about, and its one blind spot is a limitation already recorded and
+already published in `KNOWN_LIMITATIONS`.
+
+**What was not measured, stated plainly.** Not a Rails application. The
+`rails_real` fixture has one method with a parameter and no `def self.`
+at all, so it cannot support this measurement; running it there would
+have produced a number with an N of one. What that measurement would add
+is how often macro-generated methods make the check bail out — a recall
+figure, not a precision one, and `UNSTATED_PARAMETERS` already declines
+by construction there. It is not expected to change whether G5 earns its
+row, and it is not being carried as an open item on that basis.
+
+**The entry's title is retained though it is no longer true.** Every
+report it named is gone — 109 to 0 in the table above — and the entry is
+closed on that plus the measurement. Retitling it would lose the thread
+from the 0.1.6 reading to here.
 
 
 ## 024.41 Typing a `.` reports a method on the *next* line
@@ -6466,6 +6516,18 @@ plain Ruby.
 Separately and in the same area: **nothing checks a module's singleton
 calls at all.** `PlainClass.nope_y` is reported; `PlainMod.nope_x` is
 not, on a module whose `def self.` methods the engine does know.
+
+**Measured in 0.2.15, as a cost rather than a description.** The
+`argument-count` check's recall over `core/lib` is **31 / 31** on a
+class's singleton method and **0 / 16** on a module's — 47 deliberately
+wrong calls, `scripts/measure_arity_recall.rb`, the numbers in `024.40`.
+Every miss in that sample is this entry, with no second cause. So the
+price of declining on modules is a third of the arity mistakes in a
+codebase shaped like this one, and it is worth knowing that the trade is
+that size rather than a rounding error — the alternative 0.2.10 tried
+reported `Rails.application`, `Rails.env` and `Rails.logger` as missing,
+which is still the worse half.
+
 
 ## 024.107 An alias never appears in completion, though every other feature knows it
 
