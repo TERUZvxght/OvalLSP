@@ -297,7 +297,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.125`](#024125-the-packaged-core-is-never-driven-end-to-end-and-two-gates-say-it-is) | open | 0.2.15 | The packaged Core is never driven end to end, and two gates say it is |
 | [`024.126`](#024126-a-text-scanner-matches-its-own-prose-exempts-itself-and-stops-checking-a-file-that-can-hold-the-real-thing) | fixed | 0.2.14 | A text scanner matches its own prose, exempts itself, and stops chec… |
 | [`024.127`](#024127-hover-answers-an-empty-string-where-lsp-expects-null) | fixed | 0.2.15 | Hover answers an empty string where LSP expects null |
-| [`024.128`](#024128-integer-arithmetic-answers-a-four-way-union) | open | 0.2.15 | Integer arithmetic answers a four-way union |
+| [`024.128`](#024128-integer-arithmetic-answers-a-four-way-union) | fixed | 0.2.15 | Integer arithmetic answers a four-way union |
 | [`024.129`](#024129-no-undefined-method-report-on-a-core-library-receiver) | open | 0.2.15 | No undefined-method report on a core-library receiver |
 | [`024.130`](#024130-a-hover-label-drops-the-namespace-when-the-name-was-written-bare-withdrawn-it-does-not-reproduce) | fixed | 0.2.14 | A hover label drops the namespace when the name was written bare — w… |
 | [`024.131`](#024131-after-on-a-nil-local-hover-answers-nil-a-wrong-answer-not-an-absent-one) | fixed | 0.2.15 | After `||=` on a nil local, hover answers `nil` — a wrong answer, no… |
@@ -5885,6 +5885,27 @@ and completion filters on where it was asked from — an explicit receiver
 sees public methods only. Same query as `024.78`'s and `024.88`'s
 subject; see the availability item in `037`.
 
+### 0.2.15 reassessment: this is not a small fix
+
+An implementation attempt classified it `small` and produced a change
+touching **seven files under `core/lib`** — `query_service.rb`,
+`method_resolver.rb`, `prefix_completion.rb`, `call_site_visibility.rb`,
+`signatures/environment.rb`, `parser_service.rb` and `server.rb` — plus
+two specs and a mutation entry.
+
+That is a cross-cutting change to how visibility reaches the completion
+path, not a bounded one, and calling it small is how a fix gets made in
+seven places instead of one. **Reclassified `large`** and left for a
+release that can carry it.
+
+*The rule it needs is already known and stated in `024.151`'s Direction:
+the answer belongs where the value is produced, not at each reader. What
+is not yet decided is which layer that is here — `MethodResolver`
+already owns "can this be called from there" for diagnostics, and the
+question is whether completion should be asking it rather than
+assembling its own answer.*
+
+
 ## 024.100 The four features answer from different code paths and disagree at one position
 
 ```yaml
@@ -7504,10 +7525,13 @@ the empty string was correct is what made it look settled.*
 ## 024.128 Integer arithmetic answers a four-way union
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
+user-visible-note: >
+  Fixed in 0.2.15. Integer arithmetic hovers Integer.
 target: 0.2.15
+released-in: 0.2.15
 ```
 
 **Area:** `core/lib/ovallsp/signatures/environment.rb`, `core/lib/ovallsp/local_inferencer.rb`
@@ -7520,6 +7544,53 @@ not an answer a reader can use, and completion after it offers 209
 members drawn from all four.
 
 **Was one of nine bullets under `024.90` until 0.2.14.**
+
+### Fixed in 0.2.15
+
+Both authorities were read rather than remembered:
+
+```
+$ ruby -e 'p [(10 * 3).class, (10 * 1.5).class, (2 ** 3).class, (2 ** -1).class]'
+[Integer, Float, Integer, Rational]
+
+Integer#*  : (::Float) -> ::Float
+Integer#*  : (::Rational) -> ::Rational
+Integer#*  : (::Complex) -> ::Complex
+Integer#*  : (::Integer) -> ::Integer
+Integer#** : (::Integer) -> ::Numeric
+```
+
+RBS keys those overloads on the argument's type. The resolver matched on
+**shape only** — arity and block presence — so all four fitted a
+one-argument call and every return type joined the union, with the
+argument sitting right there. `OverloadResolver#narrow_by_argument_types`
+reads that key, and `LocalInferencer` threads `env:` through
+`#resolve_signature_call` so the argument *types* are available and not
+only their count.
+
+**Three restrictions, each of which is the fix being honest:**
+
+- **Only on the exact-shape path.** The fall-back to every overload is
+  already an admission that nothing is known about the call, and
+  narrowing an admission is inventing.
+- **Only where every argument's type is known.** One `Unknown` and the
+  whole set stands.
+- **It picks the overload; it never touches the return type.** RBS
+  declares `Integer#**(Integer) -> Numeric` deliberately, because the
+  answer depends on the value — `2 ** 3` is an Integer and `2 ** -1` a
+  Rational — and that `Numeric` survives.
+
+**An expectation was written wrong first and the tree corrected it.** The
+guard example asserted that an unknown argument leaves every overload
+contributing a union; the engine answers `Unknown` for the whole
+expression instead, which is a different and more honest thing. Recorded
+in the spec, because `CLAUDE.md` asks where an expected value came from
+and the answer was "a belief, until it was run".
+
+**Measured**: 269 files of real gem source, both sides on corpus digest
+`8143600c…` at different revisions — output **byte-identical**,
+`unresolved-constant` 1,485 and `unknown-method` 22 on both.
+
 
 ## 024.129 No undefined-method report on a core-library receiver
 
@@ -10287,6 +10358,26 @@ that one sentence.
 *It is the same shape as `024.149` — a result read from a summary rather
 than from the thing itself — with the added cost that here the thing
 itself was then thrown away.*
+
+### Three of the six agents reported the drift, and I did not read it
+
+Checked afterwards: `024.128`, `024.134` and `024.40` all named the wrong
+base in the fields they returned. One opened with it in capitals —
+**"BASE DRIFT — READ FIRST. This worktree is based on `main` @ 57e98da
+(0.2.13 published)"** — and went on to list three consequences for
+whoever applied the diff.
+
+**The information was in my hands before I deleted anything.** I read
+the `outcome` field, saw six `fixed`, and went to integrate. The
+`notes` field is where an agent puts what does not fit the schema's
+other slots, which is exactly where a surprise lands.
+
+So the rule above is not enough on its own, and the missing half is
+small: **read every field a run returns before acting on any of them.**
+A schema with an `outcome` slot invites reading that slot; the fields
+that carry the reason it might be wrong are the ones easiest to skip.
+`024.149` is the same failure against a workflow's summary, and this is
+it against an agent's own report — twice now, one level apart.
 
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)

@@ -889,7 +889,7 @@ module Ovallsp
 
         if node.name == :new
           singleton_method = resolve_source_method_member(constant_type, node.name, singleton: true)
-          inherited_signature = resolve_signature_call(constant_type, node, singleton: true, direct: false)
+          inherited_signature = resolve_signature_call(constant_type, node, singleton: true, direct: false, env: env)
           inherited_signature = nil if inherited_signature.is_a?(Types::Unknown)
           return singleton_method || inherited_signature || constant_type
         end
@@ -913,7 +913,7 @@ module Ovallsp
         singleton_method = resolve_source_method_member(constant_type, node.name, singleton: true)
         return singleton_method if singleton_method
 
-        inherited_signature = resolve_signature_call(constant_type, node, singleton: true, direct: false)
+        inherited_signature = resolve_signature_call(constant_type, node, singleton: true, direct: false, env: env)
         return inherited_signature if inherited_signature
       end
 
@@ -930,14 +930,14 @@ module Ovallsp
         return Types.normalize_union(member_types) unless member_types.empty?
       end
 
-      signature = receiver_type && resolve_signature_call(receiver_type, node, direct: true)
+      signature = receiver_type && resolve_signature_call(receiver_type, node, direct: true, env: env)
       return signature if signature
 
       instance_level = receiver_type && resolve_instance_level(receiver_type, node.name,
                                                                positionals: positional_count(node))
       return instance_level if instance_level
 
-      inherited_signature = receiver_type && resolve_signature_call(receiver_type, node, direct: false)
+      inherited_signature = receiver_type && resolve_signature_call(receiver_type, node, direct: false, env: env)
       return inherited_signature if inherited_signature
 
       observed = receiver_type && resolve_observed_call(receiver_type, node)
@@ -1101,17 +1101,20 @@ module Ovallsp
         .then { |type| type == Types::UNKNOWN ? nil : type }
     end
 
-    def resolve_signature_call(receiver_type, node, singleton: false, direct: nil)
+    # `env:` is threaded so the argument *types* are available here, not
+    # only their count -- `024.128`. Every caller is inside
+    # `#resolve_call`, which already has it.
+    def resolve_signature_call(receiver_type, node, singleton: false, direct: nil, env: nil)
       return nil unless @signatures
 
       if receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
-        return resolve_signature_call(receiver_type.type_arg, node, singleton: true, direct: direct)
+        return resolve_signature_call(receiver_type.type_arg, node, singleton: true, direct: direct, env: env)
       end
       if receiver_type.is_a?(Types::Union)
         resolved = receiver_type.members.filter_map do |member|
           next if member == Types::NIL
 
-          resolve_signature_call(member, node, singleton: singleton, direct: direct)
+          resolve_signature_call(member, node, singleton: singleton, direct: direct, env: env)
         end
         return Types.normalize_union(resolved) unless resolved.empty?
         return nil
@@ -1182,11 +1185,21 @@ module Ovallsp
         receiver_parameters = @signatures.type_parameters(owner)
         bindings[receiver_parameters.last] = generic_type_arg unless receiver_parameters.empty?
       end
+      # `024.128`. The argument types the call site already has, so the
+      # resolver can read the key RBS puts on an overload rather than
+      # unioning every one that happens to take the right number of
+      # arguments. `nil` where the shape is not countable at all --
+      # forwarding or a splat -- since there is then no argument list to
+      # describe.
+      argument_types =
+        positional_count.nil? || env.nil? ? nil : positional_arguments.map { |argument| eval_type(argument, env) }
+
       resolved = Signatures::OverloadResolver.resolve(
         signature.overloads, positional_count: positional_count, keyword_names: keyword_names,
         # `...` forwards the caller's block too, so a forwarding call may
         # supply one even though this call site writes no literal block.
-        block_given: !node.block.nil? || forwarding, receiver_bindings: bindings
+        block_given: !node.block.nil? || forwarding, receiver_bindings: bindings,
+        argument_types: argument_types
       )
       return nil unless resolved
 

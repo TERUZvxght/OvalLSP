@@ -15,7 +15,8 @@ module Ovallsp
     module OverloadResolver
       module_function
 
-      def resolve(overloads, positional_count:, keyword_names: [], block_given: false, receiver_bindings: {})
+      def resolve(overloads, positional_count:, keyword_names: [], block_given: false, receiver_bindings: {},
+                  argument_types: nil)
         matches = overloads.select { |o| matches?(o, positional_count, keyword_names, block_given) }
         exact_match = !matches.empty?
         matches = overloads unless exact_match # no exact shape match -- fall back to every overload's return type
@@ -23,11 +24,54 @@ module Ovallsp
           block_matches = matches.select(&:block_type)
           matches = block_matches unless block_matches.empty?
         end
+        matches = narrow_by_argument_types(matches, argument_types) if exact_match
 
         Types.normalize_union(matches.map do |overload|
           bindings = receiver_bindings.reject { |name, _type| overload.type_parameters.include?(name) }
           Types.substitute(overload.return_type, bindings)
         end)
+      end
+
+      # `024.128`. Shape alone fits every `Integer#*` overload, because
+      # all four take one argument -- so `price * qty` on two Integers
+      # answered `Complex | Float | Integer | Rational`, with the
+      # argument sitting right there. RBS keys those overloads on the
+      # argument's type and this reads that key.
+      #
+      # **Only on the exact-shape path.** The fall-back to every overload
+      # is already an admission that nothing is known about the call, and
+      # narrowing an admission is inventing.
+      #
+      # **And only where every argument's type is known.** A single
+      # `Unknown` means the call is not identified, so the whole set
+      # stands: picking an overload from information that is not there is
+      # exactly the wrong-answer half of section 0.
+      #
+      # This picks the overload; it never touches the return type. RBS
+      # declares `Integer#**(Integer) -> Numeric` deliberately -- the
+      # answer depends on the value, `2 ** 3` being an Integer and
+      # `2 ** -1` a Rational -- and narrowing must leave that `Numeric`
+      # alone.
+      def narrow_by_argument_types(matches, argument_types)
+        return matches if argument_types.nil? || argument_types.empty?
+        return matches if argument_types.any? { |t| t.nil? || t == Types::UNKNOWN }
+
+        narrowed = matches.select { |overload| accepts_arguments?(overload, argument_types) }
+        narrowed.empty? ? matches : narrowed
+      end
+
+      # Exact type identity, not subtyping. The resolver's own header
+      # says it does no subtyping, and a partial one here would answer
+      # confidently where it happened to be right and silently wrongly
+      # everywhere else.
+      def accepts_arguments?(overload, argument_types)
+        expected = overload.required_positionals + overload.optional_positionals
+        return false if expected.length < argument_types.length && !overload.rest_positional
+
+        argument_types.each_with_index.all? do |actual, index|
+          declared = expected[index]
+          declared.nil? || declared == actual
+        end
       end
 
       def matches?(overload, positional_count, keyword_names, block_given)

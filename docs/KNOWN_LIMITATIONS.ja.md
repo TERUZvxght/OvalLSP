@@ -596,8 +596,6 @@ true).where(user_id: 1)` は解釈されず、`.order`、`.limit`、`.includes`�
 
 ## 細かいもの
 
-- `price * quantity` は `Complex | Float | Integer | Rational` とホバーします。
-  正しくはありますが役に立ちません。 <!-- documents: 024.128 -->
 - コアライブラリのレシーバに対するタイプミスは報告されません。`"hello".upcse` や
   `[1,2].siz` は無言です（同じ位置の補完は型を正確に把握しています）。 <!-- documents: 024.129 -->
 - concern の `included do` の中で定義した scope は型を持ちません。 <!-- documents: 024.132 -->

@@ -650,8 +650,6 @@ arguments. <!-- documents: 024.89 -->
 
 ## Smaller things
 
-- `price * quantity` hovers `Complex | Float | Integer | Rational` — true
-  but not useful. <!-- documents: 024.128 -->
 - A typo on a core-library receiver is not reported: `"hello".upcse` and
   `[1,2].siz` are silent, though completion at the same spot knows the
   type exactly. <!-- documents: 024.129 -->
