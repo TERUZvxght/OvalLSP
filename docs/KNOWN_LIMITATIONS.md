@@ -721,10 +721,29 @@ found:
   Array[U]`). The engine has one word for "nothing can be concluded from
   this" and uses it in a place meant to be read by a person, where the
   word RBS actually wrote would be better (024.42). <!-- documents: 024.42 -->
-- **A call written the way Ruby writes Kernel — `puts(`, `raise(`, with
-  no receiver — gets no popup at all**, while completion offers those
-  same methods. The receiverless path asks what the enclosing class's
-  ancestors declare, and Kernel is not among them (024.43). <!-- documents: 024.43 -->
+- **A call to a method only a stdlib ancestor declares gets no popup at
+  all**, while completion offers that same method. `puts(` written with
+  no receiver is the case you meet most, but it is not about
+  receiverlessness: `MyErr.new.full_message(` fails the same way, with
+  an explicit receiver, when your class inherits a stdlib one. Signature
+  help maps the receiver straight to a signature and never walks its
+  ancestors (024.43). *An earlier version of this line said the
+  receiverless path "asks what the enclosing class's ancestors declare,
+  and Kernel is not among them". That is not what happens — the ancestor
+  walk it describes returns Kernel correctly; signature help simply
+  never calls it.* <!-- documents: 024.43 -->
+- **At the top level of a file, outside any class, signature help says
+  nothing at all** — `puts(` written in a script rather than in a class
+  body. There is a fix for this that passes every test and makes things
+  worse: it would answer a call to *your own* top-level method with the
+  stdlib method of the same name, and `open` is the name that collides
+  most. It is being fixed properly rather than
+  quickly (024.229). <!-- documents: 024.229 -->
+- **A method you define at the top level of a file, outside any class,
+  is not found by anything** — no hover, no completion, no signature
+  help, no go to definition, from anywhere. Ruby puts such a method on
+  `Object`; this extension records it with no owner at all, so nothing
+  can look it up (024.230). <!-- documents: 024.230 -->
 
 ## What an editor feature does with a macro-declared method
 

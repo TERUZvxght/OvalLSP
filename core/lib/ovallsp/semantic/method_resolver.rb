@@ -376,8 +376,12 @@ module Ovallsp
       # `Widget.` offered no `def self.` methods and no completion at all.
       # An explicit `singleton: true` from the caller still wins, so the
       # `class << self` path that already passed one is unaffected.
+      # `Types.class_object?` is the one place that knows what a class
+      # object *is*; this keeps the `(type, context)` shape its callers
+      # expect. `024.43` found two lookups that never made this move at
+      # all -- see `Types.class_object_lookup` for the pair of them.
       def normalize_class_receiver(receiver_type, context)
-        return [receiver_type, context] unless receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
+        return [receiver_type, context] unless Types.class_object?(receiver_type)
 
         [receiver_type.type_arg, context.merge(singleton: true)]
       end

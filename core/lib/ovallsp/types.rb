@@ -51,6 +51,34 @@ module Ovallsp
     # value has nothing to do with.
     INTERNAL_GENERIC_NAMES = %w[ClassOf Relation CollectionProxy].freeze
 
+    # A class-object receiver, split into the thing to look a member up
+    # on and whether that lookup is a singleton one.
+    #
+    # `String.new` types as `ClassOf[String]`, and a lookup that does not
+    # make this move asks about a class literally named `ClassOf`. Three
+    # readers were making it by hand — `MethodResolver#normalize_class_receiver`,
+    # `QueryService#add_active_record_api_members` and
+    # `#add_signature_members` — and two more were not:
+    # `#rbs_signatures` and `#signature_definition_locations`, so every
+    # `String.new(`, `File.read(`, `Integer.sqrt(` answered nothing in
+    # signature help, hover and go to definition alike (`024.43`).
+    #
+    # A module function the readers call, rather than the move being
+    # pushed into `#each_nominal`: that would fan it out to seven call
+    # sites including the model-membership paths, and moving a rule to
+    # where the value is produced is what `024.47` had to roll back.
+    #
+    # An explicit `singleton: true` from a caller still wins, so a
+    # `class << self` path that already passes one is unaffected.
+    def self.class_object_lookup(receiver_type, singleton: false)
+      return [receiver_type, singleton] unless class_object?(receiver_type)
+
+      [receiver_type.type_arg, true]
+    end
+
+    def self.class_object?(type) = type.is_a?(Generic) && type.name == "ClassOf"
+
+
     # A normalized set of >= 2 distinct member types. Never nests another
     # Union — use Types.normalize_union to build one safely.
     Union = Data.define(:members) do

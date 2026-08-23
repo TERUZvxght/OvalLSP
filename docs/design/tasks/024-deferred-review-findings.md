@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**225 entries below** <!-- measured: register-entries = 225 -->,
+**228 entries below** <!-- measured: register-entries = 228 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -214,7 +214,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
 | [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | open | 0.2.15 | Typing a `.` reports a method on the *next* line |
 | [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.2.16 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
-| [`024.43`](#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | open | 0.2.15 | Signature help answers nothing for a receiverless stdlib call |
+| [`024.43`](#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | open | 0.2.16 | Signature help answers nothing for a receiverless stdlib call |
 | [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.2.16 | A partial's local is not resolved, and C11's stated basis names it |
 | [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.2.15 | Re-analysis after a keystroke is seconds on a large file, against a … |
 | [`024.46`](#02446-typing-self-cost-55-false-diagnostics-and-was-rolled-back) | fixed | 0.2.1 | Typing `self` cost 55 false diagnostics and was rolled back |
@@ -396,6 +396,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.225`](#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | open | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
 | [`024.226`](#024226-an-argument-written-as-a-paren-less-call-is-judged-by-its-own-last-argument) | fixed | 0.2.15 | An argument written as a paren-less call is judged by its own last a… |
 | [`024.227`](#024227-every-outline-symbol-s-selectionrange-was-its-whole-declaration) | fixed | 0.2.15 | Every outline symbol's `selectionRange` was its whole declaration |
+| [`024.228`](#024228-every-stdlib-klass-method-answered-nothing-in-three-features-at-once) | fixed | 0.2.15 | Every stdlib `Klass.method(` answered nothing, in three features at … |
+| [`024.229`](#024229-signature-help-says-nothing-at-the-top-level-of-a-file-and-cannot-be-fixed-the-way-the-register-says) | open | 0.2.16 | Signature help says nothing at the top level of a file, and cannot b… |
+| [`024.230`](#024230-a-top-level-def-is-indexed-with-no-owner-so-nothing-can-look-it-up) | open | 0.2.16 | A top-level `def` is indexed with no owner, so nothing can look it up |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -2934,25 +2937,80 @@ wrote `U` too. Left open and retargeted.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.15
+user-visible-note: >
+  A call inside a class body still answers nothing for a method only an
+  RBS-declared ancestor has. The top-level half is `024.229`, the
+  class-object half is `024.228` (fixed in 0.2.15), and the index-side
+  blocker is `024.230`.
+target: 0.2.16
 ```
 
-**Area:** `core/lib/ovallsp/server.rb` (`method_signature_help`),
-`core/lib/ovallsp/semantic/query_service.rb` (`signature_owners`)
+**Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#rbs_signatures`
+at :407, reached from `#signatures_of` at :120)
 
 `puts(` answers `{signatures: []}` while bare-prefix completion offers
-`puts` from its own Kernel source. The receiverless path resolves the
-enclosing `self` and asks its ancestor chain; `lookup_owners` walks what
-the workspace declares, and Kernel is not in it — so every Kernel method
-called the way Ruby actually calls them has no signature help.
+`puts` from its own Kernel source.
 
 Round 22 found S1's receiverless half, round 23 fixed it, and this is
 S2's: the same row shape, one release later, for the stdlib source
 instead of the workspace one.
 
-**Direction:** the receiverless chain should end in `Kernel` the way
-`PrefixCompletion#kernel_methods` already does — one source of "what a
-receiverless call can reach", read by both, rather than each deciding.
+### Re-driven in 0.2.15: the mechanism recorded here is false
+
+**`lookup_owners` does return Kernel.** Measured:
+
+    lookup_owners(Nominal("Report"))
+    # => [["::Report", false], ["Object", false], ["Kernel", false], ["BasicObject", false]]
+
+So "Kernel is not in it" is wrong, and so is the **Area**:
+`#signature_owners` (query_service.rb:337) is reached only from
+`#add_signature_members` (:304), which is the *completion* path — and
+completion answers `puts` correctly, which is what the entry itself
+observes. Signature help goes `#signatures_of` → `#rbs_signatures`,
+which uses `each_nominal(receiver_type)` and **never walks ancestors at
+all**. Instrumented, `#signature_owners` fires zero times across five
+signature-help requests and once on the completion request, which is the
+control proving the instrumentation was live.
+
+**The Direction is therefore aimed at a method signature help does not
+call.** Following it would have produced a `kernel_methods`-shaped
+change in the completion path, shipped green, and left every case below
+exactly as it was. This entry is the reason `CLAUDE.md` says a stale
+entry that reads plausibly is harder to catch than one that is obviously
+wrong.
+
+**And the title is one instance of three.** `MyErr.new.full_message(`
+fails identically with an *explicit* receiver and no Kernel involved — a
+workspace class inheriting a stdlib one — and so do
+`MyErr.new.message(` and `MyStr < String; MyStr.new.sub(`. Receiverless
+is not the shape; not reaching RBS-declared ancestors is.
+
+### What this entry now is, and what left it
+
+- **`024.228`, fixed in 0.2.15** — a class-object receiver reaching RBS
+  un-normalised, so every `String.new(` answered nothing in three
+  features at once.
+- **`024.229`** — the top-level case, where both obvious fixes are
+  wrong: one regresses completion ordering, the other turns silence into
+  a wrong answer on a file in this repository.
+- **`024.230`** — a top-level `def` indexed with `owner: nil`, which is
+  what blocks `024.229`.
+- **What stays here**: `#rbs_signatures` maps the receiver straight to
+  an RBS type name and never asks the ancestor chain, so a method
+  declared only on an RBS ancestor of a nominal RBS does not know is
+  unreachable. `#signature_owners` already made this move for
+  completion; routing the RBS lookup through
+  `@method_resolver.lookup_owners` resolves the in-class receiverless
+  case and the workspace-subclass case together, because they are one
+  code path.
+
+**Retargeted to 0.2.16.** `#signatures_of` walks Union members and calls
+`#rbs_signatures` twice with `direct: true`/`false`, and the ordering
+between direct RBS, workspace source and inherited RBS has to be
+preserved or an override starts answering with an ancestor's signature.
+No spec asserts the current empty result for any of these, so the
+behaviour is unpinned in both directions — that wants establishing
+before the change, not after.
 
 
 ## 024.44 A partial's local is not resolved, and C11's stated basis names it
@@ -11517,6 +11575,166 @@ was false.
 **Split out of `024.27`**, which filed it as part of "one outline entry
 per name a macro declares". It is not about macros: it reproduces on a
 macro-free file, on every symbol kind. `024.27` keeps the macro half.
+
+## 024.228 Every stdlib `Klass.method(` answered nothing, in three features at once
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.2.15
+released-in: 0.2.15
+```
+
+**Area:** `core/lib/ovallsp/types.rb` (`.class_object_lookup`,
+`.class_object?`), `core/lib/ovallsp/semantic/query_service.rb`
+(`#rbs_signatures`, `#signature_definition_locations`,
+`#add_signature_members`, `#add_active_record_api_members`),
+`core/lib/ovallsp/semantic/method_resolver.rb`
+(`#normalize_class_receiver`)
+
+`String.new(`, `File.read(`, `Integer.sqrt(`, `Time.at(` — signature
+help, hover and go to definition all answered nothing.
+
+`String` types as `ClassOf[String]`, and `#each_nominal` on that yields
+a nominal named **`ClassOf`**, so RBS was asked about a class of that
+name. Two moves are needed: unwrap to the type argument, and ask the
+*singleton* surface. `#add_signature_members` already made both for
+completion, and its own comment names two more places that make them —
+so the rule existed in three hand-rolled copies while two lookups made
+neither move.
+
+**The second of those two is why this is one entry and not two.**
+`#signature_definition_locations` carried a byte-identical copy of the
+un-normalised lookup, so a fix aimed at signature help alone would have
+left go to definition broken for exactly the calls it repaired.
+
+**Measured before and after**, 14 stdlib class-method calls and 6
+controls:
+
+| | before | after |
+|---|---|---|
+| `String.new`, `Array.new`, `Hash.new`, `File.read`, `File.open`, `File.exist?`, `Dir.glob`, `Integer.sqrt`, `Time.at`, `IO.read`, `Process.pid`, `Struct.new`, `Random.rand`, `Kernel.puts` | 0 signatures, 0 definitions | answering, both |
+| `Widget.build` (workspace class method) | 1 / 1 | 1 / 1 — unchanged |
+| `String#upcase`, `Array#map`, `Hash#fetch` (RBS instance) | answering | identical |
+| `Widget#emit` (workspace instance) | 1 / 1 | 1 / 1 — unchanged |
+| `String#definitely_not_a_method` | 0 / 0 | 0 / 0 — unchanged |
+
+Every control is byte-identical, which is what says the fix did not
+start answering for everything.
+
+**The countermeasure is `Types.class_object_lookup`**, a module function
+the readers call. The rule was in three places and a fix would have made
+four, with `#signature_definition_locations` a waiting fifth — the shape
+`CLAUDE.md`'s same-place rule names. Deliberately **not** pushed into
+`#each_nominal`: that fans it out to seven call sites including the
+model-membership paths, and moving a rule to where the value is produced
+is what `024.47` had to roll back.
+
+**The corpus cannot measure this.** `scripts/corpus_diagnostics.rb`
+drives diagnostics, and diagnostics do not read `#signatures_of` or
+`#definitions_of` — 0 added, 0 removed with all three controls identical
+is the expected result rather than evidence about the fix. The table
+above is the measurement, run against both trees at the same revision.
+
+**Split out of `024.43`**, whose stated mechanism is false — see there.
+
+## 024.229 Signature help says nothing at the top level of a file, and cannot be fixed the way the register says
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.16
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#method_signature_help`),
+`core/lib/ovallsp/semantic/query_service.rb` (`#scope_at`),
+`core/lib/ovallsp/local_inferencer.rb` (`#capture_scope`)
+
+At the top level of a file, `puts(` and `format(` answer nothing.
+`#scope_at` gives `self_type = nil` outside any class body, and
+`#method_signature_help` returns `{signatures: []}` before consulting
+anything. RBS already has the answer:
+`signatures_of(Nominal("Object"), "puts")` is `["puts(...) -> nil"]`.
+
+**Both obvious fixes are wrong, and that is the finding.**
+
+*Shape 2 — the entry's own stated Direction*, making the shared scope
+fall back to `Object`, fails two examples, and one is a real regression:
+every `Kernel` method jumps from band 3 to band 1 in bare-prefix
+completion, above every workspace constant, at the top level of every
+file. Worse, the spec that carries the *deliberate* decision —
+`prefix_completion_spec.rb:23-34`, "does not ask for the members of a
+receiver it does not have" — stays **green**, because it builds
+`Scope.new(self_type: nil)` by hand and stubs the query service. It
+would go on asserting about a state that no longer occurs while the
+per-keystroke cost it exists to prevent came back unpinned. A green
+suite is not a blast radius, exactly as `CLAUDE.md` says.
+
+*Shape 1 — a fallback confined to `#method_signature_help`* — passes the
+whole suite, and **turns silence into a wrong answer on a file in this
+repository**. `core/spec/ovallsp/server_documentation_spec.rb:19`
+declares `def open(uri, text, language_id: "ruby")` at the top level and
+calls `open(...)` thirty lines below; with the fallback, signature help
+answers with `Kernel#open`'s *file-opening* signature. Measured
+collisions between top-level `def`s and `::Object`'s 120 instance
+methods: 8 in `core/spec` (`open` ×5, `initialize` ×3), 2 in the stdlib,
+2 in installed gems. Section 0 ranks that below the silence it replaces.
+
+**And a guard on "is there an enclosing class" cannot stop it** — at
+that position there genuinely is none, so the guard is satisfied and the
+fallback fires. It is aimed at the wrong mechanism.
+
+**What actually blocks this is `024.230`**: a top-level `def` is indexed
+with `owner: nil`, so the workspace half is unreachable and an `Object`
+fallback supplies Kernel's signature wherever the name collides. Fix
+that first and the fallback has something correct to prefer.
+
+**Also worth keeping**: fixing this would *not* fix the entry's headline
+example. An in-class `puts(` still answers nothing — that is `024.43` —
+so a changelog line saying "signature help now answers for Kernel calls"
+would be false. It must say "at the top level of a file".
+
+## 024.230 A top-level `def` is indexed with no owner, so nothing can look it up
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.16
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (the owner a top-level
+`def` is recorded under), `core/lib/ovallsp/index/symbol_id.rb`
+
+A `def helper` written at the top level of a file is indexed as
+`SymbolId(kind: :instance_method, owner: nil, …)` — `nil`, not
+`"Object"`. Ruby puts it on `Object` as a private instance method:
+
+```
+$ ruby -e 'def helper(a); end
+           p [Object.private_instance_methods(false).include?(:helper),
+              self.class]'
+# => [true, Object]
+# ruby 3.4.10
+```
+
+So neither an `Object` nor a `Kernel` receiver reaches it —
+`definitions_of` and `members_of` for both answer `[]` — and a call to
+it from anywhere gets nothing from hover, completion, signature help or
+go to definition.
+
+**Found while sizing `024.229`**, and it is what makes that entry's fix
+unsafe rather than merely incomplete: with the workspace half
+unreachable, an `Object` fallback has nothing correct to prefer and
+supplies Kernel's signature instead. 8 collisions in this repository's
+own `core/spec` alone.
+
+**Not fixed with `024.229`** because the two are different subsystems —
+this is the index's, that is the server's — and because changing the
+owner a declaration is recorded under is read by every feature at once.
+It wants its own change set and its own corpus run.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

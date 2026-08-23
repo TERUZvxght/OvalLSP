@@ -218,8 +218,7 @@ module Ovallsp
       def add_active_record_api_members(candidates, receiver_type, prefix)
         return unless @model_registry
 
-        singleton = receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
-        subject = singleton ? receiver_type.type_arg : receiver_type
+        subject, singleton = Types.class_object_lookup(receiver_type)
         return unless each_nominal(subject).any? { |nominal| @model_registry.known_model?(nominal.name) }
 
         api = @model_registry.active_record_api
@@ -297,9 +296,7 @@ module Ovallsp
         # `MethodResolver#normalize_class_receiver` makes. This source made
         # neither, so `each_nominal` yielded a nominal named "ClassOf" and
         # RBS was asked about a class of that name, which does not exist.
-        class_object = receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
-        singleton = class_object || context[:singleton] == true
-        subject = class_object ? receiver_type.type_arg : receiver_type
+        subject, singleton = Types.class_object_lookup(receiver_type, singleton: context[:singleton] == true)
         names = each_nominal(subject).flat_map do |nominal|
           signature_owners(nominal, singleton).flat_map do |owner, owner_singleton|
             @signatures.member_names(qualify(owner), prefix: prefix, singleton: owner_singleton)
@@ -343,8 +340,12 @@ module Ovallsp
       def signature_definition_locations(receiver_type, method_name, context)
         return [] unless @signatures
 
-        singleton = context[:singleton] == true
-        each_nominal(receiver_type).filter_map do |nominal|
+        # The same move as `#rbs_signatures`. This carried a byte-identical
+        # copy of the un-normalised lookup, so a fix to signature help
+        # alone would have left go to definition broken for exactly the
+        # calls it repaired (`024.43`).
+        subject, singleton = Types.class_object_lookup(receiver_type, singleton: context[:singleton] == true)
+        each_nominal(subject).filter_map do |nominal|
           symbol_id = Index::SymbolId.new(
             kind: singleton ? :singleton_method : :instance_method, owner: qualify(nominal.name), name: method_name,
             discriminator: nil
@@ -407,8 +408,11 @@ module Ovallsp
       def rbs_signatures(receiver_type, method_name, context, direct: nil)
         return nil unless @signatures
 
-        singleton = context[:singleton] == true
-        each_nominal(receiver_type).filter_map do |nominal|
+        # `String.new` types as `ClassOf[String]`; without this the lookup
+        # asks RBS about a class named `ClassOf` and every stdlib
+        # `Klass.method(` answered nothing (`024.43`).
+        subject, singleton = Types.class_object_lookup(receiver_type, singleton: context[:singleton] == true)
+        each_nominal(subject).filter_map do |nominal|
           symbol_id = Index::SymbolId.new(
             kind: singleton ? :singleton_method : :instance_method, owner: qualify(nominal.name), name: method_name,
             discriminator: nil
