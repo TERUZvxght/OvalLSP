@@ -208,7 +208,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
 | [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | open | 0.2.15 | A class that includes a module the workspace cannot resolve still re… |
 | [`024.36`](#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
-| [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.2.15 | The argument-type check reports nothing on measured real Ruby |
+| [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.2.16 | The argument-type check reports nothing on measured real Ruby |
 | [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.2.15 | `scope_at` copies the whole environment once per descent step |
 | [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.2.15 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
@@ -2459,7 +2459,12 @@ it able to.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.15
+user-visible-note: >
+  The premise changed in 0.2.15. On a workspace that states types the
+  way the check accepts, it is not silent -- it reports, and on the one
+  such corpus measured every report is false. That is `024.224`, and
+  the question this entry frames cannot be answered until it is fixed.
+target: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`argument_type_findings`,
@@ -2511,6 +2516,39 @@ that states types in the shapes the check accepts — a project with a
 hand-written `sig/`, not a gem's generated one — before deciding. A check
 that fires on the code its users write and not on gems is a different
 answer from one that fires nowhere.
+
+### The Direction was run in 0.2.15, and it changed the question
+
+The corpus it asked for is **rbs 4.0.3** -- 89 hand-written `.rbs` for
+102 `.rb`, the first hand-written-signature corpus this project has
+pointed the engine at. Both of the tables above still reproduce, and the
+"not inert, 9 examples" count is still exact.
+
+**What is refuted is the characterisation.** "Narrow to the point where
+real code does not meet it" is not true of a workspace that states its
+own types: pointed at rbs's `sig/`, the check **reports three things**.
+All three are false -- the same class written two ways
+(`expects RBS::TypeName here, but TypeName is given`) -- and every one
+of them is `024.224`, not this entry.
+
+So the honest statement is no longer "measured at zero on the code we
+have". It is: **on a gem corpus it says nothing, and on a typed
+workspace it says something false.** Section 0 ranks those in that
+order, and a paragraph promoted from this entry as written would have
+told users the check is quiet while what it does on their own typed
+project is assert that a class is incompatible with itself.
+
+**The open question cannot be answered yet, and that is why this
+retargets.** "Should a capability whose measured yield on real code is
+zero carry a README check and a capability row" rested on the yield
+being zero. It is not zero on the corpus the Direction asked for; it is
+negative. Fix `024.224`, re-measure, and the question becomes answerable
+-- possibly with a different answer, since a check that fires correctly
+on a typed workspace is a different row from one that fires nowhere.
+
+*Two neighbouring defects came out of running this Direction and have
+their own numbers: `024.223`, fixed in 0.2.15, and `024.224`. Neither is
+this entry, and closing either does not close this one.*
 
 
 ## 024.38 `scope_at` copies the whole environment once per descent step
