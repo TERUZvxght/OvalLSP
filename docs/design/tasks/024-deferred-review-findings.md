@@ -11009,6 +11009,24 @@ Over four Rails gems with no project `sig/` at all: 0 added, 0 removed,
 which is what a change that only fires on a failed signature build should
 do there.
 
+**`scripts/hunk_sweep.rb` against the change set: 7 hunks, 5 pinned, 1
+comment-only, and 1 unpinned** — `#build_definition`'s failure
+recording. The spec asserted only that `#diagnostics` was *non-empty*,
+which the ancestors recording already satisfied on its own, so reverting
+the other one left the suite green. Each failure is now asserted by
+name.
+
+**And the pin for that had to be written twice.** The first attempt at
+the deduplication example called `#ancestors` and `#member_names` five
+times each — but both memoize, so five calls compute once, the duplicate
+never arises, and the example passed against an engine with the guard
+deleted. That is an assertion that could not fail, written in the act of
+pinning one, and only a mutation run found it. What makes the guard
+reachable is that instance members, singleton members and type
+parameters are three different cache keys that all reach
+`#build_definition` and all produce the same sentence; the example asks
+those three, and without the guard it sees 3 where it wants 1.
+
 *A flake found on the way, and fixed here: the new spec defined `SOURCE`,
 and a constant written inside `RSpec.describe` lands on `Object`, so it
 silently replaced `server_receiverless_spec.rb`'s fixture and five of its

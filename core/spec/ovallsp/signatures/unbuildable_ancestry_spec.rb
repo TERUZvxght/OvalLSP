@@ -55,11 +55,55 @@ RSpec.describe "a project signature whose ancestry cannot be built" do
   end
 
   # The three that fail before the fix.
-  it "reports the failure through the diagnostics channel built to explain a gap" do
+  # Named separately per failing build, not merely "something failed".
+  # Asserting only that the channel is non-empty could not tell the two
+  # apart, and the hunk sweep found the `#build_definition` recording
+  # unpinned for exactly that reason: the ancestors recording alone
+  # already made the list non-empty, so reverting the other one left the
+  # suite green.
+  it "names the ancestor chain it could not build" do
     environment_for(UNBUILDABLE_UNRESOLVABLE_RBS) do |environment|
       environment.ancestors("::App::Key")
 
-      expect(environment.diagnostics).not_to be_empty
+      expect(environment.diagnostics.map { |d| d[:message] })
+        .to include(a_string_matching(/ancestors of ::App::Key/))
+    end
+  end
+
+  it "names the definition it could not build, which is a different failure at a different call" do
+    environment_for(UNBUILDABLE_UNRESOLVABLE_RBS) do |environment|
+      environment.member_names("::App::Key")
+
+      expect(environment.diagnostics.map { |d| d[:message] })
+        .to include(a_string_matching(/definition of ::App::Key/))
+    end
+  end
+
+  # One bad `include` fails once per *route* that reaches it, and an
+  # unbounded list of one sentence is what makes a person stop reading
+  # the channel carrying the line they need.
+  #
+  # The calls below are chosen so the guard can actually fail. Repeating
+  # one call cannot: `#ancestors` and `#member_names` memoize, so five
+  # calls compute once and the duplicate never arises. An earlier version
+  # of this example did exactly that, passed, and a mutation run found
+  # the guard unpinned -- an assertion that could not fail, written while
+  # trying to pin one.
+  #
+  # These three reach `#build_definition` by three different cache keys
+  # -- instance members, singleton members, type parameters -- and every
+  # one of them produces the same sentence.
+  it "records a failure once even when three different lookups hit it" do
+    environment_for(UNBUILDABLE_UNRESOLVABLE_RBS) do |environment|
+      environment.member_names("::App::Key", singleton: false)
+      environment.member_names("::App::Key", singleton: true)
+      environment.type_parameters("::App::Key")
+
+      definition_failures = environment.diagnostics
+                                       .map { |d| d[:message] }
+                                       .grep(/definition of ::App::Key/)
+
+      expect(definition_failures.length).to eq(1)
     end
   end
 
