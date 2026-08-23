@@ -193,6 +193,18 @@ the body can be read. <!-- documents: 024.20 -->
 
 ## Reports that are wrong today
 
+**A namespaced type reported incompatible with itself.** If your `sig/`
+declares a parameter inside a namespace — `module App; class Registry;
+def fetch: (Key key) -> Key` — and the Ruby that calls it is written
+inside that same namespace, the declared type arrives qualified and the
+inferred one arrives bare, and the argument-type check compares the two
+spellings as different classes. Driven over the `rbs` gem's own 89
+hand-written signatures, every argument-type report it produces is this
+one shape: ``expects RBS::TypeName here, but TypeName is given``, where
+the two names are the same class. Nothing is wrong with your
+code. <!-- documents: 024.224 -->
+
+
 The engine's standing policy is that a wrong report is worse than a
 missed one. These are the places it currently says something untrue —
 one of them as a colour, the rest as diagnostics. Every one is recorded

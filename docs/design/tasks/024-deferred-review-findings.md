@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**220 entries below** <!-- measured: register-entries = 220 -->,
+**223 entries below** <!-- measured: register-entries = 223 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -391,6 +391,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.219`](#024219-a-three-part-claim-shipped-with-one-part-pinned-and-the-other-two-were-false) | fixed | 0.2.15 | A three-part claim shipped with one part pinned, and the other two w… |
 | [`024.220`](#024220-the-interpreter-sessions-pasted-through-this-tree-are-never-re-run) | open | 0.2.16 | The interpreter sessions pasted through this tree are never re-run |
 | [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.2.16 | A block whose receiver cannot be vouched for contains a `private` th… |
+| [`024.223`](#024223-one-unresolvable-include-in-a-project-s-own-rbs-turns-its-whole-class-into-false-reports) | fixed | 0.2.15 | One unresolvable `include` in a project's own RBS turns its whole cl… |
+| [`024.224`](#024224-a-namespaced-type-is-reported-incompatible-with-itself) | open | 0.2.16 | A namespaced type is reported incompatible with itself |
+| [`024.225`](#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | open | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -10851,6 +10854,308 @@ question is answered, containing is the side to fail on.
 
 Carried in `docs/KNOWN_LIMITATIONS.md` and `.ja.md`, which described this
 residue under `024.111`'s number until 0.2.15.
+
+## 024.223 One unresolvable `include` in a project's own RBS turns its whole class into false reports
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.2.15
+released-in: 0.2.15
+```
+
+**Area:** `core/lib/ovallsp/signatures/environment.rb`
+(`#compute_ancestors`, `#compute_member_names`, `#build_definition`),
+`core/lib/ovallsp/semantic/method_resolver.rb` (`#accounted_for?`),
+`core/spec/meta/rescue_verdicts.yml`
+
+Two projects, **identical Ruby**, whose `sig/` differs by one line:
+
+```rbs
+module App
+  class Key
+    include _ToJson          # <- the only difference; nothing loaded declares it
+    def digest: () -> String
+  end
+end
+```
+
+```ruby
+k = Key.new(1)
+k.digest              # declared in sig/ right above
+k.definitely_absent   # declared nowhere -- the planted control
+```
+
+| | reports |
+|---|---|
+| without the `include` | 1 — `definitely_absent`. Correct. |
+| with it | 2 — `definitely_absent`, **and one saying `App::Key` has no method named `digest`** |
+
+The user is told a method does not exist, naming the class whose own
+signature file declares it, because of an unrelated line elsewhere in
+that file.
+
+**Mechanism.** `RBS::EnvironmentLoader` is built from the project `sig/`
+and the Bundler gem sig directories only (`#build_loader`), so an
+interface declared in an stdlib signature nobody added is unresolvable.
+`instance_ancestors` then raises `RBS::NoMixinFoundError`, and
+`#compute_ancestors` swallows it:
+
+    clean:  instance_ancestors -> ["::App::Key", "::Object", "::Kernel", "::BasicObject"]
+    broken: instance_ancestors -> RBS::NoMixinFoundError
+            compute_ancestors  -> []
+
+**The chain includes the class itself**, so an empty chain does not
+merely lose what `Key` inherits — it loses what `Key` *declares*. Every
+method in that class becomes unknown at once.
+
+**The recorded verdict for this rescue is wrong, and that is the finding
+under the finding.** `rescue_verdicts.yml:167` reads:
+
+> `contained: an empty chain is what a type RBS does not declare
+> produces, and every consumer reads it as less knowledge`
+
+The first clause is exactly the problem: **the failure is made
+indistinguishable from the ordinary "RBS does not know this type"**, and
+a consumer that is entitled to conclude "not declared anywhere" from the
+second is then entitled to conclude it from the first. `CLAUDE.md`'s
+test is not whether the failure is important but *whether the fallback
+lets a caller assert something*, and this one does — the same shape as
+`Engine#rbs_known_constant?` answering `false` for "RBS does not know
+this name" when the question could not be asked. `024.122` enumerated
+158 sites and says a `contained` that turns out wrong is an ordinary
+finding; this is one.
+
+**And it is silent twice over.** `Environment` carries a `diagnostics`
+array documented as collecting "*what* was skipped so a caller can still
+explain the gap". Measured on the pair above, it is `[]` on **both**
+sides. The one channel built to report a signature that failed to load
+never hears about it, so `explainType` cannot explain it either.
+
+**Direction.** Not `loader.add(library: "json")` — that fixes `_ToJson`
+and leaves every other unresolvable include. Not "stop swallowing" —
+a type RBS genuinely does not declare must still produce a chain, and
+raising would take the server down for a workspace with one bad line.
+
+The fix is to make the two cases **distinguishable at the point where
+they differ**, which is inside `#compute_ancestors`: "RBS does not
+declare this type" and "RBS declares it and the chain could not be
+built" must not both be `[]`. The second has to reach the consumer as
+*cannot say*, so the closed-nominal decision declines instead of
+asserting, and it has to reach `#diagnostics` so the gap is
+explainable. Both consumers named in the current verdict need re-reading
+against the new value rather than trusting the sentence that is being
+corrected.
+
+**Scope beyond this reproduction is measured but not by me.** A review
+pass over rbs 4.0.3 (89 hand-written `.rbs` for 102 `.rb` — the first
+hand-written-signature corpus this project has pointed the engine at)
+reports **20 false `unknown-method` and 3 false `argument-type`**, all
+from this cause, and `member_names("::RBS::Location")` goes from 0 to
+155 when the missing library is loaded — so completion is hit as well.
+Those numbers are recorded as reported and want re-deriving here before
+they are promoted anywhere; the paired fixture above is this entry's own
+evidence and was run at `1a06f60`.
+
+**Found by an independent verifier sent to refute a different finding**
+about `024.37`, which named `#compatible_nominal?`'s name spellings as
+the cause. That was the symptom: the one-line spelling fix takes
+`argument-type` 3 to 0 and leaves all 20 `unknown-method` reports
+standing. The spelling defect is real and is `024.224`.
+
+### Fixed in 0.2.15
+
+`Signatures::Environment::UNAVAILABLE` is a frozen empty Array, and
+`.unavailable?` compares by **identity** — `[] == UNAVAILABLE` is true
+and would mark every unknown type. It is produced in one place, by the
+three rescues that all swallowed the same error, and only for a type
+`#rbs_declares?` confirms RBS carries: an unresolvable name raises from
+the same call, and calling *that* a failure would be the same conflation
+facing the other way.
+
+Being an ordinary empty Array is what keeps the change small. A caller
+that only adds reachable names needs no edit and still reads it as less
+knowledge. `MethodResolver#accounted_for?` is the one that had to ask,
+and it asks **before** its `entry.kind` shortcut: the workspace knowing
+`App::Key` is a class does not say what `App::Key` contributes.
+
+`Environment#diagnostics` now hears about it. That channel is documented
+as collecting what was skipped so a caller can explain the gap, and it
+was `[]` on both sides of the pair; a workspace with one bad `include`
+fails once per type that reaches it, so the messages are deduplicated.
+
+**The affected receiver goes quiet entirely, and that is the fix rather
+than a cost of it.** Once the surface cannot be enumerated the engine
+cannot tell `digest`, which the sig declares, from `definitely_absent`,
+which nothing does — so it declines about both. An earlier draft of the
+spec asserted the opposite, reasoning that a fix should not lose a true
+report; that reasoning asks the engine to answer from a question it
+could not ask. What must not happen is the decline spreading, and a
+control pins that a class whose own chain is fine keeps being reported.
+
+Measured over rbs 4.0.3 with its own `sig/` as the signature root — 102
+files, `corpus-sha256` `d454c9e3…`, both sides identical, control
+`unresolved-constant` identical at 319:
+
+| | before | after |
+|---|---|---|
+| `unknown-method` | **20** | **0** |
+| `argument-type` (`024.224`, untouched) | 3 | 3 |
+
+All 20 were `RBS::Location has no method named …` — `buffer`,
+`_start_pos`, `_optional_keys` — each declared in `sig/location.rbs`.
+Over four Rails gems with no project `sig/` at all: 0 added, 0 removed,
+which is what a change that only fires on a failed signature build should
+do there.
+
+*A flake found on the way, and fixed here: the new spec defined `SOURCE`,
+and a constant written inside `RSpec.describe` lands on `Object`, so it
+silently replaced `server_receiverless_spec.rb`'s fixture and five of its
+examples failed under one seed. `spec/meta/spec_constants_spec.rb` exists
+for exactly this and named it. Worth recording is the bad control: the
+first attempt to decide whether it was pre-existing stashed only the two
+`core/lib` files and left the new spec in place, so the "it fails without
+my change too" run still contained the cause.*
+
+## 024.224 A namespaced type is reported incompatible with itself
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.16
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`#compatible_nominal?`
+at 571, `#ancestor_names` at 589, and the comment at 580-600)
+
+Driven over rbs 4.0.3 with its own `sig/` as the signature root — 102
+files, 89 hand-written `.rbs`, which is the first hand-written-signature
+corpus this project has pointed the engine at — every `argument-type`
+report it produces is this:
+
+    <rbs>/lib/rbs/cli.rb:498            `constant` expects RBS::TypeName here, but TypeName is given
+    <rbs>/lib/rbs/inline_parser.rb:533  `new` expects RBS::Location here, but Location is given
+    <rbs>/lib/rbs/inline_parser.rb:534  `new` expects RBS::Location here, but Location is given
+
+Taken from the interpreter rather than reasoned about:
+
+    $ ruby -e 'require "rbs"; module RBS
+      p [TypeName.equal?(RBS::TypeName), Location.equal?(RBS::Location)]
+    end'
+    # => [true, true]
+    # ruby 3.4.10
+
+They are the same class. The expected side arrives from RBS
+namespace-qualified; the actual side is inferred from Ruby source written
+*inside* `module RBS`, so it arrives bare, and the reachable set
+`#ancestor_names` builds carries the `::`-prefixed and last-segment
+spellings but not the bare qualified one that `simple_name(expected.name)`
+produces.
+
+**Any namespaced project whose parameter types come from RBS and whose
+argument types are inferred from Ruby source is exposed**, which is every
+project that writes `sig/` the way RBS itself does.
+
+**This is not `024.223`**, though the same corpus produced both.
+`024.223`'s fix — a chain that could not be built stops reading as an
+absent one — removes all 20 false `unknown-method` reports on that corpus
+and leaves these three untouched, measured: `argument-type` is 3 before
+and 3 after, with `unresolved-constant` identical at 319 as the control.
+The two want separate fixes and the register should not let one close the
+other.
+
+**Direction, and the caution on it.** The cheap repair is to have
+`#ancestor_names` emit `Index::SymbolId.bare_name(entry)` alongside the
+two spellings it already emits; a review pass measured that at 3 to 0.
+That is the symptom's fix. Three spellings of a type name float between
+the RBS side, the index side and the hierarchy side and each reader
+normalises differently, which is the shape `CLAUDE.md`'s same-place rule
+says to mechanise — `workspace_index.resolve_type_name` already maps
+every spelling to one answer, so comparing through the index rather than
+by `include?` over hand-built variants is the fix that removes the class.
+
+Note what that caution is *itself* cautioned by: 0.2.1 moved the
+type-name shadowing rule to where the value is produced and had to roll
+it back (`024.47`). This belongs at the comparison, not in the converter.
+
+**Also stale, and it is what makes this invisible on reading**: the
+comment at `engine.rb:580-600` asserts the expected side arrives bare and
+that `simple_name_of` is the form `TypeConverter` gives. Both were true
+before 0.2.5 stopped truncating and are false at HEAD.
+
+**Targeted 0.2.16 rather than 0.2.15** because the honest fix is a shared
+resolution path with three readers, and 0.2.15 already carries
+`024.223`'s change to the same area. Two changes to how a type name is
+compared, in one release, reviewed together, is how `024.47` happened.
+
+## 024.225 A scripted edit inserted the entire file before its own anchor, and the line count was the only symptom
+
+```yaml
+status: open
+kind: friction
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it costs is that the standard way of editing
+  a large tracked document in this repository can silently duplicate
+  thousands of lines, and the check that noticed was counting entry
+  numbers rather than looking at the edit.
+target: 0.2.16
+```
+
+**Area:** working practice; `CLAUDE.md`'s "Two working-practice traps"
+
+`String#sub` expands backreferences **in the replacement string**, and
+one of them is not a digit. A replacement containing a backslash followed
+by a backtick means *everything before the match*.
+
+Asked of Ruby rather than reasoned about:
+
+    $ ruby -e '
+    s = "AAAA" + "ANCHOR"
+    p s.sub("ANCHOR", "x \\` y" + "ANCHOR")
+    p s.sub("ANCHOR") { "x \\` y" + "ANCHOR" }
+    '
+    # => "AAAAx AAAA yANCHOR"
+    # => "AAAAx \\` yANCHOR"
+    # ruby 3.4.10
+
+`024.223`'s entry contained a Markdown table cell with an escaped
+backtick in it — an ordinary way to write a literal backtick inside bold
+text. Inserting that entry took the register from 11,555 lines to
+**25,878**, twice, because the replacement carried two of them and each
+one pasted the preceding 7,000 lines back in.
+
+**What is worth keeping is how it was found.** Not by reading the diff,
+which was far too large to read, and not by any check that looks at
+edits. `spec/meta/deferred_findings_spec.rb` failed with *"reused entry
+numbers: 024.1, 024.6, 024.8, …"* — 108 of them — and that was the first
+sign. The file had been through `reindex_findings.rb` and a meta run in
+between, and the first guess was that the reindexer had done it; the
+actual isolation came from restoring the file from `HEAD` and replaying
+each scripted edit one at a time with `wc -l` after each.
+
+This is `024.140`'s class arriving by a new route. That one was
+`str.find` returning `-1` and duplicating an entry body; the shared shape
+is **a scripted edit to a tracked document whose failure mode is
+insertion, in a file too large for the diff to be read.**
+
+**The countermeasure is the block form**, which does not expand anything:
+
+    src.sub(anchor) { replacement }     # not src.sub(anchor, replacement)
+
+It costs two characters and removes the whole class — `\0`, `\1`, `\&`,
+`` \` `` and `\'` all stop being special. Every edit script in this
+session was converted after the fact; what wants deciding is whether
+`CLAUDE.md` should say so where it lists the traps that cost a session,
+alongside `git checkout <file>` and polling an output file.
+
+**Left open rather than closed** because the countermeasure so far is a
+habit, and a habit is what `024.126` records twelve failures of in one
+session. A check could plausibly catch it — the shape is "a tracked
+document grew by more than the edit could account for" — and that wants
+designing rather than asserting.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

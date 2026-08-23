@@ -216,9 +216,27 @@ module Ovallsp
       # signature environment.
       def accounted_for?(entry, signatures)
         return false if signatures.nil?
+        # **Before the `entry.kind` shortcut, not after it.** The workspace
+        # knowing that `App::Key` is a class does not say what `App::Key`
+        # *contributes* -- and when the only place its members are declared
+        # is an RBS whose build raised, nothing does. One unresolvable
+        # `include` in a project's own signature file therefore reported
+        # every method of that class as missing, naming the class whose sig
+        # declares them (`024.223`).
+        #
+        # This fires only on the sentinel, which `Signatures::Environment`
+        # produces only for a type RBS *does* declare, so a type it has
+        # never heard of is unaffected and keeps the answer below.
+        return false if signature_unavailable?(entry, signatures)
         return true if entry.kind
 
         !signatures.ancestors(Index::SymbolId.qualify_owner(entry.name)).empty?
+      end
+
+      def signature_unavailable?(entry, signatures)
+        Signatures::Environment.unavailable?(
+          signatures.ancestors(Index::SymbolId.qualify_owner(entry.name))
+        )
       end
 
       # Whether the chain ends where Ruby ends it: at `::BasicObject`.

@@ -27,6 +27,29 @@ module Ovallsp
     # #load time would make every project's cold-start pay for types it
     # will never query.
     class Environment
+      # **A chain that could not be built is not an absent chain.**
+      # `AncestorBuilder` raises when a project's own RBS `include`s an
+      # interface no loaded signature declares -- `include _ToJson`,
+      # declared in `stdlib/json/0/json.rbs`, which `#build_loader` never
+      # adds. Swallowing that into `[]` made it identical to the value a
+      # type RBS has never heard of produces, and the chain contains the
+      # class *itself*, so every method the class declares vanished with
+      # it. One line of RBS turned `App::Key#digest` into
+      # "App::Key has no method named `digest`" (`024.223`).
+      #
+      # The value is an ordinary empty Array, so a caller that only adds
+      # to a set of reachable names keeps working and keeps reading it as
+      # *less* knowledge. A caller that is about to conclude something
+      # from the emptiness asks `.unavailable?` and declines instead --
+      # the same shape as `Engine#rbs_known_constant?` failing towards
+      # "known", and the same trick as asking a returned cref whether a
+      # frame was opened rather than re-deriving it.
+      UNAVAILABLE = [].freeze
+
+      # Identity, not equality: `[] == UNAVAILABLE` is true and would make
+      # every genuinely-unknown type look like a failure.
+      def self.unavailable?(value) = value.equal?(UNAVAILABLE)
+
       def initialize
         @mutex = Mutex.new
         @generation = 0
@@ -109,6 +132,11 @@ module Ovallsp
       # Ordered ancestor names (most specific first) for a fully-qualified
       # type name (e.g. "::String"), or [] if the type isn't known to the
       # loaded environment.
+      #
+      # A third answer is `UNAVAILABLE` -- also empty, so nothing that
+      # merely adds names needs to change, but `.unavailable?` tells it
+      # apart from the `[]` above. Anything about to conclude "not
+      # declared anywhere" from an empty chain must ask (`024.223`).
       def ancestors(type_name)
         @mutex.synchronize { @ancestor_cache[type_name] ||= compute_ancestors(type_name) }
       end
@@ -121,6 +149,10 @@ module Ovallsp
         @mutex.synchronize do
           key = [type_name, singleton]
           names = (@member_name_cache[key] ||= compute_member_names(type_name, singleton))
+          # `select` would build a new Array and lose the sentinel's
+          # identity, turning "could not look" back into "no members".
+          next names if Environment.unavailable?(names)
+
           names.select { |name| name.start_with?(prefix) }
         end
       end
@@ -229,7 +261,13 @@ module Ovallsp
         else
           @definition_builder.build_instance(type_name)
         end
-      rescue StandardError
+      rescue StandardError => e
+        # **Contained** (`024.122`, extended by `024.223`): `nil` still
+        # reads as "no definition", which every caller already treats as
+        # cannot-say. What it did not do was leave a trace, so a class
+        # whose whole definition failed to build looked exactly like one
+        # RBS does not carry.
+        record_signature_failure("definition of #{type_name}", e)
         nil
       end
 
@@ -306,13 +344,70 @@ module Ovallsp
         return [] unless type_name
 
         definition = build_definition(type_name, singleton: singleton)
-        return rbi_member_names(type_name_string, singleton) unless definition
+        # `#build_definition` already caught the failure and recorded it,
+        # so the rescue below never sees one -- this early return is where
+        # a failed build actually arrives, and it used to leave by the
+        # same door as a type RBS does not carry.
+        return unavailable_or(rbi_member_names(type_name_string, singleton), type_name) unless definition
 
         rbs_names = definition.methods.keys.map(&:to_s)
         rbi_names = rbi_member_names(type_name_string, singleton)
         (rbs_names + rbi_names).uniq.sort
+      rescue StandardError => e
+        # **Contained** (`024.223`): the RBI half is a genuinely narrower
+        # answer and is returned when it has anything to say. When it has
+        # nothing, the result would be an `[]` indistinguishable from "this
+        # type declares no methods" -- which is the assertion that produced
+        # the false report -- so it is marked instead.
+        record_signature_failure("members of #{type_name_string}", e)
+        unavailable_or(rbi_member_names(type_name_string, singleton), type_name)
+      end
+
+      # The RBI half is a genuinely narrower answer, so it wins when it
+      # has anything to say. When it has nothing, an `[]` here would be
+      # indistinguishable from "this type declares no methods" -- the
+      # assertion that produced `024.223`'s false report -- so a type RBS
+      # does carry is marked instead.
+      def unavailable_or(names, type_name)
+        return names unless names.empty? && rbs_declares?(type_name)
+
+        UNAVAILABLE
+      end
+
+      # Every caller of this already holds `@mutex` -- `#ancestors`,
+      # `#member_names` and `#method_signatures` all compute inside it,
+      # and Ruby's Mutex is not reentrant, so taking it here would
+      # deadlock rather than protect anything.
+      #
+      # Deduplicated by message: a workspace with one bad `include` fails
+      # once per type that reaches it, and an unbounded list of the same
+      # sentence is not more information -- it is what makes a person stop
+      # reading the channel that carries the one line they need.
+      # Whether RBS carries a declaration for this name at all.
+      #
+      # `AncestorBuilder` raises the same way for "no such type" as for
+      # "declared, but its ancestry cannot be built", so without this the
+      # sentinel would mark every unknown type too -- the same conflation
+      # `024.223` is about, pointing the other way. `class_decls` holds
+      # module entries as well as class ones (probed: `::Kernel` and
+      # `::Comparable` are both `true`).
+      def rbs_declares?(type_name)
+        return false unless @rbs_environment && type_name
+
+        @rbs_environment.class_decls.key?(type_name)
       rescue StandardError
-        rbi_member_names(type_name_string, singleton)
+        # **Contained** (`024.223`): `false` means "treat this as an
+        # ordinary absence", which is the behaviour that existed before
+        # the sentinel. It cannot manufacture an `UNAVAILABLE`, so a
+        # failure here can only lose the new distinction, never invent it.
+        false
+      end
+
+      def record_signature_failure(what, error)
+        message = "failed to build #{what}: #{error.message.lines.first.to_s.strip}"
+        return if @diagnostics.any? { |d| d[:message] == message }
+
+        @diagnostics << { severity: :warning, message: message, location: nil }
       end
 
       def rbi_member_names(type_name_string, singleton)
@@ -327,16 +422,18 @@ module Ovallsp
 
         chain = @definition_builder.ancestor_builder.instance_ancestors(type_name)
         chain.ancestors.filter_map { |a| a.respond_to?(:name) ? TypeConverter.simple_name(a.name) : nil }
-      rescue StandardError
-        # **Contained** (`024.122`): an empty chain is what a type RBS does
-        # not declare produces, and every consumer reads it as *less*
-        # knowledge -- `TypeNameResolution` declines to call a name
-        # shadowed, `MethodResolver` reaches
-        # `:ancestor_not_declared_anywhere`. Neither can turn it into an
-        # assertion about the user's code, which is the property that
-        # makes this safe to swallow rather than the failure being
-        # unimportant.
-        []
+      rescue StandardError => e
+        # **Contained** (`024.122`, corrected by `024.223`): the value is
+        # `UNAVAILABLE`, which reads as an empty chain for every caller
+        # that only adds reachable names, and which a caller about to
+        # conclude "not declared anywhere" can tell apart from the `[]`
+        # an unknown type gives. The earlier verdict here said no
+        # consumer could turn the emptiness into an assertion about the
+        # user's code; two could, and did.
+        return [] unless rbs_declares?(type_name)
+
+        record_signature_failure("ancestors of #{type_name_string}", e)
+        UNAVAILABLE
       end
 
       def rbs_type_name(owner)

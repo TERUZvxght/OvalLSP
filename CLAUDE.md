@@ -498,6 +498,20 @@ repository. Both are here because they were paid for.
   report is the answer. If something must be waited on, wait on the
   process, not on the shape of its output.
 
+- **`String#sub` expands backreferences in the *replacement*, and one of
+  them is a backtick.** A replacement containing a backslash-backtick
+  means "everything before the match", so a scripted edit whose new text
+  contains an escaped backtick -- an ordinary way to write a literal one
+  inside bold Markdown -- pastes the whole preceding file in at the
+  anchor. `024.223`'s entry took the register from 11,555 lines to
+  25,878 that way, twice. **Use the block form**, which expands nothing:
+  `src.sub(anchor) { replacement }`. Two characters, and every
+  backreference stops being special. The symptom was a meta spec
+  reporting 108 reused entry numbers; the diff was far too large to
+  read, and isolating it meant restoring from `HEAD` and replaying each
+  edit with `wc -l` after each. `024.225`, and the same class as
+  `024.140`.
+
 **And before committing, run `ruby scripts/preflight.rb`.** It runs the
 documented example counts, the full suite, the **three**
 environment-dependent suites separately — `real_rails_spec`,
