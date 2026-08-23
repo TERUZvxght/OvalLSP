@@ -665,9 +665,20 @@ reported. <!-- documents: 024.87 -->
 ## Completion on a value that could be two things
 
 `x = cond ? "s" : 1` offers you every method of `String` *and* every
-method of `Integer`. Picking one of them fails on the other branch. The
-undefined-method check takes the opposite and safer view of the same
-value, so the two features disagree. <!-- documents: 024.88 -->
+method of `Integer`. Picking one of them fails on the other branch.
+
+As of 0.2.15 the list at least says which is which: the methods **both**
+branches have come first, and the ones only one branch has sort after
+them. That is ordering, not a warning — the list still offers `upcase`
+on a value that may be an `Integer`.
+
+*An earlier version of this paragraph said the undefined-method check
+"takes the opposite and safer view of the same value, so the two
+features disagree". Measured at that position, it takes no view at all:
+it is silent on `String | Integer` even when neither branch has the
+method, and silent on a plain `String` too, for the separate reason
+recorded below about core-library receivers. The contrast it described
+is real only on a class of your own.* <!-- documents: 024.88 -->
 
 ## What signature help shows
 

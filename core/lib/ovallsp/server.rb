@@ -2658,12 +2658,34 @@ module Ovallsp
       { isIncomplete: bare.incomplete, items: route_items + bare.items }
     end
 
+    # `QueryService#members_of` already decides which members only one
+    # branch of a union has, and already sorts those last. The response
+    # threw it away: every item carried the same four keys, so `upcase`
+    # on `cond ? "s" : 1` -- which raises NoMethodError on the Integer
+    # branch -- looked exactly like `succ`, which both branches have
+    # (`024.88`).
+    #
+    # The bare-prefix list met this and solved it: "`sortText` is what the
+    # editor actually orders by -- it will re-sort the array otherwise --
+    # so the group index is rendered into it rather than left implicit in
+    # the array order". Same mechanism and the same formatter here, rather
+    # than a second string format that would have to agree with it.
+    #
+    # These are their own bands, not `PrefixCompletion`'s: that scale
+    # orders locals, self-methods, constants and Kernel in one list, and
+    # this is a different list answering a different question.
+    MEMBER_ON_EVERY_BRANCH = 0
+    MEMBER_ON_ONE_BRANCH = 1
+
     def member_completion_items(document, position, prefix)
       receiver_type = receiver_type_before_dot(document, position)
       return [] unless receiver_type
 
       @query_service.members_of(receiver_type, prefix: prefix).map do |member|
         item = { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s,
+                 sortText: Semantic::PrefixCompletion.sort_text(
+                   member.conditional ? MEMBER_ON_ONE_BRANCH : MEMBER_ON_EVERY_BRANCH, member.name
+                 ),
                  data: completion_resolve_data(receiver_type, member.name) }
         snippet = completion_snippet(member)
         item.merge(snippet ? { insertText: snippet, insertTextFormat: SNIPPET_INSERT_FORMAT } : {})

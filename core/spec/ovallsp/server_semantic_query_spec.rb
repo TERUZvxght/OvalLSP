@@ -370,4 +370,61 @@ RSpec.describe "Ovallsp::Server semantic query integration (Task 013)" do
       expect(signatures.method_signatures(symbol_id).overloads.first.return_type.to_s).to eq("Integer")
     end
   end
+
+  # `024.88`. `QueryService#members_of` decides `conditional` correctly --
+  # true for exactly the members present on one branch of a union and not
+  # the other, and it sorts them after the ones on both. The completion
+  # response then threw that away: every item carried the same four keys
+  # and nothing told `upcase` from `succ`.
+  #
+  # Ruby, run rather than reasoned about:
+  #
+  #   $ ruby -e '
+  #   p [1.respond_to?(:upcase), "s".respond_to?(:even?), "s".respond_to?(:upcase)]
+  #   '
+  #   # => [false, false, true]
+  #   # ruby 3.4.10
+  #
+  # So accepting `upcase` on `cond ? "s" : 1` raises NoMethodError on one
+  # branch, and the list gave the user nothing to see that with.
+  describe "completion on a union receiver" do
+    def union_items
+      input =
+        did_open("file:///u.rb", "cond = [true, false].sample\nx = cond ? \"s\" : 1\nx.\n") +
+        frame(
+          jsonrpc: "2.0", id: 1, method: "textDocument/completion",
+          params: { textDocument: { uri: "file:///u.rb" }, position: { line: 2, character: 2 } }
+        ) +
+        frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+      build_server(input).run
+      sent_messages.first[:result][:items]
+    end
+
+    it "marks a member that only one branch of the union has" do
+      item = union_items.find { |i| i[:label] == "upcase" }
+
+      expect(item).to include(sortText: a_string_starting_with("1"))
+    end
+
+    it "does not mark a member both branches have" do
+      item = union_items.find { |i| i[:label] == "succ" }
+
+      expect(item[:sortText]).to start_with("0")
+    end
+
+    # The distinguishing pair. Without both, the examples above would
+    # pass on a server that marked everything, or nothing, and on one
+    # that offered no items at all.
+    it "offers both kinds, and orders the ones every branch has first" do
+      items = union_items
+      labels = items.map { |i| i[:label] }
+
+      aggregate_failures do
+        expect(labels).to include("upcase", "succ")
+        expect(items.map { |i| i[:sortText].to_s[0] }.uniq.sort).to eq(%w[0 1])
+        expect(items.each_cons(2).all? { |a, b| a[:sortText].to_s <= b[:sortText].to_s }).to be(true)
+      end
+    end
+  end
 end

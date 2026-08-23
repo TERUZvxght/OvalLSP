@@ -257,7 +257,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.85`](#02485-self-completes-nothing) | open | 0.2.15 | `self.` completes nothing |
 | [`024.86`](#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | open | 0.2.16 | An ivar assigned in another method has no type, except in the view |
 | [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.2.16 | A relation stops being a relation after one hop |
-| [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.2.15 | Completion unions a union's members; the diagnostic intersects them |
+| [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.2.16 | Completion unions a union's members; the diagnostic intersects them |
 | [`024.89`](#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | open | 0.2.15 | Signature help strips the parameter kinds and never advances |
 | [`024.90`](#02490-smaller-answers-a-review-round-measured) | fixed | 0.2.14 | Smaller answers a review round measured |
 | [`024.91`](#02491-the-undefined-method-check-reports-on-ordinary-ruby-it-cannot-read) | open | 0.2.15 | The undefined-method check reports on ordinary Ruby it cannot read |
@@ -5764,7 +5764,12 @@ e2e path with a real Agent. Retargeted to 0.2.16 for that.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.15
+user-visible-note: >
+  The list now says which members only one branch has, by ordering
+  (0.2.15). What stays open is whether completion should offer them at
+  all, which is D3's shared-resolver question and moves with its
+  siblings.
+target: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#members_of`),
@@ -5779,6 +5784,59 @@ only when *every* branch lacks the method.
 Two features answering one question about one receiver with inverted
 quantifiers, and completion is the one whose answer can be acted on
 wrongly. Measured through the real server by a review round of 0.2.6.
+
+### Re-driven in 0.2.15
+
+**The headline reproduces**: 313 items, `upcase` among them, and
+accepting it raises `NoMethodError` on the Integer branch — taken from
+the interpreter, `1.respond_to?(:upcase)` is `false`.
+
+**The second sentence does not.** "The undefined-method check at the
+same position takes the opposite and correct stance" is not observable
+there. Driven through the engine with a control:
+
+    union String|Integer, method on NEITHER branch  -> nothing
+    union String|Integer, method on ONE branch      -> nothing
+    plain String, method absent                     -> nothing
+    workspace class, method absent (CONTROL)        -> reported
+
+The check takes no view at that position at all. It is silent for
+`024.129`'s separate reason — no undefined-method report on a
+core-library receiver — and the intersecting stance it really does take
+is visible only on a class of the user's own. The `KNOWN_LIMITATIONS`
+paragraph asserted the contrast as something a user could see, which is
+the `024.131` shape: a published sentence that misdescribes which way
+the defect runs. Corrected in both languages.
+
+**The bounded half is fixed in 0.2.15** and is not the quantifier
+question. `#members_of` decided `conditional` correctly all along — true
+for exactly the members one branch has and not the other, sorted after
+the ones on both — and `Server#member_completion_items` never read it,
+so every item carried the same four keys. The response now renders that
+order into `sortText`, through
+`Semantic::PrefixCompletion.sort_text`, which is the formatter the
+bare-prefix list already uses. That list met this exact bug and its own
+comment states the rule: `sortText` is what the editor orders by, so the
+group is rendered into it rather than left implicit in the array order.
+Member completion was the asymmetric one.
+
+The bands are declared where they are used rather than borrowed from
+`PrefixCompletion`'s scale, which orders locals, self-methods, constants
+and Kernel in a different list answering a different question.
+
+**What stays open is the quantifier**, and it is a design decision
+rather than a patch. `042`'s D3 records the acceptance —
+`x = cond ? "s" : 1` stops offering `upcase` — behind one shared
+`ReceiverResolver#at`. Its two siblings `024.99` and `024.100` were
+moved to 0.2.16 by `047` as needing new machinery or a decision about
+which layer answers; this entry was left at 0.2.15, which looks like an
+oversight in that split rather than a judgement. It moves with them.
+
+And intersecting is not obviously right anyway: for a nilable receiver
+`Widget | nil` a strict intersection offers **nothing** — measured, 121
+members offered today, 0 of them unconditional, including the class's
+own methods. Which quantifier completion wants is exactly the
+"which layer answers" decision `047` used as its cut line.
 
 ## 024.89 Signature help strips the parameter kinds and never advances
 
