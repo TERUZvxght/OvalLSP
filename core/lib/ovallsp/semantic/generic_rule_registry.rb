@@ -167,6 +167,14 @@ module Ovallsp
 
       ENUMERABLE_LIKE = %w[Array Relation CollectionProxy].freeze
 
+      # `024.87`. Every one of these answered `Post::ActiveRecord_Relation`
+      # under ActiveRecord 8.1.3.1 with an in-memory sqlite3 and
+      # `rel = Post.where(title: "x")` -- probed, not assumed.
+      RELATION_RETURNING = %i[
+        where order limit offset includes joins distinct group having
+        preload eager_load references reorder readonly none unscope
+      ].freeze
+
       def install(registry)
         t = Types::TypeParameter.new(name: "T")
         u = Types::TypeParameter.new(name: "U")
@@ -196,6 +204,30 @@ module Ovallsp
                              block_type: Types::ProcType.new(parameters: [t], return_type: Types::UNKNOWN),
                              return_template: :receiver
                            ))
+        # `024.87`. A relation stayed a relation for exactly one hop:
+        # `Post.where(a: 1)` inferred `Relation[Post]` and
+        # `Post.where(a: 1).where(b: 2)` inferred nothing, because the
+        # relation-*returning* methods had no rule. The cost was not only
+        # hover -- the undefined-method check switched off at the second
+        # link of the most common Rails expression there is.
+        #
+        # **Probed against real Rails rather than assumed**, the same way
+        # `find_each`/`build`/`to_a` beside them were. ActiveRecord
+        # 8.1.3.1, in-memory sqlite3, `rel = Post.where(title: "x")`:
+        # every one of these answered `Post::ActiveRecord_Relation`.
+        #
+        # `select` is deliberately not here. On a Relation it returns a
+        # Relation without a block and an Array with one, and the
+        # `ENUMERABLE_LIKE` rule above already covers the block form;
+        # adding a relation rule would make the answer depend on which
+        # rule matched first.
+        RELATION_RETURNING.each do |method_name|
+          registry.register(GenericRule.new(
+                               receiver_pattern: %w[Relation CollectionProxy], method_name: method_name,
+                               parameters: [], block_type: nil, return_template: :receiver
+                             ))
+        end
+
         # Real Rails' Relation#find_each returns nil (it's a void-ish
         # batched-iteration method, unlike #each).
         registry.register(GenericRule.new(
