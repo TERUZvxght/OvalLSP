@@ -234,12 +234,6 @@ methods, together with the attribute readers those DSLs define. That was
 Ruby's standard library, and it was fixed and released as 0.1.14 rather
 than carried into this release (024.23).
 
-- **Semantic highlighting colours only the first segment of a qualified
-  constant** (024.21). In `Ovallsp::Server`, `Ovallsp` gets a semantic
-  colour and `Server` keeps the editor's grammar colour, so the two
-  halves of one name do not match. The same module is also coloured as a
-  namespace where it is declared and as a class where it is read. <!-- documents: 024.21 -->
-
 Seven more are older than this release and untouched by it:
 
 - **A class that includes a module the workspace has not read still has

@@ -60,13 +60,40 @@ module E2E
     end
 
     # Waits for the state the extension waits for before a user's first
-    # keystroke can be answered usefully. Returns the final state.
-    def wait_until_ready(timeout: 120)
+    # keystroke can be answered usefully, and returns it -- or, if the
+    # timeout expires first, whatever Core was still reporting, so the
+    # caller's own expectation names it in the failure message.
+    #
+    # `agent:` is whether this workspace boots a Runtime Agent, and it has
+    # to come from the caller because `ovallsp/status` cannot supply it:
+    # **`ready-static` means two different things over the wire.**
+    # `Server` assigns `@agent_manager` only once the bootstrap returns
+    # (deliberately -- `server_workspace_trust_spec.rb` pins it), so a
+    # Rails workspace reads `ready-static` for the whole of its boot,
+    # exactly as a plain Ruby workspace that will never have an Agent
+    # does.
+    #
+    # So `agent: true` waits for `ready-rails` and nothing else, and
+    # `agent: false` waits only for the cold index to finish, returning
+    # whatever settled state Core then reports rather than a name this
+    # file hardcodes.
+    #
+    # **No default, because the omission is the defect** (`024.134`). The
+    # accepted set was `ready`/`ready-rails`: `ready` is a state Core does
+    # not report at all -- `Server#status_result` answers `indexing`,
+    # `ready-rails`, `agent-unavailable` or `ready-static`, and a grep of
+    # `core/lib` finds `"ready"` nowhere -- and `ready-rails` is reached
+    # only by a workspace with an Agent. The first example pointed at a
+    # non-Rails workspace therefore waited out its whole budget in
+    # silence. A default of `true` would keep every existing caller green
+    # and hand the next one the same wait; `keyreq` raises on that
+    # example's first run instead.
+    def wait_until_ready(agent:, timeout: 120)
       deadline = monotonic + timeout
       state = nil
       while monotonic < deadline
         state = request("ovallsp/status", {})[:state]
-        return state if %w[ready ready-rails].include?(state)
+        return state if agent ? state == "ready-rails" : state != "indexing"
 
         sleep 0.25
       end

@@ -18,6 +18,68 @@ RSpec.describe Ovallsp::SemanticTokens do
     tokens(text, **options).select { |t| t.line == line }.map(&:type)
   end
 
+  # `024.21`. `Collector` overrode `visit_constant_read_node` and not
+  # `visit_constant_path_node`, so in `Ovallsp::Server` only `Ovallsp`
+  # received a token. A semantic token overrides the editor's grammar
+  # colour, so every namespaced constant rendered with its two halves
+  # coloured by different systems.
+  #
+  # Measured before the fix, driving `collect` over
+  # `x = Ovallsp::Server`: one token, `Ovallsp` at char 4 length 7, and
+  # nothing at all for `Server`.
+  #
+  # **A leading segment is a namespace syntactically** — something
+  # follows the `::`, so it is being qualified through, whatever it was
+  # declared as. That half is decidable here and is what makes the
+  # declaration and the read agree: `module Ovallsp` and the `Ovallsp`
+  # of `Ovallsp::Server` are both `namespace` now.
+  #
+  # The final segment stays `class`, which is what a bare constant read
+  # already gets. Telling a class from a module there needs resolution
+  # the collector does not have, and guessing would be the wrong-answer
+  # half of section 0.
+  describe "a qualified constant" do
+    it "gives every segment a token" do
+      text = "Ovallsp::Server\n"
+
+      expect(tokens(text).map { |t| [t.character, t.length, t.type] })
+        .to eq([[0, 7, :namespace], [9, 6, :class]])
+    end
+
+    it "marks each intermediate segment a namespace, however deep" do
+      text = "A::B::C\n"
+
+      expect(tokens(text).map { |t| [t.character, t.type] })
+        .to eq([[0, :namespace], [3, :namespace], [6, :class]])
+    end
+
+    # The head of a path is reachable twice — `mark_namespace_segments`
+    # records it, and `super` walks into the same `ConstantReadNode` —
+    # so a duplicate is the obvious way this fix goes wrong. A duplicate
+    # token is not cosmetic: the encoding is a delta stream, and a
+    # zero-delta entry is a token the client draws on top of itself.
+    it "emits one token per segment and no more" do
+      expect(tokens("A::B::C\n").length).to eq(3)
+      expect(described_class.encode(document("A::B::C\n")).length).to eq(15)
+    end
+
+    # The distinguishing pair: a *bare* constant is not a namespace, so
+    # "always namespace" would pass the examples above and be wrong here.
+    it "leaves a bare constant a class" do
+      expect(types_on_line("Server\n", 0)).to eq([:class])
+    end
+
+    # And the inconsistency the entry names second: the same module read
+    # as a qualifier and written as a declaration now agree.
+    it "agrees with the declaration about a module used as a namespace" do
+      declaration = types_on_line("module Ovallsp\nend\n", 0)
+      use = tokens("Ovallsp::Server\n").first.type
+
+      expect(declaration).to eq([:namespace])
+      expect(use).to eq(:namespace)
+    end
+  end
+
   ERB_URI = "file:///app/views/users/show.html.erb"
 
   # The headline: the same three characters, two different things,

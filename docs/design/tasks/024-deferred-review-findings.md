@@ -192,7 +192,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.18`](#02418-the-unassigned-ivar-check-cannot-enumerate-what-it-needs-to) | open | 0.2.15 | The unassigned-`@ivar` check cannot enumerate what it needs to |
 | [`024.19`](#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | open | 0.2.15 | The argument-type check judges against a class the receiver is not |
 | [`024.20`](#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | open | 0.2.15 | `contains?` treats an exclusive end offset as inclusive |
-| [`024.21`](#02421-a-qualified-constant-is-coloured-half-one-way-half-the-other) | open | 0.2.15 | A qualified constant is coloured half one way, half the other |
+| [`024.21`](#02421-a-qualified-constant-is-coloured-half-one-way-half-the-other) | fixed | 0.2.15 | A qualified constant is coloured half one way, half the other |
 | [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | 0.2.15 | The unassigned-`@ivar` check is silent in an application `rails new`… |
 | [`024.23`](#02423-the-singleton-chain-did-not-model-class-module) | fixed | 0.1.14 | The singleton chain did not model `Class`/`Module` |
 | [`024.24`](#02424-every-path-url-call-is-a-missing-route-when-no-routes-are-loaded) | fixed | 0.2.0 | Every `*_path`/`*_url` call is a missing route when no routes are lo… |
@@ -303,7 +303,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.131`](#024131-after-on-a-nil-local-hover-answers-nil-a-wrong-answer-not-an-absent-one) | fixed | 0.2.15 | After `||=` on a nil local, hover answers `nil` — a wrong answer, no… |
 | [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 0.2.15 | A scope defined in a concern's `included do` has no type |
 | [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | fixed | 0.2.15 | A positional argument to a keyword-only method reads as nonsense |
-| [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | open | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
+| [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | fixed | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
 | [`024.135`](#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | open | 0.2.15 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
 | [`024.136`](#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | open | 0.2.15 | A route's optional segments are detected by matching the literal `(.… |
 | [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | 0.2.15 | `WorkspaceIndex#search` scans every symbol in the workspace |
@@ -1208,10 +1208,13 @@ can descend and hover becomes right inside every block.
 ## 024.21 A qualified constant is coloured half one way, half the other
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
+user-visible-note: >
+  Fixed in 0.2.15. Every segment of a qualified constant is coloured.
 target: 0.2.15
+released-in: 0.2.15
 ```
 
 Pre-existing for `Foo::Bar` reads; 0.2.0 is where semantic tokens became a user-visible capability (T1).
@@ -1231,6 +1234,35 @@ where it is read, which is a second inconsistency in the same feature.
 **Direction:** visit the path node and emit a token per segment. The
 kinds want deciding together with the declaration case rather than
 patched one at a time.
+
+### Fixed in 0.2.15
+
+Measured before the change, driving `collect` over `x = Ovallsp::Server`:
+**one token** — `Ovallsp`, char 4, length 7 — and nothing at all for
+`Server`.
+
+`#visit_constant_path_node` records the final segment as `:class` and
+walks the parents, recording each as `:namespace`.
+
+**A segment with something after it is a namespace syntactically** — it
+is being qualified through, whatever it was declared as — so that half
+is decidable here without resolution, and it settles the second
+inconsistency the entry names: `module Ovallsp` and the `Ovallsp` of
+`Ovallsp::Server` now agree.
+
+**The final segment stays `:class`**, which is what a bare constant read
+already gets. Telling a class from a module there needs resolution the
+collector does not have, and guessing would be the wrong-answer half of
+section 0. That limitation is unchanged and is not what this entry was
+about.
+
+**Four examples, and two are the distinguishing ones.** A bare constant
+must stay `:class`, or "always namespace" would pass the first two and
+be wrong. And the head of a path is reachable twice — the recursion
+records it and `super` walks into the same `ConstantReadNode` — so a
+duplicate is the obvious way this goes wrong; the encoding is a delta
+stream and a zero-delta entry is a token drawn on top of itself.
+`A::B::C` gives three tokens and fifteen integers.
 
 
 ## 024.22 The unassigned-`@ivar` check is silent in an application `rails new` produces
@@ -7691,12 +7723,13 @@ is a different and equally wrong message.
 ## 024.134 `wait_until_ready` never returns for a non-Rails workspace
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   A spec helper, not shipped code. What it costs is that the next e2e example pointed at a non-Rails fixture hangs to its timeout instead of failing with a reason.
 target: 0.2.15
+released-in: 0.2.15
 ```
 
 **Area:** `core/spec/e2e/lsp_client.rb` (`#wait_until_ready`)
@@ -7711,6 +7744,38 @@ is exactly why it will be found by whoever writes the first that is not.
 user-visible ones.
 
 **Was one of nine bullets under `024.90` until 0.2.14.**
+
+### Fixed in 0.2.15
+
+`#wait_until_ready` takes a **required** `agent:` keyword. `true` waits
+for `ready-rails`; `false` waits only for the cold index to finish and
+returns whatever settled state Core then reports.
+
+**Why the caller has to say, rather than the helper working it out:**
+`ready-static` means two different things over the wire. `Server`
+assigns `@agent_manager` only once the bootstrap returns — deliberately,
+and `server_workspace_trust_spec.rb` pins it — so a Rails workspace
+reads `ready-static` for the whole of its boot, exactly as a workspace
+that will never have an Agent does.
+
+**Verified independently rather than taken from the entry.**
+`Server#status_result` answers `indexing`, `ready-rails`,
+`agent-unavailable` or `ready-static`; a grep of `core/lib` finds
+`"ready"` nowhere. The helper accepted `ready` — impossible — and
+`ready-rails` — Rails only.
+
+**Required, not defaulted, and that is the load-bearing half.** Every
+existing caller passes `agent: true`, so a default of `true` keeps the
+whole suite green and hands the next non-Rails caller the same silent
+two-minute wait. `keyreq` raises on that example's first run instead,
+and a second example asserts the parameter is `keyreq` for exactly that
+reason.
+
+`spec/e2e/plain_ruby_workspace_spec.rb` is the first e2e example pointed
+at a workspace that is not a Rails app — which is why this went
+unnoticed: every other one drives `spec/fixtures/rails_real`. It needs
+neither Rails nor sqlite3, so it runs wherever the suite runs.
+
 
 ## 024.135 `Observation::Runner` deserialises a subprocess's output with `Marshal.load`
 

@@ -157,6 +157,43 @@ module Ovallsp
         super
       end
 
+      # `024.21`. Without this, only the head of `Ovallsp::Server` was
+      # visited -- Prism nests a path as `ConstantPathNode(parent:
+      # ConstantReadNode)`, so `visit_constant_read_node` fired for
+      # `Ovallsp` and nothing reached `Server`. A semantic token
+      # overrides the editor's grammar colour, so every namespaced
+      # constant rendered with its two halves coloured by different
+      # systems.
+      #
+      # **A segment with something after it is a namespace
+      # syntactically** -- it is being qualified through, whatever it was
+      # declared as -- so that is decidable here, and it is what makes
+      # the declaration and the read agree: `module Ovallsp` and the
+      # `Ovallsp` of `Ovallsp::Server` are both `namespace` now.
+      #
+      # The final segment stays `:class`, which is what a bare constant
+      # read already gets. Telling a class from a module there needs
+      # resolution this collector does not have, and guessing is the
+      # wrong-answer half of section 0.
+      def visit_constant_path_node(node)
+        record(node.name_loc, :class) if node.name_loc
+        mark_namespace_segments(node.parent)
+        super
+      end
+
+      # Every segment left of the last one, innermost outward. Recorded
+      # rather than visited, because visiting would take the `:class`
+      # branch above for the head and the whole point is that it is not
+      # one here.
+      def mark_namespace_segments(node)
+        case node
+        when Prism::ConstantReadNode then record(node.location, :namespace)
+        when Prism::ConstantPathNode
+          record(node.name_loc, :namespace) if node.name_loc
+          mark_namespace_segments(node.parent)
+        end
+      end
+
       def visit_class_node(node)
         record(node.constant_path.location, :class)
         super

@@ -64,7 +64,7 @@ RSpec.describe "Extension capabilities", :e2e do
 
     @client = E2E::LspClient.new(self.class.workspace)
     @client.initialize!
-    @state = @client.wait_until_ready
+    @state = @client.wait_until_ready(agent: true)
     @posts_controller = @client.open(File.join(self.class.workspace, "app/controllers/posts_controller.rb"))
   end
 
@@ -119,7 +119,7 @@ RSpec.describe "Extension capabilities", :e2e do
   it "B3: leaves no Core or Runtime Agent process behind after shutdown" do
     client = E2E::LspClient.new(self.class.workspace)
     client.initialize!
-    client.wait_until_ready
+    client.wait_until_ready(agent: true)
     pid = client.core_pid
     agent_pids = descendant_pids(pid)
 
@@ -847,7 +847,7 @@ RSpec.describe "Extension capabilities", :e2e do
         # Opened immediately, the way the extension does, rather than
         # after waiting for the Agent.
         uri = client.open(path)
-        client.wait_until_ready
+        client.wait_until_ready(agent: true)
 
         # Two halves, because `not_to match` alone is satisfied by a
         # world in which the check never ran: 0.2.0 made a route table
@@ -948,7 +948,7 @@ RSpec.describe "Extension capabilities", :e2e do
       client = E2E::LspClient.new(self.class.workspace)
       begin
         client.initialize!
-        client.wait_until_ready
+        client.wait_until_ready(agent: true)
         # One unrelated file opened, the way an editor restores a session.
         client.open(File.join(self.class.workspace, "app/controllers/posts_controller.rb"))
 
