@@ -560,7 +560,12 @@ RSpec.describe "Ovallsp::Server controller-to-view instance variable propagation
       build_analysis_stack(max_steps: 6).local_inferencer
     )
 
-    ivars = server.send(:infer_controller_action_ivars, "::PostsController", "show")
+    # Through `Views::ControllerIvars`, which owns this since 0.2.16. The
+# memo is cleared because the line above swapped the inferencer the
+# collaborator is built with, and a `ControllerIvars` built earlier
+# would still hold the old one -- the budget is the whole point here.
+server.instance_variable_set(:@controller_ivars, nil)
+ivars = server.send(:controller_ivars).send(:infer_controller_action_ivars, "::PostsController", "show")
 
     expect(ivars.keys).to eq([:@a])
   end

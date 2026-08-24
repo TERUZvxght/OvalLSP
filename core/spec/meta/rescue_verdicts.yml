@@ -125,9 +125,9 @@
 "core/lib/ovallsp/server.rb#load_signatures_environment": surfaces
 "core/lib/ovallsp/server.rb#maybe_start_agent": surfaces
 "core/lib/ovallsp/server.rb#maybe_start_agent[2]": surfaces
-"core/lib/ovallsp/server.rb#assigned_ivars_for": surfaces
-"core/lib/ovallsp/server.rb#renders_something?": "contained: true, and the caller returns nil on it -- the declining direction"
-"core/lib/ovallsp/server.rb#load_document_from_disk": surfaces
+"core/lib/ovallsp/views/controller_ivars.rb#assigned_ivars_for": surfaces
+"core/lib/ovallsp/views/controller_ivars.rb#renders_something?": "contained: true, and the caller returns nil on it -- the declining direction"
+"core/lib/ovallsp/document_from_disk.rb#load": surfaces
 "core/lib/ovallsp/server.rb#declaration_at_cursor": "contained: an empty list answers no definition, never a wrong one"
 "core/lib/ovallsp/server.rb#compute_structural_tokens": "contained: no semantic tokens leaves the editor's own grammar in charge"
 "core/lib/ovallsp/server.rb#compute_non_code_spans": "contained: an empty mask makes the def-position test answer true, which suppresses signature help rather than offering it"

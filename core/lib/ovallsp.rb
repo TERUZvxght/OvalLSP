@@ -73,6 +73,8 @@ require_relative "ovallsp/observation/runner"
 require_relative "ovallsp/cache/key"
 require_relative "ovallsp/cache/store"
 require_relative "ovallsp/benchmark/cold_index_benchmark"
+require_relative "ovallsp/document_from_disk"
+require_relative "ovallsp/views/controller_ivars"
 require_relative "ovallsp/server"
 
 module Ovallsp

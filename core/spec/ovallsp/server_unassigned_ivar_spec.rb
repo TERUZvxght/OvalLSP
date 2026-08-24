@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+# The private methods this file reaches for moved to
+# `Views::ControllerIvars` in 0.2.16 (`048`): they were 395 lines of view
+# inference living in the LSP dispatch layer. The examples still drive the
+# real `Server`, and reach the collaborator through `#controller_ivars`.
+
 require "stringio"
 require "tmpdir"
 require "fileutils"
@@ -573,7 +578,7 @@ RSpec.describe "Ovallsp::Server unassigned instance variable reads (0.2.0)" do
     document = Ovallsp::TextDocument.new(uri: "file:///app/models/user.rb", text: "class User\nend\n",
                                          version: 1, language_id: "ruby")
 
-    expect(server).not_to receive(:view_action_context)
+    expect(server.send(:controller_ivars)).not_to receive(:view_action_context)
 
     server.send(:assigned_ivars_for, document.uri)
   end
@@ -605,7 +610,7 @@ name: "Tenantable", kind: :module, origin: origin, location: nil
     it "is not enumerable when the chain carries an included module" do
       allow(server.instance_variable_get(:@hierarchy_index)).to receive(:ancestors).and_return([entry(:include)])
 
-      expect(server.send(:ivar_sources_fully_enumerable?, "::UsersController",
+      expect(server.send(:controller_ivars).send(:ivar_sources_fully_enumerable?, "::UsersController",
                          [["::UsersController", document]])).to be(false)
     end
 
@@ -629,7 +634,7 @@ name: "Tenantable", kind: :module, origin: origin, location: nil
     it "is enumerable when the chain carries only a superclass" do
       allow(server.instance_variable_get(:@hierarchy_index)).to receive(:ancestors).and_return([entry(:superclass)])
 
-      expect(server.send(:ivar_sources_fully_enumerable?, "::UsersController",
+      expect(server.send(:controller_ivars).send(:ivar_sources_fully_enumerable?, "::UsersController",
                          [["::UsersController", document]])).to be(true)
     end
   end
@@ -656,13 +661,13 @@ name: "Tenantable", kind: :module, origin: origin, location: nil
       server.send(:reindex_from_disk, uri)
       opened = { uri: uri, version: 1, languageId: "ruby", text: File.read(path) }
       server.send(:handle_did_open, textDocument: opened)
-      server.send(:helper_assigned_ivar_names)
+      server.send(:controller_ivars).send(:helper_assigned_ivar_names)
       server.send(:handle_did_close, textDocument: { uri: uri })
       server.send(:handle_did_open, textDocument: opened.merge(
         text: "module UsersHelper\n  def go\n    @salutation = 1\n  end\nend\n"
       ))
 
-      expect(server.send(:helper_assigned_ivar_names)).to include("@salutation")
+      expect(server.send(:controller_ivars).send(:helper_assigned_ivar_names)).to include("@salutation")
     end
   end
 
@@ -685,7 +690,7 @@ name: "Tenantable", kind: :module, origin: origin, location: nil
           original.call(document)
         end
 
-      3.times { server.send(:helper_assigned_ivar_names) }
+      3.times { server.send(:controller_ivars).send(:helper_assigned_ivar_names) }
 
       expect(parsed).to eq(3)
     end

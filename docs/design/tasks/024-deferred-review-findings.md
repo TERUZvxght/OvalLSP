@@ -233,7 +233,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.59`](#02459-the-guard-against-a-stale-example-count-could-not-run) | fixed | 0.2.3 | The guard against a stale example count could not run |
 | [`024.60`](#02460-four-test-fixtures-raced-macos-first-execution-scan) | fixed | 0.2.3 | Four test fixtures raced macOS' first-execution scan |
 | [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.2.16 | Two per-file stores are separated by nothing but their payload |
-| [`024.63`](#02463-the-dispatch-layer-owns-view-inference-and-it-has-broken-the-query-layer-s-one-guarantee-twice) | open | 0.2.16 | The dispatch layer owns view inference, and it has broken the query … |
+| [`024.63`](#02463-the-dispatch-layer-owns-view-inference-and-it-has-broken-the-query-layer-s-one-guarantee-twice) | fixed | 0.2.16 | The dispatch layer owns view inference, and it has broken the query … |
 | [`024.64`](#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | fixed | 0.2.12 | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
 | [`024.65`](#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
 | [`024.66`](#02466-a-marketing-card-kept-carrying-claims-about-what-an-error-s-text-says) | fixed | 0.2.3 | A marketing card kept carrying claims about what an error's text says |
@@ -4205,7 +4205,7 @@ and it found something eight rounds of review over this layer had not.
 ## 024.63 The dispatch layer owns view inference, and it has broken the query layer's one guarantee twice
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -4216,6 +4216,7 @@ user-visible-note: >
   while fixing it. The entry is about the second occurrence, not about a
   present fault.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (roughly 1580–2004, and
@@ -4296,6 +4297,36 @@ by a review round, and it was the fourth reader that gave it away — the
 architecture as described has one path, and the code has four.
 
 
+
+### Moved out in 0.2.16
+
+Measured before the move, which is what settled it: the region touched
+the LSP protocol **zero** times — no `@writer`, no `send_response`, no
+`message[:...]`; the single `respond` match was the string
+`respond_to do |format|` inside a comment — and every collaborator it
+named was an analysis one (`@local_inferencer` 9 references,
+`@document_store` 5, `@workspace_index` 4, `@hierarchy_index` 3), with
+three call sites.
+
+395 lines and 17 methods are now `Views::ControllerIvars`, handed its
+collaborators rather than reaching for them. `server.rb` goes 3,936 to
+3,557.
+
+**Two mistakes made during the move, both caught by measurement:**
+
+- `@file_summaries` is written by `Server` on every index and *read* by
+  this code. The first version of the extraction gave the new class its
+  own empty hash — the "two representations of one value" shape `048`
+  is about, created by the change fixing it. Seven examples caught it;
+  the hash is now owned there and passed by reference.
+- `#load_document_from_disk` was taken along as "the last method in the
+  region". It is not view inference: hover documentation and the cold
+  index read it too. It is `DocumentFromDisk`, one module function the
+  three share.
+
+Three `rescue` verdicts followed their methods to the new files, with
+their arguments unchanged — the failure handling did not change, only
+where it lives.
 ## 024.64 Three rounds on `extension.ts`'s wiring, and the countermeasure was aimed at the symptom
 
 ```yaml
