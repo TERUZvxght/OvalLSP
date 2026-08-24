@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Security &amp; privacy — OvalLSP</title>
-<meta name="description" content="OvalLSP's threat model, workspace-trust boundary, plugin sandbox, log redaction — and its privacy statement: no telemetry, no network access at runtime.">
+<meta name="description" content="OvalLSP's threat model, workspace-trust boundary, log redaction — and its privacy statement: no telemetry, no network access at runtime.">
 <link rel="canonical" href="https://teruzvxght.github.io/OvalLSP/security.html">
 <link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/security.html">
 <link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/security.html">
@@ -131,17 +131,6 @@
 
         <article class="card">
           <div class="card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M8 14h5"/></svg>
-          </div>
-          <h3>Untrusted plugins</h3>
-          <p>
-            A third-party OvalLSP plugin must not be able to hijack Core's internal state or
-            reach the LSP protocol stream itself.
-          </p>
-        </article>
-
-        <article class="card">
-          <div class="card-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5h16M4 12h11M4 18.5h7"/><circle cx="18" cy="17" r="3.2"/><path d="M20.4 19.4 22 21"/></svg>
           </div>
           <h3>Secrets in logs</h3>
@@ -174,22 +163,6 @@
         <li>
           <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
           <span>
-            <strong>Plugins run in a real OS process boundary.</strong> Not a sandboxed
-            namespace inside the same process — a genuine fork with no access to Core's live
-            LSP transport or internal index objects. Only plain, Marshal-safe data crosses
-            the boundary.
-          </span>
-        </li>
-        <li>
-          <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
-          <span>
-            <strong>Runtime plugins — the highest-privilege kind — never load at all</strong>
-            in an untrusted workspace.
-          </span>
-        </li>
-        <li>
-          <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
-          <span>
             <strong>Log output is redacted before it is written anywhere.</strong> Bearer
             tokens, basic auth, database connection strings, known vendor key formats and
             labelled credentials all go through the redaction pipeline first.
@@ -198,8 +171,8 @@
         <li>
           <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
           <span>
-            <strong>The Core refuses a protocol mismatch on both of its inbound
-            boundaries.</strong> Agent ↔ Core and plugin ↔ Core alike: a mismatch is
+            <strong>The Core refuses a protocol mismatch on its inbound
+            boundary.</strong> Agent ↔ Core: a mismatch is
             refused, not tolerated. The Extension ↔ Core handshake is different by
             design — a version mismatch there is reported and the session keeps
             running (024.55 tracks the follow-through).

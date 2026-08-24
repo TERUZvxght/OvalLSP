@@ -214,7 +214,6 @@ Marketplace Preview公開済み)。詳細は`docs/RELEASE_CHECKLIST.md`と
 - Rails routesからの`*_path`/`*_url`補完・signature help・definition
 - Active Recordモデルのcolumn/association型推論、Rails DSL(enum/scope/delegate)
 - controller→viewへのinstance variable伝播(ERB)
-- Plugin API(static/runtime)、プロセス隔離されたplugin実行
 - opt-inのruntime型観測(Task 019)
 - VSIXパッケージング、Ruby環境の自動解決(mise/asdf/rbenv/Homebrew/PATH)
 - ログredaction、protocol version negotiation

@@ -33,8 +33,6 @@ and provides:
   Observation`) that records method call shapes actually exercised by
   your own test suite — never argument/return *values*, see
   [PRIVACY.md](PRIVACY.md).
-- A Plugin API (static and runtime plugins) for extending the type
-  engine, running in an OS-process-isolated sandbox.
 
 This is a Preview: the feature set above reflects what's actually
 implemented and tested today, not a roadmap.

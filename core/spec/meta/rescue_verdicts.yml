@@ -86,17 +86,6 @@
 "core/lib/ovallsp/parser_service.rb#walk": "contained: an empty visitor records nothing, so the file contributes no declarations"
 "core/lib/ovallsp/parser_service.rb#raw_constant_name": "contained: nil means a constant this parser cannot name, which every caller already handles"
 "core/lib/ovallsp/parser_service.rb#constant_full_name": "contained: same"
-"core/lib/ovallsp/plugins/loader.rb#guarded": surfaces
-"core/lib/ovallsp/plugins/loader.rb#safe_load_manifest": surfaces
-"core/lib/ovallsp/plugins/loader.rb#run_isolated": "contained: the plugin contributes nothing and the child is reaped"
-"core/lib/ovallsp/plugins/loader.rb#fork_plugin_child": "contained: returns ok:false, which the caller reports"
-"core/lib/ovallsp/plugins/loader.rb#deliver_result": "contained: writes ok:false back to the parent"
-"core/lib/ovallsp/plugins/loader.rb#isolate_child_io": "contained: best-effort fd hygiene in a child about to exec"
-"core/lib/ovallsp/plugins/loader.rb#isolate_child_io[2]": "contained: same"
-"core/lib/ovallsp/plugins/loader.rb#read_isolated_result": "contained: kills the child, so a hung plugin cannot hold the session"
-"core/lib/ovallsp/plugins/loader.rb#read_isolated_result[2]": "contained: returns ok:false, which the caller reports"
-"core/lib/ovallsp/plugins/manifest.rb#self.load": surfaces
-"core/lib/ovallsp/plugins/manifest.rb#self.load[2]": surfaces
 "core/lib/ovallsp/rails_bootstrap.rb#populate_registries": surfaces
 "core/lib/ovallsp/runtime_agent/agent.rb#run": "contained: break ends the agent loop, and the engine falls back to its static answers"
 "core/lib/ovallsp/runtime_agent/agent.rb#dispatch": surfaces

@@ -12,12 +12,11 @@
 3. `docs/03-semantic-engine.md`
 4. `docs/04-runtime-agent.md`
 5. `docs/05-protocol.md`
-6. `docs/06-plugin-system.md`
-7. `docs/07-vscode-extension.md`
-8. `docs/08-implementation-plan.md`
-9. `docs/09-test-strategy.md`
-10. `docs/10-ai-execution-guide.md`
-11. `docs/11-risk-register.md`
+6. `docs/07-vscode-extension.md`
+7. `docs/08-implementation-plan.md`
+8. `docs/09-test-strategy.md`
+9. `docs/10-ai-execution-guide.md`
+10. `docs/11-risk-register.md`
 
 設計判断は`adrs/`、最初の実装タスクは`tasks/`に分離している。
 

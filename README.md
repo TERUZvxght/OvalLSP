@@ -243,7 +243,6 @@ details.
 - Active Record model column/association type inference, Rails DSLs
   (enum/scope/delegate)
 - Controller → view instance-variable propagation (ERB)
-- Plugin API (static/runtime), process-isolated plugin execution
 - Opt-in runtime type observation (Task 019)
 - VSIX packaging, automatic Ruby environment resolution (mise/asdf/
   rbenv/Homebrew/PATH)

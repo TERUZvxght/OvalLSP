@@ -26,7 +26,6 @@ require_relative "semantic/reference_index"
 require_relative "semantic/reference_resolver"
 require_relative "diagnostics/engine"
 require_relative "rename/planner"
-require_relative "plugins/loader"
 require_relative "signatures/environment"
 
 module Ovallsp
@@ -136,7 +135,6 @@ module Ovallsp
       @diagnostics_engine = Diagnostics::Engine.new
       @diagnostics_mode = :safe
       @rename_planner = Rename::Planner.new(workspace_index: @workspace_index, reference_index: @reference_index)
-      @plugin_loader = Plugins::Loader.new(logger: @logger)
       @observation_runner = Observation::Runner.new(logger: @logger)
       @observation_test_command = nil
       @cold_indexing = false
@@ -351,7 +349,6 @@ module Ovallsp
         # this is the only place it can be recorded.
         @workspace_trusted = workspace_trusted?(message[:params])
         respond(id, initialize_result)
-        load_static_plugins(message[:params])
         start_cold_index
         maybe_start_agent
       when "initialized"
@@ -1193,92 +1190,6 @@ module Ovallsp
     rescue StandardError
       nil
     end
-
-    # Task 018: loads only manifests the client explicitly lists in
-    # `initializationOptions.pluginManifests` -- never auto-discovered
-    # from installed Gems ("自動検出したGemだけを理由にコード実行しない").
-    # Each plugin's declarations (and generated-method facts, for ones
-    # that gave a return_type) are merged in under a synthetic
-    # `plugin://<name>` uri, exactly the same replace/remove-by-uri
-    # contract every other per-file contribution to WorkspaceIndex/
-    # HierarchyIndex/GeneratedMethodIndex already has -- a plugin's
-    # contribution can be swapped wholesale on the next `initialize`
-    # (there's no live reload endpoint yet) without leaving anything
-    # behind. Runtime plugin loading (Plugins::Loader#load_runtime) is
-    # implemented and tested but not called here -- forwarding a
-    # runtime plugin's contributions into the actual Rails Runtime
-    # Agent process is further work this task doesn't complete (see
-    # Plugins::RuntimeContext's own docs).
-    def load_static_plugins(params)
-      options = params && params[:initializationOptions]
-      manifest_paths = options.is_a?(Hash) ? options[:pluginManifests] : nil
-      return unless manifest_paths.is_a?(Array) && !manifest_paths.empty?
-      # A plugin executes arbitrary Ruby -- that is what a plugin is. The
-      # fork contains it; trust decides whether it runs at all. The paths
-      # come from the client's own initializationOptions, so an untrusted
-      # workspace persuading a client to name a manifest inside it would
-      # otherwise be code execution with no gate in front of it.
-      return unless trusted_for_execution?("loading static plugins")
-
-      @plugin_loader.load_static(manifest_paths).each { |context| apply_plugin_context(context) }
-    end
-
-    def apply_plugin_context(context)
-      return if context.declarations.empty?
-
-      valid_facts, invalid_count = partition_plugin_facts(context.declarations)
-      @logger.warn("plugin #{context.plugin_name}: dropped #{invalid_count} malformed declaration(s)") if invalid_count.positive?
-      return if valid_facts.empty?
-
-      uri = "plugin://#{context.plugin_name}"
-      declarations = valid_facts.map { |fact| plugin_declaration(fact) }
-      summary = Index::FileSummary.new(
-        uri: uri, content_hash: uri, document_version: nil, declarations: declarations, diagnostics: []
-      )
-
-      @workspace_index.replace_file(summary)
-      @hierarchy_index.replace_file(summary)
-      facts = valid_facts.filter_map { |fact| plugin_generated_fact(fact) }
-      @generated_method_index.replace_file(uri: uri, facts: facts) unless facts.empty?
-    end
-
-    # `context.declarations` crossed a process boundary as plain JSON,
-    # rebuilt here by `Plugins::Wire` from validated fields (024.73) -- everything downstream of this
-    # point (WorkspaceIndex, HierarchyIndex, GeneratedMethodIndex) trusts
-    # its shape unconditionally and raises on anything else (e.g.
-    # WorkspaceIndex#simple_name calling `.name` on a nil symbol_id).
-    # A plugin's own file already can't corrupt this process directly
-    # (Loader's fork-based isolation), but nothing between "a plugin
-    # returned this Hash" and "this Hash reaches WorkspaceIndex" ever
-    # re-validates its shape -- a bug in a plugin's own
-    # #register_declarations call, or any future gap in Loader's
-    # isolation, would otherwise crash the whole Server on an ordinary
-    # `NoMethodError`/`TypeError` with no rescue anywhere between here
-    # and #run. Filtering here keeps the same "one broken plugin
-    # contributes nothing, logged, never brings Core down" contract every
-    # other plugin failure mode already gets, instead of trusting
-    # cross-process data implicitly.
-    def partition_plugin_facts(facts)
-      valid = facts.select { |fact| fact.is_a?(Hash) && fact[:symbol_id].is_a?(Index::SymbolId) }
-      [valid, facts.size - valid.size]
-    end
-
-    def plugin_declaration(fact)
-      Index::Declaration.new(symbol_id: fact[:symbol_id], location: PLUGIN_LOCATION, visibility: :public,
-                              parameters: [], origin: :plugin)
-    end
-
-    def plugin_generated_fact(fact)
-      return nil unless fact[:return_type]
-
-      symbol_id = fact[:symbol_id]
-      Index::GeneratedMethodFact.new(
-        owner: symbol_id.owner, name: symbol_id.name, kind: symbol_id.kind, return_type: fact[:return_type],
-        source_location: PLUGIN_LOCATION, origin: :plugin, confidence: :high
-      )
-    end
-
-    PLUGIN_LOCATION = { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }.freeze
 
     # Marks the workspace-wide reference index as needing a rebuild. The
     # rebuild itself is #ensure_reference_index_current's job, deferred to

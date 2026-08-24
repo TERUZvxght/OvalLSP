@@ -115,44 +115,6 @@ RSpec.describe "Ovallsp::Server execution entry points are gated on workspace tr
     end
   end
 
-  describe "static plugins" do
-    # A plugin executes arbitrary Ruby by design; the fork contains it,
-    # trust decides whether it runs. The manifest paths arrive in the
-    # client's initializationOptions, so this is reachable by any client.
-    it "does not load a plugin manifest when the workspace is untrusted" do
-      loaded = []
-      server = Ovallsp::Server.new(
-        input: StringIO.new(initialize_frame(trusted: false)), output: output, logger: logger,
-        workspace_root: "/workspace", agent_bootstrap: fake_bootstrap
-      )
-      fake_loader = Class.new do
-        define_method(:load_static) { |paths| loaded.concat(Array(paths)); [] }
-      end.new
-      server.instance_variable_set(:@plugin_loader, fake_loader)
-      server.send(:load_static_plugins,
-                  { initializationOptions: { workspaceTrusted: false, pluginManifests: ["/tmp/evil/manifest.json"] } })
-
-      expect(loaded).to be_empty
-    end
-
-    it "still loads one when the workspace is trusted" do
-      loaded = []
-      server = Ovallsp::Server.new(
-        input: StringIO.new(initialize_frame(trusted: true)), output: output, logger: logger,
-        workspace_root: "/workspace", agent_bootstrap: fake_bootstrap
-      )
-      server.instance_variable_set(:@workspace_trusted, true)
-      fake_loader = Class.new do
-        define_method(:load_static) { |paths| loaded.concat(Array(paths)); [] }
-      end.new
-      server.instance_variable_set(:@plugin_loader, fake_loader)
-      server.send(:load_static_plugins,
-                  { initializationOptions: { workspaceTrusted: true, pluginManifests: ["/tmp/ok/manifest.json"] } })
-
-      expect(loaded).to eq(["/tmp/ok/manifest.json"])
-    end
-  end
-
   describe "ovallsp/restartAgent" do
     it "does not start the Runtime Agent when the workspace is untrusted" do
       run(

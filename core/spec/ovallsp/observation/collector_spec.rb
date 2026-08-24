@@ -106,7 +106,12 @@ RSpec.describe Ovallsp::Observation::Collector do
   end
 
   it "does not record a call to a method defined outside the workspace root" do
-    outside_collector = described_class.new(workspace_root: File.expand_path("../../fixtures/plugins", __dir__))
+    # Any real directory that is not this fixture's own root will do --
+    # what the example turns on is that the method's source file is
+    # outside it. It borrowed `fixtures/plugins` until 0.2.16 deleted
+    # the plugin subsystem, which is why the path is now a neighbour
+    # the observation fixtures own.
+    outside_collector = described_class.new(workspace_root: File.expand_path("../../fixtures/observation_neighbor", __dir__))
     outside_collector.start
     ObservationFixture::Widget.new.combine("a", "b")
     outside_collector.stop

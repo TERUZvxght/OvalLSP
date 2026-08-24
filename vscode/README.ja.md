@@ -29,8 +29,6 @@ OvalLSPはRuby実装の言語サーバー(`ovallsp`)をVS Codeと並行して起
 - Opt-inのruntime型観測(`OvalLSP: Run Tests with Type Observation`) —
   実際のテストで実行されたメソッド呼び出しの形状のみを記録します
   (引数・戻り値の**値**は一切記録しません、[PRIVACY.ja.md](PRIVACY.ja.md)参照)。
-- 型エンジンを拡張するPlugin API(static/runtime) — OSプロセスレベルで
-  隔離された環境で実行されます。
 
 これはPreview版です。上記の機能一覧は「実際に実装・テスト済みのもの」
 であり、将来のロードマップではありません。

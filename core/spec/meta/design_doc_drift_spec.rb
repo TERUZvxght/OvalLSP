@@ -82,21 +82,6 @@ RSpec.describe "design documents that restate something the code owns" do
     expect(JSON.parse(documented).fetch("activationEvents").sort).to eq(manifest.fetch("activationEvents").sort)
   end
 
-  # The public SDK document is the plugin API's source of truth (`06`
-  # points at it rather than restating it, after `06`'s own five
-  # registration methods turned out to be fictional). Every method it
-  # shows a plugin author calling must exist.
-  it "plugin-sdk.md names only registration methods that exist" do
-    named = self.class.read("docs/design/plugin-sdk.md").scan(/\b(register_[a-z_]+)\b/).flatten.uniq
-    defined = RepoFiles.list(DESIGN_DRIFT_ROOT, "core/lib/ovallsp/plugins", "core/lib/ovallsp/plugins.rb")
-                .flat_map { |rel| self.class.read(rel).scan(/^\s*def (register_[a-z_]+)/).flatten }
-                .uniq
-
-    expect(named).not_to be_empty
-    expect(named - defined).to be_empty,
-                              "plugin-sdk.md shows #{(named - defined).join(", ")}, which core/lib does not define"
-  end
-
   # Each example above compares two lists, and would pass on two empty
   # ones -- which is what a renamed heading or a reformatted block
   # produces. This asserts the extractors found something to compare.

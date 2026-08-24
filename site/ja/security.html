@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>セキュリティとプライバシー — OvalLSP</title>
-<meta name="description" content="OvalLSP の脅威モデル、ワークスペース信頼の境界、プラグインのサンドボックス、ログの秘匿処理、そしてプライバシー方針。テレメトリなし、実行時のネットワークアクセスなし。">
+<meta name="description" content="OvalLSP の脅威モデル、ワークスペース信頼の境界、ログの秘匿処理、そしてプライバシー方針。テレメトリなし、実行時のネットワークアクセスなし。">
 <link rel="canonical" href="https://teruzvxght.github.io/OvalLSP/ja/security.html">
 <link rel="alternate" hreflang="en" href="https://teruzvxght.github.io/OvalLSP/security.html">
 <link rel="alternate" hreflang="ja" href="https://teruzvxght.github.io/OvalLSP/ja/security.html">
@@ -127,17 +127,6 @@
 
         <article class="card">
           <div class="card-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M3.5 9.5h17M8 14h5"/></svg>
-          </div>
-          <h3>信頼されていないプラグイン</h3>
-          <p>
-            サードパーティ製の OvalLSP プラグインが、Core の内部状態を乗っ取ったり、
-            LSP のプロトコルストリームそのものに手を出したりできてはなりません。
-          </p>
-        </article>
-
-        <article class="card">
-          <div class="card-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5.5h16M4 12h11M4 18.5h7"/><circle cx="18" cy="17" r="3.2"/><path d="M20.4 19.4 22 21"/></svg>
           </div>
           <h3>ログへの秘密情報の流出</h3>
@@ -169,20 +158,6 @@
         <li>
           <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
           <span>
-            <strong>プラグインは本物の OS プロセス境界の内側で動きます。</strong>
-            同一プロセス内の名前空間的なサンドボックスではなく、実際の fork です。
-            Core の生きた LSP トランスポートにも内部インデックスのオブジェクトにもアクセスできず、境界を越えるのは Marshal 可能な素のデータだけです。
-          </span>
-        </li>
-        <li>
-          <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
-          <span>
-            <strong>最も権限の高いランタイムプラグインは、未信頼のワークスペースでは一切ロードされません。</strong>
-          </span>
-        </li>
-        <li>
-          <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
-          <span>
             <strong>ログはどこかに書き出される前に秘匿処理されます。</strong>
             Bearer トークン、Basic 認証、データベース接続文字列、既知のベンダーキー形式、ラベル付きの資格情報は、すべて先に秘匿パイプラインを通ります。
           </span>
@@ -191,7 +166,7 @@
           <span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5 9.5 18 20 6.5"/></svg></span>
           <span>
             <strong>Core は自身への 2 つの境界でプロトコル不一致を拒否します。</strong>
-            Agent ↔ Core も、プラグイン ↔ Core も同様で、不一致は許容せず拒否します。
+            Agent ↔ Core で、不一致は許容せず拒否します。
             Extension ↔ Core のハンドシェイクは設計上異なります — そこでのバージョン
             不一致は報告され、セッションは動き続けます(その後の扱いは 024.55 が
             追跡しています)。

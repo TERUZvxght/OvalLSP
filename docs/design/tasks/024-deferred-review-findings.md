@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**231 entries below** <!-- measured: register-entries = 231 -->,
+**232 entries below** <!-- measured: register-entries = 232 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -379,7 +379,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.207`](#024207-two-decisions-in-the-duplicate-heading-fence-parser-have-no-fixture-that-can-distinguish-them) | open | 0.2.16 | Two decisions in the duplicate-heading fence parser have no fixture … |
 | [`024.208`](#024208-encoding-default-internal-nil-is-the-half-of-the-locale-fix-that-nothing-pins) | open | 0.2.16 | `Encoding.default_internal = nil` is the half of the locale fix that… |
 | [`024.209`](#024209-the-5-status-bar-comparison-is-set-equality-against-a-regex-sample-of-clientpresentation-ts-not-against-the-file-s-status-strings-and-two-records-state-the-stronger-guarantee) | open | 0.2.16 | The §5 status-bar comparison is set equality against a regex sample … |
-| [`024.210`](#024210-the-plugin-sdk-check-asks-whether-a-name-is-defined-anywhere-under-core-lib-ovallsp-plugins-not-whether-it-is-callable-on-the-receiver-the-document-shows) | open | 0.2.16 | The plugin-sdk check asks whether a name is defined anywhere under c… |
+| [`024.210`](#024210-the-plugin-sdk-check-asks-whether-a-name-is-defined-anywhere-under-core-lib-ovallsp-plugins-not-whether-it-is-callable-on-the-receiver-the-document-shows) | fixed | 0.2.16 | The plugin-sdk check asks whether a name is defined anywhere under c… |
 | [`024.211`](#024211-check-pinned-mutations-rb-verify-only-prints-the-applier-s-conclusion-after-applying-nothing) | open | 0.2.16 | `check_pinned_mutations.rb --verify-only` prints the applier's concl… |
 | [`024.212`](#024212-pinned-mutations-yml-s-header-documents-the-mechanism-the-applier-abandoned-and-a-scope-it-no-longer-has) | open | 0.2.16 | pinned_mutations.yml's header documents the mechanism the applier ab… |
 | [`024.213`](#024213-a-mutation-entry-s-stated-reason-describes-a-mutation-different-from-the-one-it-encodes) | open | 0.2.16 | A mutation entry's stated reason describes a mutation different from… |
@@ -402,6 +402,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.231`](#024231-a-permission-written-down-once-was-still-missed-and-the-script-that-hid-it-said-the-opposite) | fixed | 0.2.15 | A permission written down once was still missed, and the script that… |
 | [`024.232`](#024232-the-fixture-proving-a-check-has-teeth-lost-its-own-teeth-when-a-version-shipped) | fixed | 0.2.15 | The fixture proving a check has teeth lost its own teeth when a vers… |
 | [`024.233`](#024233-the-guard-against-naming-a-shipped-release-could-not-fire-until-the-release-had-shipped) | fixed | 0.2.16 | The guard against naming a shipped release could not fire until the … |
+| [`024.234`](#024234-the-plugin-subsystem-was-unreachable-from-the-shipped-product-and-eight-documents-said-otherwise) | fixed | 0.2.16 | The plugin subsystem was unreachable from the shipped product, and e… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -10059,9 +10060,9 @@ target: 0.2.16
 
 **Area:** `scripts/check_doc_links.rb` (lines 25-27), `core/spec/meta/doc_links_spec.rb` (lines 8-12 and the failure message at line 65), `docs/design/tasks/046-0.2.14-making-the-record-true.md` (line 229)
 
-Four tracked places assert that all 19 of the citations this check was built for lived in source comments, and draw a design conclusion from it — "a checker that read only Markdown would have reported this tree clean", which is the argument for scanning `.rb` at all. Re-running the A0-era checker against the pre-A0 tree reproduces the census exactly (19 citations, 5 never-committed names, 17 distinct files) and shows 18 in `.rb` comments and the nineteenth in `docs/design/plugin-sdk.md:5` — the "public SDK document" the immediately preceding sentence names in both the script and the spec. A Markdown-only checker would have found one of the nineteen, not zero. The conclusion survives at 18-of-19; the absolute quantifier that carries it does not, and one of the four places is an rspec failure message, so the false claim is what a future failure prints at the reader.
+Four tracked places assert that all 19 of the citations this check was built for lived in source comments, and draw a design conclusion from it — "a checker that read only Markdown would have reported this tree clean", which is the argument for scanning `.rb` at all. Re-running the A0-era checker against the pre-A0 tree reproduces the census exactly (19 citations, 5 never-committed names, 17 distinct files) and shows 18 in `.rb` comments and the nineteenth in `docs/design/plugin-sdk.md:5` — the "public SDK document" the immediately preceding sentence names in both the script and the spec. A Markdown-only checker would have found one of the nineteen, not zero. The conclusion survives at 18-of-19; the absolute quantifier that carries it does not, and one of the four places is an rspec failure message, so the false claim is what a future failure prints at the reader. <!-- deleted -->
 
-**Reproduce:** `git worktree add --detach /tmp/w6bc 6bc31b9; cd /tmp/w6bc; git show 26243e0:scripts/check_doc_links.rb > scripts/check_doc_links_a0.rb; ruby scripts/check_doc_links_a0.rb`. It prints "19 citation(s) resolve to nothing, naming 5 path(s)"; the last hit line is `docs/design/plugin-sdk.md:5`. Fix the sentence in all four places, not three — the spec's failure message at line 65 is easy to miss.
+**Reproduce:** `git worktree add --detach /tmp/w6bc 6bc31b9; cd /tmp/w6bc; git show 26243e0:scripts/check_doc_links.rb > scripts/check_doc_links_a0.rb; ruby scripts/check_doc_links_a0.rb`. It prints "19 citation(s) resolve to nothing, naming 5 path(s)"; the last hit line is `docs/design/plugin-sdk.md:5`. Fix the sentence in all four places, not three — the spec's failure message at line 65 is easy to miss. <!-- deleted -->
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
@@ -10720,20 +10721,22 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.210 The plugin-sdk check asks whether a name is defined anywhere under core/lib/ovallsp/plugins, not whether it is callable on the receiver the document shows
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
-  Internal. It is a defect in what this project uses to decide whether
-  a change is sound, not in what the extension answers.
+  Internal, and now moot: the document the check guards, and the
+  subsystem it documented, are both deleted (`024.234`). The check
+  went with them.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
-**Area:** `core/spec/meta/design_doc_drift_spec.rb` (the `plugin-sdk.md names only registration methods that exist` example), `docs/design/plugin-sdk.md`
+**Area:** removed — the `design_doc_drift_spec.rb` example that guarded it, and `docs/design/plugin-sdk.md`, are both deleted (`024.234`). <!-- deleted -->
 
 `named` is every `register_[a-z_]+` word anywhere in plugin-sdk.md; `defined` is every `^\s*def (register_[a-z_]+)` across `core/lib/ovallsp/plugins` and `plugins.rb`, flattened into a single set with no record of which object defines which name. Four receivers contribute: `Ovallsp::Plugins` singleton (`register_static`, `register_runtime`), `StaticContext` (`register_declarations`, `register_generic_rules`, `register_diagnostics`), `RuntimeContext` (`register_snapshot_section`, `register_reload_hook`). The document's entire purpose is to tell a plugin author what to call on the `context` its examples yield, and `named - defined` cannot tell such a call apart from a call on a different class in the same directory — nor from a module function, nor from a private method, since `^\s*def` matches under `private` just as well. So the document can instruct an author to write a line that raises `NoMethodError` at load time and the example stays green; that is the same class of falsehood the example was created for, since `06`'s five registration methods had been fictional. This is not just a stronger-assertion wish: the check answers a question about a directory while the example's own comment states the guarantee as "[e]very method it shows a plugin author calling must exist", which is a claim about a receiver. Fix shape: load the classes and compare against `StaticContext.public_instance_methods` / `RuntimeContext.public_instance_methods` / `Ovallsp::Plugins.singleton_methods`, attributing each name in the document to the receiver its fenced block yields.
 
-**Reproduce:** In `docs/design/plugin-sdk.md`, inside the `Ovallsp::Plugins.register_static("ovallsp-my-plugin") do |context|` block, add `context.register_static("nested")` and `context.register_reload_hook { }` above the existing `context.register_declarations([`. Then `cd core && bundle exec rspec spec/meta/design_doc_drift_spec.rb` → 6 examples, 0 failures. Confirm both lines are false: `cd core && bundle exec ruby -e 'require "ovallsp/plugins/static_context"; c = Ovallsp::Plugins::StaticContext.new("x"); p c.respond_to?(:register_static); p c.respond_to?(:register_reload_hook); p c.respond_to?(:register_declarations)'` → `false`, `false`, `true`. `git checkout -- docs/design/plugin-sdk.md`.
+**Reproduce:** In `docs/design/plugin-sdk.md`, inside the `Ovallsp::Plugins.register_static("ovallsp-my-plugin") do |context|` block, add `context.register_static("nested")` and `context.register_reload_hook { }` above the existing `context.register_declarations([`. Then `cd core && bundle exec rspec spec/meta/design_doc_drift_spec.rb` → 6 examples, 0 failures. Confirm both lines are false: `cd core && bundle exec ruby -e 'require "ovallsp/plugins/static_context"; c = Ovallsp::Plugins::StaticContext.new("x"); p c.respond_to?(:register_static); p c.respond_to?(:register_reload_hook); p c.respond_to?(:register_declarations)'` → `false`, `false`, `true`. `git checkout -- docs/design/plugin-sdk.md`. <!-- deleted -->
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
@@ -11960,6 +11963,85 @@ release", and `scripts/deferred_findings.rb --targeting <version>` exists
 to do it. Neither is wired into `preflight`, and preflight is what
 actually gets run. A step that lives only in a checklist competes with
 the gate that runs itself, and loses.*
+
+## 024.234 The plugin subsystem was unreachable from the shipped product, and eight documents said otherwise
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  No user could reach it, which is the point: 1,028 lines of engine and
+  790 of spec existed behind an option the only shipped client never
+  sends, while README, the Marketplace description, the site and the
+  security page all advertised it as a feature.
+target: 0.2.16
+released-in: 0.2.16
+```
+
+**Area:** deleted — `core/lib/ovallsp/plugins*`,
+`core/spec/ovallsp/plugins*`, `core/spec/fixtures/plugins`,
+`docs/design/docs/06-plugin-system.md`, `docs/design/plugin-sdk.md`, <!-- deleted -->
+`docs/design/schemas/plugin-manifest.schema.json` <!-- deleted -->
+
+The only entry point was `Server#load_static_plugins`, which returns
+early unless `initializationOptions[:pluginManifests]` is a non-empty
+array. The shipped extension sends `workspaceTrusted` and
+`ovallspClient` and nothing else (`vscode/src/extension.ts:233-239`), and
+`pluginManifests` appears **nowhere** in `vscode/src`. So the early
+return always fired.
+
+Everything the project uses to decide whether something is a feature said
+it was not one:
+
+- `docs/ROADMAP.md` and `.ja.md`: **no plugin item, in any release**.
+- `docs/EXTENSION_CAPABILITIES.md`: **no plugin row** — never a verified
+  capability.
+- `024.73`, the fixed entry about `Marshal.load` across the plugin fork,
+  says in its own note: "Reachable only by a client that sends
+  `pluginManifests`, and the shipped extension sends none, so **no user of
+  the published build was exposed**."
+
+And four documents said the opposite, in both languages: the root README
+and the Marketplace README listed "Plugin API (static/runtime),
+process-isolated plugin execution" as implemented; `site/index.html`
+carried a feature card for it; `site/security.html` carried a
+threat-model card and two guarantees — "Plugins run in a real OS process
+boundary" and "Runtime plugins — the highest-privilege kind — never load
+at all in an untrusted workspace".
+
+**Deleted, with the claims corrected in the same change.** Removing the
+implementation and leaving the claims would have manufactured, in one
+commit, exactly the state 0.2.14 spent a whole release repairing.
+
+    core/lib/ovallsp/plugins*          1,028 lines
+    server.rb wiring                      89   (4,025 -> 3,936)
+    specs and the trust-gate block       790
+    fixtures                              12 directories
+    rescue verdicts                       11 rows (160 -> 149 sites)
+
+**Three consequences worth keeping**, each found by the suite rather than
+by reading:
+
+- `collector_spec` had **borrowed** `fixtures/plugins` as "a directory
+  that is not this fixture's root". Nothing about the example was about
+  plugins; it needed any real path. Re-pointed at a neighbour the
+  observation fixtures own, with the reason recorded so the next deletion
+  does not puzzle over it.
+- `Rename::Planner`'s comment cited a plugin declaration as the reason it
+  keys on `origin: :generated` rather than a missing `name_location`.
+  The decision stands and its illustration is gone; the comment now says
+  so rather than pointing at a subsystem that no longer exists.
+- `site/security.html` claimed the Core "refuses a protocol mismatch on
+  **both** of its inbound boundaries. Agent ↔ Core and plugin ↔ Core
+  alike". There is one inbound boundary now, and the sentence says one.
+
+**Not a `major` by `docs/PUBLISHING.md`'s table**, which defines that
+tier as "a ✅ row removed" among other things a user relies on. There is
+no ✅ row to remove, and no user of a published build could reach the
+feature. It is recorded here rather than argued in a commit message
+because the next person to read the README's history will find a feature
+that was listed and then was not.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

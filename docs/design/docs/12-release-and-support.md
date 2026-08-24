@@ -113,18 +113,6 @@ enum・scope・delegate)の型推論、RBS/RBI連携、opt-inのruntime型観測
 - 永続キャッシュ(Task 021)はCore Serverの2回目以降の起動を高速化する。
   初回起動(cold)は必ずフルパースが走る。
 
-## Plugin author guide
-
-`docs/design/plugin-sdk.md`を参照。要点:
-
-- static entrypointはCore process外の隔離されたforkで実行され、Ruby
-  Data値(SymbolId/Types)のみをMarshalで受け渡しする。
-- `Ovallsp::Plugins.register_static("plugin-name") { |context| ... }`で
-  登録し、`context.register_declarations([...])`でmethodをCoreへ伝える。
-- protocol_versionの不一致は明示的にログへ出て、そのpluginだけが
-  スキップされる(他のplugin/Core自体には影響しない)。
-
-## Privacy of observation
 
 `docs/design/tasks/019-runtime-observation-notes.md`を参照。要点:
 
