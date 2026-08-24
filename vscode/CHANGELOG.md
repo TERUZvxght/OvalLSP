@@ -6,6 +6,49 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.15 — answers the engine already had
+
+Every fix here is a case where the engine knew the answer and something
+between it and the reply threw it away. No capability is added.
+
+- **`String.new(`, `File.read(`, `Integer.sqrt(` answer again** — in
+  signature help, hover *and* go to definition, all three of which were
+  silent for every class method the standard library declares. A class
+  receiver reached the lookup as an internal wrapper type, so RBS was
+  asked about a class that does not exist. 14 stdlib calls measured, 0
+  before and answering after, with six controls unchanged.
+- **A signature is spelled the way you wrote it.**
+  `def simple(a, b = 2, *rest, key:, opt: 1, **others, &blk)` presented
+  as `simple(a, b, rest, key, opt, others, blk)`, telling you `key` was
+  the fourth positional argument when it is a required keyword. Hover
+  showed the same string and is fixed by the same change.
+- **One unresolvable `include` in your own `sig/` no longer turns that
+  whole class into false reports.** The RBS ancestry build failed, was
+  swallowed, and came back indistinguishable from "this type has nothing"
+  — so methods your signature file declares were reported missing.
+  Measured on the `rbs` gem's own 89 hand-written signatures: 20 false
+  reports, now none.
+- **An argument written as a paren-less call is judged as itself.**
+  `w.label(w.make 1)` was judged by the trailing `1`, which both reported
+  a String argument as an Integer *and* hid the real mismatch in
+  `w.resize(w.make 1)`.
+- **Picking a class in the outline selects its name**, not its whole
+  body.
+- **Completion says which methods only one branch of a union has.**
+  On `x = cond ? "s" : 1`, the ones both branches have now sort first.
+- **A `private` written inside an ordinary loop reaches the methods
+  below it**, as Ruby does — and so do `protected`, `public` and
+  `module_function`.
+
+### Details
+
+Seventeen register entries close here. The account is in
+`docs/design/tasks/047-0.2.15-scope.md`, including a triage of the
+thirty-four entries that had queued up behind this release: five of its
+seven batches were refuted by an independent pass, one proposed closure
+turned out to be a live defect, and nothing was closed on contested
+evidence.
+
 ## 0.2.14 — the record, and the checks that keep it true
 
 **Nothing in this release changes what the extension answers.** Every

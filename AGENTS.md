@@ -29,6 +29,28 @@ most-useful-first, say — are 2.x.x.
 - **Section 0 itself** — the vision, the definition of finished, the
   scope, and the accuracy-versus-shipping principle.
 
+**A patch is already approved; do not ask again.** The owner's standing
+position, given during 0.2.4 and written out in
+[`docs/PUBLISHING.md`](docs/PUBLISHING.md)'s Publishing section: for a
+*patch* — no capability row moves — the go-ahead is granted in advance,
+**conditional on the secret and privacy checks having actually run and
+passed**, and on whoever answers `release.sh`'s prompt having read what
+the script printed and saying what it found. A minor or major still
+asks, and so does a patch where any of those checks did not run.
+
+That paragraph also says the prompt does **not** need the owner's own
+fingers: 0.2.3 was published by an agent driving the script under the
+owner's instruction, and that is within the rule. What is outside it is
+reaching the prompt with no decision behind it, or deciding for oneself.
+
+*This pointer exists because the permission was written down once, at
+line 259 of a three-hundred-line document, and a session preparing a
+release still missed it and asked — which is the failure that paragraph
+predicts in its own text: "a permission carried only in a conversation is
+one compaction away from being either forgotten or assumed larger than it
+is." It was neither forgotten nor inflated; it was assumed smaller.
+`024.231`.*
+
 **The distance to 1.0.0 is written down**, derived from those two and
 nothing else: [`docs/design/tasks/036-road-to-1.0.0.md`](docs/design/tasks/036-road-to-1.0.0.md).
 **Which release is being prepared is not written here.** `git branch

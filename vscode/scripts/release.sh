@@ -12,11 +12,16 @@
 #
 # This script builds the release candidate, runs the packaged semantic
 # smoke test, and shows the package contents -- but it does NOT publish
-# without an explicit "yes" typed at the confirmation prompt below. That
-# prompt is the one part of this script intentionally not automated away:
-# initial publish and every later publish are supposed to need a human
-# saying "yes, publish this" at the moment it actually happens, not a
-# standing approval baked into a script that runs unattended.
+# without an explicit "yes" typed at the confirmation prompt below.
+#
+# The prompt is not skippable by a flag, and what it protects is that no
+# publish happens without a decision behind it. It does *not* require the
+# project owner's own keystroke, and for a **patch** the decision is
+# already made: see docs/PUBLISHING.md's Publishing section, "A patch does
+# not need the owner asked again", for the standing delegation and the
+# privacy conditions it is conditional on. An agent answering this prompt
+# under that delegation is within the rule; reaching it with no decision
+# behind it, or deciding for oneself, is not.
 #
 # Usage: vscode/scripts/release.sh
 

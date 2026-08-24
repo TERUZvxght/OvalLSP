@@ -195,34 +195,63 @@
           </p>
         </article>
 
-<article class="tl-item" id="v0214">
-  <div class="tl-version">
-    <span class="v">0.2.14</span>
-    <span class="mark mark--yes">shipped</span>
-  </div>
-  <h3>記録と、それを真に保つ検査</h3>
-  <ul class="feature-list">
-    <li>
-      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-      <span><strong>拡張機能が返す答えは何ひとつ変わりません。</strong>このリリースがエンジン側で触れた行はすべてコメントで、VS Code 拡張のコードは無変更です。プロジェクト自身の記録が製品からずれていたために出しています。</span>
-    </li>
-    <li>
-      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-      <span><strong>この製品には存在しない制限事項が、両言語で公開されていました。</strong>ある指摘を9件に分割し7件は検証しましたが、未検証の2件のうち片方は、数リリース前から存在しない不具合を記述していました。撤回しました。</span>
-    </li>
-    <li>
-      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-      <span><strong>3つの検査が、存在理由となっている場面で失敗できませんでした。</strong>「スイートは走ったか」は example 数を数えていましたが全件 skip でも数は出ます。文字列を探す検査は自分の説明文に一致し自分のファイルを除外していました。ツリー走査は commit 済みファイルしか読まず、commit gate は commit の前に走ります。</span>
-    </li>
-  </ul>
-  <p class="tl-note">
-    機能を追加せず、利用者から見える不具合も直さないパッチです。
-    記録のずれに気づくための検査のいくつかが失敗しえない状態だったこと、
-    そして <code>PUBLISHING.md</code> が v0.1.2 として壊れた VSIX を
-    公開したときの publish コマンドを25リリースにわたり載せ続けていたこと
-    が理由です。
-  </p>
-</article>
+        <article class="tl-item" id="v0215">
+          <div class="tl-version">
+            <span class="v">0.2.15</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>エンジンが既に持っていた答え</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>String.new(</code>・<code>File.read(</code>・<code>Integer.sqrt(</code> が再び答えます</strong> &mdash; シグネチャヘルプ、ホバー、<em>そして定義ジャンプ</em>の3つすべてで、標準ライブラリが宣言するクラスメソッドに沈黙していました。stdlib の呼び出し14件で計測し、修正前0・修正後は応答、対照6件は不変。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>シグネチャが、書いたとおりの綴りで出ます。</strong> <code>def simple(a, b = 2, *rest, key:, opt: 1, **others, &amp;blk)</code> が <code>simple(a, b, rest, key, opt, others, blk)</code> と表示され、必須キーワードの <code>key</code> が4番目の位置引数のように見えていました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>自分の <code>sig/</code> にある解決できない <code>include</code> 1行が、そのクラス全体を誤報告に変えることはなくなりました。</strong> <code>rbs</code> gem 自身の89個の手書きシグネチャで計測して、誤報告20件が0件に。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            機能の追加はありません。いずれも、エンジンは答えを知っていたのに
+            返答までのどこかでそれが捨てられていた、という形の修正です &mdash;
+            括弧なし呼び出しの引数が末尾のリテラルで判定されること、アウトライン
+            の項目がクラス名ではなく本体全体を選択すること、ループの中に書いた
+            <code>private</code> がその後のメソッドに届かないこと。
+          </p>
+        </article>
+
+        <article class="tl-item" id="v0214">
+          <div class="tl-version">
+            <span class="v">0.2.14</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>記録と、それを真に保つ検査</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>拡張機能が返す答えは何ひとつ変わりません。</strong>このリリースがエンジン側で触れた行はすべてコメントで、VS Code 拡張のコードは無変更です。プロジェクト自身の記録が製品からずれていたために出しています。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>この製品には存在しない制限事項が、両言語で公開されていました。</strong>ある指摘を9件に分割し7件は検証しましたが、未検証の2件のうち片方は、数リリース前から存在しない不具合を記述していました。撤回しました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>3つの検査が、存在理由となっている場面で失敗できませんでした。</strong>「スイートは走ったか」は example 数を数えていましたが全件 skip でも数は出ます。文字列を探す検査は自分の説明文に一致し自分のファイルを除外していました。ツリー走査は commit 済みファイルしか読まず、commit gate は commit の前に走ります。</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            機能を追加せず、利用者から見える不具合も直さないパッチです。
+            記録のずれに気づくための検査のいくつかが失敗しえない状態だったこと、
+            そして <code>PUBLISHING.md</code> が v0.1.2 として壊れた VSIX を
+            公開したときの publish コマンドを25リリースにわたり載せ続けていたこと
+            が理由です。
+          </p>
+        </article>
 
         <article class="tl-item" id="v0213">
           <div class="tl-version">

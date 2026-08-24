@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**228 entries below** <!-- measured: register-entries = 228 -->,
+**230 entries below** <!-- measured: register-entries = 230 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -399,6 +399,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.228`](#024228-every-stdlib-klass-method-answered-nothing-in-three-features-at-once) | fixed | 0.2.15 | Every stdlib `Klass.method(` answered nothing, in three features at … |
 | [`024.229`](#024229-signature-help-says-nothing-at-the-top-level-of-a-file-and-cannot-be-fixed-the-way-the-register-says) | open | 0.2.16 | Signature help says nothing at the top level of a file, and cannot b… |
 | [`024.230`](#024230-a-top-level-def-is-indexed-with-no-owner-so-nothing-can-look-it-up) | open | 0.2.16 | A top-level `def` is indexed with no owner, so nothing can look it up |
+| [`024.231`](#024231-a-permission-written-down-once-was-still-missed-and-the-script-that-hid-it-said-the-opposite) | fixed | 0.2.15 | A permission written down once was still missed, and the script that… |
+| [`024.232`](#024232-the-fixture-proving-a-check-has-teeth-lost-its-own-teeth-when-a-version-shipped) | fixed | 0.2.15 | The fixture proving a check has teeth lost its own teeth when a vers… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -11779,6 +11781,126 @@ own `core/spec` alone.
 this is the index's, that is the server's — and because changing the
 owner a declaration is recorded under is read by every feature at once.
 It wants its own change set and its own corpus run.
+
+## 024.231 A permission written down once was still missed, and the script that hid it said the opposite
+
+```yaml
+status: fixed
+kind: friction
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it cost is a release stopping to ask for a
+  permission that had been granted, in writing, two years of releases
+  ago -- and asking on the grounds of a script comment that contradicts
+  the document.
+target: 0.2.15
+released-in: 0.2.15
+```
+
+**Area:** `AGENTS.md`, `vscode/scripts/release.sh` (the header),
+`docs/PUBLISHING.md` (unchanged -- it was right)
+
+Preparing 0.2.14's publish, a session read `release.sh`'s header:
+
+> That prompt is the one part of this script intentionally not automated
+> away: initial publish and every later publish are supposed to need a
+> human saying "yes, publish this" at the moment it actually happens,
+> not a standing approval baked into a script that runs unattended.
+
+and concluded it could not answer the prompt. It then asked the owner,
+who replied that a patch is releasable without asking.
+
+**The permission was written down, in full, and had been for a long
+time.** `docs/PUBLISHING.md`, Publishing section: "**A patch does not
+need the owner asked again.**" — the go-ahead granted in advance for a
+patch, conditional on the secret and privacy checks having run and
+passed, with the four conditions named. The paragraph immediately above
+it goes further: the prompt "does *not* require the owner's own fingers
+on the keystroke", and 0.2.3 was published by an agent driving the
+script under instruction, which "is within the rule".
+
+**That paragraph predicts this failure in its own text.** It says it is
+written there "because a permission carried only in a conversation is one
+compaction away from being either forgotten or assumed larger than it
+is". This is the third variant: **assumed smaller**. The document
+anticipated the direction of drift and still could not prevent it,
+because of where it sits.
+
+**Why one correct copy was not enough.** The reader was looking at the
+script, not the document — which is the right place to look when about
+to run a script. `release.sh`'s header describes the prompt's purpose
+and **does not say where the delegation is written**, so it reads as the
+whole rule when it is half of one. The document is at line 259 of a
+three-hundred-line file that a session opens only when publishing, and
+this session *was* publishing and still missed it.
+
+**Fixed by putting the conclusion where a session already reads**, not
+by restating the conditions in a second place:
+
+- `AGENTS.md`'s first section, "Read this first, every time", now states
+  that a patch is pre-approved and conditional on the checks, and points
+  at `PUBLISHING.md` for the conditions themselves.
+- `release.sh`'s header now names the delegation and where it lives,
+  instead of implying none exists.
+
+`PUBLISHING.md` is unchanged. It was correct; the failure was that
+nothing else pointed at it.
+
+## 024.232 The fixture proving a check has teeth lost its own teeth when a version shipped
+
+```yaml
+status: fixed
+kind: friction
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it cost is that the example whose only job
+  is to prove the site check can still fail would have reported the
+  check toothless -- while the check was working correctly.
+target: 0.2.15
+released-in: 0.2.15
+```
+
+**Area:** `core/spec/meta/site_version_guard_spec.rb`, `docs/ROADMAP.md`
++ `.ja.md`
+
+`scripts/check_site_links.rb` compares each roadmap panel's item count
+against `ROADMAP.md`, **except for a version that has shipped** — a
+shipped panel answers to the changelog instead, and skipping the
+comparison there is correct.
+
+The example that proves the check still has teeth plants an extra item
+in a panel and expects a complaint. It chose the panel like this:
+
+```ruby
+planned = File.read(.../ROADMAP.md)[/^## (\d+\.\d+\.\d+)/, 1]
+```
+
+**The first heading, not the first unshipped one** — and its own comment
+one line above says why that distinction matters: "shipped panels answer
+to the changelog instead, so mutating one of those would test the wrong
+branch." The selection did not enforce what the comment knew.
+
+Cutting 0.2.15 made it true. `ROADMAP.md` still opened with `## 0.2.15`,
+0.2.15 entered the changelog, and the fixture landed on a shipped panel.
+The script skipped the comparison, correctly; the example saw no
+complaint and reported **"a roadmap panel disagreeing with ROADMAP.md
+passed the site check"**. The check was fine. The fixture had gone
+blind, and it failed in the direction that accuses the thing it is
+guarding.
+
+**Two fixes, and only the second is the countermeasure.**
+
+- `ROADMAP.md` and `.ja.md` drop the 0.2.15 section, which is the
+  convention already — 0.2.14 and everything below it are gone from
+  those files. That makes the fixture correct again *today*.
+- The fixture now selects the first version in `ROADMAP.md` that is
+  **not** in the changelog. Verified against the state one release
+  ahead: with 0.3.0 shipped it selects 0.4.0 rather than going blind.
+  Without this, the same failure returns the day 0.3.0 ships with its
+  section still in place, which is exactly how this one arrived.
+
+*Found by preflight during 0.2.15's release, between the changelog going
+in and the tag being cut.*
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

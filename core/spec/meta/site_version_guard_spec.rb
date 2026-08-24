@@ -141,8 +141,22 @@ RSpec.describe "the site check's own teeth" do
     # The first *planned* version, read from the same source the script
     # compares against -- shipped panels answer to the changelog instead,
     # so mutating one of those would test the wrong branch.
-    planned = File.read(File.join(repo_root, "docs", "ROADMAP.md"), encoding: "UTF-8")[/^## (\d+\.\d+\.\d+)/, 1]
-    expect(planned).not_to be_nil, "docs/ROADMAP.md no longer opens a version section this fixture can target"
+# **First *unshipped*, not first.** Taking the first heading assumed
+# `ROADMAP.md` never opens with a version that has already gone out,
+# and that stopped being true the moment 0.2.15 shipped while its
+# section was still there: the fixture landed on a shipped panel, the
+# script correctly skipped the ROADMAP comparison for it, and this
+# example -- whose whole job is to prove the script still has teeth --
+# reported the script toothless. The fixture had gone blind, not the
+# script (`024.232`).
+shipped = File.read(File.join(repo_root, "vscode", "CHANGELOG.md"), encoding: "UTF-8")
+              .scan(/^## (\d+\.\d+\.\d+)/).flatten
+planned = File.read(File.join(repo_root, "docs", "ROADMAP.md"), encoding: "UTF-8")
+              .scan(/^## (\d+\.\d+\.\d+)/).flatten
+              .find { |version| !shipped.include?(version) }
+expect(planned).not_to be_nil,
+       "docs/ROADMAP.md opens no version section that has not already shipped, " \
+       "so this fixture has nothing to target"
 
     with_site_copy do |copy|
       rewrite(File.join(copy, "roadmap.html")) do |html|

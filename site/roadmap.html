@@ -200,34 +200,64 @@
           </p>
         </article>
 
-<article class="tl-item" id="v0214">
-  <div class="tl-version">
-    <span class="v">0.2.14</span>
-    <span class="mark mark--yes">shipped</span>
-  </div>
-  <h3>The record, and the checks that keep it true</h3>
-  <ul class="feature-list">
-    <li>
-      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-      <span><strong>Nothing here changes what the extension answers.</strong> Every line this release touches in the engine is a comment, and the VS Code extension is untouched. It exists because the project&rsquo;s own record had drifted from the product.</span>
-    </li>
-    <li>
-      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-      <span><strong>A limitation this product does not have had been published to users</strong>, in both languages. A finding was split into nine entries and seven were verified; one of the two that were not described a defect the engine had not had for several releases. Withdrawn.</span>
-    </li>
-    <li>
-      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-      <span><strong>Three checks could not fail in the case they existed for.</strong> &ldquo;Did the suite actually run&rdquo; counted examples, and a fully skipped file still reports examples; a text scanner matched its own prose and exempted its own file; a tree scan read only committed files, while the commit gate runs before the commit.</span>
-    </li>
-  </ul>
-  <p class="tl-note">
-    A patch that adds no capability and fixes no user-visible defect.
-    It is here because several of the checks meant to notice a drifting
-    record could not fail, and because <code>PUBLISHING.md</code> had
-    documented the publish command that shipped a corrupt VSIX as
-    v0.1.2 and kept it for twenty-five releases.
-  </p>
-</article>
+        <article class="tl-item" id="v0215">
+          <div class="tl-version">
+            <span class="v">0.2.15</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>Answers the engine already had</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>String.new(</code>, <code>File.read(</code>, <code>Integer.sqrt(</code> answer again</strong> &mdash; in signature help, hover <em>and</em> go to definition, all three of which were silent for every class method the standard library declares. 14 stdlib calls measured, 0 before and answering after, six controls unchanged.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A signature is spelled the way you wrote it.</strong> <code>def simple(a, b = 2, *rest, key:, opt: 1, **others, &amp;blk)</code> had presented as <code>simple(a, b, rest, key, opt, others, blk)</code>, telling you <code>key</code> was the fourth positional argument when it is a required keyword.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>One unresolvable <code>include</code> in your own <code>sig/</code> no longer turns that whole class into false reports.</strong> Measured on the <code>rbs</code> gem&rsquo;s 89 hand-written signatures: 20 false reports, now none.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            No capability is added. Every fix is a case where the engine knew
+            the answer and something between it and the reply threw it away
+            &mdash; a paren-less call argument judged by its trailing literal,
+            an outline entry selecting a whole class body instead of its name,
+            a <code>private</code> written in a loop not reaching the methods
+            below it.
+          </p>
+        </article>
+
+        <article class="tl-item" id="v0214">
+          <div class="tl-version">
+            <span class="v">0.2.14</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>The record, and the checks that keep it true</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Nothing here changes what the extension answers.</strong> Every line this release touches in the engine is a comment, and the VS Code extension is untouched. It exists because the project&rsquo;s own record had drifted from the product.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A limitation this product does not have had been published to users</strong>, in both languages. A finding was split into nine entries and seven were verified; one of the two that were not described a defect the engine had not had for several releases. Withdrawn.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Three checks could not fail in the case they existed for.</strong> &ldquo;Did the suite actually run&rdquo; counted examples, and a fully skipped file still reports examples; a text scanner matched its own prose and exempted its own file; a tree scan read only committed files, while the commit gate runs before the commit.</span>
+            </li>
+          </ul>
+          <p class="tl-note">
+            A patch that adds no capability and fixes no user-visible defect.
+            It is here because several of the checks meant to notice a drifting
+            record could not fail, and because <code>PUBLISHING.md</code> had
+            documented the publish command that shipped a corrupt VSIX as
+            v0.1.2 and kept it for twenty-five releases.
+          </p>
+        </article>
 
         <article class="tl-item" id="v0213">
           <div class="tl-version">
