@@ -37,11 +37,10 @@ Ruby method bodyから戻り値型を推論してMethodSummaryを生成し、通
 ```ruby
 module Ovallsp
   module Semantic
+    # `parameter_types`と`effects`は0.2.16で削除(`048`)。読み手が現れなかった。
     MethodSummary = Data.define(
       :symbol_id,
-      :parameter_types,
       :return_type,
-      :effects,
       :dependencies,
       :confidence,
       :generation,

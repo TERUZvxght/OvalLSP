@@ -112,12 +112,31 @@ module DeferredFindings
   # already gone out (`024.124`).
   def published_versions(markdown) = markdown.scan(/^\| (\d+\.\d+\.\d+) \| `/).flatten
 
-  def open_entries_targeting_a_shipped_release(markdown, artifacts)
-    published = published_versions(artifacts)
+  # **Both sources, because they become true at different moments.**
+  # `RELEASE_ARTIFACTS.md` gains a version's row *after* the VSIX is
+  # published, so a guard reading only that cannot fire before the
+  # release it is about -- it reports the mistake once the mistake has
+  # shipped. 0.2.15 went out with six entries still naming it, preflight
+  # green the whole way, and this check went red immediately afterwards.
+  #
+  # A changelog section is written *before* the tag is cut, so preflight
+  # sees it while there is still something to do about it. Reading both
+  # keeps the later signal as a backstop without waiting for it
+  # (`024.233`).
+  def open_entries_targeting_a_shipped_release(markdown, artifacts, changelog = nil)
+    shipped = published_versions(artifacts) | changelog_versions(changelog)
     open_defects(markdown).filter_map do |number, fields|
       target = fields["target"]
-      "#{number} (#{target})" if target && published.include?(target)
+      "#{number} (#{target})" if target && shipped.include?(target)
     end
+  end
+
+  # A version with a changelog section is one this project has written
+  # release notes for, which happens before the tag.
+  def changelog_versions(changelog)
+    return [] unless changelog
+
+    changelog.scan(/^## (\d+\.\d+\.\d+)/).flatten
   end
 
   # The `**Area:**` line of an entry, as the paths it names. Backticked,

@@ -101,14 +101,9 @@ module Ovallsp
           end
 
         MethodSummary.new(
-          symbol_id: symbol_id, parameter_types: parameter_types_for(declarations.first.last), return_type: return_type,
-          effects: [], dependencies: dependencies, confidence: confidence, generation: @summary_store.generation,
-          status: status
+          symbol_id: symbol_id, return_type: return_type, dependencies: dependencies,
+          confidence: confidence, generation: @summary_store.generation, status: status
         )
-      end
-
-      def parameter_types_for(declaration)
-        declaration.parameters.each_with_object({}) { |param, hash| hash[param.name] = Types::UNKNOWN if param.name }
       end
 
       DeclResult = Struct.new(:type, :dependencies, :confidence, :status)
@@ -210,7 +205,7 @@ module Ovallsp
       # independent query of the same symbol_id.
       def widened(symbol_id, status)
         MethodSummary.new(
-          symbol_id: symbol_id, parameter_types: {}, return_type: Types::UNKNOWN, effects: [], dependencies: [],
+          symbol_id: symbol_id, return_type: Types::UNKNOWN, dependencies: [],
           confidence: :low, generation: @summary_store.generation, status: status
         )
       end

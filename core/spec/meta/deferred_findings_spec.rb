@@ -151,6 +151,9 @@ RSpec.describe "deferred findings metadata" do
 
   let(:deferred) { read_utf8("docs/design/tasks/024-deferred-review-findings.md") }
   let(:artifacts) { read_utf8("docs/RELEASE_ARTIFACTS.md") }
+  # Written before the tag, unlike RELEASE_ARTIFACTS.md's row, which
+  # lands after the publish -- see `024.233`.
+  let(:changelog) { read_utf8("vscode/CHANGELOG.md") }
   let(:english) { read_utf8("docs/KNOWN_LIMITATIONS.md") }
   let(:japanese) { read_utf8("docs/KNOWN_LIMITATIONS.ja.md") }
 
@@ -436,7 +439,7 @@ RSpec.describe "deferred findings metadata" do
   end
 
   it "has no open entry naming a release that has already shipped" do
-    stale = DeferredFindings.open_entries_targeting_a_shipped_release(deferred, artifacts)
+    stale = DeferredFindings.open_entries_targeting_a_shipped_release(deferred, artifacts, changelog)
 
     expect(stale).to be_empty,
                      "open findings targeting a released version: #{stale.join(", ")}. " \

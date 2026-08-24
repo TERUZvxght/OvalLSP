@@ -106,12 +106,19 @@ module Ovallsp
 
       # docs/design/docs/05-protocol.md's agent/snapshot: returns only the
       # requested sections, so a Core that only needs routes doesn't pay for
-      # a full model dump. Task 006 implements "metadata" and "routes";
-      # "models" arrives with Task 007.
+      # a full model dump.
+      #
+      # **`"metadata"` is gone.** Task 006 implemented it and nothing ever
+      # asked for it: every caller of `AgentProcessManager#fetch_snapshot`
+      # passes `["routes"]` (`rails_bootstrap.rb:118`, `server.rb:3426`),
+      # and no spec requested the section. It also restated three of
+      # `#hello_result`'s four fields, so a Core that wanted it had a
+      # cheaper way to ask. The `|| ["metadata"]` default went with it: a
+      # request naming no section now returns nothing, which is what
+      # "returns only the requested sections" already said (`048`).
       def snapshot_result(params)
-        sections = (params && params[:sections]) || ["metadata"]
+        sections = (params && params[:sections]) || []
         result = {}
-        result[:metadata] = metadata_section if sections.include?("metadata")
         result[:routes] = extract_routes if sections.include?("routes")
         result[:models] = discover_models if sections.include?("models")
         result
@@ -131,6 +138,22 @@ module Ovallsp
       # sees the app's full model set, not just an accident of boot order
       # (docs/design/tasks/008.5-runtime-and-index-corrections.md).
       def discover_models
+        concrete_models { |klass| { name: klass.name, tableName: safely { klass.table_name } } }
+      end
+
+      # The one place that decides which classes count as a model.
+      #
+      # `#discover_models` and `#models_result` had the same four
+      # decisions written out twice -- is ActiveRecord loaded, eager-load
+      # first, drop `abstract_class?`, drop anything without a usable
+      # `name` -- and differed only in the payload built from each class.
+      # Two copies of an enumeration is how one of them ends up answering
+      # about a different set (`048`).
+      #
+      # Yields the class rather than returning a payload, because the two
+      # payloads are genuinely different: discovery is deliberately
+      # lightweight and `agent/models` is not.
+      def concrete_models
         return [] unless active_record_available?
 
         eager_load_models!
@@ -138,7 +161,7 @@ module Ovallsp
         ::ActiveRecord::Base.descendants.reject(&:abstract_class?).filter_map do |klass|
           next nil unless klass.respond_to?(:name) && klass.name
 
-          { name: klass.name, tableName: safely { klass.table_name } }
+          yield klass
         end
       end
 
@@ -192,15 +215,8 @@ module Ovallsp
       def models_result
         return { models: [] } unless active_record_available?
 
-        eager_load_models!
-
-        models = ::ActiveRecord::Base.descendants.reject(&:abstract_class?).filter_map do |klass|
-          next nil unless klass.respond_to?(:name) && klass.name
-
-          model_payload(klass)
-        end
-
-        { models: models, activeRecordApi: active_record_api }
+        { models: concrete_models { |klass| model_payload(klass) },
+          activeRecordApi: active_record_api }
       end
 
       # The Active Record API itself, reported once rather than per model.
@@ -506,15 +522,6 @@ module Ovallsp
         yield
       rescue StandardError
         nil
-      end
-
-      def metadata_section
-        {
-          generation: @generation,
-          railsVersion: rails_defined? ? Rails.version.to_s : nil,
-          rubyVersion: RUBY_VERSION,
-          root: rails_root
-        }
       end
 
       # Reads only the duck-typed subset of ActionDispatch::Journey::Route's

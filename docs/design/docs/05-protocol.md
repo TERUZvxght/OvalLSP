@@ -103,12 +103,19 @@ params:
 
 ```json
 {
-  "sections": ["metadata", "routes", "models"],
+  "sections": ["routes", "models"],
   "ifGeneration": 10
 }
 ```
 
 `ifGeneration`と同じならnotModifiedを返せる。
+
+**`"metadata"` sectionは0.2.16で削除した。** Task 006で実装したが、
+要求する側が一度も現れなかった — `AgentProcessManager#fetch_snapshot`の
+呼び出し元はいずれも`["routes"]`を渡し、specも要求していない。内容は
+`agent/hello`のresponseの4フィールドのうち3つを言い換えたものだったので、
+必要とするCoreにはより安価な尋ね方が既にあった。sectionを1つも名指さない
+requestは何も返さない(以前は`"metadata"`を既定にしていた)。`048`を参照。
 
 ### agent/model
 

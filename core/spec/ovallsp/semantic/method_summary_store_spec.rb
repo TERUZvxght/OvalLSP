@@ -7,7 +7,7 @@ RSpec.describe Ovallsp::Semantic::MethodSummaryStore do
 
   def summary(name, dependencies: [])
     Ovallsp::Semantic::MethodSummary.new(
-      symbol_id: sym(name), parameter_types: {}, return_type: Ovallsp::Types::UNKNOWN, effects: [],
+      symbol_id: sym(name), return_type: Ovallsp::Types::UNKNOWN,
       dependencies: dependencies, confidence: :high, generation: 0, status: :complete
     )
   end

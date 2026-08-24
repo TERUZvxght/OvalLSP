@@ -6,18 +6,9 @@ module Ovallsp
   module Semantic
     # A cached summary of one method's inferred return type.
     #
-    # - parameter_types: {name (String) => Types value}, currently always
-    #   Types::UNKNOWN for every parameter (Task 010's explicit MVP scope
-    #   — "初期版ではparameter型がUnknownでもよい") but kept as a real Hash
-    #   keyed by parameter name so call-site-informed narrowing can fill
-    #   it in later without changing this shape.
     # - return_type: the inferred return type (implicit last expression,
     #   unioned with every explicit `return`'s value across every reachable
     #   exit path).
-    # - effects: reserved for future interprocedural effect tracking
-    #   (raises, mutation, ...); always [] for now — "interprocedural
-    #   effect analysis completeness" is explicitly out of scope, but the
-    #   field exists so a later task doesn't need to change this shape.
     # - dependencies: SymbolIds of every method this summary's computation
     #   called into to determine the return type — what
     #   MethodSummaryStore#invalidate walks to find dependents.
@@ -30,8 +21,13 @@ module Ovallsp
     # - status: :complete, :partial (some declarations couldn't be
     #   analyzed at all), :timeout (the analysis budget ran out), or
     #   :recursive_widened (direct or mutual recursion was cut off).
-    MethodSummary = Data.define(:symbol_id, :parameter_types, :return_type, :effects, :dependencies, :confidence,
-                                 :generation, :status)
+    # `parameter_types` and `effects` were removed in 0.2.16. Both were
+    # written on every summary -- `{}` and `[]` at one site, a built Hash
+    # at the other -- and read by nothing: instrumenting the accessors
+    # and grepping both trees found writers only. A field nobody reads
+    # is a field the next reader has to work out the meaning of before
+    # discovering it has none (`048`).
+    MethodSummary = Data.define(:symbol_id, :return_type, :dependencies, :confidence, :generation, :status)
 
     # Caches MethodSummary by SymbolId and tracks a reverse dependency
     # graph (who calls whom) so invalidating one method's summary also

@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**230 entries below** <!-- measured: register-entries = 230 -->,
+**231 entries below** <!-- measured: register-entries = 231 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -305,9 +305,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | fixed | 0.2.15 | A positional argument to a keyword-only method reads as nonsense |
 | [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | fixed | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
 | [`024.135`](#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | open | 0.2.16 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
-| [`024.136`](#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | open | 0.2.15 | A route's optional segments are detected by matching the literal `(.… |
+| [`024.136`](#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | open | 0.2.16 | A route's optional segments are detected by matching the literal `(.… |
 | [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | 0.2.16 | `WorkspaceIndex#search` scans every symbol in the workspace |
-| [`024.138`](#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | open | 0.2.15 | No test mixes a schema change and a model-file change in one batch |
+| [`024.138`](#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | open | 0.2.16 | No test mixes a schema change and a model-file change in one batch |
 | [`024.139`](#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
 | [`024.140`](#024140-a-scripted-edit-doubled-a-register-entry-and-every-check-stayed-green) | fixed | 0.2.14 | A scripted edit doubled a register entry, and every check stayed gre… |
 | [`024.141`](#024141-publishing-md-documented-the-publish-command-that-shipped-a-corrupt-v0-1-2) | fixed | 0.2.14 | `PUBLISHING.md` documented the publish command that shipped a corrup… |
@@ -323,10 +323,10 @@ nobody can search is the recording habit without the benefit.
 | [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices) | open | 0.2.16 | A check can be disabled, and no check notices |
 | [`024.152`](#024152-a-leak-check-counted-every-descriptor-in-the-process-and-flaked-under-load) | fixed | 0.2.14 | A leak check counted every descriptor in the process, and flaked und… |
 | [`024.153`](#024153-a-quarter-of-the-open-work-is-in-no-release-and-0-3-0-has-become-where-the-rest-goes) | fixed | 0.2.15 | A quarter of the open work is in no release, and 0.3.0 has become wh… |
-| [`024.154`](#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | open | 0.2.15 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
-| [`024.155`](#024155-a-register-heading-the-entry-grammar-does-not-match-is-skipped-rather-than-failed-so-an-entry-can-exist-and-be-checked-by-nothing) | open | 0.2.15 | A register heading the entry grammar does not match is skipped rathe… |
-| [`024.156`](#024156-the-evidence-extractor-recognises-only-rb-sh-js-and-test-so-typescript-tests-and-ci-job-names-the-sole-evidence-for-eight-gates-are-never-checked) | open | 0.2.15 | The evidence extractor recognises only .rb/.sh/.js and test:, so Typ… |
-| [`024.157`](#024157-a-git-subprocess-in-a-throwaway-repository-obeys-the-inherited-git-dir-so-the-suite-commits-to-the-real-repository) | open | 0.2.15 | A git subprocess in a throwaway repository obeys the inherited GIT_D… |
+| [`024.154`](#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | open | 0.2.16 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
+| [`024.155`](#024155-a-register-heading-the-entry-grammar-does-not-match-is-skipped-rather-than-failed-so-an-entry-can-exist-and-be-checked-by-nothing) | open | 0.2.16 | A register heading the entry grammar does not match is skipped rathe… |
+| [`024.156`](#024156-the-evidence-extractor-recognises-only-rb-sh-js-and-test-so-typescript-tests-and-ci-job-names-the-sole-evidence-for-eight-gates-are-never-checked) | open | 0.2.16 | The evidence extractor recognises only .rb/.sh/.js and test:, so Typ… |
+| [`024.157`](#024157-a-git-subprocess-in-a-throwaway-repository-obeys-the-inherited-git-dir-so-the-suite-commits-to-the-real-repository) | open | 0.2.16 | A git subprocess in a throwaway repository obeys the inherited GIT_D… |
 | [`024.158`](#024158-the-executed-pat-mode-example-passes-on-a-release-sh-that-only-warns-because-its-exit-status-comes-from-a-later-check-misreporting-a-non-repository-as-dirty) | open | 0.2.16 | The executed PAT-mode example passes on a release.sh that only warns… |
 | [`024.159`](#024159-the-measured-claim-marker-and-the-number-a-reader-sees-are-separate-strings-so-the-prose-can-say-anything-while-the-marker-verifies) | open | 0.2.16 | The measured-claim marker and the number a reader sees are separate … |
 | [`024.160`](#024160-counts-in-046-that-describe-this-tree-carry-no-basis-are-not-marked-and-several-are-stale-at-head) | open | 0.2.16 | Counts in 046 that describe this tree carry no basis, are not marked… |
@@ -401,6 +401,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.230`](#024230-a-top-level-def-is-indexed-with-no-owner-so-nothing-can-look-it-up) | open | 0.2.16 | A top-level `def` is indexed with no owner, so nothing can look it up |
 | [`024.231`](#024231-a-permission-written-down-once-was-still-missed-and-the-script-that-hid-it-said-the-opposite) | fixed | 0.2.15 | A permission written down once was still missed, and the script that… |
 | [`024.232`](#024232-the-fixture-proving-a-check-has-teeth-lost-its-own-teeth-when-a-version-shipped) | fixed | 0.2.15 | The fixture proving a check has teeth lost its own teeth when a vers… |
+| [`024.233`](#024233-the-guard-against-naming-a-shipped-release-could-not-fire-until-the-release-had-shipped) | fixed | 0.2.16 | The guard against naming a shipped release could not fire until the … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -8459,7 +8460,7 @@ covered by it; the same reasoning applies and the same fix shape would —
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.15
+target: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/runtime_agent/agent.rb` (`optionalParts`)
@@ -8530,7 +8531,7 @@ user-visible-note: >
   A coverage gap, not a reproduced defect: the code path was read and
   judged correct when this was written, and nothing has exercised the
   combination since.
-target: 0.2.15
+target: 0.2.16
 ```
 
 **Area:** `core/spec/ovallsp/server_rails_invalidation_spec.rb`
@@ -9549,7 +9550,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.15
+target: 0.2.16
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md (lines 526-671, 1042-1380)
@@ -9570,7 +9571,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.15
+target: 0.2.16
 ```
 
 **Area:** `scripts/deferred_findings.rb` (`ENTRY_HEADING`, `METADATA_BLOCK`, `#headings`, `#entries`), `core/spec/meta/deferred_findings_spec.rb` ("parses every entry", "indexes every entry"), `scripts/reindex_findings.rb` (`#number_of`)
@@ -9591,7 +9592,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.15
+target: 0.2.16
 ```
 
 **Area:** core/spec/meta/release_gate_spec.rb (`RELEASE_GATE_EXECUTABLE`, line 38; the dead `.test.ts` branch, line 116), docs/RELEASE_CHECKLIST.md
@@ -9612,7 +9613,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.15
+target: 0.2.16
 ```
 
 **Area:** `scripts/repo_files.rb`, `core/spec/meta/untracked_visibility_spec.rb`, `core/spec/meta/doc_links_spec.rb`, `core/spec/meta/release_script_guard_spec.rb`, `scripts/check_home_paths.rb`, `scripts/preflight.rb` (the `--install` hook)
@@ -11901,6 +11902,64 @@ guarding.
 
 *Found by preflight during 0.2.15's release, between the changelog going
 in and the tag being cut.*
+
+## 024.233 The guard against naming a shipped release could not fire until the release had shipped
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it cost is that 0.2.15 shipped with six
+  entries still naming it as their target -- the exact state `024.124`
+  exists to prevent, on the fourth occurrence, with the guard green the
+  whole way.
+target: 0.2.16
+released-in: 0.2.16
+```
+
+**Area:** `scripts/deferred_findings.rb`
+(`#open_entries_targeting_a_shipped_release`),
+`core/spec/meta/deferred_findings_spec.rb`
+
+0.2.15 was tagged, merged, published and recorded with **six open entries
+still carrying `target: 0.2.15`** — `024.136`, `024.138`, `024.154`,
+`024.155`, `024.156`, `024.157`. Preflight was 8/8 green before the tag,
+before the merge and before the publish. The check went red on the very
+next run.
+
+**Because the fact it keys on is written after the release it should
+protect.** `#open_entries_targeting_a_shipped_release` decided "shipped"
+from `docs/RELEASE_ARTIFACTS.md`, whose row carries the SHA-256 of the
+published VSIX and therefore cannot exist until the VSIX is published.
+The guard was structurally incapable of firing in time; it reported the
+mistake once the mistake had shipped.
+
+Measured, by reconstructing the state at the moment the tag was cut —
+one entry planted back at `0.2.15`, and the 0.2.15 artifact row removed:
+
+    artifacts only (the guard as it was):   []
+    artifacts + changelog (the guard now):  ["024.136 (0.2.15)"]
+
+**Fixed by adding a source that becomes true earlier.** A changelog
+section is written before the tag — it was written before the preflight
+run that passed — so reading `vscode/CHANGELOG.md` as well lets the same
+rule fire while there is still something to do about it.
+`RELEASE_ARTIFACTS.md` stays in the union as a backstop rather than
+being replaced: it is the stronger evidence, just the later one.
+
+**This is `024.124`'s fourth occurrence**, and the first three each
+produced a guard. The guard was right about what to check and wrong
+about when it could know — which is a different defect from the one it
+was built for, and is why a fourth hand-correction would not have
+helped.
+
+*What did not fail: `docs/RELEASE_CHECKLIST.md` names a pre-release step
+for exactly this, "run the reproductions of the entries targeting this
+release", and `scripts/deferred_findings.rb --targeting <version>` exists
+to do it. Neither is wired into `preflight`, and preflight is what
+actually gets run. A step that lives only in a checklist competes with
+the gate that runs itself, and loses.*
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

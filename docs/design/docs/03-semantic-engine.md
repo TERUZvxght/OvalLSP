@@ -232,16 +232,21 @@ map return: Array[String]
 ```ruby
 MethodSummary = Data.define(
   :symbol_id,
-  :parameter_types,
   :return_type,
-  :effects,
   :dependencies,
   :confidence,
-  :generation
+  :generation,
+  :status
 )
 ```
 
 body解析の結果をキャッシュする。依存symbolのsummary変更時だけ再計算する。
+
+`parameter_types`と`effects`は0.2.16で削除した。どちらもTask 010が「後の
+タスクがshapeを変えずに済むように」という理由で置いたが、置かれて以降ずっと
+`{}`と`[]`が書き込まれるだけで、読み手は一度も現れなかった。AGENTS.mdの
+「投機的な実装は決してしない(YAGNI)」に反していたのはフィールドではなく
+その理由付けの方で、`Data.define`のshapeは必要になった時点で足せる。`048`。
 
 ### 5.6 fixed pointとwidening
 
