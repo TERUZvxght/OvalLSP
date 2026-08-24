@@ -6,6 +6,47 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.14 — the record, and the checks that keep it true
+
+**Nothing in this release changes what the extension answers.** Every
+line it touches in the engine is a comment, and the VS Code extension is
+untouched. It is here because the project's own record had drifted from
+the product, and because several of the checks meant to notice that
+could not fail.
+
+- **A limitation this product does not have was published to users, in
+  both languages.** A finding was split into nine entries and seven of
+  them were verified; two were not, and one of those described a defect
+  the engine had not had for several releases. It is withdrawn, and the
+  paragraph is gone.
+- **Three checks could not fail in the case they existed for.** The one
+  that asked "did the suite actually run" counted examples, and a fully
+  skipped file still reports examples. The one that hunts a text pattern
+  had matched its own prose and exempted its own file. The one that
+  scans the tree read only committed files, while the commit gate runs
+  before the commit.
+- **A scripted edit doubled a register entry and every check stayed
+  green.** Duplicate headings now fail.
+- **`PUBLISHING.md` documented the publish command that shipped a
+  corrupt VSIX** as v0.1.2, and kept it for twenty-five releases.
+- **A corpus run did not record what it had run**, so two measurements
+  taken against different trees could look comparable. It now prints its
+  own working directory, revision and corpus digest before it starts.
+- Smaller: a script that crashed under a locale-less shell on the very
+  input it exists to report; a leak check that counted every descriptor
+  in the process and flaked under load; a review harness that reported
+  "nothing found" when its own post-processing had crashed; and the
+  example count in three documents, which had been three hand edits per
+  commit and is now derived.
+
+### Details
+
+The full account is in `docs/design/tasks/046-0.2.14-making-the-record-true.md`,
+including the audit that started it, the hypothesis that turned out half
+wrong, and three review rounds whose findings are recorded rather than
+resolved — this project ships with open findings written down rather
+than letting a release recede.
+
 ## 0.2.13 — what a class's own body says, and failures that stop being silent
 
 - **A class that runs a macro this extension cannot read no longer
