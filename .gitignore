@@ -46,3 +46,6 @@ core/spec/fixtures/rails_real/tmp/
 
 # CI's rspec JSON output (used to detect skipped real-Rails examples)
 core/tmp/
+
+# Raw audit output kept out of the tree: 048 carries the conclusions.
+.audit-048-wip/
