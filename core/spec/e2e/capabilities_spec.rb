@@ -504,6 +504,37 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # `024.85`. Both halves in one example, because "not empty" is not
+    # the claim: the instance side must offer the instance method and not
+    # the class method, and the class side the other way round. A single
+    # `include` would pass against an engine that answered the wrong
+    # surface, which is the failure mode `class << self` has produced
+    # here twice.
+    it "C14: offers the enclosing self's own members after `self.`" do
+      with_file("app/models/self_probe.rb", <<~RUBY) do |uri|
+        class SelfProbe
+          def self.built_here; end
+          def labelled_here; end
+
+          def run
+            self.
+          end
+
+          def self.run_class_side
+            self.
+          end
+        end
+      RUBY
+        instance_side = @client.completion_labels(uri, 5, 9)
+        class_side = @client.completion_labels(uri, 9, 9)
+
+        expect(instance_side).to include("labelled_here")
+        expect(instance_side).not_to include("built_here")
+        expect(class_side).to include("built_here")
+        expect(class_side).not_to include("labelled_here")
+      end
+    end
+
     it "C13: resolves a completion item to the RDoc comment above its declaration" do
       with_file("app/models/documented_probe.rb", <<~RUBY) do |uri|
         class DocumentedProbe

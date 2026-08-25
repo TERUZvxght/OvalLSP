@@ -55,6 +55,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Completion: stdlib methods (RBS) | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion: workspace class instance methods | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion: workspace class singleton methods | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Completion after `self.` | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion: model columns and associations | ✅ | — (no Runtime Agent) | — |
 | Completion: Active Record instance API | ✅ | — (no Runtime Agent) | — |
 | Completion: Active Record class API | ✅ | — (no Runtime Agent) | — |
@@ -79,7 +80,6 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Documentation (RDoc/YARD) in hover and completion [^doc] | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Completion: Active Record `Relation` API (`where`, `order`, `limit`) | 0.3.0 | — (no Runtime Agent) | — |
-| Completion after `self.` | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Inlay hints (inferred types, parameter names) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Code actions / quick fixes for each diagnostic | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
 | Go to type definition | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |

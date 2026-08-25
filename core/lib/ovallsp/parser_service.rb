@@ -1975,7 +1975,23 @@ module Ovallsp
             # and the shape does not reproduce in either direction.
             position = Index::SourceLocation.to_position(node.receiver.location.end_line,
                                                            node.receiver.location.end_column, @lines)
-            [{ position: position }, false] # arbitrary expression receiver -- always an instance call
+            # `written_self:` is recorded here because here is where it is
+            # known. Since `024.85` gave `self` a type, the undefined-method
+            # check can reach one -- and a type read off the enclosing class
+            # body is an **upper bound**, not the receiver's class. Inside
+            # `class Numeric`, `self` is whichever subclass instance received
+            # the call, so `Numeric` declaring no `*` says nothing about it:
+            #
+            #   $ ruby -e '
+            #   p [Numeric.method_defined?(:*), Integer.method_defined?(:*)]
+            #   '
+            #   # => [false, true]
+            #   # ruby 3.4.10
+            #
+            # The alternative was for the check to look the node up again from
+            # the position, which is re-deriving downstream what was in hand
+            # upstream -- the shape `049` counts eleven of.
+            [{ position: position, written_self: node.receiver.is_a?(Prism::SelfNode) }, false]
           end
 
         @reference_candidates << Index::ReferenceCandidate.new(

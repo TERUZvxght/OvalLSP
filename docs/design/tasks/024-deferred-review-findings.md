@@ -254,7 +254,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.82`](#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | fixed | 0.2.15 | `Foo = Class.new(Bar)` is not a type the index knows |
 | [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.2.16 | The undefined-method check is loudest exactly where no Runtime Agent… |
 | [`024.84`](#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | open | 0.2.16 | A constant is typed as a class object whatever it holds |
-| [`024.85`](#02485-self-completes-nothing) | open | 0.2.16 | `self.` completes nothing |
+| [`024.85`](#02485-self-completes-nothing) | fixed | 0.2.16 | `self.` completes nothing |
 | [`024.86`](#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | open | 0.2.16 | An ivar assigned in another method has no type, except in the view |
 | [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.3.0 | A relation stops being a relation after one hop |
 | [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.2.16 | Completion unions a union's members; the diagnostic intersects them |
@@ -678,6 +678,14 @@ with its control — this entry previously had none that fired. And
 each declaration was parsed from, so "is this class declared by the
 project's own sig/" is answerable exactly rather than by guessing at
 names. Whoever builds `024.R7` will want that.
+
+**And the target moves with it, to 0.3.0.** The yaml said `0.2.16`
+while the paragraph above said the fix is `024.R7`, which is a 0.3.0
+item — a schedule no check can see, because the shipped-release guard
+only fires once a release is tagged. `024.85` found it by resting an
+argument on it: that entry ships 39 new reports of exactly this shape
+and had written "when `024.13` is fixed the 39 go with it" on the
+strength of a `target:` this entry's own body had already invalidated.
 
 ## 024.14 Workspace-wide diagnostics do not fire against the real Rails fixture
 
@@ -3661,6 +3669,11 @@ what caught it here was a measurement, not a reviewer's reading. Giving
 measure it properly, with `ClassOf` handled for singleton bodies and
 `.class` resolving to the class object rather than to `Class`.
 
+**That release is 0.2.16**, and both conditions in the sentence above are
+what it did. `024.85` carries the work and the measurement; this entry
+stays as the record of the attempt that was reverted, and of the fact
+that the sentence naming what was missing turned out to name all of it.
+
 
 ## 024.47 A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal
 
@@ -6242,10 +6255,14 @@ should follow the assigned value where the workspace can see it, and
 ## 024.85 `self.` completes nothing
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
+user-visible-note: >
+  Fixed in 0.2.16. `self.` offers the members of whatever `self` is at
+  that point, and a typo behind it is reported.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/semantic/prefix_completion.rb`,
@@ -6260,6 +6277,334 @@ of 0.2.6.
 
 `self.` is mandatory for a setter and ubiquitous in `self.class` /
 `self.name`, so the empty list is on a path everyone walks.
+
+### Fixed in 0.2.16, and what `024.46` had got wrong
+
+`024.46` is the 0.2.1 attempt: a `SelfNode` case reading the enclosing
+class, reverted after it cost 55 new false diagnostics over Ruby's
+standard library and removed none. Its own closing sentence names the
+condition for trying again — "with `ClassOf` handled for singleton
+bodies and `.class` resolving to the class object rather than to
+`Class`" — and all three families it recorded turn out to be *the value
+being wrong*, not the case existing:
+
+- **`self.class.foo` reported on `Class`.** `#class` went through RBS,
+  which answers `Class` — true, and useless. `Types.class_of` answers the
+  receiver's class *object* now, and a `ClassOf` receiver is not
+  something `Engine#reportable_branches` asserts about.
+- **`def Const.method` bodies typed `self` as an instance**, because the
+  push looked for a literal `self` receiver and nothing else.
+  `#def_self_type` reads the constant.
+- **`class << self` bodies did the same one `def` down.**
+  `@in_singleton_class` decides it, because after this change a class
+  body and a `class << self` body both hold a class object and the type
+  alone cannot tell them apart.
+
+**The root cause is one conflation.** `@self_type_stack` was documented
+as "self", and held *an instance of the enclosing class* — right for an
+instance method body, which is the reader it was written for, and wrong
+for the class body it was pushed in. `#locate_in_def` compensated by
+wrapping in `ClassOf` for the one shape it recognised. So the stack now
+holds `self` at the point being visited, and `#locate_in_def` derives
+the instance type through `Types.class_object_lookup` instead. Every
+answer this entry is about falls out of that; the `SelfNode` case is one
+line.
+
+**The stack has four readers, not one**, and the class-body change is
+visible in three of them. `#eval_type`'s new `SelfNode` case is what the
+entry is about. `#eval_call`'s receiverless branch resolves a bare call
+written in a class body as the singleton call Ruby makes it, instead of
+looking it up on an instance. And `#capture_scope` is what `scope_at`
+hands `Semantic::PrefixCompletion`, so receiverless completion in a
+class body offers the singleton surface — a change no corpus can see,
+because a corpus measures diagnostics and not completion, and one the
+suite could not see either: both existing `self_type` examples are `def`
+bodies. `local_inferencer_spec.rb` has a class-body one now.
+
+Ruby was asked for each shape rather than reasoned about, and the
+sessions are in the spec — including the two a reader gets wrong: a
+`def` nested inside `class << self` is still a singleton method (its
+`self` is the class), and a `def` nested inside `def self.x` is an
+ordinary instance method (its `self` is an instance).
+
+One thing fell out that nothing had asked about: `def self.x` and
+`class << self` written at the *top level* of a file used to push
+`ClassOf[nil]` — a class object over nothing, which no reader has a case
+for and which `#to_s` renders as `ClassOf[]`. They push nil now, which is
+what every reader already treats as "cannot say".
+
+**Two things it deliberately does not answer.** The top level of a file:
+`self` there is `main`, and a top-level `def` is a private method of
+`Object` that this engine does not attribute to `Object` at all, so
+offering `Object`'s members would be answering a question nobody asked.
+And `class << obj` on anything that is not `self` — the parser's `Cref`
+makes the same approximation on the declaration side, and this is the
+place to record that neither models a singleton class of an object it
+cannot name.
+
+**`Types.class_of` is shared, not duplicated.** `MethodAnalyzer` is the
+second evaluator and reads the same function, for the reason
+`Types::LiteralTypes` exists: a rule either evaluator owns is a rule the
+other drifts from, and the symptom both times was an expression typing
+correctly on its own line and losing its type as a method's return.
+`Types.class_object` is the wrap that goes with `class_object_lookup`'s
+unwrap; `core/lib` held five `Generic.new(name: "ClassOf", …)` of its
+own (three in `LocalInferencer`, one in `MethodAnalyzer`, one in
+`Observation::TypeNormalizer`) and now holds exactly one, inside
+`class_object` itself.
+
+**Where the new reports can and cannot appear.** `self` in an instance
+method body is a `Nominal`, so the unknown-method check runs on it —
+that is the point, and `self.labell` beside a real `self.label` is
+reported. `self` in a class body, a `def self.x` body or a
+`class << self` body is a `ClassOf`, which `#reportable_branches`
+answers `[]` for, so the check declines there exactly as it already
+declines for a local holding a class object. The new population is
+therefore `self.foo` written in instance method bodies, which is the
+same receiver shape as `widget.foo` and has shipped for releases.
+
+Twelve decisions inside the new methods are in
+`core/spec/meta/pinned_mutations.yml`, because the hunk sweep cannot
+reach the inside of a method it can only delete whole. It was six until
+a review round listed the other six, which is the blind spot working
+exactly as `CLAUDE.md` describes it: "N of M hunks pinned" is a floor,
+and a method that arrives whole proves only that it exists.
+
+### The measurement
+
+Stated **before** either side ran, per `CLAUDE.md`: the control is
+`unresolved-constant`, which must come out identical, because nothing
+here touches the constant candidates the parser records or the two
+lookups that check reads.
+
+Ruby 3.4.10's own standard library, 976 files, one run at a time in the
+foreground, both sides given the identical corpus
+(`corpus-sha256` equal, file count equal, same working directory; the
+two sides differ by `dirty-tracked-files` 16 against 20, because the
+comparison is a dirty tree against itself with `core/lib` stashed rather
+than two revisions). The baseline run was given
+`--expect-control=unresolved-constant:7204` on the command line, so the
+control was asserted by the script rather than read afterwards.
+
+| side | `unresolved-constant` (control) | `unknown-method` |
+|---|---|---|
+| before | 7,204 | 231 |
+| after | **7,204 — as expected** | 270 |
+
+**Re-run after round 2, because the repair could have moved it.**
+Scoping `@in_singleton_class` to a nested class changes the answer for
+a class or module opened inside a `class << ...` body, and this corpus
+contains six of those, in four files (`irb/debug.rb`,
+`irb/easter-egg.rb`, `psych.rb`, `tempfile.rb`) — so "rare shape" was
+not an argument for leaving the table alone. The after side was
+measured again on the repaired tree, same corpus
+(`corpus-sha256=2decf77…`, 976 files, the value the first pair printed),
+control asserted on the command line again: **`unresolved-constant`
+7,204, `unknown-method` 270 — both identical.** What that shows is the
+totals, not the sets: the run's own stdout was lost to a concurrent
+process writing the same path, which is `026`'s list happening again
+and is why this paragraph says totals. The introduced-set analysis
+below is the original pair's, and its settling example was re-checked
+against the file and the interpreter — `openssl/hmac.rb:17`'s
+`base64digest` calls a bare `digest`, `:6`'s `==` calls `self.digest`
+twice, and `OpenSSL::HMAC.instance_method(:digest).source_location` is
+`nil`.
+
+*One line of `core/lib` changed after that run started and before this
+entry was written: `#enclosing_instance`'s nil guard, deleted because
+`Types.class_object_lookup` already hands a nil straight back. Checked
+rather than assumed, over every shape the stack can hold — nil, Unknown,
+nil-type, Nominal, `ClassOf[…]`, `Array[Unknown]` — the guarded and
+unguarded forms return the same object for all six.*
+
+**39 introduced, 0 removed**, and every one of the 39 is on five
+receivers: `Addrinfo`, `OpenSSL::HMAC`, `OpenSSL::SSL::SSLContext`,
+`OpenSSL::X509::Extension`, `Socket`.
+
+**All 39 are `024.13`, not this change.** Each is a `self.<method>` where
+the method is C-defined and the class is reopened in a `.rb` file, which
+is the exact shape `024.13` records: the reopening makes the chain look
+closed while the real method set lives somewhere this engine does not
+index. Asked of the interpreter rather than assumed — all eighteen
+distinct methods exist, and every one answers `nil` for
+`source_location`, which is what "defined in C" looks like from Ruby.
+
+The pair that settles it is ten lines apart in one file. In
+`openssl/hmac.rb`, `def base64digest` calls a bare `digest` and **the
+baseline already reports it**; `def ==` calls `self.digest` twice and the
+baseline is silent. Same method, same class, same file. The product was
+reporting one spelling of a call and not the other, and this change makes
+the two agree — it does not create the wrong side of the disagreement,
+which shipped already. The same corpus's baseline carries 57 reports
+naming those five receivers before the change.
+
+**They ship, and no release is scheduled to remove them.** The first
+version of this paragraph said the 39 go when `024.13` is fixed,
+"which is open, user-visible, and already carries `target: 0.2.16`".
+That was read off the register and not off the tree, which is the
+promotion rule's own failure mode. The commit this change set is built
+on is *`024.13`'s fix declined*: it was attempted in 0.2.16, removed 11
+false reports on a gem corpus and took four real typo reports with
+them, and was reverted. `024.13`'s own body now says the real fix is
+`024.R7`, a 0.3.0 roadmap item — so the yaml's `target: 0.2.16` was
+stale the moment that commit landed, and this change set corrects it to
+`0.3.0` rather than resting on it. **The 39 are visible to a user of
+0.2.16 and stay until 0.3.0.**
+
+**Argued on that, the trade still comes out this way, and here is the
+alternative it was weighed against.** `engine.rb` has a house pattern
+for exactly "receiver identified, assertion withheld" —
+`#shadowed_declared_type?` and `#rooted_receiver_answered_elsewhere?`,
+both declining inside `#receiver_type_for` with comments saying
+resolution keeps answering and only the assertion is withheld, citing
+`024.47` for why the rule belongs there rather than in resolution. A
+third such guard, on a `self` receiver, would take the 39 out. It would
+also take out the one report this entry exists to add: `self.labell`
+beside a real `self.label` is the same `self` receiver, so the guard
+cannot tell the capability from its cost. That is `024.13`'s own
+attempt in miniature — a fix that buys false positives by spending true
+ones — and this release already reverted one of those.
+
+Two facts the size of the number should be read against. `024.46` was
+reverted at 55 of these and this is 39, which is the same order; what
+differs is that `024.46`'s were three distinct families of *wrong
+value*, all three now gone, while these are one family with one cause
+that is somebody else's entry. And the baseline already carries 57
+reports naming those same five receivers, so the release is not opening
+a category — it is making one spelling of a call agree with another,
+ten lines apart in `openssl/hmac.rb`.
+
+The direction `024.46` was reverted for is repaired: its first two
+families are gone (a `ClassOf` receiver is not asserted about, and
+`#class` answers a class object), and its third turns out never to have
+been about `self`.
+
+### Round 2: what an independent read found, and what changed
+
+Method `diff`, on the change set above. Five defects and two notes; the
+dispositions, because a round that repairs the last one is the loop
+working and the next reader needs to know which is which.
+
+- **The justification for shipping the 39 rested on a stale
+  `target:`** — the largest of the five, and it is answered in "They
+  ship, and no release is scheduled to remove them" above, together
+  with the alternative `engine.rb`'s existing decline guards offer.
+  `024.13`'s own `target:` moved to 0.3.0 in the same change.
+- **`@in_singleton_class` outlived a nested class.** `#locate_in_namespace`
+  restored `@lexical_nesting` and not the flag, so `class W; class << self;
+  class Inner; def a` answered `ClassOf[Inner]` where Ruby has an `Inner`.
+  Before this change set the flag's only reader made a stale `true`
+  *decline*; `#def_self_type` made it assert. Scoped, and pinned by an
+  example that fails with `ClassOf[Inner]` without it.
+- **"Its only reader was `#locate_in_def`" was wrong** — the stack has
+  four readers, and two more of them see the class-body change:
+  `#eval_call`'s receiverless branch (a bare call in a class body
+  resolves as the singleton call it is) and `#capture_scope`, which is
+  what `scope_at` hands prefix completion. The second was pinned by
+  nothing: both existing `self_type` examples are `def` bodies. There is
+  a class-body one now, and the comment says four.
+- **Six decisions inside the new methods were unpinned**, in the
+  wholly-new-method blind spot the manifest exists for: `#def_self_type`'s
+  absent `else`, `#enclosing_class_object`'s missing-enclosure decline,
+  and four inside `Types.class_of`/`class_call?`. Each now has an example
+  whose two candidate answers differ, and a manifest entry that inverts
+  it. Six entries became twelve.
+- **The manifest's own text was HTML-escaped.** `class &lt;&lt; self`
+  where the example says `class << self`; `rspec -e` is a substring
+  match, so it selected nothing and `spec/meta` could not have been
+  green. Unescaped. Worth recording as its own class of mistake: the
+  escaping was invisible in a rendered diff.
+- **`MethodAnalyzer#eval_call` walked the receiver twice** whenever
+  `Types.class_of` declined. The walk is carried into the ordinary
+  branch now; the dispatch is unchanged.
+- **One line was deleted rather than pinned.**
+  `#enclosing_instance`'s nil guard could not change an answer:
+  `class_object_lookup` hands a nil straight back, so the guard was
+  unpinned *and* unpinnable. The rule says pin it or delete it, and
+  deleting is what an unobservable line earns.
+- **One note did not reproduce.** It said every `self.class.X` /
+  `x.class.X` typo becomes unreportable because `s.class` used to be
+  `Nominal("Class")` and is now a `ClassOf`. Driven against this tree
+  with `core/lib` stashed and again with it applied, both sides answer
+  the same: `w.class.bogus_thing`, `self.class.bogus_thing` and
+  `s.class.bogus_thing` are reported by neither, because nothing is
+  reported on a core-library receiver at all — which is `024.129`. The
+  control, `W.bogus_thing`, is reported on both sides. So the change
+  does not buy that false negative; it was already there.
+- **`Types.class_call?`'s block guard was described wrongly.** The
+  comment said `x.class { }` is "somebody's own method"; Ruby ignores
+  the block and answers `String`. The guard is kept — declining gives up
+  an answer rather than inventing one — but the comment now says what
+  Ruby does, with the session.
+
+Two more the round did not raise and the trigger-table walk did. The
+three documents that state the suite's size were stale: this change set
+adds 31 examples and none of them had been re-derived, which
+`scripts/documented_counts.rb` fixes and `preflight` would have refused
+the commit over. And `045`, the 0.3.0 scope file, named `024.85` as
+0.3.0's first capability task and counted the public roadmap's 0.3.0
+section as nine items; it is eight now, and the file carries a dated
+amendment saying so rather than being rewritten.
+
+### What shipping this cost, measured, and what it did not
+
+Two review rounds. The second drove a corpus and found the shape that
+decides the whole entry.
+
+**Typing `self` also let the undefined-method check assert about it, and
+that assertion is wrong.** A type read off the enclosing class body is an
+**upper bound**: every instance reaching the body may be a subclass that
+supplies the method. Measured over activesupport-8.1.3.1/lib, 289 files,
+`corpus-sha256` identical on both sides and `unresolved-constant` held at
+827 as the control:
+
+    unknown-method  21 -> 30      9 introduced, 0 removed
+
+and all nine are ``Numeric has no method named `*` `` on that gem's own
+`self * KILOBYTE`. Taken from Ruby:
+
+    $ ruby -e '
+    p [Numeric.method_defined?(:*), Integer.method_defined?(:*)]
+    '
+    # => [false, true]
+    # ruby 3.4.10
+
+`*` lives on Integer and Float. Every instance that reaches
+`Numeric#kilobytes` has it; a bare `Numeric` never exists.
+
+**So the check declines on a written `self`**, recorded by the parser at
+the call site because that is where the node is — looking it up again
+downstream is the shape `049` counts eleven of. Re-measured after: the
+same corpus, both directions of the diff **empty**. The entry's change
+moves no diagnostic at all, and what it delivers is the completion and
+hover it was filed for.
+
+**What that costs, stated plainly.** `self.labell` is a typo and is not
+reported. It was not reported before this entry either — `self` had no
+type — so nothing regresses, but the round-one version of this change
+did report it and two of its examples asserted so. Section 0 settles the
+trade in favour of the missed report. The direction that would get both
+is to ask the receiver's *subclasses* rather than its class, which is a
+new query and not a thing to add inside a review round.
+
+**And one wrong answer was removed rather than shipped.** `Types.class_of`
+answered `ClassOf[Class]` for any class object, which is right for a class
+and wrong for a module:
+
+    $ ruby -e '
+    module M; end
+    class C; end
+    p [M.class, C.class, Comparable.class]
+    '
+    # => [Module, Class, Module]
+    # ruby 3.4.10
+
+`Types` holds no index and cannot tell which it has, so that branch
+declines. The session pasted with the original branch showed only
+`class W; end; p W.class`, so the module case was never asked of the
+interpreter — which is the expected-value rule failing in the narrow way
+`CLAUDE.md` describes: the claim was checked, but not against the case
+that breaks it.
 
 ## 024.86 An ivar assigned in another method has no type, except in the view
 

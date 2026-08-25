@@ -153,9 +153,13 @@ out, recorded as 024.13. `lib/core_ext/array.rb` is idiomatic in Rails,
 and reopening `Array` makes its whole ancestry look accounted for —
 `Array, Object, Kernel, BasicObject`, every one of them known — so the
 unknown-method check treats the receiver as closed even though gems keep
-adding to it. A connected Runtime Agent settles it by reporting the real
-ancestry; without one — an untrusted workspace, a plain Ruby project —
-there is nothing to ask. <!-- documents: 024.13 -->
+adding to it. **0.2.16 widened where this shows.** `self` has a type
+now, so a call written `self.digest` inside such a class is reported
+exactly as a bare `digest` in the same file already was — the same
+defect, reaching a spelling that used to be invisible because nothing
+knew what `self` was. A connected Runtime Agent settles it by reporting
+the real ancestry; without one — an untrusted workspace, a plain Ruby
+project — there is nothing to ask. <!-- documents: 024.13 -->
 
 What this reaches is narrower than it sounds, and worth stating exactly,
 because the call a user would try first is the one case that does *not*
@@ -628,13 +632,6 @@ away. <!-- documents: 024.83 -->
 float, an array or a frozen hash. Completion after a constant offers
 nothing, and nothing assigned from one carries a usable
 type. <!-- documents: 024.84 -->
-
-## What `self.` completes to
-
-**Nothing.** Completion after `self.` returns an empty list everywhere —
-instance methods, class methods, plain Ruby, Rails. Typing the same
-prefix without `self.` works. `self.nope` is also not reported as
-undefined, while a bare `nope` on the line above is. <!-- documents: 024.85 -->
 
 ## An instance variable set in another method
 

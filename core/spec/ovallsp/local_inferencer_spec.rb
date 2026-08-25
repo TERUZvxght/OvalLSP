@@ -1804,6 +1804,22 @@ RSpec.describe Ovallsp::LocalInferencer do
       expect(scope.self_type.to_s).to eq("ClassOf[UsersController]")
     end
 
+    # The third context, and the one `024.85` changed. `self` in a class
+    # body is the class object -- `class W; p self` prints `W` -- so a
+    # receiverless call written there is a singleton call and receiverless
+    # completion there offers the singleton surface. `scope_at` is what
+    # `Semantic::PrefixCompletion` reads for that, and the two examples
+    # above are both `def` bodies, so nothing was asking this one.
+    it "reports the class object as the self type in a class body" do
+      scope = scope_for(<<~RUBY)
+        class UsersController
+          HERE
+        end
+      RUBY
+
+      expect(scope.self_type.to_s).to eq("ClassOf[UsersController]")
+    end
+
     it "reports a block parameter bound by the enclosing block" do
       scope = scope_for(<<~RUBY)
         users = [User.new]

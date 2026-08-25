@@ -78,6 +78,118 @@ module Ovallsp
 
     def self.class_object?(type) = type.is_a?(Generic) && type.name == "ClassOf"
 
+    # The other direction: the class object *of* a type.
+    # `class_object_lookup` above is the one place that knows how to take
+    # a `ClassOf` apart, and this is the one place that knows how to build
+    # one -- the wrap was written out by hand at five sites, and `024.85`
+    # adds readers that have to agree with `#locate_in_def`'s about a
+    # value they hand to each other.
+    #
+    # Deliberately *not* idempotent, because the operation is not:
+    # `W.class` is `Class`, not `W`. A caller that means "the class object
+    # this frame already denotes" asks `class_object?` first -- see
+    # `LocalInferencer#enclosing_class_object`.
+    def self.class_object(type) = Generic.new(name: "ClassOf", type_arg: type)
+
+    # `#class` is the one call whose result this engine already has an
+    # exact type for -- `ClassOf[T]` is what a class object *is* here.
+    # Left to RBS it resolves to `Class`, which is true and useless: every
+    # workspace class method reached through `record.class` was then
+    # reported unknown, and completion after `x.class.` offered `Class`'s
+    # members rather than the class's own. `024.46`'s first family, and
+    # the one that made typing `self` unshippable in 0.2.1 --
+    # `unless self.class.correct?(v)` is everyday Ruby.
+    #
+    # Taken from Ruby, not reasoned about:
+    #
+    #   $ ruby -e 'p nil.class; p 1.class; class W; end; p W.class'
+    #   # => NilClass
+    #   # => Integer
+    #   # => Class
+    #   # ruby 3.4.10
+    #
+    # so a class object's own `#class` is `Class` -- the operation is not
+    # idempotent, which is why `class_object` above is not either.
+    #
+    # **Here rather than in either evaluator**, because both have to
+    # answer it and a rule either one owns is a rule the other drifts
+    # from -- the shape `LiteralTypes` already took after a literal added
+    # to one table alone made a method *ending* in one return Unknown to
+    # every caller while the same expression assigned to a local typed
+    # correctly (twice).
+    #
+    # nil declines, wherever the receiver is not a class this engine can
+    # name: an Unknown receiver, and the generics that stand for a shape
+    # rather than a class (`INTERNAL_GENERIC_NAMES`, which `base_nominal`
+    # already refuses). A Union declines whole rather than in part, so a
+    # branch that cannot be named is not silently dropped from *this*
+    # answer -- `LocalInferencer#resolve_call`'s own union fallback may
+    # then still answer from the branches that can, which is the rule it
+    # already applies to every other call and not something added here.
+    def self.class_of(receiver_type)
+      case receiver_type
+      when Nominal then class_object(receiver_type)
+      when Generic
+        if class_object?(receiver_type)
+          # **Declines**, and the reason is that this cannot tell a class
+          # from a module while Ruby's answer differs:
+          #
+          #   $ ruby -e '
+          #   module M; end
+          #   class C; end
+          #   p [M.class, C.class, Comparable.class]
+          #   '
+          #   # => [Module, Class, Module]
+          #   # ruby 3.4.10
+          #
+          # The first version of this branch answered `Class` for every
+          # class object, which is right for `C` and wrong for `M` and
+          # for every module a project writes. `Types` holds no index and
+          # so cannot ask which it has, and section 0 ranks a wrong answer
+          # below no answer -- so the branch that cannot tell says
+          # nothing. Nothing regresses: before `024.85` this whole
+          # question had no answer at all.
+          #
+          # The pasted session above is why. The one this replaced showed
+          # only `class W; end; p W.class`, so the module case was never
+          # checked against the interpreter and the branch read as
+          # correct.
+          nil
+        else
+          base = base_nominal(receiver_type)
+          base && class_object(base)
+        end
+      when NilType then class_object(Nominal.new(name: "NilClass"))
+      when Union
+        members = receiver_type.members.map { |member| class_of(member) }
+        normalize_union(members) if members.none?(&:nil?)
+      end
+    end
+
+    # The call shape `class_of` answers about: `x.class`, written with a
+    # receiver and nothing else. Both extra guards decline, and Ruby says
+    # they are not the same case:
+    #
+    #   $ ruby -e '
+    #   s = "x"
+    #   p(s.class { })
+    #   begin; p s.class(1); rescue ArgumentError => e; p e.class; end
+    #   '
+    #   # => String
+    #   # => ArgumentError
+    #   # ruby 3.4.10
+    #
+    # An argument means this is not `Object#class`, which takes none, so
+    # the call is somebody's own method or a mistake and this table does
+    # not know its return type. A block is merely *ignored* by
+    # `Object#class`, so declining there gives up an answer Ruby would
+    # have -- a missing answer rather than a wrong one, which is the
+    # direction section 0 asks for, and it keeps this predicate the plain
+    # shape it claims to be rather than a partial model of Ruby's
+    # argument rules.
+    def self.class_call?(node)
+      node.receiver && node.name == :class && node.arguments.nil? && node.block.nil?
+    end
 
     # A normalized set of >= 2 distinct member types. Never nests another
     # Union — use Types.normalize_union to build one safely.

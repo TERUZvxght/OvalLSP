@@ -39,7 +39,7 @@ module Ovallsp
         name = as_nominal_name(mod.name)
         return Types::UNKNOWN if name == Types::UNKNOWN
 
-        Types::Generic.new(name: "ClassOf", type_arg: name)
+        Types.class_object(name)
       end
 
       # `#name` is one of the handful of methods this module calls

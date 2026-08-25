@@ -194,7 +194,7 @@ module Ovallsp
       # Nominal from the `Widget` a constant receiver produces (0.1.12).
       def self_type_for(symbol_id)
         owner = Types::Nominal.new(name: ReceiverResolution.canonical_receiver_name(symbol_id.owner))
-        symbol_id.kind == :singleton_method ? Types::Generic.new(name: "ClassOf", type_arg: owner) : owner
+        symbol_id.kind == :singleton_method ? Types.class_object(owner) : owner
       end
 
       # A summary that was never actually computed (recursion/timeout cut
@@ -311,6 +311,22 @@ module Ovallsp
       end
 
       def eval_call(node, ctx)
+        # The same table `LocalInferencer#resolve_call` reads, asked the
+        # same way. Without it a method whose body ends in `self.class`
+        # summarised as `Class` while hovering that very expression said
+        # `ClassOf[Widget]` -- one expression, two answers, which is the
+        # drift `LiteralTypes` exists to stop.
+        #
+        # The receiver is walked once and carried into the ordinary
+        # branch below, rather than walked again there: `class_of`
+        # declines on an Unknown receiver, so `p1.class` in a method whose
+        # parameter has no type is exactly the shape that would have paid
+        # for two full descents of the same subtree.
+        receiver_type = eval_node(node.receiver, ctx).type if Types.class_call?(node)
+        if receiver_type && (answer = Types.class_of(receiver_type))
+          return literal(answer)
+        end
+
         if node.receiver.nil?
           eval_implicit_self_call(node, ctx)
         elsif node.receiver.is_a?(Prism::SelfNode)
@@ -318,8 +334,7 @@ module Ovallsp
         elsif constant_receiver?(node.receiver)
           eval_constant_receiver_call(node, ctx)
         else
-          receiver_type = eval_node(node.receiver, ctx).type
-          eval_resolved_call(receiver_type, node, ctx, implicit_self: false)
+          eval_resolved_call(receiver_type || eval_node(node.receiver, ctx).type, node, ctx, implicit_self: false)
         end
       end
 

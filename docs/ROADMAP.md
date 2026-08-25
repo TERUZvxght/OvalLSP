@@ -33,8 +33,6 @@ open, user-visible defect that has no release assigned to it.
   the type (`Relation[Article]`) and completion offers nothing, because
   nothing tells the engine what a Relation's own API is; the gem index
   above is what supplies it.
-- **`self.` completes.** The methods callable on the object you are
-  writing in. The same list a bare prefix already offers, after a dot.
 - **Inlay hints.** The inferred types and parameter names appear in the
   code itself, not only when you hover.
 - **Quick fixes for each diagnostic.** Define the missing method, correct

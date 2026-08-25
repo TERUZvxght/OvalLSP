@@ -126,6 +126,7 @@ suite in step: every row must have an example, every example a row.
 | C11 | Types `post.` or `@post.` inside an ERB template, where the template itself assigns `post` or a controller action assigns `@post` | the model's members, resolved from the template's Ruby regions rather than its HTML — the `@ivar` from the controller action that assigned it, as hover already did. **A partial's local** (`article` in `_article.html.erb`) is not resolved: its type comes from the `render` call site, which nothing reads (024.44) | PASS |
 | C12 | Types `Art` with no receiver in front of it | workspace classes, the locals in scope, and the methods callable at that position | PASS |
 | C13 | Highlights a completion candidate declared with an RDoc/YARD comment, *in the list a receiver produced* | the comment appears as the item's documentation | PASS |
+| C14 | Types `self.` inside a method body | the members of whatever `self` is *there* — the class's instance methods inside `def x`, its singleton methods inside `def self.x` and inside `class << self` | PASS |
 
 C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
 a bare constant inferred as `Unknown`, so nothing downstream ever saw a

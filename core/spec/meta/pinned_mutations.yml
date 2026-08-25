@@ -187,3 +187,106 @@
   to: "          parameters: []\n"
   spec: spec/ovallsp/diagnostics/define_method_arity_spec.rb
   example: "reports the block's own count when a call cannot fit it"
+
+# --- 024.85, `self` as a receiver ------------------------------------
+#
+# Every entry below inverts one decision inside code the hunk sweep cannot
+# reach: `#def_self_type`, `#enclosing_class_object` and `Types.class_of`
+# arrive as whole methods, so reverse-applying their hunk removes the call
+# site too and proves only that the method exists. `CLAUDE.md` names that
+# blind spot; these are the internal decisions pinned separately.
+
+- why: "024.85's singleton-class context -- reading the enclosing frame's type instead of the flag, which cannot tell a class body from a `class << self` body once both hold a class object."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "      when nil then @in_singleton_class ? enclosing_class_object : enclosing_instance\n"
+  to: "      when nil then enclosing_instance\n"
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "is the class object inside a `def` written in `class << self`"
+
+- why: "024.85's `class << obj` guard -- treating any singleton class as the enclosing class object, which names a class the code never reaches."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "node.expression.is_a?(Prism::SelfNode) ? enclosing_class_object : nil"
+  to: "enclosing_class_object"
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "declines inside a singleton class opened on something other than `self`"
+
+- why: "024.85's `def Const.x` receiver -- read off the constant rather than from the lexical enclosure, which a top-level `def Const.x` does not have."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "      when Prism::ConstantReadNode, Prism::ConstantPathNode then eval_constant(node.receiver)\n"
+  to: ""
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "is the named constant's class object inside a `def Const.x` body"
+
+- why: "024.85's class-body self -- pushing the instance type, which is what made `self.` in a class body offer the instance surface Ruby does not have there."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "        Types.class_object(\n          Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.constant_path.full_name))\n        )\n"
+  to: "        Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.constant_path.full_name))\n"
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "is the class object in a class body"
+
+- why: "024.85's refusal to answer `#class` on a class object -- `Types` cannot tell a class from a module, and Ruby answers `Class` for one and `Module` for the other."
+  file: core/lib/ovallsp/types.rb
+  from: "          nil\n        else"
+  to: "          class_object(Nominal.new(name: \"Class\"))\n        else"
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "declines for `#class` on a class object, where it cannot tell a class from a module"
+
+- why: "024.85's shared `#class` table -- the second evaluator falling back to RBS's `Class`, which is the drift `LiteralTypes` exists to stop."
+  file: core/lib/ovallsp/semantic/method_analyzer.rb
+  from: "        if receiver_type && (answer = Types.class_of(receiver_type))\n          return literal(answer)\n        end\n\n"
+  to: ""
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "summarises a method returning `self.class` as the class object"
+
+# Six more, from the same review round. Each is a decision the first six
+# left standing: reverting it left the whole suite green, which is a
+# defect in its own right whether or not the decision is right.
+
+- why: "024.85's `def obj.x` decline -- handing back the enclosing class for a receiver this engine cannot name, which is the assertion 024.46 measured 55 false reports of."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "      when Prism::ConstantReadNode, Prism::ConstantPathNode then eval_constant(node.receiver)\n      end\n"
+  to: "      when Prism::ConstantReadNode, Prism::ConstantPathNode then eval_constant(node.receiver)\n      else @self_type_stack.last\n      end\n"
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "declines inside a `def` written on a local variable"
+
+- why: "024.85's missing-enclosure decline -- a top-level `def self.x` wrapping nothing into `ClassOf[]`, a class object over no class."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "      return nil if enclosing.nil?\n\n"
+  to: ""
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "declines inside a `def self.x` at the top level of a file"
+
+- why: "024.85's `nil.class` -- the one receiver whose class object is not spelled by any Nominal in the type model."
+  file: core/lib/ovallsp/types.rb
+  from: "      when NilType then class_object(Nominal.new(name: \"NilClass\"))\n"
+  to: ""
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "answers `ClassOf[NilClass]` for `#class` on nil"
+
+- why: "024.85's union `#class` -- leaving a union to the caller's own per-branch fallback, which silently drops the nil branch instead of answering about it."
+  file: core/lib/ovallsp/types.rb
+  from: "      when Union\n        members = receiver_type.members.map { |member| class_of(member) }\n        normalize_union(members) if members.none?(&:nil?)\n"
+  to: ""
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "answers about every branch of a union, including the nil one"
+
+- why: "024.85's all-or-nothing union rule -- letting a branch `class_of` cannot name into `normalize_union`, which renders a raw nil as an empty member."
+  file: core/lib/ovallsp/types.rb
+  from: "        normalize_union(members) if members.none?(&:nil?)"
+  to: "        normalize_union(members)"
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "declines whole for a union with a branch it cannot name"
+
+- why: "024.85's container `#class` -- a Generic that is a real class answering nothing, so `[1].class` loses the type `base_nominal` already knows."
+  file: core/lib/ovallsp/types.rb
+  from: "          base = base_nominal(receiver_type)\n          base && class_object(base)\n"
+  to: "          nil\n"
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "answers a class object for `#class` on a container"
+
+- why: "024.85's `#class` call shape -- treating somebody's own `class(1)` or `class { }` as the built-in, which asserts a class object about a call this engine has not resolved."
+  file: core/lib/ovallsp/types.rb
+  from: "node.receiver && node.name == :class && node.arguments.nil? && node.block.nil?"
+  to: "node.receiver && node.name == :class"
+  spec: spec/ovallsp/self_receiver_spec.rb
+  example: "leaves a `class` call carrying arguments or a block to ordinary resolution"

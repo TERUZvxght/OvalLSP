@@ -765,11 +765,28 @@ module Ovallsp
       def receiver_type_for(document, candidate, context)
         resolved = Semantic::ReceiverResolution.receiver_type_for(context.workspace_index, document, candidate,
                                                                   context.local_inferencer)
+        # A written `self`. Its type comes from the enclosing class body, so
+        # it is an upper bound on the receiver rather than its class --
+        # every instance reaching the body may be a subclass that supplies
+        # the method. `024.85` made this reachable by giving `self` a type
+        # for completion and hover, which do not assert; measured over
+        # activesupport-8.1.3.1/lib with `unresolved-constant` held at 827,
+        # admitting it took `unknown-method` from 21 to 30, all nine new
+        # ones `Numeric has no method named `*`` on that gem's own
+        # `self * KILOBYTE`. Declining costs nothing that was ever
+        # reported: before `self` had a type, this said nothing here either.
+        return Types::UNKNOWN if written_self?(candidate)
         return Types::UNKNOWN if resolved.is_a?(Types::Nominal) && context.workspace_index.guessed_type_name?(resolved.name)
         return Types::UNKNOWN if resolved.is_a?(Types::Nominal) && shadowed_declared_type?(resolved.name, context)
         return Types::UNKNOWN if rooted_receiver_answered_elsewhere?(candidate, context)
 
         resolved
+      end
+
+      # Recorded by the parser at the call site rather than re-derived
+      # here, because the parser had the node.
+      def written_self?(candidate)
+        candidate.receiver.is_a?(Hash) && candidate.receiver[:written_self]
       end
 
       # `::JSON` is rooted, and Ruby gives a rooted name exactly one

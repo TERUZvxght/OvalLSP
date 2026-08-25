@@ -458,6 +458,19 @@ module Ovallsp
     end
 
     def locate_in_namespace(node, offset)
+      # Read before the guard, because `ensure` runs on the early return
+      # too and a value captured after it would restore nil -- which is
+      # `false` to every reader, and would clear the flag for the rest of
+      # an enclosing `class << self`.
+      #
+      # The *restore* below is **unpinned and known to be**, like the two
+      # lines this method already says that about: a descent visits one
+      # path down to the offset and nothing reads the flag on the way back
+      # out, so no fixture can distinguish restoring from not. It is the
+      # symmetry `#locate_in_singleton_class` already keeps, and the entry
+      # point resets the flag per query. Only the clearing is observable,
+      # and `self_receiver_spec.rb` pins that.
+      previous_in_singleton_class = @in_singleton_class
       return Types::UNKNOWN unless contains?(node.location, offset)
 
       # `full_name` answers `::Widget` for `class ::Widget`, and the type
@@ -483,12 +496,54 @@ module Ovallsp
       # it, which proves the line was untested, not that it was broken.
       # The distinction matters because the two call for different things:
       # untested wants a spec, broken wants a fix (0.1.12).
+      #
+      # **The class object, not an instance of it** (`024.85`). `self` in
+      # a class body is the class -- `class W; p self` prints `W` -- and
+      # a receiverless call written there is a singleton call. The stack
+      # held the instance type because the reader it was written for was
+      # `#locate_in_def`, which wants the instance type and now derives
+      # it; leaving the two conflated is what made `self.` in a class
+      # body offer the wrong side's members.
+      #
+      # It has four readers, not one. `#eval_type`'s `SelfNode` case is
+      # the one this entry is about, and two more see the class-body
+      # change: `#eval_call`'s receiverless branch, so a bare call written
+      # in a class body resolves as the singleton call Ruby makes it; and
+      # `#capture_scope`, which is what `scope_at` hands prefix
+      # completion, so receiverless completion there offers the singleton
+      # surface. Both are what Ruby does in a class body, and neither was
+      # pinned -- `local_inferencer_spec.rb` covers the scope one now.
+      #
+      # **And `@in_singleton_class` does not survive a nested class.** A
+      # class opened inside `class << self` is an ordinary class, and a
+      # `def` in it an ordinary instance method:
+      #
+      #   $ ruby -e '
+      #   class W
+      #     class << self
+      #       class Inner; def a; self; end; end
+      #     end
+      #   end
+      #   inner = W.singleton_class.const_get(:Inner)
+      #   p inner.new.a.class == inner
+      #   '
+      #   # => true
+      #   # ruby 3.4.10
+      #
+      # Leaving the flag set made `#def_self_type` answer `ClassOf[Inner]`
+      # where Ruby has an `Inner`. Before `024.85` the flag's only reader
+      # was `#ancestor_type_name`, where a stale `true` merely skipped a
+      # resolution step -- a decline. It asserts now, so it is scoped.
+      @in_singleton_class = false
       @self_type_stack.push(
-        Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.constant_path.full_name))
+        Types.class_object(
+          Types::Nominal.new(name: Semantic::ReceiverResolution.canonical_receiver_name(node.constant_path.full_name))
+        )
       )
       push_nesting(node.constant_path.full_name)
       locate(node.body, offset, {})
     ensure
+      @in_singleton_class = previous_in_singleton_class
       @self_type_stack.pop
       @lexical_nesting&.pop
     end
@@ -509,8 +564,17 @@ module Ovallsp
 
     # `class << self` -- unlike ClassNode/ModuleNode, Prism::SingletonClassNode
     # has no `constant_path` (it reopens `self`'s own singleton class, not
-    # a named constant), so self inside it is `ClassOf[enclosing self]`,
+    # a named constant), so self inside it is the enclosing class object,
     # the same value `def self.x` already computes.
+    #
+    # Ruby's own answer for the body itself is one step further out than
+    # that -- `class W; class << self; p self` prints the *singleton*
+    # class, not `W` -- and this engine has no type for a singleton class.
+    # The approximation is deliberate and is what every `def` written
+    # there needs; the direction it errs in is offering a member the
+    # singleton class does not have, never asserting one is missing, since
+    # a `ClassOf` receiver is not something the unknown-method check
+    # reports about. `024.85`.
     def locate_in_singleton_class(node, offset)
       return Types::UNKNOWN unless contains?(node.location, offset)
 
@@ -535,7 +599,15 @@ module Ovallsp
       # marked `024.112` fixed while it was still true.
       previous_in_singleton_class = @in_singleton_class
       @in_singleton_class = true
-      @self_type_stack.push(Types::Generic.new(name: "ClassOf", type_arg: @self_type_stack.last))
+      # `class << obj` is the same node with a different expression, and
+      # the enclosing class object is not that object's singleton class.
+      # Declining is the honest answer; `024.85` records that the parser's
+      # `Cref` makes the same approximation on the declaration side.
+      #
+      # `#enclosing_class_object` rather than a bare wrap: after `024.85`
+      # a class body already holds the class object, and wrapping it again
+      # would make `class << self` `ClassOf[ClassOf[W]]`.
+      @self_type_stack.push(node.expression.is_a?(Prism::SelfNode) ? enclosing_class_object : nil)
       locate(node.body, offset, {})
     ensure
       @in_singleton_class = previous_in_singleton_class
@@ -545,12 +617,66 @@ module Ovallsp
     def locate_in_def(node, offset)
       return Types::UNKNOWN unless contains?(node.location, offset)
 
-      singleton = node.receiver.is_a?(Prism::SelfNode)
-      enclosing_self = @self_type_stack.last
-      @self_type_stack.push(singleton ? Types::Generic.new(name: "ClassOf", type_arg: enclosing_self) : enclosing_self)
+      @self_type_stack.push(def_self_type(node))
       locate(node.body, offset, parameter_env(node))
     ensure
       @self_type_stack.pop
+    end
+
+    # What `self` is inside a `def`, which is not what the body around it
+    # answered. The four shapes, each taken from Ruby -- the interpreter
+    # sessions are pasted into `core/spec/ovallsp/self_receiver_spec.rb`,
+    # which drives every one of them:
+    #
+    # - `def x` -- an instance of the owner, so the enclosing class object
+    #   is unwrapped.
+    # - `def x` written anywhere inside `class << self` -- still the class
+    #   object. Ruby's default definee does not change when a method body
+    #   opens, so a `def` nested two deep there is *still* a singleton
+    #   method and its `self` is still the class. This is the case
+    #   `Cref#declares_singleton?` exists for, and the reason this reads a
+    #   context flag rather than the enclosing frame's type: after the
+    #   change above, a class body and a `class << self` body both hold a
+    #   class object, so the type alone cannot tell them apart.
+    # - `def self.x` -- the class object, whatever the enclosing body is.
+    # - `def Widget.x` -- *that* constant's class object. The lexical
+    #   enclosure cannot supply it (a top-level `def Const.x` has none),
+    #   so it is read off the receiver, through the same constant
+    #   resolution a written `Widget` gets.
+    #
+    # A receiver this engine cannot name -- `def obj.x` -- answers nil.
+    # Handing back the enclosing class instead is precisely the wrong
+    # assertion `024.46` measured 55 false reports of.
+    def def_self_type(node)
+      case node.receiver
+      when nil then @in_singleton_class ? enclosing_class_object : enclosing_instance
+      when Prism::SelfNode then enclosing_class_object
+      when Prism::ConstantReadNode, Prism::ConstantPathNode then eval_constant(node.receiver)
+      end
+    end
+
+    # The class object the enclosing frame already denotes, or nil where
+    # there is no enclosing frame -- a `def self.x` or a `class << self`
+    # at the top level of a file, whose `self` is `main` rather than any
+    # class. `Types.class_object` is not idempotent (`W.class` is
+    # `Class`), so a frame that is already a class object is returned as
+    # it stands rather than wrapped a second time.
+    def enclosing_class_object
+      enclosing = @self_type_stack.last
+      return nil if enclosing.nil?
+
+      Types.class_object?(enclosing) ? enclosing : Types.class_object(enclosing)
+    end
+
+    # And its inverse: an instance of whatever the enclosing frame is the
+    # class object of. `Types.class_object_lookup` is the one place that
+    # takes a `ClassOf` apart, so this does not re-derive the rule -- and
+    # it already answers nil for nil (`class_object?(nil)` is false, so it
+    # hands the value straight back), which is why there is no guard here.
+    # There was one; it could be removed with the whole suite green,
+    # because it could not change an answer.
+    def enclosing_instance
+      Types.class_object_lookup(@self_type_stack.last).first
     end
 
     # A method's parameters are bindings its body can see, so a cursor
@@ -754,19 +880,31 @@ module Ovallsp
       # value does not render two ways depending on how it was written.
       when Prism::HashNode then Types::Generic.new(name: "Hash", type_arg: Types::UNKNOWN)
       when ->(other) { Types::LiteralTypes.for_node(other) } then Types::LiteralTypes.for_node(node)
-      # No `SelfNode` case, deliberately. 0.2.1 added one -- the enclosing
-      # class, which the descent already tracks -- so that `self.target(1)`
-      # would resolve. It did, and it cost **55 new false diagnostics over
-      # Ruby's own standard library and removed none**: `self.class.foo`
-      # became `Class has no method named foo`, `def Const.method` bodies
-      # typed `self` as an *instance* rather than the class object, and
-      # `self.` calls on C-defined or singleton-`attr_accessor` methods
-      # were reported unknown. Measured by reverting this one line: the
-      # output goes byte-identical to the baseline.
+      # `self` is whatever the descent last pushed, and after `024.85`
+      # that value is `self` at this exact point rather than "an instance
+      # of the enclosing class": `#locate_in_namespace` pushes the class
+      # object, `#locate_in_def` unwraps it for an instance method body,
+      # and both `class << self` and `def self.x` leave it alone.
       #
-      # Recorded as 024.46 rather than patched again. Answering nothing
-      # for `self.foo` is the trade this project takes; answering wrongly
-      # on `self.class` is not.
+      # 0.2.1 added this case reading the *old* stack and it cost **55
+      # new false diagnostics over Ruby's own standard library, removing
+      # none** (`024.46`). All three families it recorded were the value
+      # being wrong rather than the case existing:
+      #
+      # - `self.class.foo` became `Class has no method named foo`, because
+      #   `#class` went through RBS to `Class`. `#resolve_call` answers
+      #   the receiver's class *object* now, and a `ClassOf` receiver is
+      #   not something the unknown-method check asserts about.
+      # - `def Const.method` bodies typed `self` as an instance, because
+      #   the push looked only for a literal `self` receiver.
+      #   `#def_self_type` reads the constant.
+      # - a `class << self` body typed `self` as an instance one `def`
+      #   down, for the same reason; `@in_singleton_class` decides it now.
+      #
+      # nil at the top level of a file -- `self` there is `main`, an
+      # ordinary Object -- and Unknown is what a caller must be handed for
+      # that, not a stack frame that is not there.
+      when Prism::SelfNode then @self_type_stack.last || Types::UNKNOWN
       when Prism::ParenthesesNode then eval_type(node.body, env)
       # `!x` is a CallNode whose message is `!`, and Ruby guarantees its
       # class whatever `x` is -- one of the few calls whose return type
@@ -797,7 +935,7 @@ module Ovallsp
       name = node.full_name
       return Types::UNKNOWN if name.nil? || name.empty?
 
-      Types::Generic.new(name: "ClassOf", type_arg: Types::Nominal.new(name: constant_type_name(name)))
+      Types.class_object(Types::Nominal.new(name: constant_type_name(name)))
     rescue StandardError
       # `full_name` raises on a dynamic constant path (`Foo::(bar)`).
       Types::UNKNOWN
@@ -905,6 +1043,15 @@ module Ovallsp
     end
 
     def resolve_call(node, receiver_type, env)
+      # `#class` before anything else can answer it. One table, shared
+      # with `MethodAnalyzer#eval_call`, for the reason `LiteralTypes`
+      # is: two evaluators that answer the same expression differently
+      # make a value type correctly on its own line and lose its type as
+      # a method's return.
+      if Types.class_call?(node) && (class_object = Types.class_of(receiver_type))
+        return class_object
+      end
+
       if (receiver_name = constant_receiver_name(node.receiver))
         # The class, not the spelling the call site used. `::Widget` and
         # `Widget` are one class, and letting both through makes two
