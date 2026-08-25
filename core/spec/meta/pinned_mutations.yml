@@ -15,7 +15,13 @@
 #
 # Each entry names:
 #   why      -- the decision, in one line, as the example's own comment puts it
-#   file     -- a path under `core/lib`, relative to the repository root
+#   file     -- a path relative to the repository root. Which roots may be
+#               named is `scripts/check_pinned_mutations.rb`'s to say: it
+#               keeps the list, its refusal message reads that same list, and
+#               it names them back to you when it rejects an entry. This line
+#               named them too until 0.2.16, and was wrong from the day the
+#               first entry outside `core/lib` was added -- so it stops naming
+#               them, rather than being corrected into naming them again
 #   from/to  -- an exact replacement. `from` must appear exactly once
 #   spec     -- the spec file, relative to `core/`
 #   example  -- the full example description; `rspec -e` must select exactly one
@@ -25,9 +31,17 @@
 # its first line, and a later line indented *less* silently ends the block --
 # which is how the first version of this file failed to parse.
 #
-# Run by `scripts/check_pinned_mutations.rb`, which applies each mutation to a
-# throwaway copy of `core/lib` and runs the named example against it. The live
-# tree is never modified: the copy goes first on the load path.
+# Run by `scripts/check_pinned_mutations.rb`, which **writes the mutation into
+# the real, tracked file** and puts the original bytes back. So do not run its
+# applying mode while anything else is mutating the tree, for the reason
+# `CLAUDE.md` gives for the hunk sweep. The suite runs `--verify-only`, which
+# writes nothing.
+#
+# How it restores, and why a throwaway copy on the load path was tried and
+# abandoned, is written once -- in that script's header. This paragraph
+# described the copy as if it were the arrangement in force, which is the
+# reverse of the actual safety property in the dangerous direction, and it is
+# the second half of `024.212`.
 
 - why: "024.110's per-owner claim -- reading a synthesised link's open surface, which makes one `alias_method` in a core_ext file decline about every class in the workspace."
   file: core/lib/ovallsp/semantic/method_resolver.rb
@@ -139,13 +153,13 @@
 # safe for a spec file, where the mutation could remove the example being
 # run. A decision inside a spec is pinned by a second example instead.
 
-- why: "check_doc_links' SKIP -- widening it to exclude core/ drops inspection from 537 files to 117 and a dangling citation in a core/lib source comment goes unreported, which is round 2's break verbatim."
+- why: "check_doc_links' SKIP -- this splices an empty alternative into it, which matches at the start of every path, so the checker skips the whole tree and inspects nothing; the example's per-root coverage floor is what notices. Round 2's break was the narrower form of the same move, and 046's doc-links section carries its numbers."
   file: scripts/check_doc_links.rb
   from: "|core/spec/fixtures/rails_real/"
   to: "|core/|"
   spec: spec/meta/doc_links_spec.rb
   example: "reads every part of the tree it claims to, so narrowing its input is a failure"
-- why: "check_doc_links' relative-link pass -- 107 links between task files resolve through it, and nothing else reads them."
+- why: "check_doc_links' relative-link pass -- a link resolved against the citing file's own directory matches neither branch of CITATION, so this scan is the only reader of one and disabling it leaves every one unchecked. The checker counts them on each run rather than anybody writing the count here."
   file: scripts/check_doc_links.rb
   from: "    line.scan(RELATIVE_LINK) do\n"
   to: "    [].each do\n"

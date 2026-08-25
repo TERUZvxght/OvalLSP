@@ -32,12 +32,22 @@ module ReindexFindings
     tail = number.split(".", 2)[1]
     # `024.R*` are roadmap items and sort after the defects, which is
     # where they have always been read.
-    tail.start_with?("R") ? [1, tail[1..].to_i] : [0, tail.to_i]
+    return [1, tail[1..].to_i] if tail.start_with?("R")
+
+    # Element-wise, so a sub-numbered entry sorts under its parent rather
+    # than tying with it. `"13.1".to_i` is 13, so both entries used to
+    # key on `[0, 13]` and `sort_by` is not stable -- which of the two
+    # came first was unspecified (`024.216`).
+    [0, *tail.split(".").map(&:to_i)]
   end
 
-  def number_of(block) = block[/\A## (024\.[0-9R]+)/, 1]
+  # `024.216`. These were hand-rolled here, in a third grammar: one that
+  # truncated a sub-number to its parent and one that then failed
+  # outright, so the index grew a second row numbered after the parent
+  # with an empty title and a dead anchor. The register has one parser.
+  def number_of(block) = DeferredFindings.number_of(block)
 
-  def title_of(block) = block[/\A## 024\.[0-9R]+ (.*)/, 1].to_s.strip
+  def title_of(block) = DeferredFindings.title_of(block)
 
   # `046`'s C4. This used to be a second, hand-rolled `key: value`
   # scanner, under a comment saying the yaml block was "this file's own
@@ -91,17 +101,45 @@ module ReindexFindings
     "#{legend}\n#{index}#{blocks.join}"
   end
 
+  # Raised when the register carries a heading this grammar cannot read.
+  Unparsable = Class.new(StandardError)
+
+  # `024.155`. The reader here used to be *looser* than the one the checks
+  # use, so a heading the checks could not parse still got an index row --
+  # `?` for status, an empty title, a dead anchor -- and that row then
+  # made `indexes every entry` and `is in numeric order with its index
+  # current` both pass about an entry nothing else had looked at.
+  # Refusing is the only answer that does not manufacture a record.
+  #
+  # Split out of `rebuild` so an example can hand it a register-shaped
+  # string: `rebuild` reads one fixed path, and a check that can only be
+  # run against the real file cannot be shown failing.
+  def blocks_of(source)
+    first = source.index("\n## 024.")
+    raise Unparsable, "no entries found" unless first
+
+    blocks = source[(first + 1)..].split(DeferredFindings::ENTRY_SPLIT).reject { |part| part.strip.empty? }
+
+    unparsed = blocks.reject { |block| number_of(block) }
+    unless unparsed.empty?
+      raise Unparsable, "#{unparsed.length} heading(s) the entry grammar cannot parse, first: " \
+                        "#{unparsed.first.lines.first.to_s.strip.inspect}. An entry heading is the " \
+                        "number, then a space, then its title."
+    end
+
+    blocks
+  end
+
   def rebuild
     source = File.read(PATH, encoding: "UTF-8")
+    blocks = blocks_of(source)
     first = source.index("\n## 024.")
-    raise "no entries found in #{PATH}" unless first
 
     legend = source[0..first]
     # Any previously generated index is part of the legend region and is
     # dropped here rather than parsed, so this is idempotent.
     legend = legend.split(/^## Index$/, 2).first.rstrip + "\n"
 
-    blocks = source[(first + 1)..].split(/^(?=## 024\.)/).reject { |part| part.strip.empty? }
     render(legend, blocks.sort_by { |block| entry_key(number_of(block)) })
   end
 end

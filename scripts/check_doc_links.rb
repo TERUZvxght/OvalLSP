@@ -22,9 +22,17 @@ require_relative "repo_files"
 # header -- "nothing else would notice a renamed page" -- and is scoped to
 # `site/` alone. This is the same argument for the other 101 documents.
 #
-# **Source comments are in scope, deliberately.** All 19 dangling
-# citations live in them. A checker that read only Markdown would have
-# reported this tree clean.
+# **Source comments are in scope, deliberately.** Eighteen of the 19
+# dangling citations live in them; the nineteenth is in the public SDK
+# document named above. A checker that read only Markdown would have
+# found one of the nineteen and reported the rest of this tree clean.
+#
+# `024.178`: this said "all 19", in four places, one of them an rspec
+# failure message -- so the false sentence was what a future failure
+# would print at the reader. Re-running the founding census reproduces
+# it exactly and puts the nineteenth in a Markdown document, which the
+# sentence immediately above already names. The conclusion survives at
+# 18 of 19; the absolute quantifier carrying it did not.
 
 require "set"
 require "shellwords"
@@ -36,22 +44,31 @@ require "shellwords"
 # only be checked by damaging this tree.
 ROOT = File.expand_path(ENV.fetch("CHECK_DOC_LINKS_ROOT", File.expand_path("..", __dir__)))
 
-# `docs/<NN>-<name>.md` is an established shorthand for
-# the fully-qualified form, used **45 times across 20 files** since the
-# design documents moved.
+# `docs/<NN>-<name>.md` is an established shorthand for the
+# fully-qualified form, used widely across this tree since the design
+# documents moved.
 #
-# Re-derived in round 3. It was written as "91 times across 39 files",
-# which is a raw count of the short form anywhere — a pattern that also
-# matches the *tail* of the fully-qualified path, i.e. the form that is
-# not a shorthand at all. (Neither is spelled here: this script scans
-# itself, and quoting either makes the comment the finding.) The argument the
-# number supports (rewriting them costs more than it buys) survives at
-# 45; the number did not.
+# It is a shorthand, not an error: rewriting those lines would cost more
+# than it buys and would make the citations longer at every reading.
+# Normalised here so the check can be strict about everything else.
 #
-# It is a shorthand, not an error: rewriting those 45 lines would cost
-# more than it buys and would make the citations longer at every
-# reading. Normalised here so the check can be strict about everything
-# else.
+# **No count is written here, deliberately.** `024.179`: this sentence
+# carried one, and it was wrong twice running. It said "91 times across
+# 39 files", which was a raw count of the short form anywhere — a
+# pattern that also matches the *tail* of the fully-qualified path, the
+# form that is not a shorthand at all, so the cost side of the argument
+# was roughly doubled. Round 3 re-derived it to "45 times across 20
+# files": the citation count was true one commit before the commit that
+# wrote the sentence and on no commit since, and the file count was
+# never true at all -- 22 there, 23 on the commit that wrote it.
+# (Neither spelling of the path is written out here: this script scans
+# itself, and quoting either makes the comment the finding.)
+#
+# The number moves with every release and the argument does not rest on
+# it. A number that is a claim about this tree belongs in a
+# `<!-- measured: -->` marker with a deriver, and this file is outside
+# the four globs that scanner reads (`024.181`) — so the correction is
+# to stop asserting it here, not to assert it again.
 #
 # **The placeholders are written with angle brackets deliberately.** This
 # script scans every tracked file, which includes itself, so an example
@@ -78,7 +95,15 @@ SHORTHAND = %r{\Adocs/(\d{2}-[a-z0-9-]+\.md)\z}
 SKIP = %r{\A(core/vendor/|vscode/node_modules/|core/spec/fixtures/rails_real/|(.*/)?\.gitignore\z|(.*/)?\.gitattributes\z|.*\.(png|ico|svg|lock|vsix|sqlite3)\z)}
 
 # What a documentation path looks like, inside backticks or a Markdown
-# link. Anchors and trailing punctuation are stripped by the caller.
+# link. **Nothing strips anything.** The character class simply stops
+# before an anchor or a trailing full stop, so the capture is already a
+# bare path and both readers of it -- the scan loop and `resolve` -- take
+# it verbatim. This comment said "stripped by the caller" until
+# `024.169`; no caller stripped, and a maintainer acting on it would
+# either have added a pass that already happens or widened the class
+# trusting a cleanup that does not exist. (`RELATIVE_LINK` below does
+# consume an anchor, but in the pattern rather than in a caller, and it
+# is a different constant -- which is where the belief came from.)
 #
 # Two forms, because until 0.2.14 only the first was matched and the
 # header claimed to check "every documentation path named in tracked
@@ -90,22 +115,33 @@ SKIP = %r{\A(core/vendor/|vscode/node_modules/|core/spec/fixtures/rails_real/|(.
 # stated.
 CITATION = %r{
   (?<path>
-    docs/(?:design/)?(?:tasks/|adrs/|docs/|schemas/)?[A-Za-z0-9._-]+\.md
+    # Any depth under `docs/`. Round 2 enumerated the subdirectories that
+    # existed at the time, and a citation in any other one was not merely
+    # resolved loosely -- it never matched, so the check reported clean a
+    # region it had not read. `024.177`. The reach of a scanner is not a
+    # list anybody maintains, and the coverage example in
+    # `doc_links_spec.rb` now asserts that every document in this tree is
+    # one this can name.
+    docs/(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.md
     |
-    # Documents that live outside `docs/`. Round 2 found the check could
-    # not name any of them: twenty tracked Markdown files -- `CLAUDE.md`,
-    # `AGENTS.md`, both READMEs, both CONTRIBUTINGs, `SECURITY`,
-    # `SUPPORT`, `CODE_OF_CONDUCT`, and six under `vscode/` -- cited
-    # hundreds of times across the tree, none of it checked. The header
-    # said "every documentation path named in tracked content"; it meant
-    # "every path beginning `docs/`".
+    # Documents that live outside `docs/`: an upper-case name, an
+    # optional `.ja`, an optional `vscode/` prefix. Round 2 found the
+    # check could not name a single one of them, though they are cited
+    # all over the tree. The header said "every documentation path named
+    # in tracked content"; it meant "every path beginning `docs/`".
     #
     # Matched **structurally**, not from a list of what exists. Deriving
     # the set from the tree would make this self-defeating: a citation of
     # a *deleted* root document would stop matching the moment the file
-    # went away, which is the one case the check is for. Upper-case
-    # initial with an optional `.ja` and an optional `vscode/` prefix
-    # covers every one of them and matches little else.
+    # went away, which is the one case the check is for.
+    #
+    # Neither their number nor an enumeration of them is written here.
+    # `024.179`: the sentence said "twenty" and then named fifteen,
+    # counting `vscode/` as six when it is eight and dropping three `.ja`
+    # halves -- and it is the list a reader consults to decide whether
+    # the structural pattern still covers what it claims, so being wrong
+    # in both directions at once is the whole cost. The coverage example
+    # checks that every run instead.
     (?:vscode/)?[A-Z][A-Z0-9_]*(?:\.ja)?\.md
   )
 }x
@@ -169,9 +205,29 @@ end
 
 def resolve(raw)
   list = candidates_for(raw)
-  return nil if list.any? { |c| File.file?(File.join(ROOT, c)) }
+  return nil if list.any? { |c| carried?(c) }
 
   list.first
+end
+
+# Whether this repository carries the path, byte for byte. `024.175`.
+#
+# This was `File.file?`, which asks the working tree rather than the
+# repository, and the two disagree in both directions. On APFS the
+# working tree folds case, so a citation differing from the real
+# filename only in case resolved on the maintainer's machine and was a
+# dead link on Linux and in GitHub's renderer -- with `preflight`, the
+# gate whose whole purpose is to run *before* the commit, strictly
+# weaker than CI on that class of typo. And a file present on disk but
+# ignored by git is not a file any reader of this repository has, yet
+# `File.file?` answered for it too.
+#
+# `CARRIED` is the same enumeration the scan itself reads, so the
+# resolver and the census cannot disagree about what exists, and it is
+# the same question `ever_existed?` puts to git -- which was already
+# case-sensitive, so the script previously disagreed with itself.
+def carried?(path)
+  CARRIED.include?(path)
 end
 
 # The same candidate list, against history. A citation written as a bare
@@ -195,6 +251,9 @@ def ever_existed?(path)
 end
 
 files = tracked_files.reject { |f| f.match?(SKIP) }
+
+# What this repository carries, as an exact set -- see `carried?`.
+CARRIED = tracked_files.to_set
 
 dangling = []
 inspected = 0
@@ -246,13 +305,21 @@ files.each do |rel|
 
     line.scan(RELATIVE_LINK) do
       raw = Regexp.last_match[:path]
-      next if raw.start_with?("docs/") # already counted by the pass above
 
+      # A link beginning `docs/` used to be handed back to the pass above
+      # on the grounds that it was "already counted" there. That pass
+      # resolves against the repository root; a relative link resolves
+      # against the citing file's own directory, and the two agree only
+      # for a document at the root. `024.174`: for anything nested the
+      # checker was validating a path the reader can never follow --
+      # which is the failure the relative pass was added to close,
+      # reopened by the pass's own optimisation. It is counted twice now,
+      # once per question asked, because the two questions are different.
       citations += 1
       relative_citations += 1
       target = File.join(File.dirname(rel), raw)
       target = target.split("/").each_with_object([]) { |part, acc| part == ".." ? acc.pop : (acc << part unless part == ".") }.join("/")
-      next if File.file?(File.join(ROOT, target))
+      next if carried?(target)
 
       if line.include?(DELETED_MARKER) && ever_existed?(target)
         recorded_deletions += 1
@@ -286,6 +353,30 @@ coverage = files.group_by { |f| f.split("/").first }.transform_values(&:length)
 %w[core vscode scripts docs site].each do |root|
   puts "check-doc-links: coverage.#{root}=#{coverage.fetch(root, 0)}"
 end
+
+# The other half of coverage, and the half a hand-written list shrinks
+# without anybody noticing. `024.177`.
+#
+# The floor above says how much of the tree this **reads**. This says how
+# much of it this can **refer to**: a document `CITATION` cannot name is
+# one whose citations from source comments no run will ever test, however
+# much of the tree was read looking for them. Round 2's pattern could
+# name a path only in an enumerated set of `docs/` subdirectories, so
+# that property was a silent consequence of where a file happened to be
+# put, and adding a subdirectory would have made the check quietly
+# smaller while every number it prints stayed healthy.
+#
+# Reported rather than refused, for the same reason the floor is: a
+# throwaway repository built by a spec, or somebody else's tree, may
+# legitimately hold a document nothing cites. `doc_links_spec.rb`
+# requires this to be zero for *this* repository.
+#
+# The names go on the same line as the count rather than in a loop below
+# it, so that reverting the count cannot leave the names behind or the
+# other way round: one statement, one hunk, nothing here unpinned.
+unnameable = files.select { |f| f.end_with?(".md") }.reject { |f| f.match?(/\A#{CITATION}\z/) }
+puts "check-doc-links: unnameable-documents=#{unnameable.length}" \
+     "#{unnameable.empty? ? '' : " (#{unnameable.join(', ')})"}"
 
 # It fails rather than reporting, because the sentence below is the whole
 # output of this check and it cannot be said about a file that was not

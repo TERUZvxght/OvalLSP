@@ -79,10 +79,13 @@ $LOAD_PATH.unshift(File.expand_path("lib", Dir.pwd))
 require "ovallsp"
 
 # `046`'s C8. Every false corpus result this project has recorded came
-# from the run not being what the reader thought it was --
-# `026-0.2.1-review-loop.md` lists five: a diff computed from a file
-# still being written, a diff between two *different* corpora, a `cd`
-# that persisted so both sides ran from the same worktree, two processes
+# from the run not being what the reader thought it was. Five are
+# recorded, in two places, and this comment used to attribute all five to
+# one of them (`024.166`): `026-0.2.1-review-loop.md`'s table has
+# **three** -- a diff computed from a file still being written, a diff
+# between two *different* corpora, and a `cd` that persisted so both
+# sides ran from the same worktree -- and `CLAUDE.md` carries the other
+# two from 0.2.1's last day, both from backgrounding: two processes
 # writing the same output files, and a rewritten script that left both
 # sides in the baseline tree. Not one would have been caught by
 # re-reading the numbers, and three produced confident findings that did

@@ -88,8 +88,16 @@ RSpec.describe "RELEASE_CHECKLIST's evidence column" do
   # found it: a check that passes for a reason other than the one it
   # states. So the haystack is built *per candidate*, excluding the
   # candidate's own file.
+  #
+  # `RepoFiles.tracked`, not `.list`, and the difference is deliberate --
+  # `024.194`. This corpus is not what the check *inspects*, it is what
+  # the check accepts as evidence that something invokes a script, and an
+  # uncommitted scratch file merely naming a basename flipped a gate from
+  # "nothing invokes this" to "wired". A reason that exists in no commit
+  # is not a reason. The `exists` test below keeps `024.147`'s behaviour,
+  # because there a file being written is exactly what must be visible.
   def haystack_excluding(base)
-    @sources ||= (RELEASE_GATE_CALLERS + RepoFiles.list(RELEASE_GATE_ROOT, "core/spec", "scripts"))
+    @sources ||= (RELEASE_GATE_CALLERS + RepoFiles.tracked(RELEASE_GATE_ROOT, "core/spec", "scripts"))
                  .uniq
                  .to_h { |rel| [rel, self.class.read(rel)] }
 
@@ -152,5 +160,28 @@ RSpec.describe "RELEASE_CHECKLIST's evidence column" do
 
     expect(cited).to eq([absent])
     expect(haystack_excluding(File.basename(absent))).not_to include(absent)
+  end
+
+  # `024.194`, and the reason the corpus above is `RepoFiles.tracked`.
+  # An uncommitted scratch file under `scripts/` that merely *names* a
+  # script flipped a gate from "nothing invokes this" to "wired", so the
+  # check passed on evidence no commit contains -- green on the machine
+  # that happened to hold the file, red everywhere else.
+  #
+  # The probe is written into the real tree because that is the only
+  # place the corpus reads from; both names are assembled so neither the
+  # scanners nor this file's own haystack can read them as real. It is
+  # removed in `ensure`, and the path is built from `RELEASE_GATE_ROOT`
+  # rather than fabricated.
+  it "does not accept an uncommitted file as evidence that something runs" do
+    needle = "#{%w[nothing runs this].join("_")}.rb"
+    probe = File.join(RELEASE_GATE_ROOT, "scripts", "#{%w[uncommitted evidence probe].join("-")}.txt")
+    File.write(probe, "todo: look at #{needle} tomorrow\n")
+
+    expect(File.exist?(probe)).to be(true)
+    expect(haystack_excluding("release.sh")).not_to include(needle),
+                                                    "an untracked file is being read as an invocation"
+  ensure
+    File.unlink(probe) if probe && File.exist?(probe)
   end
 end

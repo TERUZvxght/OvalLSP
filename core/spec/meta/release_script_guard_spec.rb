@@ -129,10 +129,34 @@ RSpec.describe "the release script's own guards" do
     end
   end
 
+  # Anchored on the condition that decides, not on the line that asks
+  # git. `024.158`: the exit status is captured before the branch now, so
+  # a window opened at the first `diff --quiet` would start at the check
+  # *above* this one and pin that check's `exit 1` instead -- the window
+  # defect this file's own helper comment describes, arriving through a
+  # change to the script rather than to the matcher.
   it "refuses to publish from a tree with uncommitted changes, from inside that check" do
-    block = block_containing(/diff --quiet/)
+    block = block_containing(/TREE_STATUS" -ne 0/)
 
     expect(block).not_to be_nil, "the clean-tree check is gone, or is no longer an if block"
+    expect(block).to include("exit 1")
+  end
+
+  # The other branch, and the second half of `024.158`. `git diff
+  # --quiet` answers 0 clean, 1 dirty, and **more than 1 for "I cannot
+  # tell you"** -- not a repository, an unreadable index, a broken object
+  # store. The `if ! git ...` form collapsed the third into the second,
+  # so a tree git could not read was announced to the user as a tree with
+  # uncommitted changes: a failure to *ask* turned into an assertion
+  # about their tree, which is CLAUDE.md's swallowed-failure rule
+  # arriving from the other side. Refusing is still right; saying the
+  # wrong reason is not.
+  it "refuses on a tree git could not read, and says that is what happened" do
+    block = block_containing(/TREE_STATUS" -gt 1/)
+
+    expect(block).not_to be_nil,
+                         "release.sh no longer tells 'git says dirty' from 'git could not answer'"
+    expect(block).to include("cannot read the tracked tree")
     expect(block).to include("exit 1")
   end
 
@@ -176,8 +200,24 @@ RSpec.describe "the release script's own guards" do
       output = `#{script.shellescape} 2>&1`
       status = $CHILD_STATUS
 
-      expect(status.success?).to be(false), "release.sh continued past a world-readable token file"
+      # `024.158`. This used to assert `status.success? == false` plus the
+      # message, and neither is tied to *this* check. Demote the refusal
+      # to a warning and the message is still printed, while the non-zero
+      # status arrives from the clean-tree check further down -- which,
+      # against this fixture's non-repository tmpdir, exits 128. So the
+      # example passed on a release.sh that only warns about a
+      # world-readable publish token.
+      #
+      # Reaching any later check at all is the regression, so that is
+      # what is asserted: exactly 1, and nothing the clean-tree check
+      # says. Both of its branches name the tracked tree, so one string
+      # covers "has uncommitted changes" and "cannot read".
+      expect(status.exitstatus).to eq(1),
+                                   "release.sh did not refuse at the PAT check " \
+                                   "(exit #{status.exitstatus}):\n#{output}"
       expect(output).to include("readable beyond its owner")
+      expect(output).not_to include("tracked tree"),
+                            "the run continued past the PAT refusal into a later check:\n#{output}"
     end
   end
 
@@ -185,9 +225,48 @@ RSpec.describe "the release script's own guards" do
   # to a ugrep wrapper it skips binary files without -a and clears an
   # artifact it never read. `if ! grep` was missed by the first version
   # of this matcher, which anchored on an optional `if` and no negation.
+  #
+  # `024.199`, two holes in one example. (a) The pin was `include` over
+  # the whole file, and the *advisory* grep -- the one whose output goes
+  # to /dev/null and whose only effect is printing a note -- satisfies it
+  # on its own, so the refusal's grep need not have been absolute at all.
+  # It is asserted inside that refusal's own block now. (b) The scan
+  # required `grep` at a line start with no leading whitespace, or
+  # straight after `| & ; ( if !`, so any *indented* bare `grep` escaped
+  # -- and almost every grep inside an `if` or a function body is
+  # indented. Position is not the property; being a bare word is. The
+  # lookbehind excludes a path (`/usr/bin/grep`) and a longer word
+  # (`ugrep`), and nothing else -- including a `grep` written on a
+  # continuation line, after `; then`, or inside backticks.
   it "calls the grep it means, not whatever the shell resolves" do
-    expect(code).to include("/usr/bin/grep -rlF")
-    expect(code.scan(/(?:^|[|&;(]\s*|\bif\s+|!\s*)grep\s/)).to be_empty
+    hard_failure = block_containing(/grep -rlF --exclude/)
+
+    expect(hard_failure).not_to be_nil,
+                                "the packaged-artifact path check is gone, or is no longer an if block"
+    expect(hard_failure).to include("/usr/bin/grep -rlF")
+    expect(code.scan(%r{(?<![/\w.-])grep\s})).to be_empty
+  end
+
+  # `024.200`. Everything above this line is either a text match or one
+  # of three executed examples that exit at the PAT or clean-tree check,
+  # so bash's parser never reaches the rest of the file: an unterminated
+  # `if` introduced past the clean-tree block leaves the only publish
+  # path unrunnable with every example green, and is discovered by the
+  # person attempting the release, at the moment they attempt it.
+  #
+  # `verify-installed-extension.sh` had no spec at all and the same
+  # exposure, so both shell scripts beside it are parsed rather than only
+  # this one. `include(SCRIPT)` is there because an empty glob would make
+  # the loop assert nothing.
+  it "parses, and so does every shell script beside it" do
+    scripts = Dir.glob(File.join(File.dirname(SCRIPT), "*.sh")).sort
+
+    expect(scripts).to include(SCRIPT)
+    scripts.each do |path|
+      complaint = IO.popen(["bash", "-n", path], err: %i[child out], &:read)
+
+      expect($?).to be_success, "#{path} does not parse:\n#{complaint}"
+    end
   end
 
   # What this file cannot do, said plainly rather than left to be

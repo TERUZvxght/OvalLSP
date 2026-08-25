@@ -20,7 +20,22 @@ jobs:
       matrix:
         ruby: ["3.3", "3.4"]
     steps:
+      # `fetch-tags`, because this is the only job that runs the suite and
+      # `core/spec/meta/release_artifacts_spec.rb` has two examples that
+      # skip themselves when `git tag --list 'v*'` is empty. A bare
+      # checkout has none, so the invariant "every `v*` tag is recorded --
+      # with the hash it shipped, or as never published" was pending on
+      # every CI run while rspec exited 0. That invariant is written
+      # because 0.1.14 and 0.1.15 were tagged, never built, and noticed
+      # only by someone looking at the Marketplace by eye. `024.202`.
+      #
+      # This line is a claim about `actions/checkout`, and it is not
+      # trusted on its own: the "must not skip" step below fails the job
+      # if those examples are pending anyway, so a wrong belief here is a
+      # red build rather than a gate that goes on being vacuously green.
       - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
 
       - uses: ruby/setup-ruby@v1
         with:
@@ -79,17 +94,30 @@ jobs:
       # is legitimate. Here it can: this step runs after the whole suite
       # by construction, so a pending from that file means the number
       # nobody re-measures went unchecked again.
-      - name: Fail if a documented-count check skipped
+      #
+      # `release_artifacts_spec.rb` joined the list in `024.202`: its two
+      # tag examples skip when the checkout has no tags, and nothing
+      # watched those pendings -- not `CheckSuitesRan::SUITES`, which the
+      # file is deliberately not in, and not this step, which read one
+      # hard-coded filename. A list, because the next one to need this is
+      # the one nobody adds.
+      #
+      # Here rather than in `CheckSuitesRan::SUITES`: a reviewer reading a
+      # source tarball or a `git archive` extraction has no tags either,
+      # and for them skipping is the right answer. This text exists only
+      # in CI, so only CI can never take the skip.
+      - name: Fail if a check that must not skip on a full run skipped
         working-directory: core
         run: |
           ruby -rjson -e '
+            must_run = ["spec/meta/documented_counts_spec.rb", "spec/meta/release_artifacts_spec.rb"]
             result = JSON.parse(File.read("tmp/rspec.json", encoding: "UTF-8"))
             skipped = result.fetch("examples").select do |ex|
-              ex.fetch("file_path").include?("spec/meta/documented_counts_spec.rb") &&
+              must_run.any? { |path| ex.fetch("file_path").include?(path) } &&
                 ex.fetch("status") == "pending"
             end
             unless skipped.empty?
-              warn "the documented example-count checks skipped on a full run:"
+              warn "a check that must not skip on a full run skipped:"
               skipped.each { |ex| warn "  #{ex.fetch("full_description")} -- #{ex["pending_message"]}" }
               exit 1
             end
@@ -345,11 +373,15 @@ jobs:
   #
   # This applies each mutation the manifest names and requires the example
   # that names it to fail. It is a job of its own rather than part of the
-  # suite because it writes to `core/lib` and restores it -- an
-  # interrupted rspec would leave a working tree wrong, and a developer's
-  # tree is not a thing to risk for a check. The manifest's own shape is
-  # checked in the suite (`spec/meta/pinned_mutations_spec.rb`), so a
-  # renamed example fails locally rather than here.
+  # suite because it writes into the tracked file each entry names and
+  # restores it -- an interrupted rspec would leave a working tree wrong,
+  # and a developer's tree is not a thing to risk for a check. Which roots
+  # an entry may name is the script's to say, and it says so; this comment
+  # named one of them and went stale the day a second was added
+  # (`024.212`). The manifest's own shape is checked in the suite
+  # (`spec/meta/pinned_mutations_spec.rb`), so a renamed example fails
+  # locally rather than here -- and that run says so, rather than
+  # borrowing this job's conclusion (`024.211`).
   #
   # It gates. A mutation nothing catches is the defect `024.109` is about.
   pinned-mutations:

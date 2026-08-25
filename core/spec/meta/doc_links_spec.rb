@@ -8,8 +8,12 @@ require "tmpdir"
 # The measured state before this landed, at `6bc31b9`: **19 citations
 # across 17 files naming five task filenames that had never existed in
 # any commit.** The whole `plugins/` subsystem and the public SDK
-# document pointed at one of them. Every one lived in a *source comment*,
-# so a checker that read only Markdown would have called this tree clean.
+# document pointed at one of them. Eighteen of the nineteen lived in a
+# *source comment* and the nineteenth in that SDK document, so a checker
+# that read only Markdown would have found one of them and called the
+# rest of this tree clean. (`024.178`: this said "every one", which
+# re-running the census does not support. The argument for reading `.rb`
+# survives at 18 of 19.)
 #
 # `scripts/check_site_links.rb` had already bought this countermeasure
 # for `site/` alone, and its header makes the argument: nothing else
@@ -34,6 +38,16 @@ RSpec.describe "documentation links" do
     env = root ? { "CHECK_DOC_LINKS_ROOT" => root } : {}
     output = IO.popen(env, ["ruby", DOC_LINKS_SCRIPT], err: %i[child out], &:read)
     [output, $?.success?]
+  end
+
+  # A throwaway repository is the only honest fixture for a checker that
+  # asks git questions, and every example below needs the same three
+  # commands.
+  def init_commit(root)
+    system("git", "init", "-q", root, out: File::NULL)
+    system("git", "-C", root, "add", "-A", out: File::NULL)
+    system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
+           "commit", "-qm", "one", out: File::NULL)
   end
 
   it "all resolve to a file that exists" do
@@ -62,7 +76,7 @@ RSpec.describe "documentation links" do
       expect(count).not_to be_nil, "the checker no longer reports coverage for #{root}:\n#{output}"
       expect(count.to_i).to be > 0,
                             "the checker inspected no file under #{root}/. Source comments are in scope " \
-                            "deliberately — all 19 of the citations this was built for lived in them."
+                            "deliberately — 18 of the 19 citations this was built for lived in them."
     end
   end
 
@@ -85,6 +99,107 @@ RSpec.describe "documentation links" do
       expect(ok).to be(false), "a broken relative link was not reported:\n#{output}"
       expect(output).to include("999-absent")
     end
+  end
+
+  # `024.174`. The relative pass handed every link beginning `docs/` back
+  # to the pass that resolves against the repository root, on the grounds
+  # that it was already counted there — so for any document below the
+  # root the checker validated a path the reader can never follow.
+  #
+  # The fixture distinguishes the two readings rather than merely
+  # exercising one: the target exists at the root and does not exist
+  # beside the citing file, so root-resolution reports green and
+  # directory-resolution reports red. A fixture where both readings agree
+  # would pass either way.
+  it "resolves a relative link written as a docs path against the citing file's directory too" do
+    Dir.mktmpdir do |root|
+      target = unspellable("docs", "zz-target.md")
+      FileUtils.mkdir_p(File.join(root, File.dirname(target)))
+      File.write(File.join(root, target), "the one at the root\n")
+      FileUtils.mkdir_p(File.join(root, DOC_LINKS_DIR))
+      File.write(File.join(root, DOC_LINKS_DIR, "here.md"), "A link to [the target](#{target})\n")
+      init_commit(root)
+
+      output, ok = check(root: root)
+
+      expect(ok).to be(false), "a docs-prefixed relative link was resolved against the root:\n#{output}"
+      expect(output).to include(target)
+    end
+  end
+
+  # `024.175`. Resolution asked the working tree, `File.file?`, and the
+  # working tree answers for things this repository does not carry. The
+  # instance that raised it was macOS: APFS folds case, so a citation
+  # differing from the real filename only in case resolved here and was a
+  # dead link on Linux and in GitHub's renderer — the local-green/CI-red
+  # asymmetry `CLAUDE.md` already records for the real-Rails suites.
+  #
+  # Pinned by the *rule* rather than by that one instance, because the
+  # instance cannot fail on a case-sensitive filesystem and the rule can:
+  # a file present on disk but ignored by git is not a file a reader of
+  # this repository has. Both are the same repair — resolve against the
+  # enumerated list, which is byte-exact and is what git carries.
+  #
+  # Two targets, because the resolver has two call sites and one fixture
+  # would leave the other unpinned. The linked one is a *sibling* link,
+  # which the citation pattern cannot name at all, so only the relative
+  # pass can report it.
+  it "resolves only against files git carries, not whatever the working tree answers for" do
+    Dir.mktmpdir do |root|
+      cited = unspellable("docs", "zz-cited.md")
+      linked = ["zz-linked", "md"].join(".")
+      FileUtils.mkdir_p(File.join(root, DOC_LINKS_DIR))
+      FileUtils.mkdir_p(File.join(root, File.dirname(cited)))
+      File.write(File.join(root, cited), "on this disk, carried by nothing\n")
+      File.write(File.join(root, DOC_LINKS_DIR, linked), "likewise\n")
+      File.write(File.join(root, ".gitignore"), "zz-*.md\n")
+      File.write(File.join(root, "note.md"), "A citation of `#{cited}`\n")
+      File.write(File.join(root, DOC_LINKS_DIR, "here.md"), "A link to [a sibling](#{linked})\n")
+      init_commit(root)
+
+      output, ok = check(root: root)
+
+      expect(ok).to be(false), "a path git does not carry resolved because the disk answered for it:\n#{output}"
+      expect(output).to include(cited)
+      expect(output).to include(linked)
+    end
+  end
+
+  # `024.177`. The pattern could name a path only in an enumerated set of
+  # `docs/` subdirectories, so a citation in any other one — including
+  # any added tomorrow — was not merely resolved, it was never matched.
+  it "names a citation in a docs subdirectory nobody enumerated" do
+    Dir.mktmpdir do |root|
+      absent = unspellable("docs", "guides", "zz-absent.md")
+      File.write(File.join(root, "note.md"), "A citation of `#{absent}`\n")
+      init_commit(root)
+
+      output, ok = check(root: root)
+
+      expect(ok).to be(false), "a citation in an unenumerated subdirectory was invisible:\n#{output}"
+      expect(output).to include(absent)
+    end
+  end
+
+  # And the same property stated as coverage rather than as one instance,
+  # which is what stops the list growing back. The floor above says how
+  # much of the tree the checker *reads*; this says how much of it the
+  # checker can *refer to*. A document `CITATION` cannot name is one
+  # whose citations from source comments no run will ever test, however
+  # much was read looking for them — and under the enumerated pattern
+  # that was a silent consequence of which directory a file was put in.
+  #
+  # Watched failing by planting a document the pattern cannot reach —
+  # a lower-case `.md` outside `docs/` — which took it to 1.
+  it "can name every document in this tree, so no citation of one goes unchecked" do
+    output, ok = check
+
+    expect(ok).to be(true), output
+    count = output[/unnameable-documents=(\d+)/, 1]
+    expect(count).not_to be_nil, "the checker no longer reports the pattern's reach:\n#{output}"
+    expect(count.to_i).to eq(0),
+                          "the citation pattern cannot name every document here, so citations of the ones " \
+                          "it cannot name are unchecked. Widen it, or move the document:\n#{output}"
   end
 
   # The `<!-- deleted -->` marker is the one way a citation may resolve

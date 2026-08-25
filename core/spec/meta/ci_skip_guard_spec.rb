@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "yaml"
+require_relative "../../../scripts/check_suites_ran"
 
 # 024.16's whole deliverable is one step in `.github/workflows/ci.yml`:
 # both suites that skip themselves when rails/sqlite3 are unresolvable
@@ -17,6 +18,12 @@ require "yaml"
 # file still contains every asserted string. Parsed structure is what
 # GitHub Actions executes; the run-text assertions then pin what the
 # located step does.
+#
+# The lookup lives in `spec/support/ci_workflow.rb` because
+# `suites_ran_spec` needed the same one and, not having it, asserted a
+# substring of the whole file instead -- which is the arrangement above
+# already recorded as insufficient, rebuilt in another file
+# (`024.203`).
 RSpec.describe "the CI guard against a silently skipped suite" do
   def read_utf8(path)
     # The Japanese capability document is not ASCII, and this suite runs
@@ -26,16 +33,12 @@ RSpec.describe "the CI guard against a silently skipped suite" do
     File.read(path, encoding: "UTF-8")
   end
 
-  let(:workflow_text) do
-    read_utf8(File.expand_path("../../../.github/workflows/ci.yml", __dir__))
-  end
-
   let(:core_steps) do
-    YAML.safe_load(workflow_text).fetch("jobs").fetch("core").fetch("steps")
+    CiWorkflow.job("core").fetch("steps")
   end
 
   let(:guard_step) do
-    core_steps.find { |step| step["name"] == "Fail if the real-Rails or capability suites were skipped instead of run" }
+    CiWorkflow.core_step("Fail if the real-Rails or capability suites were skipped instead of run")
   end
 
   # The guard step's own run text. Both spec paths are also named in the
@@ -53,9 +56,19 @@ RSpec.describe "the CI guard against a silently skipped suite" do
     File.read(File.expand_path("../../../scripts/check_suites_ran.rb", __dir__), encoding: "UTF-8")
   end
 
+  # "Executed" is two things, and this example used to assert one. A step
+  # carrying `if: false` or `continue-on-error: true` is still in the
+  # parsed YAML and still contains every asserted string, and either key
+  # turns the gate green -- `046`'s round 2 disabled it three ways with
+  # the whole of `spec/meta` passing. The keys are parsed structure
+  # GitHub acts on, so they belong to the same assertion as the step's
+  # presence.
   it "still runs in the core job at all" do
     expect(guard_step).not_to be_nil,
-                              "the real-Rails/capability skip guard is no longer an executed step of the core job"
+                              "the real-Rails/capability skip guard is no longer a step of the core job"
+    expect(CiWorkflow.executed?(guard_step)).to be(true),
+                                                "the guard step is present but disabled by `if:` or " \
+                                                "`continue-on-error:`"
   end
 
   # Both paths, and both must be the *real* spec files -- a typo'd path
@@ -122,15 +135,35 @@ RSpec.describe "the CI guard against a silently skipped suite" do
     end
   end
 
-  # The exemption must not swallow the skip the guard is about: neither
+  # The exemption must not swallow the skip the guard is about: no
   # suite's environment-skip message may contain the escape hatch.
+  #
+  # `024.201`. This iterated a hand-written two-element array while
+  # `CheckSuitesRan::SUITES` named three, so `client_behaviour_spec.rb`
+  # -- added to that table in the same release -- was unguarded: a `NOT
+  # YET` on its environment skip left every check in the repository
+  # green while `check_suites_ran` printed "all 7 client-behaviour
+  # examples ran" and exited 0 for a run in which two of the seven never
+  # executed. The checker stating the opposite of the truth in its own
+  # output is the failure `024.148` was written to close, reopened for
+  # the third file that entry's own table lists.
+  #
+  # **The copy is the defect, not the missing element**, so this reads
+  # the table. It also has to match wherever the call sits: the three
+  # files do not agree on a form -- two write `skip "..."` at the start
+  # of a line, the third writes `skip("...")` inside a one-line
+  # `before { ... }` -- and an anchored scan finds nothing in that one,
+  # which `not_to be_empty` then reports as the failure it is rather
+  # than passing on an empty scan.
   it "does not exempt the environment skip it exists to catch" do
-    %w[spec/integration/real_rails_spec.rb spec/e2e/capabilities_spec.rb].each do |path|
+    CheckSuitesRan::SUITES.each_value do |path|
       source = read_utf8(File.expand_path("../../#{path}", __dir__))
-      skip_messages = source.scan(/^\s*skip\s+"([^"]+)"/).flatten
+      skip_messages = source.scan(/\bskip[\s(]+"([^"]+)"/).flatten
 
-      expect(skip_messages).not_to be_empty
-      expect(skip_messages.grep(/NOT YET/)).to be_empty
+      expect(skip_messages).not_to be_empty, "#{path}: no environment skip found to check"
+      expect(skip_messages.grep(/NOT YET/)).to be_empty,
+                                              "#{path}: its environment skip claims the NOT YET " \
+                                              "exemption, so check_suites_ran will call the suite ran"
     end
   end
 
@@ -142,14 +175,24 @@ RSpec.describe "the CI guard against a silently skipped suite" do
   # count check "actually runs now". Same defect class as above, same fix
   # shape: pin the structure GitHub executes, then what the step runs.
   describe "the CI-only guards the published documents cite" do
-    it "fails a full run whose documented-count checks skipped" do
-      dc_step = core_steps.find { |step| step["name"] == "Fail if a documented-count check skipped" }
+    # `024.202` gave this step a second path. `release_artifacts_spec`'s
+    # two tag examples skip on a checkout with no tags, and the core job
+    # -- the only job that runs the suite -- checked out without them, so
+    # the "every `v*` tag is accounted for" invariant was pending on every
+    # CI run while rspec exited 0. The checkout now asks for tags; this
+    # step is what makes that request checkable rather than believed.
+    it "fails a full run whose must-not-skip checks skipped" do
+      dc_step = CiWorkflow.core_step("Fail if a check that must not skip on a full run skipped")
 
       expect(dc_step).not_to be_nil,
-                             "the documented-count guard is no longer an executed step of the core job"
+                             "the must-not-skip guard is no longer a step of the core job"
+      expect(CiWorkflow.executed?(dc_step)).to be(true),
+                                               "the step is present but disabled by `if:` or " \
+                                               "`continue-on-error:`"
 
       run = dc_step.fetch("run")
       expect(run).to include("documented_counts_spec.rb")
+      expect(run).to include("release_artifacts_spec.rb")
       expect(run).to include('ex.fetch("status") == "pending"')
       expect(run).to include("exit 1")
 
@@ -161,8 +204,25 @@ RSpec.describe "the CI guard against a silently skipped suite" do
       expect(core_steps.index(dc_step)).to be > suite_index
     end
 
+    # The other half of `024.202`, and the half that keeps the build
+    # green rather than merely honest: the tag examples can only run on a
+    # checkout that has tags, and a bare `actions/checkout` has none.
+    # Either spelling is accepted, because which key delivers the tags is
+    # the action's business and pinning one would pin an accident.
+    it "checks the core job out with the tags the release-artifact invariant needs" do
+      checkout = core_steps.find { |step| step["uses"].to_s.start_with?("actions/checkout") }
+
+      expect(checkout).not_to be_nil, "the core job no longer checks the repository out"
+
+      with = checkout["with"] || {}
+      expect(with["fetch-tags"] == true || with["fetch-depth"] == 0).to be(true),
+                                                                       "the core job checks out without " \
+                                                                       "tags, so release_artifacts_spec's " \
+                                                                       "two tag examples skip on every run"
+    end
+
     it "keeps the 4.0 job reporting its example count, and failing when nothing ran" do
-      job = YAML.safe_load(workflow_text).fetch("jobs")["core-ruby-4"]
+      job = CiWorkflow.jobs["core-ruby-4"]
 
       expect(job).not_to be_nil, "the core-ruby-4 job is no longer in ci.yml"
       # Non-gating is the recorded decision -- a 4.0-specific failure is
@@ -199,7 +259,7 @@ RSpec.describe "the CI guard against a silently skipped suite" do
   # leaves every check green while the disclosure path reopens.
   describe "the commit-message half of the home-path guard" do
     let(:secret_scan_job) do
-      YAML.safe_load(workflow_text).fetch("jobs").fetch("secret-scan")
+      CiWorkflow.job("secret-scan")
     end
 
     it "still runs the message scan as an executed step" do

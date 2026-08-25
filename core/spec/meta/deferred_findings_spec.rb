@@ -39,6 +39,28 @@ RSpec.describe "deferred findings metadata" do
                                          "matches the entries. Run: ruby scripts/reindex_findings.rb"
     end
 
+    # One entry's text, keyed by its number, for the two body checks
+    # below. `024.216`: this was a third grammar, requiring a trailing
+    # space where `ENTRY_SPLIT` does not and dropping the `## ` prefix,
+    # so a sub-numbered entry's body was merged into its parent's chunk
+    # and reported under the parent's number.
+    def self.entry_chunks(markdown)
+      markdown.split(DeferredFindings::ENTRY_SPLIT).filter_map do |chunk|
+        number = DeferredFindings.headings(chunk).first
+        [number, chunk] if number
+      end
+    end
+
+    # The split has to find every entry, or every example built on it
+    # checks a subset and reports the clean result a working one reports.
+    it "splits the register into one chunk per entry" do
+      require_relative "../../../scripts/reindex_findings"
+
+      body = File.read(ReindexFindings::PATH, encoding: "UTF-8")
+
+      expect(self.class.entry_chunks(body).map(&:first)).to eq(DeferredFindings.headings(body))
+    end
+
     # A scripted edit doubled `024.69`'s entire body during 0.2.14 -- a
     # `String#find` that returned -1 when its terminator was absent, so a
     # slice meant to end at a paragraph ran to the end of the entry and
@@ -55,9 +77,7 @@ RSpec.describe "deferred findings metadata" do
 
       body = File.read(ReindexFindings::PATH, encoding: "UTF-8")
       kinds = DeferredFindings.entries(body).transform_values { |f| f["kind"] }
-      doubled = body.split(/^## (?=024\.[0-9R]+ )/).filter_map do |chunk|
-        number = chunk[/\A(024\.[0-9R]+) /, 1]
-        next unless number
+      doubled = self.class.entry_chunks(body).filter_map do |number, chunk|
         # A roadmap entry describes a plan, not a place, and legitimately
         # names no Area. A defect or a friction always has one: it is
         # where to go and look.
@@ -76,6 +96,146 @@ RSpec.describe "deferred findings metadata" do
                          "entries not stating exactly one Area: #{doubled.join(", ")}. " \
                          "A defect or friction states one — twice means a block was duplicated, " \
                          "none means there is nowhere to go and look."
+    end
+
+    # `024.170`. The example above counts `**Area:**` lines, so it sees a
+    # doubled body only when the doubled slice happens to contain that
+    # line -- and the Area line sits in an entry's first few lines, while
+    # `024.140`'s class of bug puts the slice boundary wherever a
+    # terminator search failed, which is far more often somewhere down in
+    # the body. The countermeasure was therefore about one line wide
+    # against a defect that can start anywhere in a 200-line entry.
+    #
+    # Both are kept. `!= 1` above also catches a *deleted* Area line,
+    # which this cannot; this catches a slice pasted anywhere, which that
+    # cannot.
+    #
+    # Three consecutive lines, not two: a two-line window already repeats
+    # legitimately inside one entry today (a table's header row and its
+    # separator, in `024.40`). Derived, not guessed -- run
+    # `DOUBLED_SLICE_WINDOW` at 2 against the register and that entry is
+    # the single offender. See `prose_lines` for what is compared, which
+    # is the half that actually decides this number.
+    DOUBLED_SLICE_WINDOW = 3
+
+    # An entry's **prose**: non-blank lines, with fenced blocks and
+    # indented blocks dropped. Quoted material legitimately repeats
+    # inside one entry and narration does not, which is the distinction
+    # the whole check turns on:
+    #
+    # - every entry's metadata block states the same three or four keys,
+    #   so an entry illustrating the register's own grammar states them
+    #   twice;
+    # - `024.28` carries two pasted interpreter sessions that share a
+    #   three-line preamble -- `024.220` asks for sessions rather than
+    #   prose, so entries with several of them are the normal case now,
+    #   not a curiosity.
+    #
+    # Derived, not assumed: over the register at this revision, comparing
+    # every line needs a window of 4 to clear `024.28`, and comparing
+    # prose alone clears it at 3. A window that has to grow whenever
+    # somebody quotes a similar session is a maintained number; "compare
+    # the narration" is a rule. The cost is that a slice doubled entirely
+    # inside a code block is invisible here -- the Area count and the
+    # duplicate-heading check are what still see it.
+    def self.prose_lines(chunk)
+      inside_fence = false
+      chunk.lines.filter_map do |line|
+        stripped = line.strip
+        if stripped.start_with?("```")
+          inside_fence = !inside_fence
+          next
+        end
+        next if inside_fence
+        next if line.start_with?("    ")
+
+        stripped unless stripped.empty?
+      end
+    end
+
+    def self.doubled_slices(markdown)
+      entry_chunks(markdown).filter_map do |number, chunk|
+        lines = prose_lines(chunk)
+        next if lines.length < DOUBLED_SLICE_WINDOW
+
+        repeated = lines.each_cons(DOUBLED_SLICE_WINDOW).map { |window| window.join(" / ") }
+                        .tally.select { |_, count| count > 1 }
+        next if repeated.empty?
+
+        "#{number}: #{repeated.keys.first[0, 120]}"
+      end
+    end
+
+    it "states no run of three lines twice within one entry, so a slice doubled anywhere cannot pass" do
+      require_relative "../../../scripts/reindex_findings"
+
+      doubled = self.class.doubled_slices(File.read(ReindexFindings::PATH, encoding: "UTF-8"))
+
+      expect(doubled).to be_empty,
+                         "entries carrying the same three consecutive lines twice: #{doubled.join('; ')}. " \
+                         "A scripted edit whose end boundary was not found pastes the slice back instead " \
+                         "of moving it; check the passage is not in the entry twice."
+    end
+
+    # Why the fenced yaml is dropped, stated as the case that needs it:
+    # an entry illustrating the register's own grammar states the same
+    # keys twice, once as its metadata and once as the example. That is
+    # not a doubled body, and the real file cannot show the difference --
+    # every entry states its block exactly once, so leaving the drop out
+    # is invisible against the register and fires the first time somebody
+    # writes an entry about the format.
+    it "does not report an entry that quotes a metadata block in its body" do
+      block = "```yaml\nstatus: open\nkind: defect\ntarget: unscheduled\n```\n"
+      synthetic = "## #{unspellable_number(998)} A synthetic entry\n\n#{block}\n" \
+                  "**Area:** `core/lib`\n\nAn entry's block looks like this:\n\n#{block}"
+
+      expect(self.class.doubled_slices(synthetic)).to be_empty
+    end
+
+    # The same rule for an indented block. `024.220` asks for pasted
+    # interpreter sessions rather than prose about what Ruby does, so an
+    # entry carrying two of them that share a preamble is now ordinary --
+    # `024.28` is one, and it is what this check reported the first time
+    # it was run against a tree that had it.
+    it "does not report an entry whose two quoted blocks share a preamble" do
+      # Written with the four-space indent spelled out: a squiggly
+      # heredoc strips exactly the indentation that makes these lines an
+      # indented block, so the fixture would stop being one.
+      #
+      # And written as a *configuration* block rather than the pasted
+      # interpreter session this is really about -- `024.126`.
+      # `scripts/check_interpreter_sessions.rb` re-runs every session in
+      # tracked content, and a spec is tracked content, so a fixture
+      # spelled the way a real session is spelled is a finding about the
+      # checker that hunts it. What this needs is an indented block
+      # repeated inside one entry; what kind of block it is does not
+      # matter to `prose_lines`.
+      quoted = [
+        "workspace:",
+        "  root: /somewhere",
+        "  ruby: 3.4",
+        "  rails: 8.1"
+      ].map { |line| "    #{line}\n" }.join
+      synthetic = "## #{unspellable_number(998)} A synthetic entry\n\n" \
+                  "```yaml\nstatus: open\nkind: defect\n```\n\n" \
+                  "**Area:** `core/lib`\n\nFirst, the plain case:\n\n#{quoted}\n" \
+                  "And then the same setup under a different flag:\n\n#{quoted}"
+
+      expect(self.class.doubled_slices(synthetic)).to be_empty
+    end
+
+    # The check has to be able to fail on the shape it exists for, and
+    # the shape is a slice taken from *below* the Area line -- the half
+    # the Area count cannot see.
+    it "catches a slice doubled below the Area line, which the Area count cannot see" do
+      synthetic = "## #{unspellable_number(998)} A synthetic entry\n\n" \
+                  "```yaml\nstatus: open\nkind: defect\n```\n\n" \
+                  "**Area:** `core/lib`\n\nfirst paragraph.\n\nsecond paragraph.\n\nthird paragraph.\n"
+      doubled = synthetic + "first paragraph.\n\nsecond paragraph.\n\nthird paragraph.\n"
+
+      expect(self.class.doubled_slices(synthetic)).to be_empty
+      expect(self.class.doubled_slices(doubled)).not_to be_empty
+      expect(doubled.scan(/^\*\*Area:\*\*/).length).to eq(1)
     end
 
     # `046`'s C4. The index and the checks must read one entry the same
@@ -136,14 +296,40 @@ RSpec.describe "deferred findings metadata" do
                             "and say why in the entry."
     end
 
+    # `024.182`/`024.216`. Both sides used to carry their own
+    # `[0-9R]+` regex, and asymmetrically: the heading side truncated a
+    # sub-number to its parent while the index-row side captured nothing
+    # from that entry's row. So a sub-numbered entry would have failed
+    # this example under the wrong number -- and the pair of scans agreed
+    # with each other about a heading they both read wrongly, which is
+    # what let `reindex_findings.rb` emit a second row numbered after the
+    # parent with an empty title and a dead anchor while this passed.
+    #
+    # The heading side is `DeferredFindings`, the one parser of this
+    # file; the row side reads the number grammar from the same module.
+    INDEX_ROW = /^\| \[`(#{DeferredFindings::NUMBER})`\]/
+
     it "indexes every entry, so the table cannot silently omit one" do
       require_relative "../../../scripts/reindex_findings"
 
       body = File.read(ReindexFindings::PATH, encoding: "UTF-8")
-      headings = body.scan(/^## (024\.[0-9R]+)/).flatten
-      indexed = body.scan(/^\| \[`(024\.[0-9R]+)`\]/).flatten
 
-      expect(indexed).to eq(headings)
+      expect(body.scan(INDEX_ROW).flatten).to eq(DeferredFindings.headings(body))
+    end
+
+    # The example above cannot fail on a sub-number while the register
+    # contains none, and the pair of scans agreeing *while both are
+    # wrong* is the shape `024.216` records. So the same comparison is
+    # run over a rendered register that does contain one.
+    it "indexes a sub-numbered entry under its own number, not its parent's" do
+      require_relative "../../../scripts/reindex_findings"
+
+      blocks = [unspellable_number(30), unspellable_number("30.1")].map do |number|
+        "## #{number} A finding\n\n```yaml\nstatus: open\nkind: defect\n```\n\nprose\n\n"
+      end
+      rendered = ReindexFindings.render("# Register\n", blocks)
+
+      expect(rendered.scan(INDEX_ROW).flatten).to eq(DeferredFindings.headings(blocks.join))
     end
   end
 
@@ -250,16 +436,96 @@ RSpec.describe "deferred findings metadata" do
     # `headings` recognised fewer than `entries` did, "parses every entry"
     # would compare two different sets and pass while an entry went
     # unchecked -- which is the failure this whole guard replaces.
+    #
+    # Sub-numbers are assembled rather than spelled: `024.126`, and
+    # widening the citation guard to see a sub-number (`024.182`) made
+    # every spelled one here a dangling pointer in the file that tests
+    # the register.
     it "reads a sub-numbered entry as itself, in both readers" do
-      markdown = entry("024.30.1", status: "open", kind: "defect")
+      sub = unspellable_number("30.1")
+      markdown = entry(sub, status: "open", kind: "defect")
 
-      expect(DeferredFindings.entries(markdown).keys).to eq(["024.30.1"])
-      expect(DeferredFindings.headings(markdown)).to eq(["024.30.1"])
+      expect(DeferredFindings.entries(markdown).keys).to eq([sub])
+      expect(DeferredFindings.headings(markdown)).to eq([sub])
+    end
+
+    # `024.216`. The number and the title were read by six hand-rolled
+    # regexes in three grammars, and the two the index is rendered from
+    # were the narrow ones: a sub-numbered heading was indexed as a
+    # second row numbered after its *parent*, with an empty title and a
+    # dead anchor, and the example that exists to catch a missing row
+    # passed because both of its scans truncated the same way.
+    it "reads a sub-numbered entry's number and title, in the reader the index uses" do
+      require_relative "../../../scripts/reindex_findings"
+
+      sub = unspellable_number("30.1")
+      markdown = entry(sub, status: "open", kind: "defect")
+
+      expect(DeferredFindings.number_of(markdown)).to eq(sub)
+      expect(DeferredFindings.title_of(markdown)).to eq("A finding")
+      expect(ReindexFindings.number_of(markdown)).to eq(sub)
+      expect(ReindexFindings.title_of(markdown)).to eq("A finding")
+    end
+
+    # `024.155`. `headings` recognises deliberately *more* than `entries`
+    # does, and that asymmetry is the whole point: "parses every entry"
+    # subtracts one from the other, so a heading both sides read the same
+    # way is absent from both sets and the subtraction is empty exactly
+    # where it was meant to bite. A colon after the number is the cheapest
+    # shape the strict grammar cannot parse.
+    it "reports a heading the entry grammar cannot parse, rather than skipping it" do
+      malformed = "## #{unspellable_number(901)}: A finding written with a colon\n\nprose, no yaml block.\n"
+
+      expect(DeferredFindings.headings(malformed) - DeferredFindings.entries(malformed).keys).not_to be_empty
+    end
+
+    # The control for the example above: a well-formed heading with no
+    # block is already reported, and was before 0.2.16. Without this the
+    # pair cannot tell a widened `headings` from one that reports
+    # everything.
+    it "still reports a well-formed heading that has no block" do
+      blockless = "## #{unspellable_number(901)} A finding\n\nprose, no yaml block.\n"
+
+      expect(DeferredFindings.headings(blockless) - DeferredFindings.entries(blockless).keys)
+        .to eq([unspellable_number(901)])
+    end
+
+    # `024.155`, the other end. The index renderer used to read the number
+    # with a *looser* pattern than the checks, so it rendered a row for a
+    # heading they could not parse -- and the row is what made the two
+    # examples that compare the index to the entries agree about it.
+    it "refuses to index a heading the entry grammar cannot parse" do
+      require_relative "../../../scripts/reindex_findings"
+
+      legend = "# Register\n"
+      good = "\n## #{unspellable_number(901)} A finding\n\n```yaml\nstatus: open\nkind: defect\n```\n\nprose\n"
+      malformed = "\n## #{unspellable_number(902)}: A finding written with a colon\n\nprose\n"
+
+      expect(ReindexFindings.blocks_of(legend + good).length).to eq(1)
+      expect { ReindexFindings.blocks_of(legend + good + malformed) }
+        .to raise_error(ReindexFindings::Unparsable, /cannot parse/)
+    end
+
+    # `024.216`. The tail's `to_i` reads a sub-number as its parent, so
+    # the two keyed identically -- and `sort_by` is not stable, so which
+    # of them the index listed first was unspecified. Asserted as a strict
+    # ordering rather than only as a sorted list, because a tie can come
+    # out in the right order by luck.
+    it "sorts a sub-numbered entry under its parent rather than tying with it" do
+      require_relative "../../../scripts/reindex_findings"
+
+      parent = ReindexFindings.entry_key(unspellable_number(13))
+      sub = ReindexFindings.entry_key(unspellable_number("13.1"))
+      later = ReindexFindings.entry_key(unspellable_number(14))
+
+      expect(parent <=> sub).to eq(-1)
+      expect(sub <=> later).to eq(-1)
     end
 
     it "requires the marker to end where the number ends" do
       expect(DeferredFindings.documents?("a limitation <!-- documents: 024.13 -->", "024.1")).to be(false)
-      expect(DeferredFindings.documents?("a limitation <!-- documents: 024.21.1 -->", "024.21")).to be(false)
+      expect(DeferredFindings.documents?("a limitation <!-- documents: #{unspellable_number('21.1')} -->",
+                                         "024.21")).to be(false)
       expect(DeferredFindings.documents?("a limitation <!-- documents: 024.13 -->", "024.13")).to be(true)
     end
 

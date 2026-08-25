@@ -37,6 +37,29 @@ ROOT = File.expand_path("..", __dir__)
 CORE = File.join(ROOT, "core")
 MANIFEST = File.join(CORE, "spec", "meta", "pinned_mutations.yml")
 
+# The roots a mutation may name, in one place.
+#
+# `core/lib` was the whole scope until 0.2.14. Round 2's method was to
+# take a guarantee and try to make it false with the suite green, and it
+# succeeded against nearly every check in `scripts/` -- because the
+# manifest that exists to ask "does this example fail when the decision
+# it names is inverted" could not name a decision in a check.
+#
+# `scripts/` is added, and nothing else: the applier writes to the real
+# file and restores it, which is safe for a script a spec shells out to,
+# and is *not* safe for a spec file, where mutating the source could
+# delete the example being run. A decision inside a spec is pinned by a
+# second example, not by this.
+#
+# One list, because there were three: this constant's predecessor was a
+# literal argument list, the refusal below spelled the roots again in
+# prose, and the manifest's header spelled them a third time -- and that
+# third copy said `core/lib` alone for the whole of 0.2.14, having gone
+# stale in the same commit that added the `scripts/` entries (`024.212`).
+# The refusal now reads the list, and the manifest header points here
+# rather than repeating it.
+ACCEPTED_ROOTS = %w[core/lib/ scripts/].freeze
+
 def fail_with(message)
   warn("check-pinned-mutations: #{message}")
   exit 1
@@ -45,8 +68,9 @@ end
 # `--verify-only` checks the manifest without touching a file: every `from`
 # matches exactly once, and every named example exists and is selected
 # uniquely. That half is safe to run inside the ordinary suite. Applying the
-# mutations is not -- it writes to `core/lib`, and an interrupted rspec would
-# leave the tree wrong -- so it is a CI job of its own.
+# mutations is not -- it writes into the tracked file each entry names, and an
+# interrupted rspec would leave the tree wrong -- so it is a CI job of its own.
+# What each mode may then claim is at the bottom of this file.
 verify_only = ARGV.include?("--verify-only")
 
 entries = YAML.safe_load(File.read(MANIFEST, encoding: "UTF-8"))
@@ -66,19 +90,8 @@ entries.each_with_index do |entry, i|
 
   source = File.join(ROOT, entry["file"])
   fail_with("entry #{i + 1}: #{entry["file"]} does not exist") unless File.file?(source)
-  # `core/lib` was the whole scope until 0.2.14. Round 2's method was to
-  # take a guarantee and try to make it false with the suite green, and
-  # it succeeded against nearly every check in `scripts/` -- because the
-  # manifest that exists to ask "does this example fail when the decision
-  # it names is inverted" could not name a decision in a check.
-  #
-  # `scripts/` is added, and nothing else: the applier writes to the real
-  # file and restores it, which is safe for a script a spec shells out
-  # to, and is *not* safe for a spec file, where mutating the source
-  # could delete the example being run. A decision inside a spec is
-  # pinned by a second example, not by this.
-  unless entry["file"].start_with?("core/lib/", "scripts/")
-    fail_with("entry #{i + 1}: #{entry["file"]} is under neither core/lib nor scripts -- " \
+  unless entry["file"].start_with?(*ACCEPTED_ROOTS)
+    fail_with("entry #{i + 1}: #{entry["file"]} is under none of #{ACCEPTED_ROOTS.join(", ")} -- " \
               "a spec file cannot be mutated here, because the mutation could remove the example")
   end
 
@@ -135,11 +148,37 @@ entries.each_with_index do |entry, i|
   end
 end
 
+# Two modes, two conclusions, because they establish different things and
+# only one of them ran anything against mutated source.
+#
+# `--verify-only` used to fall through to the applying run's sentence --
+# "every one caught by the example that names it" -- after taking the
+# early `next` above, so the ordinary suite emitted that claim on every
+# run while writing no file and running no example to failure. It is this
+# project's own "the answer that would be right if nothing had gone
+# wrong", in the checker built to detect that shape, and it is what this
+# script's header warns about two paragraphs in: a checker that cannot
+# see the thing it checks reports what a working one reports. `024.211`.
+#
+# The failure branch was wrong symmetrically: in `--verify-only` a
+# failure can only be a manifest that no longer selects what it names,
+# never an example that survived its mutation.
 if failures.empty?
-  puts "check-pinned-mutations: #{entries.length} mutation(s), every one caught by the example that names it."
+  puts(if verify_only
+         "check-pinned-mutations: #{entries.length} mutation(s) checked as a manifest -- every `from` matches " \
+         "its file exactly once, and every named example exists and is selected uniquely. Nothing was applied " \
+         "here, so nothing here says an example fails under its mutation: that is ci.yml's \"Pinned mutations\"."
+       else
+         "check-pinned-mutations: #{entries.length} mutation(s), every one caught by the example that names it."
+       end)
   exit 0
 end
 
-warn("check-pinned-mutations: #{failures.length} of #{entries.length} mutation(s) not caught:")
+warn(if verify_only
+       "check-pinned-mutations: #{failures.length} of #{entries.length} mutation(s) no longer select " \
+       "what they name:"
+     else
+       "check-pinned-mutations: #{failures.length} of #{entries.length} mutation(s) not caught:"
+     end)
 failures.each { |f| warn("  - #{f}") }
 exit 1

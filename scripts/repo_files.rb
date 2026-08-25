@@ -33,8 +33,27 @@ module RepoFiles
 
   # `pathspec` is passed to git unchanged, so callers keep their globs.
   def list(root, *pathspec)
-    (git(root, %W[ls-files -z] + pathspec) +
+    (tracked(root, *pathspec) +
      git(root, %W[ls-files -z --others --exclude-standard] + pathspec)).uniq.sort
+  end
+
+  # Committed content only, and **deliberately the opposite of `list`**.
+  #
+  # `024.194`. The argument above is about the files a check *inspects*:
+  # a file you have just written must not be invisible to the checks that
+  # judge it. It is not an argument about the files a check treats as
+  # *evidence that something happens*. `release_gate_spec` asks "does
+  # anything invoke this script?", and answering yes on the strength of an
+  # uncommitted scratch file means the check passed for a reason that
+  # exists in no commit — so a gate reads as wired on this machine and
+  # nowhere else.
+  #
+  # The cost is the mirror image of `024.147`'s and is the right way
+  # round here: a genuinely new caller reports its gate unwired until
+  # `git add`. "Nothing runs this" is the answer that must not be given
+  # on evidence no commit contains.
+  def tracked(root, *pathspec)
+    git(root, %W[ls-files -z] + pathspec).uniq.sort
   end
 
   def git(root, args)

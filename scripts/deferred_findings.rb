@@ -22,7 +22,10 @@ require "yaml"
 # - **An entry with no block is a failure, not a skip.** The old guard
 #   silently dropped a heading it did not recognise, so an entry could be
 #   added and never checked. `parses every entry` compares the block count
-#   to the heading count for exactly that reason.
+#   to the heading count for exactly that reason -- and it could not do
+#   that until 0.2.16, because both counts came from one pattern and a
+#   heading outside it was missing from both. `024.155`; see
+#   `HEADING_LINE`, which is deliberately the looser of the two.
 # - **The opt-out must say why.** The old guard documented that
 #   requirement in three places and enforced it nowhere.
 # - **The other end of the check needs a grammar too.** Until 0.2.1 this
@@ -35,15 +38,72 @@ require "yaml"
 module DeferredFindings
   module_function
 
-  ENTRY_HEADING = /^## (024\.[0-9R][0-9.]*) /
+  # The entry number, as a well-formed heading spells it: the prefix and
+  # a number, an `R` and a number for a roadmap item, or a dotted tail
+  # for a sub-entry. (Described rather than spelled -- `024.126`. An
+  # illustration of a sub-number written out here is a citation of an
+  # entry that does not exist, in the file the citation guard reads its
+  # grammar from.)
+  #
+  # **One place.** `024.216` counted six readers of this in three
+  # incompatible grammars -- the index renderer truncated a sub-number to
+  # its parent, one spec's scan matched nothing at all, and each reader
+  # was the only reader of its own result, so they could not notice.
+  # Everything that needs to recognise a number reads this.
+  #
+  # The `R` branch requires digits: `R` alone would make the trailing
+  # `\b` in `CITATION` match the register's own prose about the roadmap
+  # numbering.
+  NUMBER = /024\.(?:R[0-9]+|[0-9]+(?:\.[0-9]+)*)/
+
+  ENTRY_HEADING = /^## (#{NUMBER}) ([^\n]*)/
+
+  # Deliberately looser than `ENTRY_HEADING`, and the asymmetry is the
+  # point -- `024.155`. `parses every entry` subtracts the parsed blocks
+  # from the headings, so if both sides read the same pattern a heading
+  # outside it is absent from *both* sets and the subtraction is empty
+  # exactly where it was meant to bite: the guard's own header calls that
+  # "an entry could be added and never checked", and it was true of this
+  # guard until 0.2.16. A colon after the number was enough.
+  HEADING_LINE = /^## (024\.\S*)/
+
+  # Where one entry ends and the next begins. Shared, for the same reason
+  # as `NUMBER`: three splits with three patterns disagreed about whether
+  # a heading needed a trailing space, and the one that said no rendered
+  # an index row for a heading the checks could not parse.
+  ENTRY_SPLIT = /^(?=## 024\.)/
+
+  # A pointer *to* an entry, written in prose anywhere in the tree.
+  # Derived from `NUMBER` rather than written independently: the
+  # hand-rolled version could not express a sub-number, so a citation of
+  # a sub-entry that has never existed matched as its parent, which does
+  # exist, and resolved (`024.182`). Shape described, not spelled, for
+  # the reason given above `NUMBER`.
+  CITATION = /\b(#{NUMBER})\b/
+
   # `[^\n]*` for the title, not `.*`: under `/m` -- which the block body
   # needs -- a dot matches newlines, and the title would swallow the file
   # down to the last block, leaving one entry parsed and every other one
   # reported as missing.
-  METADATA_BLOCK = /^## (024\.[0-9R][0-9.]*) [^\n]*\n\n```yaml\n(.*?)\n```$/m
+  METADATA_BLOCK = /^## (#{NUMBER}) [^\n]*\n\n```yaml\n(.*?)\n```$/m
+
+  # A row in the register's "Retired numbers" table. A deleted entry
+  # keeps its number resolvable, which is the whole point of citing one.
+  RETIRED_ROW = /^\| `(#{NUMBER})` \|/
+
   RESOLVED = %w[fixed done].freeze
 
-  def headings(markdown) = markdown.scan(ENTRY_HEADING).flatten
+  def headings(markdown) = markdown.scan(HEADING_LINE).flatten
+
+  def retired_numbers(markdown) = markdown.scan(RETIRED_ROW).flatten
+
+  # The number and title of one entry's block, read from the strict
+  # grammar. `nil` for a heading that grammar cannot parse -- the caller
+  # decides what to do about that, and the one caller there is refuses to
+  # render an index row for it rather than rendering an empty one.
+  def number_of(block) = block[ENTRY_HEADING, 1]
+
+  def title_of(block) = block[ENTRY_HEADING, 2].to_s.strip
 
   # Raised when an entry names a key the legend does not define.
   UnknownKey = Class.new(StandardError)
@@ -145,7 +205,7 @@ module DeferredFindings
   AREA_PATH = %r{`((?:core|vscode|scripts|docs|site|\.github)/[A-Za-z0-9._/-]+)`}
 
   def area_paths(markdown)
-    markdown.scan(/^## (024\.\S+)(.*?)(?=^## 024\.|\z)/m).to_h do |number, body|
+    markdown.scan(/#{HEADING_LINE.source}(.*?)(?=^## 024\.|\z)/m).to_h do |number, body|
       line = body[AREA_LINE, 1].to_s
       [number, line.scan(AREA_PATH).flatten]
     end

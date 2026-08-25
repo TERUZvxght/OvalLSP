@@ -80,7 +80,29 @@ fi
 # enforced this, and nothing invoked that script -- so between its last
 # hand-run and 0.2.14 the gate was enforced by nothing. Pinned by
 # core/spec/meta/release_script_guard_spec.rb.
-if ! git -C "$REPO_ROOT" diff --quiet || ! git -C "$REPO_ROOT" diff --cached --quiet; then
+#
+# `git diff --quiet` has three answers, not two: 0 clean, 1 dirty, and
+# anything above 1 for "I cannot tell you" -- not a repository, an
+# unreadable index, a broken object store. The `if ! git ...` form this
+# replaces collapsed the third into the second, so a tree git could not
+# read was announced to the operator as a tree with uncommitted changes:
+# a failure to *ask*, turned into an assertion about their tree. Both
+# still refuse, because publishing on an unanswered question is not an
+# option -- but the reason printed is now the reason. 024.158.
+TREE_STATUS=0
+git -C "$REPO_ROOT" diff --quiet 2>/dev/null || TREE_STATUS=$?
+if [ "$TREE_STATUS" -eq 0 ]; then
+  git -C "$REPO_ROOT" diff --cached --quiet 2>/dev/null || TREE_STATUS=$?
+fi
+
+if [ "$TREE_STATUS" -gt 1 ]; then
+  echo "release.sh: cannot read the tracked tree at $REPO_ROOT (git exited $TREE_STATUS)." >&2
+  echo "The packaged Core records the current commit as its buildCommit, and that cannot be" >&2
+  echo "decided from a question git could not answer. Not publishing." >&2
+  exit 1
+fi
+
+if [ "$TREE_STATUS" -ne 0 ]; then
   echo "release.sh: the tracked tree has uncommitted changes." >&2
   echo "The packaged Core records the current commit as its buildCommit, so publishing" >&2
   echo "now would ship an artifact naming a commit it does not match. Commit or stash:" >&2

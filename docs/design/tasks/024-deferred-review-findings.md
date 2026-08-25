@@ -160,6 +160,7 @@ comment that cites it, which is where a reader is standing.
 | `024.7` | `rootIdentity`'s refresh assignment cannot affect any decision |
 | `024.9` | a forced crash popup can still appear for deliberate stops |
 | `024.12` | a hash literal and `Hash.new` still render differently |
+| `024.61` | nothing — vacated by the renumber described above and never reused. A row here rather than prose alone, because the citation guard now reads this file too (`024.183`) and the paragraphs explaining the hole cite the number they explain |
 | `024.70` | withdrawn, not fixed — the packaged-VSIX path warning was not blind; the re-run that "disproved" it went through a `ugrep` wrapper that skips binary files without `-a`. See CLAUDE.md's "A tool with the right name is not necessarily the tool under test" |
 
 `core/spec/meta/measured_claims_spec.rb` checks that every `024.N` cited
@@ -324,35 +325,35 @@ nobody can search is the recording habit without the benefit.
 | [`024.152`](#024152-a-leak-check-counted-every-descriptor-in-the-process-and-flaked-under-load) | fixed | 0.2.14 | A leak check counted every descriptor in the process, and flaked und… |
 | [`024.153`](#024153-a-quarter-of-the-open-work-is-in-no-release-and-0-3-0-has-become-where-the-rest-goes) | fixed | 0.2.15 | A quarter of the open work is in no release, and 0.3.0 has become wh… |
 | [`024.154`](#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | open | 0.2.16 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
-| [`024.155`](#024155-a-register-heading-the-entry-grammar-does-not-match-is-skipped-rather-than-failed-so-an-entry-can-exist-and-be-checked-by-nothing) | open | 0.2.16 | A register heading the entry grammar does not match is skipped rathe… |
+| [`024.155`](#024155-a-register-heading-the-entry-grammar-does-not-match-is-skipped-rather-than-failed-so-an-entry-can-exist-and-be-checked-by-nothing) | fixed | 0.2.16 | A register heading the entry grammar does not match is skipped rathe… |
 | [`024.156`](#024156-the-evidence-extractor-recognises-only-rb-sh-js-and-test-so-typescript-tests-and-ci-job-names-the-sole-evidence-for-eight-gates-are-never-checked) | open | 0.2.16 | The evidence extractor recognises only .rb/.sh/.js and test:, so Typ… |
 | [`024.157`](#024157-a-git-subprocess-in-a-throwaway-repository-obeys-the-inherited-git-dir-so-the-suite-commits-to-the-real-repository) | open | 0.2.16 | A git subprocess in a throwaway repository obeys the inherited GIT_D… |
-| [`024.158`](#024158-the-executed-pat-mode-example-passes-on-a-release-sh-that-only-warns-because-its-exit-status-comes-from-a-later-check-misreporting-a-non-repository-as-dirty) | open | 0.2.16 | The executed PAT-mode example passes on a release.sh that only warns… |
+| [`024.158`](#024158-the-executed-pat-mode-example-passes-on-a-release-sh-that-only-warns-because-its-exit-status-comes-from-a-later-check-misreporting-a-non-repository-as-dirty) | fixed | 0.2.16 | The executed PAT-mode example passes on a release.sh that only warns… |
 | [`024.159`](#024159-the-measured-claim-marker-and-the-number-a-reader-sees-are-separate-strings-so-the-prose-can-say-anything-while-the-marker-verifies) | open | 0.2.16 | The measured-claim marker and the number a reader sees are separate … |
 | [`024.160`](#024160-counts-in-046-that-describe-this-tree-carry-no-basis-are-not-marked-and-several-are-stale-at-head) | open | 0.2.16 | Counts in 046 that describe this tree carry no basis, are not marked… |
 | [`024.161`](#024161-046-s-round-3-correction-states-that-the-4-000-lines-of-revert-phrase-is-removed-the-phrase-is-still-the-file-s-closing-sentence) | open | 0.2.16 | 046's round-3 correction states that the "4,000 lines of revert" phr… |
-| [`024.162`](#024162-046-s-recorded-departure-from-the-drive-round-rests-on-a-false-enumeration-of-the-change-set) | open | 0.2.16 | 046's recorded departure from the `drive` round rests on a false enu… |
+| [`024.162`](#024162-046-s-recorded-departure-from-the-drive-round-rests-on-a-false-enumeration-of-the-change-set) | fixed | 0.2.16 | 046's recorded departure from the `drive` round rests on a false enu… |
 | [`024.163`](#024163-046-s-round-2-header-asserts-every-attacker-worked-in-a-clean-tree-and-046-s-own-recorded-findings-say-the-tree-was-dirty-and-changing-throughout) | open | 0.2.16 | 046's round-2 header asserts every attacker worked in a clean tree, … |
 | [`024.164`](#024164-046-states-finding-totals-whose-stated-dispositions-do-not-account-for-them) | open | 0.2.16 | 046 states finding totals whose stated dispositions do not account f… |
 | [`024.165`](#024165-046-keeps-138-acceptance-boxes-on-the-stated-ground-that-no-box-has-ever-been-ticked-56-are-ticked-13-of-them-in-a-file-this-change-set-edited) | open | 0.2.16 | 046 keeps 138 acceptance boxes on the stated ground that no box has … |
-| [`024.166`](#024166-two-rows-of-046-s-checks-table-describe-checks-that-were-built-differently-and-the-changed-shape-list-omits-one) | open | 0.2.16 | Two rows of 046's checks table describe checks that were built diffe… |
+| [`024.166`](#024166-two-rows-of-046-s-checks-table-describe-checks-that-were-built-differently-and-the-changed-shape-list-omits-one) | fixed | 0.2.16 | Two rows of 046's checks table describe checks that were built diffe… |
 | [`024.167`](#024167-046-s-three-review-rounds-record-no-per-place-tracking-so-claude-md-s-same-place-rule-cannot-be-applied-and-was-not) | open | 0.2.16 | 046's three review rounds record no per-place tracking, so CLAUDE.md… |
 | [`024.168`](#024168-the-ledger-s-reason-for-keeping-05-protocol-md-s-section-numbering-counts-four-source-comments-where-one-exists-and-the-claim-was-copied-into-the-shipped-document) | open | 0.2.16 | The ledger's reason for keeping 05-protocol.md's section numbering c… |
-| [`024.169`](#024169-check-doc-links-rb-s-citation-comment-describes-anchor-punctuation-stripping-that-no-caller-performs) | open | 0.2.16 | `check_doc_links.rb`'s CITATION comment describes anchor/punctuation… |
-| [`024.170`](#024170-the-doubled-entry-check-counts-area-lines-so-a-body-duplicated-anywhere-below-that-line-is-invisible) | open | 0.2.16 | The doubled-entry check counts `**Area:**` lines, so a body duplicat… |
+| [`024.169`](#024169-check-doc-links-rb-s-citation-comment-describes-anchor-punctuation-stripping-that-no-caller-performs) | fixed | 0.2.16 | `check_doc_links.rb`'s CITATION comment describes anchor/punctuation… |
+| [`024.170`](#024170-the-doubled-entry-check-counts-area-lines-so-a-body-duplicated-anywhere-below-that-line-is-invisible) | fixed | 0.2.16 | The doubled-entry check counts `**Area:**` lines, so a body duplicat… |
 | [`024.171`](#024171-three-entries-closed-in-0-2-14-state-as-done-something-head-contradicts-two-of-them-naming-a-countermeasure-that-was-never-built) | open | 0.2.16 | Three entries closed in 0.2.14 state as done something HEAD contradi… |
 | [`024.172`](#024172-four-counts-derived-about-this-tree-are-wrong-and-unmarked-one-of-them-inside-the-entry-about-a-record-that-drifted) | open | 0.2.16 | Four counts derived about this tree are wrong and unmarked, one of t… |
 | [`024.173`](#024173-the-shipped-target-guard-sees-only-kind-defect-and-released-in-is-written-by-16-entries-and-read-by-no-check) | open | 0.2.16 | The shipped-target guard sees only `kind: defect`, and `released-in:… |
-| [`024.174`](#024174-a-relative-markdown-link-beginning-docs-is-resolved-against-the-repository-root-instead-of-the-citing-file-s-directory) | open | 0.2.16 | A relative Markdown link beginning `docs/` is resolved against the r… |
-| [`024.175`](#024175-doc-link-resolution-goes-through-file-file-so-a-case-only-typo-passes-on-macos-and-fails-on-linux-and-github) | open | 0.2.16 | Doc-link resolution goes through File.file?, so a case-only typo pas… |
+| [`024.174`](#024174-a-relative-markdown-link-beginning-docs-is-resolved-against-the-repository-root-instead-of-the-citing-file-s-directory) | fixed | 0.2.16 | A relative Markdown link beginning `docs/` is resolved against the r… |
+| [`024.175`](#024175-doc-link-resolution-goes-through-file-file-so-a-case-only-typo-passes-on-macos-and-fails-on-linux-and-github) | fixed | 0.2.16 | Doc-link resolution goes through File.file?, so a case-only typo pas… |
 | [`024.176`](#024176-the-deletion-marker-marker-admits-a-pointer-to-a-renamed-file-which-the-paragraph-defining-it-says-is-still-a-failure) | open | 0.2.16 | The `[deletion marker]` marker admits a pointer to a renamed file, w… |
-| [`024.177`](#024177-check-doc-links-names-only-an-enumerated-set-of-docs-subdirectories-so-a-citation-in-any-other-one-is-silently-unchecked) | open | 0.2.16 | check_doc_links names only an enumerated set of docs subdirectories,… |
-| [`024.178`](#024178-check-doc-links-founding-census-is-stated-as-living-entirely-in-source-comments-one-of-the-nineteen-was-in-a-markdown-document) | open | 0.2.16 | check_doc_links' founding census is stated as living entirely in sou… |
-| [`024.179`](#024179-hand-typed-counts-in-check-doc-links-header-do-not-reproduce-and-none-carries-a-measured-marker) | open | 0.2.16 | Hand-typed counts in check_doc_links' header do not reproduce, and n… |
-| [`024.180`](#024180-the-citation-guard-reads-nine-file-extensions-so-the-published-site-s-register-pointers-are-outside-every-check) | open | 0.2.16 | The citation guard reads nine file extensions, so the published site… |
+| [`024.177`](#024177-check-doc-links-names-only-an-enumerated-set-of-docs-subdirectories-so-a-citation-in-any-other-one-is-silently-unchecked) | fixed | 0.2.16 | check_doc_links names only an enumerated set of docs subdirectories,… |
+| [`024.178`](#024178-check-doc-links-founding-census-is-stated-as-living-entirely-in-source-comments-one-of-the-nineteen-was-in-a-markdown-document) | fixed | 0.2.16 | check_doc_links' founding census is stated as living entirely in sou… |
+| [`024.179`](#024179-hand-typed-counts-in-check-doc-links-header-do-not-reproduce-and-none-carries-a-measured-marker) | fixed | 0.2.16 | Hand-typed counts in check_doc_links' header do not reproduce, and n… |
+| [`024.180`](#024180-the-citation-guard-reads-nine-file-extensions-so-the-published-site-s-register-pointers-are-outside-every-check) | fixed | 0.2.16 | The citation guard reads nine file extensions, so the published site… |
 | [`024.181`](#024181-the-measured-claim-scanner-reads-four-hand-written-globs-so-a-marker-anywhere-else-is-inert) | open | 0.2.16 | The measured-claim scanner reads four hand-written globs, so a marke… |
-| [`024.182`](#024182-a-sub-numbered-register-entry-is-invisible-to-the-citation-guard-and-a-citation-of-one-truncates-to-its-parent) | open | 0.2.16 | A sub-numbered register entry is invisible to the citation guard, an… |
-| [`024.183`](#024183-the-citation-guard-skips-the-register-itself-where-most-024-n-cross-references-are-written) | open | 0.2.16 | The citation guard skips the register itself, where most `024.N` cro… |
+| [`024.182`](#024182-a-sub-numbered-register-entry-is-invisible-to-the-citation-guard-and-a-citation-of-one-truncates-to-its-parent) | fixed | 0.2.16 | A sub-numbered register entry is invisible to the citation guard, an… |
+| [`024.183`](#024183-the-citation-guard-skips-the-register-itself-where-most-024-n-cross-references-are-written) | fixed | 0.2.16 | The citation guard skips the register itself, where most `024.N` cro… |
 | [`024.184`](#024184-a-dated-rev-claim-is-silently-derived-from-the-present-tree-unless-the-deriver-happens-to-use-the-revision) | open | 0.2.16 | A dated `@<rev>` claim is silently derived from the present tree unl… |
 | [`024.185`](#024185-a-second-measured-marker-on-the-same-line-is-never-parsed) | open | 0.2.16 | A second `<!-- measured: -->` marker on the same line is never parsed |
 | [`024.186`](#024186-mutex-sites-counts-the-string-mutex-new-so-a-comment-mentioning-it-inflates-the-documented-lock-count) | open | 0.2.16 | `mutex-sites` counts the string `Mutex.new`, so a comment mentioning… |
@@ -363,29 +364,29 @@ nobody can search is the recording habit without the benefit.
 | [`024.191`](#024191-as-utf8-s-comment-describes-a-hazard-the-same-file-s-utf8-require-already-removed) | open | 0.2.16 | as_utf8's comment describes a hazard the same file's utf8 require al… |
 | [`024.192`](#024192-the-case-sensitivity-decision-is-justified-by-a-count-of-37-that-was-never-right) | open | 0.2.16 | The case-sensitivity decision is justified by a count of 37 that was… |
 | [`024.193`](#024193-existence-is-a-suffix-glob-and-any-test-name-passes-unconditionally-so-a-citation-naming-a-file-that-does-not-exist-is-accepted) | open | 0.2.16 | Existence is a suffix glob and any test: name passes unconditionally… |
-| [`024.194`](#024194-release-gate-spec-s-wiring-corpus-includes-untracked-files-so-uncommitted-local-text-satisfies-a-gate-s-something-invokes-this) | open | 0.2.16 | release_gate_spec's wiring corpus includes untracked files, so uncom… |
+| [`024.194`](#024194-release-gate-spec-s-wiring-corpus-includes-untracked-files-so-uncommitted-local-text-satisfies-a-gate-s-something-invokes-this) | fixed | 0.2.16 | release_gate_spec's wiring corpus includes untracked files, so uncom… |
 | [`024.195`](#024195-every-prose-statement-of-what-the-preflight-gate-runs-is-stale-and-nothing-derives-any-of-them) | fixed | 0.2.16 | Every prose statement of what the preflight gate runs is stale, and … |
 | [`024.196`](#024196-the-measurement-that-justifies-reading-per-example-status-is-quoted-three-times-attributed-to-a-different-file-each-time-and-matches-none-of-them) | open | 0.2.16 | The measurement that justifies reading per-example status is quoted … |
 | [`024.197`](#024197-0-2-14-s-review-loop-edited-its-own-standard-and-added-a-capability-between-rounds-with-no-departure-recorded) | open | 0.2.16 | 0.2.14's review loop edited its own standard and added a capability … |
 | [`024.198`](#024198-the-packaged-artifact-inspection-count-is-derived-from-the-directory-alone-so-a-grep-aimed-at-the-wrong-pattern-or-with-wider-exclusions-still-reports-a-healthy-count) | open | 0.2.16 | The packaged-artifact inspection count is derived from the directory… |
-| [`024.199`](#024199-the-guard-spec-s-absolute-grep-pin-is-satisfied-by-the-advisory-grep-and-its-bare-grep-scan-cannot-see-an-indented-call) | open | 0.2.16 | The guard spec's absolute-grep pin is satisfied by the advisory grep… |
-| [`024.200`](#024200-nothing-checks-that-release-sh-parses-so-a-syntax-error-past-the-first-refusal-leaves-every-check-green) | open | 0.2.16 | Nothing checks that release.sh parses, so a syntax error past the fi… |
-| [`024.201`](#024201-the-not-yet-escape-hatch-is-guarded-against-a-hand-copied-two-suite-list-that-has-drifted-from-the-three-suite-table-it-covers) | open | 0.2.16 | The NOT YET escape hatch is guarded against a hand-copied two-suite … |
-| [`024.202`](#024202-the-release-tag-accounting-invariant-runs-nowhere-continuous-the-job-that-runs-the-suite-checks-out-without-tags) | open | 0.2.16 | The release-tag accounting invariant runs nowhere continuous: the jo… |
-| [`024.203`](#024203-suites-ran-spec-s-ci-yml-link-asserts-a-text-substring-so-it-passes-for-a-step-that-has-been-deleted-commented-out-or-disabled) | open | 0.2.16 | suites_ran_spec's ci.yml link asserts a text substring, so it passes… |
+| [`024.199`](#024199-the-guard-spec-s-absolute-grep-pin-is-satisfied-by-the-advisory-grep-and-its-bare-grep-scan-cannot-see-an-indented-call) | fixed | 0.2.16 | The guard spec's absolute-grep pin is satisfied by the advisory grep… |
+| [`024.200`](#024200-nothing-checks-that-release-sh-parses-so-a-syntax-error-past-the-first-refusal-leaves-every-check-green) | fixed | 0.2.16 | Nothing checks that release.sh parses, so a syntax error past the fi… |
+| [`024.201`](#024201-the-not-yet-escape-hatch-is-guarded-against-a-hand-copied-two-suite-list-that-has-drifted-from-the-three-suite-table-it-covers) | fixed | 0.2.16 | The NOT YET escape hatch is guarded against a hand-copied two-suite … |
+| [`024.202`](#024202-the-release-tag-accounting-invariant-runs-nowhere-continuous-the-job-that-runs-the-suite-checks-out-without-tags) | fixed | 0.2.16 | The release-tag accounting invariant runs nowhere continuous: the jo… |
+| [`024.203`](#024203-suites-ran-spec-s-ci-yml-link-asserts-a-text-substring-so-it-passes-for-a-step-that-has-been-deleted-commented-out-or-disabled) | fixed | 0.2.16 | suites_ran_spec's ci.yml link asserts a text substring, so it passes… |
 | [`024.204`](#024204-the-git-ls-files-guard-reads-49-files-in-two-directories-so-the-enumeration-it-forbids-is-invisible-everywhere-else-in-the-tree) | open | 0.2.16 | The `git ls-files` guard reads 49 files in two directories, so the e… |
-| [`024.205`](#024205-the-duplicate-heading-check-tracks-a-fence-by-its-character-and-not-its-length-so-a-four-backtick-block-leaves-the-rest-of-the-file-unread) | open | 0.2.16 | The duplicate-heading check tracks a fence by its character and not … |
-| [`024.206`](#024206-the-duplicate-heading-check-sees-only-unindented-h1-and-h2-while-024-140-records-the-guarantee-as-every-heading) | open | 0.2.16 | The duplicate-heading check sees only unindented h1 and h2, while `0… |
-| [`024.207`](#024207-two-decisions-in-the-duplicate-heading-fence-parser-have-no-fixture-that-can-distinguish-them) | open | 0.2.16 | Two decisions in the duplicate-heading fence parser have no fixture … |
+| [`024.205`](#024205-the-duplicate-heading-check-tracks-a-fence-by-its-character-and-not-its-length-so-a-four-backtick-block-leaves-the-rest-of-the-file-unread) | fixed | 0.2.16 | The duplicate-heading check tracks a fence by its character and not … |
+| [`024.206`](#024206-the-duplicate-heading-check-sees-only-unindented-h1-and-h2-while-024-140-records-the-guarantee-as-every-heading) | fixed | 0.2.16 | The duplicate-heading check sees only unindented h1 and h2, while `0… |
+| [`024.207`](#024207-two-decisions-in-the-duplicate-heading-fence-parser-have-no-fixture-that-can-distinguish-them) | fixed | 0.2.16 | Two decisions in the duplicate-heading fence parser have no fixture … |
 | [`024.208`](#024208-encoding-default-internal-nil-is-the-half-of-the-locale-fix-that-nothing-pins) | open | 0.2.16 | `Encoding.default_internal = nil` is the half of the locale fix that… |
 | [`024.209`](#024209-the-5-status-bar-comparison-is-set-equality-against-a-regex-sample-of-clientpresentation-ts-not-against-the-file-s-status-strings-and-two-records-state-the-stronger-guarantee) | open | 0.2.16 | The §5 status-bar comparison is set equality against a regex sample … |
 | [`024.210`](#024210-the-plugin-sdk-check-asks-whether-a-name-is-defined-anywhere-under-core-lib-ovallsp-plugins-not-whether-it-is-callable-on-the-receiver-the-document-shows) | fixed | 0.2.16 | The plugin-sdk check asks whether a name is defined anywhere under c… |
-| [`024.211`](#024211-check-pinned-mutations-rb-verify-only-prints-the-applier-s-conclusion-after-applying-nothing) | open | 0.2.16 | `check_pinned_mutations.rb --verify-only` prints the applier's concl… |
-| [`024.212`](#024212-pinned-mutations-yml-s-header-documents-the-mechanism-the-applier-abandoned-and-a-scope-it-no-longer-has) | open | 0.2.16 | pinned_mutations.yml's header documents the mechanism the applier ab… |
-| [`024.213`](#024213-a-mutation-entry-s-stated-reason-describes-a-mutation-different-from-the-one-it-encodes) | open | 0.2.16 | A mutation entry's stated reason describes a mutation different from… |
-| [`024.214`](#024214-generate-sbom-rb-s-header-tells-the-reader-a-stale-sbom-is-caught-by-nobody-in-the-release-that-made-a-spec-catch-it) | open | 0.2.16 | generate_sbom.rb's header tells the reader a stale SBOM is caught by… |
+| [`024.211`](#024211-check-pinned-mutations-rb-verify-only-prints-the-applier-s-conclusion-after-applying-nothing) | fixed | 0.2.16 | `check_pinned_mutations.rb --verify-only` prints the applier's concl… |
+| [`024.212`](#024212-pinned-mutations-yml-s-header-documents-the-mechanism-the-applier-abandoned-and-a-scope-it-no-longer-has) | fixed | 0.2.16 | pinned_mutations.yml's header documents the mechanism the applier ab… |
+| [`024.213`](#024213-a-mutation-entry-s-stated-reason-describes-a-mutation-different-from-the-one-it-encodes) | fixed | 0.2.16 | A mutation entry's stated reason describes a mutation different from… |
+| [`024.214`](#024214-generate-sbom-rb-s-header-tells-the-reader-a-stale-sbom-is-caught-by-nobody-in-the-release-that-made-a-spec-catch-it) | fixed | 0.2.16 | generate_sbom.rb's header tells the reader a stale SBOM is caught by… |
 | [`024.215`](#024215-a-scripted-comment-rewrite-in-corpus-diagnostics-rb-cut-a-sentence-mid-clause-and-nothing-in-the-tree-can-see-it) | open | 0.2.16 | A scripted comment rewrite in corpus_diagnostics.rb cut a sentence m… |
-| [`024.216`](#024216-the-register-s-entry-number-is-parsed-by-six-readers-with-three-grammars-so-a-sub-numbered-entry-is-indexed-as-a-duplicate-of-its-parent) | open | 0.2.16 | The register's entry number is parsed by six readers with three gram… |
+| [`024.216`](#024216-the-register-s-entry-number-is-parsed-by-six-readers-with-three-grammars-so-a-sub-numbered-entry-is-indexed-as-a-duplicate-of-its-parent) | fixed | 0.2.16 | The register's entry number is parsed by six readers with three gram… |
 | [`024.217`](#024217-rescue-verdicts-yml-s-header-tells-a-reader-the-98-arguments-are-unargued-defaults-and-names-a-verdict-the-checker-rejects-as-the-safe-one) | open | 0.2.16 | `rescue_verdicts.yml`'s header tells a reader the 98 arguments are u… |
 | [`024.218`](#024218-six-isolated-agents-branched-from-the-wrong-commit-and-the-evidence-was-deleted-before-it-was-checked) | fixed | 0.2.15 | Six isolated agents branched from the wrong commit, and the evidence… |
 | [`024.219`](#024219-a-three-part-claim-shipped-with-one-part-pinned-and-the-other-two-were-false) | fixed | 0.2.15 | A three-part claim shipped with one part pinned, and the other two w… |
@@ -5291,9 +5292,12 @@ pair is the same class through a document the legend does not name.
 
 Found by merge round 5 of 0.2.3's loop, by full cross-reference at
 626d652: 58 entries against 74 distinct number-shaped citations, two
-of which (`024.21.1`, `024.30.1`) are synthetic fixture strings inside
+of which are *sub-numbered* synthetic fixture strings inside
 `deferred_findings_spec.rb`'s own format examples — not citations of
-entries, and excluded as such. Of the remaining 72, the other
+entries, and excluded as such. (Described rather than spelled: `024.182`
+widened the citation guard to read a sub-number as itself, so writing
+those two out here makes this paragraph two dangling pointers.
+`024.126`'s repair for prose, applied where the helper cannot reach.) Of the remaining 72, the other
 unmatched citations (`024.51`, `024.54`, `024.57`, `024.58`, `024.61`,
 `024.64`, `024.65`) are the legend's own documented cross-branch
 reservations and gap, not defects. (Re-run the cross-reference rather
@@ -8674,6 +8678,20 @@ periodic run is hours, and the fixture isolation that entry describes
 takes the suite to about a minute, which takes this from overnight to
 lunchtime.
 
+**Re-derived during 0.2.16 and left open deliberately.** The census
+above still holds: `hunk_sweep.rb` is there and run by hand,
+`check_pinned_mutations.rb` is there and gates from ci.yml, and layer 3
+is absent on all three of its parts -- no runner, no tracked
+surviving-mutant count, no scheduled job. What decided against building
+it in this release was not the cost estimate but the seed: a ratchet is
+a number that may only move one way, `040`'s correction says to take it
+from a measured run rather than a guess, and the run that would produce
+it is the one `024.71` -- still open, at the same target -- is the
+precondition for. A runner with no measured seed is a script nothing
+invokes and a job that cannot gate, which is worse than the gap it
+would be filling. Recorded so the next session does not re-derive the
+census to reach the same place.
+
 ## 024.122 A failure is turned into a plausible value, in 72 measured places
 
 ```yaml
@@ -9084,10 +9102,11 @@ right level; a fourth instance needing a fourth *different* repair is
 what would say otherwise.
 
 **The fourth arrived, and took the same repair.** `046`'s C4 needed a
-synthetic register entry, and writing `024.999` in the spec made
-`measured_claims_spec`'s pointer guard report a dangling register
-citation — in the file that tests the register. Assembled from parts
-instead.
+synthetic register entry, and writing that entry's number out in the
+spec made `measured_claims_spec`'s pointer guard report a dangling
+register citation — in the file that tests the register. Assembled from
+parts instead. (The number is described rather than spelled here for
+the same reason, now that the guard reads this file too — `024.183`.)
 
 ### Seven times in one release, and what that finally bought
 
@@ -9912,10 +9931,14 @@ file, an hour apart.
 
 So the `**Area:**` rule was aimed at the symptom: it guards one file, and
 the class is "a scripted edit whose boundary silently misses". The
-countermeasure is now `core/spec/meta/duplicate_headings_spec.rb` — **no
-tracked Markdown document states the same heading twice** — which is the
-check both instances would have failed, and which needs no rule about how
-edits are performed.
+countermeasure is now `core/spec/meta/duplicate_headings_spec.rb`, which
+is the check both instances would have failed and which needs no rule
+about how edits are performed.
+
+**What exactly it guarantees is stated there, and deliberately not
+restated here.** This paragraph used to carry a one-line version of it,
+and `024.206` is that line claiming more than the check did — a
+guarantee written in two places goes wrong in one of them.
 
 Two things it had to get right, and both were found by running it:
 
@@ -10825,13 +10848,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.155 A register heading the entry grammar does not match is skipped rather than failed, so an entry can exist and be checked by nothing
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/deferred_findings.rb` (`ENTRY_HEADING`, `METADATA_BLOCK`, `#headings`, `#entries`), `core/spec/meta/deferred_findings_spec.rb` ("parses every entry", "indexes every entry"), `scripts/reindex_findings.rb` (`#number_of`)
@@ -10839,6 +10863,26 @@ target: 0.2.16
 `DeferredFindings`' header comment states the rule the whole guard was rebuilt for: "An entry with no block is a failure, not a skip. The old guard silently dropped a heading it did not recognise, so an entry could be added and never checked. `parses every entry` compares the block count to the heading count for exactly that reason." It cannot do that. `parses every entry` computes `headings(deferred) - entries(deferred).keys`, and both sides are derived from the *same* pattern — `ENTRY_HEADING` and `METADATA_BLOCK` each require `024.N` followed by a literal space. A heading outside that shape is absent from both sets, so the subtraction is empty for it and the comparison is vacuous exactly where it was meant to bite. Three checks that could have caught it independently do not: `reindex_findings.rb` uses a looser pattern (`/\A## (024\.[0-9R]+)/`, no trailing space), so it happily renders an index row for the malformed entry with `?` for status and an empty title, which then makes `indexes every entry` and `is in numeric order with its index current` both pass. The result is a heading that reads as an entry to every human and to the generated index, and to no check. Note this is not 024.151's class: no check was edited or narrowed, and a coverage floor would not help, because the two readers agree with each other while both being too narrow. The fix has the shape `CLAUDE.md` calls for — the two ends must not share the assumption they are supposed to cross-check. `headings` should recognise deliberately more than `entries` does (any `^## 024\.` line), so that anything the strict grammar cannot parse shows up in the difference.
 
 **Reproduce:** In a clone at aa1185f: `printf '\n## 024.<n>: A finding written with a colon after its number\n\nBody prose, no yaml block.\n' >> docs/design/tasks/024-deferred-review-findings.md`. Then `ruby -r./scripts/deferred_findings -e 'md=File.read("docs/design/tasks/024-deferred-review-findings.md",encoding:"UTF-8"); puts (DeferredFindings.headings(md) - DeferredFindings.entries(md).keys).inspect'` → `[]`. Then `ruby scripts/reindex_findings.rb` (rewrites, adding `| [`024.<n>`](#024200-) | ? | — | |`) and `ruby scripts/reindex_findings.rb --check` → `current`, exit 0. Then from `core/`: `bundle exec rspec spec/meta/deferred_findings_spec.rb` → 37 examples, 0 failures, and `bundle exec rspec spec/meta` → 192 examples, 0 failures, 6 pending — byte-identical to the clean HEAD run. Control: the same body written as `## 024.<n> A finding` (space, no colon) fails `parses every entry`.
+
+### Fixed in 0.2.16
+
+Reproduced first: the colon form gave an empty difference, the space
+form gave the heading, exactly as written.
+
+`headings` reads `HEADING_LINE` now — any heading line beginning with
+the number's prefix — while `entries` still reads the strict
+`METADATA_BLOCK`. The two sides of `parses every entry` no longer share
+the assumption they exist to cross-check, and the colon form is named in
+the failure.
+
+The index was the other half. `reindex_findings.rb` read the number with
+a pattern *looser* than the checks', so it rendered a row for a heading
+they could not parse, and that row is what made `indexes every entry`
+and `is in numeric order with its index current` both pass about an
+entry nothing had looked at. It refuses now:
+`ReindexFindings.blocks_of` raises `Unparsable`, split out of `rebuild`
+so an example can hand it a register-shaped string instead of the one
+file on disk.
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
@@ -10888,13 +10932,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.158 The executed PAT-mode example passes on a release.sh that only warns, because its exit status comes from a later check misreporting a non-repository as dirty
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/meta/release_script_guard_spec.rb` lines 158-182, `vscode/scripts/release.sh` lines 51-56 and 78-84
@@ -10905,6 +10950,30 @@ The PAT-mode example exists because "semantic mutations are invisible to any tex
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+### Fixed in 0.2.16
+
+Two halves, and the second reaches outside the suite.
+
+The executed example asserted `status.success? == false` plus the
+message, neither of which is tied to the PAT check. It asserts
+`exitstatus == 1` and that nothing a later check prints appears --
+both branches of the clean-tree check name the tracked tree, so one
+string covers them. Watched failing against the demoted script this
+entry describes.
+
+`release.sh` reads `git diff --quiet`'s exit status instead of
+`if ! git ...`: 0 clean, 1 dirty, above 1 "could not answer". The
+third refuses too, saying that is what happened, rather than
+announcing uncommitted changes about a tree git never read. Against
+the PAT fixture's non-repository tmpdir it used to print "the tracked
+tree has uncommitted changes" and exit 128; it now names the exit
+status git gave it.
+
+The window example is re-anchored on the deciding condition: the
+status is captured before the branch now, so a window opened at the
+first `diff --quiet` would have walked back to the check above and
+pinned that one's refusal.
 
 ## 024.159 The measured-claim marker and the number a reader sees are separate strings, so the prose can say anything while the marker verifies
 
@@ -10972,13 +11041,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.162 046's recorded departure from the `drive` round rests on a false enumeration of the change set
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md:497-502, :1381-1386
@@ -10989,6 +11059,24 @@ target: 0.2.16
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+### Fixed in 0.2.16 by deriving the enumeration, and keeping one copy of it
+
+Reproduced at `6bc31b9..6155cf4`, the revisions the departure was
+written between: 16 changed files under `core/lib` (+38/-47), of
+which thirteen are one-line citation repoints, plus
+`semantic/query_service.rb`, one comment rewrite and one deleted
+tombstone -- and `scripts/corpus_diagnostics.rb` at +125/-4 with a
+new 119-line spec, so the corpus consumer did change inside the
+range.
+
+`046`'s departure paragraph carries that enumeration with the
+revisions named, so it can be re-derived rather than believed, and
+the restatement under "Review cadence" points at it instead of
+repeating it. Both copies were wrong, which is what a justification
+kept in two places does. The conclusion is unchanged and re-derives
+on its own: zero non-comment, non-blank changed lines under
+`core/lib` in that range.
 
 ## 024.163 046's round-2 header asserts every attacker worked in a clean tree, and 046's own recorded findings say the tree was dirty and changing throughout
 
@@ -11056,13 +11144,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.166 Two rows of 046's checks table describe checks that were built differently, and the "changed shape" list omits one
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md:365-366, :370-372, scripts/reindex_findings.rb:54-66, scripts/corpus_diagnostics.rb:81-89
@@ -11073,6 +11162,22 @@ The checks table is what a reader auditing the release compares the built checks
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+### Fixed in 0.2.16, and the third limb was inverted
+
+Limbs 1 and 2 reproduced as written. `046`'s C4 row described a
+deletion that did not happen: `metadata_of` is a one-line delegation
+to `DeferredFindings.entries` with its false comment replaced, which
+is a better outcome than deletion and is what the row says now. C4 is
+added to the "changed shape" list, which had four items and needed
+five.
+
+Limb 3 reproduced backwards, so the correction goes the other way.
+`026-0.2.1-review-loop.md`'s table lists **three** false measurement
+results, which makes `046`'s C8 row right; the false sentence is
+`scripts/corpus_diagnostics.rb`'s header, which attributed all five
+to that file. `CLAUDE.md` carries the other two, both from 0.2.1's
+last day, and the comment says so now.
 
 ## 024.167 046's three review rounds record no per-place tracking, so CLAUDE.md's same-place rule cannot be applied and was not
 
@@ -11119,13 +11224,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.169 `check_doc_links.rb`'s CITATION comment describes anchor/punctuation stripping that no caller performs
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** scripts/check_doc_links.rb:79-80
@@ -11137,16 +11243,28 @@ The comment above the CITATION constant reads "What a documentation path looks l
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed by saying what the code does.** The sentence now records that
+nothing strips anything: the character class stops before an anchor or a
+trailing full stop, so the capture is already a bare path and both readers
+of it — the scan loop and `resolve` — take it verbatim. It also names
+`RELATIVE_LINK` as the constant that really does consume an anchor, in the
+pattern rather than in a caller, since that is where the belief came from.
+
+No behaviour changed, and no check can fail on a comment. That is the
+honest limit of this one: it is a correction to the file whose whole
+subject is that a stated guarantee has to be the guarantee.
+
 ## 024.170 The doubled-entry check counts `**Area:**` lines, so a body duplicated anywhere below that line is invisible
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/meta/deferred_findings_spec.rb` ("states each entry's Area exactly once, so a doubled body cannot pass"), `docs/design/tasks/024-deferred-review-findings.md`
@@ -11154,6 +11272,38 @@ target: 0.2.16
 The check exists because a scripted edit doubled 024.69's entire body and every other check stayed green. It detects that by counting `**Area:**` occurrences per entry — which detects duplication only when the duplicated slice happens to contain the Area line. The 024.140 incident's own diagnosis is "a `String#find` that returned -1 when its terminator was absent, so a slice meant to end at a paragraph ran to the end of the entry": a class of bug whose slice boundary is wherever the terminator search failed, which for a register entry is far more often somewhere in the body than above the Area line, since the Area line sits in the first few lines of every entry. The countermeasure is therefore roughly one line wide against a defect that can start anywhere in a 200-line entry, and `CLAUDE.md`'s rule is explicit that a regression test for the specific instance is not a countermeasure. A content-based test — no paragraph of an entry appearing twice, or a normalised-body hash — is the shape that matches the defect.
 
 **Reproduce:** In a clone at aa1185f, take 024.13's block, find the newline after its `**Area:**` line, and append everything from there to the end of the block a second time (2,515 characters). Then `ruby scripts/reindex_findings.rb --check` → `current`, exit 0, and from `core/`: `bundle exec rspec spec/meta/deferred_findings_spec.rb` → 37 examples, 0 failures. Control: append from just after the *heading* instead, so the Area line falls inside the duplicated slice — the same run fails with `entries not stating exactly one Area: 024.13 (2 Area lines)`.
+
+### Fixed in 0.2.16
+
+Reproduced first, against this tree rather than the clone the entry was
+written in: 7,017 bytes of `024.13`'s body pasted back below its Area
+line left `reindex --check` current, `states each entry's Area exactly
+once` green, and the whole meta suite green.
+
+The Area count stays and a content check joins it: no run of three
+consecutive lines occurs twice inside one entry. The two catch different
+halves. `!= 1` also catches a *deleted* Area line, which a content check
+cannot see; the content check catches a slice pasted anywhere below it,
+which is where `024.140`'s class of bug actually puts a boundary.
+
+**What is compared is an entry's prose** — fenced blocks and indented
+blocks dropped — and that is the half that decides the window, not the
+number three. Quoted material legitimately repeats inside one entry:
+`024.40` states a table header and its separator twice, and `024.28`
+carries two pasted interpreter sessions sharing a three-line preamble,
+which `024.220` makes the normal case rather than a curiosity. Comparing
+every line needs a window of four to clear that; comparing prose clears
+it at three, and at two `024.40` is the single offender. A window that
+grows whenever somebody quotes a similar session is a maintained number;
+"compare the narration" is a rule.
+
+The cost, stated because it is real: a slice doubled entirely inside a
+code block is invisible to this. The Area count and
+`duplicate_headings_spec` are what still see that.
+
+`024.28` is how this was found. The check was written against an earlier
+base, went green there, and reported that entry the moment the change
+was rebased onto the tree that had gained it.
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
@@ -11224,44 +11374,78 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.174 A relative Markdown link beginning `docs/` is resolved against the repository root instead of the citing file's directory
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/check_doc_links.rb` (line 249, the `next if raw.start_with?("docs/")` shortcut in the relative-link pass)
 
-The relative-link pass, added in 0.2.14 round 1 precisely because relative links resolve against the citing file's own directory, hands every link whose text begins `docs/` back to the CITATION pass on the grounds that it is "already counted by the pass above". The CITATION pass resolves against ROOT. The two passes therefore agree only for Markdown at the repository root; for any nested document the checker validates a path the reader will never follow. `[roadmap](docs/ROADMAP.md)` written inside `docs/design/tasks/` really targets `docs/design/tasks/docs/ROADMAP.md`, and the checker reports it resolved. This is the failure the relative pass was built to close, reopened by the pass's own optimisation. Latent today: 0 live instances at HEAD (the two occurrences in 046 are inside inline backticks and do not render as links). It is the link a writer produces by copying a path out of `docs/DOCUMENTATION_MAP.md` into a task file.
+The relative-link pass, added in 0.2.14 round 1 precisely because relative links resolve against the citing file's own directory, hands every link whose text begins `docs/` back to the CITATION pass on the grounds that it is "already counted by the pass above". The CITATION pass resolves against ROOT. The two passes therefore agree only for Markdown at the repository root; for any nested document the checker validates a path the reader will never follow. A Markdown link to the roadmap written with its full repository-relative path, inside a task file, really targets that path appended to the task directory, and the checker reports it resolved. (Neither form is spelled out here: this register is scanned, so quoting either would make the entry the finding — `024.126`.) This is the failure the relative pass was built to close, reopened by the pass's own optimisation. Latent today: 0 live instances at HEAD (the two occurrences in 046 are inside inline backticks and do not render as links). It is the link a writer produces by copying a path out of `docs/DOCUMENTATION_MAP.md` into a task file.
 
-**Reproduce:** In a scratch worktree at HEAD: `printf '[roadmap](docs/ROADMAP.md)\n' > <probe>.md; ruby scripts/check_doc_links.rb` -> prints "every documentation path resolves", exit 0, while `ls docs/design/tasks/docs` does not exist. Direction: drop the shortcut and treat a link as relative unless the citing file is at the repository root, or require one of the two interpretations to resolve and say which.
+**Reproduce:** In a scratch worktree at HEAD: write `<probe>.md` under the task directory holding that link, then `ruby scripts/check_doc_links.rb` -> prints "every documentation path resolves", exit 0, while the directory the link really names does not exist. Direction: drop the shortcut and treat a link as relative unless the citing file is at the repository root, or require one of the two interpretations to resolve and say which.
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed by deleting the shortcut.** A link written with a leading `docs/`
+now goes through the relative pass like every other link, resolved against
+the citing file's own directory. It is still counted by the CITATION pass
+as well, which asks a different question of the same text, so such a link
+contributes two to the citation total — the whole cost, and cosmetic.
+
+Pinned by `doc_links_spec.rb`, "resolves a relative link written as a docs
+path against the citing file's directory too": a throwaway repository where
+the target exists at the root and does not exist beside the citing file, so
+the two interpretations give *different* answers and the fixture cannot
+pass under either one by accident. Watched failing against the unfixed
+script.
+
+Landing it turned this entry's own illustrations into dangling citations of
+the kind `024.126` describes. They are described rather than quoted now,
+here and in `046`'s round note, and the register was not exempted.
+
 ## 024.175 Doc-link resolution goes through File.file?, so a case-only typo passes on macOS and fails on Linux and GitHub
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/check_doc_links.rb` (`resolve`/`candidates_for`, lines 163-175), `scripts/preflight.rb` (line 101), `.github/workflows/ci.yml` (the doc-links job, ubuntu-latest)
 
-Resolution is `File.file?(File.join(ROOT, target))`. On APFS that is case-insensitive, so `docs/roadmap.md` and `docs/design/tasks/024-DEFERRED-review-findings.md` both "resolve" and the check exits 0 — while both are dead links in a Linux checkout and in GitHub's web renderer. CI runs the identical script on ubuntu-latest, so `preflight.rb`, the gate whose entire purpose is to run *before* the commit, is strictly weaker than CI on this class of typo: the same local-green/CI-red asymmetry CLAUDE.md already records for the real-Rails and capability suites. It also makes the script disagree with itself: `ever_existed?` asks git, which is case-sensitive, so the resolver and the history query can answer differently about the same path.
+Resolution is `File.file?(File.join(ROOT, target))`. On APFS that is case-insensitive, so the roadmap's path with its filename lower-cased, and this register's path with one word of its filename upper-cased, both "resolve" and the check exits 0 (neither is spelled out: this register is scanned, and quoting a case-typo makes the entry the finding — `024.126`) — while both are dead links in a Linux checkout and in GitHub's web renderer. CI runs the identical script on ubuntu-latest, so `preflight.rb`, the gate whose entire purpose is to run *before* the commit, is strictly weaker than CI on this class of typo: the same local-green/CI-red asymmetry CLAUDE.md already records for the real-Rails and capability suites. It also makes the script disagree with itself: `ever_existed?` asks git, which is case-sensitive, so the resolver and the history query can answer differently about the same path.
 
-**Reproduce:** On macOS, from the repository root: `ruby -e 'p File.file?("docs/ROADMAP.md"), File.file?("docs/roadmap.md")'` prints `true true`. Then `printf '# See docs/roadmap.md\n' > <probe>.rb; ruby scripts/check_doc_links.rb` -> "every documentation path resolves", exit 0. Direction: after `File.file?` succeeds, require the resolved path to appear verbatim in `RepoFiles.list`, which is byte-exact and already enumerated.
+**Reproduce:** On macOS, from the repository root: `ruby -e 'p File.file?("docs/ROADMAP.md")'` prints `true`, and so does the same call with the filename lower-cased. Then write `<probe>.rb` holding a source comment that cites the lower-cased spelling and run `ruby scripts/check_doc_links.rb` -> "every documentation path resolves", exit 0. Direction: after `File.file?` succeeds, require the resolved path to appear verbatim in `RepoFiles.list`, which is byte-exact and already enumerated.
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed by asking the repository instead of the disk.** `resolve` and the
+relative pass both go through `carried?`, which tests membership of the
+same `RepoFiles.list` enumeration the scan itself reads. That is
+byte-exact, so a case-only typo is a dead link here exactly as it is on
+Linux and in GitHub's renderer — and it is the same question
+`ever_existed?` already put to git, so the resolver and the history query
+can no longer answer differently about one path.
+
+The case instance cannot fail an example on a case-sensitive filesystem, so
+the pin is the rule rather than that instance: "resolves only against files
+git carries" plants a file present on disk and ignored by git, which the
+working tree answers for and this repository does not have. It distinguishes
+the two behaviours on every platform, and it was watched failing against the
+unfixed script.
 
 ## 024.176 The `[deletion marker]` marker admits a pointer to a renamed file, which the paragraph defining it says is still a failure
 
@@ -11287,34 +11471,55 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.177 check_doc_links names only an enumerated set of docs subdirectories, so a citation in any other one is silently unchecked
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/check_doc_links.rb` (`CITATION`, line 93: `docs/(?:design/)?(?:tasks/|adrs/|docs/|schemas/)?[A-Za-z0-9._-]+\.md`)
 
-Round 2's fix added the root and `vscode/` documents and added `schemas/` to the enumeration, which closed the reported instances. What it did not do is stop enumerating. The pattern can name a path only in the four listed leaf directories; `docs/guides/x.md`, or any subdirectory added tomorrow, is invisible, and the file's headline still says "Every documentation path named in tracked content must resolve to a file that exists." The scanner's scope is a hand-written list — the same shape `024.151` names in its third open bullet, one level in. Latent: 0 live instances at HEAD, because every docs subdirectory that exists today happens to be on the list. It becomes a false clean the first time someone adds one.
+Round 2's fix added the root and `vscode/` documents and added `schemas/` to the enumeration, which closed the reported instances. What it did not do is stop enumerating. The pattern can name a path only in the four listed leaf directories; a path in a `docs/` subdirectory that is not on the list — or any subdirectory added tomorrow — is invisible (an example is described rather than written, since quoting one would make this entry the finding — `024.126`), and the file's headline still says "Every documentation path named in tracked content must resolve to a file that exists." The scanner's scope is a hand-written list — the same shape `024.151` names in its third open bullet, one level in. Latent: 0 live instances at HEAD, because every docs subdirectory that exists today happens to be on the list. It becomes a false clean the first time someone adds one.
 
 **Reproduce:** In a scratch worktree at HEAD: `printf '# See <probe>.md\n' > <probe>.rb; ruby scripts/check_doc_links.rb` -> "every documentation path resolves", exit 0. Add `<probe>.md` to the same probe and that one *is* reported, which is the contrast. Direction: match any `[A-Za-z0-9._/-]+\.md` token beginning with a real top-level directory of this repository rather than enumerating subdirectories; the coverage floor added in 0.2.14 pins how much of the tree is *read*, not how much of a path the pattern can *name*.
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed by removing the enumeration, and then by measuring the reach.**
+CITATION's first branch is any depth under `docs/` now, so a subdirectory
+added tomorrow is inside the check on the day it appears.
+
+The enumeration was the symptom. The class is that the pattern's reach was
+a property nobody measured, so shrinking it cost nothing and showed
+nowhere. The checker prints `unnameable-documents=N` — the tracked Markdown
+files CITATION cannot name — and `doc_links_spec.rb` requires it to be zero
+for this repository. It is the mirror of the per-root coverage floor beside
+it: that one says how much of the tree is *read*, this says how much of it
+can be *referred to*, and a hand-written list shrinks the second without
+touching the first. Watched failing by planting a lower-case Markdown file
+outside `docs/`, which took the count to 1.
+
+Reported rather than refused. The first shape of this check refused such a
+tree outright and took four unrelated examples red with it, because a
+throwaway repository built by a spec legitimately holds a document nothing
+cites.
+
 ## 024.178 check_doc_links' founding census is stated as living entirely in source comments; one of the nineteen was in a Markdown document
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/check_doc_links.rb` (lines 25-27), `core/spec/meta/doc_links_spec.rb` (lines 8-12 and the failure message at line 65), `docs/design/tasks/046-0.2.14-making-the-record-true.md` (line 229)
@@ -11326,16 +11531,28 @@ Four tracked places assert that all 19 of the citations this check was built for
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed in the four places, quantifier only.** The census re-runs exactly as
+the entry describes — 19 citations, five never-committed names, 17 distinct
+files — with 18 in `.rb` comments and the nineteenth in the public SDK
+document, which is the file the preceding sentence already names in both the
+script and the spec. Each place says 18 of the 19 now and keeps the
+conclusion, which survives: a checker that read only Markdown would have
+found one of nineteen and reported the rest of the tree clean.
+
+The place that mattered is `doc_links_spec.rb`'s coverage failure message,
+because that sentence is what a future failure prints at its reader.
+
 ## 024.179 Hand-typed counts in check_doc_links' header do not reproduce, and none carries a measured marker
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/check_doc_links.rb` (the SHORTHAND comment, lines 39-54; the CITATION root-document comment, lines 95-109), `docs/design/tasks/046-0.2.14-making-the-record-true.md` (lines 230-231)
@@ -11347,16 +11564,44 @@ Three numbers in this file are claims about this tree, each argued from, and non
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed by removing the numbers rather than re-typing them.** All three are
+claims about a tree that moves, and re-deriving the shorthand census with
+the file's own patterns bears that out: 45 across 22 one commit before
+the sentence was written, 48 across 23 on the commit that wrote it, and a
+third pair again on the commit this was closed at. A count typed into a
+comment is stale by the next release.
+
+- The shorthand comment states no count. The argument it supports —
+  rewriting those citations costs more than it buys — does not rest on one,
+  and the comment now records both retracted figures and why each was wrong.
+- The root-document comment no longer says "twenty" and no longer
+  enumerates. It was wrong in both directions at once, counting `vscode/`
+  as six against eight and dropping three `.ja` halves, and it is the list
+  a reader consults to decide whether the structural pattern still covers
+  what it claims. `024.177`'s coverage line answers that every run instead.
+- `046`'s A0 paragraph no longer carries the retracted "91 occurrences
+  across 39 files". It records that the figure was a raw grep which also
+  matched the fully-qualified form, and was withdrawn.
+
+The entry's direction was to mark each with a measured marker and add a
+deriver. **That is not available at this file.** The measured-claim scanner
+reads four hand-written globs and `scripts/` is outside all of them
+(`024.181`), so a marker written here would be inert — a claim that looks
+checked and is not, which is the failure this whole batch is about. If
+`024.181` is closed by widening that scanner, the shorthand census is the
+first number worth marking.
+
 ## 024.180 The citation guard reads nine file extensions, so the published site's register pointers are outside every check
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/meta/measured_claims_spec.rb` (`scanned_files`, line 199-205), `site/index.html`, `site/security.html`, `site/ja/index.html`, `site/ja/security.html`
@@ -11367,6 +11612,26 @@ target: 0.2.16
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed by stating the scope as what it excludes.** `scanned_files` no
+longer filters on nine extensions; it takes `RepoFiles.list` and rejects
+vendored trees and files that are not authored text. The published pages,
+every extensionless file, the `.rbs` signatures, the gemspec and the
+PowerShell job script are read now, and the only tracked files dropped are
+the dependency lock file and two icons. Getting a denylist wrong is noisy;
+getting an allowlist wrong is silent, and silent is the direction this
+scanner had been failing in twice running.
+
+Pinned by "reads the published pages too, not only the file types somebody
+listed", which asserts the property — a published page carrying a register
+pointer is read — rather than restating the denylist back at itself.
+Watched failing under the extension list, where no page was being read at
+all; and the pointer guard itself watched failing on a bogus register
+number appended to a site page, which was green before this change.
+
+This retires the concrete instance `024.151`'s third bullet names for this
+scanner. The other half of that bullet, the four globs `claims` reads, is
+`024.181` and is untouched here.
 
 ## 024.181 The measured-claim scanner reads four hand-written globs, so a marker anywhere else is inert
 
@@ -11392,20 +11657,42 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.182 A sub-numbered register entry is invisible to the citation guard, and a citation of one truncates to its parent
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/meta/measured_claims_spec.rb` (`CITATION` line 182, `register_numbers` line 187-191), `core/spec/meta/deferred_findings_spec.rb:143-144`
 
-Sub-numbered entries are a supported shape — `DeferredFindings::ENTRY_HEADING` is `/^## (024\.[0-9R][0-9.]*) /` and `046`'s C4 made that module the single parser of the register — but two hand-rolled readers of the same headings survived that consolidation and neither can express a sub-number. `register_numbers` uses `/^## (024\.[0-9R]+) /`, which does not match `## 024.30.1`, so a sub-numbered entry is not in the guard's set of known numbers at all. `CITATION` is `/\b024\.(?<number>[0-9]+|R[0-9]+)\b/`, which matches `024.30.1` as `024.30`. The two failures compose in both directions: a pointer at `024.13.9` — an entry that was never written, or one renumbered away — passes because `024.13` exists, while `024.<n>.1` is reported dangling under the wrong number `024.<n>`. The consolidation comment at lines 76-88 of this file says round 1 removed a third and fourth reader for exactly this reason; these are the fifth and sixth. `deferred_findings_spec.rb`'s "indexes every entry" example carries the same regex on both sides asymmetrically (`/^## (024\.[0-9R]+)/` captures `024.30` from a sub-numbered heading, `/^\| \[`(024\.[0-9R]+)`\]/` captures nothing from its index row), so adding a sub-numbered entry would also fail that example spuriously.
+Sub-numbered entries are a supported shape — `DeferredFindings::ENTRY_HEADING` is `/^## (024\.[0-9R][0-9.]*) /` and `046`'s C4 made that module the single parser of the register — but two hand-rolled readers of the same headings survived that consolidation and neither can express a sub-number. `register_numbers` uses `/^## (024\.[0-9R]+) /`, which does not match `## 024.30.<n>`, so a sub-numbered entry is not in the guard's set of known numbers at all. `CITATION` is `/\b024\.(?<number>[0-9]+|R[0-9]+)\b/`, which matches `024.30.<n>` as `024.30`. The two failures compose in both directions: a pointer at `024.13.<n>` — an entry that was never written, or one renumbered away — passes because `024.13` exists, while `024.<n>.1` is reported dangling under the wrong number `024.<n>`. The consolidation comment at lines 76-88 of this file says round 1 removed a third and fourth reader for exactly this reason; these are the fifth and sixth. `deferred_findings_spec.rb`'s "indexes every entry" example carries the same regex on both sides asymmetrically (`/^## (024\.[0-9R]+)/` captures `024.30` from a sub-numbered heading, `/^\| \[`(024\.[0-9R]+)`\]/` captures nothing from its index row), so adding a sub-numbered entry would also fail that example spuriously.
 
-**Reproduce:** Append `See 024.13.9 and 024.<n>.1 for the reasoning.` to any scanned `.md` (e.g. `docs/design/tasks/037-0.2.7-concurrency-foundations.md`) and run `cd core && bundle exec rspec spec/meta/measured_claims_spec.rb` — one failure, naming only `024.<n>`. For the reader divergence: `ruby -e 'require_relative "scripts/deferred_findings"; s="## 024.30.1 A sub entry\n"; p DeferredFindings.headings(s); p s.scan(/^## (024\\.[0-9R]+) /).flatten; p "see 024.30.1".scan(/\\b024\\.([0-9]+|R[0-9]+)\\b/).flatten'` → `["024.30.1"]`, `[]`, `["30"]`.
+**Reproduce:** Append `See 024.13.<n> and 024.<n>.1 for the reasoning.` to any scanned `.md` (e.g. `docs/design/tasks/037-0.2.7-concurrency-foundations.md`) and run `cd core && bundle exec rspec spec/meta/measured_claims_spec.rb` — one failure, naming only `024.<n>`. For the reader divergence: `ruby -e 'require_relative "scripts/deferred_findings"; s="## 024.30.<n> A sub entry\n"; p DeferredFindings.headings(s); p s.scan(/^## (024\\.[0-9R]+) /).flatten; p "see 024.30.<n>".scan(/\\b024\\.([0-9]+|R[0-9]+)\\b/).flatten'` → `["024.30.<n>"]`, `[]`, `["30"]`.
+
+### Fixed in 0.2.16
+
+Reproduced first, all three halves: the module read the sub-number,
+`register_numbers` read nothing, the citation pattern read the parent —
+and a pointer at a sub-entry that has never existed was accepted while a
+sub-entry of a nonexistent parent was reported under the wrong number.
+
+`CITATION` is now `DeferredFindings::CITATION`, built from the one number
+grammar rather than written a second time, and `register_numbers` reads
+`DeferredFindings.headings` and `.retired_numbers`. `indexes every
+entry` reads that grammar on both of its sides. A pointer at a sub-entry
+that does not exist is now reported as itself. See `024.216`, which is
+the same root cause counted across all six readers.
+
+Widening it turned every illustration of a sub-number in this file, in
+`046`'s round notes and in `deferred_findings_spec.rb` into a dangling
+pointer — `024.126` arriving inside the change that caused it. The
+spec's are assembled with `unspellable_number`; the prose writes the
+sub-part as this register's own `<n>` placeholder, which keeps the
+parent resolving and the sentence legible. No file was exempted.
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
@@ -11413,13 +11700,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.183 The citation guard skips the register itself, where most `024.N` cross-references are written
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/meta/measured_claims_spec.rb` (`scanned_files`, line 202), `docs/design/tasks/024-deferred-review-findings.md`
@@ -11427,6 +11715,26 @@ target: 0.2.16
 `scanned_files` rejects `024-deferred-review-findings.md` outright, so a `see 024.NNN` typo inside an entry's body — the densest place `024.N` cross-references are written, and the place a reader most often follows one from — is unverifiable. The exclusion appears to exist so the entry headings and the index table do not match `CITATION` and report themselves; a scan that skips `^## ` headings and `^| [` index rows would keep the body prose in scope without that. Scanning the register's own body today finds four references that resolve to nothing — `024.61` at lines 85, 95 and 3998, and `024.<n>` at line 7092 — and all four are deliberate prose (the legend explains the vacated `024.61` at length; line 7092 records `046`'s C4 assembling a synthetic entry from parts because writing `024.<n>` tripped this very guard). None of them is a live defect, which is the point: a real typo would be indistinguishable from them by machine, because nothing looks.
 
 **Reproduce:** Append `A stray pointer to 024.<n> for the reasoning.` to `docs/design/tasks/024-deferred-review-findings.md` and run `cd core && bundle exec rspec spec/meta/measured_claims_spec.rb` → 6 examples, 0 failures. The scan that would have caught it: `ruby -rset -e 'reg=File.read("docs/design/tasks/024-deferred-review-findings.md",encoding:"UTF-8"); known=(reg.scan(/^## (024\\.[0-9R]+) /).flatten+reg.scan(/^\\| `(024\\.[0-9R]+)` \\|/).flatten).to_set; reg.lines.each_with_index{|l,i| l.scan(/\\b024\\.([0-9]+|R[0-9]+)\\b/).flatten.each{|n| puts "#{i+1}: 024.#{n}" unless known.include?("024.#{n}")}}'`.
+
+### Fixed in 0.2.16
+
+Reproduced first. The entry's own line numbers had moved — the hand
+scan reports five locations at this revision rather than the four it
+names — but every one of them is a line the entry describes, and the
+planted pointer was invisible exactly as written.
+
+`scanned_files` no longer rejects this file. What the rejection was
+really avoiding is the register's own scaffolding matching itself, so
+that is what is skipped instead, line by line: an entry heading, a
+generated index row, a "Retired numbers" row. Everything a person wrote
+as prose is in scope, which is the half a reader follows.
+
+The pre-existing deliberate lines were dealt with rather than exempted.
+`024.61` now has a row in the "Retired numbers" table — the mechanism
+the guard already honours — which makes the legend's paragraphs about
+the hole, and the 0.2.3 cross-reference record that lists it, resolve
+without any of them being reworded. The two lines that spelled a
+synthetic number describe the shape instead, per `024.126`.
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
@@ -11644,13 +11952,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.194 release_gate_spec's wiring corpus includes untracked files, so uncommitted local text satisfies a gate's "something invokes this"
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** core/spec/meta/release_gate_spec.rb (`haystack_excluding`, line 92), scripts/repo_files.rb
@@ -11661,6 +11970,25 @@ target: 0.2.16
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+### Fixed in 0.2.16 by splitting the two questions one helper was answering
+
+Reproduced exactly: with the three real invocations of the SBOM
+generator removed the gate correctly reports it unwired, and one
+uncommitted scratch file under `scripts/` naming the basename turns
+it green again.
+
+`RepoFiles.tracked` is the committed-only half, and
+`release_gate_spec`'s wiring corpus reads it. `024.147`'s argument is
+about the files a check *inspects*; this corpus is what the check
+accepts as evidence that something happens, and "nothing runs this"
+must not be answered on evidence no commit contains. The `exists`
+lookup beside it still reads `RepoFiles.list`, deliberately, and the
+comment at each says why they differ.
+
+Pinned by an example that writes an untracked probe under `scripts/`
+and asserts the corpus does not read it -- watched failing with the
+call site put back to `RepoFiles.list`.
 
 ## 024.195 Every prose statement of what the preflight gate runs is stale, and nothing derives any of them
 
@@ -11775,13 +12103,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.199 The guard spec's absolute-grep pin is satisfied by the advisory grep, and its bare-grep scan cannot see an indented call
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/meta/release_script_guard_spec.rb` lines 188-191, `vscode/scripts/release.sh` lines 174-181
@@ -11793,16 +12122,31 @@ Two holes in one example, `"calls the grep it means, not whatever the shell reso
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+### Fixed in 0.2.16
+
+(a) The absolute-path pin is asserted inside the hard-failure grep's
+own `if ... fi` window rather than over the whole file, so the
+advisory grep -- the one whose output goes to /dev/null and whose
+only effect is printing a note -- can no longer satisfy it alone.
+
+(b) The scan is a whole-word one, `grep` preceded by neither a path
+separator nor a word character, so position stops mattering.
+Measured against this entry's own reproduction, which moves the
+refusal into a shell function and leaves the call indented: the old
+scan returns nothing and the old whole-file `include` still passes,
+while the new pair reports it.
+
 ## 024.200 Nothing checks that release.sh parses, so a syntax error past the first refusal leaves every check green
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `vscode/scripts/release.sh`, `core/spec/meta/release_script_guard_spec.rb`, `.github/workflows/`
@@ -11814,16 +12158,27 @@ Nothing anywhere runs `bash -n` or shellcheck on release.sh — not the guard sp
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+### Fixed in 0.2.16
+
+One example runs `bash -n` over every shell script beside
+`release.sh`, so `verify-installed-extension.sh` -- which had no spec
+at all -- is covered by the same line. Watched failing on this
+entry's mutation, an `if` opened before the SHA-256 echo with no
+closing `fi`, which leaves the only publish path unrunnable with
+every other example green; and again on a deliberate break in the
+other script.
+
 ## 024.201 The NOT YET escape hatch is guarded against a hand-copied two-suite list that has drifted from the three-suite table it covers
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** core/spec/meta/ci_skip_guard_spec.rb, scripts/check_suites_ran.rb, core/spec/meta/client_behaviour_spec.rb
@@ -11835,16 +12190,32 @@ target: 0.2.16
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+### Fixed in 0.2.16 by reading the table instead of a copy of it
+
+Reproduced: `NOT YET` on the client-behaviour suite's environment
+skip left the whole of `spec/meta` green, and
+`CheckSuitesRan.complaints` returned `[]` for a report in which two
+of seven examples were pending.
+
+The example iterates `CheckSuitesRan::SUITES`, so a fourth suite
+added to that table is guarded on the day it is added. The scan
+accepts the paren form *and* ignores position: the third file writes
+its skip inside a one-line `before { ... }`, where a line-anchored
+scan finds nothing -- so widening only to `skip(` would have left the
+example passing on an empty result had `not_to be_empty` not been
+there. Both shapes watched red.
+
 ## 024.202 The release-tag accounting invariant runs nowhere continuous: the job that runs the suite checks out without tags
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** core/spec/meta/release_artifacts_spec.rb, .github/workflows/ci.yml, scripts/check_suites_ran.rb
@@ -11856,16 +12227,37 @@ release_artifacts_spec's two tag examples -- "accounts for every tag, in one tab
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+### Fixed in 0.2.16, with the belief about the checkout made checkable
+
+Reproduced with `git tag` stubbed empty: 4 examples, 0 failures, 2
+pending, exit 0 -- which is what every CI run got, the core job
+checking out bare.
+
+Two changes. The core job's checkout asks for tags. And ci.yml's
+documented-count guard, which read one hard-coded filename, reads a
+list now with `spec/meta/release_artifacts_spec.rb` on it -- so if
+the tags do not arrive the build goes red rather than the invariant
+going on being vacuously green. A line about `actions/checkout` is a
+claim about something outside this tree, and this is what makes it
+checkable instead of believed.
+
+Deliberately not `CheckSuitesRan::SUITES`: a reviewer reading a
+source tarball or a `git archive` extraction has no tags either, and
+for them skipping is the right answer. The guard is CI-only text, so
+only CI can never take the skip -- and `024.203`'s helper is what
+keeps that text from being deleted or disabled unnoticed.
+
 ## 024.203 suites_ran_spec's ci.yml link asserts a text substring, so it passes for a step that has been deleted, commented out, or disabled
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** core/spec/meta/suites_ran_spec.rb
@@ -11876,6 +12268,21 @@ The example "is what ci.yml runs, not a second implementation" reads the whole w
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+### Fixed in 0.2.16 by one helper both files read
+
+`core/spec/support/ci_workflow.rb` locates a step in the parsed YAML.
+`suites_ran_spec`'s example asserts the located step's `run`, so a
+commented-out step fails it -- watched, having first watched the
+substring form pass on exactly that mutation.
+
+`CiWorkflow.executed?` closes the sibling `046`'s round 2 recorded at
+the same time: `if:` or `continue-on-error: true` leaves every
+asserted string in place and turns the gate green. This example and
+`ci_skip_guard_spec`'s "still runs in the core job at all" both
+assert it now, watched failing against `if: false`. `ci_skip_guard_spec`
+reads the same helper rather than keeping its own parse, which is the
+divergence that produced this entry.
 
 ## 024.204 The `git ls-files` guard reads 49 files in two directories, so the enumeration it forbids is invisible everywhere else in the tree
 
@@ -11901,13 +12308,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.205 The duplicate-heading check tracks a fence by its character and not its length, so a four-backtick block leaves the rest of the file unread
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** core/spec/meta/duplicate_headings_spec.rb
@@ -11916,19 +12324,38 @@ target: 0.2.16
 
 **Reproduce:** From a clone at aa1185f, write `<probe>.md` containing `# T`, a blank line, a ```` line, a ```ruby line, `x = 1`, a ```` line, a blank line, then `## Dup`, `a`, `## Dup`, `b`. `cd core && bundle exec rspec spec/meta/duplicate_headings_spec.rb` -> 3 examples, 0 failures. Control: the same file without the fence block -> 1 failure, "documents stating a heading more than once". Remove the file.
 
+### Fixed in 0.2.16
+
+Reproduced first, and the latency the entry claims re-derived at this
+revision rather than quoted forward: of the tracked Markdown documents,
+none uses a fence marker longer than three characters and none is left
+with a fence open at end of file.
+
+The scan stores the whole marker and closes only on the same character
+at a length at least the opener's, so a three-character fence quoted
+inside a four-character one is content.
+
+The second half matters more than the first. "No repeated heading" and
+"the scan stopped reading at line twelve" were the same report, so the
+scan now returns its fence state alongside the headings and a second
+example fails on any document left with a fence open at EOF. A
+structural property, not a maintained number: it says the check read the
+file, whatever the file turns out to contain.
+
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
 ## 024.206 The duplicate-heading check sees only unindented h1 and h2, while `024.140` records the guarantee as every heading
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** core/spec/meta/duplicate_headings_spec.rb, docs/design/tasks/024-deferred-review-findings.md
@@ -11937,19 +12364,45 @@ The heading pattern is `/\A\#{1,2} \S/` — h1 and h2, column zero only. Two con
 
 **Reproduce:** From a clone at aa1185f: `<probe>.md` with `# I`, blank, `### Dup`, `a`, blank, `### Dup`, `b` -> `cd core && bundle exec rspec spec/meta/duplicate_headings_spec.rb` reports 3 examples, 0 failures. Repeat with ` ## Dup` (three leading spaces) twice -> 3 examples, 0 failures. Control: `## Dup` twice at column zero -> 1 failure. For the record half, no clone needed: run the spec's own `headings_in` with the level raised to 6 over `RepoFiles.list(root, "*.md")` and it names the five files above.
 
+### Fixed in 0.2.16
+
+Reproduced first, both halves and the record half: at level 6 keyed on
+the heading text alone, the tracked Markdown gives five offenders — the
+five files the entry names, and no others.
+
+The check now reads levels one to six and tolerates up to three leading
+spaces, which is what a renderer reads as a heading.
+
+**The level raise is affordable only because the tally is keyed on the
+heading path** — the nearest enclosing headings plus its own text —
+rather than the text alone. The entry understates this half: every one
+of those five repeats is a legitimate section name under a *different*
+parent, a per-release or per-task subsection, not a pasted block. A
+pasted block duplicates its parent too, so it still repeats the whole
+path. Same tracked Markdown, same level: five offenders keyed on the
+text, none keyed on the path.
+
+The path keying is stated with its own failing case, or it could not be
+told from a rule that reports nothing: an example asserts that the same
+subsection name under two different parents is left alone.
+
+The record half needs no wording, which is the better outcome of the two
+the entry offers: there is no scoping left to write down.
+
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
 ## 024.207 Two decisions in the duplicate-heading fence parser have no fixture that can distinguish them
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** core/spec/meta/duplicate_headings_spec.rb
@@ -11957,6 +12410,23 @@ target: 0.2.16
 `CLAUDE.md`: a behavioural line that no test fails on when it is reverted is a defect regardless of whether the behaviour is correct. Two mutations of `headings_in` leave all three of the spec's examples green and produce zero offenders across all 118 tracked Markdown files: (1) replacing `elsif marker[0] == fence then fence = nil` with an unconditional `fence = fence.nil? ? marker[0] : nil`; (2) deleting the `~{3,}` alternative from the marker regex. Mutation (1) removes precisely the rule the comment above the method asserts — "a fence closes on the same marker -- so a ``` inside a ~~~ block is content, which is how this file's own examples stay quotable" — so the spec states a guarantee in prose that its own fixtures cannot tell the difference about. The spec's fixtures use only backtick fences and never nest one marker inside the other, which is why neither mutation is visible.
 
 **Reproduce:** Extract `headings_in` verbatim and run it against these two fixtures. For (1): `# Doc` / blank / `~~~markdown` / ``` / `## Quoted` / ``` / `~~~` / blank / `## Real` / x / `## Real` / y — original returns ["# Doc","## Real","## Real"], the always-toggle mutant returns ["# Doc","## Quoted","## Real","## Real"]. Note this fixture does NOT distinguish (2). For (2) use `# Doc` / `~~~` / `## Quoted` / `~~~` / `## Real` / `## Real` — original ["# Doc","## Real","## Real"], no-tilde mutant ["# Doc","## Quoted","## Real","## Real"]. Both fixtures need adding as examples; a decision inside a spec cannot go in `pinned_mutations.yml` (024.151 records why the applier is unsafe for spec files).
+
+### Fixed in 0.2.16
+
+Both mutations reproduced first, against the scan as `024.205` and
+`024.206` left it rather than as the entry found it, and both fixtures
+still distinguish exactly the one decision the entry says they do.
+
+Two examples, one per decision, each asserting the scan's exact return
+value rather than "no offenders" — which is what makes them
+distinguishing. A backtick fence nested inside a tilde fence pins "a
+fence closes on the same marker"; a bare tilde fence pins that a tilde
+run opens a fence at all. Neither fixture can see the other decision, so
+both are needed, exactly as the entry says.
+
+A second example is the available mechanism here: `pinned_mutations.yml`
+cannot hold a decision inside a spec, because the applier refuses a path
+outside `core/lib` and `scripts`.
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
@@ -12029,13 +12499,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.211 `check_pinned_mutations.rb --verify-only` prints the applier's conclusion after applying nothing
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/check_pinned_mutations.rb`, `core/spec/meta/pinned_mutations_spec.rb`
@@ -12047,16 +12518,37 @@ In `--verify-only` every entry takes the `next` at line 105 after only a `rspec 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed in 0.2.16.** The summary is per mode now. `--verify-only` states
+what that mode established -- every `from` matches its file exactly once,
+every named example exists and is selected uniquely -- and says in the same
+sentence that nothing was applied, so nothing it prints claims an example
+fails under its mutation. The failure branch matches: in that mode a failure
+can only be a manifest that no longer selects what it names, and it says
+that instead of "not caught". `pinned_mutations_spec.rb` gained a second
+example asserting the wording, watched failing against the old
+unconditional sentence before the fix went in.
+
+**What is pinned, and what is not.** The success sentence -- the one the
+ordinary suite printed on every run -- is pinned by that example. The
+failure sentence is not: reaching it means handing the script a manifest
+that no longer selects what it names, which the script can only be given
+by editing the tracked one, so it was exercised by hand and nothing in
+the suite would notice it reverting. Reported here rather than pinned,
+because the override that would make it reachable is a second place that
+must agree about where the manifest lives, and the roots refusal a few
+lines above has been unpinned for the same reason since it was written.
+
 ## 024.212 pinned_mutations.yml's header documents the mechanism the applier abandoned, and a scope it no longer has
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/meta/pinned_mutations.yml` (header, lines 16-30), `scripts/check_pinned_mutations.rb`
@@ -12068,16 +12560,32 @@ The manifest header says the script "applies each mutation to a throwaway copy o
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed in 0.2.16 by removing the restatement, not by correcting it.** Both
+halves were the manifest header repeating something the applier owns, so the
+header stops repeating either. The run paragraph now states only the
+property a reader has to act on -- it writes into the real tracked file, so
+the applying mode must not run beside anything else that mutates the tree --
+and points at that script's header for how it restores and why the
+load-path copy was abandoned. The `file` line points at the script for the
+accepted roots, and says it used to name them and was wrong, so the next
+reader does not helpfully put them back.
+
+In the script those roots were two further copies: a literal argument list
+and a refusal message spelling them again in prose. They are one frozen
+constant the refusal reads, so an entry outside them is refused with the
+list itself -- watched, against an entry naming a spec file.
+
 ## 024.213 A mutation entry's stated reason describes a mutation different from the one it encodes
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/meta/pinned_mutations.yml` (the `check_doc_links`' SKIP entry, lines 142-147), `scripts/check_pinned_mutations.rb`
@@ -12089,16 +12597,34 @@ The entry's `why` reads "check_doc_links' SKIP -- widening it to exclude core/ d
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed in 0.2.16.** The `why` describes the mutation it encodes -- an empty
+alternative spliced into SKIP, which matches at the start of every path, so
+the checker inspects nothing and the example's per-root coverage floor is
+what notices -- and cites `046`'s doc-links section for round 2's numbers
+rather than restating them. Derived rather than reasoned: the mutation
+applied to a copy of the checker in a tmpdir and run against this tree
+read-only reports zero files inspected and zero coverage on all five roots,
+while exiting 0 itself.
+
+**The adjacent entry had the same defect, and is fixed in the same change.**
+Its `why` claimed a count of links between task files, which matches neither
+the checker's own relative-link total nor the number of relative links
+written inside the tasks directory -- both derived here, neither equal to
+it. Neither `why` carries a typed number now. The countermeasure this entry
+sketches, teaching the applier to print what a mutation did so a numeric
+`why` could be checked, is still not built and is still a separate decision.
+
 ## 024.214 generate_sbom.rb's header tells the reader a stale SBOM is caught by nobody, in the release that made a spec catch it
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/generate_sbom.rb` (header, lines 17-20), `core/spec/meta/sbom_spec.rb`
@@ -12109,6 +12635,16 @@ The header ends "Run manually via `ruby scripts/generate_sbom.rb` whenever ... c
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed in 0.2.16.** The header says what is true: `--check` runs from
+`core/spec/meta/sbom_spec.rb` on every suite run and therefore in CI, and
+the manual invocation is how a divergence is *fixed* rather than how it is
+found. The checklist-item pointer is gone rather than renumbered -- that
+document carries two numbered tables and the second one's item 8 is about
+something else entirely, so the pointer had become a coin toss. Watched: a
+version planted into the tracked `docs/SBOM.md` turns that spec red, naming
+the line and both values; restored, it is green at two examples, neither
+pending.
 
 ## 024.215 A scripted comment rewrite in corpus_diagnostics.rb cut a sentence mid-clause, and nothing in the tree can see it
 
@@ -12134,20 +12670,47 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.216 The register's entry number is parsed by six readers with three grammars, so a sub-numbered entry is indexed as a duplicate of its parent
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/reindex_findings.rb` (`number_of`, `title_of`, `rebuild`'s split), `core/spec/meta/deferred_findings_spec.rb` (the "indexes every entry" scans, the Area-line split), `core/spec/meta/measured_claims_spec.rb` (`register_numbers`, `CITATION`), against `scripts/deferred_findings.rb` (`ENTRY_HEADING`, `METADATA_BLOCK`)
 
-046's C4 unified the reading of an entry's *yaml block* into `DeferredFindings.entries`, and its comment and `measured_claims_spec`'s both now say `DeferredFindings` is "the single parser of this file". It is not the single parser of the *primary key*. The entry number is still read by six hand-rolled regexes in three incompatible grammars: `DeferredFindings::ENTRY_HEADING` = `/^## (024\.[0-9R][0-9.]*) /` (accepts sub-numbers), `ReindexFindings.number_of` = `/\A## (024\.[0-9R]+)/` (truncates, and needs no trailing space), `ReindexFindings.title_of` = `/\A## 024\.[0-9R]+ (.*)/` (fails outright), `ReindexFindings.rebuild`'s split `/^(?=## 024\.)/`, `deferred_findings_spec`'s two scans `/^## (024\.[0-9R]+)/` and its Area split `/^## (?=024\.[0-9R]+ )/`, `measured_claims_spec#register_numbers` = `/^## (024\.[0-9R]+) /` (matches nothing), and `measured_claims_spec::CITATION` = `/\b024\.([0-9]+|R[0-9]+)\b/` (truncates). A sub-numbered entry is a supported shape — `scripts/deferred_findings.rb:38` was widened for it deliberately and `core/spec/meta/deferred_findings_spec.rb:250` asserts "reads a sub-numbered entry as itself, in both readers" — so this is not an input nobody promised to handle. Two consequences, one latent and one live now: 1. **Latent.** Adding `## 024.13.1 A sub-numbered follow-up` makes `reindex_findings.rb` emit a second index row numbered `024.13`, with an empty title and the dead anchor `#02413-`, adjacent to the real `024.13`. `entry_key` gives both `[0, 13]`, and Ruby's `sort_by` is not stable, so which of the two comes first is unspecified. The check that exists to catch exactly this — "indexes every entry, so the table cannot silently omit one" — passes, because both of its scans truncate the same way and therefore agree while both are wrong. This is C4's own declared failure mode, recorded at `046` line 363 as the thing C4 was supposed to prevent. 2. **Live at HEAD, no register change needed.** `CITATION` cannot express a sub-number, so a citation of `024.13.9` — a sub-entry that has never existed — resolves to `024.13` and passes the dangling-pointer guard. The asymmetry is visible in one run: `024.<n>.1` is correctly reported dangling (because `024.<n>` does not exist) while `024.13.9` is accepted. The root cause is not any one regex. It is that the primary key has no single reader, and each reader is the only reader of its own result — the same shape `024.68` records for the metadata grammar, one layer down. Fix direction: route every number read through `DeferredFindings` (a `number_of`/`title_of` there, and a `CITATION` derived from `ENTRY_HEADING` rather than written independently), or delete sub-number support outright — widen nothing, narrow `ENTRY_HEADING` to `[0-9R]+`, and delete the spec at line 250 that promises it. Either is coherent; what is not coherent is one reader promising the shape and five others corrupting it.
+046's C4 unified the reading of an entry's *yaml block* into `DeferredFindings.entries`, and its comment and `measured_claims_spec`'s both now say `DeferredFindings` is "the single parser of this file". It is not the single parser of the *primary key*. The entry number is still read by six hand-rolled regexes in three incompatible grammars: `DeferredFindings::ENTRY_HEADING` = `/^## (024\.[0-9R][0-9.]*) /` (accepts sub-numbers), `ReindexFindings.number_of` = `/\A## (024\.[0-9R]+)/` (truncates, and needs no trailing space), `ReindexFindings.title_of` = `/\A## 024\.[0-9R]+ (.*)/` (fails outright), `ReindexFindings.rebuild`'s split `/^(?=## 024\.)/`, `deferred_findings_spec`'s two scans `/^## (024\.[0-9R]+)/` and its Area split `/^## (?=024\.[0-9R]+ )/`, `measured_claims_spec#register_numbers` = `/^## (024\.[0-9R]+) /` (matches nothing), and `measured_claims_spec::CITATION` = `/\b024\.([0-9]+|R[0-9]+)\b/` (truncates). A sub-numbered entry is a supported shape — `scripts/deferred_findings.rb:38` was widened for it deliberately and `core/spec/meta/deferred_findings_spec.rb:250` asserts "reads a sub-numbered entry as itself, in both readers" — so this is not an input nobody promised to handle. Two consequences, one latent and one live now: 1. **Latent.** Adding `## 024.13.<n> A sub-numbered follow-up` makes `reindex_findings.rb` emit a second index row numbered `024.13`, with an empty title and the dead anchor `#02413-`, adjacent to the real `024.13`. `entry_key` gives both `[0, 13]`, and Ruby's `sort_by` is not stable, so which of the two comes first is unspecified. The check that exists to catch exactly this — "indexes every entry, so the table cannot silently omit one" — passes, because both of its scans truncate the same way and therefore agree while both are wrong. This is C4's own declared failure mode, recorded at `046` line 363 as the thing C4 was supposed to prevent. 2. **Live at HEAD, no register change needed.** `CITATION` cannot express a sub-number, so a citation of `024.13.<n>` — a sub-entry that has never existed — resolves to `024.13` and passes the dangling-pointer guard. The asymmetry is visible in one run: `024.<n>.1` is correctly reported dangling (because `024.<n>` does not exist) while `024.13.<n>` is accepted. The root cause is not any one regex. It is that the primary key has no single reader, and each reader is the only reader of its own result — the same shape `024.68` records for the metadata grammar, one layer down. Fix direction: route every number read through `DeferredFindings` (a `number_of`/`title_of` there, and a `CITATION` derived from `ENTRY_HEADING` rather than written independently), or delete sub-number support outright — widen nothing, narrow `ENTRY_HEADING` to `[0-9R]+`, and delete the spec at line 250 that promises it. Either is coherent; what is not coherent is one reader promising the shape and five others corrupting it.
 
-**Reproduce:** At HEAD, from the repository root. The divergence, in one line: ruby -r./scripts/deferred_findings -r./scripts/reindex_findings -e 'h="## 024.13.1 X\n\n```yaml\nstatus: open\nkind: defect\n```\n"; p DeferredFindings.headings(h), ReindexFindings.number_of(h), ReindexFindings.title_of(h), h.scan(/^## (024\.[0-9R]+) /).flatten' prints `["024.13.1"]`, `"024.13"`, `""`, `[]`. The full round trip (do this on a scratch copy, or in memory — it rewrites the register). Insert a valid sub-numbered entry immediately before `## 024.14 `, with a yaml block and **no** `**Area:**` line: ## 024.13.1 A sub-numbered follow-up ```yaml status: open kind: friction target: unscheduled ``` prose. Bump the `register-entries` marker in the register from 152 to 153, run `ruby scripts/reindex_findings.rb`, then `cd core && bundle exec rspec spec/meta/deferred_findings_spec.rb spec/meta/measured_claims_spec.rb`. Both files are green, and the index carries | [`024.13`](#02413-) | open | unscheduled | | Note the variant matters: give the sub-entry an `**Area:**` line and `deferred_findings_spec`'s "states each entry's Area exactly once" fails with the misleading message `024.13 (2 Area lines)` — because its split truncates too, and merges the sub-entry's body into its parent's chunk. The suite is fully green only for the no-Area variant. The citation half needs nothing inserted: ruby -rset -e 'reg=File.read("docs/design/tasks/024-deferred-review-findings.md",encoding:"UTF-8"); known=(reg.scan(/^## (024\.[0-9R]+) /).flatten+reg.scan(/^\| `(024\.[0-9R]+)` \|/).flatten).to_set; ["024.13.9","024.<n>.1"].each{|c| n=c[/\b024\.([0-9]+|R[0-9]+)\b/,1]; puts "#{c} -> 024.#{n} known? #{known.include?("024.#{n}")}"}' prints `024.13.9 -> 024.13 known? true` and `024.<n>.1 -> 024.<n> known? false`.
+**Reproduce:** At HEAD, from the repository root. The divergence, in one line: ruby -r./scripts/deferred_findings -r./scripts/reindex_findings -e 'h="## 024.13.<n> X\n\n```yaml\nstatus: open\nkind: defect\n```\n"; p DeferredFindings.headings(h), ReindexFindings.number_of(h), ReindexFindings.title_of(h), h.scan(/^## (024\.[0-9R]+) /).flatten' prints `["024.13.<n>"]`, `"024.13"`, `""`, `[]`. The full round trip (do this on a scratch copy, or in memory — it rewrites the register). Insert a valid sub-numbered entry immediately before `## 024.14 `, with a yaml block and **no** `**Area:**` line: ## 024.13.<n> A sub-numbered follow-up ```yaml status: open kind: friction target: unscheduled ``` prose. Bump the `register-entries` marker in the register from 152 to 153, run `ruby scripts/reindex_findings.rb`, then `cd core && bundle exec rspec spec/meta/deferred_findings_spec.rb spec/meta/measured_claims_spec.rb`. Both files are green, and the index carries | [`024.13`](#02413-) | open | unscheduled | | Note the variant matters: give the sub-entry an `**Area:**` line and `deferred_findings_spec`'s "states each entry's Area exactly once" fails with the misleading message `024.13 (2 Area lines)` — because its split truncates too, and merges the sub-entry's body into its parent's chunk. The suite is fully green only for the no-Area variant. The citation half needs nothing inserted: ruby -rset -e 'reg=File.read("docs/design/tasks/024-deferred-review-findings.md",encoding:"UTF-8"); known=(reg.scan(/^## (024\.[0-9R]+) /).flatten+reg.scan(/^\| `(024\.[0-9R]+)` \|/).flatten).to_set; ["024.13.<n>","024.<n>.1"].each{|c| n=c[/\b024\.([0-9]+|R[0-9]+)\b/,1]; puts "#{c} -> 024.#{n} known? #{known.include?("024.#{n}")}"}' prints `024.13.<n> -> 024.13 known? true` and `024.<n>.1 -> 024.<n> known? false`.
+
+### Fixed in 0.2.16
+
+Reproduced first: the one-line divergence printed the four different
+answers the entry lists, from four readers of one heading.
+
+Direction (a), the one that keeps the promised shape. `NUMBER` in
+`scripts/deferred_findings.rb` is the single grammar, and
+`ENTRY_HEADING`, `METADATA_BLOCK`, `RETIRED_ROW` and a new `CITATION`
+are all built from it. `number_of` and `title_of` live there and
+`reindex_findings.rb` calls them; `ENTRY_SPLIT` is shared by the three
+places that split the file into entries; `measured_claims_spec` reads
+its three patterns from the module rather than writing them again.
+
+`headings` is the one reader that stays deliberately *looser*, and that
+is not an oversight: `024.155` is the defect that exists when the two
+sides of `parses every entry` agree, so this is the one place two
+readers are meant to disagree, and the module says so where the
+constant is written.
+
+`entry_key` compares the tail element-wise, so a sub-entry sorts under
+its parent instead of tying with it and leaving `sort_by` to decide.
+
+The live half is `024.182`, closed with the same change; its section
+records the illustrations that widening the citation grammar turned into
+dangling pointers.
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*

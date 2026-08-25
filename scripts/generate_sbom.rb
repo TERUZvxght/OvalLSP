@@ -14,10 +14,21 @@ require_relative "utf8"
 # Deliberately excludes development-only dependencies (rspec, benchmark,
 # @vscode/vsce, mocha, typescript, ...) -- those never ship in the VSIX, so
 # listing them in a *runtime* SBOM would misrepresent what end users
-# actually receive and run. Run manually via `ruby scripts/generate_sbom.rb`
-# whenever core/ovallsp.gemspec's, core/Gemfile.lock's, or
-# vscode/package-lock.json's production dependency set changes; not run
-# automatically by CI/tests (RELEASE_CHECKLIST.md item 8).
+# actually receive and run.
+#
+# **A stale SBOM is caught by the suite, not by remembering.**
+# `core/spec/meta/sbom_spec.rb` shells out to `--check` on every run --
+# and therefore in CI -- and a second example plants a divergence in a
+# tmpdir to prove `--check` is not comparing a fresh render against
+# itself. So `ruby scripts/generate_sbom.rb` is how you *fix* a
+# divergence after core/ovallsp.gemspec's, core/Gemfile.lock's or
+# vscode/package-lock.json's production dependency set changes; it is not
+# how you find one.
+#
+# This header said the opposite -- "not run automatically by CI/tests" --
+# from the commit that installed that spec until 0.2.16, telling a
+# contributor that nothing would notice, which is precisely the state the
+# spec was written to end. `024.214`.
 
 require "bundler"
 require "json"

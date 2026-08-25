@@ -75,9 +75,22 @@ RSpec.describe "did the environment-dependent suites actually run" do
 
   # And CI must call the same script rather than keeping its own copy --
   # the divergence is what let preflight ship a weaker rule.
+  #
+  # `024.203`. This read the whole workflow file and asserted the
+  # substring `scripts/check_suites_ran.rb`. A commented-out step keeps
+  # that text, as does one carrying `if: false` or `continue-on-error:
+  # true`, so the example passed under every mutation it appeared to
+  # guard against -- and it reads as an independent guard on the link
+  # `024.148` established, which is what made it worth more than
+  # nothing to a reader and nothing to the build. The step is located in
+  # the structure GitHub executes now, through the same helper its
+  # neighbour uses.
   it "is what ci.yml runs, not a second implementation" do
-    workflow = File.read(File.expand_path("../../../.github/workflows/ci.yml", __dir__), encoding: "UTF-8")
+    step = CiWorkflow.core_step("Fail if the real-Rails or capability suites were skipped instead of run")
 
-    expect(workflow).to include("scripts/check_suites_ran.rb")
+    expect(step).not_to be_nil, "the skip guard is no longer a step of the core job"
+    expect(CiWorkflow.executed?(step)).to be(true),
+                                          "the step is present but disabled by `if:` or `continue-on-error:`"
+    expect(step.fetch("run")).to include("scripts/check_suites_ran.rb")
   end
 end

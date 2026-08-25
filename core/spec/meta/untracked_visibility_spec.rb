@@ -86,6 +86,8 @@ RSpec.describe "checks and a file that is not committed yet" do
 
     expect(offenders).to be_empty,
                          "these enumerate the repository the old way, which cannot see a file " \
-                         "until it is committed: #{offenders.join(", ")}. Use RepoFiles.list."
+                         "until it is committed: #{offenders.join(", ")}. Use RepoFiles.list — " \
+                         "or RepoFiles.tracked where the files are evidence that something happens " \
+                         "rather than input to inspect (024.194)."
   end
 end

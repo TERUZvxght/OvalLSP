@@ -179,15 +179,27 @@ RSpec.describe "numbers documented about this tree" do
   # The register's legend says to grep before deleting an entry; this is
   # that grep, run every time instead of remembered.
   describe "pointers into the deferred-findings register" do
-    CITATION = /\b024\.(?<number>[0-9]+|R[0-9]+)\b/
+    # `024.182`/`024.216`. Derived from the register's own number grammar
+    # rather than written here a second time. The hand-rolled version
+    # could not express a sub-number, so a pointer at a sub-entry that
+    # has never existed matched as its *parent*, which does exist, and
+    # the dangling pointer resolved. (Shape described rather than
+    # spelled: this file is excluded from its own scan, and an
+    # illustration written out here would be a finding the day that
+    # exclusion is removed. `024.126`.)
+    CITATION = DeferredFindings::CITATION
+    REGISTER_BASENAME = "024-deferred-review-findings.md"
 
     # An entry that is still here, or a row in the register's
     # "Retired numbers" table -- a deleted entry keeps its number
     # resolvable, which is the whole point of citing one.
+    #
+    # Both halves come from `DeferredFindings`: `024.216` counted six
+    # readers of the entry number in three grammars, and these were two
+    # of them.
     def register_numbers
-      register = File.read(File.join(TREE_ROOT, "docs", "design", "tasks", "024-deferred-review-findings.md"),
-                           encoding: "UTF-8")
-      (register.scan(/^## (024\.[0-9R]+) /).flatten + register.scan(/^\| `(024\.[0-9R]+)` \|/).flatten).to_set
+      register = File.read(File.join(TREE_ROOT, "docs", "design", "tasks", REGISTER_BASENAME), encoding: "UTF-8")
+      (DeferredFindings.headings(register) + DeferredFindings.retired_numbers(register)).to_set
     end
 
     # Every tracked text file, not a hand-written list of directories.
@@ -196,25 +208,88 @@ RSpec.describe "numbers documented about this tree" do
     # clean while `024.5` was cited in both, in the same sentence as three
     # numbers that did resolve. A guard whose scope is a list somebody
     # remembered has the defect it was built to catch.
+    #
+    # Two entries meet on this one method, and both fixes are kept.
+    #
+    # **The register is *in* scope** -- `024.183`. It used to be rejected
+    # outright, so the densest place `024.N` cross-references are written,
+    # and the place a reader most often follows one from, was the one
+    # place a typo could not be caught. What the rejection was really
+    # avoiding is the file's own structure reporting itself, and that is
+    # what `structural_line?` skips instead.
+    #
+    # **And the scope is stated as what it excludes** -- `024.180`. It was
+    # a list of nine extensions, which is the same shape one turn further
+    # on from the defect that entry is about. Measured, that list dropped
+    # 38 files: every published `site/` page, four of which cite a
+    # register entry; every extensionless file; the `.rbs` signatures; the
+    # gemspec; the PowerShell job script. No other check reads any of
+    # those for register pointers, so renumbering an entry they cite would
+    # have left four dangling pointers on the public site with the whole
+    # suite green.
+    #
+    # A denylist is the shape `check_doc_links.rb`'s `SKIP` already uses:
+    # vendored trees, and files that are not authored text. Getting it
+    # wrong is noisy rather than silent, which is the direction a
+    # scanner's scope should fail in.
+    NOT_AUTHORED_TEXT = %r{
+      \A(?:core/vendor/|vscode/node_modules/)
+      |
+      \.(?:png|ico|jpg|jpeg|gif|pdf|zip|gz|vsix|sqlite3|woff2?|ttf|otf|eot|wasm|lock)\z
+    }x
+
     def scanned_files
       RepoFiles.list(TREE_ROOT)
-             .select { |path| path.match?(/\.(rb|ts|js|md|json|yml|yaml|sh|erb)\z/) }
-             .reject { |path| path.end_with?("024-deferred-review-findings.md") }
+             .reject { |path| path.match?(NOT_AUTHORED_TEXT) }
              .reject { |path| path.end_with?(File.basename(__FILE__)) }
              .map { |path| File.join(TREE_ROOT, path) }
     end
 
+    # The register's own scaffolding: an entry heading, a generated index
+    # row, a "Retired numbers" row. Each states a number rather than
+    # citing one, and each is checked by `deferred_findings_spec` on its
+    # own terms.
+    def structural_line?(line)
+      line.start_with?("## 024.") || line.match?(/\A\| \[?`#{DeferredFindings::NUMBER}`/)
+    end
+
+    def dangling_in(text, known, label:, register: false)
+      text.lines.each_with_index.flat_map do |line, index|
+        next [] if register && structural_line?(line)
+
+        line.scan(CITATION).flatten
+            .reject { |number| known.include?(number) }
+            .map { |number| "#{label}:#{index + 1}: #{number}" }
+      end
+    end
+
     def citations
       known = register_numbers
-      scanned_files
-              .sort.flat_map do |path|
-        File.read(path, encoding: "UTF-8").lines.each_with_index.filter_map do |line, index|
-          line.scan(CITATION).flatten.filter_map do |number|
-            cited = "024.#{number}"
-            "#{path.delete_prefix("#{TREE_ROOT}/")}:#{index + 1}: #{cited}" unless known.include?(cited)
-          end
-        end.flatten
+      scanned_files.sort.flat_map do |path|
+        label = path.delete_prefix("#{TREE_ROOT}/")
+        dangling_in(File.read(path, encoding: "UTF-8"), known, label: label, register: label.end_with?(REGISTER_BASENAME))
       end
+    end
+
+    # The scope, asserted against content that exists rather than trusted.
+    # `024.180`: the filter above was a list of nine extensions, and the
+    # published site is HTML — so four pages carrying a register pointer
+    # sat outside this check, outside `check_site_links.rb` (which
+    # verifies links, anchors and assets and has no register handling)
+    # and outside `check_doc_links.rb` (which verifies file paths).
+    # Deleting or renumbering the entry they cite would have left four
+    # dangling pointers on the published site with the suite green.
+    #
+    # Stated as "a published page that carries a pointer is read",
+    # because that is the property; asserting the denylist back would
+    # only restate the mechanism.
+    it "reads the published pages too, not only the file types somebody listed" do
+      pages = scanned_files.select { |path| path.end_with?(".html") }
+      expect(pages).not_to be_empty, "no published page is being read; the scope has narrowed to a list again"
+
+      carrying = pages.select { |path| File.read(path, encoding: "UTF-8").match?(CITATION) }
+      expect(carrying).not_to be_empty,
+                              "the site's pages point into the register, and none of those pointers is being read"
     end
 
     it "all resolve to an entry that exists" do
@@ -222,6 +297,47 @@ RSpec.describe "numbers documented about this tree" do
                            "these point at register entries that are not there:\n#{citations.join("\n")}\n" \
                            "Either the entry was deleted without the grep its legend asks for, or the number " \
                            "is a typo. Both read as a reason the reader can go and check, and neither is."
+    end
+
+    # `024.183`. The scan the exclusion made impossible, run against a
+    # register-shaped text rather than the real file: a stray pointer in
+    # an entry's body is reported, while the heading and index row that
+    # state the same number are not.
+    #
+    # The three structural lines state a number the fixture's `known` set
+    # does not hold, so each of them would be reported if the skip stopped
+    # working. Given a number that resolves, the example would pass
+    # whether or not anything was skipped -- an assertion that cannot
+    # fail, which is the shape this whole batch is about.
+    it "reports a stray pointer written inside the register's own body" do
+      stated = unspellable_number(995)
+      body = "## #{stated} An entry\n\n| [`#{stated}`](#0-an-entry) | open | 0.2.16 | An entry |\n" \
+             "| `#{stated}` | what it recorded |\n" \
+             "See #{unspellable_number(996)} for the reasoning.\n"
+
+      expect(dangling_in(body, Set[], label: "reg", register: true))
+        .to eq(["reg:5: #{unspellable_number(996)}"])
+
+      # And the skip is the register's alone: those three lines are
+      # ordinary content in any other file, where nothing states an entry
+      # number except by citing it.
+      expect(dangling_in(body, Set[], label: "doc").length).to eq(4)
+    end
+
+    # `024.182`. The half that needs no register change: a citation of a
+    # sub-entry that has never existed used to truncate to its parent and
+    # resolve.
+    it "reports a citation of a sub-entry that does not exist" do
+      known = Set["024.13"]
+
+      expect(dangling_in("see #{unspellable_number('13.9')} for why\n", known, label: "doc"))
+        .to eq(["doc:1: #{unspellable_number('13.9')}"])
+    end
+
+    # And the control, or the pair cannot tell a working grammar from one
+    # that reports every citation: the parent still resolves.
+    it "accepts a citation of an entry that exists" do
+      expect(dangling_in("see 024.13 for why\n", Set["024.13"], label: "doc")).to be_empty
     end
   end
 end
