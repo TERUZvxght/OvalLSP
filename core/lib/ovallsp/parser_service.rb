@@ -1437,11 +1437,16 @@ module Ovallsp
       end
 
       def record_defined_method_name(node, kind)
-        name = attribute_name(node.arguments&.arguments&.first)
+        name_node = node.arguments&.arguments&.first
+        name = attribute_name(name_node)
         return unless name
 
+        # `node:`, not `name_node:`, is the region: the block this call
+        # carries *is* the method's body, so the whole call is what this
+        # one declaration owns. See `#add_generated_method`.
         add_generated_method(
-          node: node, name: name, kind: kind == :singleton ? :singleton_method : :instance_method,
+          node: node, name_node: name_node, name: name,
+          kind: kind == :singleton ? :singleton_method : :instance_method,
           return_type: Types::UNKNOWN, origin: node.name, visibility: nil,
           parameters: defined_method_parameters(node)
         )
@@ -1534,8 +1539,12 @@ module Ovallsp
             # Through `add_generated_method`, so the declaration is paired
             # with a fact -- three documents state that a `:generated`
             # declaration always is, and 0.1.14 recorded these without one.
+            # `node: argument`, not `node: node`. One `attr_accessor :a, :b`
+            # declares four methods, and the region each of them owns is
+            # its own token -- the rest of the call is the other name.
+            # See `#add_generated_method`.
             add_generated_method(
-              node: node, name: "#{name}#{suffix}",
+              node: argument, name_node: argument, name: "#{name}#{suffix}",
               kind: singleton ? :singleton_method : :instance_method,
               # Honest rather than absent: an attribute's type is whatever
               # was last assigned to the ivar, which this does not track.
@@ -1586,9 +1595,12 @@ module Ovallsp
       def record_enum(node)
         return unless node.arguments
 
-        enum_value_names(node).each do |value_name|
+        enum_values(node).each do |value_name, value_node|
+          # `node: value_node`: one `enum` call declares one predicate per
+          # value, and the region each owns is its own key. See
+          # `#add_generated_method`.
           add_generated_method(
-            node: node, name: "#{value_name}?", kind: :instance_method,
+            node: value_node, name_node: value_node, name: "#{value_name}?", kind: :instance_method,
             return_type: Types::Nominal.new(name: "Boolean"), origin: :enum, metadata: { value: value_name },
             # Stated rather than defaulted: an enum predicate really does
             # take no arguments, and `order.active?(1)` really is an error.
@@ -1597,7 +1609,10 @@ module Ovallsp
         end
       end
 
-      def enum_value_names(node)
+      # `[name, the Prism node that spells it]` per value -- the node is
+      # what gives each predicate a range of its own (`024.27`); the name
+      # alone left all of them at the whole call's.
+      def enum_values(node)
         first = node.arguments.arguments.first
         values_node =
           if first.is_a?(Prism::KeywordHashNode)
@@ -1607,10 +1622,26 @@ module Ovallsp
           end
 
         case values_node
-        when Prism::HashNode then values_node.elements.filter_map { |e| symbol_name(e.key) }
-        when Prism::ArrayNode then values_node.elements.filter_map { |e| symbol_name(e) }
+        when Prism::HashNode then values_node.elements.filter_map { |e| named_node(e.key) }
+        when Prism::ArrayNode then values_node.elements.filter_map { |e| named_node(e) }
         else []
         end
+      end
+
+      # **`if name` is the drop, and it is load-bearing.** This replaced
+      # two `filter_map { symbol_name(...) }` call sites where the drop
+      # was `filter_map`'s and invisible; carrying the pair makes it this
+      # method's job to keep. An argument that is not a literal spells no
+      # name -- `delegate(*names, to: :company)`, `enum :status,
+      # [SOME_CONST]` -- and without the guard the recorder builds a
+      # declaration from the half of the name that *is* written: none at
+      # all for the splat, and the bare `?` suffix for the enum
+      # constant. That is the guess `#record_attribute_methods` refuses
+      # for the same reason: it declares a method that may not exist and
+      # silences a real report.
+      def named_node(node)
+        name = symbol_name(node)
+        [name, node] if name
       end
 
       # `scope :active, -> { where(active: true) }` -- the scope body
@@ -1635,12 +1666,16 @@ module Ovallsp
       def record_scope(node)
         return unless node.arguments
 
-        name = symbol_name(node.arguments.arguments.first)
+        name_node = node.arguments.arguments.first
+        name = symbol_name(name_node)
         return unless name
 
         return_type = Types::Generic.new(name: "Relation", type_arg: Types::Nominal.new(name: qualified_owner_name))
-        add_generated_method(node: node, name: name, kind: :singleton_method, return_type: return_type,
-                             origin: :scope, parameters: UNSTATED_PARAMETERS)
+        # `node:`, not `name_node:`, is the region: the lambda this call
+        # carries is the scope's body, and one call declares one scope.
+        # See `#add_generated_method`.
+        add_generated_method(node: node, name_node: name_node, name: name, kind: :singleton_method,
+                             return_type: return_type, origin: :scope, parameters: UNSTATED_PARAMETERS)
       end
 
       # `delegate :name, :age, to: :company, prefix: true, allow_nil: true`.
@@ -1662,12 +1697,17 @@ module Ovallsp
         prefix = truthy_option?(keyword_hash, "prefix")
         allow_nil = truthy_option?(keyword_hash, "allow_nil")
         method_names = node.arguments.arguments.take_while { |a| !a.is_a?(Prism::KeywordHashNode) }
-                            .filter_map { |a| symbol_name(a) }
+                            .filter_map { |a| named_node(a) }
 
-        method_names.each do |delegated_name|
+        method_names.each do |delegated_name, name_node|
           generated_name = prefix ? "#{target}_#{delegated_name}" : delegated_name
+          # `node: name_node`: one `delegate` call declares one method per
+          # name, and the region each owns is its own token -- the rest of
+          # the call is the other names and the options. See
+          # `#add_generated_method`.
           add_generated_method(
-            node: node, name: generated_name, kind: :instance_method, return_type: Types::UNKNOWN, origin: :delegate,
+            node: name_node, name_node: name_node, name: generated_name, kind: :instance_method,
+            return_type: Types::UNKNOWN, origin: :delegate,
             parameters: UNSTATED_PARAMETERS,
             metadata: { to: target, delegated_name: delegated_name, allow_nil: allow_nil }
           )
@@ -1692,14 +1732,47 @@ module Ovallsp
       # `define_method` in 0.2.13). The question is not one a recorder can
       # answer by omission, so it cannot be omitted: state the list, or
       # state UNSTATED_PARAMETERS.
-      def add_generated_method(node:, name:, kind:, return_type:, origin:, parameters:, metadata: {},
+      #
+      # **`name_node:` has no default either, and for the same reason.**
+      # It is the Prism node that spells this method's name -- the
+      # `:title` of `attr_reader :title, :body`, the `active` of an
+      # `enum` hash -- and every recorder has one in hand. Defaulting it
+      # to `node` would let a recorder omit it and silently get nil, which
+      # is exactly how `parameters:` went wrong three times.
+      #
+      # **`node:` is the region this one declaration owns**, and the two
+      # arguments differ for a reason. A macro that takes a *list* of
+      # names owns, per name, its own token: the rest of
+      # `attr_accessor :a, :b` is the other name, so passing the whole
+      # call gave four declarations one identical range, and everything
+      # that picks the smallest range containing the caret then answered
+      # about whichever one sorted first (`024.27`). A macro whose call
+      # declares exactly one method -- `scope`, `define_method` -- owns
+      # the whole call, because the rest of it is that method's body.
+      def add_generated_method(node:, name:, name_node:, kind:, return_type:, origin:, parameters:, metadata: {},
                                visibility: :public)
         symbol_id = Index::SymbolId.new(kind: kind, owner: current_owner, name: name, discriminator: nil)
         location = Index::SourceLocation.to_range(node.location, @lines)
+        name_token = name_token_location(node.location, name_node)
 
         @declarations << Index::Declaration.new(
           symbol_id: symbol_id, location: location, visibility: visibility, parameters: parameters,
-          origin: :generated
+          origin: :generated,
+          # `name_token &&`: reachable, not defensive. A heredoc argument
+          # has a name span that lies outside the region above, so
+          # `#name_token_location` refuses it and this declaration falls
+          # back to `location` in both fields.
+          #
+          # **That is not the answer the outline gave before `024.27`**,
+          # and a review round corrected this comment for saying it was:
+          # `node:` for `attr_*` is the argument now rather than the whole
+          # call, so this shape's row moved as well -- driven through a
+          # real server, `range` went from the whole `attr_reader <<~NAME`
+          # call to the `<<~NAME` marker alone. What is pre-`024.27`-shaped
+          # is the *equality* of the two fields, not the value of either,
+          # and the equality is what the protocol's containment rule
+          # allows.
+          name_location: name_token && Index::SourceLocation.to_range(name_token, @lines)
         )
         @generated_method_facts << Index::GeneratedMethodFact.new(
           owner: current_owner, name: name, kind: kind, return_type: return_type, source_location: location,
@@ -1746,6 +1819,75 @@ module Ovallsp
         when Prism::SymbolNode, Prism::StringNode
           node.unescaped
         end
+      end
+
+      # The bare name inside a literal, without the punctuation that makes
+      # it one -- `title` inside `:title`, inside `"title"` and inside the
+      # `title:` of a hash key. Prism keeps that span separately from the
+      # node's own, and the difference is the whole point: a
+      # `selectionRange` of `:title` selects a colon the name does not
+      # have, and any edit range that included it would write
+      # `attr_reader ::title`.
+      #
+      #   $ ruby -rprism -e '
+      #   src = %q{attr_accessor :title, "body", active: 0}
+      #   Prism.parse(src).value.statements.body.first.arguments.arguments.each do |a|
+      #     n = a.is_a?(Prism::KeywordHashNode) ? a.elements.first.key : a
+      #     p [n.class.name.split("::").last, n.location.slice,
+      #        (n.respond_to?(:value_loc) ? n.value_loc : n.content_loc).slice]
+      #   end'
+      #   ["SymbolNode", ":title", "title"]
+      #   ["StringNode", "\"body\"", "body"]
+      #   ["SymbolNode", "active:", "active"]
+      #   # prism 1.9.0, ruby 3.4.10
+      #
+      # **`region` is not decoration: the name span is refused unless it
+      # lies inside it.** `docs/CLIENT_BEHAVIOUR.md` records, checked
+      # against the installed types, that `selectionRange` must be
+      # contained by `range` -- and once `024.27` narrowed `range` to a
+      # name token, that stopped being automatic, because the span Prism
+      # keeps for a literal's name is not always inside the node that
+      # literal occupies. A heredoc is the shape where it is not; the
+      # node is the `<<~` marker and the text is on later lines:
+      #
+      #   $ ruby -rprism -e '
+      #   src = "attr_reader <<~NAME\n  quoted\nNAME\n"
+      #   a = Prism.parse(src).value.statements.body.first.arguments.arguments.first
+      #   p [a.location.start_offset, a.location.end_offset, a.location.slice]
+      #   p [a.content_loc.start_offset, a.content_loc.end_offset]'
+      #   [12, 19, "<<~NAME"]
+      #   [20, 29]
+      #   # prism 1.9.0, ruby 3.4.10
+      #
+      # Enforced here, where the span is produced, rather than at the one
+      # caller: a second caller would otherwise have to remember, and the
+      # invariant is a property of the value, not of the call site.
+      #
+      # nil, then, for a name span outside its region -- and for a node
+      # class this does not read. That second arm is not reachable from
+      # the five recorders, each of which returns early unless
+      # `attribute_name`/`symbol_name` recognised the argument, and those
+      # two admit exactly the classes below; it declines rather than
+      # raising so that a sixth recorder handing over some other literal
+      # loses a `selectionRange` instead of raising out of `#summarize`,
+      # which would drop the whole file's index. It is recorded as
+      # unpinned in `024.27`.
+      #
+      # Every reader of `name_location` already treats nil as "no narrow
+      # range recorded" and falls back to the declaration's own --
+      # `DocumentSymbolBuilder` because the protocol field is not
+      # optional, `Rename::Planner` by declining to edit -- so declining
+      # here asserts nothing about the user's code.
+      def name_token_location(region, node)
+        span =
+          case node
+          when Prism::SymbolNode then node.value_loc
+          when Prism::StringNode then node.content_loc
+          end
+        return nil unless span
+        return nil unless span.start_offset >= region.start_offset && span.end_offset <= region.end_offset
+
+        span
       end
 
       # The one value every recorder is handed, rather than the six stacks

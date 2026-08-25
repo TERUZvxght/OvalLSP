@@ -736,22 +736,33 @@ found:
   `Object`; this extension records it with no owner at all, so nothing
   can look it up (024.230). <!-- documents: 024.230 -->
 
-## What an editor feature does with a macro-declared method
+## Rename refuses on a method a macro declared
 
 `attr_accessor :name`, `delegate :title, to: :author`, `enum` and `scope`
 declare their methods at a *symbol argument* rather than at an identifier
-token. There is no name in the source to point an editor at, and two
-features show it:
+token. The outline points at that argument: every name a macro declares
+gets its own entry, and each entry selects the token it was declared
+from — which is not always its own name. `attr_accessor :alpha` writes
+one token and declares two methods, so `alpha=` selects `alpha`; an
+`enum` predicate `active?` selects the label `active` it is derived
+from. **Rename does not edit that token, and refuses instead.**
 
-- **Rename refuses** rather than editing (024.28). Renaming through such
-  a declaration would have to rewrite every call site and could not
-  rewrite the declaration, leaving a file that does not run — 0.1.14 did
-  exactly that, and 0.1.15 refuses instead. VS Code shows its own
-  "cannot be renamed" message; the reason reaches the Core log only. <!-- documents: 024.28 -->
-- **The outline lists one entry per declared name** (024.27).
-  `attr_accessor :a, :b, :c` declares six methods on one line, so the
-  outline shows six children with identical ranges. Every name is right
-  and each is genuinely a method, but six identical ranges read as a bug. <!-- documents: 024.27 -->
+That argument is source the macro reads, not the method's name, so
+rewriting it is a different edit from renaming. `attr_reader :name` also
+names the `@name` it reads, so a rewrite gives you a reader of an ivar
+nothing assigns — a file that still runs and answers `nil`.
+`attr_accessor :name` declares `name=` from the same token, so one edit
+renames two methods and only one method's call sites are in the plan. In
+`enum status: { active: 0 }`, `active` is the label and `0` is what the
+column stores; the same label is also the scope `Order.active` and the
+key in `Order.statuses`. `delegate :name, to: :company` names
+*`Company`'s* method, which the rename must leave alone.
+
+`scope :recent` and `define_method(:calc)` are the two shapes where the
+argument really is just the name, and they are refused with the rest:
+nothing at the point of refusal says which macro declared what. VS Code
+shows its own "cannot be renamed" message; the reason reaches the Core
+log only (024.28). <!-- documents: 024.28 -->
 
 ## Conflicts with other extensions
 

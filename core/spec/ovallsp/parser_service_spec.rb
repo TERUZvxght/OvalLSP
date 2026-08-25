@@ -670,6 +670,30 @@ RSpec.describe Ovallsp::ParserService do
 
       expect(generated(summary)).to be_empty
     end
+
+    # A macro argument that is not a literal spells no name: `*names` is
+    # whatever that array holds at load time, and a constant is whatever
+    # it is assigned. Both reach `enum`/`delegate`'s per-name loop, and
+    # both have to be dropped there rather than recorded from the half
+    # of the name that *is* written -- which is nothing for the splat,
+    # and the trailing `?` for the enum constant. Recording either would
+    # declare a method that may not exist and silence a real report,
+    # which is the argument `#record_attribute_methods` already states
+    # for the same class of guess.
+    #
+    # The three shapes are the three places a name is read per element:
+    # `delegate`'s `take_while`, and `enum`'s Array and Hash branches.
+    it "records nothing for a macro argument that does not spell a name" do
+      splat = service.summarize(document("class Widget\n  delegate(*names, to: :company)\nend\n"))
+      array = service.summarize(document("class Widget\n  enum :status, [SOME_CONST]\nend\n"))
+      hash = service.summarize(document("class Widget\n  enum status: { SOME_CONST => 0 }\nend\n"))
+
+      expect(generated(splat).map(&:name)).to eq([])
+      expect(generated(array).map(&:name)).to eq([])
+      expect(generated(hash).map(&:name)).to eq([])
+      expect([splat, array, hash].flat_map { |s| s.declarations.map { |d| d.symbol_id.name } })
+        .to eq(["::Widget", "::Widget", "::Widget"])
+    end
   end
 
   # A file deep enough to exhaust the interpreter stack used to take the

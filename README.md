@@ -118,10 +118,12 @@ verified per platform, is what 1.0.0 requires (024.R4).
     application this check never fires (024.22).
 
 [^rename]: A method a macro declared — `attr_accessor :name`,
-    `delegate :title, to: :author` — is refused rather than renamed. There
-    is no identifier token to rewrite, and editing only the call sites
-    would leave the declaration behind and the file would not run
-    (024.28).
+    `delegate :title, to: :author` — is refused rather than renamed. The
+    macro's argument is source the macro reads, not the method's name, so
+    rewriting it also changes the ivar an `attr_*` returns, the second
+    method `attr_accessor` declares, the label an `enum` uses for its
+    scope and its stored mapping, or the method a `delegate` calls on
+    its target (024.28).
 
 [^doc]: In hover, everywhere the popup names a method: `widget.charge`,
     a call written with no receiver, and the `def` itself. Inside an ERB

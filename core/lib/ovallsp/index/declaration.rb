@@ -23,9 +23,19 @@ module Ovallsp
     #   documentSymbol's `range`, for folding and for
     #   "Defined: file:line", but would be a catastrophic edit range for
     #   a rename (replacing an entire class body with just its new
-    #   name). nil for anything Rename::Planner never needs to edit in
-    #   place (a declaration whose identifier span isn't tracked
-    #   separately).
+    #   name). nil where no identifier span exists to record — a
+    #   declaration synthesised rather than parsed, a class reopened by a
+    #   dynamic form — and nil, too, where a span exists but lies outside
+    #   `location`, which a heredoc argument does
+    #   (`ParserService::Visitor#name_token_location` refuses it, because
+    #   `selectionRange` has to be contained by `range`).
+    #
+    #   **Having one does not make a declaration renameable.** A macro
+    #   declaration carries the token it is named after, as of `024.27`,
+    #   and `Rename::Planner` still refuses: that token is source the
+    #   macro reads rather than the method's identifier, and rewriting it
+    #   changes more than the name (`024.28`). The planner keys its
+    #   refusal on `origin`, not on this field.
     #
     #   **Not documentSymbol's `selectionRange`**, which is a different
     #   field meaning the name to select and reveal. This comment said

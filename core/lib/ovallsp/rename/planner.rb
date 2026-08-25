@@ -51,25 +51,78 @@ module Ovallsp
         { placeholder: simple_name(symbol_id) }
       end
 
-      # A declaration a DSL generated has no identifier token to rewrite:
-      # `attr_accessor :name` declares `name` at a symbol argument, and
-      # `delegate :title, to: :author` at another call's argument list.
-      # `locations_for` drops such a declaration because it has no
-      # `name_location` -- and dropping it silently is what turned a
-      # rename into a WorkspaceEdit that rewrote every call site and left
-      # the declaration behind, producing a file that does not run.
-      # Refusing is what `#prepare`'s comment always claimed happened. The
-      # reason below reaches the log, not the user: `prepare` answers nil,
-      # so the editor shows its own message and never asks for the edit
-      # (024.28).
+      # **A macro's argument is not this method's name, even now that the
+      # declaration points at it.** Until `024.27` a generated declaration
+      # carried no `name_location`, so `locations_for` dropped it -- and
+      # dropping it silently is what turned a rename into a WorkspaceEdit
+      # that rewrote every call site and left the declaration behind,
+      # producing a file that does not run. That is fixed: the declaration
+      # now carries the token's own range.
+      #
+      # Refusing still is, and the reason is the one below rather than
+      # "there is nothing to rewrite" (024.28). The token is source the
+      # macro *reads*, and in every macro this parser recognises it spells
+      # more than the method being renamed:
+      #
+      #   - `attr_reader :name` reads `@name`. Rewriting the token to
+      #     `:title` makes the reader return `@title`, which nothing in
+      #     the class assigns -- a file that still runs and answers nil.
+      #   - `attr_accessor :name` declares `name` *and* `name=` from one
+      #     token, so one edit renames two methods while the plan holds
+      #     one symbol's call sites. The other method's callers break.
+      #   - `enum status: { active: 0 }` -- `active` is the *label*, not
+      #     the stored value; the column holds `0`. The same label is
+      #     also the scope `Order.active`, the key in `Order.statuses`
+      #     and what the attribute reads back, so rewriting it renames
+      #     three things besides the predicate. Driven against
+      #     activerecord 8.1.3.1 in `024.28`.
+      #   - `delegate :name, to: :company` calls `company.name`. The token
+      #     names the *target's* method, and renaming this method must not
+      #     touch it: rewriting it makes the delegation call a method the
+      #     target does not have.
+      #
+      # An earlier version of the bullet above added "and under
+      # `prefix: true` it is not even a substring of the generated name",
+      # which is false -- `prefix:` prepends, so the token is always the
+      # tail. It was written as prose and believed for a review round.
+      # Asked of Ruby instead, which is why it is a session:
+      #
+      #   $ ruby -e '
+      #   gem "activesupport"
+      #   require "active_support/all"
+      #   class Company; def name = "acme"; end
+      #   class Order
+      #     def company = Company.new
+      #     delegate :name, to: :company, prefix: true
+      #   end
+      #   p Order.instance_methods(false).sort
+      #   p "company_name".include?("name")
+      #   '
+      #   # => [:company, :company_name]
+      #   # => true
+      #   # ruby 3.4.10, activesupport 8.1.3.1
+      #
+      # `scope` and `define_method` are the two shapes where the token is
+      # exactly the name and nothing else depends on its spelling, and
+      # they are refused with the rest because nothing here can tell them
+      # apart: `Declaration#origin` says `:generated` and stops there.
+      # Separating them is the direction 024.28 records, not a special
+      # case to bolt on.
+      #
+      # The reason reaches the log, not the user: `prepare` answers nil,
+      # so the editor shows its own message and never asks for the edit.
       #
       # Keyed on `origin: :generated`, not on a missing `name_location`.
-      # A plugin's declaration also has none (`Server#plugin_declaration`
-      # records the synthetic `PLUGIN_LOCATION`), and a plugin registering
-      # a symbol the workspace also writes with a real `def` would then
-      # have disabled rename for a method that has an identifier to edit --
-      # refusing with a message naming a macro and a 1:1 position that is
-      # not in any file.
+      # A declaration synthesised rather than parsed -- registered by
+      # something outside this parser, at a location no file has -- has no
+      # `name_location` either, and if that were the key, a synthetic
+      # registration of a name the workspace also writes with a real `def`
+      # would disable rename for a method that does have an identifier to
+      # edit, refusing with a message naming a macro and a position that
+      # is not in any file. `origin` says which of the two it is; the
+      # absent field does not. (The plugin subsystem was that source until
+      # `024.234` removed it in 0.2.16; the argument is about the shape,
+      # which is why it survives its example.)
       def uneditable_declaration(symbol_id)
         @workspace_index.declarations_with_uri(symbol_id)
                         .map { |(_uri, declaration)| declaration }
@@ -91,12 +144,16 @@ module Ovallsp
         end
 
         if (declaration = uneditable_declaration(symbol_id))
+          position = declaration.name_location || declaration.location
           return refused_plan(
             symbol_id, generation,
-            "`#{simple_name(symbol_id)}` is declared by a macro rather than a `def` " \
-            "(#{declaration.location[:start][:line] + 1}:#{declaration.location[:start][:character] + 1}) and " \
-            "cannot be renamed in place -- editing only its call sites would leave the declaration behind, " \
-            "and the file would no longer run. Rewrite that line by hand, then rename from there"
+            "`#{simple_name(symbol_id)}` is declared by a macro rather than by a `def`, at " \
+            "#{position[:start][:line] + 1}:#{position[:start][:character] + 1}. That argument is source the " \
+            "macro reads, so rewriting it is not the same edit as renaming this method -- the same token also " \
+            "spells the ivar an `attr_*` reads, the second method `attr_accessor` declares, the label an " \
+            "`enum` uses for its scope and its stored mapping, or the method a `delegate` calls on its " \
+            "target. Nothing is edited here: change the macro and its call sites by hand, or write the " \
+            "method as a `def`, which this does rename"
           )
         end
 

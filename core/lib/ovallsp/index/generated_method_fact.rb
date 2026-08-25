@@ -20,9 +20,15 @@ module Ovallsp
     #   honest value here (e.g. `delegate` when its target can't be
     #   statically resolved), not a placeholder that must be filled in
     #   later.
-    # - source_location: the DSL call site's own LSP range -- what
-    #   "生成元DSLへ移動できる" (definition on a generated method) points
-    #   at, since there's no literal `def` for these methods anywhere.
+    # - source_location: the region of the DSL call that declares *this*
+    #   method -- what "生成元DSLへ移動できる" (definition on a generated
+    #   method) points at, since there's no literal `def` for these
+    #   methods anywhere. For a macro taking a list of names it is that
+    #   name's own token, not the whole call: `delegate :a, :b` used to
+    #   send both to the same character, and `024.27` narrowed it. For
+    #   `scope`/`define_method` it stays the whole call, whose lambda or
+    #   block is the method's body. Same value as the paired
+    #   `Index::Declaration#location`, by construction.
     # - origin: which DSL produced this (:enum, :scope, :delegate, ...).
     # - confidence: :high for every fact this task produces -- everything
     #   recognized here comes from a literal, statically-parseable macro

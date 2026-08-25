@@ -204,34 +204,83 @@ RSpec.describe Ovallsp::Rename::Planner do
     end
   end
 
-  # 0.1.14 made `attr_reader`/`attr_accessor` declare methods, and those
-  # declarations carry no `name_location` -- there is no identifier token
-  # to rewrite, only a symbol argument. `locations_for` silently drops
-  # such a declaration, so rename produced a plan that rewrote every
-  # *call site* and left `attr_accessor :name` alone: a WorkspaceEdit that
-  # breaks the file, with no warning. Before 0.1.14 no declaration existed
-  # and `prepareRename` refused outright, which was the safe answer.
+  # 0.1.14 made `attr_reader`/`attr_accessor` declare methods, and rename
+  # produced a plan that rewrote every *call site* and left
+  # `attr_accessor :name` alone: a WorkspaceEdit that breaks the file,
+  # with no warning. Before 0.1.14 no declaration existed and
+  # `prepareRename` refused outright, which was the safe answer.
   #
   # The same hole pre-existed for `enum`/`scope`/`delegate`; it was
   # confined to Rails DSLs until `attr_*` put it in ordinary Ruby.
   # `#prepare`'s own comment already said nil means "a generated/DSL-origin
   # symbol" -- this makes that true.
+  #
+  # **`024.28`: the refusal stays and its reason changes.** 0.1.15 refused
+  # because a generated declaration had no `name_location` -- nothing to
+  # rewrite. `024.27` gave it one, so that reason is now false, and the
+  # examples below assert the reason the refusal actually rests on: the
+  # macro's argument is source the macro *reads*, and the same token
+  # spells more than this method's name.
   describe "a method declared by a DSL rather than a `def`" do
+    # A `let`, not a constant: a bare assignment inside a `describe` block
+    # lands on Object, where another spec file's same-named one wins.
+    let(:macro_source) { "class Widget\n  attr_accessor :name\n\n  def describe = name\nend\n" }
+
     before do
-      index_source("class Widget\n  attr_accessor :name\n\n  def describe = name\nend\n")
+      index_source(macro_source)
     end
 
     let(:target) { sym(kind: :instance_method, owner: "::Widget", name: "name") }
+
+    # Derived from the fixture, not typed: the 1-based line and column of
+    # the `name` inside `attr_accessor :name` -- the identifier itself,
+    # one column right of the `:` that makes it a symbol. That is the
+    # position a reader told to change the macro by hand needs; the macro
+    # call's own start, which the refusal used to quote, points at the
+    # `attr_accessor` keyword instead.
+    let(:macro_argument_position) do
+      line = macro_source.lines.index { |text| text.include?("attr_accessor") }
+      column = macro_source.lines[line].index(":name") + ":".length
+      "#{line + 1}:#{column + 1}"
+    end
 
     it "refuses to start the rename" do
       expect(planner.prepare(target)).to be_nil
     end
 
+    # The distinguishing value. The declaration now carries the token's
+    # own range, so a refusal that merely echoed "the macro call starts
+    # here" and a refusal that names the argument are two different
+    # strings, and only the second one can be acted on by hand.
     it "refuses with a reason rather than emitting a partial edit" do
       plan = planner.plan(target, new_name: "title", generation: 1)
 
       expect(plan.confirmed_edits).to eq([])
-      expect(plan.warnings.join).to include("declared by a macro rather than a `def`", "cannot be renamed in place")
+      expect(plan.warnings.join).to include("declared by a macro", macro_argument_position)
+    end
+
+    # `024.28`. The old refusal said there was no identifier token. There
+    # is one now, and it is not this method's name: `attr_accessor :name`
+    # spells the reader, the writer `name=`, and the ivar `@name` that
+    # both use, in one token. Rewriting it is a different edit from
+    # renaming `name`, which is why refusing is still the answer.
+    it "refuses even though the declaration now has a token to point at" do
+      declaration = workspace_index.declarations_with_uri(target).map { |(_uri, decl)| decl }.first
+
+      expect(declaration.name_location).not_to be_nil
+      expect(planner.prepare(target)).to be_nil
+      expect(planner.plan(target, new_name: "title", generation: 1).warnings.join)
+        .to include("not the same edit as renaming this method")
+    end
+
+    # The control against the opposite failure: refusing must not become
+    # "emit the declaration's token as an edit". If the guard were dropped
+    # this plan would carry a `:name` edit, which is the 0.1.14 shape with
+    # the halves swapped.
+    it "never offers the macro argument as an edit" do
+      plan = planner.plan(target, new_name: "title", generation: 1)
+
+      expect(plan.confirmed_edits.map { |edit| edit[:new_text] }).to eq([])
     end
 
     # A plugin's declaration also carries no `name_location` -- it records

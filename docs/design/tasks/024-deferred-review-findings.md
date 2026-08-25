@@ -198,8 +198,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.24`](#02424-every-path-url-call-is-a-missing-route-when-no-routes-are-loaded) | fixed | 0.2.0 | Every `*_path`/`*_url` call is a missing route when no routes are lo… |
 | [`024.25`](#02425-a-markdown-parsing-spec-is-the-wrong-shape-for-these-two-documents-must-agree) | fixed | 0.2.12 | A Markdown-parsing spec is the wrong shape for "these two documents … |
 | [`024.26`](#02426-a-workspace-def-object-foo-is-reachable-from-every-class-in-ruby-and-from-none-here) | fixed | 0.2.12 | A workspace `def Object.foo` is reachable from every class in Ruby a… |
-| [`024.27`](#02427-documentsymbol-lists-one-outline-entry-per-name-a-macro-declares) | open | 0.2.16 | `documentSymbol` lists one outline entry per name a macro declares |
-| [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | 0.2.16 | Rename refuses on a macro-declared method rather than editing it |
+| [`024.27`](#02427-documentsymbol-lists-one-outline-entry-per-name-a-macro-declares) | fixed | 0.2.16 | `documentSymbol` lists one outline entry per name a macro declares |
+| [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | 0.3.0 | Rename refuses on a macro-declared method rather than editing it |
 | [`024.29`](#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | done | 0.2.16 | Two features were written for 0.1.15 and cut from it |
 | [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | fixed | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
 | [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | fixed | — | A declaration written inside a block has no owner this parser can na… |
@@ -1794,52 +1794,236 @@ of these gems do.
 ## 024.27 `documentSymbol` lists one outline entry per name a macro declares
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-user-visible-note: >
-  Noise rather than a wrong answer, and the half that was a wrong answer
-  is `024.227`, fixed in 0.2.15. What remains is several outline entries
-  sharing one `range` for one macro call.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
-**Area:** `core/lib/ovallsp/index/document_symbol_builder.rb`
-(`#build_children`), `core/lib/ovallsp/parser_service.rb`
-(`#record_attribute_methods`, `#add_generated_method`)
+**Area:** `core/lib/ovallsp/parser_service.rb` (`#add_generated_method`,
+and the five recorders that call it),
+`core/lib/ovallsp/index/document_symbol_builder.rb` (`#build_children`)
 
 `attr_accessor :a, :b, :c` declares six methods, all at the same source
 range, so the outline shows six children with byte-identical `range` and
-`selectionRange` on one line. The names are right and each is genuinely a
-method, so this is noise rather than a wrong answer — but an outline is
-read by eye and six identical ranges read as a bug.
+`selectionRange` on one line.
 
-**Re-driven in 0.2.15, through the real server.** It reproduces exactly,
-and the shape is narrower than "macros": it is *macros that declare more
-than one name per call*. `attr_accessor :a, :b, :c` gives six children,
-`delegate` three at one range, `enum` two — while `scope` gives each
-call its own distinct range, because each call declares one name.
+**It was more than noise, and 0.2.15's own closing note — replaced by
+what follows — was wrong about which half was left.** It read: "each of
+the six now selects its own name, so the remaining symptom is duplicate
+`range`s in a list whose entries are correctly labelled — noise". Both
+halves of that sentence are false, and each is checked below.
 
-**Half of this entry was a second defect, and it was not about macros at
-all.** `#build_children` wrote `decl.location` into **both** `range` and
-`selectionRange`, for every symbol — a plain `def`, a `class`, a
-constant. That is `024.227`, fixed in 0.2.15, and it is why the six
-identical ranges were identical in the *second* field as well.
+Two features read "the smallest declaration whose
+range contains the caret" — `Server#declaration_symbol_id_at` for Find
+References from a declaration site, and `#declaration_named_at` for go
+to definition. With every name at one range those N candidates *tie*,
+`min_by` returns the first, and asking about the second name answered
+about the first.
 
-**What stays here** is the first field: six children at one `range`,
-which is a question about how a multi-name macro call should appear in
-an outline rather than about which range a symbol reports. The two
-directions are unchanged — group the names a single call declares under
-one node, or give each its own `range` from the per-argument Prism node
-that `#record_attribute_methods` has in hand at its
-`node.arguments.arguments.each` loop and currently discards, passing
-`node:` (the whole call) instead. The second would also give `024.28`'s
-rename something to edit.
+Driven through the real server on a class whose `attr_accessor :alpha,
+:beta` is called once per name, `textDocument/references` with the caret
+on `beta` answered `alpha`'s call site:
 
-**Retargeted to 0.2.16.** With `024.227` fixed, each of the six now
-selects its own name, so the remaining symptom is duplicate `range`s in
-a list whose entries are correctly labelled — noise, and the cheaper
-half of it is already gone.
+    expected: [6]      # the line `beta` is called on
+         got: [5]      # the line `alpha` is called on
+
+That is a wrong answer, not a cosmetic one, and it is pinned now by
+`core/spec/ovallsp/macro_declaration_ranges_spec.rb` — through the
+server, not by a copy of `declaration_symbol_id_at`'s arithmetic, which
+would have pinned the copy.
+
+**And `024.227` did not reach these symbols at all**, which is the other
+half. `#build_children` falls back to `decl.location` when
+`name_location` is nil, and a macro-declared declaration had none, so
+none of the six selected its own name.
+`DocumentSymbolBuilder.build` over `ParserService#summarize`, on
+
+```ruby
+class Widget
+  attr_accessor :a, :b
+  enum status: { active: 0, archived: 1 }
+  scope :recent, -> { where(x: 1) }
+  delegate :name, :age, to: :company
+  define_method(:calc) { |v| v }
+  def plain = 1
+end
+```
+
+against the tree that shipped 0.2.15:
+
+    Widget         range=(0,0)-(7,3) sel=(0,6)-(0,12)
+      a              range=(1,2)-(1,22) sel=(1,2)-(1,22)
+      a=             range=(1,2)-(1,22) sel=(1,2)-(1,22)
+      b              range=(1,2)-(1,22) sel=(1,2)-(1,22)
+      b=             range=(1,2)-(1,22) sel=(1,2)-(1,22)
+      active?        range=(2,2)-(2,41) sel=(2,2)-(2,41)
+      archived?      range=(2,2)-(2,41) sel=(2,2)-(2,41)
+      recent         range=(3,2)-(3,35) sel=(3,2)-(3,35)
+      name           range=(4,2)-(4,36) sel=(4,2)-(4,36)
+      age            range=(4,2)-(4,36) sel=(4,2)-(4,36)
+      calc           range=(5,2)-(5,32) sel=(5,2)-(5,32)
+      plain          range=(6,2)-(6,15) sel=(6,6)-(6,11)
+
+`plain` is a `def` and shows the 0.2.15 fix working. Every macro row
+above it has `sel` equal to `range`, which is what the fix replaced —
+including `recent` and `calc`, which declare one name each and were
+never part of the duplicate-range symptom, but lost their
+`selectionRange` all the same.
+This is the shape `CLAUDE.md`'s "promoting a finding is making a claim"
+warns about: a note written while splitting an entry, restating in the
+present tense something nobody re-drove.
+
+**Fixed by giving each generated declaration the token it is named
+after.** `#add_generated_method` gained a `name_node:` keyword with **no
+default**, for the reason `parameters:` has none: three recorders once
+took that default while meaning "not stated here". From it comes
+`name_location` — Prism's `value_loc`/`content_loc`, the bare name
+without the `:` or the quotes, so a `selectionRange` selects `title` and
+not `:title`.
+
+`node:` and `name_node:` then differ deliberately, and the rule is
+**`node:` is the region this one declaration owns**:
+
+- a macro taking a *list* of names owns, per name, its own token — the
+  rest of `attr_accessor :a, :b` is the other name. `attr_*`, `enum` and
+  `delegate` pass the token.
+- a macro whose call declares exactly one method owns the whole call,
+  because the rest of it is that method's body. `scope` passes the call
+  (its lambda), `define_method` passes the call (its block). Narrowing
+  these would have *lost* the body, and `Declaration#location`'s own
+  contract is the whole declaration — a `def`'s body is inside its
+  `location`, so a `define_method`'s block belongs inside its own.
+
+The builder needed nothing: `decl.name_location || decl.location` was
+already there from `024.227`.
+
+The same run afterwards:
+
+    Widget         range=(0,0)-(7,3) sel=(0,6)-(0,12)
+      a              range=(1,16)-(1,18) sel=(1,17)-(1,18)
+      a=             range=(1,16)-(1,18) sel=(1,17)-(1,18)
+      b              range=(1,20)-(1,22) sel=(1,21)-(1,22)
+      b=             range=(1,20)-(1,22) sel=(1,21)-(1,22)
+      active?        range=(2,17)-(2,24) sel=(2,17)-(2,23)
+      archived?      range=(2,28)-(2,37) sel=(2,28)-(2,36)
+      recent         range=(3,2)-(3,35) sel=(3,9)-(3,15)
+      name           range=(4,11)-(4,16) sel=(4,12)-(4,16)
+      age            range=(4,18)-(4,22) sel=(4,19)-(4,22)
+      calc           range=(5,2)-(5,32) sel=(5,17)-(5,21)
+      plain          range=(6,2)-(6,15) sel=(6,6)-(6,11)
+
+`a` and `a=` still share a range, and should: one token declares both.
+`recent` and `calc` keep the whole call, and now select their names.
+
+**Narrowing has a second side, and the first version of this entry did
+not state it.** A name now owns only its own token, so the rest of the
+macro call — the keyword, the commas, `to: :company` — lies inside no
+method's range at all. Driven through the real server on a `Widget`
+whose `attr_accessor :alpha, :beta` and `delegate :title, :author, to:
+:company` are each called once in a `def use` that also names `Widget`,
+with the caret on the `attr_accessor` keyword itself,
+`textDocument/references`:
+
+    before: [(5,4)]           # alpha's call site
+    after:  [(0,6), (8,4)]    # Widget's
+
+and `textDocument/definition` there answered the declaration before and
+answers nothing now. That reads as a regression until the same two runs
+are given a control: a caret on the class's own `end`, and on a blank
+line in its body, answered `[(0,6), (8,4)]` on **both** sides. So the
+"after" column is the answer this engine has always given for a
+position in a class body that no narrower declaration covers, and the
+"before" column was the anomaly — a caret on `attr_accessor` reporting
+about `alpha`, a name it is not on, because the call's range covered
+the keyword and `min_by` broke the tie by returning the first.
+
+Pinned in `macro_declaration_ranges_spec.rb` against the class's own
+`end` rather than against a line number, so the example asserts the
+rule rather than repeating the measurement. `#declaration_named_at`
+reads `name_location || location`, and `scope` — which keeps the whole
+call as its `location` — is the fixture that can tell those two apart;
+a caret on its `scope` keyword is inside `location` and outside
+`name_location`, and only a reader preferring the second declines
+there.
+
+**One shape had to be refused: a name span can lie outside its own
+node.** `docs/CLIENT_BEHAVIOUR.md` records, checked against the
+installed types, that `selectionRange` must be contained by `range`.
+While `range` was the whole call that came free; once it is the name
+token it does not, because Prism keeps a heredoc's text separately
+from the `<<~` marker that is the node:
+
+    $ ruby -rprism -e '
+    src = "attr_reader <<~NAME\n  quoted\nNAME\n"
+    a = Prism.parse(src).value.statements.body.first.arguments.arguments.first
+    p [a.location.start_offset, a.location.end_offset, a.location.slice]
+    p [a.content_loc.start_offset, a.content_loc.end_offset]'
+    [12, 19, "<<~NAME"]
+    [20, 29]
+    # prism 1.9.0, ruby 3.4.10
+
+On the first version of this change that shape produced a child with
+`range=(1,14)-(1,21)` and `sel=(2,0)-(3,0)` — a selection entirely
+outside the range it belongs to. `#name_token_location` now takes the
+region as an argument and refuses a span outside it, at the one place
+the span is produced rather than at its caller, so that shape falls
+back to `location` in both fields.
+
+**Not to the answer it gave before this change**, and the sentence here
+said it was until a review round drove it. `location` narrowed for this
+shape as well, because `node:` for `attr_*` is the argument now rather
+than the whole call: through a real server the row's `range` went from
+`(1,2)-(1,21)`, the whole `attr_reader <<~NAME` call, to `(1,14)-(1,21)`,
+the marker alone. What is unchanged is that the two fields are *equal*,
+which is what the protocol's containment rule allows. The value moved 12
+columns, and a reader of the old sentence would have concluded the shape
+was untouched.
+
+The shape is pathological on purpose, and Ruby says so — the name the
+heredoc produces carries the newline, and `attr_reader` refuses it:
+
+    $ ruby -e 'class W
+                 attr_reader <<~NAME
+                   quoted
+                 NAME
+               end'
+    NameError: invalid attribute name 'quoted
+    '
+    # ruby 3.4.10
+
+Nothing here is about supporting that spelling. What the example pins
+is the containment invariant, and this was the first shape probed for
+it.
+
+**Left unpinned, and recorded rather than papered over.**
+`#name_token_location`'s class dispatch has a nil arm for a node that
+is neither literal class. Nothing reaches it: each of the five
+recorders returns early unless `attribute_name`/`symbol_name`
+recognised the argument, and those two admit exactly those classes. It
+declines rather than raising so that a sixth recorder handing over
+another literal shape loses a `selectionRange` instead of raising out
+of `#summarize` and dropping the file's whole index — an argument, not
+a measurement. No example can reach it without that sixth recorder, so
+none was written.
+
+**Corpus control.** `corpus_diagnostics.rb` over ActiveRecord 8.1.3.1's
+`lib` — 397 files, `corpus-sha256` identical on both sides — produces
+**byte-identical output**: 1,702 findings before and after, with
+`unresolved-constant` at 1,609 and `unknown-method` at 93 on both. That
+is the intended result rather than a null one: the engine reads *which*
+declarations exist, never where they are, so the whole diagnostics
+output is a category this change cannot affect.
+
+**What says the two sides really ran different code** is the outline
+pair above, driven in the same two tree states, with
+`shasum lib/ovallsp/parser_service.rb` printed before each. The header's
+own `dirty-tracked-files` cannot say it here — it counts the index, and
+the docs and specs are dirty on both sides, so it read 15 either way.
+Worth knowing before trusting that field to tell an A from a B: it
+answers "does this tree differ from its revision", not "did these two
+runs differ from each other".
 
 
 ## 024.28 Rename refuses on a macro-declared method rather than editing it
@@ -1848,18 +2032,15 @@ half of it is already gone.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
-Refusing is the deliberate behaviour as of 0.1.15; what is open is that
-refusing is not the end state.
-
 **Area:** `core/lib/ovallsp/rename/planner.rb`
+(`#uneditable_declaration`), `core/lib/ovallsp/index/declaration.rb`
 
-`attr_accessor :name` declares `name` and `name=` at a symbol argument,
-not at an identifier token, so there is nothing for an in-place edit to
-rewrite. 0.1.14 emitted a `WorkspaceEdit` that renamed every call site and
-left the declaration behind, producing a file that does not run; 0.1.15
+`attr_accessor :name` declares `name` and `name=` at a symbol argument.
+0.1.14 emitted a `WorkspaceEdit` that renamed every call site and left
+the declaration behind, producing a file that does not run; 0.1.15
 refuses instead, which is what `#prepare`'s own comment had always
 claimed happened.
 
@@ -1869,15 +2050,136 @@ edit; nothing in this codebase sends `window/showMessage`. The W4 row's
 E2E example calls `textDocument/rename` directly and asserts an empty
 edit set, so the refusal is verified and the *explanation* is not.
 
-Refusing is correct and is not the end state. The same applies to `enum`,
-`scope` and `delegate`, and has since those shipped.
+**This entry's Direction was wrong, and 0.2.16 tried it.** It read: give
+the declaration a `name_location` covering its symbol argument "so
+`attr_reader :name` can be rewritten to `attr_reader :title`", with the
+`name=`/`name` asymmetry named as the hard half. `024.27` gave every
+macro declaration exactly that `name_location`, and the rewrite is still
+the wrong edit — for three of the five macro families that reach
+`#add_generated_method` (`attr_*`, `enum`, `delegate`, against `scope`
+and `define_method`), and for a
+reason the asymmetry only hints at. **The macro's argument is source the
+macro reads, not this method's identifier**, and rewriting it changes
+whatever else that argument feeds:
 
-**Direction:** give a macro-declared declaration a `name_location`
-covering its symbol argument, so `attr_reader :name` can be rewritten to
-`attr_reader :title`. The writer is the hard half: `name=` and `name` are
-one token in the source, so renaming `name=` to `title=` has to write
-`:title`, not `:title=`. That asymmetry is why this is its own entry
-rather than a line in 0.1.15.
+- `attr_reader :name` reads `@name`. Rewriting the token gives a reader
+  of `@title`, which nothing in the class assigns. Run on ruby 3.4.10:
+
+      class W
+        def initialize = @name = "n"
+        attr_reader :title      # renamed from :name by hand
+      end
+      p W.new.title             # => nil
+      p W.instance_methods(false)  # => [:title]
+
+  That is worse than 0.1.14's failure, not better: the file still runs
+  and answers `nil`. Section 0 ranks a wrong answer below no answer.
+- `attr_accessor :name` declares `name` *and* `name=` from one token.
+  Run on ruby 3.4.10, and pasted as it prints rather than as it reads —
+  the order is the interpreter's, and an earlier draft of this entry
+  tidied it into `[:name, :name=]`, which is the class of quiet
+  inaccuracy the "paste the session" rule exists to catch:
+
+      $ ruby -e 'class W; attr_accessor :name; end; p W.instance_methods(false)'
+      [:name=, :name]
+
+  One edit renames two methods while the plan holds one symbol's call
+  sites, so every `w.name = x` breaks and nothing in the plan says so.
+- `enum status: { active: 0 }` — **`active` is the label, not the
+  stored value.** An earlier draft of this entry said "the *stored*
+  value", and eight files and both languages repeated it. Driven
+  against `activerecord 8.1.3.1` on ruby 3.4.10, over a sqlite3
+  database in a `Dir.mktmpdir`:
+
+      create_table(:orders) { |t| t.integer :status }
+      class Order < ActiveRecord::Base
+        enum :status, { active: 0, archived: 1 }
+      end
+      o = Order.create!(status: :active)
+      p Order.statuses   # => {"active" => 0, "archived" => 1}
+      p o.status         # => "active"
+      p Order.connection.select_value("select status from orders")  # => 0
+
+  The column holds `0`; `active` is the label mapped onto it. The
+  refusal is still right, and for a *larger* reason than the draft
+  gave: rewriting the label renames three things besides the
+  predicate. Re-run with the label spelled `live` instead:
+
+      p Order.statuses            # => {"live" => 0, "archived" => 1}
+      p Order.respond_to?(:active)  # => false
+      p Order.respond_to?(:live)    # => true
+
+  — the scope, the `statuses` key, and what the attribute reads back.
+- `delegate :name, to: :company` calls `company.name`. Run with
+  `activesupport 8.1.3.1` on ruby 3.4.10:
+
+      require "active_support/all"
+      class Company; def name = "acme"; end
+      class Order
+        attr_reader :company
+        def initialize = @company = Company.new
+        delegate :nickname, to: :company   # the same line, name rewritten
+      end
+      Order.new.nickname
+      # => NoMethodError: undefined method 'nickname' for an instance of Company
+
+  **This paragraph said "under `prefix: true` the token is not even a
+  substring of the generated name", and that is false.** `prefix:`
+  prepends, so the token is always the tail. It was written as prose in a
+  bullet list, believed for a review round, and caught by the round
+  after — which is the second false claim in the same rewritten list, and
+  the trigger for `024.220`'s session checker. Written as a session now,
+  so something re-runs it:
+
+      $ ruby -e '
+      gem "activesupport"
+      require "active_support/all"
+      class Company; def name = "acme"; end
+      class Order
+        def company = Company.new
+        delegate :name, to: :company, prefix: true
+      end
+      p Order.instance_methods(false).sort
+      p "company_name".include?("name")
+      '
+      # => [:company, :company_name]
+      # => true
+      # ruby 3.4.10, activesupport 8.1.3.1
+
+  Which does not change the conclusion — the token still names the
+  *target's* method and rewriting it still breaks the delegation — only
+  the reason given for it.
+
+**So refusing is the end state for `attr_*`, `enum` and `delegate`**, and
+0.2.16 makes the refusal say so. It had been claiming "there is no
+identifier token to rewrite", which `024.27` made false; it now names the
+argument's own position — `2:18` rather than the macro call's `2:3` on
+`attr_accessor :name` — and says that rewriting it is not the same edit
+as renaming the method.
+
+**What is still open is narrow, and it is not what this entry used to
+say.** Two shapes remain where the token *is* exactly the method's name
+and nothing else depends on its spelling:
+
+- `scope :recent, -> { … }` — the lambda never names the scope.
+- `define_method(:calc) { … }` — the block never names the method.
+
+Both are refused with the rest, and the reason is structural rather than
+deliberate: `Rename::Planner` keys the refusal on
+`Declaration#origin == :generated`, which is the same value for every
+macro. Nothing reaching the planner says which one produced the
+declaration, so it cannot separate the two shapes it could safely edit
+from the three it must not.
+
+**Direction:** carry that distinction on the declaration — whether its
+`name_location` is an *exact* spelling of the method's name and the only
+method that token declares — and let rename edit in place where it is.
+`Declaration#origin` is the wrong carrier (`:generated` is a contract
+three documents state); a separate field set at record time, where the
+macro is known, is the shape. Deliberately **not** done in 0.2.16:
+enabling rename for two macros is a new capability row, its E2E example,
+two READMEs and two site pages, and the change set was a correction.
+Retargeted from 0.2.16 to 0.3.0 for that reason.
 
 
 ## 024.29 Two features were written for 0.1.15 and cut from it
