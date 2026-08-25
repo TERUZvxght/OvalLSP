@@ -548,7 +548,23 @@ module Ovallsp
             verb: route.verb.to_s.empty? ? "GET" : route.verb.to_s,
             pathTemplate: route.path.spec.to_s,
             requiredParts: Array(route.required_parts).map(&:to_s),
-            optionalParts: route.path.spec.to_s.include?("(.:format)") ? ["format"] : [],
+            # **From the route, not from the path spec's text.** This tested
+            # the spec string for the literal `(.:format)`, so a route with
+            # any other optional segment was reported as having none, and
+            # Signature Help understated the helper's parameters -- a wrong
+            # answer, since the helper does accept them (`024.136`).
+            #
+            # Rails carries both lists and the difference is the answer,
+            # asked of a real 8.1.3.1 route set:
+            #
+            #   get "/posts(/:page)", to: "posts#index", as: :paged_posts
+            #   r.parts          # => [:page, :format]
+            #   r.required_parts # => []
+            #
+            # Duck-typed the same way `requiredParts` above already is, so
+            # a route object without `parts` degrades to none rather than
+            # raising.
+            optionalParts: optional_parts_for(route),
             defaults: route.defaults.to_h { |k, v| [k.to_s.to_sym, v.to_s] },
             sourceLocation: normalize_source_location(route.respond_to?(:source_location) ? route.source_location : nil),
             routeSet: "main_app"
@@ -568,6 +584,15 @@ module Ovallsp
       # resolve to anything real. Never raises — a route whose location
       # can't be parsed just gets nil, exactly like one with no location
       # data at all.
+      # `parts` minus `required_parts`, both duck-typed. A route that
+      # answers neither has no optional parts to report, which is what an
+      # empty list already means (`024.136`).
+      def optional_parts_for(route)
+        return [] unless route.respond_to?(:parts)
+
+        Array(route.parts).map(&:to_s) - Array(route.required_parts).map(&:to_s)
+      end
+
       def normalize_source_location(raw)
         path, line = parse_source_location(raw)
         return nil unless path && line

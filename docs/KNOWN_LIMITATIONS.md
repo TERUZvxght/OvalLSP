@@ -406,16 +406,6 @@ and completion stopped answering for such a class as of 0.2.1. That
 described an arrangement built and rolled back *inside* 0.2.1's review
 loop; what 0.2.1 actually shipped is the silence described above.)
 
-## A path helper's optional segments are understated
-
-Signature Help for a route helper lists the parameters the route
-requires, and — for optional ones — only `format`. The Runtime Agent
-detects optional segments by looking for the literal `(.:format)` in the
-route's path, so a route written `get "/posts(/:page)"` is reported as
-having no optional parameter at all, and its helper's signature looks
-complete without `page`. The required parameters are read from Rails
-itself and are correct. <!-- documents: 024.136 -->
-
 ## "Go to Symbol in Workspace" scans every symbol
 
 The workspace symbol picker matches your query against every symbol name

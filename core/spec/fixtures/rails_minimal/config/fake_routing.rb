@@ -10,7 +10,8 @@
 # required_parts), so Ovallsp::RuntimeAgent::Agent#extract_routes only ever
 # talks to that duck-typed interface.
 module FakeRouting
-  Route = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :source_location, keyword_init: true) do
+  Route = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :parts, :source_location,
+                     keyword_init: true) do
     def path
       Struct.new(:spec).new(path_spec)
     end
@@ -113,6 +114,10 @@ module FakeRouting
         path_spec: full_path,
         defaults: { "controller" => controller, "action" => action },
         required_parts: required,
+        # Rails' route carries both lists, and the Agent reads optional
+        # parts as the difference (`024.136`). This fixture exists to
+        # mimic that interface, so it carries both too.
+        parts: required + ["format"],
         # Matches real Rails' actual format (verified against Rails 8.1:
         # "/abs/path/config/routes.rb:12", 1-based) rather than a
         # pre-normalized Hash — normalization is the Agent's job
@@ -183,6 +188,7 @@ module FakeRouting
           path_spec: full_path,
           defaults: { "controller" => @controller, "action" => action.to_s },
           required_parts: required,
+          parts: required + ["format"],
           source_location: "#{location.absolute_path}:#{location.lineno}"
         )
       end

@@ -305,7 +305,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | fixed | 0.2.15 | A positional argument to a keyword-only method reads as nonsense |
 | [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | fixed | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
 | [`024.135`](#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | open | 0.2.16 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
-| [`024.136`](#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | open | 0.2.16 | A route's optional segments are detected by matching the literal `(.… |
+| [`024.136`](#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | fixed | 0.2.16 | A route's optional segments are detected by matching the literal `(.… |
 | [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | 0.2.16 | `WorkspaceIndex#search` scans every symbol in the workspace |
 | [`024.138`](#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | open | 0.2.16 | No test mixes a schema change and a model-file change in one batch |
 | [`024.139`](#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
@@ -8489,10 +8489,11 @@ covered by it; the same reasoning applies and the same fix shape would —
 ## 024.136 A route's optional segments are detected by matching the literal `(.:format)`
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/runtime_agent/agent.rb` (`optionalParts`)
@@ -8522,6 +8523,31 @@ answered by two different methods, which is `042`'s D5 shape.
 **Where this came from:** `008.5`'s `## 残課題`, written during Task
 008.5 and never converted into an entry, so no release ever considered
 it. See `024.139`.
+
+### Fixed in 0.2.16
+
+`parts` minus `required_parts`, both duck-typed the way `requiredParts`
+one line above already was. Rails carries both lists and the difference
+is the answer, asked of a real 8.1.3.1 route set rather than reasoned
+about:
+
+    get "/posts(/:page)", to: "posts#index", as: :paged_posts
+    r.parts           # => [:page, :format]
+    r.required_parts  # => []
+
+so the answer is `[:page, :format]` where the substring test said
+`["format"]`.
+
+A route object that answers neither degrades to no optional parts rather
+than raising, which is what an empty list already meant.
+
+**The example is pinned in both directions**: reverting to the substring
+test fails it, and it drives the real agent over framed stdio rather than
+calling the private method, so it exercises the payload a Core actually
+receives. `rails_minimal`'s fake route gained `parts` too — the fixture
+exists to mimic Rails' route interface, and the duck-typing would
+otherwise have silently taken it to `[]`, losing the `format` the
+substring test used to find.
 
 ## 024.137 `WorkspaceIndex#search` scans every symbol in the workspace
 

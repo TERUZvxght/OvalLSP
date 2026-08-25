@@ -57,14 +57,62 @@ RSpec.describe Ovallsp::RuntimeAgent::Agent do
     expect(result[:root]).to eq("/rails/app")
   end
 
-  it "answers agent/snapshot's routes section via the duck-typed route interface" do
-    fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :source_location) do
+  # `024.136`. Optional parts were detected by testing the path spec for
+  # the literal `(.:format)`, so a route with any other optional segment
+  # was reported as having none — Signature Help then understates a path
+  # helper's parameters, which is a wrong answer rather than an absent
+  # one, because the helper really does accept them.
+  #
+  # Rails' own route object carries both lists, and the difference is the
+  # answer. Asked of a real Rails 8.1.3.1 route set rather than reasoned
+  # about:
+  #
+  #   get "/posts(/:page)", to: "posts#index", as: :paged_posts
+  #   r = Rails.application.routes.routes.find { |x| x.name == "paged_posts" }
+  #   r.parts           # => [:page, :format]
+  #   r.required_parts  # => []
+  #
+  # so `parts - required_parts` is `[:page, :format]`, and the substring
+  # test answers `["format"]`.
+  it "reads a route's optional parts from the route, not from the path spec's text" do
+    fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :parts, :source_location) do
       def path
         Struct.new(:spec).new(path_spec)
       end
     end
-    named = fake_route_class.new("post", "GET", "/posts/:id(.:format)", { controller: "posts", action: "show" }, [:id], nil)
-    unnamed = fake_route_class.new(nil, "GET", "/ping(.:format)", { controller: "health", action: "ping" }, [], nil)
+    # An optional segment that is not `(.:format)`, plus a required one.
+    paged = fake_route_class.new("paged_posts", "GET", "/posts/:id(/:page)(.:format)",
+                                 { controller: "posts", action: "index" }, [:id], %i[id page format], nil)
+
+    fake_app = Class.new do
+      define_method(:routes) { Struct.new(:routes).new([paged]) }
+    end.new
+
+    stub_const("Rails", Class.new do
+      define_singleton_method(:version) { "7.1.0-fixture" }
+      define_singleton_method(:application) { fake_app }
+    end)
+
+    input =
+      frame(jsonrpc: "2.0", id: 1, method: "agent/snapshot", params: { sections: ["routes"] }) +
+      frame(jsonrpc: "2.0", id: 2, method: "agent/shutdown", params: {})
+
+    build_agent(input).run
+
+    route = sent_messages.first[:result][:routes].first
+    expect(route).to include(requiredParts: ["id"], optionalParts: %w[page format])
+  end
+
+  it "answers agent/snapshot's routes section via the duck-typed route interface" do
+    fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :parts, :source_location) do
+      def path
+        Struct.new(:spec).new(path_spec)
+      end
+    end
+    named = fake_route_class.new("post", "GET", "/posts/:id(.:format)", { controller: "posts", action: "show" }, [:id],
+                                       %i[id format], nil)
+    unnamed = fake_route_class.new(nil, "GET", "/ping(.:format)", { controller: "health", action: "ping" }, [],
+                                         %i[format], nil)
 
     fake_app = Class.new do
       define_method(:routes) { Struct.new(:routes).new([named, unnamed]) }
@@ -88,13 +136,13 @@ RSpec.describe Ovallsp::RuntimeAgent::Agent do
 
   describe "route source_location normalization (Task 008.5)" do
     def fake_route(source_location:, name: "post")
-      fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :source_location) do
+      fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :parts, :source_location) do
         def path
           Struct.new(:spec).new(path_spec)
         end
       end
       fake_route_class.new(name, "GET", "/posts/:id(.:format)", { controller: "posts", action: "show" }, [:id],
-                            source_location)
+                            %i[id format], source_location)
     end
 
     def snapshot_routes(route)
@@ -174,12 +222,13 @@ RSpec.describe Ovallsp::RuntimeAgent::Agent do
   end
 
   it "treats a route's empty-string verb (e.g. real Rails' `via: :all`) as GET, not \"\"" do
-    fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :source_location) do
+    fake_route_class = Struct.new(:name, :verb, :path_spec, :defaults, :required_parts, :parts, :source_location) do
       def path
         Struct.new(:spec).new(path_spec)
       end
     end
-    any_verb = fake_route_class.new("catch_all", "", "/catch_all(.:format)", { controller: "x", action: "y" }, [], nil)
+    any_verb = fake_route_class.new("catch_all", "", "/catch_all(.:format)", { controller: "x", action: "y" }, [],
+                                        %i[format], nil)
 
     fake_app = Class.new do
       define_method(:routes) { Struct.new(:routes).new([any_verb]) }
