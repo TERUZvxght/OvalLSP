@@ -102,6 +102,7 @@ carried in a conversation.
 
 
 - Never implement functionality speculatively or in advance. Apply the YAGNI principle rigorously, and implement only what is explicitly required for the current task.
+- Write the simplest construction that satisfies the requirement in front of you, and let the next requirement change the shape. The measure of simpler is *places that must agree*, not lines — a measured simplification in `048` came out at +3 net lines once it had to work. This governs code being written; a simplification of code that already works is an ordinary change and carries an ordinary change's obligations. See `CLAUDE.md` for the rule, the four shapes to stop at, and the counter-rule about centralising.
 - Write tests first: a test must be observed failing before the code that makes it pass is written. Behaviour that no test fails on when it is reverted counts as a defect. See `CLAUDE.md` for the full rule and for how to verify it mechanically.
 - When asking another agent for an independent review, do not tell it what not to count, where to concentrate, or that finding nothing is fine. Each of those narrows what it can report, and a falling defect count then measures the instructions rather than the code. See `CLAUDE.md` for the rule and 024.36 for the control run that established it.
 - **Work in progress lives in `docs/design/tasks/`, not in a transcript.**

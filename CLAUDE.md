@@ -228,6 +228,108 @@ that way. Many of those arguments are one author's, reviewed by nobody
 else yet — a `contained` that turns out to be wrong is an ordinary
 finding, and the file is where to record that it was.*
 
+## The simplest thing that could possibly work (mandatory)
+
+**Source, per section 0.6:** the maintainer asked on 2026-08-25 that
+DTSTTCPW be set as a working principle so that excess complexity stops
+being produced. That is (b) — a dated instruction. Everything below the
+next paragraph is (c): this project's generalisation of it, written out
+separately so a later session can check the generalisation rather than
+inherit it.
+
+**The instruction generalised:** *when you write something, write the
+simplest construction that satisfies the requirement in front of you,
+and let the next requirement change the shape.* It serves the capability
+axis by keeping the number of places that must agree small, and it
+serves 0.4 by not spending a release on a mechanism nothing has asked
+for yet.
+
+### It is a rule about writing, not a licence to rewrite
+
+This is the whole of what makes it safe here, and the evidence is this
+repository's own.
+
+`048` audited ten subsystems for excess and produced eight proposals
+large enough to change a release. **Every one of them failed
+measurement.** Four would have made the product worse. The headline
+reduction — making `#contains?` exclusive — broke 114 examples, added
+100 diagnostics over 1,070 Rails files, and once the three compensations
+it needed were added came out at **+3 net lines**. `024.47` records a
+rule moved to where the value is produced and rolled back. `024.224`
+records two attempts at one comparison, both measured unsound.
+
+So: applied to code being written, DTSTTCPW prevents complexity.
+Applied to code that works, it is an ordinary change and carries an
+ordinary change's obligations — a test watched failing, a corpus driven,
+a control in the diff. A simplification is not exempt from the rules
+because its intent is subtraction.
+
+### The measure is places that must agree, not lines
+
+The `#contains?` result is the reason this sentence exists. Before
+calling something simpler, count:
+
+- how many places must agree about one fact, and whether anything checks
+  that they still do;
+- how many invariants are held by convention rather than by a type;
+- how many readers must remember a rule to read a value correctly.
+
+If those numbers do not go down, it is not a simplification whatever the
+diffstat says.
+
+### Where to apply it, concretely
+
+The moment is when you catch yourself **adding the N-th place that must
+agree** — not later, during an audit. Four shapes to stop at, each of
+which this repository has produced:
+
+- **Information destroyed upstream and reconstructed downstream.**
+  `024.224`: `Signatures::TypeConverter` knows an absolute `RBS::TypeName`
+  at the moment it builds a `Types::Nominal`, flattens it to a String, and
+  three downstream readers then normalise spellings to get the identity
+  back. Every recovery rule strong enough to reunite two spellings of one
+  class also unites two different classes. Nothing there is unused, so
+  YAGNI cannot see it. The simplest thing that could work is to not throw
+  the identity away.
+- **N bookkeeping structures where one value would do.** 0.2.8 replaced
+  the parser's six stacks with one immutable `Index::Cref`. This is the
+  successful instance, and it is what the shape looks like when it works.
+- **A sentinel every reader must remember to check.**
+  `Signatures::Environment::UNAVAILABLE` is a frozen `[]` told apart by
+  `.equal?`. It exists for a real defect (`024.223`) and a reviewer found
+  a *new* consumer getting it wrong during 0.2.16 — so the "readers must
+  remember" cost is being paid repeatedly rather than once.
+- **A guard at each caller instead of at the thing guarded.** The
+  `/Applications` incident: every call site computed its own target and
+  was individually plausible, and containment was an emergent property of
+  all of them being right at once, which is not a property.
+
+### And the counter-rule, which is equally load-bearing
+
+**Centralising is not free, and "one place that knows the rule" has a
+cheap form and an expensive one.** 0.1.12 moved three naming rules and an
+invariant into `Index::SymbolId`'s constructor and one of that release's
+regressions existed *only* because logic had moved into `initialize`.
+0.2.1 moved the type-name shadowing rule into resolution so its readers
+could not diverge, and broke every bare name written from inside its own
+namespace (`024.47`, rolled back). A module function that callers invoke
+is usually the cheaper form.
+
+The test to apply: **do all the readers really want the same answer?**
+If they do, one implementation. If they want the same answer *most of
+the time*, they do not want the same answer, and unifying them is how
+0.2.1 lost a release.
+
+### How this sits with the YAGNI rule already written down
+
+`AGENTS.md` already says never to implement speculatively. That rule
+answers *should this exist*; this one answers *given it must exist, is
+this its simplest form*. They fail differently and they are caught
+differently — a deletion finds the first and only a substitution finds
+the second — which is why both are written, and why `048`'s conclusion
+that "the complexity here is earned" is correct **within the question it
+asked** and says nothing about this one.
+
 ## General implementation discipline (reaffirmed by Task 008.6)
 
 - Fix the underlying design, not the symptom. A local `if` patch that suppresses a symptom without addressing the structural cause is not an acceptable fix in this codebase.

@@ -117,6 +117,13 @@ itself.
   deliberate.
 - Design decisions with real trade-offs (not obvious implementation
   details) are recorded as ADRs under `docs/design/adrs/`.
+- New code is the simplest construction that satisfies the requirement in
+  front of it; the next requirement is allowed to change the shape. What
+  counts as simpler is the number of places that must agree about one
+  fact, not the number of lines. This governs code as it is written — a
+  simplification of code that already works is an ordinary change, needs
+  a test watched failing and a corpus driven, and this project's record
+  on retrospective simplifications is 0 for 8.
 
 ## Before committing: `preflight`
 
