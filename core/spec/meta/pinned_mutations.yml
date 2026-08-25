@@ -290,3 +290,9 @@
   to: "node.receiver && node.name == :class"
   spec: spec/ovallsp/self_receiver_spec.rb
   example: "leaves a `class` call carrying arguments or a block to ordinary resolution"
+- why: "024.137's exact-match ranking -- ranking against the raw query rather than the downcased needle, which the fixture first written for it could not distinguish because the exact name sorted first on the tail key as well."
+  file: core/lib/ovallsp/workspace_index.rb
+  from: "        rank(matches, needle, limit)\n"
+  to: "        rank(matches, query.to_s, limit)\n"
+  spec: spec/ovallsp/workspace_index_spec.rb
+  example: "is case-insensitive in the query, for matching and for exact-match ranking"

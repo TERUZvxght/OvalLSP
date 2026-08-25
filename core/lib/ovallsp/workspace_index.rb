@@ -485,16 +485,84 @@ module Ovallsp
 
     # Workspace symbol search: case-insensitive substring match on the
     # symbol's own (unqualified) name, exact matches ranked first.
+    #
+    # Reads `@by_simple_name`, like `#prefix_search` and
+    # `#find_by_simple_name` above -- the third reader of the structure to
+    # do so, and the last one that was not (`024.137`). Its keys already
+    # *are* the downcased simple names, which is precisely the string this
+    # query is asked about; walking `@by_symbol` instead meant deriving
+    # one per symbol (`split("::")` and a `downcase` allocated per key) to
+    # rediscover a value the index was already holding. The register entry
+    # said a substring search "cannot use" this index because
+    # `#find_by_simple_name` looks a key up exactly. Exact lookup is what
+    # *that* method needs; the keys are equally available to scan.
+    #
+    # Measured on a 14,958-symbol workspace (activerecord, activesupport,
+    # actionpack, actionview and activemodel: 1,039 files, 16,688
+    # declaration entries, 8,259 distinct simple names), four
+    # implementations in one process against one index, every answer
+    # identical by digest across nine queries. The table is in `024.137`;
+    # the shape of it is that a query of two characters or more falls
+    # from 3.6-5.5ms to 0.7-2.1ms, and that is the whole of the gain.
+    #
+    # **A one-character query improves slightly (13.6ms against 11.4ms)
+    # and the empty query not at all (17.9ms against 17.5ms).** The empty
+    # query is what the picker sends when it opens, and it matches every
+    # symbol in the workspace by definition, so nothing about *which
+    # symbols match* can help it: the cost is building and ranking 16,688
+    # candidates. That half of `024.137` is unfixed and the entry stays
+    # open for it, with a paragraph in `KNOWN_LIMITATIONS` -- the fix
+    # narrows the entry rather than closing it.
+    #
+    # The corpus is installed gems and deliberately excludes this
+    # repository's own `core/lib`: the first attempt at this measurement
+    # included it, so editing *this file* moved declaration line numbers
+    # inside the corpus and the before/after answers differed for that
+    # reason alone. The register's own rule about a corpus containing the
+    # tree under change, arriving a third time.
+    #
+    # One critical section, not two. The entry proposed copying
+    # `@by_symbol.keys` under the lock, filtering outside it and re-taking
+    # the lock for the survivors. Measured in the same run it is slower
+    # end to end than this at every one of the nine queries, and it does
+    # not even hold the lock for less where it matters most: ranking
+    # happens in the second critical section, so the picker's opening
+    # state holds the mutex for 16.6ms of a 21.1ms call. It also opens a
+    # window in which a copied key can name a symbol removed while the
+    # filter ran. And the trade it is offering is not one this program can
+    # take: `Server` wraps this whole request in `@index_mutation_mutex`
+    # -- `server_spec.rb` has an example per read request pinning that --
+    # and commits every index mutation under that same outer lock, so what
+    # indexing actually waits behind is the call's total time. Shortening
+    # the call is what shortens the wait; moving the inner lock is not.
+    #
+    # `fetch(symbol_id, [])` because that is this class's read convention,
+    # stated in `#initialize` and followed by all six readers of
+    # `@by_symbol` -- not a decision taken here. Its default is in fact
+    # unreachable from outside: `#replace_file` writes both structures and
+    # `#remove_file_locked` prunes both in one critical section, and this
+    # method never leaves `@mutex`, so a bucket naming a symbol
+    # `@by_symbol` has lost would be an index bug rather than a race.
+    # Which also means no test can fail on it -- subscripting instead
+    # leaves the whole behavioural file green. `024.137` records that as
+    # an unpinned line rather than pretending otherwise.
     def search(query, limit:)
       @mutex.synchronize do
         needle = query.to_s.downcase
         matches = []
-        @by_symbol.each do |symbol_id, entries|
-          next unless simple_name(symbol_id).downcase.include?(needle)
+        @by_simple_name.each do |simple, symbol_ids|
+          next unless simple.include?(needle)
 
-          entries.each { |(uri, decl)| matches << { symbol_id: symbol_id, uri: uri, location: decl.location } }
+          symbol_ids.each do |symbol_id|
+            @by_symbol.fetch(symbol_id, []).each do |(uri, decl)|
+              matches << { symbol_id: symbol_id, uri: uri, location: decl.location, simple: simple }
+            end
+          end
         end
+        # `:simple` is `#rank`'s, not a caller's: the answer's shape is the
+        # three keys `Server#workspace_symbol_result` reads, and stays so.
         rank(matches, needle, limit)
+            .map { |m| { symbol_id: m[:symbol_id], uri: m[:uri], location: m[:location] } }
       end
     end
 
@@ -712,8 +780,12 @@ module Ovallsp
       [uri, decl.location[:start][:line], decl.location[:start][:character]]
     end
 
-    # The one place a *query* reads `@by_simple_name` -- `remove_file_locked`
-    # reads it too, to drop a name whose last declarer is gone.
+    # One of three queries that read `@by_simple_name` -- `#prefix_search`
+    # since 0.2.0 and `#search` since 0.2.16 read it too, as does
+    # `remove_file_locked`, to drop a name whose last declarer is gone.
+    # This said "the one place" until 0.2.16; it went stale in 0.2.0 when
+    # `#prefix_search` became the second, and the change that added the
+    # third is the one that found it.
     # It is a Set, so its order is
     # insertion order -- which moves on re-index for the same reason the
     # entry lists did. Ordered by qualified name: a bare name that matches
@@ -755,9 +827,11 @@ module Ovallsp
 
     def rank(matches, needle, limit)
       # The exact-match bucket was the whole key, so everything inside a
-      # bucket was decided by `@by_symbol`'s insertion order -- and this
-      # result is *truncated*, so that changed which symbols survived
-      # `limit:` after any edit.
+      # bucket was decided by the scanned Hash's insertion order -- and
+      # this result is *truncated*, so that changed which symbols survived
+      # `limit:` after any edit. (`@by_symbol`'s, when this was written;
+      # `@by_simple_name`'s since `024.137`. Which Hash is scanned is the
+      # thing this key exists to stop mattering.)
       #
       # The tail has to be *total*, not merely longer. A first attempt
       # stopped at `[name, uri, line]` and still scrambled: `sort_by` is
@@ -795,8 +869,31 @@ module Ovallsp
       # construction in this tree does -- but `Server#plugin_declaration`
       # copies a plugin's own SymbolId verbatim, so a plugin that starts
       # populating it would put an index-order tie back.
+      #
+      # `m.fetch(:simple)` rather than deriving the simple name again: it
+      # is the `@by_simple_name` bucket key `#search` matched on, written
+      # by `#replace_file` as `simple_name(sid).downcase`, so re-deriving
+      # it here computed the same rule a second time, once per match.
+      #
+      # It is a trade rather than a free win, and the measurement in
+      # `024.137` says which way it goes. Re-deriving is *cheaper* on a
+      # typed query, where the match list is short and building a fourth
+      # hash entry per match costs more than the `split("::")` it saves
+      # (0.4-1.7ms against 0.7-2.1ms). It is dearer where the match list
+      # is the whole workspace: the empty query the picker opens with
+      # makes all 16,688 declarations a match, and re-deriving answers it
+      # in 20.1ms against 17.5ms. The carry is taken because the state it
+      # helps is the one that costs the most in absolute terms, and
+      # because that state is already the one `024.137` cannot fix.
+      #
+      # `fetch`, not `[]`: a match assembled without the key would
+      # silently rank as inexact -- an ordering defect, not an error --
+      # and this is the only caller. Nothing behavioural can hold that
+      # choice, so `spec/meta/workspace_index_cost_spec.rb` holds it as a
+      # source-text decision, the way this file's other cost decisions
+      # are held.
       matches.min_by(limit) do |m|
-        [simple_name(m[:symbol_id]).downcase == needle ? 0 : 1,
+        [m.fetch(:simple) == needle ? 0 : 1,
          m[:symbol_id].name.to_s, m[:uri],
          m[:location][:start][:line], m[:location][:start][:character],
          m[:symbol_id].kind.to_s, m[:symbol_id].owner.to_s]

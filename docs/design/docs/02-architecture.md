@@ -265,6 +265,18 @@ publish_state は葉。外側へ入れ子にしません（FramedWriter の fram
 `workspace_pass` / `refresh_state` / `agent_retry` は短い状態更新のみを
 守り、他のロックを保持したまま取ることはありません。
 
+**内側のロックを短くしてもインデックス構築は待ちます。** 読み取り要求は
+`Server#with_index_snapshot`(= `index_mutation`)の下で*要求全体*が実行
+され、インデックスへの commit も同じ `index_mutation` の下で行われます
+(`#apply_file_summary`、cold index、changed-files batch)。`server_spec.rb`
+には読み取り要求ごとにこれを固定する例があり、意図的な取り決めです。
+したがって、`WorkspaceIndex` などの内側ロックの保持時間を縮めても、
+インデックス構築が待つ時間は変わりません — 待っているのは要求の**総時間**
+だからです。`024.137` はこれを取り違えて「内側の `@mutex` を握ったまま
+走査するせいでインデックス構築が止まる」と記録され、そこで提案された対策
+(キー集合をロック外へ写して絞り込む)は効果ゼロと実測されました。要求
+そのものを速くするのが、ここで唯一効く手段です。
+
 **この節が最初に書かれたとき、「27 箇所の `Mutex.new` が個別にこの順序を
 守っていた」と書いていました。** `core/lib` には現在 31 箇所あり
 <!-- measured: mutex-sites = 31 -->、上の順序が名指ししていたのは

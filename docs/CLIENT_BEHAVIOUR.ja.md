@@ -66,6 +66,7 @@ grep できる主張については、`core/spec/meta/client_behaviour_spec.rb` 
 |---|---|---|
 | **答えるものが無いリクエストは、空の結果オブジェクトではなく `null` を返す。** `textDocument/hover` は `Hover \| null` と宣言されているので、`{contents: {value: ""}}` は「存在して中身が空の hover」であり、クライアントが枠を描いてよい。 | `vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.d.ts` の `HoverRequest`: `ProtocolRequestType<HoverParams, Hover \| null, …>` | checked |
 | **`DocumentSymbol#selectionRange` は識別子であって、シンボル全体の範囲ではない。** 型定義はこれを「そのシンボルが選ばれたときに選択され表示されるべき範囲。例えば関数の名前」と説明し、`range` に含まれていることを要求している。宣言全体を両方のフィールドに書くのは規約違反ではないが、このフィールドの意味を失わせる — アウトラインでクラスを選ぶと本体全体が選択されてしまう。 | `vscode/node_modules/vscode-languageserver-types/lib/esm/main.d.ts` の `DocumentSymbol` | checked |
+| **`workspace/symbol` は `query` が空で届くことがあり、プロトコルはそれを「全シンボル」と定めています。** 型定義は、クライアントが全シンボルを要求するために空文字列を送っても*よい*と述べています。したがってサーバは、特定のクライアントがどうであれ空クエリに対して速くなければなりません。`vscode-languageclient` はエディタのクエリをそのまま転送し、何もフィルタしません。VS Code のピッカーが開いた瞬間に空クエリを送るかどうかは**ここでは確認していません** — レビューラウンドが、確認済みであるかのように公開されていたその主張を見つけました。エンジンが実際に依拠しているのは上記の「許可」の方です。 | `vscode/node_modules/vscode-languageserver-protocol/lib/common/protocol.d.ts` の `WorkspaceSymbolParams.query`、`vscode/node_modules/vscode-languageclient/lib/common/workspaceSymbol.js` の `provideWorkspaceSymbols` | checked |
 
 ## 起動
 

@@ -9392,7 +9392,7 @@ user-visible: yes
 target: 0.2.16
 ```
 
-**Area:** `core/lib/ovallsp/workspace_index.rb` (`#search`)
+**Area:** `core/lib/ovallsp/workspace_index.rb` (`#search`, `#rank`)
 
 `workspace/symbol` runs a `downcase.include?` over every key of
 `@by_symbol`, under `@mutex`, on every keystroke in the symbol picker.
@@ -9412,6 +9412,162 @@ lock and filter outside it, which removes the interference without
 adding an index to keep consistent.
 
 **Where this came from:** `008.5`'s `## 残課題`. See `024.139`.
+
+### Half of this is fixed in 0.2.16, and the entry stays open for the other half
+
+Everything above this line is the entry as it was written. It is kept
+because two of its sentences turned out to be false and the correction is
+the useful part of the record — and because the half it is right about is
+still true after the fix.
+
+**The last sentence of the first paragraph is wrong.** `@by_simple_name`
+maps a *downcased simple name* to the SymbolIds sharing it — its keys are
+exactly the strings this query is matched against. `#find_by_simple_name`
+looks a key up exactly because exact lookup is that method's question;
+nothing stopped a substring search from scanning the same keys. Scanning
+them is what `#search` does now, and it is the third *query* to be moved
+off a full scan of the symbol table — `#method_symbol_ids` in 0.1.14,
+`#prefix_search` in 0.2.0, this in 0.2.16 — each found separately, each
+having derived per symbol a value an index was already holding.
+
+The first of those moved onto `@by_owner_kind`, not onto
+`@by_simple_name`: it is asked once per ancestor, and 0.1.14 grew the
+singleton chain from one entry to six, so one `Widget.` completion went
+from one full scan to six. This paragraph said `@by_simple_name` for all
+three until a review round checked it against that structure's own
+comment, against `workspace_index_cost_spec.rb`'s pre-existing example,
+and against the pre-0.1.15 body of the method.
+
+Measured on 14,958 distinct SymbolIds (16,688 declaration entries, 8,259
+distinct simple names, 1,039 files) from five installed Rails components.
+**One run, four implementations, one process, one index**; median of 25
+interleaved calls at `limit: 100`. The run's own control is that all four
+agree on every answer, digested over name, kind, owner, uri, position and
+key set — they did, for every query.
+
+| query | before | after | no `:simple` carry | snapshot | snapshot's lock hold |
+|---|---|---|---|---|---|
+| `""` (picker opens) | 17.9ms | 17.5ms | 20.1ms | 21.1ms | 16.6ms |
+| `"a"` | 13.6ms | 11.4ms | 12.9ms | 15.6ms | 10.9ms |
+| `"as"` | 5.5ms | 2.1ms | 1.7ms | 6.3ms | 1.5ms |
+| `"act"` | 4.9ms | 1.4ms | 1.1ms | 5.6ms | 0.9ms |
+| `"record"` | 4.3ms | 1.1ms | 0.7ms | 4.8ms | 0.5ms |
+| `"association"` | 4.1ms | 1.1ms | 0.8ms | 4.7ms | 0.2ms |
+| `"save"` | 3.6ms | 0.8ms | 0.5ms | 4.2ms | 0.1ms |
+| `"connection"` | 4.3ms | 1.2ms | 0.8ms | 4.8ms | 0.3ms |
+| `"zzzznope"` | 3.6ms | 0.7ms | 0.4ms | 3.9ms | 0.0ms |
+
+This is the only table. An earlier draft of this entry carried different
+figures from the code comment beside it and from the report that
+accompanied it — three framings of one measurement, disagreeing about
+whether the picker's opening state improved or regressed, in a change set
+whose whole argument turns on that row. `#search`, `#rank` and
+`spec/meta/workspace_index_cost_spec.rb` now all cite these numbers.
+There is no separate "lock held" column for the first two: their whole
+method body is inside `@mutex`, so the call time *is* the hold.
+
+**What is fixed.** Deciding which symbols match no longer derives a name
+per symbol. A query of two characters or more falls from 3.6–5.5ms to
+0.7–2.1ms — roughly four times — and that is per keystroke, which is
+where the repeats are.
+
+**What is not, and why this entry stays open.** The empty query is
+17.9ms before and 17.5ms after: unchanged. It matches every symbol in the
+workspace *by definition*, so no improvement to "which symbols match" can
+reach it; what it costs is building and ranking 16,688 candidates. And
+the empty query is not an edge case — **it is what the picker sends when
+it opens**, so it is the first thing a user experiences, and the second
+is a one-character query at 11.4ms. Both remain linear in workspace size.
+
+The consequence in the second half of **What a user sees** also survives,
+though its stated mechanism was wrong (below): an open picker still
+delays indexing, because the delay comes from the *outer* lock and the
+request still holds that for its whole duration. Shortening the request
+by four times shortens the stall by four times for a typed query, and not
+at all for the state the picker opens in.
+
+So the paragraph in `KNOWN_LIMITATIONS` is **narrowed, not removed** — in
+both languages. Retiring it would have published silence about behaviour
+the product still has; `CLAUDE.md`'s "promoting a finding is making a
+claim" applies in this direction too, because deleting a limitation
+restates it in the present tense as absent.
+
+The entry's proposed countermeasure was the wrong shape twice over:
+
+- **The snapshot does not pay.** Copying `@by_symbol.keys` under the
+  lock, filtering outside it and re-taking the lock for the survivors is
+  slower end to end than the shipped code at every one of the nine
+  queries, because the filter still derives a simple name per symbol and
+  now allocates a key array and a second hash lookup per survivor. Nor
+  does it reliably hold the lock for less: ranking sits inside its second
+  critical section, so the picker's opening state holds the mutex for
+  16.6ms of a 21.1ms call — against 17.5ms for a call that never releases
+  it. It only wins on hold time while a query is being typed, which is
+  the case that was already cheap. It also opens the window the entry's
+  own author flagged, in which a copied key names a symbol removed while
+  the filter ran.
+- **The lock it names is not the one indexing waits on.** `Server`
+  dispatches `workspace/symbol` inside `with_index_snapshot`, which is
+  `@index_mutation_mutex.synchronize` — and every index mutation
+  (`#apply_file_summary`, the cold-index commit, the changed-files batch)
+  commits under that same outer lock. `server_spec.rb` has an example per
+  read request pinning that deliberately, so indexing blocks for the
+  whole request whatever the inner lock does. What shortens the stall is
+  shortening the call; releasing the inner mutex mid-scan would have
+  measured as exactly zero improvement.
+
+The second is the more general point: an entry naming a lock as the cause
+was reasoning from the method it was reading, and the binding lock was
+one layer up in a different file. Note what that does *not* buy — the
+mechanism was misattributed, but the consequence the user was told about
+was correct, so correcting the mechanism is not grounds for deleting the
+user-facing paragraph.
+
+**A fixture that could not distinguish what its own title claimed.** The
+first control written for case-insensitivity indexed `::User` and
+`::UserProfile` and asserted `search("USER")` returned them in that
+order. `::User` sorts ahead of `::UserProfile` on the *name* half of the
+ranking key regardless, so the example answered the same whether `#rank`
+compared the bucket key against the downcased needle or against the raw
+query — the exact-match half of its title was pinning nothing. Run, not
+reasoned: with `rank(matches, query.to_s, limit)` the whole file reported
+82 examples, 0 failures. The fixture now puts the exact match *last* on
+the tail key (`::Widget` in `z.rb`, `::AbstractWidget` in `a.rb`, query
+`"WIDGET"`), so the two candidate implementations invert the pair, and
+the mutation is registered in `spec/meta/pinned_mutations.yml` — which is
+this repository's own countermeasure for exactly this class and which the
+first version of this change set did not use.
+
+**Two lines this change cannot pin behaviourally**, recorded rather than
+faked:
+
+- `#rank` reading the carried bucket key is a source-text decision, held
+  in `spec/meta/workspace_index_cost_spec.rb` the way this class's other
+  cost decisions are. The first version of that assertion named the bare
+  `fetch` call, which the explanatory comment inside `#rank` contains
+  verbatim — so the check was answered by the prose it sat next to, and
+  subscripting the hash instead left everything green. The needle now
+  carries syntax no sentence would.
+- `#search`'s `@by_symbol.fetch(symbol_id, [])` cannot take its default
+  through any public path: `#replace_file` writes both structures and
+  `#remove_file_locked` prunes both in one critical section, and `#search`
+  never leaves `@mutex`. Subscripting instead leaves the whole
+  behavioural file green. It is not a decision taken here in any case —
+  `#initialize`'s comment states the rule for the class and all six
+  readers of `@by_symbol` follow it. A source-text check that they all
+  still do would be the countermeasure if a seventh ever diverges; it is
+  not written, because a review loop is for fixing what was found.
+
+**And a measurement trap, for the third recorded time.** The first
+before/after comparison put this repository's own `core/lib` in the
+corpus. Editing `workspace_index.rb` moved declaration line numbers
+*inside the corpus*, so five of eight answer digests differed and the
+change looked as though it had altered the answers — while an in-process
+comparison of the two implementations against one index said "identical"
+at the same moment. `CLAUDE.md` records this exact corpus as one of its
+three false results, which is what made the contradiction worth chasing
+instead of picking whichever number was more convenient. The corpus above
+is installed gems only, and the harness refuses a root inside this tree.
 
 ## 024.138 No test mixes a schema change and a model-file change in one batch
 

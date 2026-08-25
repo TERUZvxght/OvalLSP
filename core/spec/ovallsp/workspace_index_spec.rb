@@ -578,6 +578,130 @@ RSpec.describe Ovallsp::WorkspaceIndex do
 
       expect(index.search("widget", limit: 2).size).to eq(2)
     end
+
+    # The controls for `024.137`, which moved this method off a scan of
+    # every symbol and onto the index keyed by downcased simple name. Each
+    # fixture distinguishes the answer from a plausible way of getting the
+    # new structure wrong, rather than only asserting that some answer
+    # comes back.
+
+    # A bucket key is the *simple* name, so nothing in the namespace is
+    # matchable. An implementation that matched the stored qualified name
+    # -- the obvious slip when the thing being scanned is a name index --
+    # would return `::Billing::Invoice` here.
+    it "matches the symbol's own name, not the namespace it sits in" do
+      index.replace_file(
+        summary(uri: "file:///a.rb",
+                declarations: [declaration(kind: :class, owner: "::Billing", name: "::Billing::Invoice")])
+      )
+
+      expect(index.search("billing", limit: 10)).to be_empty
+      expect(index.search("invoice", limit: 10).map { |m| m[:symbol_id].name }).to eq(["::Billing::Invoice"])
+    end
+
+    # Two classes with one simple name share a single bucket, and the
+    # bucket holds a Set of SymbolIds. Reading the bucket and stopping at
+    # its first element answers this with one result; both must come back,
+    # in the order the ranking key gives.
+    it "returns every symbol sharing a simple name across namespaces" do
+      index.replace_file(
+        summary(uri: "file:///s.rb",
+                declarations: [declaration(kind: :class, owner: "::Sales", name: "::Sales::Invoice")])
+      )
+      index.replace_file(
+        summary(uri: "file:///b.rb",
+                declarations: [declaration(kind: :class, owner: "::Billing", name: "::Billing::Invoice")])
+      )
+
+      expect(index.search("invoice", limit: 10).map { |m| m[:symbol_id].name })
+        .to eq(["::Billing::Invoice", "::Sales::Invoice"])
+    end
+
+    # The keys are stored downcased, so the *needle* has to be downcased
+    # to meet them -- and so does the exact-match test that decides
+    # ranking. The two halves need different fixtures, and the first
+    # version of this example only had the first: `::User` sorts ahead of
+    # `::UserProfile` on the name key whether or not anything ranks as
+    # exact, so it answered the same under a `#rank` that compares the
+    # bucket key against the *raw* query. Verified, not reasoned: with
+    # `rank(matches, query.to_s, limit)` the whole file stayed green.
+    #
+    # The exact match has to sort *last* on the tail key for the exact
+    # bucket to be the thing being observed, and that is a claim about
+    # Ruby's String order, so it comes from Ruby:
+    #
+    #   ["::User", "::UserProfile"].sort
+    #   # => ["::User", "::UserProfile"]        exact already first
+    #   ["::AbstractWidget", "::Widget"].sort
+    #   # => ["::AbstractWidget", "::Widget"]   exact last
+    #
+    # So a raw-query `#rank` -- which finds nothing exact and falls
+    # through to the name -- inverts this pair and leaves the old one
+    # alone. Registered in `spec/meta/pinned_mutations.yml` so the next
+    # fixture that stops distinguishing this fails a check instead of
+    # waiting for a reviewer.
+    it "is case-insensitive in the query, for matching and for exact-match ranking" do
+      index.replace_file(
+        summary(uri: "file:///a.rb",
+                declarations: [declaration(kind: :class, owner: nil, name: "::AbstractWidget")])
+      )
+      index.replace_file(
+        summary(uri: "file:///z.rb", declarations: [declaration(kind: :class, owner: nil, name: "::Widget")])
+      )
+
+      expect(index.search("WIDGET", limit: 10).map { |m| m[:symbol_id].name })
+        .to eq(["::Widget", "::AbstractWidget"])
+    end
+
+    # `workspace/symbol` sends an empty query when the picker opens, and
+    # the result feeds VS Code's list directly. It is also the one query
+    # for which every symbol in the workspace is a match.
+    it "returns every symbol for the empty query the picker opens with" do
+      index.replace_file(
+        summary(uri: "file:///a.rb",
+                declarations: [declaration(kind: :class, owner: nil, name: "::Alpha"),
+                               declaration(kind: :instance_method, owner: "::Alpha", name: "run")])
+      )
+
+      expect(index.search("", limit: 10).map { |m| m[:symbol_id].name }).to eq(["::Alpha", "run"])
+    end
+
+    # `#rank` needs the bucket key to decide whether a match is exact, so
+    # `#search` carries it alongside each match and drops it again on the
+    # way out. Without that last step the ranking aid ships in the answer:
+    # nothing downstream reads it, which is exactly why no other example
+    # would notice.
+    it "answers with the three keys a result is made of, not the ranking aid" do
+      index.replace_file(
+        summary(uri: "file:///a.rb", declarations: [declaration(kind: :class, owner: nil, name: "::Alpha")])
+      )
+
+      expect(index.search("alpha", limit: 10).map(&:keys)).to eq([%i[symbol_id uri location]])
+    end
+
+    # `#search` now reaches a symbol through its simple-name bucket, so a
+    # removed symbol has to leave *both* structures or the picker keeps
+    # answering with it. That is a joint invariant and this is a joint
+    # control: what it distinguishes is the pair being pruned together.
+    #
+    # It is not the pin for either half on its own, and the first draft of
+    # this comment claimed it was. Measured: stop `remove_file_locked`
+    # pruning `@by_simple_name` and this example still passes -- the
+    # pre-existing "removes the simple-name index entry once the last
+    # declaration with that name is removed" is what fails. Nor does it
+    # pin `#search`'s `fetch(symbol_id, [])`: subscripting instead leaves
+    # the whole file green, because the two structures never disagree.
+    # That form is this class's stated read convention rather than a
+    # decision taken here -- `#initialize`'s comment gives the rule, and
+    # all six readers of `@by_symbol` follow it.
+    it "does not answer with a symbol whose last declaring file was removed" do
+      index.replace_file(
+        summary(uri: "file:///gone.rb", declarations: [declaration(kind: :class, owner: nil, name: "::Vanishing")])
+      )
+      index.remove_file("file:///gone.rb")
+
+      expect(index.search("vanish", limit: 10)).to be_empty
+    end
   end
 
   describe "type name resolution (Task 009)" do

@@ -410,14 +410,34 @@ and completion stopped answering for such a class as of 0.2.1. That
 described an arrangement built and rolled back *inside* 0.2.1's review
 loop; what 0.2.1 actually shipped is the silence described above.)
 
-## "Go to Symbol in Workspace" scans every symbol
+## "Go to Symbol in Workspace" is slowest at the moment you open it
 
-The workspace symbol picker matches your query against every symbol name
-in the index, on every keystroke, rather than using an index built for
-it. On a large workspace the picker becomes slow, and because the scan
-holds the same lock indexing uses, it can also delay indexing that is
-running at the same time. Symbol search *within* a file, and go to
-definition, use a different path and are unaffected. <!-- documents: 024.137 -->
+A `workspace/symbol` request may carry an empty query, which the protocol
+defines as "all symbols", and an empty query matches every symbol in your
+workspace by definition. So the picker's opening state, and to a lesser
+extent the first character you type, stay proportional to how big the
+workspace is — measured at about 17ms and 11ms on a 15,000-symbol
+workspace, and growing from there. While that request is running it also
+holds the lock indexing needs, so opening the picker on a large workspace
+can briefly delay indexing that is running at the same time.
+
+Typing more characters is faster, but not because anything switches on:
+0.2.16 replaced a full scan with an index keyed on the names being
+matched, and that index is read for **every** query including the empty
+one. What a longer query changes is how much the index removes. Measured
+over 1,037 files and 14,942 symbols, a two-character query went from
+10.4ms to 4.0ms — about 2.6 times — while the empty query is bounded by
+the number of results rather than by the query.
+
+Symbol search *within* a file, and go to definition, use a different path
+and are unaffected. <!-- documents: 024.137 -->
+
+(Until this was re-measured, this section said the picker "sends an empty
+query when it opens" — a claim about the client that nothing in
+`docs/CLIENT_BEHAVIOUR.md` showed — and that "once you have typed two
+characters or more the picker uses an index", which describes a switch
+that does not exist, at "roughly four times" where the measurement says
+2.6.)
 
 ## The packaged extension is smoke-tested, not driven
 

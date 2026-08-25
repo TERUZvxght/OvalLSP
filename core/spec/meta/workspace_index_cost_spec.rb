@@ -83,6 +83,75 @@ RSpec.describe "WorkspaceIndex's cost decisions" do
     expect(body).not_to include(".sort_by")
   end
 
+  # And the third reader of the same structure, `024.137`. `#search` is
+  # `workspace/symbol`: it runs per keystroke in the symbol picker, and
+  # it asked exactly the question `@by_simple_name` is keyed on -- does
+  # this symbol's downcased simple name contain the needle -- by walking
+  # `@by_symbol` and deriving that name per symbol instead.
+  #
+  # Measured on a 14,958-symbol workspace of installed gems (5 Rails
+  # components, 1,039 files, 8,259 distinct simple names), four
+  # implementations in one process against one index, every answer
+  # identical by digest: 3.6-5.5ms per keystroke against 0.7-2.1ms for a
+  # two-or-more-character query. The whole method body is inside the
+  # mutex, so that is also the fall in how long the call holds it.
+  #
+  # It buys nothing for the empty query -- 17.9ms against 17.5ms -- which
+  # is the state the picker opens in, and `024.137` stays open for that
+  # half with a published limitation. The gain here is per keystroke
+  # after the first character, which is where the repeats are.
+  #
+  # The register entry proposed a different countermeasure -- copy
+  # `@by_symbol.keys` under the lock, filter outside it, re-take the lock
+  # for the survivors -- on the premise that a substring search "cannot
+  # use" the simple-name index. It can: that index's keys *are* the
+  # downcased simple names. Run in the same process against the same
+  # index, the snapshot shape is slower end to end at every one of the
+  # nine queries, and holds the lock for less only while a query is being
+  # typed: ranking sits in its second critical section, so the picker's
+  # opening state holds the mutex 16.6ms of a 21.1ms call. The trade it
+  # offers is one this program cannot take anyway -- `Server` holds
+  # `@index_mutation_mutex` around the whole request, and indexing
+  # commits under that same outer lock, so what indexing waits for is the
+  # call's total time and not the inner lock's hold.
+  it "reads the simple-name index rather than deriving a name per symbol" do
+    body = body_of("search")
+
+    expect(body).to include("@by_simple_name")
+    expect(body).not_to include("@by_symbol.each")
+    expect(body).not_to include("simple_name(symbol_id)")
+  end
+
+  # The bucket key is `simple_name(sid).downcase`, written by
+  # `#replace_file`. `#rank` needs exactly that string to decide whether a
+  # match is exact, and re-derived it per match -- a `split("::")` and a
+  # `downcase` allocated for each of the 16,688 entries an empty query
+  # matches, which is the state the picker opens in. Carrying the key
+  # answers that query in 17.5ms against 20.1ms re-deriving it; on a
+  # typed query the trade runs the other way (0.7-2.1ms against
+  # 0.4-1.7ms), and `#rank`'s own comment records why the empty query is
+  # the side worth taking.
+  #
+  # Two decisions, and the needles have to reach the *code*. `body_of`
+  # returns the method's comments as well, so a needle spelled the way
+  # prose spells it is answered by the prose: the first version of this
+  # example asserted the bare `fetch` call, which the explanatory comment
+  # inside `#rank` contains verbatim, and subscripting the hash instead
+  # left this example green. Verified, not reasoned -- under that
+  # mutation this file reported 8 examples, 0 failures, and the
+  # behavioural file 82, 0. Both needles below carry syntax no sentence
+  # would: the opening bracket of the ranking key, and the receiver.
+  #
+  # `fetch`, not `[]`: a match assembled without the key ranks as
+  # *inexact* under `[]` -- a silently wrong order rather than an error.
+  # Nothing behavioural can hold that, because `#search` is the only
+  # caller and always sets the key.
+  it "ranks on the bucket key rather than deriving the simple name again" do
+    body = body_of("rank")
+
+    expect(body).to include("[m.fetch(:simple) == needle")
+    expect(body).not_to include("simple_name(m[:symbol_id])")
+  end
 end
 
 # `SourceLocation.byte_offset_to_utf16` walks a line character by
