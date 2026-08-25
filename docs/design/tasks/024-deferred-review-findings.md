@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**235 entries below** <!-- measured: register-entries = 235 -->,
+**238 entries below** <!-- measured: register-entries = 238 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -406,6 +406,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.237`](#024237-four-shapes-stopped-reporting-by-declining-on-the-body-not-by-reading-it) | open | 0.3.0 | Four shapes stopped reporting by declining on the body, not by readi… |
 | [`024.238`](#024238-alias-to-a-method-an-included-module-declares-is-reported-as-unknown) | open | 0.3.0 | `alias` to a method an included module declares is reported as unkno… |
 | [`024.239`](#024239-a-name-ruby-gives-every-object-reported-missing-because-rbs-omits-it) | fixed | 0.2.16 | A name Ruby gives every object, reported missing because RBS omits it |
+| [`024.240`](#024240-hover-answers-nothing-in-a-view-where-completion-and-go-to-definition-both-answer) | open | 0.2.16 | Hover answers nothing in a view where completion and go-to-definitio… |
+| [`024.241`](#024241-find-references-answers-from-a-comment-a-bare-literal-and-end) | open | 0.2.16 | Find References answers from a comment, a bare literal, and `end` |
+| [`024.242`](#024242-a-class-held-in-a-local-variable-loses-an-rbs-overload) | open | 0.2.16 | A class held in a local variable loses an RBS overload |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -12592,6 +12595,126 @@ subprocess inherited bundler's `RUBYOPT`, so `--disable-gems` read as
 honoured while rubygems was loaded back in and three names came out six.
 The same lesson as 0.2.3's gate — confirm you invoked the implementation
 you think you did.
+
+## 024.240 Hover answers nothing in a view where completion and go-to-definition both answer
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.16
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#hover_result`,
+`#explain_type_result`)
+
+Driven through the real server at `bea3f38`. A `User` model carrying a
+documented method, a controller assigning `@user` in a `before_action`,
+and `<%= @user.full_name %>` in the view. With the caret on
+`full_name`:
+
+    textDocument/hover      -> null
+    textDocument/completion -> ["full_name"]      (identical position)
+    textDocument/definition -> user.rb:3          (identical position)
+    hover on the same call in a .rb file
+                            -> full_name(first, last)
+                               Origin: source declaration
+                               Defined: …:3
+                               Full name of the user.
+
+So the engine has the answer at that position and one of the three
+handlers throws it away.
+
+**Cause.** Nine handlers resolve a position in a view; seven fetch the
+document one way and `hover` and `explainType` fetch it another. The
+two that differ do not build the extracted-Ruby document the other seven
+build, so the position lands in ERB text.
+
+**Found by the `049` audit, not by a review round**, and that is the
+part worth noting: the duplicate path looked exactly like the working
+one, and nothing pinned the silence — adding an example for it took the
+suite from 2,188 to 2,189.
+
+`049` proposes the substitution (one view environment, one document,
+read by all nine) and measured it: the view hover becomes byte-identical
+to the `.rb` hover, with the suite and an activesupport corpus unchanged
+either side. **The defect is filed separately from the substitution** so
+that it is fixed whether or not the wider change is taken.
+
+## 024.241 Find References answers from a comment, a bare literal, and `end`
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.16
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`#reference_symbol_id_at`,
+`#declaration_symbol_id_at`, `#symbol_id_and_range_at`)
+
+Driven through the real server at `bea3f38`:
+
+    class Widget
+      def build
+        # a plain comment
+        42
+      end
+    end
+
+with `w1.build` and `w2.build` in a second file. With the caret on a
+word *inside the comment*, on the bare `42`, and on `end`,
+`textDocument/references` answers **both call sites of `build`**.
+`textDocument/prepareRename` at the same three positions correctly
+answers `nil`.
+
+**Cause.** Three spellings of "the symbol under the cursor" exist, and
+only one applies the name-range rule. References reads a spelling that
+picks the smallest declaration whose *whole range* contains the caret —
+so anywhere inside a method body is inside that method's declaration.
+Rename reads the spelling that requires the caret to be on the name.
+
+The engine's own comment at `server.rb:2110-2124` already lists "the
+`def` and the `end`" among the answers it calls wrong, so this is a
+known judgement arriving at a handler that did not get it, rather than a
+new question.
+
+Found by the `049` audit. Nothing pinned the whole-range reading:
+adding an example took the suite from 2,188 to 2,189.
+
+## 024.242 A class held in a local variable loses an RBS overload
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.16
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (the call-resolution
+ladder), `core/lib/ovallsp/semantic/query_service.rb`
+
+With a workspace signature declaring
+`Zoo.pick: (Integer) -> String | (String) -> Symbol`:
+
+    Zoo.pick(1)            # => String | Symbol
+    k = Zoo; k.pick(1)     # => String
+
+The same call, one hop through a local, and one of the two declared
+overloads is gone. The second answer is not merely narrower — it is a
+different answer to the same question, and a reader has no way to know
+which of the two spellings they are being told about.
+
+**Cause.** Two call-resolution ladders exist for one question. One is
+reached when the receiver is written as a constant, decided on the AST;
+the other when the receiver is a value whose type is a class object,
+decided on the value. They do not have the same rungs.
+
+`049` measured the substitution (one ladder, with the argument that made
+the divergence possible turned from optional into required so no site
+can omit it while its twin passes it) across five corpora with controls,
+finding no change to any diagnostic. **Filed separately from it** so the
+defect is fixed whichever way the shape question goes.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

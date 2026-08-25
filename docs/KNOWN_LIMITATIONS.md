@@ -560,6 +560,20 @@ is clean. <!-- documents: 024.99 -->
   and `p.update(`, while it answers for a method of your own and for
   `"abc".split(`. A method that overrides another shows its signature
   twice. <!-- documents: 024.100 -->
+- **In a view, hover answers nothing where completion and go to
+  definition both answer.** With the caret on a model method inside
+  `<%= @user.full_name %>`, hover is empty while completion offers the
+  method and go to definition opens it. The same call in a `.rb` file
+  hovers normally. <!-- documents: 024.240 -->
+- **Find References answers from a comment, a bare number, or `end`.**
+  Put the caret anywhere inside a method's body — including inside a
+  comment — and "Find All References" lists that method's call sites, as
+  though the caret were on its name. Rename, asked at the same
+  positions, correctly declines. <!-- documents: 024.241 -->
+- **A class held in a local variable can lose a declared overload.**
+  `Zoo.pick(1)` and `k = Zoo; k.pick(1)` are the same call, and the
+  second is answered from a narrower set of the signatures your `sig/`
+  declares. <!-- documents: 024.242 -->
 
 ## Ordinary Ruby the undefined-method check reports anyway
 
