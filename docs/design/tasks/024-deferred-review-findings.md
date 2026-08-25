@@ -184,7 +184,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.6`](#0246-the-seen-uris-spec-s-comment-overclaims) | fixed | 0.1.10 | The `seen_uris` spec's comment overclaims |
 | [`024.8`](#0248-ownership-retirement-on-exited-known-size-0-is-unpinned) | fixed | 0.1.10 | Ownership retirement on `exited() && known.size === 0` is unpinned |
 | [`024.10`](#02410-four-extension-ts-behaviours-cannot-be-unit-tested) | fixed | 0.1.10 | Four `extension.ts` behaviours cannot be unit-tested |
-| [`024.13`](#02413-a-reopened-core-class-looks-closed-in-both-directions-0-3-x) | open | 0.2.16 | A reopened core class looks closed, in both directions (0.3.x) |
+| [`024.13`](#02413-a-reopened-core-class-looks-closed-in-both-directions-0-3-x) | open | 0.3.0 | A reopened core class looks closed, in both directions (0.3.x) |
 | [`024.14`](#02414-workspace-wide-diagnostics-do-not-fire-against-the-real-rails-fixture) | fixed | 0.2.1 | Workspace-wide diagnostics do not fire against the real Rails fixture |
 | [`024.15`](#02415-the-index-s-answers-depend-on-which-file-was-edited-last) | fixed | 0.1.13 | The index's answers depend on which file was edited last |
 | [`024.16`](#02416-the-capability-e2e-suite-can-skip-in-full-while-ci-stays-green) | fixed | 0.1.13 | The capability E2E suite can skip in full while CI stays green |
@@ -193,14 +193,14 @@ nobody can search is the recording habit without the benefit.
 | [`024.19`](#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | open | 0.2.16 | The argument-type check judges against a class the receiver is not |
 | [`024.20`](#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | open | 0.2.16 | `contains?` treats an exclusive end offset as inclusive |
 | [`024.21`](#02421-a-qualified-constant-is-coloured-half-one-way-half-the-other) | fixed | 0.2.15 | A qualified constant is coloured half one way, half the other |
-| [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | 0.2.16 | The unassigned-`@ivar` check is silent in an application `rails new`… |
+| [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | 0.3.0 | The unassigned-`@ivar` check is silent in an application `rails new`… |
 | [`024.23`](#02423-the-singleton-chain-did-not-model-class-module) | fixed | 0.1.14 | The singleton chain did not model `Class`/`Module` |
 | [`024.24`](#02424-every-path-url-call-is-a-missing-route-when-no-routes-are-loaded) | fixed | 0.2.0 | Every `*_path`/`*_url` call is a missing route when no routes are lo… |
 | [`024.25`](#02425-a-markdown-parsing-spec-is-the-wrong-shape-for-these-two-documents-must-agree) | fixed | 0.2.12 | A Markdown-parsing spec is the wrong shape for "these two documents … |
 | [`024.26`](#02426-a-workspace-def-object-foo-is-reachable-from-every-class-in-ruby-and-from-none-here) | fixed | 0.2.12 | A workspace `def Object.foo` is reachable from every class in Ruby a… |
 | [`024.27`](#02427-documentsymbol-lists-one-outline-entry-per-name-a-macro-declares) | open | 0.2.16 | `documentSymbol` lists one outline entry per name a macro declares |
 | [`024.28`](#02428-rename-refuses-on-a-macro-declared-method-rather-than-editing-it) | open | 0.2.16 | Rename refuses on a macro-declared method rather than editing it |
-| [`024.29`](#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | open | 0.2.16 | Two features were written for 0.1.15 and cut from it |
+| [`024.29`](#02429-two-features-were-written-for-0-1-15-and-cut-from-it) | done | 0.2.16 | Two features were written for 0.1.15 and cut from it |
 | [`024.30`](#02430-0-1-15-s-hunk-sweep-three-hunks-that-cannot-be-pinned-and-why) | fixed | 0.2.12 | 0.1.15's hunk sweep: three hunks that cannot be pinned, and why |
 | [`024.31`](#02431-a-declaration-written-inside-a-block-has-no-owner-this-parser-can-name) | fixed | — | A declaration written inside a block has no owner this parser can na… |
 | [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | fixed | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
@@ -256,7 +256,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.84`](#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | open | 0.2.16 | A constant is typed as a class object whatever it holds |
 | [`024.85`](#02485-self-completes-nothing) | open | 0.2.16 | `self.` completes nothing |
 | [`024.86`](#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | open | 0.2.16 | An ivar assigned in another method has no type, except in the view |
-| [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.2.16 | A relation stops being a relation after one hop |
+| [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.3.0 | A relation stops being a relation after one hop |
 | [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.2.16 | Completion unions a union's members; the diagnostic intersects them |
 | [`024.89`](#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | fixed | 0.2.15 | Signature help strips the parameter kinds and never advances |
 | [`024.90`](#02490-smaller-answers-a-review-round-measured) | fixed | 0.2.14 | Smaller answers a review round measured |
@@ -298,7 +298,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.126`](#024126-a-text-scanner-matches-its-own-prose-exempts-itself-and-stops-checking-a-file-that-can-hold-the-real-thing) | fixed | 0.2.14 | A text scanner matches its own prose, exempts itself, and stops chec… |
 | [`024.127`](#024127-hover-answers-an-empty-string-where-lsp-expects-null) | fixed | 0.2.15 | Hover answers an empty string where LSP expects null |
 | [`024.128`](#024128-integer-arithmetic-answers-a-four-way-union) | fixed | 0.2.15 | Integer arithmetic answers a four-way union |
-| [`024.129`](#024129-no-undefined-method-report-on-a-core-library-receiver) | open | 0.2.16 | No undefined-method report on a core-library receiver |
+| [`024.129`](#024129-no-undefined-method-report-on-a-core-library-receiver) | open | 0.3.0 | No undefined-method report on a core-library receiver |
 | [`024.130`](#024130-a-hover-label-drops-the-namespace-when-the-name-was-written-bare-withdrawn-it-does-not-reproduce) | fixed | 0.2.14 | A hover label drops the namespace when the name was written bare — w… |
 | [`024.131`](#024131-after-on-a-nil-local-hover-answers-nil-a-wrong-answer-not-an-absent-one) | fixed | 0.2.15 | After `||=` on a nil local, hover answers `nil` — a wrong answer, no… |
 | [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 0.2.16 | A scope defined in a concern's `included do` has no type |
@@ -392,7 +392,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.220`](#024220-the-interpreter-sessions-pasted-through-this-tree-are-never-re-run) | open | 0.2.16 | The interpreter sessions pasted through this tree are never re-run |
 | [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.2.16 | A block whose receiver cannot be vouched for contains a `private` th… |
 | [`024.223`](#024223-one-unresolvable-include-in-a-project-s-own-rbs-turns-its-whole-class-into-false-reports) | fixed | 0.2.15 | One unresolvable `include` in a project's own RBS turns its whole cl… |
-| [`024.224`](#024224-a-namespaced-type-is-reported-incompatible-with-itself) | open | 0.2.16 | A namespaced type is reported incompatible with itself |
+| [`024.224`](#024224-a-namespaced-type-is-reported-incompatible-with-itself) | open | 0.3.0 | A namespaced type is reported incompatible with itself |
 | [`024.225`](#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | open | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
 | [`024.226`](#024226-an-argument-written-as-a-paren-less-call-is-judged-by-its-own-last-argument) | fixed | 0.2.15 | An argument written as a paren-less call is judged by its own last a… |
 | [`024.227`](#024227-every-outline-symbol-s-selectionrange-was-its-whole-declaration) | fixed | 0.2.15 | Every outline symbol's `selectionRange` was its whole declaration |
@@ -538,7 +538,7 @@ module, or add an integration test host.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -1216,6 +1216,61 @@ Fixture-level confirmation (<scratch> and specs_19b.rb, project sig declaring `c
 
 </details>
 
+### Driven again in 0.2.16, and it reproduces — the half that is fixed is not the half this entry names
+
+A triage pass reported this entry already fixed elsewhere, and an
+independent verifier agreed. **Both were wrong**, and the way they were
+wrong is worth more than the correction: they drove the *rooted and
+namespaced* spellings, which really are fixed — `resolve_type_symbol_locked`
+requires an exact match for a leading `::` and a `namespace_suffix?` match
+otherwise (`024.78`) — and did not drive the **bare** name, which is what
+the title and the published limitation are about.
+
+Driven at HEAD, `sig/` declaring `Vendor::Gadgets::Widget.make: (Integer) -> String`
+and the workspace declaring the same class:
+
+    module Somewhere
+      class User
+        def go
+          Widget.make("nope")
+        end
+      end
+    end
+
+    argument-type  app.rb:9:18  `make` expects Integer here, but String is given
+
+Taken from the interpreter rather than reasoned about:
+
+    $ ruby -e '
+    module Vendor; module Gadgets; class Widget; def self.make(n) = n.to_s; end; end; end
+    module Somewhere; class User; def go = Widget.make(1); end; end
+    Somewhere::User.new.go'
+    # => NameError: uninitialized constant Somewhere::User::Widget
+    # ruby 3.4.10
+
+Ruby cannot see that constant from there at all — nesting is
+`Somewhere::User`, `Somewhere`, `Object` — and the engine resolves it by
+last segment and then judges an argument against it. So the report is
+about a call that does not exist, on a class the receiver is not, which
+is exactly what the title says.
+
+**What this says about the method, not the entry.** A refutation is the
+dangerous direction here, which is why the pass had a verifier at all;
+this one agreed and was still wrong, because it inherited the first
+agent's *fixture* rather than the entry's claim. A verifier given the
+same spelling to try is not an independent measurement. The cheap
+countermeasure, for whoever runs the next such pass: a refutation must
+re-derive its reproduction from the entry's own text and from the
+paragraph the entry documents in `KNOWN_LIMITATIONS`, not from the
+report it is checking.
+
+Stays open. The residual is a constant-resolution question — respecting
+`Module.nesting` for a bare name, which `Index::Cref` already models —
+and not the enumeration one, so it is not blocked on `024.R7`. It is
+also the area `024.47` records a rollback in, which is why it is not
+being changed inside a release that already carries other changes to how
+a type name is resolved.
+
 ## 024.20 `contains?` treats an exclusive end offset as inclusive
 
 ```yaml
@@ -1411,7 +1466,7 @@ stream and a zero-delta entry is a token drawn on top of itself.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`MODELLED_CLASS_BODY_CALLS`,
@@ -1824,7 +1879,7 @@ rather than a line in 0.1.15.
 ## 024.29 Two features were written for 0.1.15 and cut from it
 
 ```yaml
-status: open
+status: done
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -1832,6 +1887,7 @@ user-visible-note: >
   building at all, which is a question about a future release rather than
   about anything a user can see today.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** was `core/lib/ovallsp/parser_service.rb` (`module_function`) and
@@ -1884,6 +1940,26 @@ receiver-qualified: go-to-definition on `LIMIT = 10` under
 **Direction:** whichever release takes either up must justify it on a
 corpus first. `module_function` in particular needs a measurement showing
 it changes an answer a user sees; the one taken here says it does not.
+
+### Answered by events, and closed in 0.2.16
+
+Driven at HEAD: both features this entry says were cut are in the shipped
+tree, having arrived by other routes.
+
+- `module_function` modelling is back under `024.106`/`024.114`.
+  `WorkspaceIndex` carries `@module_function_names`, `FileSummary`
+  carries `module_function_names`, and the cache schema was bumped for
+  it, so it survives a restart.
+- The writer half arrived through the parser recording `attr_*`
+  generated methods with a `value` parameter, which the general
+  completion-snippet path then renders. There is no `setter_suffix` left
+  in `core/lib` or `core/spec`, and the rstrip-across-newlines defect
+  this entry records did not come back with it.
+
+So the open question the entry ends on — whether these were worth
+building at all — has been answered by both of them being built anyway,
+for other reasons, and staying. Nothing here is a limitation, so nothing
+is published.
 
 
 ## 024.30 0.1.15's hunk sweep: three hunks that cannot be pinned, and why
@@ -2439,6 +2515,41 @@ PINNED. Reverse-applying both lines via a monkeypatch (scratchpad/unpatch35.rb �
 ```
 
 </details>
+
+### Reported fixed in 0.2.16, and the refutation was overturned
+
+A triage pass concluded this entry's Direction was implemented — and it
+is: `MethodResolver#unenumerable_reason` carries both halves,
+`:ancestor_not_identified` and `:ancestor_not_declared_anywhere`, dated
+to 0.2.6 and citing the `include Singleton` and `include Sidekiq::Worker`
+reports by name.
+
+An adversarial verifier then made it reproduce anyway, which is why the
+pass had one. The shape that still fires is a module the workspace *can*
+partly see:
+
+    module Other
+      module SomeGem
+        module Model
+          def only_in_other_module; end
+        end
+        class Base; end
+      end
+    end
+
+    class ViaInclude
+      include SomeGem::Model
+    end
+
+The include resolves to something — the nested `Other::SomeGem::Model` —
+by the last-segment path, so neither refusal fires, and the class reads
+as enumerable while the module the author meant is a gem's. The two
+triage agents drove the *unresolvable* spelling, which the Direction does
+cover, and not this one.
+
+Stays open. Note that this is the same failure of method as `024.19`'s
+entry records: a refutation checked against the fixture it was refuting
+rather than against the entry's own claim.
 
 ## 024.36 Instructing a reviewer narrowed what it could find, and a control run proved it
 
@@ -5881,7 +5992,7 @@ user-visible: yes
 user-visible-note: >
   The type half is fixed in 0.2.15: a chain stays Relation[T]. The
   diagnostic half is unconfirmed and stays open.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/generic_rule_registry.rb`,
@@ -8287,7 +8398,7 @@ and the answer was "a belief, until it was run".
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -11476,7 +11587,7 @@ my change too" run still contained the cause.*
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`#compatible_nominal?`
@@ -11541,6 +11652,94 @@ before 0.2.5 stopped truncating and are false at HEAD.
 resolution path with three readers, and 0.2.15 already carries
 `024.223`'s change to the same area. Two changes to how a type name is
 compared, in one release, reviewed together, is how `024.47` happened.
+
+### Two attempts in 0.2.16, both measured unsound, and why the third is not being written
+
+`CLAUDE.md`'s same-place rule says a hand fix does not get a third go at
+one place. This is that point, so what follows is the deliverable and the
+code change is not.
+
+**Attempt 1 — the cheap repair this entry's own Direction names.** Emit
+`Index::SymbolId.bare_name(entry)` from `#ancestor_names` alongside the
+two spellings it already emits. Measured 3 reports to 0 on the rbs
+corpus, which is why it looked finished. Declined during 0.2.16 for the
+reason the Direction already gave: it adds a fourth spelling to a set of
+hand-built spellings, which is the class of defect rather than the fix
+for it.
+
+**Attempt 2 — the shared resolution path the Direction actually asks
+for.** A `Diagnostics::TypeIdentity.of(name, workspace_index,
+signatures)` answering one identity per type name whatever spelling it
+arrives in, with `#compatible_nominal?` putting both sides through it and
+`#ancestor_names` replaced by an `#ancestor_identities` that asks RBS
+about identities rather than raw hierarchy spellings. It refuses through
+two rules this repository already owns — `WorkspaceIndex#guessed_type_name?`
+and `Index::TypeNameResolution.substitution?` — rather than inventing a
+resolution rule, and it deletes `#simple_name_of`. On paper this is the
+right shape. A reviewer drove it and found two things the author's own
+measurement could not have seen:
+
+- **It buys a false negative wider than the false positive it removes.**
+  The expected side is a name RBS produced — absolute and unambiguous by
+  construction — and putting it through `guessed_type_name?` makes it
+  guessed as soon as the workspace declares one class sharing its last
+  segment. Reproduced on a clone, with and without the patch, `sig/`
+  declaring `Zoo::Barn#feed: (Zoo::Animal) -> void`:
+
+      # workspace as the patch's own control example writes it,
+      # with no Ruby class named Animal anywhere
+      base    ["`feed` expects Zoo::Animal here, but Animal is given"]
+      patched ["`feed` expects Zoo::Animal here, but Farm::Animal is given"]
+
+      # the same fixture, plus the ordinary `module Farm; class Animal; end; end`
+      base    ["`feed` expects Zoo::Animal here, but Farm::Animal is given"]
+      patched []          <- the true mismatch, silenced
+
+  The patch's headline control — "it still reports a same-named class
+  from another namespace" — holds only because its fixture declares no
+  Ruby class named `Animal` at all. Add the class the source is written
+  against and the fix loses exactly the report it was designed to keep.
+
+- **It reintroduces `024.223`'s conflation at a consumer it adds
+  itself.** Half two calls `declared_by_signatures?`, which is
+  `!signatures.ancestors(...).empty?` — and `Environment::UNAVAILABLE` is
+  a frozen `[]`, so a chain that could not be built reads as "not
+  declared". Probed with this entry's own fixture, adding one
+  `include _Serializable` to `class Key` brings the original report back
+  unchanged. The two halves' fixtures each avoid the other's condition.
+
+Four behavioural decisions in that patch were also unpinned — reverse-applied
+one at a time with the whole core suite green — including the very decision
+the report credits with the fix.
+
+**The root cause, stated plainly.** Three spellings of a type name float
+between the RBS side, the index side and the hierarchy side, and each
+reader normalises differently. That much this entry already said. What
+the two attempts add is *why a fix at the comparison keeps failing*: the
+comparison is being asked to recover an identity that was **already lost
+upstream**, and every recovery rule strong enough to reunite the two
+spellings is also strong enough to unite two genuinely different classes.
+`guessed_type_name?` and `substitution?` are refusals designed for a
+*receiver*, where declining costs a missed report; on an *argument's
+expected type* the same refusal costs a wrong silence, and neither rule
+was written for that side.
+
+**The direction actually needed.** The expected type must not arrive as a
+name to be re-resolved at all. `Signatures::TypeConverter` knows the
+absolute `RBS::TypeName` at the moment it builds the `Types::Nominal`,
+and that identity is exact; it is thrown away and a String is compared
+downstream. Carrying it — a nominal that remembers what resolved it —
+removes the comparison's job rather than improving it, and no refusal
+rule is needed on the expected side because there is nothing left to
+guess. That is a change to a type every component reads, which is a
+release's worth of blast radius on this project's own evidence
+(`0.2.5`'s one-line converter change), and it is why this is re-scoped
+rather than attempted a third time.
+
+**Re-scoped to 0.3.0**, where `024.R7`'s work already opens the
+signature and index sides together. Until then the entry stays open and
+`KNOWN_LIMITATIONS` keeps its paragraph in both languages: the product
+does have this defect, and 0.2.16 shipped without fixing it.
 
 ## 024.225 A scripted edit inserted the entire file before its own anchor, and the line count was the only symptom
 
