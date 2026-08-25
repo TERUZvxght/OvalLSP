@@ -169,6 +169,48 @@ module Ovallsp
         []
       end
 
+      # Names the interpreter gives *every* object that the signature
+      # set does not declare on `::Object` (`024.91` shape D). Each was
+      # reported as missing on the user's own class -- a gap in this
+      # engine's signature set, stated as an assertion about somebody's
+      # code, which is the shape section 0 ranks worst.
+      #
+      # Taken from Ruby, per the expected-value rule, and from RBS:
+      #
+      #     $ ruby --disable-gems --disable-did_you_mean -e \
+      #         'puts (Object.private_instance_methods + Object.instance_methods).size'
+      #     122
+      #     ruby=3.4.10 rbs=4.0.3
+      #     (bare Ruby's names) - (RBS ::Object's) => ["iterator?", "set_trace_func", "trap"]
+      #
+      # **Derived with no gem loaded, deliberately.** A first version
+      # asked this process's own `Object` and got nineteen names rather
+      # than three: `json` puts `to_json` there, `uri` puts `URI`, `pp`
+      # puts `pretty_inspect`. Declining on those would be this engine
+      # guessing that the user's project loads whatever *it* happens to
+      # load. What a gem defines is `024.R7`'s question, answered by
+      # indexing the gems rather than inferred from in here -- and
+      # replacing a guess with an index is the direction, so a fix for
+      # one gap may not smuggle a guess about another one in with it.
+      #
+      # What is left is only core Ruby: names no gem can supply, no index
+      # can discover, and every object has had since the process started.
+      # `object_signature_gap_spec.rb` re-derives both sides in a
+      # subprocess and fails if a new Ruby or a new RBS moves either,
+      # which is what keeps a written list from going stale.
+      #
+      # **One-directional, which is why it is safe to apply at all.** It
+      # can only remove a report, and only for a name Ruby genuinely
+      # gives every object -- so it cannot silence a typo, a typo not
+      # being such a name. `024.13` proposed declining on a *proxy*
+      # instead ("the workspace reopens a foreign class"); measured, that
+      # took four real typo reports with it, and was reverted.
+      UNIVERSAL_RUBY_NAMES = %w[iterator? set_trace_func trap].freeze
+
+      # Not asked per receiver: everything inherits from `Object`, so a
+      # name in the gap is present on whatever branch a report would name.
+      def self.universal_ruby_name?(name) = UNIVERSAL_RUBY_NAMES.include?(name)
+
       private
 
       def build_loader(workspace_root, bundle_context, diagnostics)

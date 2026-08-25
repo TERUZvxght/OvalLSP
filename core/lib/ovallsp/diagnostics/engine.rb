@@ -109,6 +109,10 @@ module Ovallsp
         summary.reference_candidates.filter_map do |candidate|
           next unless candidate.kind == :method_call
           next if resolved_locations[candidate.location]
+          # A name Ruby gives every object that the signature set does
+          # not declare on `::Object` (`024.91` shape D). Asked before
+          # the receiver because everything inherits from `Object`.
+          next if Signatures::Environment.universal_ruby_name?(candidate.name)
           # Deliberately *not* `Types.base_nominal` here, unlike everywhere
           # else that reads a container receiver. A workspace that reopens
           # a core class makes its chain look closed while gems keep adding

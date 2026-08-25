@@ -518,25 +518,24 @@ Rails の concern がまさにこの形でした。メタプログラミング�
 
 ## 動く Ruby なのに未定義メソッド検査が報告するもの
 
-4つの形があり、いずれも実際に動くコードです。rspec-core / i18n / psych /
-reline の 177 ファイルに対する実測で 41 件、およそ4ファイルに1件です。
+2つの形があり、いずれも実際に動くコードです。rspec-core / i18n / psych /
+reline の 177 ファイルに対する実測で 16 件です。
 
-- **`Struct.new` や `Data.define` で作ったクラスを再オープンした場合。**
-  `Seed = Struct.new(:seed, :used)` の後に `class Seed … end` と書くと、その
-  本体で読むメンバーが全て報告されます。クラスの外からの呼び出しは検査対象
-  にならないので、暗黙の `self` の形に限った話です。
-- **`define_method` と `attr_reader` 自体。** `Class.new do … end` や
-  `Module.new { … }` の中に書いた場合です。
 - **include したモジュール由来のメソッドへの `alias`。** `include Escaping`
-  の後の `alias safe_escape escape`。同じクラス内の `def` への alias は
-  問題ありません。
-- **`trap`、`URI`、`set_trace_func`、`pretty_inspect`** — 同梱の型定義が
-  宣言していない4つの `Kernel` メソッドです。`trap` は CLI やサーバーでは
-  ごく普通に使われます。
+  の後に `alias safe_escape escape` と書くと、`safe_escape` の呼び出しが
+  報告されます。同じクラス内の `def` への alias は問題ありません。 <!-- documents: 024.238 -->
+- **自作クラスの中に書いた `URI(...)`。** `Kernel#URI` は gem 由来で、この
+  拡張はまだ gem が定義しているものを索引していないため、見えていません。
+  gem が供給する他の `Kernel` メソッドも同様です。 <!-- documents: 024.R7 -->
 
-加えて、ループの中で定義したメソッドは、名前がリテラルであっても報告されます
-（`[1].each { define_method(:alpha) { 1 } }`）。インストール済み gem と標準
-ライブラリに対する実測で 63 ファイル・108 箇所。 <!-- documents: 024.91 -->
+この節は 0.2.16 まで「4つの形・41 件」と書いていましたが、そのうち2つは
+数リリース前から既に起きていませんでした。元になった指摘を分割する際に
+測り直したところ、記述が両方向に古くなっていたものです。`Struct.new` /
+`Data.define` で作ったクラスの再オープン、`Class.new do … end` の中の
+`define_method` と `attr_reader`、リテラル名でループ内定義したメソッド —
+これらはもう報告されません。検査がその本体ごと辞退するようになったためで、
+裏を返せばそこに書かれた本物の打ち間違いについても何も言いません。誤った
+答えではなく沈黙であり、それでも欠落ではあります。 <!-- documents: 024.237 -->
 
 ## Runtime Agent が居ないときに未定義メソッド検査が間違えること
 

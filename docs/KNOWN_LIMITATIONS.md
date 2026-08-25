@@ -563,26 +563,28 @@ is clean. <!-- documents: 024.99 -->
 
 ## Ordinary Ruby the undefined-method check reports anyway
 
-Four shapes, all of them code that runs. Measured over 177 files of
-rspec-core, i18n, psych and reline: 41 reports, about one per four files.
+Two shapes, both of them code that runs. Measured over 177 files of
+rspec-core, i18n, psych and reline: 16 reports.
 
-- **A class made with `Struct.new` or `Data.define` and then reopened.**
-  `Seed = Struct.new(:seed, :used)` followed by `class Seed … end` — every
-  member read inside that body is reported. Calls from outside the class
-  are not checked at all, so it is specifically the implicit-`self` form.
-- **`define_method` and `attr_reader` themselves**, when written inside
-  `Class.new do … end` or `Module.new { … }`.
 - **`alias` to a method that came from an included module.**
-  `include Escaping` then `alias safe_escape escape`. Aliasing a `def` in
-  the same class is fine.
-- **`trap`, `URI`, `set_trace_func` and `pretty_inspect`** — four
-  `Kernel` methods the bundled signatures do not declare. `trap` is
-  ordinary in a CLI or a server.
+  `include Escaping` then `alias safe_escape escape` — calling
+  `safe_escape` is reported. Aliasing a `def` in the same class is
+  fine. <!-- documents: 024.238 -->
+- **`URI(...)` written on your own class.** `Kernel#URI` comes from a
+  gem, and this extension does not yet index what gems define, so it
+  cannot see it. The same will apply to other `Kernel` methods a gem
+  supplies. <!-- documents: 024.R7 -->
 
-Also: a method defined inside a loop is reported even when its name is a
-literal — `[1].each { define_method(:alpha) { 1 } }`. Measured at 63
-files and 108 sites across the installed gems and the standard
-library. <!-- documents: 024.91 -->
+This section said *four* shapes and 41 reports until 0.2.16, and two of
+the four had stopped happening some releases earlier — the count was
+re-measured when the finding behind it was split, and it had gone stale
+in both directions. A class made with `Struct.new` or `Data.define` and
+then reopened, `define_method` and `attr_reader` inside
+`Class.new do … end`, and a method defined inside a loop with a literal
+name are all no longer reported. The check now declines on those bodies
+instead, which means it also says nothing about a genuine typo written
+there — silence rather than a wrong answer, and still a
+gap. <!-- documents: 024.237 -->
 
 ## What the undefined-method check gets wrong without a Runtime Agent
 

@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**232 entries below** <!-- measured: register-entries = 232 -->,
+**235 entries below** <!-- measured: register-entries = 235 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -260,7 +260,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.2.16 | Completion unions a union's members; the diagnostic intersects them |
 | [`024.89`](#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | fixed | 0.2.15 | Signature help strips the parameter kinds and never advances |
 | [`024.90`](#02490-smaller-answers-a-review-round-measured) | fixed | 0.2.14 | Smaller answers a review round measured |
-| [`024.91`](#02491-the-undefined-method-check-reports-on-ordinary-ruby-it-cannot-read) | open | 0.2.16 | The undefined-method check reports on ordinary Ruby it cannot read |
+| [`024.91`](#02491-the-undefined-method-check-reports-on-ordinary-ruby-it-cannot-read-split-and-re-measured) | done | 0.2.16 | The undefined-method check reports on ordinary Ruby it cannot read —… |
 | [`024.92`](#02492-a-plugin-chooses-how-much-memory-the-parent-allocates) | fixed | 0.2.6 | A plugin chooses how much memory the parent allocates |
 | [`024.93`](#02493-process-kill-sig-0-signals-the-caller-s-own-process-group) | fixed | 0.2.6 | `Process.kill(sig, 0)` signals the caller's own process group |
 | [`024.94`](#02494-a-windows-workspace-could-have-its-own-ruby-exe-run-before-it-is-trusted) | fixed | 0.2.6 | A Windows workspace could have its own `ruby.exe` run before it is t… |
@@ -403,6 +403,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.232`](#024232-the-fixture-proving-a-check-has-teeth-lost-its-own-teeth-when-a-version-shipped) | fixed | 0.2.15 | The fixture proving a check has teeth lost its own teeth when a vers… |
 | [`024.233`](#024233-the-guard-against-naming-a-shipped-release-could-not-fire-until-the-release-had-shipped) | fixed | 0.2.16 | The guard against naming a shipped release could not fire until the … |
 | [`024.234`](#024234-the-plugin-subsystem-was-unreachable-from-the-shipped-product-and-eight-documents-said-otherwise) | fixed | 0.2.16 | The plugin subsystem was unreachable from the shipped product, and e… |
+| [`024.237`](#024237-four-shapes-stopped-reporting-by-declining-on-the-body-not-by-reading-it) | open | 0.3.0 | Four shapes stopped reporting by declining on the body, not by readi… |
+| [`024.238`](#024238-alias-to-a-method-an-included-module-declares-is-reported-as-unknown) | open | 0.3.0 | `alias` to a method an included module declares is reported as unkno… |
+| [`024.239`](#024239-a-name-ruby-gives-every-object-reported-missing-because-rbs-omits-it) | fixed | 0.2.16 | A name Ruby gives every object, reported missing because RBS omits it |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -613,6 +616,65 @@ can see, and pinning it with a fixture that passes for the wrong reason.
 *Found by trying rather than by reading the two entries side by side.
 The dependency is not stated in either.*
 
+### Attempted in 0.2.16, measured, and reverted
+
+**It reproduces, and more strongly than this entry's own 0.2.15 note
+believes.** That note says the defect "cannot be observed before
+`024.129`" because the experiment used container literals, which are
+`Generic`/`Hash[Unknown]` and outside the gate. A **String** literal is
+inside it. Driven with a control:
+
+    workspace reopens String:  ["String has no method named `squish`",
+                               "String has no method named `blank?`"]
+    workspace does not:        []
+    `s.upcase` in both arms:   never reported
+
+`upcase` staying silent is the control that matters — RBS is loaded and
+resolving. What changes is that the workspace now *declares* `String`,
+and `MethodResolver#accounted_for?` reads "the workspace declares this
+ancestor" as "the workspace can enumerate it".
+
+**The fix attempted was a proxy, and the proxy is too wide.** A new
+`#reopens_foreign_class?` — the workspace declares the class *and* the
+signature environment already knew it, with the project's own `sig/`
+excluded via a new `Environment#declared_by_project_sig?` reading RBS's
+recorded buffer paths. The exclusion works (`::Widget` from a project
+sig answers true, `::String` false), and a corpus pass measured 11 false
+reports removed and 0 introduced.
+
+**Four examples then failed, all the same shape: a typo stopped being
+reported.**
+
+    class Object
+      def self.foo; end     # an innocuous reopening
+    end
+    Widget.nope             # a typo, and it went silent
+
+`object_singleton_chain_spec.rb:58`, `:64`,
+`class_object_ancestors_spec.rb:85`, `unreadable_macro_spec.rb:167`. The
+first of those carries its own comment saying why it exists: "a name
+`Object` does *not* declare is still reported, so the chain gained a
+link rather than losing its edge." The proxy removes that edge.
+
+Reverted. This is `024.224`'s shape from the same release — a fix that
+buys false positives by spending true ones — and `048`'s finding
+repeating a third time.
+
+**The real fix is already scheduled.** `squish` and `blank?` are
+activesupport's, and this engine does not index what gems define. That
+is `024.R7`, a 0.3.0 item, which `045` records as the dependency five of
+0.3.0's nine promises share. Reopening is a *proxy* for "this project
+probably loads gems that patch core classes", and a proxy that cannot
+tell activesupport from `def self.foo` costs more than it buys. Nothing
+narrower was found: the distinction the proxy needs is exactly the
+enumeration question `024.R7` answers by asking the running application.
+
+**Two things worth keeping from the attempt.** The reproduction above,
+with its control — this entry previously had none that fired. And
+`Environment#declared_by_project_sig?`'s shape: RBS records the buffer
+each declaration was parsed from, so "is this class declared by the
+project's own sig/" is answerable exactly rather than by guessing at
+names. Whoever builds `024.R7` will want that.
 
 ## 024.14 Workspace-wide diagnostics do not fire against the real Rails fixture
 
@@ -6108,51 +6170,61 @@ The legend gained the rule this cost: **one entry states one defect, with
 one Area and one reproduction.** Not machine-checked — a rule counting
 bullets would guess at intent — and `046` records why.
 
-## 024.91 The undefined-method check reports on ordinary Ruby it cannot read
+## 024.91 The undefined-method check reports on ordinary Ruby it cannot read — split, and re-measured
 
 ```yaml
-status: open
+status: done
 kind: defect
-user-visible: yes
+user-visible: no
+user-visible-note: >
+  Split into 024.237, 024.238 and 024.239, which carry the user-visible
+  halves. This entry is now the measurement that decided the split, and
+  the record that two of its four shapes had stopped happening some
+  releases before it was read.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`,
 `core/lib/ovallsp/diagnostics/engine.rb`
 
-Four shapes an attack round found, all measured through the real engine,
-all A/B'd against `v0.2.5` and **byte-identical** there — so none is a
-0.2.6 regression, and each is a report about code that works. Over 177
-files of rspec-core / i18n / psych / reline: **41 reports**, about one
-per four files.
+Four shapes an attack round found over 177 files of rspec-core / i18n /
+psych / reline, recorded together as **41 reports**, about one per four
+files.
 
-- **`Const = Struct.new(...)` then `class Const … end`** — roughly 19 of
-  the 41. The members are unknown inside the reopened body:
-  `Seed = Struct.new(:seed, :used)` then `def describe = "#{seed}/#{used}"`
-  reports both. The same for `Data.define`, for `keyword_init: true`, and
-  for a subclass of a Struct constant. This is rspec-core's whole
-  `notifications.rb`. Neighbour of `024.82`, which is the same seam seen
-  from resolution rather than from members.
-- **`define_method` and `attr_reader` reported as unknown methods
-  themselves**, inside `Class.new do … end` and
-  `Module.new { define_method(…) }`. Both directions are wrong at once
-  here: per `024.31` the `attr_reader :y` is *also* recorded as declaring
-  a method on the enclosing class.
-- **`alias` to a method from an included module.** `include Escaping`
-  then `alias safe_escape escape` reports `safe_escape`. Plain `alias` to
-  a `def` in the same class is fine.
-- **`Kernel#trap` and `Kernel#URI`** reported missing on the user's own
-  class. Probed one Kernel name per file across ~75: exactly four report
-  — `trap`, `URI`, `set_trace_func`, `pretty_inspect`. `rbs-3.8.0/core`
-  has no `def trap`, so this is a signature-set gap surfacing as a wrong
-  report. `trap` is idiomatic in CLI and server Ruby.
+**Driven again in 0.2.16 before splitting, per the promotion rule, and
+the entry had gone stale in both directions.** The same corpus at the
+same file count now gives **18**, and the shape the entry says is
+"roughly 19 of the 41" — `Const = Struct.new(...)` reopened — produces
+nothing at all. What the entry describes has not been true for several
+releases.
 
-And one correction to what is already recorded: the `KNOWN_LIMITATIONS`
-bullet about loop-defined methods says "the name is not a literal, so the
-index records nothing". A **literal** name inside a block reports too —
-`[1].each { define_method(:alpha) { 1 } }` then `alpha`. 0.2.6's block
-narrowing fixed the direct-in-a-class-body spelling and not this one.
-Measured: 63 files / 108 sites across the installed gems and the stdlib.
+More usefully, each shape was re-run in a fixture **with a typo written
+into the same body as a control**, which the original measurement did
+not have. That control is what separates two very different reasons a
+report can be gone:
+
+| shape | the entry's report | now | typo control in the same body |
+|---|---|---|---|
+| A `Struct.new` const, then `class Const` | reported | silent | **also silent** |
+| A2 `Data.define` | reported | silent | **also silent** |
+| B `define_method`/`attr_reader` in `Class.new do` | reported | silent | **also silent** |
+| C `alias` to an included module's method | reported | **reports** | reports |
+| D `trap`, `URI` on the user's own class | reported | **reports** | reports |
+| E literal `define_method` in a loop block | reported | silent | **also silent** |
+
+A, A2, B and E are silent because the check declines on those bodies
+*wholesale* — it has not learned the members, it has stopped answering
+there, and a real typo goes with it. That is the right direction for
+this check's policy and it is not the same thing as being fixed, so
+recording them as fixed would have been a false claim. They are
+`024.237`.
+
+C and D survive with their edge intact, and are `024.238` and `024.239`.
+
+The entry's closing correction — that a **literal** name inside a block
+reports too, contradicting a `KNOWN_LIMITATIONS` bullet — is shape E,
+and is silent now for the same wholesale reason.
 
 ## 024.92 A plugin chooses how much memory the parent allocates
 
@@ -12099,6 +12171,143 @@ no ✅ row to remove, and no user of a published build could reach the
 feature. It is recorded here rather than argued in a commit message
 because the next person to read the README's history will find a feature
 that was listed and then was not.
+
+## 024.237 Four shapes stopped reporting by declining on the body, not by reading it
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing false is published for these four shapes any more, so there is
+  no limitation to state. It stays open because a genuine typo in the
+  same body is unreported too, which is a missed report rather than a
+  wrong one -- the direction section 0 prefers, and still a gap.
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+
+The four shapes `024.91`'s table marks silent-with-a-silent-control:
+`Const = Struct.new(...)` reopened as a class body, the same for
+`Data.define`, `define_method`/`attr_reader` inside `Class.new do … end`,
+and a literal `define_method` inside a loop block.
+
+Measured with the control in the same fixture:
+
+    Seed = Struct.new(:seed, :used)
+    class Seed
+      def describe = "#{seed}/#{used}"          # was reported; silent now
+      def typo_control = definitely_not_a_member # silent too
+    end
+
+So the check answers nothing about those bodies rather than answering
+correctly about them. Reading them properly means knowing what
+`Struct.new` and `define_method` produce, which is the enumeration
+question again, and `024.R7` is the release that takes it on.
+
+## 024.238 `alias` to a method an included module declares is reported as unknown
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`,
+`core/lib/ovallsp/index/*`
+
+`024.91` shape C, which does still reproduce, with its control alive:
+
+    module Escaping
+      def escape(s) = s
+    end
+    class Page
+      include Escaping
+      alias safe_escape escape
+    end
+    Page.new.safe_escape("x")            # Page has no method named `safe_escape`
+    Page.new.definitely_not_a_member     # reported, so the check keeps its edge here
+
+Taken from Ruby, `ruby 3.4.10`:
+
+    Page.new.respond_to?(:safe_escape)   # => true
+    Page.new.safe_escape("x")            # => "x"
+
+`alias` to a `def` in the same class body is fine; it is the hop through
+the included module that is not followed. Left for 0.3.0 rather than
+patched here: it is a shared path with `024.91`'s other shapes and with
+the alias handling `024.R7` will have to revisit anyway, and 0.2.16 is
+not the release to start that.
+
+## 024.239 A name Ruby gives every object, reported missing because RBS omits it
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.2.16
+released-in: 0.2.16
+```
+
+**Area:** `core/lib/ovallsp/signatures/environment.rb`,
+`core/lib/ovallsp/diagnostics/engine.rb`
+
+`024.91` shape D. The signature set's `::Object` does not declare
+everything the interpreter puts on every object, and each name in that
+gap was reported as missing on the user's own class:
+
+    class Runner
+      def go
+        trap("INT") { nil }   # Runner has no method named `trap`
+      end
+    end
+
+A gap in this engine's signature set, stated as an assertion about
+somebody's working code — the shape section 0 ranks worst. `trap` is
+everyday CLI and server Ruby.
+
+Taken from Ruby and from RBS, both sides with no gem loaded:
+
+    $ ruby --disable-gems --disable-did_you_mean -e \
+        'puts (Object.private_instance_methods + Object.instance_methods).size'
+    122
+    ruby=3.4.10 rbs=4.0.3
+    (bare Ruby's names) - (RBS ::Object's) => ["iterator?", "set_trace_func", "trap"]
+
+Fixed by declining on exactly those three.
+**One-directional, which is why it is safe to apply at all**: it can
+only remove a report, and only for a name Ruby genuinely gives every
+object, so it cannot silence a typo — a typo is not such a name. The
+spec's control asserts precisely that, with `definitely_not_a_member`
+written into the same body.
+
+**A first version asked this process's own `Object` and got nineteen
+names rather than three** — `json` puts `to_json` there, `uri` puts
+`URI`, `pp` puts `pretty_inspect`. Declining on those would have been
+this engine guessing that the user's project loads whatever *it* happens
+to load, which is the class of guess being removed rather than extended.
+Narrowed to core Ruby: names no gem can supply and no index can
+discover. What a gem defines stays `024.R7`'s question, so `URI(...)` is
+still reported and correctly belongs to that entry.
+
+Measured on `024.91`'s own corpus, both sides identical
+(`corpus-sha256` equal, `unresolved-constant` control equal at 891):
+`unknown-method` **18 → 16**, the two removed being rspec-core's real
+`trap` calls at `bisect/coordinator.rb:52` and `runner.rb:175`, and
+**nothing introduced**. The nineteen-name version removed a third,
+`runner.rb:170`'s `URI` — the report that measurement made look like a
+bonus is exactly the one that was a guess.
+
+A written list is what keeps a gem out of the answer, and a written list
+is what goes stale on the next Ruby or the next RBS, so
+`object_signature_gap_spec.rb` re-derives both sides in a subprocess and
+fails if either moves. Writing that check found its own defect: the
+subprocess inherited bundler's `RUBYOPT`, so `--disable-gems` read as
+honoured while rubygems was loaded back in and three names came out six.
+The same lesson as 0.2.3's gate — confirm you invoked the implementation
+you think you did.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
