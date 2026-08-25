@@ -31,6 +31,24 @@ RSpec.describe "Ovallsp::Server cold index (Task 008.5)" do
     end
   end
 
+  # Wait on the cold index *finishing*, not on a wall clock.
+  #
+  # `wait_until`'s three seconds is a bound on how long a *hang* is
+  # allowed to take, and it is right for the examples that assert
+  # something must eventually stop being true. It is the wrong instrument
+  # for "the cold index has run": that answer depends on the machine, and
+  # `#cold_indexes_references…` failed once on a loaded one and passed six
+  # times alone immediately afterwards. A test whose result depends on how
+  # busy the machine is measures the machine.
+  #
+  # `BackgroundTasks#track_thread` holds the cold-index thread, so joining
+  # it is the deterministic wait. The same reach is already made by
+  # `server_rails_invalidation_spec.rb`.
+  def join_cold_index(server, timeout: 60)
+    threads = server.instance_variable_get(:@background_tasks).instance_variable_get(:@threads)
+    threads.each { |t| t.join(timeout) }
+  end
+
   it "resolves a view opened before its controller has ever been opened (the Task 008 cold-index gap)" do
     Dir.mktmpdir do |root|
       write(root, "app/controllers/users_controller.rb", <<~RUBY)
@@ -131,6 +149,7 @@ RSpec.describe "Ovallsp::Server cold index (Task 008.5)" do
         input: StringIO.new(""), output: output, logger: logger, workspace_root: root
       )
       server.send(:start_cold_index)
+      join_cold_index(server)
 
       build_symbol = Ovallsp::Index::SymbolId.new(
         kind: :instance_method, owner: "::Widget", name: "build", discriminator: nil
@@ -141,7 +160,7 @@ RSpec.describe "Ovallsp::Server cold index (Task 008.5)" do
       reference_index = server.instance_variable_get(:@reference_index)
       generated_index = server.instance_variable_get(:@generated_method_index)
 
-      expect(wait_until { generated_index.fact_for(scope_symbol) }).to be(true)
+      expect(generated_index.fact_for(scope_symbol)).not_to be_nil
       server.send(:ensure_reference_index_current)
       expect(reference_index.references(build_symbol)).not_to be_empty
     end

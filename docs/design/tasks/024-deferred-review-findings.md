@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**238 entries below** <!-- measured: register-entries = 238 -->,
+**239 entries below** <!-- measured: register-entries = 239 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -214,7 +214,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
 | [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | open | 0.2.16 | Typing a `.` reports a method on the *next* line |
 | [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.2.16 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
-| [`024.43`](#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | open | 0.2.16 | Signature help answers nothing for a receiverless stdlib call |
+| [`024.43`](#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | fixed | 0.2.16 | Signature help answers nothing for a receiverless stdlib call |
 | [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.2.16 | A partial's local is not resolved, and C11's stated basis names it |
 | [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.2.16 | Re-analysis after a keystroke is seconds on a large file, against a … |
 | [`024.46`](#02446-typing-self-cost-55-false-diagnostics-and-was-rolled-back) | fixed | 0.2.1 | Typing `self` cost 55 false diagnostics and was rolled back |
@@ -409,6 +409,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.240`](#024240-hover-answers-nothing-in-a-view-where-completion-and-go-to-definition-both-answer) | open | 0.2.16 | Hover answers nothing in a view where completion and go-to-definitio… |
 | [`024.241`](#024241-find-references-answers-from-a-comment-a-bare-literal-and-end) | open | 0.2.16 | Find References answers from a comment, a bare literal, and `end` |
 | [`024.242`](#024242-a-class-held-in-a-local-variable-loses-an-rbs-overload) | open | 0.2.16 | A class held in a local variable loses an RBS overload |
+| [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 0.2.16 | Signature help says nothing for a receiverless call inside a module … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -3463,19 +3464,24 @@ wrote `U` too. Left open and retargeted.
 ## 024.43 Signature help answers nothing for a receiverless stdlib call
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 user-visible-note: >
-  A call inside a class body still answers nothing for a method only an
-  RBS-declared ancestor has. The top-level half is `024.229`, the
-  class-object half is `024.228` (fixed in 0.2.15), and the index-side
-  blocker is `024.230`.
+  Fixed in 0.2.16 for a call inside a *class* body, and for a workspace
+  class inheriting a stdlib one. What is still open has entries of its
+  own: `024.240` (inside a module body, where the workspace's own
+  instance chain never reaches Object/Kernel), `024.229` (the top level
+  of a file) and `024.230` (the index-side blocker under it). The
+  class-object part was `024.228`, fixed in 0.2.15.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
-**Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#rbs_signatures`
-at :407, reached from `#signatures_of` at :120)
+**Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#signatures_of`,
+and the RBS bands under it -- `#rbs_own_signatures` and
+`#ancestor_signatures` today, one `#rbs_signatures` called twice with
+`direct: true`/`direct: false` when this entry was written)
 
 `puts(` answers `{signatures: []}` while bare-prefix completion offers
 `puts` from its own Kernel source.
@@ -3540,6 +3546,212 @@ preserved or an override starts answering with an ancestor's signature.
 No spec asserts the current empty result for any of these, so the
 behaviour is unpinned in both directions — that wants establishing
 before the change, not after.
+
+### Fixed in 0.2.16
+
+`#signatures_of`'s two RBS bands become **three bands and a constructor
+rule**, and the band that used to ask about the receiver's own name and
+stop now walks the chain `MethodResolver#lookup_owners` gives:
+
+| band | asks | why there |
+|---|---|---|
+| 1 | RBS, declared **directly** on the receiver's own type | a `sig/` for the class the workspace also declares, or a reopened core class, outranks the workspace's own line |
+| 2 | the workspace's declaration | an override is nearer than what it overrides |
+| 3 | RBS on the receiver's own type however the method got there, then on an **ancestor** the workspace's chain reaches | the reach this entry is about; its head is the same call the old `direct: false` band made |
+
+Band 1 is the old `direct: true` half, unmoved. The old `direct: false`
+half is *inside* band 3 now, as its head, and this is the correction
+round 2 of review made: the first version of this change kept it as a
+fourth band, justified in two comments that contradicted each other,
+and the reviewer showed the code agreed with neither. For every name
+but `new`, asking the receiver's own name with no `direct:` filter and
+walking a chain whose head is that same name with that same filter are
+the identical call. `new` was the only thing the extra band decided,
+and it decided it by *where the guard sat* rather than by what it
+asked, so it is written as a rule now — `#constructor_signatures` asks
+the receiver's own type first and refuses the chain below it, which is
+what `#definitions_of` already did in the same order.
+
+Only the reach past the head is new, and it sits below the source band
+— which is the ordering the retargeting note above asked to have
+established first. `#signature_definition_locations` reads the same
+chain, and `#add_signature_members` — the reader that already had it
+right — now reads the same builder, so the three cannot drift apart
+again.
+
+**Three things the measurement found that reasoning did not.**
+
+- **`#lookup_owners` does not open the chain with the receiver.** The
+  comment on `#signature_owners` says it does. Driven over the stdlib,
+  `Nominal("EOFError")` opens at a nested `EOFError` a gem declares,
+  `Nominal("Encoding")` at one RDoc declares, `Nominal("Marshal")` at
+  one OpenSSL declares — `HierarchyIndex` resolves a bare name against
+  whatever the workspace declares with that last segment. Handing the
+  bare chain to the RBS readers **lost two signatures and eight
+  definition jumps they had been answering.** The receiver's own name
+  is now prepended, so each walk is a superset of the lookup it
+  replaces and cannot answer less. `inherited_rbs_signatures_spec.rb`
+  reproduces the shadowing in a fixture.
+- **Prepending it in the reader completion uses would undo `024.47`.**
+  `query_service_spec.rb`'s "answers an inferred String with the
+  workspace class alone" went green — that entry's live half, pinned
+  in *both* directions until it is settled. A single call asking "what
+  could this reach" and a completion list asking "what should I offer"
+  are different questions; `#rbs_lookup_chains` and `#rbs_owner_chains`
+  are where they differ, and the second is what completion reads.
+- **`new` is the one name an ancestor cannot answer for.** `Class#new`
+  forwards to the receiver's own `initialize`, so walking the singleton
+  chain reported `new() -> Object` — RBS's rendering of
+  `Object#initialize`, which takes nothing — on **31 of 253** newly
+  answered call sites, and sent go to definition into
+  `basic_object.rbs`. A constructor reported as taking no arguments
+  when it takes two is the wrong answer this walk had to not introduce,
+  and `Diagnostics::Engine` already declines there, so signature help
+  asserting was the asymmetry section 0 forbids. `X.new(` is answered
+  from `X#initialize` as the workspace declares it, and otherwise not
+  at all — RBS's `Object#initialize` is `() -> void`, and rendering
+  that as `new()` would restate the same false claim one layer down.
+
+**Measured, both sides at this revision, on the identical corpus** (Ruby
+3.4.10's `lib/ruby/3.4.0`, 976 files, `corpus-sha256` printed and equal
+on both runs; each run printed the `query_service.rb` it *loaded* rather
+than the one it was handed, after the first attempt found Bundler
+putting the worktree's own `lib` on the path first):
+
+| driven through the engine's own inference, 5,898 receiverless call sites | before | after |
+|---|---|---|
+| answering, unchanged | 3,721 | 3,721 |
+| silent, unchanged | 1,928 | 1,928 |
+| silent → answering | — | 249 |
+| answering → silent | — | **0** |
+| answer changed | — | **0** |
+
+The comparison asserts the inferred receiver is identical on both sides
+before comparing anything, so inference is not a free variable. A second
+pass over 12,609 `(receiver, method)` pairs taken from the same corpus
+agrees: 1,266 gained, 0 lost, 0 changed, and 11,343 unchanged.
+
+`scripts/corpus_diagnostics.rb` over 241 files is **byte-identical on
+both sides** — 1,293 `unresolved-constant`, 7 `unknown-method`, same
+findings. That is the expected result rather than evidence about the
+fix: diagnostics never reach `QueryService`, exactly as `024.228`
+recorded.
+
+The `.new(` answers are the real constructors —
+`new(original_path, &block)`, `new(env, keys)`,
+`new(base = nil, name = nil)` — checked against the declaring files.
+
+**Twenty-one behavioural decisions were mutated one at a time, and all
+twenty-one fail a spec** — each mutation applied to the real file, the
+suite run against it, the file restored from a snapshot afterwards and
+the restore verified by sha256. `spec/ovallsp/semantic` alone (225
+examples) catches every one; the sweep needed nothing wider.
+
+This is a fresh sweep against the shape as repaired; the eleven the
+author counted were against the previous one. **Four decisions did not
+fail a spec on their first pass**, and each was dealt with rather than
+argued away:
+
+- band 1's `direct:` restriction — now pinned by a workspace reopening
+  `String` to override `tap`, which RBS carries on `::String`
+  *inherited*;
+- `#constructor_candidate`'s instance-side override, which no example
+  could reach because no spec passed a `context:` to either reader at
+  all;
+- the constructor rule's placement below the source band, in *both*
+  readers, which no fixture could see because none declared a
+  `def self.new` beside an `initialize` — the fixture now does, and
+  the two orderings give different answers;
+- the same rule sitting above the band's `@signatures` guard, which no
+  example reached because none built the service without an RBS
+  environment.
+
+Two lines turned out to be unreachable rather than unpinned and were
+deleted: a `.drop(1)`, and a `.uniq` on the lookup chain. The `.uniq`
+was put back as mutation 22 to check the claim rather than assert it —
+the suite stays **green**, because every reader either takes the chain's
+head or stops at the first owner that answers, so a repeated owner is
+only ever reached after the first copy failed to answer.
+
+**Still open, and not touched here:** `024.240` (inside a module body),
+`024.229` (the top level, where `#scope_at` gives no `self_type` at
+all) and `024.230` (a top-level `def` indexed with `owner: nil`). A
+changelog line for this must say "inside a class body", not "for
+Kernel calls" and not "for a receiverless call".
+
+### Found by review round 2, and not fixed here
+
+Round 2 read the change set (`diff`) and reported eight findings, plus
+four decisions no example distinguished. Repaired above: all four
+unpinned decisions, the band shape, `types.rb`'s comment naming a method
+this change deletes, and the limitation paragraph that was deleted while
+half of what it described is still true. The rest are recorded rather
+than built, because a review round reviews a fixed thing:
+
+- **A module body is still silent, and it is not the asymmetry the
+  limitation described.** `024.240`, split out and driven before it was
+  written down.
+- **`#member_available_on?` is the fourth copy of this walk and still
+  asks the receiver's own name.** It reads
+  `@signatures.member_names(qualify(nominal.name), …)` with no chain,
+  so for a **Union** receiver a Kernel or Object name that
+  `#add_signature_members` legitimately offers through the chain comes
+  back absent, `#normalize_union_conditionals` marks it
+  `conditional: true`, and `#members_of`'s sort puts it below
+  everything unconditional. Nothing the user reads is false — the
+  item is offered, with its own label and detail — so this changes an
+  order, not an answer. Left alone deliberately: changing it moves
+  completion ranking, which is what `024.229` records as a regression
+  this project will not accept blind, and it wants its own
+  measurement. The countermeasure this entry installed therefore
+  covers three readers of four, and that is worth knowing before
+  trusting it.
+- **`Types::INTERNAL_GENERIC_NAMES` is not consulted by the shared
+  chain builder.** `#each_nominal` reads a `Generic` as a class of the
+  same name, so a `Relation[Article]` receiver becomes
+  `Nominal("Relation")` and `#lookup_owners` resolves that bare name
+  against whatever the workspace declares with that last segment —
+  which `types.rb` says in as many words is the thing to exclude.
+  Measured in a fixture declaring `class Relation < String`, both
+  sides at this revision: `signatures_of(Relation[Company], "sub")`
+  was `[]` before this change and is `String#sub`'s two overloads
+  after, and go to definition gains a jump into `string.rbs`.
+  Completion was already doing this (`members_of` is identical on both
+  sides), so the defect is in `#each_nominal` and this change extends
+  its reach to two more readers rather than introducing it. Not fixed
+  here because every containment that would work changes completion
+  too, or re-splits the readers this entry just joined.
+- **The cost reasoning recorded for the walk was wrong**, though the
+  cost is not a problem. `Environment#method_signatures` is
+  `@rbi_methods[id] || (@method_cache[id] ||= build_signature_method(id))`
+  and a miss stores `nil`, so the `||` short-circuit fails on the next
+  read and the build is re-entered every request rather than once per
+  process. Each unknown owner also appends one warning diagnostic,
+  deduplicated by a linear scan. Measured: 1,000 misses cost 6–9 ms in
+  total, because RBS's own definition cache absorbs the rebuild. What
+  band 3 changes is the *number* of unknown-owner lookups per request,
+  not the price of one.
+- **One reported finding did not reproduce.** Round 2 reported that
+  `#definitions_of`'s constructor branch returns `[]` before
+  `#model_definition_locations`, so a model with a column named `new`
+  would lose its jump. It cannot: `#model_definition_locations` reads
+  `#each_nominal`, which yields `Nominal("ClassOf")` for a class-object
+  receiver, and `#constructor_call?` is true only for one of those. So
+  that path answered nothing before this change either. Driven in a
+  fixture registering a `Company` model with a column literally named
+  `new`: `definitions_of(ClassOf[Company], "new")` is `[]` on both
+  sides, and `definitions_of(Company, "new")` is unchanged. Recorded
+  because a finding that does not reproduce is worth as much as one
+  that does, and only if it is written down.
+- **Round 2 also withdrew one of the author's own stated risks.**
+  The report said hover would show a signature line for a local
+  variable whose name collides with an Object/Kernel method.
+  `Server#hover_lines` reaches `#signatures_of` for an unqualified word
+  only through `#enclosing_self_type`, which needs a
+  `reference_candidate` with `kind == :method_call` and a nil receiver
+  at that position; a local read is summarised as `local_variable`.
+  Publishing it would have been `024.130` again — a limitation the
+  product does not have.
 
 
 ## 024.44 A partial's local is not resolved, and C11's stated basis names it
@@ -12961,9 +13173,11 @@ fallback supplies Kernel's signature wherever the name collides. Fix
 that first and the fallback has something correct to prefer.
 
 **Also worth keeping**: fixing this would *not* fix the entry's headline
-example. An in-class `puts(` still answers nothing — that is `024.43` —
-so a changelog line saying "signature help now answers for Kernel calls"
-would be false. It must say "at the top level of a file".
+example. An in-class `puts(` answers as of 0.2.16 — that was `024.43` —
+but a *module* body still does not, which is `024.240`, and the top
+level is this entry. So a changelog line saying "signature help now
+answers for Kernel calls" would be false either way. It must name the
+position it means.
 
 ## 024.230 A top-level `def` is indexed with no owner, so nothing can look it up
 
@@ -13518,6 +13732,109 @@ the divergence possible turned from optional into required so no site
 can omit it while its twin passes it) across five corpora with controls,
 finding no change to any diagnostic. **Filed separately from it** so the
 defect is fixed whichever way the shape question goes.
+
+## 024.243 Signature help says nothing for a receiverless call inside a module body
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.16
+```
+
+**Area:** `core/lib/ovallsp/semantic/method_resolver.rb`
+(`#lookup_owners`), `core/lib/ovallsp/semantic/hierarchy_index.rb`
+(`#instance_ancestors_locked`)
+
+**Split out of `024.43`**, whose class-body half is fixed in 0.2.16.
+Inside a module's *instance* method — a concern, a helper module, an
+`ActiveSupport::Concern` — a receiverless `puts(` still answers
+nothing, because the chain the fix walks never reaches `Kernel` there.
+
+Driven against `core/lib` at this revision, in a fixture declaring a
+`module Helpers` with an instance method and a singleton one, beside a
+`class Report`:
+
+```
+lookup_owners(Nominal("Helpers"), singleton: false)
+# => [["::Helpers", false]]
+lookup_owners(Nominal("Helpers"), singleton: true)
+# => [["::Helpers", true], ["Module", false], ["Object", false],
+#     ["Kernel", false], ["BasicObject", false]]
+lookup_owners(Nominal("Report"), singleton: false)
+# => [["::Report", false], ["Object", false], ["Kernel", false],
+#     ["BasicObject", false]]
+
+signatures_of(Nominal("Helpers"), "puts")  # => []
+signatures_of(Nominal("Report"), "puts")   # => ["puts(...) -> nil"]
+members_of(Nominal("Helpers"), prefix: "put").map(&:name)  # => []
+scope_at(inside `module Helpers; def render`).self_type
+# => Nominal("Helpers")
+```
+
+`HierarchyIndex#instance_ancestors_locked` appends the synthesised
+Object/Kernel/BasicObject tail only when the canonical name is a
+*class*. `024.43`'s band 3 can only ask what the chain yields, so a
+module's instance side has nothing to ask. `def self.` inside a module
+is fine, because the singleton walk goes through `Module`.
+
+**What the probe above does not say, and a review round had to drive the
+product to find: completion is not silent here.** Through a real server,
+`put` inside `module Helpers; def render` offers `puts` and `putc`:
+
+```
+COMPLETION: ["putc", "puts"]
+SIGHELP:    {signatures: []}
+```
+
+`PrefixCompletion#kernel_methods` asks `Kernel` unconditionally instead
+of walking the enclosing scope's chain, so it never reaches the gap the
+`members_of` line above shows. The published limitation this entry was
+split into said "completion is silent here for the same reason, so the
+two features agree" — in both languages — and that is the opposite of
+what the product does. **The asymmetry `024.43` is about is still exactly
+true in a module body.** Corrected in both languages, and worth keeping
+as the reason the correction was needed: an internal probe is not a
+drive, and a conclusion about what a user sees has to come from the
+server.
+
+**Ruby's own answer, which is what says where the fix belongs:**
+
+```
+$ ruby -e '
+    module Helpers
+      def render = puts("reached Kernel#puts")
+    end
+    class C; include Helpers; end
+    p Helpers.ancestors
+    p Helpers.private_instance_methods(false)
+    C.new.render
+    p C.ancestors.include?(Kernel)'
+[Helpers]
+[]
+reached Kernel#puts
+true
+# ruby 3.4.10 (2026-06-30 revision 2b0b7728dc) +PRISM [arm64-darwin25]
+```
+
+So the chain the engine models is not wrong: a module's `ancestors`
+really is just itself, and `Kernel` really is not on it. The call
+works because an instance method runs with the *including* object as
+`self`, and `Kernel` is on that object's chain. The fix is therefore
+not "append the Object tail to modules too" — that would also answer
+`Helpers.new` and every other `Object` instance method for a module
+value, and `024.229` records what happens when a fallback is aimed at
+the wrong mechanism. It is that a receiverless call written inside a
+module's instance method reaches `Kernel` whatever the module itself
+inherits, which is a different question from "what does this module
+inherit" and wants asking somewhere else.
+
+**Not the asymmetry `024.43` described.** That entry's user-facing
+paragraph said completion offers the method signature help refuses;
+here completion is silent too — it reads the same chain — so the
+limitation is a plain absence rather than two features disagreeing.
+The paragraph in `KNOWN_LIMITATIONS` was rewritten to that, in both
+languages, rather than deleted with `024.43`.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
@@ -14215,6 +14532,7 @@ guard spec, and a change set that grows a guard mid-loop resets the round
 that was reviewing it.
 
 ---
+
 
 
 

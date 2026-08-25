@@ -721,25 +721,26 @@ does resolve. This is the commonest shape in a scaffolded app's views
 
 ## What the signature popup shows for a stdlib or gem method
 
-Two things, both about the *label* rather than about which method was
-found:
+Four, and only the first is about the *label* rather than about which
+method was found:
 
 - **A return type RBS writes as `self`, `void` or `untyped` reads
   `Unknown`**, and a method's own type variable leaks (`map() ->
   Array[U]`). The engine has one word for "nothing can be concluded from
   this" and uses it in a place meant to be read by a person, where the
   word RBS actually wrote would be better (024.42). <!-- documents: 024.42 -->
-- **A call to a method only a stdlib ancestor declares gets no popup at
-  all**, while completion offers that same method. `puts(` written with
-  no receiver is the case you meet most, but it is not about
-  receiverlessness: `MyErr.new.full_message(` fails the same way, with
-  an explicit receiver, when your class inherits a stdlib one. Signature
-  help maps the receiver straight to a signature and never walks its
-  ancestors (024.43). *An earlier version of this line said the
-  receiverless path "asks what the enclosing class's ancestors declare,
-  and Kernel is not among them". That is not what happens — the ancestor
-  walk it describes returns Kernel correctly; signature help simply
-  never calls it.* <!-- documents: 024.43 -->
+- **Inside a `module`, a call to a method only a stdlib ancestor
+  declares gets no popup** — `puts(` written in a concern or a helper
+  module, in an instance method rather than a `def self.`. A module's
+  ancestors really are just itself, so the chain this extension walks
+  never reaches `Kernel`; Ruby reaches it at run time through whatever
+  object the module was mixed into. **Completion is not silent here** —
+  typing `put` in a module body offers `puts` and `putc`, because
+  completion asks `Kernel` unconditionally rather than walking the
+  enclosing scope's chain. So the asymmetry this entry is about is still
+  exactly true in a module body: completion answers, signature help and
+  hover do not. In a `class` body, and in a `def self.` inside a module,
+  all three answer as of 0.2.16. <!-- documents: 024.243 -->
 - **At the top level of a file, outside any class, signature help says
   nothing at all** — `puts(` written in a script rather than in a class
   body. There is a fix for this that passes every test and makes things

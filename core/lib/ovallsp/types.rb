@@ -57,11 +57,18 @@ module Ovallsp
     # `String.new` types as `ClassOf[String]`, and a lookup that does not
     # make this move asks about a class literally named `ClassOf`. Three
     # readers were making it by hand — `MethodResolver#normalize_class_receiver`,
-    # `QueryService#add_active_record_api_members` and
-    # `#add_signature_members` — and two more were not:
-    # `#rbs_signatures` and `#signature_definition_locations`, so every
+    # `QueryService#add_active_record_api_members` and the RBS member
+    # lookup completion reads — and two more were not: the RBS signature
+    # lookup and `QueryService#signature_definition_locations`, so every
     # `String.new(`, `File.read(`, `Integer.sqrt(` answered nothing in
     # signature help, hover and go to definition alike (`024.43`).
+    #
+    # Those two now reach it through `QueryService#rbs_lookup_chains`,
+    # and completion through `#rbs_owner_chains`; both call this. The
+    # methods that used to call it directly are named by shape rather
+    # than by name here, because the names have already changed once and
+    # a comment naming a method that no longer exists is what `024.43`'s
+    # own review round found (`0.2.16`).
     #
     # A module function the readers call, rather than the move being
     # pushed into `#each_nominal`: that would fan it out to seven call

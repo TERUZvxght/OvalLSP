@@ -105,6 +105,20 @@ module Ovallsp
         locations = source.flat_map { |candidate| candidate.declarations.map { |uri, decl| { uri: uri, range: decl.location } } }
         return locations unless locations.empty?
 
+        # The same rule `#signatures_of` applies, for the same reason: an
+        # ancestor's `new` is not the method `X.new(` reaches, so jumping
+        # to it lands the reader on somebody else's constructor.
+        if constructor_call?(receiver_type, method_name)
+          # RBS declaring `new` on the receiver's *own* type is a
+          # declaration of this constructor (`String.new`), so it is
+          # tried first -- the same order `#signatures_of` takes.
+          own = chain_definition_locations(rbs_own_chains(receiver_type, context), method_name)
+          return own unless own.empty?
+
+          candidate = constructor_candidate(receiver_type, context)
+          return candidate ? candidate.declarations.map { |uri, decl| { uri: uri, range: decl.location } } : []
+        end
+
         signature_locations = signature_definition_locations(receiver_type, method_name, context)
         return signature_locations unless signature_locations.empty?
 
@@ -124,9 +138,27 @@ module Ovallsp
           end.uniq
         end
 
-        rbs_signatures(receiver_type, method_name, context, direct: true) ||
+        # Three bands, and the source band's position is the whole reason
+        # there is more than one RBS band: what RBS declares *directly*
+        # on the receiver's own type outranks the workspace's declaration
+        # (a `sig/` file describing the class the workspace also
+        # declares, or a reopened core class), while what RBS says about
+        # an *ancestor* does not -- an override is nearer than the thing
+        # it overrides. So `#ancestor_signatures` is correct only
+        # below the source band; walking the chain above it would answer
+        # `MyStr#sub` with `String`'s signature, which the controls in
+        # `spec/ovallsp/semantic/inherited_rbs_signatures_spec.rb` pin.
+        #
+        # Bands 1 and 2 are what this method already did -- band 1 is the
+        # old `direct: true` half. The old `direct: false` half asked the
+        # receiver's own name a second time, and band 3 subsumes it: band
+        # 3 walks the chain whose *head* is that same name with that same
+        # filter, so for every name but `new` the two make the identical
+        # call. `new` is where they differed, and it is a rule rather
+        # than a band -- see `#constructor_call?`.
+        rbs_own_signatures(receiver_type, method_name, context) ||
           source_signatures(receiver_type, method_name, context) ||
-          rbs_signatures(receiver_type, method_name, context, direct: false) || []
+          ancestor_signatures(receiver_type, method_name, context)
       end
 
       # A minimal evidence trail for `type_at`'s result: what the type
@@ -296,11 +328,15 @@ module Ovallsp
         # `MethodResolver#normalize_class_receiver` makes. This source made
         # neither, so `each_nominal` yielded a nominal named "ClassOf" and
         # RBS was asked about a class of that name, which does not exist.
-        subject, singleton = Types.class_object_lookup(receiver_type, singleton: context[:singleton] == true)
-        names = each_nominal(subject).flat_map do |nominal|
-          signature_owners(nominal, singleton).flat_map do |owner, owner_singleton|
-            @signatures.member_names(qualify(owner), prefix: prefix, singleton: owner_singleton)
-          end
+        #
+        # This was the reader that got the chain right, and it now reads
+        # the same `#rbs_owner_chains` the signature and definition
+        # lookups do, so the three cannot drift apart again (`024.43`).
+        # Every owner, not the first: a completion list is the union of
+        # what the chain offers, which is the opposite of the
+        # nearest-wins question a single call asks.
+        names = rbs_owner_chains(receiver_type, context).flatten(1).flat_map do |owner, owner_singleton|
+          @signatures.member_names(qualify(owner), prefix: prefix, singleton: owner_singleton)
         end
         names.each do |name|
           candidates[name] ||= Member.new(
@@ -326,32 +362,46 @@ module Ovallsp
       # even though the walk is a singleton one. `MethodResolver` and
       # `Diagnostics::Engine` were taught this in 0.1.15; completion is
       # the third reader and was not.
-      # Only the no-resolver case needs a fallback. `#lookup_owners` opens
-      # every chain with the receiver's own name -- including for a name
-      # the workspace has never heard of, which is the case a fallback
-      # would have been for -- so an empty result here means the argument
-      # was not a Nominal, and `#each_nominal` only ever yields Nominals.
+      # Only the no-resolver case needs a fallback: an empty result here
+      # means the argument was not a Nominal, and `#each_nominal` only
+      # ever yields Nominals.
+      #
+      # **It does not open the chain with the receiver.** This comment
+      # said it did until `024.43` drove it over the stdlib:
+      # `HierarchyIndex` resolves a bare name against whatever the
+      # workspace declares with that last segment, so a name some nested
+      # class shares is answered with the nested class.
+      # `#rbs_lookup_chains` is where the receiver's own name is put back
+      # at the head, and it is deliberately not done here -- completion
+      # reads this one, and prepending there is what `024.47` decided
+      # against.
       def signature_owners(nominal, singleton)
         return [[nominal.name, singleton]] unless @method_resolver
 
         @method_resolver.lookup_owners(nominal, singleton: singleton)
       end
 
+      # Reached only when the workspace declares nothing, so there is no
+      # source declaration for an ancestor's signature to outrank and the
+      # whole chain is in scope -- unlike `#signatures_of`'s bands.
+      #
+      # This carried a byte-identical copy of the receiver's-own-name
+      # lookup, so a fix to signature help alone would have left go to
+      # definition unable to jump for exactly the calls it repaired
+      # (`024.43`). It reads the same `#rbs_lookup_chains` now.
       def signature_definition_locations(receiver_type, method_name, context)
+        chain_definition_locations(rbs_lookup_chains(receiver_type, context), method_name)
+      end
+
+      # The nearest owner in each chain that answers, for the same reason
+      # `#rbs_overloads` stops there: `Object` and `Kernel` both carry
+      # `puts`, and go to definition offering two identical jumps is
+      # offering a choice the call does not have.
+      def chain_definition_locations(chains, method_name)
         return [] unless @signatures
 
-        # The same move as `#rbs_signatures`. This carried a byte-identical
-        # copy of the un-normalised lookup, so a fix to signature help
-        # alone would have left go to definition broken for exactly the
-        # calls it repaired (`024.43`).
-        subject, singleton = Types.class_object_lookup(receiver_type, singleton: context[:singleton] == true)
-        each_nominal(subject).filter_map do |nominal|
-          symbol_id = Index::SymbolId.new(
-            kind: singleton ? :singleton_method : :instance_method, owner: qualify(nominal.name), name: method_name,
-            discriminator: nil
-          )
-          sm = @signatures.method_signatures(symbol_id)
-          sm&.location
+        chains.filter_map do |chain|
+          chain.lazy.filter_map { |owner, singleton| rbs_method(owner, singleton, method_name)&.location }.first
         end
       end
 
@@ -405,27 +455,234 @@ module Ovallsp
         signatures.empty? ? nil : signatures
       end
 
-      def rbs_signatures(receiver_type, method_name, context, direct: nil)
+      # What RBS declares on the receiver's **own** type, and only that.
+      #
+      # `String.new` types as `ClassOf[String]`; without the
+      # normalisation the lookup asks RBS about a class named `ClassOf`
+      # and every stdlib `Klass.method(` answered nothing (`024.228`).
+      #
+      # Deliberately not the ancestor chain: this band outranks the
+      # workspace's own declaration, and an ancestor's signature does not
+      # -- see `#signatures_of`.
+      def rbs_own_signatures(receiver_type, method_name, context)
         return nil unless @signatures
 
-        # `String.new` types as `ClassOf[String]`; without this the lookup
-        # asks RBS about a class named `ClassOf` and every stdlib
-        # `Klass.method(` answered nothing (`024.43`).
-        subject, singleton = Types.class_object_lookup(receiver_type, singleton: context[:singleton] == true)
-        each_nominal(subject).filter_map do |nominal|
-          symbol_id = Index::SymbolId.new(
-            kind: singleton ? :singleton_method : :instance_method, owner: qualify(nominal.name), name: method_name,
-            discriminator: nil
-          )
-          sm = @signatures.method_signatures(symbol_id)
+        rbs_own_chains(receiver_type, context).flat_map do |chain|
+          rbs_overloads(chain, method_name, direct: true)
+        end.tap { |result| return nil if result.empty? }
+      end
+
+      # Band 3, and the reach this entry adds: what RBS declares on the
+      # receiver's own type however the method got there, and then on an
+      # *ancestor* the workspace's chain reaches.
+      #
+      # The RBS bands asked about the receiver's own name and nothing
+      # else, so a method declared only on an RBS ancestor of a name RBS
+      # has never heard of was unreachable: a receiverless `puts(` inside
+      # a class body, `MyErr < StandardError` and its `full_message`,
+      # `MyStr < String` and its `sub`. `#add_signature_members` had
+      # already made the move for completion, which is why bare-prefix
+      # completion offers `puts` in the very body where signature help
+      # said nothing (`024.43`).
+      #
+      # The whole chain, head included: the head is the receiver's own
+      # type, and asking it here is the same call the old `direct:
+      # false` band made. A `.drop(1)` would be the shape to use if
+      # something above had already asked it, and nothing does.
+      #
+      # `new` never reaches the walk, because an ancestor's `new` is the
+      # ancestor's constructor -- see `#constructor_call?`. That test is
+      # deliberately *above* the `@signatures` guard: the workspace's own
+      # `initialize` is a fact about the workspace, so an engine with no
+      # RBS environment loaded still answers `X.new(` from it. Pinned by
+      # `inherited_rbs_signatures_spec.rb`'s "with no RBS environment
+      # loaded".
+      def ancestor_signatures(receiver_type, method_name, context)
+        return constructor_signatures(receiver_type, context) if constructor_call?(receiver_type, method_name)
+        return [] unless @signatures
+
+        rbs_lookup_chains(receiver_type, context).flat_map do |chain|
+          rbs_overloads(chain, method_name, direct: nil)
+        end
+      end
+
+      # The **first** owner in `chain` RBS answers for, not every one of
+      # them. Ruby calls the method on the nearest ancestor that has one,
+      # and RBS's own definition builder has already merged that owner's
+      # ancestors into the answer -- so a nearer owner's reply is the
+      # whole reply, and collecting the rest would offer a choice the
+      # call does not have. `Object` and `Kernel` are both in every
+      # chain and both answer for `puts`.
+      def rbs_overloads(chain, method_name, direct:)
+        chain.each do |owner, singleton|
+          sm = rbs_method(owner, singleton, method_name)
           next unless sm
           next unless direct.nil? || sm.direct == direct
 
           # Two RBS overloads can spell the same part list -- `upcase` has
           # two that both read `(Symbol, Symbol) -> String` -- and an
           # editor showing the same line twice is showing noise.
-          sm.overloads.map { |overload| rbs_signature(method_name, overload) }.uniq { |signature| signature[:label] }
-        end.flatten.tap { |result| return nil if result.empty? }
+          return sm.overloads.map { |o| rbs_signature(method_name, o) }.uniq { |signature| signature[:label] }
+        end
+        []
+      end
+
+      # **`new` is the one name an ancestor cannot answer for.** Every
+      # other method keeps the parameter list it is inherited with;
+      # `Class#new` forwards its arguments to the receiver's *own*
+      # `initialize`, so a declaration of `new` found on an ancestor
+      # describes that ancestor's constructor.
+      #
+      #     $ ruby -e '
+      #       class Report; def initialize(a, b); end; end
+      #       class Plain; end
+      #       p Report.instance_method(:initialize).parameters
+      #       p Plain.instance_method(:initialize).owner
+      #       begin; Report.new(1); rescue ArgumentError => e; p e.message; end'
+      #     [[:req, :a], [:req, :b]]
+      #     BasicObject
+      #     "wrong number of arguments (given 1, expected 2)"
+      #     # ruby 3.4.10
+      #
+      # Walking the singleton chain without this answered `new() -> Object`
+      # -- RBS's rendering of `Object#initialize`, which takes nothing --
+      # on 31 of 253 newly answered call sites across the Ruby 3.4.10
+      # standard library, and sent go to definition into `basic_object.rbs`.
+      # A constructor reported as taking no arguments when it takes two is
+      # the wrong answer this walk had to not introduce.
+      #
+      # Reached only after `#rbs_own_signatures` and `#source_signatures`,
+      # so a class RBS declares a constructor for *directly*
+      # (`String.new`) and a class that writes its own `def self.new` are
+      # both answered before this, from their own declarations. A class
+      # RBS carries `new` for only by inheritance -- every
+      # `StandardError` subclass RBS knows -- is answered *by* this rule,
+      # from the receiver's own type: see `#constructor_signatures`.
+      def constructor_call?(receiver_type, method_name)
+        method_name == "new" && Types.class_object?(receiver_type)
+      end
+
+      # `X#initialize` as the workspace declares it, looked up on the
+      # instance side so an inherited constructor is found where the
+      # workspace wrote one.
+      #
+      # Its caller deliberately does not fall through to an *ancestor's*
+      # RBS declaration when this answers nothing: `Object#initialize` is
+      # `() -> void` there, and rendering that as `new()` for every class
+      # whose constructor this engine cannot see would restate the same
+      # false claim one layer down. Nothing is what the engine can honestly
+      # say. The receiver's *own* RBS type is a different matter and is
+      # asked first -- see `#constructor_signatures`.
+      def constructor_candidate(receiver_type, context)
+        return nil unless @method_resolver
+
+        @method_resolver.resolve(
+          receiver_type: receiver_type.type_arg, name: "initialize", context: context.merge(singleton: false)
+        ).first
+      end
+
+      # RBS declaring `new` on the receiver's **own** type is a
+      # declaration of *this* constructor (`String.new`, `Struct.new`),
+      # however RBS came to carry it -- it builds a definition per type
+      # and resolves `instance` and `self` against the type it was asked
+      # for, so `singleton(::ArgumentError)`'s inherited `new` still
+      # reads `-> ArgumentError`. So it is asked first, and only the
+      # chain *below* the head is refused. `#definitions_of` takes the
+      # same two steps in the same order.
+      def constructor_signatures(receiver_type, context)
+        own = if @signatures
+                rbs_own_chains(receiver_type, context).flat_map { |chain| rbs_overloads(chain, "new", direct: nil) }
+              else
+                []
+              end
+        return own unless own.empty?
+
+        decl = constructor_candidate(receiver_type, context)&.declarations&.first&.last
+        return [] unless decl
+
+        [{ label: signature_label("new", decl.parameters),
+           parameters: decl.parameters.map { |parameter| { label: parameter.label } } }]
+      end
+
+      # **The one place that answers "which RBS owners does this receiver
+      # reach".** One chain per nominal, because a Union reaches each
+      # member's ancestors separately and an answer found on one member
+      # is not an answer for the other.
+      #
+      # Three readers had three copies of this question and two of them
+      # answered it with the receiver's own name -- the RBS signature
+      # lookup and `#signature_definition_locations` -- so signature
+      # help, hover and go to definition all stopped at the receiver
+      # while completion, which had already moved to
+      # `MethodResolver#lookup_owners`, walked the chain (`024.43`). The
+      # countermeasure for two readers that must agree is one
+      # implementation both read, not a fix to each.
+      def rbs_owner_chains(receiver_type, context)
+        subject, singleton = Types.class_object_lookup(receiver_type, singleton: context[:singleton] == true)
+        each_nominal(subject).map { |nominal| signature_owners(nominal, singleton) }
+      end
+
+      # The same chains, each opened with the receiver's **own** name.
+      #
+      # `#signature_owners`'s comment already claimed `#lookup_owners`
+      # does that; driven over the stdlib it does not. `HierarchyIndex`
+      # resolves a bare name against whatever the workspace declares with
+      # that last segment, so `Nominal("EOFError")` opened a chain at a
+      # nested `EOFError` a gem declares, `Nominal("Encoding")` at one
+      # RDoc declares and `Nominal("Marshal")` at one OpenSSL declares --
+      # and RBS, asked about those, says nothing. Handing the bare chain
+      # to the RBS readers lost two signatures and eight definition jumps
+      # they had been answering, out of 12,609 probes.
+      #
+      # So the receiver's own name is asked first and the chain is the
+      # extension: each of these walks is then a *superset* of the
+      # receiver's-own-name lookup it replaces, and cannot answer less
+      # than it did.
+      #
+      # **Not folded into `#rbs_owner_chains`**, which completion reads:
+      # for a Union or a shadowed name, opening the chain with the bare
+      # name is what `024.47` decided against and
+      # `query_service_spec.rb`'s "answers an inferred String with the
+      # workspace class alone" pins in both directions until that entry
+      # is settled. A single call asking "what could this reach" and a
+      # completion list asking "what should I offer" are different
+      # questions, and this is where they differ.
+      #
+      # **Not deduplicated.** The receiver's own link usually arrives
+      # twice -- once bare from `Nominal#name` and once qualified from
+      # `#lookup_owners` -- and no reader can see the repeat: every one
+      # of them takes the head (`#rbs_own_chains`) or stops at the first
+      # owner that answers (`#rbs_overloads`,
+      # `#chain_definition_locations`). A second copy is therefore only
+      # ever reached when the first did not answer, and it cannot answer
+      # either. A `.uniq` here was a line no example could fail on,
+      # which this project counts as a defect of its own.
+      def rbs_lookup_chains(receiver_type, context)
+        subject, singleton = Types.class_object_lookup(receiver_type, singleton: context[:singleton] == true)
+        each_nominal(subject).map do |nominal|
+          [[nominal.name, singleton]] + signature_owners(nominal, singleton)
+        end
+      end
+
+      # Just the head of each of those: the receiver's own type, asked on
+      # its own. Cut from `#rbs_lookup_chains` rather than rebuilt, so
+      # "what is the receiver's own name" is decided once and the band
+      # that outranks the workspace can never mean something different by
+      # it than the band below does.
+      def rbs_own_chains(receiver_type, context)
+        rbs_lookup_chains(receiver_type, context).map { |chain| chain.take(1) }
+      end
+
+      # One owner asked of the signature environment. `singleton` is the
+      # *side* to ask that owner for, which `#signature_owners` pairs with
+      # each name and is not the same question as the side of the walk.
+      def rbs_method(owner, singleton, method_name)
+        @signatures.method_signatures(
+          Index::SymbolId.new(
+            kind: singleton ? :singleton_method : :instance_method, owner: qualify(owner), name: method_name,
+            discriminator: nil
+          )
+        )
       end
 
       # `Index::Parameter#label` spells each one the way the source does.
