@@ -233,7 +233,9 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
   # and `Module#extend` wants a Module:
   #
   #   $ ruby -e 'class ESC; extend self; end'
-  #   # => wrong argument type Class (expected Module) (TypeError)
+  #   # => -e:1:in 'Kernel#extend': wrong argument type Class (expected Module) (TypeError)
+  #   # =>     from -e:1:in '<class:ESC>'
+  #   # =>     from -e:1:in '<main>'
   #   # ruby 3.4.10
   #
   # So a class writing it is broken code, and the engine must not record

@@ -364,7 +364,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.192`](#024192-the-case-sensitivity-decision-is-justified-by-a-count-of-37-that-was-never-right) | open | 0.2.16 | The case-sensitivity decision is justified by a count of 37 that was… |
 | [`024.193`](#024193-existence-is-a-suffix-glob-and-any-test-name-passes-unconditionally-so-a-citation-naming-a-file-that-does-not-exist-is-accepted) | open | 0.2.16 | Existence is a suffix glob and any test: name passes unconditionally… |
 | [`024.194`](#024194-release-gate-spec-s-wiring-corpus-includes-untracked-files-so-uncommitted-local-text-satisfies-a-gate-s-something-invokes-this) | open | 0.2.16 | release_gate_spec's wiring corpus includes untracked files, so uncom… |
-| [`024.195`](#024195-every-prose-statement-of-what-the-preflight-gate-runs-is-stale-and-nothing-derives-any-of-them) | open | 0.2.16 | Every prose statement of what the preflight gate runs is stale, and … |
+| [`024.195`](#024195-every-prose-statement-of-what-the-preflight-gate-runs-is-stale-and-nothing-derives-any-of-them) | fixed | 0.2.16 | Every prose statement of what the preflight gate runs is stale, and … |
 | [`024.196`](#024196-the-measurement-that-justifies-reading-per-example-status-is-quoted-three-times-attributed-to-a-different-file-each-time-and-matches-none-of-them) | open | 0.2.16 | The measurement that justifies reading per-example status is quoted … |
 | [`024.197`](#024197-0-2-14-s-review-loop-edited-its-own-standard-and-added-a-capability-between-rounds-with-no-departure-recorded) | open | 0.2.16 | 0.2.14's review loop edited its own standard and added a capability … |
 | [`024.198`](#024198-the-packaged-artifact-inspection-count-is-derived-from-the-directory-alone-so-a-grep-aimed-at-the-wrong-pattern-or-with-wider-exclusions-still-reports-a-healthy-count) | open | 0.2.16 | The packaged-artifact inspection count is derived from the directory… |
@@ -389,7 +389,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.217`](#024217-rescue-verdicts-yml-s-header-tells-a-reader-the-98-arguments-are-unargued-defaults-and-names-a-verdict-the-checker-rejects-as-the-safe-one) | open | 0.2.16 | `rescue_verdicts.yml`'s header tells a reader the 98 arguments are u… |
 | [`024.218`](#024218-six-isolated-agents-branched-from-the-wrong-commit-and-the-evidence-was-deleted-before-it-was-checked) | fixed | 0.2.15 | Six isolated agents branched from the wrong commit, and the evidence… |
 | [`024.219`](#024219-a-three-part-claim-shipped-with-one-part-pinned-and-the-other-two-were-false) | fixed | 0.2.15 | A three-part claim shipped with one part pinned, and the other two w… |
-| [`024.220`](#024220-the-interpreter-sessions-pasted-through-this-tree-are-never-re-run) | open | 0.2.16 | The interpreter sessions pasted through this tree are never re-run |
+| [`024.220`](#024220-the-interpreter-sessions-pasted-through-this-tree-are-never-re-run) | fixed | 0.2.16 | The interpreter sessions pasted through this tree are never re-run |
 | [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.2.16 | A block whose receiver cannot be vouched for contains a `private` th… |
 | [`024.223`](#024223-one-unresolvable-include-in-a-project-s-own-rbs-turns-its-whole-class-into-false-reports) | fixed | 0.2.15 | One unresolvable `include` in a project's own RBS turns its whole cl… |
 | [`024.224`](#024224-a-namespaced-type-is-reported-incompatible-with-itself) | open | 0.3.0 | A namespaced type is reported incompatible with itself |
@@ -1245,7 +1245,8 @@ Taken from the interpreter rather than reasoned about:
     module Vendor; module Gadgets; class Widget; def self.make(n) = n.to_s; end; end; end
     module Somewhere; class User; def go = Widget.make(1); end; end
     Somewhere::User.new.go'
-    # => NameError: uninitialized constant Somewhere::User::Widget
+    # => -e:3:in 'Somewhere::User#go': uninitialized constant Somewhere::User::Widget (NameError)
+    # =>     from -e:5:in '<main>'
     # ruby 3.4.10
 
 Ruby cannot see that constant from there at all — nesting is
@@ -10646,13 +10647,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.195 Every prose statement of what the preflight gate runs is stale, and nothing derives any of them
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/preflight.rb` (header, line 17), `CONTRIBUTING.md` + `.ja.md`, `docs/design/tasks/024-deferred-review-findings.md` (024.143)
@@ -10663,6 +10665,31 @@ target: 0.2.16
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+### Fixed in 0.2.16 by removing the enumeration, not by correcting it
+
+Found again the moment a ninth check was added (`024.220`'s session
+checker): four places stated the count and three of them were already
+wrong, including `preflight.rb`'s own header, which named "a git state"
+among the checks when no check inspects git state.
+
+Correcting four numbers leaves four numbers to drift. What was done
+instead: **no prose states what preflight runs.** `CLAUDE.md`,
+`CONTRIBUTING.md`, `CONTRIBUTING.ja.md` and `preflight.rb`'s header all
+point at `ruby scripts/preflight.rb --list`, which derives the list from
+the array that runs.
+
+One property is still stated in prose, deliberately, because the list
+cannot show it: the three environment-dependent suites are run
+separately and read per-example status rather than counts. That sentence
+is about *why* the gate is shaped as it is, and it does not go stale
+when a check is added.
+
+Historical statements in `046` and in earlier register entries are left
+as they are: they record what was true when they were written, and
+rewriting a record to match the present is the opposite of what this
+entry is about.
+
 
 ## 024.196 The measurement that justifies reading per-example status is quoted three times, attributed to a different file each time, and matches none of them
 
@@ -11295,9 +11322,10 @@ in a sentence. Saying a table catches it would be the same error again.
 ## 024.220 The interpreter sessions pasted through this tree are never re-run
 
 ```yaml
-status: open
+status: fixed
 kind: friction
 user-visible: no
+released-in: 0.2.16
 user-visible-note: >
   Nothing a user meets. What it costs is that the evidence a fix
   rests on is unverifiable text, and the rule that produced it says
@@ -11313,21 +11341,33 @@ target: 0.2.16
 Ruby, run, and pasted in "so the next reader can see what the
 expectation rests on rather than trusting that somebody checked". The
 rule works — several defects were found by obeying it. It has produced
-55 `$ ruby -e '...'` sessions with their output written beside them, and
-**every one is inert text.** Nothing re-runs them. A mis-transcribed
+70 pasted sessions with their output written beside them (the opener is
+not quoted here, for the reason the shape description below gives), and
+**every one was inert text.** Nothing re-ran them. A mis-transcribed
 result, a session edited out of agreement with the code beside it, and a
 session that stops being true on a later Ruby all read exactly like a
 correct one, and each would be believed — which is the whole point of
 pasting them.
 
-Two shapes are in the tree, and both parse:
+Two shapes are in the tree, and both parse. **They are described here
+rather than quoted**, because an illustration spelled the way a real
+session is spelled becomes a session the checker extracts, runs, and
+reports — and the first run of the checker reported exactly that, twice,
+about this paragraph. `CLAUDE.md`'s "writing a check means writing bait
+for the other checks" is the rule, and describing the shape is what it
+says to do instead.
 
-    $ ruby -e '...multi-line...'
-    # => value            <- one per line of stdout
-    # ruby 3.4.10
+- The **multi-line** shape: an opener ending in the `-e` flag and an
+  opening quote, the program on the following lines carrying the same
+  comment prefix, a line holding only the closing quote, then one
+  arrow-prefixed comment line per line of standard output, then
+  optionally a comment naming the interpreter version that answered.
+- The **one-line** shape: the whole program on the opener between the
+  quotes, with the output lines following in the same arrow-prefixed
+  form.
 
-    $ ruby -e 'one-liner'
-    bare output line
+The version line is a note about *which* interpreter answered rather
+than part of the answer, so the comparison drops it.
 
 A checker extracts each session, runs it, and compares. It must **fail
 on a session it cannot parse rather than skipping it**: a checker that
@@ -11341,12 +11381,57 @@ run, and `024.147`).
 `024.219` — there the transcript was right and the engine disagreed with
 it, which no amount of re-running the interpreter can see. It is a
 separate, real class: the evidence a fix rests on ceasing to say what it
-says. Building it means normalising up to 55 sessions across 26 files,
-which is its own change set rather than an addition to one under review.
+says.
 
-Cost to be measured before scheduling: 55 subprocesses in the suite is
-not free, and the check may belong in CI plus a `--list` mode locally
-rather than in every `bundle exec rspec`.
+### Built in 0.2.16, as the countermeasure the same-place rule called for
+
+Not scheduled: **triggered**. Two review rounds inside 0.2.16 each found
+a false claim about a macro's behaviour written as prose in the same
+rewritten bullet list — round one that `enum` stores the token, round two
+that `delegate` under `prefix:` does not keep it as a substring. Same
+place twice, so `CLAUDE.md` forbids a third hand fix and asks for
+something mechanical instead.
+
+**And the mechanical thing cannot read prose**, which is the honest
+limit of it. What it can do is make the *session* the checked form, so
+that stating a behavioural claim as prose is the unverified path and
+stating it as a session is the verified one. `CLAUDE.md`'s rule was
+extended to say so in the same change.
+
+**What the first run found is not what this entry expected.** Of 70
+sessions, 50 carry a recorded answer, and **every one of them
+reproduces**. Not one was a false claim. The five the first run reported
+were all artefacts, and each is worth naming because each is a way this
+check could have been built wrong:
+
+- **Seven wrapped answers.** A long result line-wrapped to fit its
+  comment. Comparing line by line reports all seven, and a check that
+  reports seven non-defects on its first run gets disbelieved. The
+  comparison collapses whitespace.
+- **Three broken by the runner, not the tree.** The first runner passed
+  a no-gems flag the sessions never asked for, so `gem` and a `require`
+  of an installed library failed. A session runs with its own flags.
+- **Two error transcriptions** written as the message a `rescue` would
+  give, where the session as pasted crashes and Ruby prints the frame
+  and the class. Both were corrected in the tree — the pasted form was
+  the human's, not the interpreter's, which is exactly the class this
+  entry is about, found by the check on its first run.
+- **One refusal that was wrong**, and wrong expensively: a hazard pattern
+  containing a bare backtick refused `024.225`'s session, whose *subject*
+  is a backslash-backtick inside a replacement string. Fixed by asking
+  Ripper whether a backtick opens a command instead of matching text —
+  which also stops a hazard *named* inside a string from counting.
+- **Two of this entry's own illustrations**, spelled the way a real
+  session is spelled and therefore extracted, run, and reported. That is
+  `CLAUDE.md`'s "writing a check means writing bait for the other checks"
+  arriving on schedule, in the entry that specifies the check. They are
+  described rather than quoted now.
+
+So this closes no defect. It stops one arriving, and it converts 50
+inert paragraphs into 50 assertions that can fail. The cost measured
+before wiring it in: the whole run is 50 subprocesses and finishes in
+under ten seconds, which is inside the suite's budget, so it runs in
+`spec/meta` and in `preflight` rather than in CI only.
 
 ## 024.221 A block whose receiver cannot be vouched for contains a `private` that Ruby would let through
 

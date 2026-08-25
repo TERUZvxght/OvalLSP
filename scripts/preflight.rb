@@ -14,9 +14,16 @@ require_relative "utf8"
 # run: the suite had been run for one directory, it was green, and the
 # full run afterwards was not. Both times the tree was already pushed.
 # Neither was carelessness in a form more care would fix -- the checks
-# are in six places (the suite, three scripts, a git state, a derived
-# number) and the only thing holding the list together was a person
-# remembering it.
+# were scattered and the only thing holding the list together was a
+# person remembering it.
+#
+# **The count is not written here, deliberately.** It was, and it was
+# wrong: this comment said "six places (the suite, three scripts, a git
+# state, a derived number)" while the file ran two rspec invocations and
+# six scripts and had no git-state check at all, and it drifted inside
+# the release that added a check to the list. Three other documents
+# stated three different numbers (`024.195`). `CHECKS` below is the list;
+# `--list` prints it.
 #
 # Two rules this follows, both learned the hard way:
 #
@@ -114,6 +121,11 @@ CHECKS = [
     name: "site links resolve",
     why: "the site is not generated from the docs and propagates nothing on its own",
     dir: ROOT, command: %w[ruby scripts/check_site_links.rb]
+  ),
+  Check.new(
+    name: "every pasted interpreter session still reproduces",
+    why: "a session is evidence only while it runs; until 0.2.16 all 69 of them were inert text",
+    dir: ROOT, command: %w[ruby scripts/check_interpreter_sessions.rb]
   )
 ].freeze
 

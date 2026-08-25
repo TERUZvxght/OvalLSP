@@ -103,6 +103,16 @@ So, before writing an expected value:
 - **A claim about Ruby's semantics is taken from Ruby.** Run it. Paste the
   session into the example, so the next reader can see what the
   expectation rests on rather than trusting that somebody checked.
+  **Paste it as a session, not as prose about what Ruby does**, because
+  `scripts/check_interpreter_sessions.rb` re-runs every session in the
+  tree and re-runs no prose. Two review rounds in 0.2.16 each found a
+  false claim about a macro's behaviour in the same rewritten bullet
+  list — that `enum` stores the token, that `delegate` under `prefix:`
+  does not keep it as a substring — and both were prose. That is the
+  same place twice, and the checker is the countermeasure it called for:
+  it cannot read the prose, so the rule is to stop writing it. A pasted
+  session is now the cheap form, because it is the one something else
+  checks. `024.220`.
 - **A claim about something outside this tree** — the client, the editor,
   the LSP specification — goes through `docs/CLIENT_BEHAVIOUR.md`, which
   exists because the same failure happened with a claim about
@@ -614,11 +624,15 @@ repository. Both are here because they were paid for.
   edit with `wc -l` after each. `024.225`, and the same class as
   `024.140`.
 
-**And before committing, run `ruby scripts/preflight.rb`.** It runs the
-documented example counts, the full suite, the **three**
-environment-dependent suites separately — `real_rails_spec`,
-`capabilities_spec` and `client_behaviour_spec` — and five scripted
-checks.
+**And before committing, run `ruby scripts/preflight.rb`.** What it runs
+is not enumerated here — `ruby scripts/preflight.rb --list` prints it,
+and every prose enumeration of this gate in the repository had gone
+stale by the release that added a check to it, this paragraph included
+(`024.195`). One property is worth stating because the list does not show
+it: the **three** environment-dependent suites — `real_rails_spec`,
+`capabilities_spec` and `client_behaviour_spec` — are run separately,
+because each skips in full without its local dependency while `rspec`
+still exits 0.
 
 It reads **each example's status**, not the count. A count cannot see
 this: a skipped example is still an example, so a fully skipped file

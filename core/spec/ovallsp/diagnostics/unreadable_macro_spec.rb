@@ -54,7 +54,8 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
   #   end
   #   p CDynamic.dyn_a
   #   '
-  #   # => :mm  and  "dyn_a"
+  #   # => :mm
+  #   # => "dyn_a"
   #   # ruby 3.4.10
   describe "a class that answers class-level calls it does not declare" do
     it "says nothing when the class defines def self.method_missing" do

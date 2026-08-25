@@ -124,13 +124,24 @@ cd vscode && npm run test:integration
 ruby scripts/preflight.rb
 ```
 
-commit前に真であるべきものを全て実行します: 文書中のexample数、フル
-スイート、環境依存の3つのsuite(ローカルに`rails`/`sqlite3`/
-`vscode/node_modules`が無いと丸ごとskipし、それでも`rspec`は0で終了
-するため、example数ではなく各exampleの**status**を読みます —
-skipされたexampleもexampleだからです)、home path検査、ドキュメント
-リンク解決、レジスタの索引、rescue verdict、siteリンク。それぞれが何を実行したかを
+commit前に真であるべきものを全て実行し、それぞれが何を実行したかを
 出力するので、commit messageには記憶ではなく実行結果を引用できます。
+
+```bash
+ruby scripts/preflight.rb --list
+```
+
+で一覧が出ます。**この段落では意図的に列挙しません** — このゲートを
+説明する散文は、チェックが1つ増えたリリースの時点でリポジトリ内の
+どれもが古くなっていました(`024.195`)。リストは、走る場所に1つだけ
+置き、記憶ではなく問い合わせます。
+
+一覧からは見えない性質を1つだけ書いておきます。環境依存の3つのsuiteは
+ローカルに`rails`/`sqlite3`/`vscode/node_modules`が無いと**丸ごと**skip
+し、それでも`rspec`は0で終了します。そのため preflight はexample数では
+なく各exampleの**status**を読みます — skipされたexampleもexampleなので、
+数に基づく検査は「丸ごとskipされたファイル」と「通ったファイル」を
+区別できません。
 
 git hookとして1度だけ入れる場合:
 
@@ -143,7 +154,7 @@ ruby scripts/preflight.rb --install
 これがあるのは、「全部走らせたか?」を記憶で答えていたからです。ある
 セッションでは2度その答えが間違っていました — 作業していたディレクトリ
 だけスイートを走らせてgreenを見て commit し、後からのフル実行が
-greenではなかった。検査は7箇所に散っており、リストを繋いでいたのは人間
+greenではなかった。検査は複数箇所に散っており、リストを繋いでいたのは人間
 だけでした。
 
 ## PRを開く前に

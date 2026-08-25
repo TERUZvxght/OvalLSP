@@ -131,14 +131,24 @@ itself.
 ruby scripts/preflight.rb
 ```
 
-Runs everything that has to be true before a commit: the documented
-example counts, the full suite, the three environment-dependent suites
-(they skip in full without local `rails`, `sqlite3` or
-`vscode/node_modules` while `rspec` still exits 0 — so it reads each
-example's *status*, not the count, because a skipped example is still an
-example), the home-path scan, the documentation-link resolver, the
-register index, the rescue verdicts and the site links. It prints what each one ran, so a
-commit message can quote a run rather than a recollection.
+Runs everything that has to be true before a commit, and prints what each
+one ran, so a commit message can quote a run rather than a recollection.
+
+```bash
+ruby scripts/preflight.rb --list
+```
+
+names them. **This paragraph deliberately does not enumerate them**: every
+prose description of this gate in the repository had gone stale by the
+release that added a check to it (`024.195`), so the list lives in one
+place that runs and is asked rather than remembered.
+
+One property is worth stating here because it is not visible from the
+list: the three environment-dependent suites skip *in full* without local
+`rails`, `sqlite3` or `vscode/node_modules` while `rspec` still exits 0,
+so preflight reads each example's **status** rather than the count — a
+skipped example is still an example, and a count-based check cannot tell
+a fully skipped file from a passing one.
 
 Install it as a git hook once:
 
