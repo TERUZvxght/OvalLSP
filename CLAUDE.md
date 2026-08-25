@@ -602,6 +602,23 @@ repository. Both are here because they were paid for.
   rule generalises: *before running a command whose effect is "make this
   file match something else", know what the file currently holds.*
 
+  **And `git stash` protects the work only until it is popped.**
+  `git stash pop` restores everything *unstaged*, whatever it was before,
+  so a tree that was carefully staged comes back inside `checkout`'s
+  reach — and `git checkout -- .` then takes the lot. That is how 0.2.16
+  lost an applied patch plus five review-note repairs, from a session
+  that had read this paragraph and used stash exactly as it says. The
+  sentence the paragraph was missing: **after a pop, commit before doing
+  anything whose effect is "make this match something else."** A
+  work-in-progress commit is cheap and is the only form of this that
+  survives the next command. `git stash pop --index` keeps the staging
+  but not the protection.
+
+  What made it recoverable was not git: the change was a patch file on
+  disk and five scripted edits, both replayable. *Prefer a form of work
+  that can be replayed* — a patch, a script — over one that exists only
+  in the tree.
+
 - **A completion check reads whatever the output file holds now, which
   may be a truncated prefix.** A background run's output file was read,
   its tail looked like a suite still going, and the wait loop ran for ten
@@ -609,6 +626,16 @@ repository. Both are here because they were paid for.
   decide whether work finished; the harness reports completion, and that
   report is the answer. If something must be waited on, wait on the
   process, not on the shape of its output.
+
+  **The harness reports what it launched, so do not detach from it.**
+  Backgrounding with a trailing `&` inside a harness-run command makes
+  the harness time the *wrapper*: 0.2.16 got "completed, exit 0" for a
+  `preflight` that was still running, and the output file held two lines
+  of a nine-check run — the truncated-prefix trap arriving through the
+  door the completion report was supposed to close. Let the harness
+  background the command itself. If a process really must be waited on
+  from a shell, wait on its pid (`while kill -0 <pid>; do sleep …; done`),
+  never on its output.
 
 - **`String#sub` expands backreferences in the *replacement*, and one of
   them is a backtick.** A replacement containing a backslash-backtick
