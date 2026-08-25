@@ -49,3 +49,8 @@ core/tmp/
 
 # Raw audit output kept out of the tree: 048 carries the conclusions.
 .audit-048-wip/
+
+# Agent worktrees. These are real git worktrees created inside the repository,
+# so a `git add -A` would otherwise sweep an entire second checkout into the
+# tree -- the same accident that committed a raw audit directory in 0.2.16.
+.claude/worktrees/
