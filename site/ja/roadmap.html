@@ -195,6 +195,40 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0216">
+          <div class="tl-version">
+            <span class="v">0.2.16</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>積み残しを、駆動する</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>self.</code> が補完されます。</strong> <code>self.</code> と打っても何も出ず、レシーバを明示すれば普通に補完されていました。未定義メソッド検査は <code>self</code> について意図的に何も言いません &mdash; 実測では、そこで主張させると ActiveSupport 自身のソースに誤報告が9件増え、正しい報告は1件も増えませんでした。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>レシーバなしの <code>format(</code> や <code>puts(</code> にシグネチャヘルプが出ます。</strong> 7,900件の比較で3,046件が新たに答え、失われた答えはありません。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>view でホバーが答えます。</strong> <code>&lt;%= @user.full_name %&gt;</code> のモデルメソッドにカーソルを置くと、補完はメソッドを出し定義ジャンプは開くのに、ホバーだけが空でした。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Find References がコメントから答えるのをやめました。</strong> メソッド本体の中であればどこでも &mdash; コメント、裸の数値、<code>end</code> &mdash; 名前の上にあるかのように呼び出し箇所を一覧していました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>マクロが宣言する名前が、それぞれアウトラインで自分の場所を持ちます。</strong> <code>attr_accessor :alpha, :beta</code> はどの行も呼び出し全体を指し、2番目を選ぶと1番目について答えていました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>「ワークスペース内のシンボルへ移動」が、答える間インデックス構築を止めなくなりました。</strong> 15,000シンボルのワークスペースで2文字のクエリが 10.4ms から 4.0ms に。</span>
+            </li>
+          </ul>
+        </article>
+
         <article class="tl-item" id="v0215">
           <div class="tl-version">
             <span class="v">0.2.15</span>

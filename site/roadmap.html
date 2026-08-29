@@ -200,6 +200,40 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0216">
+          <div class="tl-version">
+            <span class="v">0.2.16</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>The backlog, driven</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>self.</code> completes.</strong> Typing <code>self.</code> offered nothing at all, while the same position with an explicit receiver completed normally. The undefined-method check deliberately still says nothing about <code>self</code> &mdash; measured, letting it assert there added nine false reports to ActiveSupport&rsquo;s own source and removed none.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A receiverless <code>format(</code> or <code>puts(</code> gets signature help.</strong> 3,046 answers gained across a 7,900-probe comparison, none lost.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Hover answers in a view.</strong> With the caret on a model method inside <code>&lt;%= @user.full_name %&gt;</code>, hover was empty while completion offered the method and go to definition opened it.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Find References stops answering from a comment.</strong> The caret anywhere inside a method&rsquo;s body &mdash; a comment, a bare number, <code>end</code> &mdash; listed that method&rsquo;s call sites, as though it were on the name.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Each name a macro declares gets its own place in the outline.</strong> <code>attr_accessor :alpha, :beta</code> produced rows that all pointed at the whole call, and picking the second answered about the first.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>&ldquo;Go to Symbol in Workspace&rdquo; no longer blocks indexing while it answers.</strong> A two-character query went from 10.4ms to 4.0ms on a 15,000-symbol workspace.</span>
+            </li>
+          </ul>
+        </article>
+
         <article class="tl-item" id="v0215">
           <div class="tl-version">
             <span class="v">0.2.15</span>

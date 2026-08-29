@@ -6,6 +6,89 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.16 — the backlog, driven
+
+Every open finding this release named was reproduced against the tree
+rather than read: 111 of them, each with a control in its own fixture.
+94 reproduced exactly as recorded, 13 differently, and 4 were reported
+already fixed — two of which an independent check overturned. What
+follows is what the driving found and fixed.
+
+- **`self.` completes.** Typing `self.` offered nothing at all, while the
+  same position with an explicit receiver completed normally. It now
+  takes its type from the class the cursor is in, including inside
+  `class << self`. The undefined-method check deliberately still says
+  nothing about `self` — measured, letting it assert there added nine
+  false reports to ActiveSupport's own source and removed none.
+- **A receiverless `format(` or `puts(` gets signature help.** It
+  answered for an explicit receiver and not for a bare call. 3,046
+  answers gained across a 7,900-probe comparison, none lost.
+- **Hover answers in a view.** With the caret on a model method inside
+  `<%= @user.full_name %>`, hover was empty while completion offered the
+  method and go to definition opened it. All nine position handlers read
+  the same document now, so they cannot disagree about one position
+  again.
+- **Find References stops answering from a comment.** The caret anywhere
+  inside a method's body — including inside a comment, on a bare number,
+  or on `end` — listed that method's call sites, as though it were on the
+  name. Rename, asked at the same positions, had always declined
+  correctly.
+- **Each name a macro declares gets its own place in the outline.**
+  `attr_accessor :alpha, :beta` produced rows that all pointed at the
+  whole macro call, and picking the second one answered about the first.
+- **`trap`, `set_trace_func` and `iterator?` stop being reported
+  missing.** Three names the interpreter gives every object that the
+  bundled signatures do not declare.
+- **"Go to Symbol in Workspace" no longer blocks indexing while it
+  answers.** A two-character query went from 10.4ms to 4.0ms on a
+  15,000-symbol workspace, and the request stopped holding the lock
+  indexing needs for the length of a full scan.
+
+### Details
+
+**What the driving pass was for.** Two of the 111 entries were reported
+fixed by a triage agent and by the independent agent checking it, and
+both were wrong in the same way: they drove a spelling the entry did not
+name. `024.19`'s rooted and namespaced spellings really are fixed; its
+title and its published limitation are about the *bare* one, which
+resolves a constant Ruby raises `NameError` for and then judges an
+argument against it. A verifier handed the same fixture to try is not an
+independent measurement.
+
+**Two entries stated their own defect backwards, and both were this
+project's own writing.** `024.242`'s title said a class held in a local
+loses an overload; the narrow answer is the correct one and it was the
+*constant* spelling asserting a return the signature does not allow — a
+reader repairing it from the title would have widened the wrong side.
+`024.240`'s recorded cause named two handlers where only one was at
+fault. Closing an entry freezes its cause into the record, so both are
+corrected rather than left standing beside fixes that contradict them.
+
+**Three fixes were built, measured, and not shipped.** A fix for the
+reopened-core-class reports removes eleven false ones over a gem corpus
+and silences four real typo reports; a shared type-identity path for the
+argument check silences a true mismatch as soon as one unrelated class
+shares a last segment; and an optimisation of the scope walk answers with
+no locals at all when the walk hits its step budget. Each is recorded
+with its measurement and its reproduction.
+
+**A check now re-runs the evidence.** This project requires a claim about
+Ruby's semantics to be taken from Ruby and pasted in. Those 89 pasted
+sessions were inert text — a mis-transcribed one reads exactly like a
+correct one. They are re-run on every suite run now. Not one was false,
+so this closes no defect; it stops one arriving, and it makes the pasted
+session the cheap way to state a behavioural claim, because prose stating
+the same thing is checked by nobody. Two review rounds in this release
+each found a false claim about a macro written as prose.
+
+**Nothing user-facing was published that the product contradicts.** Three
+limitations shipped in both languages saying the opposite of what the
+server answers — that completion is silent inside a module body, that the
+symbol picker switches to an index after two characters, that the client
+sends an empty query when it opens. Each was driven and rewritten, and
+the one about the client now goes through the document that requires a
+source for a claim about the editor.
+
 ## 0.2.15 — answers the engine already had
 
 Every fix here is a case where the engine knew the answer and something
