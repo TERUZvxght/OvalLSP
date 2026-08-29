@@ -407,9 +407,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.237`](#024237-four-shapes-stopped-reporting-by-declining-on-the-body-not-by-reading-it) | open | 0.3.0 | Four shapes stopped reporting by declining on the body, not by readi… |
 | [`024.238`](#024238-alias-to-a-method-an-included-module-declares-is-reported-as-unknown) | open | 0.3.0 | `alias` to a method an included module declares is reported as unkno… |
 | [`024.239`](#024239-a-name-ruby-gives-every-object-reported-missing-because-rbs-omits-it) | fixed | 0.2.16 | A name Ruby gives every object, reported missing because RBS omits it |
-| [`024.240`](#024240-hover-answers-nothing-in-a-view-where-completion-and-go-to-definition-both-answer) | open | 0.2.16 | Hover answers nothing in a view where completion and go-to-definitio… |
-| [`024.241`](#024241-find-references-answers-from-a-comment-a-bare-literal-and-end) | open | 0.2.16 | Find References answers from a comment, a bare literal, and `end` |
-| [`024.242`](#024242-a-class-held-in-a-local-variable-loses-an-rbs-overload) | open | 0.2.16 | A class held in a local variable loses an RBS overload |
+| [`024.240`](#024240-hover-answers-nothing-in-a-view-where-completion-and-go-to-definition-both-answer) | fixed | 0.2.16 | Hover answers nothing in a view where completion and go-to-definitio… |
+| [`024.241`](#024241-find-references-answers-from-a-comment-a-bare-literal-and-end) | fixed | 0.2.16 | Find References answers from a comment, a bare literal, and `end` |
+| [`024.242`](#024242-a-class-held-in-a-local-variable-loses-an-rbs-overload) | fixed | 0.2.16 | A class held in a local variable loses an RBS overload |
 | [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 0.2.16 | Signature help says nothing for a receiverless call inside a module … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
@@ -4914,19 +4914,23 @@ status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
-  Both times this structure produced a user-visible symptom the symptom
-  was fixed, and no disagreement is known to be live today. What is
-  recorded is that the guarantee is upheld by four call sites each
-  remembering to do the same thing, and that the last release broke it
-  while fixing it. The entry is about the second occurrence, not about a
-  present fault.
+  A third occurrence was live while this note said none was, which is why
+  that sentence is gone. Hover and explainType built a second extracted
+  document of their own instead of reading the one the other seven
+  position handlers share, so a template's hover answered nothing at a
+  character where completion and go to definition both answered. That
+  symptom is fixed and the two call sites that caused it are now one.
+  What stays recorded is the structure: the guarantee is upheld by three
+  call sites each remembering to do the same thing, rather than by
+  construction.
 target: 0.2.16
 released-in: 0.2.16
 ```
 
-**Area:** `core/lib/ovallsp/server.rb` (roughly 1580–2004, and
-`#receiver_type_before_dot` at 2735–2766),
-`core/lib/ovallsp/semantic/query_service.rb`
+**Area:** `core/lib/ovallsp/server.rb` (the view-inference cluster and
+`#receiver_type_before_dot`), `core/lib/ovallsp/semantic/query_service.rb`.
+Line numbers deliberately not given: this entry carried five of them and
+every one had drifted by the release that next read it.
 
 Around 425 lines of `Server` answer a semantic question: *which instance
 variables does this view receive.* It walks the controller's ancestors,
@@ -4947,11 +4951,23 @@ own answer.
 **Where it leaks.** `#type_at` takes an `initial_env`, and for a template
 that environment *is* the answer: nothing in the ERB assigns `@article`,
 so the type comes entirely from what the caller passes in. That value is
-assembled by `Server` and fetched independently at four places —
-`#explain_type_in_view` (1584), the `@`-name list inside
-`#assigned_ivars_for` (1666), `#receiver_type_before_dot` (2763), and the
-diagnostics context (417, 456). The resolution is unified; its input is
-not.
+assembled by `Server` and fetched independently at three places —
+`#view_initial_env`, which hover, explainType and
+`#receiver_type_before_dot` now share, the `@`-name list inside
+`#assigned_ivars_for`, and the diagnostics context. The resolution is
+unified; its input is not.
+
+**It was four, and the fourth is how the structure finally produced a
+symptom nobody had noticed.** `#explain_type_in_view` extracted the
+template a second time and seeded *that* document, while
+`#receiver_type_before_dot` seeded the document `#analyzable_document`
+had already extracted. Hover's type therefore came out of one document
+and its receiver lookup out of the other — so `#hover_lines` switched
+the receiver lookup off for every `.erb` to compensate, and a model
+method called on a controller-assigned `@ivar` in a template hovered
+nothing while completion at the same character offered it and go to
+definition found it. The fourth call site is gone; the compensation with
+it.
 
 **It broke twice, and the code says so.** `#receiver_type_before_dot`
 carries the record, in its own comment:
@@ -4991,6 +5007,19 @@ countermeasure. Two candidates, and they are not equivalent:
    on 0.2.1's intermediate state. It is weaker than (1) — it catches a
    divergence rather than preventing one — but it is not an instance
    test, and it is in the tree.
+
+**What the view-hover fix took, and what it did not.** It took (1) as far
+as it goes without moving the cluster: the environment is obtained once,
+in `#view_initial_env`, keyed on the uri, and the three readers that
+query a position all call it instead of each spelling the ternary. That
+removes the reader that had already drifted and makes a fourth spelling
+something you have to write on purpose. It is *not* (1): `#type_at`
+still takes the environment from its caller, so a future handler can
+still forget to pass one. The remaining two producers —
+`#assigned_ivars_for`'s `@`-name list and the diagnostics context — ask a
+different question of the same value and were left alone, per the
+counter-rule that unifying readers who want the same answer *most of the
+time* is how 0.2.1 lost a release.
 
 Deliberately not attempted while the 0.2.4-bound branch's release was in
 flight: (1) is an architectural move, and `CLAUDE.md`'s "during a review
@@ -14196,10 +14225,11 @@ you think you did.
 ## 024.240 Hover answers nothing in a view where completion and go-to-definition both answer
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#hover_result`,
@@ -14222,10 +14252,16 @@ and `<%= @user.full_name %>` in the view. With the caret on
 So the engine has the answer at that position and one of the three
 handlers throws it away.
 
-**Cause.** Nine handlers resolve a position in a view; seven fetch the
-document one way and `hover` and `explainType` fetch it another. The
-two that differ do not build the extracted-Ruby document the other seven
-build, so the position lands in ERB text.
+**Cause — and this entry stated it wrongly, which the fix corrects.**
+The entry said `hover` and `explainType` both fail to build the
+extracted-Ruby document the other seven handlers build. Driven,
+`#explain_type_in_view` *did* build one, with the identical
+`TextDocument` construction; probed at nine view positions its answers
+are byte-identical before and after. What landed in ERB text was
+`#hover_lines`'s document, which is why the `!erb_view?` compensation
+lived there and nowhere else. Recording the wrong cause in a closed
+entry freezes it into the record, so it is corrected here rather than
+left standing beside a fix that contradicts it.
 
 **Found by the `049` audit, not by a review round**, and that is the
 part worth noting: the duplicate path looked exactly like the working
@@ -14238,17 +14274,42 @@ to the `.rb` hover, with the suite and an activesupport corpus unchanged
 either side. **The defect is filed separately from the substitution** so
 that it is fixed whether or not the wider change is taken.
 
+### Fixed in 0.2.16
+
+Hover and `explainType` join the other seven position handlers: one view
+environment, one document, so the nine cannot answer differently about
+the same position again. Driven through a real server, the view hover is
+byte-identical to the `.rb` hover for the same call.
+
+A verifier drove 30 hover positions across 22 ERB shapes on both sides:
+every difference is `nil` to an answer, or an answer to a richer one.
+Nothing was lost and nothing new was asserted — every position that must
+decline still declines.
+
+**Two things kept out of the fix and recorded instead.**
+`#view_initial_env`'s `erb_view?` guard is a second place encoding what
+`VIEW_PATH_PATTERN` already encodes; replacing the body with a bare
+`ivars_for_view(uri)` leaves 2,305 examples green, so it is redundancy
+rather than a defect — the DTSTTCPW "N-th place that must agree" shape,
+in the small. And a view hover now computes `#ivars_for_view` twice per
+request where the old path computed it once, because the second call
+used to be short-circuited by the guard this removes. Completion already
+paid it once per request, so it is not out of line with the feature set,
+but nothing measures it.
+
+
 ## 024.241 Find References answers from a comment, a bare literal, and `end`
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.16
+released-in: 0.2.16
 ```
 
-**Area:** `core/lib/ovallsp/server.rb` (`#reference_symbol_id_at`,
-`#declaration_symbol_id_at`, `#symbol_id_and_range_at`)
+**Area:** `core/lib/ovallsp/server.rb` (`#symbol_id_and_range_at`, and
+the two spellings that are gone)
 
 Driven through the real server at `bea3f38`:
 
@@ -14279,13 +14340,95 @@ new question.
 Found by the `049` audit. Nothing pinned the whole-range reading:
 adding an example took the suite from 2,188 to 2,189.
 
+**Fixed in 0.2.16.** The two whole-range spellings are deleted, not
+corrected: `#reference_symbol_id_at` and `#declaration_symbol_id_at`
+are gone, and `#references_result` and `#show_type_evidence_result`
+now read `#symbol_id_and_range_at`, which is what Rename and
+prepareRename already read. Correcting the second spelling in place
+would have left the shape the entry is actually about — two readers of
+one question, free to diverge again — so the fix is that there is one
+reader. `showTypeEvidence` had the same defect for the same reason and
+was never reported; it answered a method's observed signature from
+that method's `end`.
+
+Pinned by seven examples in the references spec — the comment, the
+literal, `end` and `def` answering nothing, and three controls: the
+method's own name, a call site, and the class's own name all still
+answer — plus one in the observation spec that asks
+`showTypeEvidence` at the `end` and at the name in the same example,
+so a wholesale decline cannot pass. All five failed against the
+previous code before the change was written.
+
+**One deliberate consequence, and the argument for it.** Under the
+name-range rule, References on the `class` *keyword* goes from three
+answers to none, exactly as References on the `def` keyword goes from
+two to none. This is the same judgement applied consistently rather
+than a loss:
+
+- `#declaration_named_at`'s own comment already named "the `def` and
+  the `end`" as answers it calls wrong. The `class` keyword is that
+  same position — beside a name, not on one — and nothing distinguishes
+  it except that no one had written it down.
+- prepareRename already refused at both keywords. A References that
+  answered where Rename refuses is the disagreement the entry reports;
+  it cannot be removed while keeping the keyword answering.
+- The name is one token away and still answers. Nothing becomes
+  unreachable; the caret has to be on the thing being asked about,
+  which is where a user invoking "find references to this method" puts
+  it, and where Rename has always required it.
+
+The alternative — keep whole-range containment for the keyword alone —
+is a third rule, needing a list of which keywords count, and would put
+back the thing that made the defect invisible for so long.
+
+### The second handler this narrows, which the fix did not record
+
+`textDocument/references` is the one the entry is about. The same
+deletion reaches `ovallsp/showTypeEvidence`, and a verifier measured it
+where the author had not.
+
+Probed at every position of this repository's own
+`observation_runner` fixture — `class Calculator; def add(a, b); a + b;
+end; end` — on both sides of the change:
+
+    before: 26 positions answer
+    after:   4 positions answer, and they are byte-identical
+             (the four characters of `add` itself)
+
+Now declining: the `def` keyword, both parameter names, the body line,
+and `end`. Its caller is the palette command in
+`vscode/src/extension.ts`, which sends `editor.selection.active` — the
+caret wherever the reader left it — so in practice it now requires
+landing on the method name.
+
+**Kept, deliberately.** Two spellings of "the symbol under the cursor"
+is the defect this entry is about, and exempting one handler
+reintroduces it with a smaller blast radius rather than removing it. The
+positions that stopped answering were answering *about the enclosing
+method* from a comment, a parameter or an `end` — the same wrong answer
+`textDocument/references` was giving, and the reason the engine's own
+comment already listed "the `def` and the `end`" among the answers it
+calls wrong.
+
+The cost is real and is a usability one rather than a correctness one:
+a command meant to explain what you are looking at now wants the caret
+on a name. If that proves worse in use, the fix is to give the palette
+command a *caret-to-name* step of its own — resolving the enclosing
+declaration and then pointing at its name — rather than to give it back
+a second lookup rule.
+
 ## 024.242 A class held in a local variable loses an RBS overload
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
+user-visible-note: >
+  Fixed in 0.2.16. The two spellings of one call answer the same
+  thing, and both narrow to the overload the signature declares for
+  the argument's type.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (the call-resolution
@@ -14312,6 +14455,47 @@ the divergence possible turned from optional into required so no site
 can omit it while its twin passes it) across five corpora with controls,
 finding no change to any diagnostic. **Filed separately from it** so the
 defect is fixed whichever way the shape question goes.
+
+### Fixed in 0.2.16, and the entry had the two answers the wrong way round
+
+The divergence is exactly one keyword. `#resolve_signature_call` takes
+an `env:`, which is what lets it evaluate the argument expressions at
+the call site and pick the overload RBS keys on their types
+(`024.128`'s mechanism). It defaulted to `nil`, and of its five call
+sites **one** omitted it: the constant-receiver rung in
+`#resolve_call`. Without an env, `argument_types` is nil and every
+overload of the right arity joins the union.
+
+So the fix is to pass `env:` at that rung and make the keyword
+**required**, which is `049`'s own countermeasure: a regression test
+pins this one call, and only a required keyword stops the next site
+being written without it. The one caller that legitimately has no
+environment -- a spec invoking the private method on a bare parsed
+fragment -- now states `env: nil` rather than omitting it, so the
+absence is a visible decision instead of an oversight.
+
+**What this entry got wrong, in the shape `024.131` warns about.** The
+observations above are accurate; the reading of them is backwards. The
+title says the local spelling *loses* an overload, and the published
+limitation said it answered "from a narrower set". But narrow is
+correct here: RBS declares the Integer argument returns `String`, and
+`String` is the answer. It was the *constant* spelling that was wrong,
+asserting `Symbol` was possible for a call the signature says returns a
+`String`. The fix therefore moves the constant spelling to the local
+one's answer -- the opposite direction from the one the entry's title
+implies, and worth recording because a reader repairing this from the
+title alone would have widened the wrong side.
+
+**Controls, since a fix that made the engine narrow everywhere would
+look identical to a correct one.** An argument whose type is unknown
+must still yield both declared returns --
+`OverloadResolver#narrow_by_argument_types` returns its matches
+untouched rather than guessing -- and it does, on both spellings,
+before and after. A `String` argument must select the *second*
+declared overload and answer `Symbol`, which distinguishes "reads the
+argument type" from "answers the first overload". A single-overload
+method must still answer, and a name the signature does not declare
+must still answer nothing.
 
 ## 024.243 Signature help says nothing for a receiverless call inside a module body
 

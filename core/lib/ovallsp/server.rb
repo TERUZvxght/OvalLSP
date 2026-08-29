@@ -1141,8 +1141,7 @@ module Ovallsp
       summary = @file_summaries[uri]
       return nil unless document && summary
 
-      symbol_id = reference_symbol_id_at(document, summary, uri, params.fetch(:position)) ||
-                  declaration_symbol_id_at(summary, params.fetch(:position))
+      symbol_id, = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
       return nil unless symbol_id
 
       evidence = @observation_store.evidence_for(symbol_id)
@@ -1774,18 +1773,19 @@ module Ovallsp
 
     # Custom (non-LSP-standard) request: infers the type of the expression
     # at a position using local-only inference (docs/design/tasks/004-type-model-and-local-inference.md).
-    # For a .erb view (Task 008), the query instead runs against a synthetic
-    # Ruby source extracted from the template's <% %> regions, seeded with
-    # the conventionally-corresponding controller action's instance
+    # For a .erb view (Task 008), the query runs against the Ruby
+    # extracted from the template's <% %> regions -- #analyzable_document,
+    # the same document the other eight position handlers get -- seeded
+    # with the conventionally-corresponding controller action's instance
     # variable types.
     def explain_type_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       return { type: Types::UNKNOWN.to_s } unless document
 
       position = params.fetch(:position)
       query_context = build_query_context(uri, position)
-      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(document, position, budget: query_context.budget)
+      type = @query_service.type_at(document, position, initial_env: view_initial_env(uri), budget: query_context.budget)
       warn_if_stale(query_context)
       { type: type.to_s }
     end
@@ -1809,9 +1809,21 @@ module Ovallsp
     # range in the answer.
     #
     # Applied once, where documents are fetched, rather than at each of
-    # the ten handlers that take a position -- which is what let hover and
-    # explainType be correct while completion, signature help, definition,
-    # references and rename were not.
+    # the handlers that take a position -- which is what let completion,
+    # signature help, definition, references and rename be wrong before
+    # 0.2.1, and what let hover and explainType be wrong until `024.240`.
+    #
+    # Every position handler now fetches through here. `explainType`
+    # built a *second* extracted document of its own -- the same
+    # construction, so its answers never moved -- while `hover` passed
+    # the raw buffer down to `#hover_lines`, which is where the position
+    # landed in ERB text and why the `!erb_view?` compensation lived
+    # there and nowhere else. The
+    # difference was not visible from either site: hover's answer came
+    # out of one document and its receiver lookup out of the other, so
+    # `#hover_lines` switched the receiver lookup off for `.erb`
+    # altogether and a template's hover answered nothing where
+    # completion and go to definition, at the same character, answered.
     def analyzable_document(document)
       return document unless document && erb_view?(document.uri)
 
@@ -1821,11 +1833,20 @@ module Ovallsp
       )
     end
 
-    def explain_type_in_view(document, position, query_context = nil)
-      ruby_source = Erb::RubyRegionExtractor.extract_ruby_source(document.text)
-      synthetic = TextDocument.new(uri: document.uri, text: ruby_source, version: document.version, language_id: "ruby")
-
-      @query_service.type_at(synthetic, position, initial_env: ivars_for_view(document.uri), budget: query_context&.budget)
+    # The instance variables a position in this document starts out
+    # knowing: for a template, the ones its controller action assigned --
+    # nothing in the template itself assigns them -- and for a .rb buffer,
+    # none, because the buffer assigns its own.
+    #
+    # One spelling, read by both the type query and
+    # #receiver_type_before_dot, because there were two and they drifted:
+    # one seeded a document it extracted itself, the other seeded the
+    # document #analyzable_document had already extracted. Callers pass
+    # the uri rather than the document so that this cannot be asked about
+    # a document whose extraction state differs from the one being
+    # queried.
+    def view_initial_env(uri)
+      erb_view?(uri) ? ivars_for_view(uri) : {}
     end
 
     # Task 013's QueryContext, actually constructed and consulted (a
@@ -1988,11 +2009,12 @@ module Ovallsp
       locations
     end
 
-    # Task 014: finds the reference candidate ParserService already
-    # recorded at `position` (the same candidate list #ensure_reference_index_current
-    # resolves into ReferenceIndex), resolves *that one* candidate again
-    # to learn its SymbolId, then returns every location ReferenceIndex
-    # has for that SymbolId. Resolving just the one clicked-on candidate
+    # Task 014: asks `#symbol_id_and_range_at` which symbol is under the
+    # cursor -- normally the reference candidate ParserService already
+    # recorded at `position` (the same candidate list
+    # #ensure_reference_index_current resolves into ReferenceIndex),
+    # resolved again to learn its SymbolId -- then returns every location
+    # ReferenceIndex has for that SymbolId. Resolving just the one clicked-on candidate
     # rather than looking up a pre-built "SymbolId at position" table
     # keeps this consistent with Hover/Definition/Completion's own "same
     # expression, same resolution path" property from Task 013 -- it's
@@ -2003,41 +2025,11 @@ module Ovallsp
       summary = @file_summaries[uri]
       return [] unless document && summary
 
-      position = params.fetch(:position)
-      symbol_id = reference_symbol_id_at(document, summary, uri, position) || declaration_symbol_id_at(summary, position)
+      symbol_id, = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
       return [] unless symbol_id
 
       ensure_reference_index_current
       @reference_index.references(symbol_id, minimum_confidence: :high).map { |r| { uri: r.uri, range: r.location } }
-    end
-
-    # `textDocument/documentHighlight` was implemented during 0.2.1's
-    # review loop and is deferred to 0.3.0 with the capability row that
-    # named it -- it is on the roadmap, not a correction to something this
-    # release already claimed. Note when it returns: it calls
-    # `ensure_reference_index_current`, which the comment on that method
-    # says to defer until Find References or Rename needs it, because
-    # rebuilding is O(workspace) and the editor asks for highlights on
-    # every cursor move.
-    def reference_symbol_id_at(document, summary, uri, position)
-      candidate = summary.reference_candidates.find { |c| position_within?(c.location, position) }
-      return nil unless candidate
-
-      @reference_resolver.resolve(document, [candidate], uri: uri, generation: @reference_index.generation).first&.symbol_id
-    end
-
-    # A click on the declaration site itself (`def build`, `class Widget`)
-    # has no ReferenceCandidate of its own -- ParserService only records
-    # *usage* sites -- so Find References triggered from a declaration
-    # falls back to WorkspaceIndex's own per-file declarations instead.
-    # Picks the *smallest* enclosing declaration among matches (not just
-    # the first): a class's own range spans its entire body, so clicking
-    # on a nested `def build`'s line would otherwise resolve to the
-    # class itself, since `declarations` lists the class before its
-    # methods.
-    def declaration_symbol_id_at(summary, position)
-      candidates = summary.declarations.select { |d| position_within?(d.location, position) }
-      candidates.min_by { |d| range_span(d.location) }&.symbol_id
     end
 
     def range_span(range)
@@ -2090,10 +2082,34 @@ module Ovallsp
                       .transform_values { |edits| edits.map { |e| { range: e[:range], newText: e[:new_text] } } } }
     end
 
-    # Shared by prepareRename/rename: the same candidate-or-declaration
-    # lookup #references_result uses (Task 014), but also returning the
-    # exact range the resolved symbol was found at -- prepareRename needs
-    # it to tell the client what to highlight/select.
+    # **The** reading of "the symbol under the cursor". Find References,
+    # prepareRename, rename and `ovallsp/showTypeEvidence` all ask this
+    # one question and all read this one answer; the range comes back
+    # with it because prepareRename has to tell the client what to
+    # highlight, and the callers that only want the symbol drop it.
+    #
+    # Until `024.241` there were three spellings of this and only this
+    # one applied `#declaration_named_at`'s name-range rule. The other
+    # two took a declaration's *whole* range, and a `def`'s range spans
+    # its body -- so References and showTypeEvidence answered from a word
+    # inside a comment, from a bare literal and from the closing `end`,
+    # at the very positions prepareRename was already refusing. The
+    # judgement was written down one method below and had not reached
+    # them. Answering from one method is what stops them diverging again;
+    # a second spelling is the defect, not the fix.
+    #
+    # A ReferenceCandidate is tried first because ParserService records
+    # *usage* sites and those carry the tightest ranges. A declaration
+    # site has no candidate of its own, so a caret on `def build` or
+    # `class Widget` falls through to the declarations -- which is why
+    # the fallback exists at all, and why it has to be the *name* it
+    # matches on rather than the enclosing range.
+    #
+    # `textDocument/documentHighlight` is deferred to 0.3.0 with the
+    # capability row that named it. Note when it returns: References and
+    # Rename call `ensure_reference_index_current` after this, and that
+    # rebuild is O(workspace) while the editor asks for highlights on
+    # every cursor move.
     def symbol_id_and_range_at(document, summary, uri, position)
       candidate = summary.reference_candidates.find { |c| position_within?(c.location, position) }
       if candidate
@@ -2113,15 +2129,24 @@ module Ovallsp
     # A `def`'s recorded range spans its whole body, so "contains the
     # position" was true of every position inside the method -- a word in
     # a comment, the contents of a string, a bare number, the `def` and
-    # the `end`. Find References and Rename both read it, and both are
-    # asked for deliberately, so a wrong answer was rare enough to
-    # survive. Occurrence highlighting is asked on every cursor move, and
-    # made it continuous: a box on the enclosing method's name almost
-    # anywhere the caret went.
+    # the `end`. Rename read this rule from the start. References and
+    # `ovallsp/showTypeEvidence` read a second, whole-range spelling
+    # instead until `024.241`, so they answered at all of those
+    # positions, and both are asked for deliberately, which is why a
+    # wrong answer was rare enough to survive that long. Occurrence
+    # highlighting is asked on every cursor move, and would have made it
+    # continuous: a box on the enclosing method's name almost anywhere
+    # the caret went. Every one of them reads this now, through
+    # `#symbol_id_and_range_at`.
     #
     # `name_location` is the name; a declaration without one (a class
     # reopened by a dynamic form) falls back to its whole range, which for
     # those shapes is the name.
+    #
+    # `min_by` takes the *smallest* match rather than the first, which
+    # matters for exactly those fallback shapes: a declaration standing
+    # in its whole range can enclose a nested one, and `declarations`
+    # lists a class before the methods inside it.
     def declaration_named_at(summary, position)
       summary.declarations
              .select { |d| position_within?(d.name_location || d.location, position) }
@@ -2640,9 +2665,8 @@ module Ovallsp
       # "hover and completion use the same receiver type" as the rule.
       #
       # Only the environment: `document` here has already been through
-      # `#analyzable_document`, so the ERB is extracted. Extracting again
-      # -- which is what borrowing `#explain_type_in_view` wholesale does
-      # -- breaks the local case this row was written for.
+      # `#analyzable_document`, so the ERB is extracted, and extracting a
+      # second time is what the view-hover defect was made of.
       # The same environment the `@` list is built from, for the same
       # reason: a scaffolded controller assigns `@article` in a
       # `before_action` and uses it in `edit`, `update` and `destroy`, so
@@ -2651,8 +2675,7 @@ module Ovallsp
       # produced the disagreement it had just spent the release removing
       # elsewhere: the `@` popup said `Article` and `@article.` a
       # keystroke later offered nothing.
-      initial_env = erb_view?(document.uri) ? ivars_for_view(document.uri) : {}
-      type = @query_service.type_at(document, dot_position, initial_env: initial_env)
+      type = @query_service.type_at(document, dot_position, initial_env: view_initial_env(document.uri))
       type == Types::UNKNOWN ? nil : type
     end
 
@@ -3374,12 +3397,12 @@ module Ovallsp
     # an unresolved expression gets an empty hover, never a guessed one.
     def hover_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
-      document = @document_store.fetch(uri: uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
       return empty_hover unless document
 
       position = params.fetch(:position)
       query_context = build_query_context(uri, position)
-      type = erb_view?(uri) ? explain_type_in_view(document, position, query_context) : @query_service.type_at(document, position, budget: query_context.budget)
+      type = @query_service.type_at(document, position, initial_env: view_initial_env(uri), budget: query_context.budget)
       warn_if_stale(query_context)
       lines = hover_lines(document, position, type)
       return empty_hover if lines.empty?
@@ -3453,18 +3476,24 @@ module Ovallsp
       documentation = nil
 
       word = word_at_position(document, position)
-      # Skipped for .erb views: #receiver_type_before_dot queries #type_at
-      # directly against `document`, which only works for a plain Ruby
-      # buffer -- an .erb view needs the synthetic-source/ivar-seeded path
-      # #explain_type_in_view already used just above for `type` itself.
+      # No `.erb` exception any more. There was one, and it was the
+      # compensation for the real defect rather than a judgement about
+      # templates: `document` used to be the raw ERB here, which
+      # #receiver_type_before_dot cannot read, so the lookup was switched
+      # off for every view and `@user.full_name` in a template hovered
+      # nothing. `document` is now what #analyzable_document produced and
+      # what the ivar seed was computed against, which is the same pair
+      # completion and go to definition have always had.
+      #
       # With no receiver the call is on the enclosing `self`, which is how
       # most Ruby calls a method of its own class -- `article_params` in a
       # controller. Go to definition and signature help were given this
       # reading in 0.2.0 and hover was not, so hovering such a call
       # answered an empty popup while H5 promises its parameter list with
-      # no qualifier about receivers.
-      receiver_type = word && !erb_view?(document.uri) &&
-                      (receiver_type_before_dot(document, position) || enclosing_self_type(document, position))
+      # no qualifier about receivers. A template has no enclosing class,
+      # so #enclosing_self_type answers nil there and a bare helper call
+      # in a view is not looked up on `Object`.
+      receiver_type = word && (receiver_type_before_dot(document, position) || enclosing_self_type(document, position))
       if receiver_type
         # The call's own shape, first: hovering `value.documented(1)` is
         # most often a question about what to pass, and the answer was

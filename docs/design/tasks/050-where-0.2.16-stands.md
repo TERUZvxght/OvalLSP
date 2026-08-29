@@ -79,7 +79,10 @@ correction rather than a rewrite.
 `049` found three live user-visible defects while building
 simplifications, none of them reported by any review round, each
 invisible because a duplicate path looked like the working one. They are
-filed, published in both languages, and **not fixed**:
+filed and published in both languages. **All three are fixed in
+0.2.16** — this section is what each one was, kept because two of the
+three entries stated their own defect inaccurately and the corrections
+are recorded against them:
 
 - `024.240` — in a view, hover answers `null` where completion offers the
   method and go to definition opens it, at the identical position.

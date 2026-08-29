@@ -829,4 +829,135 @@ ivars = server.send(:controller_ivars).send(:infer_controller_action_ivars, "::P
       RUBY
     end
   end
+
+# A view's hover, against the same call answered in a .rb buffer.
+#
+# The entry (register number built at runtime below) drove a real
+# server and got `null` from hover at the exact position where
+# completion offered the method and go-to-definition found it. Nine
+# handlers resolve a position in a view; seven fetch the document
+# through `#analyzable_document` and hover/explainType did not, so the
+# position landed in ERB text rather than in the extracted Ruby -- and
+# `#hover_lines` compensated by switching the receiver lookup off for
+# every `.erb`, which is what threw the answer away.
+#
+# Asserted as an equality against the `.rb` hover rather than as a
+# `include("Defined:")`: the engine either has this answer at this
+# position or it does not, and the two buffers name the same
+# declaration. The controls are in the same example -- the `.rb` side
+# must keep answering, and a caret inside the view's own HTML must keep
+# answering `null`, so a fix that made hover assert wholesale fails
+# here rather than passing.
+describe "hover in a view" do
+  let(:view_uri) { "file:///app/views/users/show.html.erb" }
+  let(:plain_uri) { "file:///app/services/greeter.rb" }
+
+  let(:hover_input) do
+    open("file:///app/models/user.rb", <<~RUBY) +
+      class User
+        # Full name of the user.
+        def full_name(first, last)
+        end
+      end
+    RUBY
+      open("file:///app/controllers/users_controller.rb", <<~RUBY) +
+        class UsersController
+          before_action :load_user
+
+          def load_user
+            @user = User.new
+          end
+
+          def show
+          end
+        end
+      RUBY
+      open(plain_uri, "u = User.new\nu.full_name\n") +
+      open(view_uri, "<h1>Profile</h1>\n<%= @user.full_name %>\n", language_id: "erb") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/hover",
+        params: { textDocument: { uri: view_uri }, position: { line: 1, character: 14 } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/hover",
+        params: { textDocument: { uri: plain_uri }, position: { line: 1, character: 4 } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 3, method: "textDocument/completion",
+        params: { textDocument: { uri: view_uri }, position: { line: 1, character: 14 } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 4, method: "textDocument/hover",
+        params: { textDocument: { uri: view_uri }, position: { line: 0, character: 6 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+  end
+
+  it "answers a model method in a template exactly as it answers it in a .rb buffer" do
+    build_server(hover_input).run
+    in_view, in_ruby, completed, in_markup = sent_messages
+
+    expect(in_ruby[:result].dig(:contents, :value)).to include("Full name of the user.")
+    expect(in_view[:result]).to eq(in_ruby[:result]),
+                               "024.240: hover in a view answered " \
+                               "#{in_view[:result].inspect} where the same call in a .rb buffer " \
+                               "answered #{in_ruby[:result].inspect}"
+
+    # The controls. Completion at the identical position already
+    # answered before this example existed and must keep doing so --
+    # a hover fixed by breaking extraction takes this with it. And a
+    # caret in the template's own markup has nothing to say: `null`,
+    # not a popup borrowed from somewhere else in the file.
+    expect(completed[:result][:items].map { |item| item[:label] }).to include("full_name")
+    expect(in_markup[:result]).to be_nil
+  end
+
+  # The decision the fix newly exposes, pinned on its own.
+  #
+  # Dropping the `.erb` exception from `#hover_lines` also lets
+  # `#enclosing_self_type` run in a template, and that is a lookup of a
+  # bare word against whatever `self` is. In a `.rb` method body that
+  # is the enclosing class and answering is right; in a template there
+  # is no enclosing class, `#scope_at` answers a nil `self_type`, and a
+  # helper call must stay unanswered rather than be looked up on
+  # `Object`. Section 0 ranks a wrong answer below no answer.
+  #
+  # The two halves are one fixture on purpose: the same receiverless
+  # call, spelled the same way, answered in one buffer and declined in
+  # the other. A fixture with only the view half passes whether the
+  # rule holds or the lookup is broken outright. Watched failing by
+  # giving `#enclosing_self_type` a fallback receiver when the scope
+  # has no `self_type` -- the view side then answered the controller's
+  # own signature for a call that is not on the controller.
+  it "does not look a template's bare helper call up on an enclosing self it does not have" do
+    input =
+      open("file:///app/controllers/users_controller.rb", <<~RUBY) +
+        class UsersController
+          def show
+            decorate
+          end
+
+          def decorate(scope = nil)
+          end
+        end
+      RUBY
+      open(view_uri, "<%= decorate %>\n", language_id: "erb") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/hover",
+        params: { textDocument: { uri: view_uri }, position: { line: 0, character: 6 } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/hover",
+        params: { textDocument: { uri: "file:///app/controllers/users_controller.rb" },
+                  position: { line: 2, character: 6 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+    in_view, in_controller = sent_messages
+
+    expect(in_controller[:result].dig(:contents, :value)).to include("decorate(scope = nil)")
+    expect(in_view[:result]).to be_nil
+  end
+end
 end

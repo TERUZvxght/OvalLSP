@@ -310,3 +310,17 @@
   to: "        rank(matches, query.to_s, limit)\n"
   spec: spec/ovallsp/workspace_index_spec.rb
   example: "is case-insensitive in the query, for matching and for exact-match ranking"
+
+- why: "024.241's name-range rule -- matching a declaration by its whole range, which is what made Find References answer a method's call sites from a comment, a bare literal and the closing `end`."
+  file: core/lib/ovallsp/server.rb
+  from: "             .select { |d| position_within?(d.name_location || d.location, position) }\n"
+  to: "             .select { |d| position_within?(d.location, position) }\n"
+  spec: spec/ovallsp/server_references_spec.rb
+  example: "answers nothing from a word inside a comment in the method's body"
+
+- why: "024.241's candidate-first branch -- the half that keeps one reader of the cursor from being a wholesale decline, since a call site has a reference candidate and no declaration of its own."
+  file: core/lib/ovallsp/server.rb
+  from: "      candidate = summary.reference_candidates.find { |c| position_within?(c.location, position) }\n"
+  to: "      candidate = nil\n"
+  spec: spec/ovallsp/server_references_spec.rb
+  example: "still answers both call sites with the caret on a call site"

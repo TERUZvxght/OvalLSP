@@ -823,8 +823,19 @@ RSpec.describe Ovallsp::LocalInferencer do
       receiver_call = Prism.parse("box.receiver_value").value.statements.body.first
       method_call = Prism.parse("box.method_value").value.statements.body.first
 
-      expect(signature_inferencer.send(:resolve_signature_call, receiver, receiver_call).to_s).to eq("String")
-      expect(signature_inferencer.send(:resolve_signature_call, receiver, method_call)).to eq(Ovallsp::Types::UNKNOWN)
+      # `env: nil` because this calls the private method directly on a
+      # bare parsed fragment, which has no evaluation environment -- and
+      # it is now stated rather than omitted, so the keyword can be
+      # required (`024.242`). Both calls take no arguments, so there is
+      # nothing for an env to narrow by in any case: the resolver leaves
+      # its matches alone for an empty argument list exactly as it does
+      # for a nil one.
+      expect(
+        signature_inferencer.send(:resolve_signature_call, receiver, receiver_call, env: nil).to_s
+      ).to eq("String")
+      expect(
+        signature_inferencer.send(:resolve_signature_call, receiver, method_call, env: nil)
+      ).to eq(Ovallsp::Types::UNKNOWN)
     end
   end
 

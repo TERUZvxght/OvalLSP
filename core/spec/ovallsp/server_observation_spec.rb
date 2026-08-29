@@ -222,4 +222,34 @@ RSpec.describe "Ovallsp::Server runtime observation (Task 019)" do
     evidence = sent_messages.find { |m| m[:id] == 3 }[:result]
     expect(evidence).to be_nil
   end
+
+  # `024.241`. `showTypeEvidence` asks the same question References asks
+  # -- which symbol is under the cursor -- and read the same whole-range
+  # spelling, so a caret on the method's closing keyword answered with
+  # that method's observed signature. It answers on the *name* only now.
+  # The two requests are in one example on purpose: the second is the
+  # control, and without it a change that stopped answering anywhere
+  # would look identical to this one.
+  it "answers showTypeEvidence on the observed method's name, not from its closing keyword" do
+    calculator_uri = Ovallsp::UriUtil.from_path(File.join(fixtures_root, "lib", "calculator.rb"))
+    calculator_source = File.read(File.join(fixtures_root, "lib", "calculator.rb"))
+    # Line 5 is the `end` closing `def add`; line 3 character 6 is `add` itself.
+    expect(calculator_source.lines[5].strip).to eq("end")
+
+    input =
+      frame(jsonrpc: "2.0", id: 1, method: "initialize", params: TRUSTED_INIT) +
+      did_open(calculator_uri, calculator_source) +
+      frame(jsonrpc: "2.0", id: 2, method: "ovallsp/runObservedTests",
+            params: { testCommand: ["ruby", "run_tests.rb"] }) +
+      frame(jsonrpc: "2.0", id: 3, method: "ovallsp/showTypeEvidence",
+            params: { textDocument: { uri: calculator_uri }, position: { line: 5, character: 3 } }) +
+      frame(jsonrpc: "2.0", id: 4, method: "ovallsp/showTypeEvidence",
+            params: { textDocument: { uri: calculator_uri }, position: { line: 3, character: 6 } }) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.find { |m| m[:id] == 3 }[:result]).to be_nil
+    expect(sent_messages.find { |m| m[:id] == 4 }[:result]).not_to be_nil
+  end
 end

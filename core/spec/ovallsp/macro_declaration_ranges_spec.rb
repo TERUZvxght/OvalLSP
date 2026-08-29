@@ -238,10 +238,14 @@ RSpec.describe "the source range a macro-declared method reports (024.27)" do
   end
 
   # Driven through the real server rather than by reimplementing its
-  # lookup here. `Server#declaration_symbol_id_at` picks the smallest
-  # declaration whose `location` contains the caret; with every name at the
-  # whole call's range the candidates tied and `min_by` returned the first,
-  # so Find References on the *second* name answered about the first. A
+  # lookup here. The lookup this pins used to be
+  # `Server#declaration_symbol_id_at`, which picked the smallest
+  # declaration whose `location` contains the caret; with every name at
+  # the whole call's range the candidates tied and `min_by` returned the
+  # first, so Find References on the *second* name answered about the
+  # first. `024.241` deleted that spelling — every handler reads the one
+  # that requires the caret to be on the name — and the tie it describes
+  # is what this example still guards against, one layer down. A
   # copy of that algorithm in this file would pin the copy.
   describe "textDocument/references from a macro's own declaration" do
     let(:logger) { instance_double(Ovallsp::Logger, info: nil, warn: nil, error: nil) }
@@ -323,19 +327,37 @@ RSpec.describe "the source range a macro-declared method reports (024.27)" do
     # The other side of narrowing, and the one the entry understated:
     # each name now owns only its own token, so the rest of the macro
     # call -- the keyword, the commas, `to: :company` -- belongs to no
-    # method's range at all. What answers there is the enclosing class,
-    # which is what this engine has always answered for a position in a
-    # class body that no narrower declaration covers. That is asserted
-    # against the class's own `end` rather than a typed line, so the
-    # example says "the same answer as every other such position"
-    # rather than repeating a number.
+    # method's range at all. The keyword therefore answers whatever any
+    # other position covered by no name answers, and that is asserted
+    # against the class's own `end` rather than a typed value, so the
+    # example says "the same answer as every other such position" rather
+    # than repeating one.
+    #
+    # Until `024.241` that shared answer was the enclosing class, because
+    # References fell back to the declaration whose *whole range* held
+    # the caret. It is now nothing at all: the caret has to be on a name,
+    # and `end` is not one. The example is written against the shared
+    # answer rather than against either value precisely so that moving
+    # between them does not need it rewritten -- what it pins is that the
+    # keyword is not treated as a name.
     #
     # Before `024.27` the macro call's range covered its keyword, the
     # tied candidates were resolved by `min_by` returning the first, and
     # a caret on `attr_accessor` answered `alpha`'s call site -- an
     # answer about a name the caret is not on. Both halves are asserted:
-    # what it does answer, and what it must no longer answer.
-    it "treats the macro's own keyword as the class body, not as its first name" do
+    # what it does answer, and what it must no longer answer. The last
+    # assertion is what keeps the first two from being two empties
+    # compared to each other -- `alpha`'s own token still answers.
+    # Renamed with `024.241`: the keyword used to answer about the
+    # enclosing class, and now answers nothing at all, because the caret
+    # must be on a name. Driven on a Rails-shaped corpus, the
+    # `attr_accessor`, `attr_reader`, `delegate`, `enum` and
+    # `define_method` keyword positions all went from the enclosing class
+    # to no answer. The example's own name is the sentence a later reader
+    # trusts, so it states the shipped arrangement rather than the one
+    # before it — `024.47`'s failure mode, which is a *name* going stale
+    # rather than a paragraph.
+    it "answers nothing on the macro's own keyword, which is not a name" do
       class_end = calls_each_name.lines.rindex { |text| text.start_with?("end") }
       attr_line = calls_each_name.lines.index { |text| text.include?("attr_accessor") }
       delegate_line = calls_each_name.lines.index { |text| text.include?("delegate") }

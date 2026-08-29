@@ -269,4 +269,92 @@ RSpec.describe "Ovallsp::Server textDocument/references (Task 014)" do
 
     expect(server.send(:references_result, params)).to be_empty
   end
+
+  # `024.241`. Three spellings of "the symbol under the cursor" lived in
+  # Server, and only the one Rename reads applied the name-range rule.
+  # References read a spelling that took a declaration's *whole* range,
+  # and a `def`'s recorded range spans its body -- so a caret on a word
+  # inside a comment, on a bare literal, or on the closing keyword all
+  # answered the enclosing method's call sites, while
+  # `textDocument/prepareRename` at the same three positions already
+  # answered nil. The judgement was written down at `#declaration_named_at`
+  # and had simply not reached this handler.
+  #
+  # The fixture is chosen so each position has a *different* right answer
+  # from the wrong one: `build` has two call sites in another file, so
+  # "declines" and "answers" are two and zero, not both empty.
+  describe "the caret must be on a name, not merely inside a declaration" do
+    let(:widget_source) { "class Widget\n  def build\n    # a plain comment\n    42\n  end\nend\n" }
+    let(:user_source) { "w1 = Widget.new\nw1.build\nw2 = Widget.new\nw2.build\n" }
+
+    def references_at(uri, line, character)
+      server = build_server("")
+      { "file:///widget.rb" => widget_source, "file:///user.rb" => user_source }.each do |doc_uri, text|
+        document = server.instance_variable_get(:@document_store).open(
+          uri: doc_uri, text: text, version: 1, language_id: "ruby"
+        )
+        server.send(:reindex, document)
+      end
+      server.send(
+        :references_result,
+        { textDocument: { uri: uri }, position: { line: line, character: character } }
+      ).map { |entry| [entry[:uri], entry[:range][:start][:line]] }
+    end
+
+    # The two call sites every "still answers" control below expects.
+    let(:both_call_sites) { [["file:///user.rb", 1], ["file:///user.rb", 3]] }
+
+    it "answers nothing from a word inside a comment in the method's body" do
+      expect(references_at("file:///widget.rb", 2, 10)).to be_empty
+    end
+
+    it "answers nothing from a bare literal in the method's body" do
+      expect(references_at("file:///widget.rb", 3, 4)).to be_empty
+    end
+
+    it "answers nothing from the method's closing keyword" do
+      expect(references_at("file:///widget.rb", 4, 4)).to be_empty
+    end
+
+    it "answers nothing from the `def` keyword itself" do
+      expect(references_at("file:///widget.rb", 1, 2)).to be_empty
+    end
+
+    # The controls. A fix that made the engine decline wholesale would
+    # pass every example above and fail all three of these.
+    it "still answers both call sites with the caret on the method's own name" do
+      expect(references_at("file:///widget.rb", 1, 8)).to contain_exactly(*both_call_sites)
+    end
+
+    it "still answers both call sites with the caret on a call site" do
+      expect(references_at("file:///user.rb", 1, 4)).to contain_exactly(*both_call_sites)
+    end
+
+    it "still answers with the caret on the class's own name" do
+      expect(references_at("file:///widget.rb", 0, 8)).to contain_exactly(
+        ["file:///user.rb", 0], ["file:///user.rb", 2], ["file:///widget.rb", 0]
+      )
+    end
+
+    # Decided deliberately, and recorded in the register entry: the
+    # `class` keyword loses its three answers, for the same reason the
+    # `def` keyword loses its two. Both are the caret sitting next to a
+    # name rather than on it, both are refused by prepareRename already,
+    # and a References that answered where Rename refuses is the
+    # disagreement this change exists to remove. The control directly
+    # above is what keeps this from being a wholesale decline.
+    it "answers nothing from the `class` keyword, where prepareRename already refuses" do
+      server = build_server("")
+      { "file:///widget.rb" => widget_source, "file:///user.rb" => user_source }.each do |doc_uri, text|
+        document = server.instance_variable_get(:@document_store).open(
+          uri: doc_uri, text: text, version: 1, language_id: "ruby"
+        )
+        server.send(:reindex, document)
+      end
+      params = { textDocument: { uri: "file:///widget.rb" }, position: { line: 0, character: 2 } }
+
+      expect(server.send(:prepare_rename_result, params)).to be_nil
+      expect(server.send(:references_result, params)).to be_empty
+    end
+  end
 end

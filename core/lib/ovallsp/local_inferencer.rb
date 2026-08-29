@@ -1060,7 +1060,7 @@ module Ovallsp
         # silent for a variable assigned both ways (0.1.12).
         constant_type = Types::Nominal.new(name: receiver_name)
         signature_method = resolve_signature_call(
-          constant_type, node, singleton: true, direct: true
+          constant_type, node, singleton: true, direct: true, env: env
         )
         # An `untyped` RBS result resolves to an Unknown, which is truthy
         # -- so consulting RBS first (correct in itself) let an untyped
@@ -1308,7 +1308,23 @@ module Ovallsp
     # `env:` is threaded so the argument *types* are available here, not
     # only their count -- `024.128`. Every caller is inside
     # `#resolve_call`, which already has it.
-    def resolve_signature_call(receiver_type, node, singleton: false, direct: nil, env: nil)
+    #
+    # **And it is required**, which is the correction `024.242` bought.
+    # The sentence above was true and was not enough: every caller did
+    # have an env, and one of the five did not pass it -- the
+    # constant-receiver rung. With no env, `argument_types` below is nil
+    # and every overload of the right arity joins the union, so
+    # `Zoo.pick(1)` answered both declared returns while
+    # `k = Zoo; k.pick(1)` answered the one RBS keys on an Integer
+    # argument. Two ladders to one question, differing by a defaulted
+    # keyword.
+    #
+    # A regression test pins that one call; only a required keyword stops
+    # the next site being written without it, which is the shape `049`
+    # asked for. A caller with genuinely no environment -- a spec driving
+    # this method on a bare parsed fragment -- passes `env: nil` and says
+    # so.
+    def resolve_signature_call(receiver_type, node, env:, singleton: false, direct: nil)
       return nil unless @signatures
 
       if receiver_type.is_a?(Types::Generic) && receiver_type.name == "ClassOf"
