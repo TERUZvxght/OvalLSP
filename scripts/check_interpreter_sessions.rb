@@ -160,12 +160,19 @@ module InterpreterSessions
       break if stripped.strip.empty?
       break unless stripped.start_with?("#")
       # The version note says which interpreter answered; it is not output.
+      # Two spellings are in the tree -- a line of its own, and a trailing
+      # parenthesis on the last answer line. Both are the same statement,
+      # and the check is about the answer, so both are dropped. Written to
+      # accept only the first at first, and four sessions written the
+      # second way failed on their first run -- the needle was the
+      # spelling rather than the thing.
       if stripped =~ /\A#\s*ruby\s+[\d.]/
         cursor += 1
         next
       end
 
-      expected << stripped.sub(/\A#\s*(?:=>)?\s?/, "")
+      answer = stripped.sub(/\A#\s*(?:=>)?\s?/, "")
+      expected << answer.sub(/\s*\((?:ruby|Ruby)\s+[\d.]+[^)]*\)\s*\z/, "")
       cursor += 1
     end
 

@@ -85,6 +85,35 @@ RSpec.describe "interpreter sessions" do
     end
   end
 
+  # The version note has two spellings in this tree — a line of its own,
+  # and a trailing parenthesis on the last answer line — and neither is
+  # part of the answer. Written to accept only the first at first, and
+  # four sessions written the second way failed on their first run.
+  it "reads the interpreter version as a note however it is spelled" do
+    Dir.mktmpdir("session-check-") do |dir|
+      opener = ["$", "ruby", "-e", "'"].join(" ")
+      arrow = "# =#{'>'}"
+      trailing = "#   #{opener}\n#   p [1, 2].sum\n#   '\n#   #{arrow} 3 (ruby #{RUBY_VERSION})\n"
+      File.write(File.join(dir, "trailing.rb"), trailing)
+      _, ok = Open3.capture2e(
+        RbConfig.ruby, File.join(SESSIONS_ROOT, "scripts", "check_interpreter_sessions.rb"),
+        "--file", File.join(dir, "trailing.rb"), chdir: SESSIONS_ROOT
+      )
+      expect(ok).to be_success
+
+      # And the note is dropped rather than the whole line ignored: a
+      # wrong answer carrying the same note still fails.
+      wrong = "#   #{opener}\n#   p [1, 2].sum\n#   '\n#   #{arrow} 7 (ruby #{RUBY_VERSION})\n"
+      File.write(File.join(dir, "wrong-trailing.rb"), wrong)
+      out, bad = Open3.capture2e(
+        RbConfig.ruby, File.join(SESSIONS_ROOT, "scripts", "check_interpreter_sessions.rb"),
+        "--file", File.join(dir, "wrong-trailing.rb"), chdir: SESSIONS_ROOT
+      )
+      expect(bad).not_to be_success, out
+      expect(out).to include("7").and include("3")
+    end
+  end
+
   # Sessions are executed, so the checker is code that runs text out of the
   # repository. It refuses rather than runs anything that writes, deletes,
   # spawns or opens a socket -- the `/Applications` incident is what a

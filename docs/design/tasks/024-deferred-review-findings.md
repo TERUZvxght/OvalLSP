@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**239 entries below** <!-- measured: register-entries = 239 -->,
+**266 entries below** <!-- measured: register-entries = 266 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -411,6 +411,33 @@ nobody can search is the recording habit without the benefit.
 | [`024.241`](#024241-find-references-answers-from-a-comment-a-bare-literal-and-end) | fixed | 0.2.16 | Find References answers from a comment, a bare literal, and `end` |
 | [`024.242`](#024242-a-class-held-in-a-local-variable-loses-an-rbs-overload) | fixed | 0.2.16 | A class held in a local variable loses an RBS overload |
 | [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 0.3.0 | Signature help says nothing for a receiverless call inside a module … |
+| [`024.244`](#024244-preparerename-is-refused-on-any-class-or-module-written-inside-a-module-class-body-while-th) | open | 0.2.17 | prepareRename is refused on any class or module written inside a `mo… |
+| [`024.245`](#024245-server-prepare-rename-result-does-not-call-ensure-reference-index-current-while-referenc) | open | 0.2.17 | `Server#prepare_rename_result` does not call `#ensure_reference_inde… |
+| [`024.246`](#024246-one-unresolvable-include-in-a-project-s-own-rbs-makes-the-engine-report-a-method-the-same-file) | open | 0.2.17 | One unresolvable `include` in a project's own RBS makes the engine r… |
+| [`024.247`](#024247-a-constant-declared-only-in-a-signature-file-is-reported-cannot-resolve-constant-when-that-fil) | open | 0.2.17 | A constant declared only in a signature file is reported `cannot res… |
+| [`024.248`](#024248-diagnostics-engine-ancestor-names-calls-ancestorentry-name-with-no-identified-guard-so) | open | 0.2.17 | `Diagnostics::Engine#ancestor_names` calls `AncestorEntry#name` with… |
+| [`024.249`](#024249-queryservice-member-available-on-asked-the-signature-environment-about-the-union-branch-s-own) | open | 0.2.17 | `QueryService#member_available_on?` asked the signature environment … |
+| [`024.250`](#024250-queryservice-member-available-on-cannot-answer-about-a-nil-branch-so-every-member-of-a-nil) | open | 0.2.17 | `QueryService#member_available_on?` cannot answer about a `nil` bran… |
+| [`024.251`](#024251-def-local-method-is-recorded-on-the-lexically-enclosing-class) | open | 0.2.17 | `def <local>.method` is recorded on the lexically enclosing class |
+| [`024.252`](#024252-conditional-says-a-method-is-on-every-branch-of-a-union-when-one-branch-declares-it-private-s) | open | 0.2.17 | `conditional` says a method is on every branch of a Union when one b… |
+| [`024.253`](#024253-every-object-kernel-inherited-name-on-a-union-of-two-workspace-classes-was-labelled-one-branch-o) | open | 0.2.17 | Every Object/Kernel-inherited name on a Union of two workspace class… |
+| [`024.254`](#024254-active-record-s-own-api-is-labelled-one-branch-only-on-a-union-of-two-models-so-save-destroy) | open | 0.2.17 | Active Record's own API is labelled one-branch-only on a Union of tw… |
+| [`024.255`](#024255-completion-answered-nothing-at-all-for-a-union-of-class-objects-k-cond-foo-bar-then-k) | open | 0.2.17 | Completion answered nothing at all for a Union of class objects — `k… |
+| [`024.256`](#024256-go-to-definition-still-answers-nothing-for-a-union-of-class-objects-and-this-patch-makes-the-as) | open | 0.2.17 | Go to definition still answers nothing for a Union of class objects,… |
+| [`024.257`](#024257-an-unrooted-compact-class-path-whose-head-resolves-outward-gets-the-enclosing-frame-glued-onto-i) | open | 0.2.17 | An unrooted compact class path whose head resolves OUTWARD gets the … |
+| [`024.258`](#024258-visit-def-node-s-method-level-ensure-popped-scope-stack-for-a-push-its-early-return-ha) | open | 0.2.17 | `#visit_def_node`'s method-level `ensure` popped `@scope_stack` for … |
+| [`024.259`](#024259-the-same-ensure-restored-included-hook-parameter-from-a-local-the-early-return-never-assi) | open | 0.2.17 | The same `ensure` restored `@included_hook_parameter` from a local t… |
+| [`024.260`](#024260-textdocument-rename-on-a-local-misses-every-binding-written-as-a-compound-or-target-node) | open | 0.2.17 | `textDocument/rename` on a local misses every binding written as a c… |
+| [`024.261`](#024261-visit-lambda-node-pushes-no-scope-frame-where-visit-block-node-does-so-a-lambda-body-shar) | open | 0.2.17 | `#visit_lambda_node` pushes no scope frame where `#visit_block_node`… |
+| [`024.262`](#024262-rename-leaves-a-closed-over-local-s-uses-inside-a-block-behind-producing-code-that-no-longer-ru) | open | 0.2.17 | Rename leaves a closed-over local's uses inside a block behind, prod… |
+| [`024.263`](#024263-rename-rewrites-an-arrow-lambda-s-own-parameter-when-renaming-a-same-named-enclosing-local-sile) | open | 0.2.17 | Rename rewrites an arrow lambda's own parameter when renaming a same… |
+| [`024.264`](#024264-a-false-unknown-method-on-a-concern-s-class-methods) | open | 0.2.17 | a false `unknown-method` on a concern's class methods |
+| [`024.265`](#024265-the-same-ensure-popped-the-scope-stack-without-a-matching-push-so-one-def-inside-a-nameless) | open | 0.2.17 | the same `ensure` popped the scope stack without a matching push, so… |
+| [`024.266`](#024266-find-references-and-rename-ignore-four-of-prism-s-six-local-variable-node-kinds) | done | 0.2.17 | Find References and Rename ignore four of Prism's six local-variable… |
+| [`024.267`](#024267-latent-spec-suite-only) | open | 0.2.17 | latent, spec suite only |
+| [`024.268`](#024268-agentprocessmanager-force-kill-the-sigkill-escalation-behind-a-sigterm-that-never-landed-i) | open | 0.2.17 | `AgentProcessManager#force_kill` — the SIGKILL escalation behind a S… |
+| [`024.269`](#024269-agentprocessmanager-alive-is-asserted-only-in-the-false-direction) | open | 0.2.17 | `AgentProcessManager#alive?` is asserted only in the false direction |
+| [`024.270`](#024270-not-a-defect-recorded-so-nobody-promotes-it-into-one) | open | 0.2.17 | Not a defect — recorded so nobody promotes it into one |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -15350,6 +15377,1299 @@ languages, rather than deleted with `024.43`.
 
 **Retargeted to 0.3.0 in 0.2.16's closing pass**, as the half of
 `024.43` that release did not fix.
+
+## 024.244 prepareRename is refused on any class or module written inside a `module`/`class` body, while th
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/reference_resolver.rb`, `core/lib/ovallsp/server.rb`
+
+prepareRename is refused on any class or module written inside a
+`module`/`class` body, while the identical caret position on the compact
+spelling is offered. `ReferenceResolver#resolve_constant` rebuilt a
+SymbolId from `#resolve_type_name` and `#type_kind` and had to invent
+the `owner` those two do not carry; `nil` is only correct for the
+compact spelling. `Rename::Planner` then found no declaration for the
+class, and because `Server#prepare_rename_result` does not rebuild the
+reference index, `#locations_for` was empty and `#prepare` answered null
+— so the editor shows its own "cannot be renamed" message. FIXED BY THIS
+PATCH. Over `activerecord 8.1.3.1`'s `lib`, this is 1,060 of the 1,481
+classes and modules the gem both declares and uses — 72% not renameable
+at all — plus 79 whose rename plan edited every call site and left the
+declaration behind, which is the 0.1.14 failure `024.28` describes as
+producing a file that does not run.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Fixture, one file, both spellings present so the compact one is the control:
+
+  module Api
+    class Widget
+    end
+  end
+
+  class Api2::Widget2
+  end
+
+  a = Api::Widget.new
+  b = Api2::Widget2.new
+
+Driven through the real server (didOpen, then textDocument/prepareRename), cold — nothing asked first, which is what an editor does when the user presses F2:
+
+BEFORE (7bce3c4):
+  nested  `class Widget` inside `module Api` -> nil
+  compact `class Api2::Widget2`              -> {range: {start: {line: 5, character: 12}, end: {line: 5, character: 19}}, placeholder: "Widget2"}
+
+AFTER (patched):
+  nested  `class Widget` inside `module Api` -> {range: {start: {line: 1, character: 8}, end: {line: 1, character: 14}}, placeholder: "Widget"}
+  compact `class Api2::Widget2`              -> {range: {start: {line: 5, character: 12}, end: {line: 5, character: 19}}, placeholder: "Widget2"}
+
+The mechanism, probed directly on `module Foo; class Bar; end; end` + `Foo::Bar.new` (one class, two identities, each index answering about only one):
+
+BEFORE:
+  declared identity: #<data SymbolId kind=:class, owner="::Foo", name="::Foo::Bar">
+  owner="::Foo" -> declarations 1, references 0
+  owner=nil     -> declarations 0, references 2
+  plan for owner="::Foo": edits at lines [1]     (1 = the declaration, 5 = the call site)
+  plan for owner=nil:     edits at lines [1, 5]
+
+AFTER:
+  owner="::Foo" -> declarations 1, references 2
+  owner=nil     -> declarations 0, references 0
+  plan for owner="::Foo": edits at lines [1, 5]
+  plan for owner=nil:     edits at lines []      (prepare correctly answers nil: it names no declaration)
+
+Corpus census over `/opt/homebrew/lib/ruby/gems/3.4.0/gems/activerecord-8.1.3.1/lib`, 397 files, identical corpus-sha256 both sides, asking for every declared class/module whether the identity a *use* of that name resolves to is the identity the declaration is stored under, and whether prepareRename answers the way the server asks it (cold):
+
+  metric                            before   after
+  class/module declarations          1564    1564   (control, unchanged)
+  never used in this corpus            83      83   (control, unchanged)
+  used in this corpus                1481    1481   (control, unchanged)
+  identity agrees with declaration    395    1455
+  identity splits                    1086      26
+  prepareRename (cold) answers        421    1481
+  prepareRename (cold) refuses       1060       0
+  rename plan edits its declaration  1402    1481
+  plan misses its declaration          79       0
+
+The census reconciles against an independent count that touches 
+```
+
+## 024.245 `Server#prepare_rename_result` does not call `#ensure_reference_index_current`, while `#referenc
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/reference_resolver.rb`, `core/lib/ovallsp/server.rb`
+
+`Server#prepare_rename_result` does not call
+`#ensure_reference_index_current`, while `#references_result` and
+`#rename_result` both do. With the reference index cold — which is its
+state until the user has run Find All References or an actual rename,
+and again after every edit that bumps the generation —
+`Rename::Planner#locations_for` sees declarations only. For a local
+variable and for an instance variable the workspace index holds no
+declaration, so prepareRename answers null and the editor refuses the
+rename box, while `textDocument/rename` at the identical position goes
+ahead and produces the correct edits. NOT FIXED BY THIS PATCH: it is
+`Server`'s dispatch rather than the identity, and folding a second
+behavioural change into a measured substitution would leave neither
+attributable. The fix looks like one line — the same
+`ensure_reference_index_current` call the other two handlers make — but
+it is O(workspace) and the method's own comment weighs that cost, so it
+wants its own measurement.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Driven through the real server. For each position: prepareRename with nothing asked first (cold); prepareRename after a references request at the same position (warm); and rename at that position.
+
+AFTER (patched worktree — the same four rows hold at 7bce3c4 except the first, which this patch fixes):
+
+  class in a module body      prepare(cold)=true  prepare(warm)=true  rename=nil edit(s)
+  class, compact spelling     prepare(cold)=true  prepare(warm)=true  rename=nil edit(s)
+  instance method             prepare(cold)=true  prepare(warm)=true  rename=2 edit(s)
+  local variable              prepare(cold)=false prepare(warm)=true  rename=2 edit(s)
+  instance variable           prepare(cold)=false prepare(warm)=true  rename=nil edit(s)
+
+BEFORE (7bce3c4), first row only differs:
+
+  class in a module body      prepare(cold)=false prepare(warm)=true  rename=nil edit(s)
+
+The local-variable row is the clean one: source `def a\n  x = 1\n  x\nend\n`, caret at line 1 character 2. prepareRename answers null, so VS Code shows "The element can't be renamed" — and textDocument/rename at that exact position returns a WorkspaceEdit with 2 correct edits. The engine can rename it; the editor is told it cannot.
+
+(The `rename=nil` cells on the three class/ivar rows are an artefact of the probe's `newName: "zzz"`, which `Planner#valid_identifier?` rejects for `:class` and `:ivar`. They are not part of the finding; the prepare columns are.)
+```
+
+## 024.246 One unresolvable `include` in a project's own RBS makes the engine report a method the same file
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/signatures/environment.rb`, `core/lib/ovallsp/index/type_name_resolution.rb`
+
+One unresolvable `include` in a project's own RBS makes the engine
+report a method the same file declares — through
+`Index::TypeNameResolution.substitution?`, in the shipped `:safe` mode,
+on `unknown-method`. `substitution?` refuses to report about a bare
+inferred type that the workspace answered with a differently-namespaced
+class of its own; it decided "signatures declare this name" from
+`!ancestors(...).empty?`, so a chain that could not be built switched
+the refusal off and the engine reported against the wrong class. This is
+024.223's cause at a consumer 024.223 does not enumerate (it names two,
+`#compute_ancestors`' readers and `MethodResolver#accounted_for?`), and
+it is not 024.224 (no namespace comparison is involved). Fixed by this
+patch and pinned by a fresh pair of examples in
+`unbuildable_ancestry_spec.rb`.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Two workspaces, identical Ruby, `sig/app.rbs` differing by one line.
+
+    # sig/app.rbs
+    class Widget
+      include _ToJson        # <- the only difference; nothing loaded declares it
+      def label: () -> String
+    end
+    class Factory
+      def make: () -> Widget
+    end
+
+    # a.rb
+    module Zoo
+      class Widget
+        def zoo_only
+          :here
+        end
+      end
+
+      class Other
+        def planted_bad
+          definitely_absent      # the planted control
+        end
+      end
+    end
+
+    w = Factory.new.make         # arrives as a BARE `Widget`, from RBS
+    w.label                      # declared on Widget, right above the include
+
+Driven at `mode: :safe` — the mode the shipped extension gets, since nothing in `vscode/` ever sets `initializationOptions.diagnosticsMode`.
+
+  BASE (7bce3c4):
+    Widget's chain builds      : ["Zoo::Other has no method named `definitely_absent`"]
+    Widget's chain unbuildable : ["Widget has no method named `label`",
+                                  "Zoo::Other has no method named `definitely_absent`"]
+  PATCHED (same script, patch-applied clean BASE tree):
+    Widget's chain builds      : ["Zoo::Other has no method named `definitely_absent`"]
+    Widget's chain unbuildable : ["Zoo::Other has no method named `definitely_absent`"]
+
+The control holds on all four arms. Mutating the fix back (`!= false` -> `== true`) puts the report straight back, which is how the new pair was watched failing:
+
+    expected collection contained:  [(a string including "definitely_absent")]
+    actual collection contained:    ["Widget has no method named `label`",
+                                     "Zoo::Other has no method named `definitely_absent`"]
+
+The receiver has to *arrive* bare, which is why the type comes back from a signature rather than being written — a written `Zoo::Widget` carries its namespace and `WorkspaceIndex#guessed_type_name?` blanks it one line earlier.
+```
+
+## 024.247 A constant declared only in a signature file is reported `cannot resolve constant` when that fil
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets directly. Recorded because it was found by
+  driving the product and is invisible to a reader of the code.
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/signatures/environment.rb`, `core/lib/ovallsp/index/type_name_resolution.rb`
+
+A constant declared only in a signature file is reported `cannot resolve
+constant` when that file's ancestry cannot be built —
+`Engine#rbs_known_constant?` derived its answer from
+`!ancestors(...).empty?`, so "declared, chain unbuildable" read as "RBS
+does not know this name". The method's own comment already says it must
+fail towards "known" (024.122); the sentinel introduced by 024.223's fix
+is what it could not see. Fixed by this patch. **Not user-visible in the
+shipped configuration, and that qualification is load-bearing:**
+`unresolved_constant_findings` runs only at `MODE_RANK >= :standard`,
+`Server#diagnostics_mode_from` defaults to `:safe`, and nothing under
+`vscode/` sets `initializationOptions.diagnosticsMode`. It is what the
+engine answers, and what any client requesting `standard`/`strict` —
+including `scripts/corpus_diagnostics.rb` — is shown.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Same paired workspace as 024.223, with Ruby that *references* the RBS-declared constant rather than declaring it (a name the Ruby source declares is settled by the workspace index one line earlier and never reaches RBS):
+
+    # sig/app.rbs — the resolvable side; the broken side adds `include _ToJson`
+    module App
+      class Key
+        def digest: () -> String
+      end
+    end
+
+    # a.rb
+    module App
+      def self.use
+        App::Key
+      end
+
+      def self.planted_bad
+        DefinitelyAbsentConstant     # the planted control
+      end
+    end
+
+  BASE (7bce3c4):
+    chain builds      : ["cannot resolve constant `DefinitelyAbsentConstant`"]
+    chain unbuildable : ["cannot resolve constant `App::Key`",
+                         "cannot resolve constant `DefinitelyAbsentConstant`"]
+  PATCHED:
+    chain builds      : ["cannot resolve constant `DefinitelyAbsentConstant`"]
+    chain unbuildable : ["cannot resolve constant `DefinitelyAbsentConstant`"]
+
+And on a corpus rather than a fixture — this repository's own `core/lib` (87 files) with rbs 4.0.3 as the signature root, both sides over the identical directory, corpus-sha256 `ed465e09f3ac847ef8047878254d070493046085d2eb0c70390e8eb0c0dd9741` on both:
+
+    only BEFORE (removed):
+      unresolved-constant  .../core/lib/ovallsp/signatures/environment.rb:483:13
+                           cannot resolve constant `RBS::TypeName`
+    only AFTER (added):
+      (none)
+
+`RBS::TypeName` is declared in rbs 4.0.3's own `sig/typename.rbs`; a probe confirms the cause is that file's `include _ToJson` ("failed to build ancestors of ::RBS::TypeName: … Could not find mixin: _ToJson"). The report was raised against `environment.rb`'s own `RBS::TypeName.parse` call.
+```
+
+## 024.248 `Diagnostics::Engine#ancestor_names` calls `AncestorEntry#name` with no `identified?` guard, so
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/method_resolver.rb`, `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/diagnostics/engine.rb`
+
+`Diagnostics::Engine#ancestor_names` calls `AncestorEntry#name` with no
+`identified?` guard, so an argument whose class has a parent nobody
+could identify raises `Semantic::UnidentifiedAncestor` out of
+`Engine#analyze` and the WHOLE document loses every diagnostic.
+`Server#publish_diagnostics_for` rescues, logs and returns without
+calling `publish_findings`, so the editor keeps whatever it was last
+shown for that file — a stale answer that looks live, and it depends on
+document content, so a user typing such a call freezes that file's
+diagnostics from that keystroke on. FIXED IN THIS PATCH:
+`#ancestor_names` returns `nil` when the chain is incomplete, and
+`#compatible_nominal?` declines on `nil` (the reachable set is a lower
+bound, so a miss is not evidence of a mismatch). This is the sixth
+reader of the chain and the one 024.80's closure did not find.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Corpus, both sides, identical directory (`corpus-sha256=d454c9e39695b4e905b3226c78e5f0b16d50be42b87d02f8cc3eca051dbbebc4`, 102 files), from `<tree>/core`:
+
+  OVALLSP_SIGNATURE_ROOT=/opt/homebrew/lib/ruby/gems/3.4.0/gems/rbs-4.0.3 \
+    bundle exec ruby ../scripts/corpus_diagnostics.rb \
+    /opt/homebrew/lib/ruby/gems/3.4.0/gems/rbs-4.0.3/lib
+
+BEFORE (BASE copy, revision=(not a git repository), dirty=0):
+  ANALYZE-ERROR .../lib/rbs/prototype/runtime.rb: Ovallsp::Semantic::UnidentifiedAncestor: an ancestor reached by superclass could not be identified
+  ANALYZE-ERROR .../lib/rbs/prototype/runtime/value_object_generator.rb: (same)
+  count.unresolved-constant=319   count.argument-type=3   -> 322 findings
+
+AFTER (worktree, revision=7bce3c4…, dirty=4):
+  no ANALYZE-ERROR
+  count.unresolved-constant=326   count.argument-type=7   count.unknown-method=2   -> 335 findings
+
+The control moved (319 -> 326) BECAUSE OF THE FIX, so I re-ran the comparison over the files that analysed on both sides. Excluding those two files: 322 findings both sides, `diff` empty, control `unresolved-constant` = 319 on both. Every one of the 13 differences is inside the two previously-unanalysable files.
+
+Backtrace at BASE (`scratchpad/w4/al/backtrace.rb`):
+  hierarchy_index.rb:67 AncestorEntry#name -> engine.rb:608 #ancestor_names -> engine.rb:583 #compatible_nominal? -> engine.rb:467 #mismatched_arguments -> engine.rb:70 #analyze
+
+Spec, watched failing at BASE, green after, controls alive both ways (`core/spec/ovallsp/diagnostics/unidentified_ancestor_argument_spec.rb`): BASE `4 examples, 2 failures`; after `4 examples, 0 failures`. Mutating the fix's decline (`return true if reachable.nil?` -> `return false`) takes it back to 1 failure, so the decline is pinned and not merely present.
+
+HONEST COST, and it is the precedent 024.31 already set ('removing a wrong silencer shows what it was silencing'): the 13 recovered findings are 7 `unresolved-constant` (standard mode only, hidden from a default-configured user), 4 `argument-type` that are 024.224 ('`generate_mixin` expects RBS::TypeName here, but TypeName is given' — false), and 2 `unknown-method` that are new_defects[3] (false). So a default-mode user opening those two files goes from nothing to 6 false warnings. The fix does not create those; it stops one comparison's crash from suppressing a whole file, and the restored output carries the engine's usual mix. The alternative — leaving a raise that also freezes stale diagnostics in place — is worse on section 0's own terms, because a frozen wrong answer outranks a visible one.
+```
+
+## 024.249 `QueryService#member_available_on?` asked the signature environment about the Union branch's OWN
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/method_resolver.rb`, `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/diagnostics/engine.rb`
+
+`QueryService#member_available_on?` asked the signature environment
+about the Union branch's OWN name and nothing above it, while the source
+that put the name into the list walks the whole chain. For a workspace
+class RBS has never heard of that is nothing at all, so every name Ruby
+gives every object was labelled `conditional: true` and sorted into
+completion's on-one-branch-only bucket. FIXED IN THIS PATCH by routing
+it through `#rbs_owner_chains`, the same seam `#add_signature_members`
+reads. This is the 'fifth copy' the brief asked about; it joins through
+`#lookup_owners`, not by reading `Link`.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+`scratchpad/w4/probe_entries.rb`, both sides, fixture `class Widget; def shared_zzz; end; def widget_only_zzz; end; end` and `class Gadget; def shared_zzz; end; end`, receiver `Widget | Gadget`:
+
+  BEFORE  unconditional members 1 of 122; frozen? conditional=true; to_s conditional=true
+  AFTER   unconditional members 121 of 122; frozen? conditional=false; to_s conditional=false
+  CONTROLS unchanged both sides: shared_zzz conditional=false, widget_only_zzz conditional=true
+
+Spec watched failing (`core/spec/ovallsp/semantic/union_conditional_members_spec.rb`): BASE `3 examples, 1 failure` (expected false, got true), both controls green; after `3 examples, 0 failures`.
+
+Blast radius: completion ordering only — `Member#conditional` is read in exactly one place, `Server#member_completion_items`, where it selects `MEMBER_ON_ONE_BRANCH`/`MEMBER_ON_EVERY_BRANCH` for `sortText`. Both corpora are byte-identical, which is consistent rather than contradictory: `corpus_diagnostics.rb` runs the diagnostics engine and never asks `members_of`.
+```
+
+## 024.250 `QueryService#member_available_on?` cannot answer about a `nil` branch, so EVERY member of a nil
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/method_resolver.rb`, `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/diagnostics/engine.rb`
+
+`QueryService#member_available_on?` cannot answer about a `nil` branch,
+so EVERY member of a nilable Union is labelled conditional — including
+the class's own methods and the names `nil` really does answer.
+`Types::NIL` is a `Types::NilType`, not a `Nominal`, so the `case` that
+unwraps the receiver falls through and the method returns `false` for
+every name. `Types.class_of` already knows the answer (`NilType ->
+ClassOf[NilClass]`), so the information is available and thrown away.
+NOT FIXED — it is a different defect from the fifth-copy one (a receiver
+shape the method does not handle, not a second spelling of the chain),
+it moves completion ordering for the commonest union in the engine, and
+it needs its own measurement.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+`scratchpad/w4/probe_entries.rb`, receiver `Widget | nil` where `class Widget; def shared_zzz; end; def widget_only_zzz; end; end`:
+
+  BEFORE  members_of(Widget|nil) total 122, of which unconditional 0
+  AFTER   members_of(Widget|nil) total 122, of which unconditional 0   (unchanged)
+  CONTROL widget_only_zzz conditional on Widget|nil: true on both sides (correctly — nil has not got it)
+
+`frozen?`, `to_s` and `inspect` are on both branches and are labelled conditional. Taken from Ruby, `ruby 3.4.10`:
+
+  $ ruby -e 'class Widget; end
+             p [Widget.new.frozen?, nil.frozen?, Widget.new.to_s.class, nil.to_s]'
+  # => [false, true, String, ""]
+
+This is the measurement 024.88's last paragraph records ('121 members offered today, 0 of them unconditional, including the class's own methods') and it now has a cause. Fixing it is one line — map `Types::NIL` to `Nominal("NilClass")` before the chain lookup — but it changes the sort order of every nilable receiver's completion list, which is a corpus-and-drive question rather than a free one.
+```
+
+## 024.251 `def <local>.method` is recorded on the lexically enclosing class
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/method_resolver.rb`, `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/diagnostics/engine.rb`
+
+`def <local>.method` is recorded on the lexically enclosing class.
+`ParserService#visit_def_node` calls `#receiver_owner_name`, which
+cannot name a local-variable receiver and falls back to `current_owner`
+— so a singleton method the enclosing class does not have is INVENTED on
+it, and receiverless calls inside that body are attributed to the
+enclosing class and reported as unknown. Two of the false reports
+recovered by new_defects[0] are this shape, in real gem source. NOT
+FIXED — it is in the parser, not the lookup path, and changing the owner
+a declaration is recorded under is read by every feature at once.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+`scratchpad/w4/al/probe_local_singleton.rb`, IDENTICAL ON BOTH SIDES (so pre-existing, not introduced here). Reduced from `rbs-4.0.3/lib/rbs/prototype/runtime.rb:270`:
+
+  class Runner
+    def go
+      ty = Thing.new
+      def ty.to_s
+        location or raise
+        location.source
+      end
+      ty
+    end
+    def control_typo
+      definitely_not_a_member_zzz
+    end
+  end
+
+  declarations recorded:
+    instance_method  owner="::Runner" name=go
+    singleton_method owner="::Runner" name=to_s      <-- invented on Runner
+    instance_method  owner="::Runner" name=control_typo
+
+  findings:
+    unknown-method  line 4  Runner has no method named `location`      <-- false
+    unknown-method  line 5  Runner has no method named `location`      <-- false
+    unknown-method  line 10 Runner has no method named `definitely_not_a_member_zzz`   <-- CONTROL, correct
+
+The control shows the check keeps its edge in the same body, so this is not the wholesale decline of 024.237.
+
+Taken from Ruby, `ruby 3.4.10`:
+
+  $ ruby -e 'class Runner
+               def go
+                 ty = Object.new
+                 def ty.tagged_zzz; :from_local; end
+                 ty
+               end
+             end
+             p [Runner.singleton_methods(false), Runner.new.go.tagged_zzz, Runner.respond_to?(:tagged_zzz)]'
+  # => [[], :from_local, false]
+
+So the engine records a singleton method Ruby puts nowhere near `Runner`, and `Runner.respond_to?(:tagged_zzz)` is `false`. Both halves are user-visible: go-to-definition and signature help on `Runner.to_s` land on the wrong body, and the two `location` calls are reported on code that runs.
+```
+
+## 024.252 `conditional` says a method is on every branch of a Union when one branch declares it private, s
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/types.rb`
+
+`conditional` says a method is on every branch of a Union when one
+branch declares it private, so completion sorts it into the every-branch
+band while calling it raises NoMethodError. This is the wrong-answer
+direction section 0 ranks worst, and it is the shape 024.88's own text
+says cannot happen ("#members_of decided conditional correctly all
+along"). Cause: `member_available_on?` asked `MethodResolver#resolve`,
+which does not filter visibility, while `#complete` — whose per-branch
+answer was being discarded — does.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+From <worktree>/core, index `class Pub; def shared; end; end` and `class Priv; private; def shared; end; end`, then `members_of(normalize_union([Nominal("Pub"), Nominal("Priv")]), prefix: "shared")`.
+  BASE 7bce3c4: shared -> origin=source conditional=FALSE
+  patched:      shared -> origin=source conditional=TRUE
+Ruby (pasted as a session in the new spec, re-run by scripts/check_interpreter_sessions.rb):
+  $ ruby -e 'class Pub; def shared; end; end; class Priv; private; def shared; end; end; p Pub.new.respond_to?(:shared); p Priv.new.respond_to?(:shared)'
+  # => true
+  # => false
+Control in the same fixture: both declarations public -> conditional=false on both sides. Script scratchpad/w4mpv/mpv_probe.rb section [D]; spec `keeps a member conditional when the other Union branch declares it private`, watched failing at BASE.
+```
+
+## 024.253 Every Object/Kernel-inherited name on a Union of two workspace classes was labelled one-branch-o
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/types.rb`
+
+Every Object/Kernel-inherited name on a Union of two workspace classes
+was labelled one-branch-only, so 121 of 122 completion items sorted into
+the bottom band and the 0.2.15 sortText work inverted the list it was
+meant to order. Recorded without a number inside 024.43's round-2 list
+and left alone pending a measurement; that measurement is in this patch.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Index `class P; def only_p; end; def both; end; end` and `class Q; def both; end; end`; `members_of(P | Q, prefix: "")`.
+  BASE:    to_s/inspect/frozen?/tap conditional=true; unconditional = 1 of 122
+  patched: all four conditional=false;                unconditional = 121 of 122
+Controls unchanged both sides: `both` false, `only_p` true. Script scratchpad/w4mpv/mpv_probe.rb section [C]; spec `calls a member every Union branch inherits from Object unconditional`.
+```
+
+## 024.254 Active Record's own API is labelled one-branch-only on a Union of two models, so `save`/`destroy
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/types.rb`
+
+Active Record's own API is labelled one-branch-only on a Union of two
+models, so `save`/`destroy`/`find` — the one thing both branches
+certainly answer to — sorted below columns that only one of the two has.
+`member_available_on?` consulted source resolution, the model's
+columns/associations and RBS, and never
+`ModelRegistry#active_record_api` at all, so it could not see the source
+that produced the member.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Register models `User` (column email) and `Post` (column title), `install_active_record_api(instance: %w[save destroy update], singleton: %w[find where all], ...)`, then `members_of(User | Post, prefix: "")`.
+  BASE:    save origin=model_api conditional=TRUE,  email true, title true
+  patched: save origin=model_api conditional=FALSE, email true, title true
+Control (`User | String`, one branch a model): save conditional=true on both sides. Script scratchpad/w4mpv/mpv_probe.rb sections [F] and [F2]; spec `calls the Active Record API unconditional when every Union branch is a model`.
+```
+
+## 024.255 Completion answered nothing at all for a Union of class objects — `k = cond ? Foo : Bar` then `k
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/types.rb`
+
+Completion answered nothing at all for a Union of class objects — `k =
+cond ? Foo : Bar` then `k.` — while either branch on its own answers.
+`Types.class_object_lookup` unwraps a receiver that IS a `ClassOf`, and
+a Union of them is not one, so `each_nominal` yielded a nominal
+literally named `ClassOf` and every source came back empty. This is
+`024.228`'s defect surviving in the one receiver shape that entry's fix
+does not reach; no register entry names it. Found in real code three
+times in two gem corpora.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Index `class Foo; def self.foo_only; end; def self.shared_cm; end; end` and `class Bar; def self.shared_cm; end; end`; `k = cond ? Foo : Bar` infers `ClassOf[Bar] | ClassOf[Foo]`; `members_of` at `k.`:
+  BASE:    total=0   (foo_only ABSENT, shared_cm ABSENT, new ABSENT, name ABSENT)
+  patched: total=198 (shared_cm conditional=false, foo_only conditional=true, new false, name false)
+Ruby (pasted as a session in the new spec): `k = (1 == 1) ? Foo : Bar; p [k.respond_to?(:shared_cm), k.respond_to?(:foo_only)]` # => [true, true].
+Soundness, both sides (scratchpad/w4mpv/mpv_soundness.rb): the 198 names the Union now offers are byte-for-byte the 198 the single `ClassOf[Foo]` control offers on BOTH sides — "names the union offers that the single control does not: []" — so this is the engine's existing class-object answer reaching one more receiver shape, not a new class of answer. 0 instance methods leak in. The 5 names neither branch responds to (append_features, extend_object, module_function, prepend_features, refine — Module's private API from RBS) are identical on the single-receiver control at BASE, so they are pre-existing and not introduced here.
+In corpora: activesupport core_ext/object/with.rb:44:6 (`[NilClass, TrueClass, FalseClass, Integer, Float, Symbol].each do |klass|` then `klass.`) 0 -> 247 members; notifications/fanout.rb:356:25 0 -> 244; actionpack testing/assertions/response.rb:98:17 (`handle = @controller || ActionController::Redirecting` then `handle.`) 0 -> 193, all conditional because the other branch is Unknown.
+```
+
+## 024.256 Go to definition still answers nothing for a Union of class objects, and this patch makes the as
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/types.rb`
+
+Go to definition still answers nothing for a Union of class objects, and
+this patch makes the asymmetry visible rather than creating it: after
+the patch, completion offers `shared_cm` at that receiver, signature
+help answers one signature (it did on both sides), and
+`textDocument/definition` returns zero — for a name the user can see in
+the completion list. `#definitions_of` hands the whole receiver to
+`MethodResolver#resolve`, whose `nominal_members` drops each `ClassOf`
+branch via `Types.base_nominal`. NOT FIXED HERE; it needs the same per-
+branch treatment in `#definitions_of`, which is a wider blast radius
+than this substitution.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Same fixture as above. `u = normalize_union([class_object(Nominal("Foo")), class_object(Nominal("Bar"))])`.
+  BASE:    members_of(u,'shared_cm')=[]            definitions_of(u,'shared_cm')=0  signatures_of=1
+  patched: members_of(u,'shared_cm')=["shared_cm"] definitions_of(u,'shared_cm')=0  signatures_of=1
+  CONTROL, single ClassOf[Foo], both sides: members=["shared_cm"] definitions=1 signatures=1
+Script scratchpad/w4mpv/mpv_probe.rb section [I].
+```
+
+## 024.257 An unrooted compact class path whose head resolves OUTWARD gets the enclosing frame glued onto i
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb`
+
+An unrooted compact class path whose head resolves OUTWARD gets the
+enclosing frame glued onto it, and both directions invert. `module App;
+class Other::Runner` written where no `App::Other` exists opens Ruby's
+frame `Other::Runner`; the walk records `App::Other::Runner`, which
+names nothing, so a bare constant falls through to the top-level class.
+The working call is reported as an unknown method and the raising call
+is silent. This is the case `024.112`'s last sentence explicitly claims
+is handled correctly, and it reproduces identically at BASE and after
+this patch -- the patch's rule keys on the leading `::` and this shape
+has none. It is a false report, not a decline.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Ruby first, so the expectation is not a belief:
+
+  $ ruby -e '
+  class Cfg; def top_only; end; end
+  class Other; class Runner; class Cfg; def cfg_only; end; end; end; end
+  module App
+    class Other::Runner
+      def nesting_here = Module.nesting
+      def go  = Cfg.new.cfg_only
+      def bad = Cfg.new.top_only
+    end
+  end
+  p Other::Runner.new.nesting_here
+  p ["go",  (Other::Runner.new.go  rescue $!.class)]
+  p ["bad", (Other::Runner.new.bad rescue $!.class)]
+  '
+  # => [Other::Runner, App]
+  # => ["go", nil]
+  # => ["bad", NoMethodError]
+  # ruby 3.4.10
+
+The engine, driven through `Diagnostics::Engine` in `mode: :standard`, filtering `unknown-method`, with three files indexed -- `class Cfg; def top_only; end; end`, `class Other; class Runner; class Cfg; def cfg_only; end; end; end; end`, and the reopening above. Identical output on both sides:
+
+  adjacent: unrooted compact head resolving outward (`App::Other` absent)
+    go  (Ruby: works)          expected []          got ["cfg_only"]
+    bad (Ruby: NoMethodError)  expected [top_only]  got []
+
+Probe: /private/tmp/claude-501/-Users-teruz-WorkSpace-Github-OvalLSP/ddb69b24-e368-4009-a94c-52359e9e3c7a/scratchpad/w4/entry112.rb (third block) and probe_compact2.rb.
+
+Why it is not fixed here: the frame is computed from the written path alone, and the written path is not enough to decide it -- Ruby resolves the compact head through the *enclosing* nesting, so `App::Other` existing or not changes the answer. Verified both ways:
+
+  $ ruby -e '
+  class Other; class Runner; end; end
+  module App; module Other; class Runner; end; end; end
+  module App
+    class Other::Runner
+      def nesting_here = Module.nesting
+    end
+  end
+  p App::Other::Runner.new.nesting_here
+  '
+  # => [App::Other::Runner, App]
+  # ruby 3.4.10
+
+So the fix belongs at `#locate_in_namespace`, where `@workspace_index` is in reach -- resolve the head with the same nesting lookup a bare constant gets (`#qualify_constant` against the *parent* cref, which is exactly Ruby's rule), then build the frame from the resolved head. That is a behaviour change over every compact class definition in every file and needs its own corpus; a control example for the inward-resolving case is already in `nested_bare_name_spec.rb` ("leaves an unrooted compact path qualified by the enclosing frame") and it is the one and only example that fails when the frame rule is over-applied, so the fixture to hold that fix is already in place.
+```
+
+## 024.258 `#visit_def_node`'s method-level `ensure` popped `@scope_stack` for a push its early `return` ha
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+`#visit_def_node`'s method-level `ensure` popped `@scope_stack` for a
+push its early `return` had skipped, so the frame the *enclosing*
+construct opened was thrown away and every local written after it was
+attributed one scope further out. Two unrelated locals of the same name
+then shared one `owner#scope_id` — the key `Semantic::ReferenceResolver`
+builds a local's SymbolId from and `Rename::Planner` selects edits by —
+so renaming one rewrote the other. No register entry names it.
+
+**A fix exists**, in the `049` substitution `parser-def-guard` — which is what
+found it. Building the single path made the difference visible; the
+duplicate path had looked like the working one.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Ruby first (a method body does not see the local scope it is written in):
+  $ ruby -e 'class A; v = 7; def m1; v; end; end; begin; A.new.m1; rescue NameError => e; p e.class; end'
+  # => NameError    (ruby 3.4.10)
+
+Driven through the real server, `textDocument/rename` at line 1 char 2 (the class-body `v`) of:
+  class A
+    v = 0
+    def m1
+      k = Class.new do
+        def h; end
+      end
+      v = 1
+      v
+    end
+  end
+
+BASE (7bce3c4) — three edits, two of them in a different variable:
+  {line: 1, character: 2}, {line: 6, character: 4}, {line: 7, character: 4}
+
+Control, the identical fixture with `Class.new do … end` replaced by a plain value — one edit:
+  {line: 1, character: 2}
+
+HEAD — [1] for the class-body local, and [3, 4] for the method's own (the second is the control against a wholesale decline).
+
+The scope-id shift, from the two directories the two corpus sides ran from, on `Anon = Class.new do; def a; n=1; n; end; def b; n=2; n; end; end`:
+  BEFORE: scope=2, scope=2, scope=1, scope=1     # `1` is the top-level scope the block's ensure had already popped past
+  AFTER:  scope=3, scope=3, scope=4, scope=4
+  named-class control identical on both sides (3, 3, 4, 4)
+```
+
+## 024.259 The same `ensure` restored `@included_hook_parameter` from a local the early `return` never assi
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+The same `ensure` restored `@included_hook_parameter` from a local the
+early `return` never assigned, clearing it to nil. An old-style
+concern's `def self.included(base)` then stopped recognising
+`base.extend(ClassMethods)` as the concern hook as soon as a `def`
+inside a nameless block preceded it, so no `concern_class_methods`
+ancestor fact was emitted and `HierarchyIndex` lost the edge that makes
+`include OldStyle` reach `OldStyle::ClassMethods`. No register entry
+names it.
+
+**A fix exists**, in the `049` substitution `parser-def-guard` — which is what
+found it. Building the single path made the difference visible; the
+duplicate path had looked like the working one.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Ruby (the hook runs and the class methods arrive whatever else the body contains):
+  $ ruby -e '
+  module OldStyle
+    def self.included(base)
+      Class.new { def h; end }
+      base.extend(ClassMethods)
+    end
+    module ClassMethods
+      def old_cm; :cm; end
+    end
+  end
+  class Article
+    include OldStyle
+  end
+  p Article.respond_to?(:old_cm)
+  '
+  # => true    (ruby 3.4.10)
+
+Parser output, `summary.ancestor_facts`:
+  BASE, that exact source:                       (none)
+  BASE, the same hook without the Class.new line: concern_class_methods ::OldStyle -> ClassMethods
+  HEAD, both:                                    concern_class_methods ::OldStyle -> ClassMethods
+
+Pinned as `keeps the included-hook parameter bound across a nameless def`, with the no-Class.new form as the control; the pinned_mutations entry (re-adding `@included_hook_parameter = nil` to `#walk_nameless_def`) turns it red: `caught: … (1 example, 1 failure)`.
+```
+
+## 024.260 `textDocument/rename` on a local misses every binding written as a compound or target node: `+=`
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+`textDocument/rename` on a local misses every binding written as a
+compound or target node: `+=` (`LocalVariableOperatorWriteNode`),
+`||=`/`&&=` (`LocalVariableOr/AndWriteNode`), a multiple-assignment
+target and a `rescue => e` binding (`LocalVariableTargetNode`).
+`ParserService::Visitor` records local references only from
+`#visit_local_variable_read_node` and
+`#visit_local_variable_write_node`, so those nodes produce no reference
+candidate at all. The result is not a decline: rename edits *some* of
+one variable's occurrences and leaves the rest, producing source that no
+longer runs. `core/lib/ovallsp/semantic_tokens.rb:118-120,244` already
+handles exactly these node kinds, so the gap is in the reference
+recorder alone. No register entry names it.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Ruby — all of these are one variable:
+  $ ruby -e '
+  def m
+    total = 0
+    total += 1
+    total ||= 2
+    other, total = 1, 3
+    begin
+      nil
+    rescue StandardError => total
+      total
+    end
+    total
+  end
+  p m
+  '
+  # => 3    (ruby 3.4.10)
+
+Driven through the real server at HEAD, rename `total` at line 2 char 4 of:
+   0| class A
+   1|   def m
+   2|     total = 0
+   3|     total += 1
+   4|     total ||= 2
+   5|     other, total = 1, 3
+   6|     begin
+   7|       nil
+   8|     rescue StandardError => total
+   9|       total
+  10|     end
+  11|     [1].each { |total| total }
+  12|     total
+  13|   end
+  14| end
+
+  edits: [[2, 4], [9, 6], [12, 4]]
+
+Lines 3, 4, 5 and 8 are silently left alone (line 11's `|total|` is correctly left alone — a block parameter shadows). After the rename the file has `renamed = 0` followed by `total += 1` on an undefined local. Identical at BASE, so this is pre-existing and not a regression.
+```
+
+## 024.261 `#visit_lambda_node` pushes no scope frame where `#visit_block_node` does, so a lambda body shar
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+`#visit_lambda_node` pushes no scope frame where `#visit_block_node`
+does, so a lambda body shares the enclosing scope id. A local created
+only inside a lambda is a distinct variable in Ruby, but the engine
+gives it the enclosing method's `owner#scope_id` and rename rewrites
+both. Adjacent to, and better fixed with, the scope-frame substitution
+that carries Prism's own `#locals`; I did not fix it here because two
+patches restructuring `@scope_stack` in the same release will not merge.
+No register entry names it.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Ruby — the lambda's `n` and the method's `n` are different variables:
+  $ ruby -e '
+  def m
+    f = -> { n = 2; n }
+    n = 1
+    [f.call, n]
+  end
+  p m
+  '
+  # => [2, 1]    (ruby 3.4.10)
+
+(If they were one variable, `f.call` would set it to 2 and the answer would be [2, 2].)
+
+Driven through the real server at HEAD, rename `n` at line 3 char 4 (the method's own local) of:
+   0| class A
+   1|   def m
+   2|     f = -> { n = 2; n }
+   3|     n = 1
+   4|     [f, n]
+   5|   end
+   6| end
+
+  edits: [[2, 13], [2, 20], [3, 4], [4, 8]]
+
+Both occurrences on line 2 are inside the lambda and are a different variable. Parser keys confirm the merge: every local in that fixture is `::A#3`. Identical at BASE — pre-existing, not a regression.
+```
+
+## 024.262 Rename leaves a closed-over local's uses inside a block behind, producing code that no longer ru
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+Rename leaves a closed-over local's uses inside a block behind,
+producing code that no longer runs. Find References misses them too. No
+register entry names this.
+
+**A fix exists**, in the `049` substitution `parser-scope-locals` — which is what
+found it. Building the single path made the difference visible; the
+duplicate path had looked like the working one.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Open `def m\n  thing = 1\n  [1].each { thing = 2 }\n  thing\nend\n`, caret on `thing` at (1,2), textDocument/rename newName="renamed".
+BASE 7bce3c4 -> `def m / renamed = 1 / [1].each { thing = 2 } / renamed / end` (the block's assignment is not rewritten; `thing` is now an undefined method call).
+WITH PATCH -> `[1].each { renamed = 2 }`.
+textDocument/references at the same caret: BASE [[0,0]] over the two-line form `thing = 1 / [1].each { thing }`; WITH PATCH [[0,0],[1,11],[2,0]] over `thing = 1 / [1].each { thing = 2 } / thing`.
+Ruby says they are one variable: `def m; w = 1; [1].each { w = 2 }; w; end` returns 2.
+```
+
+## 024.263 Rename rewrites an arrow lambda's own parameter when renaming a same-named enclosing local, sile
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+Rename rewrites an arrow lambda's own parameter when renaming a same-
+named enclosing local, silently changing what the lambda returns.
+`lambda { |v| }` was already correct, so the two spellings of one
+construct disagreed.
+
+**A fix exists**, in the `049` substitution `parser-scope-locals` — which is what
+found it. Building the single path made the difference visible; the
+duplicate path had looked like the working one.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Open `def m\n  v = 1\n  f = ->(v) { v }\n  v\nend\n`, caret on `v` at (1,2), textDocument/rename newName="renamed".
+BASE 7bce3c4 -> `f = ->(v) { renamed }` — the lambda stops returning its parameter and closes over the method local.
+WITH PATCH -> `f = ->(v) { v }`.
+textDocument/references at (1,2): BASE [[1,2],[2,14],[3,2]]; WITH PATCH [[1,2],[3,2]].
+Ruby: `v = 1; f = ->(v) { v * 10 }; f.call(7) # => 70; v # => 1`. Cause: `#visit_lambda_node` was the one scope node with no frame.
+```
+
+## 024.264 a false `unknown-method` on a concern's class methods
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+a false `unknown-method` on a concern's class methods. A `def` inside
+`base.class_eval do … end`, written before `base.extend(ClassMethods)`
+in `def self.included(base)`, cleared the recorded hook parameter, so
+the concern_class_methods ancestor fact was never produced.
+
+**A fix exists**, in the `049` substitution `parser-scope-locals` — which is what
+found it. Building the single path made the difference visible; the
+duplicate path had looked like the working one.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Two-file corpus, driven with scripts/corpus_diagnostics.rb on both sides over the identical directory (corpus-sha256=72085dc3a5cd99e20edc24995734b896c4f80838b22ab7f721bd166d23efc420):
+concerns.rb: `module Trackable; def self.included(base); base.class_eval do; def track_now; 1; end; end; base.extend(ClassMethods); end; module ClassMethods; def tracked?; true; end; end; end` plus an identical `Auditable` with nothing nested.
+uses.rb: `class Widget; include Trackable; end`, `class Gadget; include Auditable; end`, and a Caller calling `Widget.tracked?`, `Gadget.audited?`, `Gadget.audted?`.
+BASE 7bce3c4: count.unknown-method=2 — `uses.rb:12:11 Widget has no method named ``tracked?``` and `uses.rb:20:11 Gadget has no method named ``audted?```.
+WITH PATCH: count.unknown-method=1, stated as --expect-control=unknown-method:1 before the run and held — only the deliberate typo remains. `Gadget.audited?` silent on both sides.
+Cause: `previous_hook_parameter` was assigned BELOW `return super if @cref.nameless_context?` and restored unconditionally by the method-level `ensure`, so the early path restored nil.
+```
+
+## 024.265 the same `ensure` popped the scope stack without a matching push, so one `def` inside a nameless
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+the same `ensure` popped the scope stack without a matching push, so one
+`def` inside a nameless block emptied it and every later top-level local
+in the file was tagged `scope_id: nil`.
+
+**A fix exists**, in the `049` substitution `parser-scope-locals` — which is what
+found it. Building the single path made the difference visible; the
+duplicate path had looked like the working one.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+`ParserService#summarize` of `x = 1\nClass.new do\n  def a\n    q = 1\n  end\nend\nx = 2\nx\n`, reading the local_variable reference candidates' scope_ids.
+BASE 7bce3c4: x@0:0 -> 1, x@6:0 -> nil, x@7:0 -> nil.
+WITH PATCH: 1, 1, 1.
+The file already knew the rule: `#visit_namespace`'s comment says "Guarding with a bare early `return` above an `ensure` in this same method would have popped four stacks that were never pushed", and moved its pushes into `#within_namespace` for exactly this. `#visit_def_node` was the place where the shape was still written.
+```
+
+## 024.266 Find References and Rename ignore four of Prism's six local-variable node kinds
+
+```yaml
+status: done
+kind: defect
+user-visible: no
+user-visible-note: >
+  A duplicate of `024.260`, which two agents found independently in the
+  same measurement. The published limitation is there; this entry keeps
+  the second reproduction, which is the more precise of the two.
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+Find References and Rename ignore four of Prism's six local-variable
+node kinds. `n += 1`, `n ||= 2`, `n &&= 3` and every
+`LocalVariableTargetNode` (`a, b = 1, 2`; `for i in`; `rescue => e`;
+pattern captures) are not recorded as reference candidates at all, so
+Rename leaves them behind and writes code that does not run. No block or
+scope is needed to reproduce it.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Open `def m\n  n = 0\n  n += 1\n  n\nend\n`, caret on `n` at (1,2), textDocument/rename newName="renamed".
+BOTH SIDES (7bce3c4 and with this patch) -> `def m / renamed = 0 / n += 1 / renamed / end`. The `n += 1` line is untouched and now raises NameError/NoMethodError.
+Same on `def m\n  memo = nil\n  [1].each { memo ||= 1 }\n  memo\nend\n` -> `[1].each { memo ||= 1 }` left behind.
+Enumeration: `Prism.parse("n = 0\nn += 1\nn ||= 2\nn &&= 3\nn, m = 1, 2\nfor fi in [1]\n  fi\nend\nbegin\nrescue => er\n  er\nend\n")` yields LocalVariableWriteNode, LocalVariableOperatorWriteNode, LocalVariableOrWriteNode, LocalVariableAndWriteNode, LocalVariableTargetNode x4, LocalVariableReadNode x2. `core/lib/ovallsp/parser_service.rb` defines only `#visit_local_variable_read_node` (:850) and `#visit_local_variable_write_node` (:855).
+Deliberately NOT folded into this patch: it touches the same two visit methods, so mixing it would destroy the control this substitution's corpus and mutation evidence rests on, and it needs its own name-range decision per node kind, its own spec and its own drive. It is a small, self-contained one-file change and should be its own measured patch.
+```
+
+### The same defect as `024.260`, found twice in one pass
+
+Two agents building different substitutions arrived at it independently
+— one through the `def`-guard split, one through the scope frames — and
+neither could see the other's report. That is the shape worth keeping:
+the defect is in a path both substitutions had to touch, and neither
+entry is wrong.
+
+`024.260` carries the published limitation. This entry is folded into it
+and keeps the sharper statement of the count: **four of Prism's six
+local-variable node kinds** are ignored, not "some compound forms".
+
+
+## 024.267 latent, spec suite only
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets directly. Recorded because it was found by
+  driving the product and is invisible to a reader of the code.
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+latent, spec suite only. A constant assigned inside a `describe` block
+lands on Object, so two spec files using the same name silently redefine
+each other's fixture and one of them stops testing what it names.
+Nothing checks for it.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+I hit this while writing this change: my new spec defined `USES = <<~RUBY …` inside its describe block, and `core/spec/ovallsp/diagnostics/reopened_foreign_class_spec.rb:58` already defines `USES = "s = \"x\"\ns.squish\ns.blank?\ns.upcase\n"` the same way. Running `bundle exec rspec spec/ovallsp/parser_scope_frames_spec.rb spec/ovallsp/diagnostics --seed 1` produced a failure whose message was about neither file's subject (`expected ["audted?"] got []`), and the file that loaded second was the one silently changed. Fixed on my side by using `let`; the hazard remains.
+Scope of the exposure at 7bce3c4: `/usr/bin/grep -rnE "^  [A-Z][A-Z0-9_]+ *=" core/spec` and grouping by name shows every such constant is currently unique across the tree, so there are 0 live instances — it becomes a false-green the first time two files pick the same ordinary word. This is `024.126`'s family arriving from a different direction (a spec is tracked content, and a fixture name is a needle), and the cheap countermeasure is a meta example asserting no two spec files assign the same top-level constant.
+```
+
+## 024.268 `AgentProcessManager#force_kill` — the SIGKILL escalation behind a SIGTERM that never landed — i
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets directly. Recorded because it was found by
+  driving the product and is invisible to a reader of the code.
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/agent_process_manager.rb`
+
+`AgentProcessManager#force_kill` — the SIGKILL escalation behind a
+SIGTERM that never landed — is reached by no example in its own spec
+file, and the example whose comment claims to drive it asserts the
+opposite of what happens. Present at BASE.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+At BASE (7bce3c4), replace `#force_kill`'s first statement with a `raise`:
+
+    def force_kill
+      raise "PROBE: force_kill reached"
+      return unless @pid
+      ...
+
+then `cd core && bundle exec rspec spec/ovallsp/agent_process_manager_spec.rb` -> **34 examples, 0 failures**. The same probe against the equivalent line in the new shape, before the spec fix, also gave 34 examples, 0 failures.
+
+Why: the example "still tears down its pipes, reader thread and pid when the TERM signal itself fails to land" builds the ordinary `rails_minimal` fixture Agent and calls `#stop`, which sends `agent/shutdown` *before* teardown. That Agent obliges and exits, so by the time `ChildProcess.signal(pid, "TERM")` is refused with EPERM, `#wait_for_exit`'s very first `Process.wait(pid, WNOHANG)` reaps the corpse and answers `true` — `force_kill` is never called. The example finishes in **0.23s**; the escalation path costs at least the two-second wait. Its own comment says "The SIGKILL escalation is what must still get to run: TERM never landed, so nothing else would have ended this process", and the second clause is false.
+
+What that leaves unpinned: `#force_kill` is the only thing that ends a child which ignores or never receives SIGTERM, and `ChildProcess.reap`'s `Process.detach` fallback is the only thing that stops such a child becoming a zombie for the rest of the LSP session.
+
+Fixed in this patch: the example now uses `spec/fixtures/mute_agent/boot.rb`, which completes the handshake and then answers nothing — so the child is still alive when TERM is refused and the escalation is the only thing that can end it. After the fix the same `raise` probe gives **34 examples, 1 failure**, and removing the escalation (`wait_for_exit(child.pid, 2) || force_kill(child.pid)` -> `wait_for_exit(child.pid, 2)`) gives **1 example, 1 failure**. Both are now entries in `core/spec/meta/pinned_mutations.yml`.
+```
+
+## 024.269 `AgentProcessManager#alive?` is asserted only in the false direction
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets directly. Recorded because it was found by
+  driving the product and is invisible to a reader of the code.
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/agent_process_manager.rb`
+
+`AgentProcessManager#alive?` is asserted only in the false direction.
+Replacing its whole body with `false` leaves every example in its spec
+file green — so the method round 13 was written to make total could have
+been a constant, and a live Agent would be reported as gone. Present at
+BASE.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+Replace `#alive?`'s body with `false` and run `cd core && bundle exec rspec spec/ovallsp/agent_process_manager_spec.rb` -> **34 examples, 0 failures**. Five examples assert `alive?` is `false` (after `#stop`, after a cancelled start, after a hello timeout, and round 13's own "answers false rather than raising"); none asserts it is `true`. The `exit-hook retention` block checks liveness with the spec's own `process_alive?` helper, not with the method.
+
+Not user-visible: nothing under `core/lib` calls `#alive?` — it is a public probe used by specs and by anything embedding the manager. It is an unpinned behavioural line, which CLAUDE.md classes as a defect in its own right.
+
+Fixed in this patch: "leaves no process behind after #stop" now asserts `expect(@manager.alive?).to be(true)` while the Agent is running, before stopping it. The same probe then gives **34 examples, 1 failure**, and the mutation is recorded in `pinned_mutations.yml`.
+```
+
+## 024.270 Not a defect — recorded so nobody promotes it into one
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets directly. Recorded because it was found by
+  driving the product and is invisible to a reader of the code.
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/agent_process_manager.rb`
+
+Not a defect — recorded so nobody promotes it into one. `#log_stderr`
+re-read `@pid` per line at BASE, so a line pumped after the teardown had
+nil'd it would have been logged `[agent pid=]`. Driven on both sides, it
+does not reproduce.
+
+
+**Found by `051`'s follow-up measurement**, which built each remaining
+`049` substitution and drove the register entries it was expected to
+close. It closed almost none of them, and surfaced this instead.
+
+```
+A generated Agent that answers hello, writes N stderr lines and then `exit 1` (the shape of a crashing Agent writing its backtrace, since stdout EOF — which triggers the teardown — and the stderr backlog arrive together). `LINES=400` and `LINES=20000`, three runs each at BASE and two at HEAD, over a `RecordingLogger`:
+
+    start => :ready
+    stderr lines logged: 20000 of 20000
+    labelled with the agent's pid: 20000
+    labelled `[agent pid=]` (the slot had already been cleared): 0
+
+Identical on both sides. The pump always wins the race, because the teardown only starts once the reader thread sees stdout EOF, by which time the pump has drained. `#log_stderr(stderr_read, pid)` takes the pid as an argument now as a consequence of the slot going away, not as a fix; no example distinguishes the two, and I am not claiming one. The probe doubles as a control that the change did not break the labelling.
+```
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

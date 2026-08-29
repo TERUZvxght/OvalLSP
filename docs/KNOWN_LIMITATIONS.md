@@ -789,3 +789,90 @@ for this Preview — see
 not currently accepting external issues (see
 [CONTRIBUTING.md](../CONTRIBUTING.md)), so this work is tracked
 internally rather than via a public issue tracker for now.
+
+## What rename does that it should not
+
+Rename and Find References are listed as working, and there are shapes
+where they are not. Each of these was found in 0.2.16's closing
+measurement by driving the product; none had been reported before.
+
+- **Renaming a local leaves its uses inside a block behind**, producing
+  code that no longer runs. Find References misses them
+  too. <!-- documents: 024.262 -->
+- **Renaming a local rewrites an arrow lambda's own parameter** when the
+  lambda names its parameter the same thing, silently changing what the
+  lambda returns. `lambda { |v| … }` was already correct;
+  `->(v) { … }` was not. <!-- documents: 024.263 -->
+- **Renaming a local misses every binding written as `+=`, `||=`, `&&=`,
+  or as a multiple assignment target** — `a, b = 1, 2`, a `for` variable,
+  a rescue's `=> e`. Four of Ruby's six local-variable forms are ignored,
+  so the rename is partial and the file stops
+  running. <!-- documents: 024.260 -->
+- **Rename is refused outright on a class or module written inside
+  another class or module body**, while the identical position on the
+  compact `class A::B` spelling is offered. <!-- documents: 024.244 -->
+- **Rename asked before anything else has been asked answers nothing**,
+  because it is the one request of the three that does not bring the
+  reference index up to date first. <!-- documents: 024.245 -->
+- **A method defined on a local — `def obj.thing`** — is recorded against
+  the class the code is written in, so rename and go to definition answer
+  about the wrong thing. <!-- documents: 024.251 -->
+- **A lambda body shares the enclosing scope**, so a lambda parameter and
+  an outer local of the same name are treated as one
+  binding. <!-- documents: 024.261 -->
+
+## Completion on a value that could be two things, in detail
+
+`024.88` records that completion and the undefined-method check disagree
+about a union. Driving the union path turned up more:
+
+- **Every method a nilable union's branches inherit is labelled
+  conditional** — including the class's own methods — because the `nil`
+  branch cannot be asked. <!-- documents: 024.250 -->
+- **`save`, `destroy` and `find` on a union of two Active Record models
+  sort below columns that only one of them has**, although both models
+  certainly answer to them. <!-- documents: 024.254 -->
+- **Every `Object`/`Kernel` name on a union of two of your classes is
+  labelled one-branch-only**, which puts 121 of 122 completion items in
+  the bottom band. <!-- documents: 024.253 -->
+- **A method one branch declares `private` is offered as though every
+  branch had it**, and calling it raises. <!-- documents: 024.252 -->
+- **A union of *class objects* — `k = cond ? Foo : Bar` then `k.` —
+  completes nothing at all**, while either branch alone
+  completes. <!-- documents: 024.255 -->
+- **Go to definition answers nothing for that same union of class
+  objects.** <!-- documents: 024.256 -->
+- **A union branch's inherited names are asked about without walking the
+  chain**, so a name the branch really has can be labelled as missing
+  from it. <!-- documents: 024.249 -->
+
+## Signatures and constants your own `sig/` declares
+
+- **One unresolvable `include` in your own RBS makes the engine report a
+  method that the same file declares** — in the default mode, on a
+  workspace class. This is `024.223`'s family arriving at a reader that
+  was not fixed with it. <!-- documents: 024.246 -->
+- **A constant declared only in a signature file is reported as
+  unresolvable** when that file is the only place it
+  exists. <!-- documents: 024.247 -->
+- **An argument whose class has an ancestor nobody could identify raises
+  inside the argument check**, which stops that file's diagnostics
+  rather than declining. <!-- documents: 024.248 -->
+
+## Class bodies written in unusual shapes
+
+- **`module App; class Other::Runner`, where no `App::Other` exists**,
+  glues the enclosing frame onto a path that should resolve outward, and
+  both directions invert. <!-- documents: 024.257 -->
+- **A `def` inside a nameless block empties the scope stack**, so every
+  later top-level local in that file is tagged with the wrong
+  scope. <!-- documents: 024.265 -->
+- **A `def` with an early return leaves the enclosing construct's scope
+  frame popped**, throwing away the frame something else
+  opened. <!-- documents: 024.258 -->
+- **The same shape clears a concern's `def self.included(base)`
+  parameter**, so what the hook does to `base` is
+  lost. <!-- documents: 024.259 -->
+- **A `def` inside `base.class_eval do … end`, written before
+  `base.extend(ClassMethods)`, is falsely reported as an unknown
+  method.** <!-- documents: 024.264 -->
