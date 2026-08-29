@@ -2,13 +2,29 @@
 
 RSpec.describe Ovallsp::Index::TypeNameResolution do
   # `substitution?` needs one question answered about the signature
-  # environment -- "does anything declare this qualified name?" -- so the
-  # double answers exactly that, and nothing else. Loading real RBS here
-  # would couple these examples to whatever the stdlib declares.
+  # environment -- "does anything declare this name?" -- so the double
+  # answers exactly that, and nothing else. Loading real RBS here would
+  # couple these examples to whatever the stdlib declares.
+  #
+  # It qualifies the name itself because `Environment#declares?` does:
+  # the caller passes the bare name it was given, and where the rooted
+  # spelling is decided is the point of the method.
   def signatures_declaring(*qualified_names)
     double = Object.new
-    double.define_singleton_method(:ancestors) do |name|
-      qualified_names.include?(name) ? [name] : []
+    double.define_singleton_method(:declares?) do |name|
+      qualified_names.include?(Ovallsp::Index::SymbolId.qualify_owner(name))
+    end
+    double
+  end
+
+  # The third answer: declared, and the chain could not be built
+  # (`024.223`). Every other name is one the signature set has never
+  # heard of, so an example using this double still distinguishes the
+  # two.
+  def signatures_unable_to_build(*qualified_names)
+    double = Object.new
+    double.define_singleton_method(:declares?) do |name|
+      qualified_names.include?(Ovallsp::Index::SymbolId.qualify_owner(name)) ? nil : false
     end
     double
   end
@@ -54,6 +70,22 @@ RSpec.describe Ovallsp::Index::TypeNameResolution do
 
     it "is no substitution when the index had no answer" do
       expect(described_class.substitution?("String", nil, signatures_declaring("::String"))).to be(false)
+    end
+
+    # `024.246`. The question here is declaration, not enumeration: a
+    # name whose ancestry could not be built is still a name signatures
+    # declare, so the workspace class that merely shares its last segment
+    # is still standing in for it. Reading that third answer as an
+    # absence switched the refusal off, and the engine reported a method
+    # against the wrong class entirely -- `024.223`'s cause arriving at a
+    # reader that entry does not enumerate. Written `== true` this
+    # example fails and every other one in this block passes.
+    it "still recognises a substitution when the chain could not be built" do
+      expect(
+        described_class.substitution?(
+          "String", "Serializer::Elements::String", signatures_unable_to_build("::String")
+        )
+      ).to be(true)
     end
 
     it "is no substitution for a bare name signatures do not declare" do

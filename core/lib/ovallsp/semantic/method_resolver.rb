@@ -224,19 +224,15 @@ module Ovallsp
         # every method of that class as missing, naming the class whose sig
         # declares them (`024.223`).
         #
-        # This fires only on the sentinel, which `Signatures::Environment`
-        # produces only for a type RBS *does* declare, so a type it has
-        # never heard of is unaffected and keeps the answer below.
-        return false if signature_unavailable?(entry, signatures)
+        # `nil` is that case and only that case: `#declares?` answers it
+        # for a type RBS *does* declare and could not build, so a type it
+        # has never heard of comes back `false` and keeps the answer
+        # below.
+        declared = signatures.declares?(entry.name)
+        return false if declared.nil?
         return true if entry.kind
 
-        !signatures.ancestors(Index::SymbolId.qualify_owner(entry.name)).empty?
-      end
-
-      def signature_unavailable?(entry, signatures)
-        Signatures::Environment.unavailable?(
-          signatures.ancestors(Index::SymbolId.qualify_owner(entry.name))
-        )
+        declared
       end
 
       # Whether the chain ends where Ruby ends it: at `::BasicObject`.

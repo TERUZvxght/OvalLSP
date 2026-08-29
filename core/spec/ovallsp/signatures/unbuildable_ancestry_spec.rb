@@ -124,12 +124,58 @@ RSpec.describe "a project signature whose ancestry cannot be built" do
     Ovallsp::Signatures::Environment.unavailable?(value)
   end
 
+  # `024.246`/`024.247`. Four callers derived "the signature environment
+  # declares this name" from `!ancestors(...).empty?`, and each had to
+  # remember two things the chain does not tell them: to qualify the name
+  # first, and that one of the empty chains is the sentinel above. Two of
+  # them forgot the second, so a class the project's own `sig/` declares
+  # read as a name signatures have never heard of.
+  #
+  # `#declares?` decides both here, and it answers three things rather
+  # than two because the questions its callers ask have opposite safe
+  # directions -- "is this constant known" must fail towards *known*,
+  # "is this receiver's surface complete" must fail towards *incomplete*
+  # -- so no single boolean is safe for both.
+  describe "#declares?" do
+    it "answers true for a declared name whose chain was built" do
+      environment_for(UNBUILDABLE_RESOLVABLE_RBS) do |environment|
+        expect(environment.declares?("App::Key")).to be(true)
+      end
+    end
+
+    it "answers nil, not false, for a declared name whose chain could not be built" do
+      environment_for(UNBUILDABLE_UNRESOLVABLE_RBS) do |environment|
+        expect(environment.declares?("App::Key")).to be_nil
+      end
+    end
+
+    it "answers false for a name the signature set has never heard of" do
+      environment_for(UNBUILDABLE_UNRESOLVABLE_RBS) do |environment|
+        expect(environment.declares?("NoSuchTypeAnywhere")).to be(false)
+      end
+    end
+
+    # The qualification the four callers each had to remember. A bare
+    # name and a rooted one are the same name, and `#ancestors` answers
+    # only for the rooted spelling.
+    it "answers the same for a bare name and a rooted one" do
+      environment_for(UNBUILDABLE_RESOLVABLE_RBS) do |environment|
+        expect(environment.declares?("::App::Key")).to be(true)
+      end
+    end
+  end
+
   # The user-visible half. The workspace declares `App::Key` in Ruby, so
   # `MethodResolver#accounted_for?` returns true on `entry.kind` alone and
   # the chain reads as complete -- while the only place `digest` is
   # declared is the RBS whose build just failed.
   describe "the report it produced" do
-    def findings_for(rbs, source: UNBUILDABLE_RUBY_SOURCE)
+    # `mode:` because the two entries below need different ones and each
+    # needs the one it names: `unresolved-constant` runs only at
+    # `:standard` or above, while `:safe` is what the shipped extension
+    # gets -- nothing under `vscode/` sets
+    # `initializationOptions.diagnosticsMode`.
+    def findings_for(rbs, source: UNBUILDABLE_RUBY_SOURCE, mode: :standard, ancestry_registry: nil)
       Dir.mktmpdir("unbuildable-ancestry-engine-") do |root|
         FileUtils.mkdir_p(File.join(root, "sig"))
         File.write(File.join(root, "sig", "app.rbs"), rbs)
@@ -150,10 +196,11 @@ RSpec.describe "a project signature whose ancestry cannot be built" do
           method_resolver: stack.method_resolver, local_inferencer: stack.local_inferencer,
           model_registry: Ovallsp::Models::ModelRegistry.new,
           route_registry: Ovallsp::Routes::RouteRegistry.new,
+          ancestry_registry: ancestry_registry,
           signatures: signatures, generation: 1
         )
         Ovallsp::Diagnostics::Engine.new
-                .analyze(document: document, semantic_context: context, mode: :standard)
+                .analyze(document: document, semantic_context: context, mode: mode)
                 .map(&:message)
       end
     end
@@ -216,6 +263,165 @@ RSpec.describe "a project signature whose ancestry cannot be built" do
 
       expect(findings_for(UNBUILDABLE_UNRESOLVABLE_RBS, source: source))
         .to contain_exactly(a_string_including("definitely_absent"))
+    end
+
+    # `024.246`. The same cause at a reader `024.223` does not enumerate:
+    # it names `#compute_ancestors`' readers and
+    # `MethodResolver#accounted_for?`, and this is
+    # `Index::TypeNameResolution.substitution?`.
+    #
+    # That rule refuses to report about a *bare* inferred type the
+    # workspace answered with a differently-namespaced class of its own —
+    # here the RBS `Widget` against the workspace's `Zoo::Widget`. It
+    # decided "signatures declare this name" from `!ancestors(...).empty?`,
+    # so the unbuildable chain switched the refusal off and the engine
+    # reported `label` against the wrong class entirely.
+    #
+    # The receiver has to *arrive* bare, which is why the type comes back
+    # from a signature rather than being written: a written `Zoo::Widget`
+    # carries its namespace and `WorkspaceIndex#guessed_type_name?` blanks
+    # it one line earlier.
+    describe "a bare inferred type the workspace answers with a class of its own" do
+      SUBSTITUTION_RESOLVABLE_RBS = <<~RBS
+        class Widget
+          def label: () -> String
+        end
+        class Factory
+          def make: () -> Widget
+        end
+      RBS
+
+      SUBSTITUTION_UNRESOLVABLE_RBS =
+        SUBSTITUTION_RESOLVABLE_RBS.sub("class Widget\n") { "class Widget\n  include _ToJson\n" }
+
+      SUBSTITUTION_SOURCE = <<~SRC
+        module Zoo
+          class Widget
+            def zoo_only
+              :here
+            end
+          end
+
+          class Other
+            def planted_bad
+              definitely_absent
+            end
+          end
+        end
+
+        w = Factory.new.make
+        w.label
+      SRC
+
+      it "reports only what nothing declares, when the chain builds" do
+        expect(findings_for(SUBSTITUTION_RESOLVABLE_RBS, source: SUBSTITUTION_SOURCE, mode: :safe))
+          .to contain_exactly(a_string_including("definitely_absent"))
+      end
+
+      # The control is inside the expectation: `definitely_absent` has to
+      # stay, so an engine that answered by declining wholesale fails
+      # here rather than passing.
+      it "keeps refusing to substitute when the chain cannot be built" do
+        expect(findings_for(SUBSTITUTION_UNRESOLVABLE_RBS, source: SUBSTITUTION_SOURCE, mode: :safe))
+          .to contain_exactly(a_string_including("definitely_absent"))
+      end
+    end
+
+    # `024.247`. `Engine#rbs_known_constant?` derived its answer from the
+    # same emptiness, so "declared, chain unbuildable" read as "RBS does
+    # not know this name" and the engine reported `cannot resolve
+    # constant` naming a class the project's own `sig/` declares. The
+    # method's own comment already says it must fail towards *known*
+    # (`024.122`); the sentinel is what it could not see.
+    #
+    # The Ruby *references* the name rather than declaring it: a name the
+    # workspace index settles never reaches the signature environment.
+    describe "a constant declared only in the signature file" do
+      CONSTANT_ONLY_SOURCE = <<~SRC
+        module App
+          def self.use
+            App::Key
+          end
+
+          def self.planted_bad
+            DefinitelyAbsentConstant
+          end
+        end
+      SRC
+
+      it "resolves the constant when the chain builds" do
+        expect(findings_for(UNBUILDABLE_RESOLVABLE_RBS, source: CONSTANT_ONLY_SOURCE))
+          .to contain_exactly(a_string_including("DefinitelyAbsentConstant"))
+      end
+
+      it "still resolves it when the chain cannot be built" do
+        expect(findings_for(UNBUILDABLE_UNRESOLVABLE_RBS, source: CONSTANT_ONLY_SOURCE))
+          .to contain_exactly(a_string_including("DefinitelyAbsentConstant"))
+      end
+    end
+
+    # The reader that must go the OTHER way, and the one place the shared
+    # predicate is not a free substitution.
+    #
+    # `Engine#locally_accounted_for?` decides whether an ancestor the
+    # running application reported is one static analysis already
+    # accounts for. A `yes` concludes the receiver is not reopened
+    # elsewhere and lets the check report every name it cannot find — so
+    # the question is not whether signatures *declare* the ancestor but
+    # whether anything can say what it *contributes*. A chain that could
+    # not be built declares the name and enumerates nothing.
+    #
+    # `049` proposed converting this reader together with the other
+    # three, on the reasoning that they all ask one question. Built and
+    # measured, it reported a method missing on a receiver whose
+    # Agent-reported ancestor is declared in the project's own sig with
+    # that very method on it. The two arms below differ by one line of
+    # RBS and give different answers, so the direction is pinned rather
+    # than merely present.
+    describe "an ancestor only the running application reported" do
+      FOREIGN_ANCESTOR_RESOLVABLE_RBS = <<~RBS
+        module Vendor
+          class Thing
+            def shout: () -> String
+          end
+        end
+      RBS
+
+      FOREIGN_ANCESTOR_UNRESOLVABLE_RBS =
+        FOREIGN_ANCESTOR_RESOLVABLE_RBS.sub("  class Thing\n") { "  class Thing\n    include _ToJson\n" }
+
+      # `Receiver`'s own static chain is complete and reaches
+      # `BasicObject`, so nothing about *it* is in doubt. Only the
+      # foreign ancestor's chain is broken, which is the shape this
+      # reader exists for.
+      FOREIGN_ANCESTOR_SOURCE = <<~SRC
+        class Receiver
+          def use
+            shout
+          end
+        end
+      SRC
+
+      def findings_with_agent(rbs)
+        registry = Ovallsp::Runtime::AncestryRegistry.new
+        registry.install(
+          object_ancestors: %w[Object Kernel BasicObject],
+          classes: { "Receiver" => { ancestors: %w[Receiver Vendor::Thing Object Kernel BasicObject] } }
+        )
+        findings_for(rbs, source: FOREIGN_ANCESTOR_SOURCE, mode: :safe, ancestry_registry: registry)
+      end
+
+      # The control, and it is the existing rule: an ancestor RBS knows
+      # is not evidence that the surface was reopened, so the check keeps
+      # firing.
+      it "reports when the foreign ancestor's chain builds" do
+        expect(findings_with_agent(FOREIGN_ANCESTOR_RESOLVABLE_RBS))
+          .to contain_exactly(a_string_including("shout"))
+      end
+
+      it "declines when the foreign ancestor's chain could not be built" do
+        expect(findings_with_agent(FOREIGN_ANCESTOR_UNRESOLVABLE_RBS)).to be_empty
+      end
     end
   end
 end

@@ -52,13 +52,21 @@ module Ovallsp
       end
 
       # No `rescue` here, and none in `MethodResolver#accounted_for?`
-      # either: `Signatures::Environment#ancestors` answers `[]` for a
+      # either: `Signatures::Environment#declares?` answers `false` for a
       # name it cannot parse or does not know, so a blanket rescue at each
       # caller could only ever hide a *different* failure -- and there
       # were two of them, agreeing about a containment that already lived
       # where the failure happens. `environment_spec` pins that answer.
+      #
+      # `!= false` because the question here is declaration, not
+      # enumeration: a name whose ancestry could not be built is still a
+      # name signatures declare, so a workspace class that merely shares
+      # its last segment is still standing in for it. Reading that third
+      # answer as an absence switched the refusal off and handed the
+      # engine a receiver it had not identified, which is the one case
+      # this rule exists to refuse (`024.246`).
       def declared_by_signatures?(name, signatures)
-        !signatures.ancestors(SymbolId.qualify_owner(name)).empty?
+        signatures.declares?(name) != false
       end
     end
   end

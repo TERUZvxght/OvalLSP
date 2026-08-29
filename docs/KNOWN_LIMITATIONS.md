@@ -821,43 +821,6 @@ measurement by driving the product; none had been reported before.
   an outer local of the same name are treated as one
   binding. <!-- documents: 024.261 -->
 
-## Completion on a value that could be two things, in detail
-
-`024.88` records that completion and the undefined-method check disagree
-about a union. Driving the union path turned up more:
-
-- **Every method a nilable union's branches inherit is labelled
-  conditional** — including the class's own methods — because the `nil`
-  branch cannot be asked. <!-- documents: 024.250 -->
-- **`save`, `destroy` and `find` on a union of two Active Record models
-  sort below columns that only one of them has**, although both models
-  certainly answer to them. <!-- documents: 024.254 -->
-- **Every `Object`/`Kernel` name on a union of two of your classes is
-  labelled one-branch-only**, which puts 121 of 122 completion items in
-  the bottom band. <!-- documents: 024.253 -->
-- **A method one branch declares `private` is offered as though every
-  branch had it**, and calling it raises. <!-- documents: 024.252 -->
-- **A union of *class objects* — `k = cond ? Foo : Bar` then `k.` —
-  completes nothing at all**, while either branch alone
-  completes. <!-- documents: 024.255 -->
-- **Go to definition answers nothing for that same union of class
-  objects.** <!-- documents: 024.256 -->
-- **A union branch's inherited names are asked about without walking the
-  chain**, so a name the branch really has can be labelled as missing
-  from it. <!-- documents: 024.249 -->
-
-## Signatures and constants your own `sig/` declares
-
-- **One unresolvable `include` in your own RBS makes the engine report a
-  method that the same file declares** — in the default mode, on a
-  workspace class. This is `024.223`'s family arriving at a reader that
-  was not fixed with it. <!-- documents: 024.246 -->
-- **A constant declared only in a signature file is reported as
-  unresolvable** when that file is the only place it
-  exists. <!-- documents: 024.247 -->
-- **An argument whose class has an ancestor nobody could identify raises
-  inside the argument check**, which stops that file's diagnostics
-  rather than declining. <!-- documents: 024.248 -->
 
 ## Class bodies written in unusual shapes
 

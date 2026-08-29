@@ -580,7 +580,14 @@ module Ovallsp
         return true if UNIVERSAL_ANCESTORS.include?(target)
         return true if COERCES_TO.fetch(simple_name(actual.name), []).include?(target)
 
+        # `nil` is "the chain has a hole in it", and the answer is to
+        # decline. The reachable set is a lower bound even when it is
+        # complete, so a miss computed from a chain with an unnameable
+        # link in it is not evidence of a mismatch -- the link nobody
+        # could name may well *be* the expected type (`024.248`).
         reachable = ancestor_names(actual.name, context)
+        return true if reachable.nil?
+
         reachable.include?(target)
       end
 
@@ -593,6 +600,21 @@ module Ovallsp
       # `simple_name` and claimed that without it no workspace ancestor
       # ever matched; no input reaches that, and both removing it and
       # doubling it leave every answer unchanged.
+      #
+      # `nil` when the chain has a link nobody could identify. This was
+      # the sixth reader of the chain and the one with no `#identified?`
+      # guard, so `AncestorEntry#name` raised -- deliberately, since
+      # there is no way to *spell* the owner of an edge nobody resolved
+      # (`024.80`) -- straight out of `#analyze`, and the whole document
+      # lost every diagnostic rather than this one comparison declining.
+      # `Server#publish_diagnostics` rescues without publishing, so the
+      # editor kept whatever it was last shown for that file: a stale
+      # answer that looks live, frozen from the keystroke that wrote the
+      # call (`024.248`).
+      #
+      # Skipping the unnameable link instead would answer with a set that
+      # is silently short a branch, which is the shape that lets a caller
+      # assert a mismatch from a question it could not ask.
       def ancestor_names(name, context)
         # Every workspace ancestor in both spellings. `HierarchyIndex`
         # returns a workspace-resolved entry `::`-qualified and an
@@ -605,7 +627,10 @@ module Ovallsp
         # `simple_name_of`, not `bare_name`: a namespaced `::Zoo::Animal`
         # has to reach `Animal`, which stripping the prefix does not do,
         # and it is the form `TypeConverter` gives the RBS side.
-        found = context.hierarchy_index.ancestors(name).map(&:name)
+        entries = context.hierarchy_index.ancestors(name)
+        return nil unless entries.all?(&:identified?)
+
+        found = entries.map(&:name)
         workspace = ([name] + found + ([name] + found).map { |entry| simple_name_of(entry) }).uniq
 
         # `Signatures::Environment#ancestors` resolves a *qualified* name:
@@ -719,8 +744,16 @@ module Ovallsp
       # user's code made from a question that could not be asked. Failing
       # towards "known" declines instead, which is the direction §0 asks
       # for and the one every other refusal in this file takes.
+      #
+      # `!= false` is that same rule applied to the third answer
+      # `#declares?` carries: a chain that could not be built is a name
+      # the signature file *does* declare, and reading it as an absence
+      # reported `cannot resolve constant` naming a class the project's
+      # own `sig/` declares (`024.247`). The rescue stays because its
+      # argument is about a failure of any kind, not about the one
+      # failure `#declares?` now distinguishes.
       def rbs_known_constant?(name, signatures)
-        !signatures.ancestors(qualified_owner(name)).empty?
+        signatures.declares?(name) != false
       rescue StandardError
         true
       end
@@ -1002,11 +1035,24 @@ module Ovallsp
       # own code", and a workspace `Assertions` answering for a gem's
       # `ActiveSupport::Testing::Assertions` is how one same-named constant
       # anywhere in the project silently defeated the evidence.
+      #
+      # **`== true`, and it is the opposite direction from
+      # `#rbs_known_constant?` above.** What the caller does with a `yes`
+      # here is conclude the receiver is *not* reopened elsewhere and
+      # report every name it cannot find, so the question is not whether
+      # the signature set declares this ancestor but whether anything can
+      # say what the ancestor *contributes*. A chain that could not be
+      # built declares the name and enumerates nothing, and taking that
+      # as an accounting is `024.223` re-entering through a different
+      # door -- measured on the shape where the receiver's own chain is
+      # fine and only a foreign ancestor's is broken, which is the shape
+      # this method exists for. The strict comparison keeps the third
+      # answer out.
       def locally_accounted_for?(name, context)
         resolved = context.workspace_index.resolve_type_name(name)
         return true if resolved && Index::SymbolId.bare_name(resolved) == Index::SymbolId.bare_name(name)
 
-        context.signatures && !context.signatures.ancestors(qualified_owner(name)).empty?
+        context.signatures&.declares?(name) == true
       end
 
       # Every Ruby class inherits from BasicObject, so a chain that does

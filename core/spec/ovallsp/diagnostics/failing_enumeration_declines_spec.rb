@@ -48,9 +48,22 @@ RSpec.describe "Ovallsp::Diagnostics::Engine when it cannot enumerate" do
     # example above and fails this one.
     it "declines rather than reports when the question cannot be asked" do
       broken = instance_double(Ovallsp::Signatures::Environment)
-      allow(broken).to receive(:ancestors).and_raise(IOError, "gone")
+      allow(broken).to receive(:declares?).and_raise(IOError, "gone")
 
       expect(engine.send(:rbs_known_constant?, "Whatever", broken)).to be(true)
+    end
+
+    # `024.247`, and the same rule one step in: the third answer
+    # `#declares?` carries is "declared, and the chain could not be
+    # built", which is not an absence. Reading it as one reported
+    # `cannot resolve constant` naming a class the project's own `sig/`
+    # declares. An implementation written `== true` passes both examples
+    # above and fails this one.
+    it "declines for a name signatures declare but could not build a chain for" do
+      unbuildable = instance_double(Ovallsp::Signatures::Environment)
+      allow(unbuildable).to receive(:declares?).and_return(nil)
+
+      expect(engine.send(:rbs_known_constant?, "Whatever", unbuildable)).to be(true)
     end
   end
 end

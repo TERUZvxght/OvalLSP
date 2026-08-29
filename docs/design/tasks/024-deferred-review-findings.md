@@ -413,17 +413,17 @@ nobody can search is the recording habit without the benefit.
 | [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 0.3.0 | Signature help says nothing for a receiverless call inside a module … |
 | [`024.244`](#024244-preparerename-is-refused-on-any-class-or-module-written-inside-a-module-class-body-while-th) | open | 0.2.17 | prepareRename is refused on any class or module written inside a `mo… |
 | [`024.245`](#024245-server-prepare-rename-result-does-not-call-ensure-reference-index-current-while-referenc) | open | 0.2.17 | `Server#prepare_rename_result` does not call `#ensure_reference_inde… |
-| [`024.246`](#024246-one-unresolvable-include-in-a-project-s-own-rbs-makes-the-engine-report-a-method-the-same-file) | open | 0.2.17 | One unresolvable `include` in a project's own RBS makes the engine r… |
-| [`024.247`](#024247-a-constant-declared-only-in-a-signature-file-is-reported-cannot-resolve-constant-when-that-fil) | open | 0.2.17 | A constant declared only in a signature file is reported `cannot res… |
-| [`024.248`](#024248-diagnostics-engine-ancestor-names-calls-ancestorentry-name-with-no-identified-guard-so) | open | 0.2.17 | `Diagnostics::Engine#ancestor_names` calls `AncestorEntry#name` with… |
-| [`024.249`](#024249-queryservice-member-available-on-asked-the-signature-environment-about-the-union-branch-s-own) | open | 0.2.17 | `QueryService#member_available_on?` asked the signature environment … |
-| [`024.250`](#024250-queryservice-member-available-on-cannot-answer-about-a-nil-branch-so-every-member-of-a-nil) | open | 0.2.17 | `QueryService#member_available_on?` cannot answer about a `nil` bran… |
+| [`024.246`](#024246-one-unresolvable-include-in-a-project-s-own-rbs-makes-the-engine-report-a-method-the-same-file) | fixed | 0.2.17 | One unresolvable `include` in a project's own RBS makes the engine r… |
+| [`024.247`](#024247-a-constant-declared-only-in-a-signature-file-is-reported-cannot-resolve-constant-when-that-fil) | fixed | 0.2.17 | A constant declared only in a signature file is reported `cannot res… |
+| [`024.248`](#024248-diagnostics-engine-ancestor-names-calls-ancestorentry-name-with-no-identified-guard-so) | fixed | 0.2.17 | `Diagnostics::Engine#ancestor_names` calls `AncestorEntry#name` with… |
+| [`024.249`](#024249-queryservice-member-available-on-asked-the-signature-environment-about-the-union-branch-s-own) | fixed | 0.2.17 | `QueryService#member_available_on?` asked the signature environment … |
+| [`024.250`](#024250-queryservice-member-available-on-cannot-answer-about-a-nil-branch-so-every-member-of-a-nil) | fixed | 0.2.17 | `QueryService#member_available_on?` cannot answer about a `nil` bran… |
 | [`024.251`](#024251-def-local-method-is-recorded-on-the-lexically-enclosing-class) | open | 0.2.17 | `def <local>.method` is recorded on the lexically enclosing class |
-| [`024.252`](#024252-conditional-says-a-method-is-on-every-branch-of-a-union-when-one-branch-declares-it-private-s) | open | 0.2.17 | `conditional` says a method is on every branch of a Union when one b… |
-| [`024.253`](#024253-every-object-kernel-inherited-name-on-a-union-of-two-workspace-classes-was-labelled-one-branch-o) | open | 0.2.17 | Every Object/Kernel-inherited name on a Union of two workspace class… |
-| [`024.254`](#024254-active-record-s-own-api-is-labelled-one-branch-only-on-a-union-of-two-models-so-save-destroy) | open | 0.2.17 | Active Record's own API is labelled one-branch-only on a Union of tw… |
-| [`024.255`](#024255-completion-answered-nothing-at-all-for-a-union-of-class-objects-k-cond-foo-bar-then-k) | open | 0.2.17 | Completion answered nothing at all for a Union of class objects — `k… |
-| [`024.256`](#024256-go-to-definition-still-answers-nothing-for-a-union-of-class-objects-and-this-patch-makes-the-as) | open | 0.2.17 | Go to definition still answers nothing for a Union of class objects,… |
+| [`024.252`](#024252-conditional-says-a-method-is-on-every-branch-of-a-union-when-one-branch-declares-it-private-s) | fixed | 0.2.17 | `conditional` says a method is on every branch of a Union when one b… |
+| [`024.253`](#024253-every-object-kernel-inherited-name-on-a-union-of-two-workspace-classes-was-labelled-one-branch-o) | fixed | 0.2.17 | Every Object/Kernel-inherited name on a Union of two workspace class… |
+| [`024.254`](#024254-active-record-s-own-api-is-labelled-one-branch-only-on-a-union-of-two-models-so-save-destroy) | fixed | 0.2.17 | Active Record's own API is labelled one-branch-only on a Union of tw… |
+| [`024.255`](#024255-completion-answered-nothing-at-all-for-a-union-of-class-objects-k-cond-foo-bar-then-k) | fixed | 0.2.17 | Completion answered nothing at all for a Union of class objects — `k… |
+| [`024.256`](#024256-go-to-definition-still-answers-nothing-for-a-union-of-class-objects-and-this-patch-makes-the-as) | fixed | 0.2.17 | Go to definition still answers nothing for a Union of class objects,… |
 | [`024.257`](#024257-an-unrooted-compact-class-path-whose-head-resolves-outward-gets-the-enclosing-frame-glued-onto-i) | open | 0.2.17 | An unrooted compact class path whose head resolves OUTWARD gets the … |
 | [`024.258`](#024258-visit-def-node-s-method-level-ensure-popped-scope-stack-for-a-push-its-early-return-ha) | fixed | 0.2.17 | `#visit_def_node`'s method-level `ensure` popped `@scope_stack` for … |
 | [`024.259`](#024259-the-same-ensure-restored-included-hook-parameter-from-a-local-the-early-return-never-assi) | fixed | 0.2.17 | The same `ensure` restored `@included_hook_parameter` from a local t… |
@@ -15544,10 +15544,11 @@ The local-variable row is the clean one: source `def a\n  x = 1\n  x\nend\n`, ca
 ## 024.246 One unresolvable `include` in a project's own RBS makes the engine report a method the same file
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/signatures/environment.rb`, `core/lib/ovallsp/index/type_name_resolution.rb`
@@ -15623,13 +15624,14 @@ The receiver has to *arrive* bare, which is why the type comes back from a signa
 ## 024.247 A constant declared only in a signature file is reported `cannot resolve constant` when that fil
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Nothing a user meets directly. Recorded because it was found by
   driving the product and is invisible to a reader of the code.
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/signatures/environment.rb`, `core/lib/ovallsp/index/type_name_resolution.rb`
@@ -15696,10 +15698,11 @@ And on a corpus rather than a fixture — this repository's own `core/lib` (87 f
 ## 024.248 `Diagnostics::Engine#ancestor_names` calls `AncestorEntry#name` with no `identified?` guard, so
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb`, `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/diagnostics/engine.rb`
@@ -15752,10 +15755,11 @@ HONEST COST, and it is the precedent 024.31 already set ('removing a wrong silen
 ## 024.249 `QueryService#member_available_on?` asked the signature environment about the Union branch's OWN
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb`, `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/diagnostics/engine.rb`
@@ -15787,13 +15791,37 @@ Spec watched failing (`core/spec/ovallsp/semantic/union_conditional_members_spec
 Blast radius: completion ordering only — `Member#conditional` is read in exactly one place, `Server#member_completion_items`, where it selects `MEMBER_ON_ONE_BRANCH`/`MEMBER_ON_EVERY_BRANCH` for `sortText`. Both corpora are byte-identical, which is consistent rather than contradictory: `corpus_diagnostics.rb` runs the diagnostics engine and never asks `members_of`.
 ```
 
+### Fixed in 0.2.17, by deleting the lookup
+
+`#member_available_on?` is gone, and with it the fifth opinion. It
+was asked one name at a time *after* the four sources had answered,
+which is what made it a copy of a question already settled --
+`#members_of` now enumerates each Union branch on its own and a name
+is unconditional exactly when every branch's enumeration produced
+it. There is no chain left to walk a second time, and so no chain to
+walk differently.
+
+Driven on the entry's own fixture, `Widget | Gadget`: unconditional
+members 1 of 122 before, 121 of 122 after; `frozen?` and `to_s`
+conditional before, not after. Controls unchanged both sides:
+`shared_zzz` false, `widget_only_zzz` true.
+
+**What it leaves behind, deliberately.** `MethodResolver#complete`
+still merges its own per-type `conditional`, and
+`#add_source_members` no longer reads it. That is dead output rather
+than a competing authority -- its only caller now hands it one
+branch, so its answer is always `false` -- and removing the field
+changes a public method's shape and its `method_resolver_spec`
+examples, which is a change of its own rather than part of this one.
+
 ## 024.250 `QueryService#member_available_on?` cannot answer about a `nil` branch, so EVERY member of a nil
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb`, `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/diagnostics/engine.rb`
@@ -15830,6 +15858,35 @@ close. It closed almost none of them, and surfaced this instead.
 
 This is the measurement 024.88's last paragraph records ('121 members offered today, 0 of them unconditional, including the class's own methods') and it now has a cause. Fixing it is one line — map `Types::NIL` to `Nominal("NilClass")` before the chain lookup — but it changes the sort order of every nilable receiver's completion list, which is a corpus-and-drive question rather than a free one.
 ```
+
+### Fixed in 0.2.17 -- half of it, because the other half was not a defect
+
+A `nil` branch is now enumerated as `NilClass`, which
+`Types.class_of` already names and this does not restate. On
+`Widget | nil`: 0 of 121 members unconditional before, 120 of 121
+after, with `spin` -- the class's own method -- the one that stays
+conditional.
+
+**That one is the entry reading its own defect too wide.** It says
+"*every* member ... including the class's own methods", and the
+class's own method really is conditional on a nilable receiver: the
+nil branch really does raise. `query_service_spec`'s "keeps members
+conditional on a nilable receiver" is the control that says so and it
+still passes. Only the second half -- the names `nil` answers -- was
+wrong.
+
+**And the nil branch is counted without being offered from**, which
+is a rule and was decided by measurement rather than by taste.
+Letting it offer its names too is the simpler rule; over
+activesupport 8.1.3.1's `lib` (289 files, 1,569 receiver positions)
+it moves 37 positions, of which 27 are `Unknown | nil` -- where
+nothing else can be enumerated, so the whole offer would have been
+`NilClass`'s 150 names at a receiver whose only certain property is
+that it is not what the caller wants (`@max_key_size.` and
+`module_parent_name.split(` are two of them). Counting but not
+offering moves 8, every one of them an improvement. A receiver that
+is *only* `nil` still offers them: there is nothing else it could
+mean.
 
 ## 024.251 `def <local>.method` is recorded on the lexically enclosing class
 
@@ -15904,10 +15961,11 @@ So the engine records a singleton method Ruby puts nowhere near `Runner`, and `R
 ## 024.252 `conditional` says a method is on every branch of a Union when one branch declares it private, s
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/types.rb`
@@ -15937,13 +15995,26 @@ Ruby (pasted as a session in the new spec, re-run by scripts/check_interpreter_s
 Control in the same fixture: both declarations public -> conditional=false on both sides. Script scratchpad/w4mpv/mpv_probe.rb section [D]; spec `keeps a member conditional when the other Union branch declares it private`, watched failing at BASE.
 ```
 
+### Fixed in 0.2.17
+
+The per-branch enumeration answers this by construction: `#complete`
+filters visibility, so `Priv`'s branch never produces `shared`, so
+the fold counts one branch of two and the member is conditional. The
+old lookup asked `#resolve`, which does not filter, and got the
+opposite answer from the same tree.
+
+`Pub | Priv`, `shared`: conditional false before, true after.
+Control in the same fixture, both declarations public: false on both
+sides.
+
 ## 024.253 Every Object/Kernel-inherited name on a Union of two workspace classes was labelled one-branch-o
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/types.rb`
@@ -15966,13 +16037,23 @@ Index `class P; def only_p; end; def both; end; end` and `class Q; def both; end
 Controls unchanged both sides: `both` false, `only_p` true. Script scratchpad/w4mpv/mpv_probe.rb section [C]; spec `calls a member every Union branch inherits from Object unconditional`.
 ```
 
+### Fixed in 0.2.17
+
+`P | Q`, prefix `""`: unconditional 1 of 122 before, 121 of 122
+after; `to_s`, `inspect`, `frozen?` and `tap` conditional before, not
+after. Controls unchanged both sides: `both` false, `only_p` true.
+
+The cause is `024.249`'s, and so is the fix -- this entry is what it
+looks like from the completion list.
+
 ## 024.254 Active Record's own API is labelled one-branch-only on a Union of two models, so `save`/`destroy
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/types.rb`
@@ -15997,13 +16078,26 @@ Register models `User` (column email) and `Post` (column title), `install_active
 Control (`User | String`, one branch a model): save conditional=true on both sides. Script scratchpad/w4mpv/mpv_probe.rb sections [F] and [F2]; spec `calls the Active Record API unconditional when every Union branch is a model`.
 ```
 
+### Fixed in 0.2.17
+
+`#add_active_record_api_members` runs per branch like the other
+three, so the API a branch produces is the API that branch is counted
+as having. Nothing had to be taught about `ModelRegistry`; the
+lookup that could not see it is gone.
+
+`User | Post`, both models: `save` `origin=model_api` conditional
+true before, false after. Controls: `email` and `title` conditional
+on both sides, and `User | String` keeps `save` conditional on both
+sides.
+
 ## 024.255 Completion answered nothing at all for a Union of class objects — `k = cond ? Foo : Bar` then `k
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/types.rb`
@@ -16031,13 +16125,31 @@ Soundness, both sides (scratchpad/w4mpv/mpv_soundness.rb): the 198 names the Uni
 In corpora: activesupport core_ext/object/with.rb:44:6 (`[NilClass, TrueClass, FalseClass, Integer, Float, Symbol].each do |klass|` then `klass.`) 0 -> 247 members; notifications/fanout.rb:356:25 0 -> 244; actionpack testing/assertions/response.rb:98:17 (`handle = @controller || ActionController::Redirecting` then `handle.`) 0 -> 193, all conditional because the other branch is Unknown.
 ```
 
+### Fixed in 0.2.17
+
+Each branch gets its own `Types.class_object_lookup`, so a
+`ClassOf[Foo]` member is unwrapped as the class object it is instead
+of being read as a class named `ClassOf`. `ClassOf[Foo] |
+ClassOf[Bar]`: 0 members before, 198 after, `shared_cm` unconditional
+and `foo_only` conditional.
+
+Soundness, pinned in the spec rather than only measured: the names
+the Union offers are a subset of the ones the single `ClassOf[Foo]`
+control offers, so this is the engine's existing class-object answer
+reaching one more receiver shape rather than a new kind of answer.
+
+A *mixed* Union -- one class object and one branch nothing can
+enumerate -- is handled by the same move, because the unwrap is per
+branch rather than a property the whole receiver has to have.
+
 ## 024.256 Go to definition still answers nothing for a Union of class objects, and this patch makes the as
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/types.rb`
@@ -16065,6 +16177,26 @@ Same fixture as above. `u = normalize_union([class_object(Nominal("Foo")), class
   CONTROL, single ClassOf[Foo], both sides: members=["shared_cm"] definitions=1 signatures=1
 Script scratchpad/w4mpv/mpv_probe.rb section [I].
 ```
+
+### Fixed in 0.2.17, and the entry's own verdict on itself was right
+
+Driven at BASE before anything was changed:
+`definitions_of(ClassOf[Foo] | ClassOf[Bar], "shared_cm")` answered
+0, with the single-`ClassOf[Foo]` control answering 1. So the
+completion fix *made the silence visible* rather than causing it,
+exactly as the entry says.
+
+Two places had to ask per branch, and neither is a band reordering:
+`#definitions_of`'s source band, because
+`MethodResolver#nominal_members` reads a Union by dropping every
+member it cannot name and a `ClassOf` is one of those; and
+`#rbs_lookup_chains`, because `Types.class_object_lookup` answers
+about one receiver and a Union of class objects is not one. The
+*bands* stay whole-receiver and in their existing order -- they rank
+by authority, not by branch, and each already asked per nominal.
+
+Now 2 locations for `shared_cm` and 1 for `foo_only`, with a name
+neither branch declares still answering nothing.
 
 ## 024.257 An unrooted compact class path whose head resolves OUTWARD gets the enclosing frame glued onto i
 

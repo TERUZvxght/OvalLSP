@@ -376,3 +376,52 @@
   to: "          node.block.accept(self)\n"
   spec: spec/ovallsp/parser_def_frame_spec.rb
   example: "opens the ClassMethods surface for an unreadable macro in the block"
+
+- why: "024.253's per-branch fold -- enumerating the whole receiver once instead of each branch, which is what re-derived `conditional` from a fifth lookup that agreed with none of the four."
+  file: core/lib/ovallsp/semantic/query_service.rb
+  from: "        per_branch = receiver_members(receiver_type).map { |branch| [branch, branch_members(branch, prefix, context)] }\n"
+  to: "        per_branch = [[receiver_type, branch_members(receiver_type, prefix, context)]]\n"
+  spec: spec/ovallsp/semantic/union_branch_members_spec.rb
+  example: "still calls a source method only one branch declares conditional"
+- why: "024.252's single authority for `conditional` -- deciding it anywhere but from what each branch enumerated."
+  file: core/lib/ovallsp/semantic/query_service.rb
+  from: "          member.with(conditional: per_branch.any? { |_, candidates| !candidates.key?(name) })\n"
+  to: "          member.with(conditional: false)\n"
+  spec: spec/ovallsp/semantic/union_branch_members_spec.rb
+  example: "a name the other branch declares private keeps it conditional"
+- why: "024.250's nil branch -- enumerating it as the class nil is an instance of, without which no member of a nilable Union can be unconditional."
+  file: core/lib/ovallsp/semantic/query_service.rb
+  from: "        return branch unless branch.is_a?(Types::NilType)\n"
+  to: "        return branch\n"
+  spec: spec/ovallsp/semantic/union_branch_members_spec.rb
+  example: "calls a name nil answers to unconditional"
+- why: "The measured half of the nil rule -- a nil branch counts but is not offered from, which is what keeps `Unknown | nil` from offering NilClass's 150 names."
+  file: core/lib/ovallsp/semantic/query_service.rb
+  from: "        branch_count == 1 || !branch.is_a?(Types::NilType)\n"
+  to: "        true\n"
+  spec: spec/ovallsp/semantic/union_branch_members_spec.rb
+  example: "does not offer what only the nil branch has"
+- why: "The fold's authority order -- ranking two branches' answers for one name by `ORIGIN_AUTHORITY` instead of by the order the sources run in, which puts an RBS signature above Active Record's API."
+  file: core/lib/ovallsp/semantic/query_service.rb
+  from: "      def source_rank(member) = SOURCE_ORDER.index(member.origin) || SOURCE_ORDER.length\n"
+  to: "      def source_rank(member) = ORIGIN_AUTHORITY.fetch(member.origin, 9)\n"
+  spec: spec/ovallsp/semantic/union_branch_members_spec.rb
+  example: "keeps the origin a single branch would give a name two sources produce"
+- why: "024.256's source band, per branch -- handing the whole Union to `MethodResolver#resolve`, whose `nominal_members` drops every ClassOf member."
+  file: core/lib/ovallsp/semantic/query_service.rb
+  from: "          @method_resolver ? @method_resolver.resolve(receiver_type: branch, name: method_name, context: context) : []\n"
+  to: "          @method_resolver ? @method_resolver.resolve(receiver_type: receiver_type, name: method_name, context: context) : []\n"
+  spec: spec/ovallsp/semantic/union_branch_members_spec.rb
+  example: "answers go to definition for a name the completion list offers"
+- why: "024.255's per-branch class-object unwrap in the RBS chains -- asking `Types.class_object_lookup` about a Union, which is not a class object, so every chain asks RBS about a class named ClassOf."
+  file: core/lib/ovallsp/semantic/query_service.rb
+  from: "          subject, singleton = Types.class_object_lookup(branch, singleton: context[:singleton] == true)\n"
+  to: "          subject, singleton = Types.class_object_lookup(receiver_type, singleton: context[:singleton] == true)\n"
+  spec: spec/ovallsp/semantic/union_branch_members_spec.rb
+  example: "answers go to definition for a name only RBS declares on the class object"
+- why: "The dedup in `#definitions_of`'s per-branch source band -- two branches inheriting one method each answer with the same declaration, and offering the identical jump twice is a choice the call does not have."
+  file: core/lib/ovallsp/semantic/query_service.rb
+  from: "          candidate.declarations.map { |uri, decl| { uri: uri, range: decl.location } }\n        end.uniq\n"
+  to: "          candidate.declarations.map { |uri, decl| { uri: uri, range: decl.location } }\n        end\n"
+  spec: spec/ovallsp/semantic/union_branch_members_spec.rb
+  example: "answers with that declaration once, not once per branch"

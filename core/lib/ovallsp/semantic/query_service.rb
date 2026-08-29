@@ -28,9 +28,17 @@ module Ovallsp
     # declared parameter names where they are known, `:unknown_arity`
     # where the method takes arguments whose names are not (Rails' own
     # `(*, **, &)` methods), and `[]` where it takes none.
+    #
+    # `conditional` defaults **because none of the sources that build a
+    # Member can compute it**: it is a fact about the *receiver's*
+    # branches, not about the name, and `QueryService#merge_branches`
+    # sets it on every Member that leaves this class. Stating it at each
+    # of the four construction sites was four places asserting a value
+    # none of them could know, and none of those assertions survived the
+    # fold. Nothing can read the default.
     Member = Data.define(:name, :origin, :conditional, :visibility, :detail, :parameters) do
-      def initialize(parameters: [], **rest)
-        super(parameters: parameters, **rest)
+      def initialize(parameters: [], conditional: false, **rest)
+        super(parameters: parameters, conditional: conditional, **rest)
       end
     end
 
@@ -81,15 +89,34 @@ module Ovallsp
       # `receiver_type`, merged across source declarations, Active Record
       # model facts, and RBS/Gem signatures, ranked by
       # [conditional, origin authority, name].
+      #
+      # **One branch at a time.** The four sources used to be handed the
+      # whole receiver, which flattened a Union into its Nominals and lost
+      # which branch supplied each name -- and `conditional`, the only
+      # thing separating "every branch has this" from "picking this raises
+      # NoMethodError on the other branch", was then re-derived from the
+      # name alone by a *fifth* lookup that agreed with none of the four.
+      # It disagreed in both directions at once: it asked RBS about the
+      # branch's own name with no ancestor chain, so every name Ruby gives
+      # every object came back absent (`024.249`, `024.253` -- 121 of 122
+      # items in the one-branch-only band, which inverts the list
+      # 0.2.15's `sortText` work exists to order); it asked
+      # `MethodResolver#resolve`, which does not filter visibility, so a
+      # method one branch declares `private` came back present
+      # (`024.252`, and offering a call that raises is the direction
+      # section 0 ranks worst); Active Record's own API was not something
+      # it asked about at all (`024.254`); and a `nil` branch it could not
+      # unwrap answered `false` for every name (`024.250`).
+      #
+      # Enumerating per branch answers it by construction: a name is
+      # unconditional exactly when every branch's own enumeration produced
+      # it, so the enumeration that offers a member is the one that counts
+      # it and nothing is left to agree with anything.
       def members_of(receiver_type, prefix: "", context: {})
-        candidates = {}
-        add_source_members(candidates, receiver_type, prefix, context)
-        add_model_members(candidates, receiver_type, prefix)
-        add_active_record_api_members(candidates, receiver_type, prefix)
-        add_signature_members(candidates, receiver_type, prefix, context)
-        normalize_union_conditionals(candidates, receiver_type, context)
+        per_branch = receiver_members(receiver_type).map { |branch| [branch, branch_members(branch, prefix, context)] }
 
-        candidates.values.sort_by { |m| [m.conditional ? 1 : 0, ORIGIN_AUTHORITY.fetch(m.origin, 9), m.name] }
+        merge_branches(per_branch)
+          .sort_by { |m| [m.conditional ? 1 : 0, ORIGIN_AUTHORITY.fetch(m.origin, 9), m.name] }
       end
 
       # Every location `receiver_type#method_name` could resolve to:
@@ -100,9 +127,26 @@ module Ovallsp
       # declaration as a best-effort "go to the generating type"
       # (docs/design/tasks/013-unified-semantic-queries-and-lsp-features.md
       # "generated symbol自体に物理位置がない場合は、生成元DSLまたはschemaへ移動する").
+      #
+      # **The source band asks one branch at a time**, the same move
+      # `#source_signatures` already makes and for the same reason
+      # `#receiver_members` exists: `MethodResolver#nominal_members` reads
+      # a Union by dropping every member it cannot name, and a
+      # `ClassOf[Foo]` member is one of those -- only `MethodResolver`
+      # knows to read it as Foo's singleton chain, and it is told that by
+      # `#normalize_class_receiver`, which a Union never reaches. So
+      # `k = cond ? Foo : Bar` then `k.shared_cm` resolved to nothing at
+      # all, for a name completion now offers at that very position
+      # (`024.256`). The *bands* stay whole-receiver: they are ordered by
+      # authority, not by branch, and each of them already asks per
+      # nominal.
       def definitions_of(receiver_type, method_name, context: {})
-        source = @method_resolver ? @method_resolver.resolve(receiver_type: receiver_type, name: method_name, context: context) : []
-        locations = source.flat_map { |candidate| candidate.declarations.map { |uri, decl| { uri: uri, range: decl.location } } }
+        source = receiver_members(receiver_type).flat_map do |branch|
+          @method_resolver ? @method_resolver.resolve(receiver_type: branch, name: method_name, context: context) : []
+        end
+        locations = source.flat_map do |candidate|
+          candidate.declarations.map { |uri, decl| { uri: uri, range: decl.location } }
+        end.uniq
         return locations unless locations.empty?
 
         # The same rule `#signatures_of` applies, for the same reason: an
@@ -183,53 +227,129 @@ module Ovallsp
 
       private
 
-      # The one place that decides `conditional`, and the reason the
-      # sources above can all report `false`: a receiver that is not a
-      # Union has exactly one branch, so nothing it offers is conditional
-      # on which branch was taken, and `ClassOf` is only ever built over a
-      # single Nominal.
+      # One branch's members, keyed by name. The same four calls the whole
+      # receiver used to get, in the order `SOURCE_ORDER` names as
+      # origins -- `#add_model_members` produces two of them -- and the
+      # first to produce a name keeps it, which is all the `||=` in each
+      # of them does. That is what makes a source declaration outrank a
+      # column and a column outrank RBS.
       #
-      # Each source used to count for itself how many branches had a name,
-      # which was both dead (its answer was overwritten here for the only
-      # receiver shape where it could be anything but `false`) and wrong
-      # where it was read: a name can be supplied by different origins on
-      # different Union members -- a model column on one and RBS on the
-      # other -- and a per-origin count labels that common name
-      # conditional. Availability is recomputed here per receiver instead.
-      def normalize_union_conditionals(candidates, receiver_type, context)
-        return unless receiver_type.is_a?(Types::Union)
+      # **`MethodResolver#complete` caps its answer, so the cap is now per
+      # branch** rather than over the flattened receiver. That is the one
+      # way this is weaker than the pass it replaces, and it errs the
+      # cheap way round: truncation only ever removes a name from a
+      # branch, so it can only move a label *toward* conditional, never
+      # into the every-branch band on a receiver that would raise. The
+      # list still offers the name either way.
+      def branch_members(branch, prefix, context)
+        receiver = branch_receiver(branch)
+        candidates = {}
+        add_source_members(candidates, receiver, prefix, context)
+        add_model_members(candidates, receiver, prefix)
+        add_active_record_api_members(candidates, receiver, prefix)
+        add_signature_members(candidates, receiver, prefix, context)
+        candidates
+      end
 
-        variants = receiver_type.members
-        candidates.transform_values! do |member|
-          conditional = variants.any? { |variant| !member_available_on?(variant, member.name, context) }
-          member.with(conditional: conditional)
+      # The receiver a branch is enumerated as -- itself, except `nil`.
+      #
+      # Every one of the four sources keys on a class name and
+      # `Types::NilType` is not one, so a `nil` branch produced no names
+      # at all and the fold below then called *every* member of a nilable
+      # Union one-branch-only -- `to_s`, `inspect` and `frozen?` among
+      # them, which `nil` answers as readily as anything else does. That
+      # is `024.250`, and `Widget | nil` is the commonest Union this
+      # engine builds, so it was most of what a user sees.
+      #
+      # Only half of that entry is a defect, and this fixes that half:
+      # the class's own method really *is* conditional on a nilable
+      # receiver, because the nil branch really does raise.
+      # `query_service_spec`'s "keeps members conditional on a nilable
+      # receiver" is the control that says so, and it still passes.
+      #
+      # Which class `nil` is an instance of is `Types.class_of`'s to say
+      # and is not restated here; `Types.class_object_lookup` is the one
+      # place that takes the `ClassOf` it answers apart. The side that
+      # lookup pairs with the class is the side to ask *a class object*
+      # for, which is a different question from the one here -- a `nil`
+      # branch is an ordinary instance -- so it is dropped and the
+      # caller's own `context[:singleton]` still decides.
+      def branch_receiver(branch)
+        return branch unless branch.is_a?(Types::NilType)
+
+        Types.class_object_lookup(Types.class_of(branch)).first
+      end
+
+      # The order the four sources run in, which is also the order that
+      # decides which one owns a name two of them produce. Written down
+      # because it now has a second reader -- the fold below, choosing
+      # between two branches' answers for one name -- and a fold that
+      # ranked by `ORIGIN_AUTHORITY` instead would put an RBS signature
+      # above Active Record's API, which is the opposite of what a single
+      # branch does. `union_branch_members_spec`'s "keeps the
+      # higher-authority origin" is the example that tells the two apart.
+      SOURCE_ORDER = %i[source model_column model_association model_api signature].freeze
+      private_constant :SOURCE_ORDER
+
+      # **`conditional` is decided here and nowhere else**: a name every
+      # branch's enumeration produced is unconditional, and any other name
+      # is not. There is no availability question left to ask, because the
+      # enumeration that offers the member is the same one that counts it.
+      def merge_branches(per_branch)
+        merged = {}
+        per_branch.each do |branch, candidates|
+          next unless offers_names?(branch, per_branch.length)
+
+          candidates.each do |name, member|
+            held = merged[name]
+            merged[name] = member if held.nil? || source_rank(member) < source_rank(held)
+          end
+        end
+        merged.map do |name, member|
+          member.with(conditional: per_branch.any? { |_, candidates| !candidates.key?(name) })
         end
       end
 
-      def member_available_on?(receiver_type, name, context)
-        source = @method_resolver&.resolve(receiver_type: receiver_type, name: name, context: context)
-        return true unless source.nil? || source.empty?
-
-        nominal = case receiver_type
-                  when Types::Nominal then receiver_type
-                  when Types::Generic then Types::Nominal.new(name: receiver_type.name)
-                  end
-        return false unless nominal
-
-        if @model_registry&.known_model?(nominal.name)
-          return true if @model_registry.column(nominal.name, name) || @model_registry.association(nominal.name, name)
-        end
-
-        singleton = context[:singleton] == true
-        @signatures&.member_names(qualify(nominal.name), prefix: name, singleton: singleton)&.include?(name) || false
+      # **A `nil` branch decides availability without being a source of
+      # members**, and it is the only branch treated that way.
+      #
+      # The two halves of what a Union's list is for come apart here.
+      # *Which names are safe* is a question about every branch, `nil`
+      # included -- that is `024.250`, and answering it needs the nil
+      # branch enumerated. *Which names to offer* is a question about what
+      # the user is reaching for, and on `Widget | nil` that is never the
+      # nil branch: nobody types `widget.` meaning `NilClass#to_r`.
+      #
+      # Measured over activesupport 8.1.3.1's `lib` (289 files, 1,569
+      # receiver positions) before deciding, because letting nil offer its
+      # names too is the simpler rule and would have been the one to keep
+      # if the difference were small. It is not. **The simpler rule** moves
+      # 37 positions, 27 of them `Unknown | nil` -- where nothing else can
+      # be enumerated, so the whole offer would have been `NilClass`'s 150
+      # names at a receiver whose only certain property is that it is not
+      # what the caller wants (`@max_key_size.` and
+      # `module_parent_name.split(` are two of them). **This rule** moves
+      # 8, and every one of the 8 is a receiver that gains a real answer.
+      #
+      # A receiver that is *only* `nil` still offers them, because there
+      # is nothing else it could mean and `nil.to_s` is a real call.
+      def offers_names?(branch, branch_count)
+        branch_count == 1 || !branch.is_a?(Types::NilType)
       end
 
+      def source_rank(member) = SOURCE_ORDER.index(member.origin) || SOURCE_ORDER.length
+
+      # `MethodResolver#complete` answers a `conditional` of its own, and
+      # it is deliberately **not** read here: it is handed one branch, so
+      # its answer is always `false`, and passing it through would make it
+      # a second opinion about a question `#merge_branches` owns -- which
+      # is the arrangement this change removed.
       def add_source_members(candidates, receiver_type, prefix, context)
         return unless @method_resolver
 
         @method_resolver.complete(receiver_type: receiver_type, prefix: prefix, context: context).each do |result|
           candidates[result[:name]] ||= Member.new(
-            name: result[:name], origin: :source, conditional: result[:conditional],
+            name: result[:name], origin: :source,
             visibility: nil, detail: nil,
             parameters: source_parameter_names(receiver_type, result[:name], context)
           )
@@ -268,7 +388,7 @@ module Ovallsp
           next unless name.start_with?(prefix)
 
           candidates[name] ||= Member.new(
-            name: name, origin: :model_api, conditional: false, visibility: nil, detail: nil,
+            name: name, origin: :model_api, visibility: nil, detail: nil,
             parameters: takes_arguments&.include?(name) ? :unknown_arity : []
           )
         end
@@ -314,7 +434,7 @@ module Ovallsp
 
         details.each do |(origin, name), detail|
           candidates[name] ||= Member.new(
-            name: name, origin: origin, conditional: false, visibility: :public, detail: detail
+            name: name, origin: origin, visibility: :public, detail: detail
           )
         end
       end
@@ -340,7 +460,7 @@ module Ovallsp
         end
         names.each do |name|
           candidates[name] ||= Member.new(
-            name: name, origin: :signature, conditional: false, visibility: nil, detail: nil
+            name: name, origin: :signature, visibility: nil, detail: nil
           )
         end
       end
@@ -657,10 +777,23 @@ module Ovallsp
       # ever reached when the first did not answer, and it cannot answer
       # either. A `.uniq` here was a line no example could fail on,
       # which this project counts as a defect of its own.
+      #
+      # **One branch at a time**, because `Types.class_object_lookup`
+      # answers about one receiver and a Union of class objects is not
+      # one: handed the whole thing it declined to unwrap, `#each_nominal`
+      # then read each `ClassOf[Foo]` member as a class literally named
+      # `ClassOf`, and every chain asked RBS about a class that does not
+      # exist. `024.228`'s defect surviving in the one receiver shape that
+      # entry's fix does not reach (`024.255`, `024.256`). Each branch
+      # gets its own unwrap and so its own side, which is what a mixed
+      # Union -- one class object and one instance -- needs and what a
+      # single lookup over the whole receiver cannot express.
       def rbs_lookup_chains(receiver_type, context)
-        subject, singleton = Types.class_object_lookup(receiver_type, singleton: context[:singleton] == true)
-        each_nominal(subject).map do |nominal|
-          [[nominal.name, singleton]] + signature_owners(nominal, singleton)
+        receiver_members(receiver_type).flat_map do |branch|
+          subject, singleton = Types.class_object_lookup(branch, singleton: context[:singleton] == true)
+          each_nominal(subject).map do |nominal|
+            [[nominal.name, singleton]] + signature_owners(nominal, singleton)
+          end
         end
       end
 

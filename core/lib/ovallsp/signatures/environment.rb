@@ -141,6 +141,37 @@ module Ovallsp
         @mutex.synchronize { @ancestor_cache[type_name] ||= compute_ancestors(type_name) }
       end
 
+      # Whether the loaded signatures declare `name`. Four callers derived
+      # this from `!ancestors(...).empty?`, and each had to remember two
+      # things the chain does not tell them: to qualify the name first,
+      # and that one of the empty chains is the sentinel above. Two of
+      # them forgot the second, so a class the project's own `sig/`
+      # declares read as a name signatures have never heard of --
+      # `024.246` and `024.247`. Both decisions live here now, so a reader
+      # that forgets cannot be the reason a declared name looks absent.
+      #
+      #   true  -- declared, and the chain was built, so what the type
+      #            contributes can be enumerated.
+      #   nil   -- declared, and the chain could not be built (`024.223`).
+      #            **Not an absence.** Nothing can say what this type
+      #            contributes, so the caller has to choose which way it
+      #            declines rather than being handed one.
+      #   false -- the signature set has never heard of this name.
+      #
+      # Three answers rather than two because the questions the callers
+      # ask have opposite safe directions -- "is this constant known"
+      # must fail towards *known*, "is this receiver's surface complete"
+      # must fail towards *incomplete* -- so no single boolean is safe
+      # for both. What the third value buys over the sentinel is that
+      # neither `== true` nor `!= false` can be written by accident,
+      # which `[] == UNAVAILABLE` could.
+      def declares?(name)
+        chain = ancestors(Index::SymbolId.qualify_owner(name))
+        return nil if Environment.unavailable?(chain)
+
+        !chain.empty?
+      end
+
       # Every method name (including inherited ones) starting with
       # `prefix`, for completion against a receiver whose type has no
       # source declaration to complete against (Task 013's "RBS/Gem
