@@ -1,6 +1,12 @@
 # 050 — where 0.2.16 stands, and what is staged but not applied
 
-Written to stop, not to finish. Rate limits made continuing the wrong
+**Superseded by `051`. 0.2.16 shipped.** Everything this document lists
+as staged, withheld or not run was finished afterwards, and `051` records
+what happened to each. This file is kept as it was written — it is the
+state at the moment the release was paused, and rewriting it would erase
+the pause rather than record it.
+
+*Written to stop, not to finish.* Rate limits made continuing the wrong
 call, so this records the state precisely enough that the next session
 does not re-derive it.
 

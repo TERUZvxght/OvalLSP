@@ -194,6 +194,23 @@ suite counts and corpus diffs on both sides — is in the audit's own
 transcript. What is carried forward into the register is the subset with
 a defect attached.
 
+## Where the two built substitutions actually live
+
+Two of the eleven were implemented and left on local branches while the
+audit ran, and a branch nothing names is a pointer to nothing. Named
+here, with what each one is:
+
+| branch | what it holds | measured |
+|---|---|---|
+| `spike/049-visit-def-guard` | `#visit_def_node`'s guard split out of the method carrying the `ensure`, and `@skip_block_frame` deleted — a one-shot flag set in one method and read eighty lines away | moving parts 5 → 1; suites identical both sides |
+| `spike/049-scope-locals` | scope frames carry Prism's own `#locals` and the frame that binds a name is picked, replacing a counter and a stack that had to stay in step | moving parts 6 → 3; two corpora, controls held, 0-line diffs |
+
+**Both are local to the machine the audit ran on and are not pushed.**
+That is deliberate rather than an oversight: their conclusions are in
+this document, 0.3.0 will re-derive from it, and the branches are a
+convenience rather than the record. A session that cannot see them has
+lost nothing but the typing.
+
 ## Method, and its one honest limit
 
 Eight subsystems, one auditor each, given `048` to read first and told
