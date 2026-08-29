@@ -11542,6 +11542,23 @@ found one of nineteen and reported the rest of the tree clean.
 The place that mattered is `doc_links_spec.rb`'s coverage failure message,
 because that sentence is what a future failure prints at its reader.
 
+### The fifth place, found by the verifier and corrected in the same release
+
+Closed as "fixed in the four places, quantifier only" — and a fifth
+tracked place still asserted it, in `046`, the document this entry's own
+Area names. `046`'s A0 narrative said the founding census was "every one
+in a source comment", three lines above the A0 paragraph that *was*
+corrected.
+
+Re-derived rather than argued: the A0-era checker restored from its own
+commit and run against the tree of the day gives 19 citations, 5 paths,
+17 distinct files — eighteen `.rb` comments and one Markdown document,
+the plugin SDK's, since deleted by `024.234`. Its path is described
+rather than written: this entry is about a census of citations that
+resolve to nothing, and writing one here makes this file the twentieth.
+Corrected in place, marked as a correction so the round record still
+reads as a record.
+
 ## 024.179 Hand-typed counts in check_doc_links' header do not reproduce, and none carries a measured marker
 
 ```yaml
