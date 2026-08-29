@@ -791,9 +791,5 @@ rename と Find References は動くものとして挙げていますが、動�
   なります。** <!-- documents: 024.257 -->
 - **無名ブロックの中の `def` がスコープスタックを空にします。** そのファ
   イルの以降のトップレベルのローカルが、全て誤ったスコープで扱われます。 <!-- documents: 024.265 -->
-- **早期 return のある `def` が、囲みの構造のスコープフレームを pop した
-  ままにします。** 別のものが開いたフレームを捨てます。 <!-- documents: 024.258 -->
-- **同じ形が concern の `def self.included(base)` の引数を消します。**
-  hook が `base` に対して行うことが失われます。 <!-- documents: 024.259 -->
 - **`base.extend(ClassMethods)` より前に書かれた `base.class_eval do … end`
   の中の `def` が、未定義メソッドとして誤報告されます。** <!-- documents: 024.264 -->

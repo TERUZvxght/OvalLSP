@@ -307,23 +307,78 @@ module Ovallsp
         @scope_stack.pop
       end
 
+      # A `def` inside a block whose owner nothing can name belongs to
+      # that owner, not to the top level and not to the lexically
+      # enclosing class. Recording it under `nil` put it in the same
+      # bucket as every genuine top-level `def`, which is `024.80`'s
+      # collision arriving from the other side. Its body is still walked;
+      # only the declaration is withheld (`024.31`).
+      #
+      # **The guard is here because this method has no `ensure`.** It used
+      # to sit above one, and a method-level `ensure` runs for an early
+      # `return` as readily as for a fall-through -- so it undid three
+      # saves the `return` had skipped. One of them was found and repaired
+      # by hoisting that save above the guard (`@cref`, `024.122`); the
+      # other two were still live, and both changed an answer:
+      #
+      # - `@scope_stack` was popped for a push that never happened, so the
+      #   frame the *enclosing* construct opened was thrown away and every
+      #   local after it was attributed one scope further out. Two
+      #   unrelated locals then shared one `owner#scope_id`, which is the
+      #   key `Rename::Planner` selects edits by -- renaming a class-body
+      #   local rewrote a method-body local of the same name.
+      # - `@included_hook_parameter` was restored from a local the
+      #   `return` never assigned, so it was cleared to nil and the rest
+      #   of an old-style concern's `self.included` stopped recognising
+      #   `base.extend(...)` as the hook (`024.115`).
+      #
+      # Hoisting each save above the guard would have been the third
+      # instance of one repair. Splitting instead pairs every save with
+      # its restore structurally: the method that saves is the method that
+      # returns, so no `return` can get between them, and a fourth save
+      # added later cannot reintroduce the shape.
       def visit_def_node(node)
-        # A `def` inside a block whose owner nothing can name belongs to
-        # that owner, not to the top level and not to the lexically
-        # enclosing class. Recording it under `nil` put it in the same
-        # bucket as every genuine top-level `def`, which is `024.80`'s
-        # collision arriving from the other side. Its body is still
-        # walked; only the declaration is withheld (`024.31`).
-        #
-        # `previous_cref` is assigned *first*: this method has a
-        # method-level `ensure` that restores it, so an early `return`
-        # above the assignment sets `@cref` to nil for the rest of the
-        # parse. That failed no example -- the cold indexer swallows a
-        # per-file parse error into a log line -- and was found only
-        # because an unrelated example counted how many times the logger
-        # was called. `024.122` is what that swallow is.
+        return walk_nameless_def(node) if @cref.nameless_context?
+
+        record_and_walk_def(node)
+      end
+
+      # The declaration is withheld and the body is still walked -- so it
+      # is still a local-variable scope, and it still has to be its own
+      # one. Ruby's scoping does not care that nobody can name the class:
+      #
+      #   $ ruby -e '
+      #   Anon = Class.new do
+      #     n = 5
+      #     def a
+      #       defined?(n)
+      #     end
+      #   end
+      #   p Anon.new.a
+      #   '
+      #   # => nil
+      #   # ruby 3.4.10
+      #
+      # A bare `return super` here reads as free and is not: it would be
+      # the fourth save/restore split this method was broken up to remove,
+      # with the pop in one method and no push in the other.
+      def walk_nameless_def(node)
+        @scope_stack.push(next_scope_id)
+        node.each_child_node { |child| child.accept(self) }
+      ensure
+        @scope_stack.pop
+      end
+
+      # Every save this method's `ensure` restores is made here, above any
+      # line that could exit -- `#within_namespace`'s discipline, applied
+      # inside the method that carries the `ensure` rather than around it.
+      # Nothing between the old positions and this one reads `@scope_stack`
+      # or `@included_hook_parameter`, so hoisting them changes no answer;
+      # what it removes is an invariant a reader had to check by eye.
+      def record_and_walk_def(node)
         previous_cref = @cref
-        return super if @cref.nameless_context?
+        previous_hook_parameter = @included_hook_parameter
+        @scope_stack.push(next_scope_id)
 
         owner_receiver = node.receiver
         # **A written receiver is a singleton definition, whatever it
@@ -378,14 +433,13 @@ module Ovallsp
 
         # The parameter `def self.included(base)` binds, so a
         # `base.extend(…)` in its body is recognisable as the concern
-        # hook rather than as an ordinary `extend` on some object.
-        previous_hook_parameter = @included_hook_parameter
+        # hook rather than as an ordinary `extend` on some object. Saved
+        # at the top of this method with the other two.
         @included_hook_parameter =
           if singleton && %i[included prepended].include?(node.name)
             node.parameters&.requireds&.first&.name
           end
 
-        @scope_stack.push(next_scope_id)
         # Tracks "we are inside a method body", so a `private :target`
         # written there -- which never runs at class level in Ruby -- does
         # not retroactively rewrite a declaration. Restored rather than
@@ -403,7 +457,11 @@ module Ovallsp
         # after it. Guarding one call site was the symptom fix -- the
         # frame is the cause.
         @cref = @cref.in_method(singleton: singleton)
-        super
+        # What `super` did while this was `#visit_def_node` itself:
+        # `Prism::Visitor#visit_def_node` *is* this line. `#visit_namespace`
+        # already spells it out, and for the same reason -- the body has to
+        # be walked from a method that is not the overridden visit.
+        node.each_child_node { |child| child.accept(self) }
       ensure
         @cref = previous_cref
         @included_hook_parameter = previous_hook_parameter
@@ -642,14 +700,17 @@ module Ovallsp
       # The block body is the module body, so it opens a namespace and
       # *not* a block frame: a `def` in `module ClassMethods` is written
       # at depth zero, and `#defines_surface?` reads that depth.
+      #
+      # The children are walked here rather than dispatched through
+      # `#visit_block_node` with a flag telling it not to do its job.
+      # `Prism::Visitor#visit_block_node` *is* this line, so the two are
+      # identical in effect, and `#visit_namespace` already uses this
+      # construction. What goes away is a mutable one-shot flag set here
+      # and read-and-cleared eighty lines below, plus the convention that
+      # both ends agree it is cleared exactly once.
       def visit_concern_class_methods_body(node, absolute_name)
         within_namespace(absolute_name, module_owner: true) do
-          @skip_block_frame = true
-          begin
-            node.block.accept(self)
-          ensure
-            @skip_block_frame = false
-          end
+          node.block.each_child_node { |child| child.accept(self) }
         end
       end
 
@@ -721,11 +782,6 @@ module Ovallsp
       end
 
       def visit_block_node(node)
-        if @skip_block_frame
-          @skip_block_frame = false
-          return super
-        end
-
         @scope_stack.push(next_scope_id)
         # A visibility section opened inside a block belongs to that
         # block. `concerning :Auth do private; def authenticate; end end`

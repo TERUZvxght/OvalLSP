@@ -425,8 +425,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.255`](#024255-completion-answered-nothing-at-all-for-a-union-of-class-objects-k-cond-foo-bar-then-k) | open | 0.2.17 | Completion answered nothing at all for a Union of class objects — `k… |
 | [`024.256`](#024256-go-to-definition-still-answers-nothing-for-a-union-of-class-objects-and-this-patch-makes-the-as) | open | 0.2.17 | Go to definition still answers nothing for a Union of class objects,… |
 | [`024.257`](#024257-an-unrooted-compact-class-path-whose-head-resolves-outward-gets-the-enclosing-frame-glued-onto-i) | open | 0.2.17 | An unrooted compact class path whose head resolves OUTWARD gets the … |
-| [`024.258`](#024258-visit-def-node-s-method-level-ensure-popped-scope-stack-for-a-push-its-early-return-ha) | open | 0.2.17 | `#visit_def_node`'s method-level `ensure` popped `@scope_stack` for … |
-| [`024.259`](#024259-the-same-ensure-restored-included-hook-parameter-from-a-local-the-early-return-never-assi) | open | 0.2.17 | The same `ensure` restored `@included_hook_parameter` from a local t… |
+| [`024.258`](#024258-visit-def-node-s-method-level-ensure-popped-scope-stack-for-a-push-its-early-return-ha) | fixed | 0.2.17 | `#visit_def_node`'s method-level `ensure` popped `@scope_stack` for … |
+| [`024.259`](#024259-the-same-ensure-restored-included-hook-parameter-from-a-local-the-early-return-never-assi) | fixed | 0.2.17 | The same `ensure` restored `@included_hook_parameter` from a local t… |
 | [`024.260`](#024260-textdocument-rename-on-a-local-misses-every-binding-written-as-a-compound-or-target-node) | open | 0.2.17 | `textDocument/rename` on a local misses every binding written as a c… |
 | [`024.261`](#024261-visit-lambda-node-pushes-no-scope-frame-where-visit-block-node-does-so-a-lambda-body-shar) | open | 0.2.17 | `#visit_lambda_node` pushes no scope frame where `#visit_block_node`… |
 | [`024.262`](#024262-rename-leaves-a-closed-over-local-s-uses-inside-a-block-behind-producing-code-that-no-longer-ru) | open | 0.2.17 | Rename leaves a closed-over local's uses inside a block behind, prod… |
@@ -13797,6 +13797,30 @@ arriving one level up. Watched failing three ways: a corrupted real
 transcript, an unparseable session, and an enumeration that reads
 nothing.
 
+### The checker's own blind spot, found by a reviewer three weeks in
+
+Its opener pattern read long flags only — `(?:--[\w-]+ )*` before the
+`-e`. Four sessions in the tree are written `$ ruby -r<lib> -e`, and
+**one of them is in this checker's own comment**, demonstrating the
+Ripper question the hazard test turns on. All four were skipped in
+silence.
+
+That is exactly the failure this entry exists to stop, performed by the
+thing that stops it: a checker that passes over what it does not
+recognise reports what a working checker reports when everything is
+fine. The register already records it twice — `check_pinned_mutations`
+on its first run, and `024.147` — and this is the third.
+
+Widened to `(?:-{1,2}[\w-]+ )*`; the count went 104 to 109, and the five
+that appeared all reproduce. Pinned by an example that fails when the
+pattern is narrowed back, verified by narrowing it.
+
+The general form, for whoever writes the next scanner here: **the count
+is the assertion that it ran over the tree, and a count is only as good
+as the pattern that produced it.** This one had an example asserting the
+session count was above sixty, and sixty was true with four sessions
+invisible.
+
 ## 024.221 A block whose receiver cannot be vouched for contains a `private` that Ruby would let through
 
 ```yaml
@@ -16120,10 +16144,11 @@ So the fix belongs at `#locate_in_namespace`, where `@workspace_index` is in rea
 ## 024.258 `#visit_def_node`'s method-level `ensure` popped `@scope_stack` for a push its early `return` ha
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
@@ -16176,13 +16201,30 @@ The scope-id shift, from the two directories the two corpus sides ran from, on `
   named-class control identical on both sides (3, 3, 4, 4)
 ```
 
+### Fixed by splitting the guard out of the method that carries the `ensure`
+
+`#visit_def_node` saved three things and restored them in a method-level
+`ensure`, and its early `return` ran before the saves. So the `ensure`
+undid work the early path never did: it popped the enclosing construct's scope frame for a push that had not
+happened, and restored a local that had never been assigned.
+
+The fix is not a guard on the `ensure` — it is that the guard no longer
+lives in the method that carries it. `#visit_def_node` is a guard with no
+`ensure` plus a `#record_and_walk_def` where every save is above every
+exit. `@skip_block_frame` — a one-shot flag set in one method and cleared
+in another eighty lines away — is gone with it.
+
+Found by building `049`'s substitution, not by a review round.
+
+
 ## 024.259 The same `ensure` restored `@included_hook_parameter` from a local the early `return` never assi
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
@@ -16231,6 +16273,22 @@ Parser output, `summary.ancestor_facts`:
 
 Pinned as `keeps the included-hook parameter bound across a nameless def`, with the no-Class.new form as the control; the pinned_mutations entry (re-adding `@included_hook_parameter = nil` to `#walk_nameless_def`) turns it red: `caught: … (1 example, 1 failure)`.
 ```
+
+### Fixed by splitting the guard out of the method that carries the `ensure`
+
+`#visit_def_node` saved three things and restored them in a method-level
+`ensure`, and its early `return` ran before the saves. So the `ensure`
+undid work the early path never did: it popped the concern hook's parameter for a push that had not
+happened, and restored a local that had never been assigned.
+
+The fix is not a guard on the `ensure` — it is that the guard no longer
+lives in the method that carries it. `#visit_def_node` is a guard with no
+`ensure` plus a `#record_and_walk_def` where every save is above every
+exit. `@skip_block_frame` — a one-shot flag set in one method and cleared
+in another eighty lines away — is gone with it.
+
+Found by building `049`'s substitution, not by a review round.
+
 
 ## 024.260 `textDocument/rename` on a local misses every binding written as a compound or target node: `+=`
 

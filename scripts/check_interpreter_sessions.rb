@@ -112,7 +112,14 @@ module InterpreterSessions
     found = []
     i = 0
     while i < lines.length
-      match = lines[i].match(/\A(?<prefix>.*?)\$ ruby (?<flags>(?:--[\w-]+ )*)-e '/)
+      # Short flags as well as long ones. Written `(?:--[\w-]+ )*` at
+      # first, which cannot see `$ ruby -rripper -e` -- and four sessions
+      # in the tree are written that way, including one in this file's
+      # own comment. A checker that silently skips what it does not
+      # recognise reports exactly what a working checker reports when
+      # everything is fine, which is the failure this whole script exists
+      # to stop; it was doing it to itself.
+      match = lines[i].match(/\A(?<prefix>.*?)\$ ruby (?<flags>(?:-{1,2}[\w-]+ )*)-e '/)
       unless match
         i += 1
         next

@@ -867,12 +867,6 @@ about a union. Driving the union path turned up more:
 - **A `def` inside a nameless block empties the scope stack**, so every
   later top-level local in that file is tagged with the wrong
   scope. <!-- documents: 024.265 -->
-- **A `def` with an early return leaves the enclosing construct's scope
-  frame popped**, throwing away the frame something else
-  opened. <!-- documents: 024.258 -->
-- **The same shape clears a concern's `def self.included(base)`
-  parameter**, so what the hook does to `base` is
-  lost. <!-- documents: 024.259 -->
 - **A `def` inside `base.class_eval do … end`, written before
   `base.extend(ClassMethods)`, is falsely reported as an unknown
   method.** <!-- documents: 024.264 -->

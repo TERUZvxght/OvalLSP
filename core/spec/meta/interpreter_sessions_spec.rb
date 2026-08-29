@@ -114,6 +114,26 @@ RSpec.describe "interpreter sessions" do
     end
   end
 
+  # A short flag, which the opener pattern could not see. Four sessions in
+  # the tree are written `$ ruby -r<lib> -e`, one of them in this
+  # checker's own comment, and all four were skipped in silence — the
+  # exact failure the script exists to stop, performed on itself.
+  it "sees a session opened with a short flag, not only a long one" do
+    Dir.mktmpdir("session-check-") do |dir|
+      arrow = "# =#{'>'}"
+      opener = ["$", "ruby", "-rripper", "-e", "'"].join(" ")
+      File.write(File.join(dir, "shortflag.rb"),
+                 "#   #{opener}\n#   p Ripper.lex(\"1\").first[1]\n#   '\n#   #{arrow} :on_int\n")
+      out, ok = Open3.capture2e(
+        RbConfig.ruby, File.join(SESSIONS_ROOT, "scripts", "check_interpreter_sessions.rb"),
+        "--count", "--file", File.join(dir, "shortflag.rb"), chdir: SESSIONS_ROOT
+      )
+      expect(ok).to be_success, out
+      expect(out[/\bsessions=(\d+)/, 1].to_i).to eq(1)
+      expect(out[/\bcompared=(\d+)/, 1].to_i).to eq(1)
+    end
+  end
+
   # Sessions are executed, so the checker is code that runs text out of the
   # repository. It refuses rather than runs anything that writes, deletes,
   # spawns or opens a socket -- the `/Applications` incident is what a

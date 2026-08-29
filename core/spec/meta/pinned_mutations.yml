@@ -355,3 +355,24 @@
   to: ""
   spec: spec/ovallsp/server_trust_execution_gates_spec.rb
   example: "does not spawn a bootstrap when called directly on an untrusted workspace"
+
+- why: "the nameless def's own scope frame -- popping in the guard's method for a push it never made, which hands the enclosing construct's frame away and merges two unrelated locals under one owner#scope_id."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "      def walk_nameless_def(node)\n        @scope_stack.push(next_scope_id)\n"
+  to: "      def walk_nameless_def(node)\n"
+  spec: spec/ovallsp/parser_def_frame_spec.rb
+  example: "gives the def's body a scope of its own rather than the block's"
+
+- why: "the guard leaving the included-hook parameter alone -- clearing it, which is what a method-level ensure restoring an unassigned local did, and the rest of an old-style concern's self.included stops recognising its hook."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "      def walk_nameless_def(node)\n        @scope_stack.push(next_scope_id)\n"
+  to: "      def walk_nameless_def(node)\n        @included_hook_parameter = nil\n        @scope_stack.push(next_scope_id)\n"
+  spec: spec/ovallsp/parser_def_frame_spec.rb
+  example: "keeps the included-hook parameter bound across a nameless def"
+
+- why: "a concern's class_methods body being a namespace body and not a block -- dispatching it through the block visitor gives it a block frame, and an unreadable macro written there stops opening the surface it must."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "          node.block.each_child_node { |child| child.accept(self) }\n"
+  to: "          node.block.accept(self)\n"
+  spec: spec/ovallsp/parser_def_frame_spec.rb
+  example: "opens the ClassMethods surface for an unreadable macro in the block"
