@@ -190,9 +190,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.15`](#02415-the-index-s-answers-depend-on-which-file-was-edited-last) | fixed | 0.1.13 | The index's answers depend on which file was edited last |
 | [`024.16`](#02416-the-capability-e2e-suite-can-skip-in-full-while-ci-stays-green) | fixed | 0.1.13 | The capability E2E suite can skip in full while CI stays green |
 | [`024.17`](#02417-vscode-src-extension-ts-is-covered-by-no-test-that-runs-anywhere) | fixed | 0.1.13 | `vscode/src/extension.ts` is covered by no test that runs anywhere |
-| [`024.18`](#02418-the-unassigned-ivar-check-cannot-enumerate-what-it-needs-to) | open | 0.2.16 | The unassigned-`@ivar` check cannot enumerate what it needs to |
-| [`024.19`](#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | open | 0.2.16 | The argument-type check judges against a class the receiver is not |
-| [`024.20`](#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | open | 0.2.16 | `contains?` treats an exclusive end offset as inclusive |
+| [`024.18`](#02418-the-unassigned-ivar-check-cannot-enumerate-what-it-needs-to) | open | 0.3.0 | The unassigned-`@ivar` check cannot enumerate what it needs to |
+| [`024.19`](#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | open | 0.3.0 | The argument-type check judges against a class the receiver is not |
+| [`024.20`](#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | open | 0.3.0 | `contains?` treats an exclusive end offset as inclusive |
 | [`024.21`](#02421-a-qualified-constant-is-coloured-half-one-way-half-the-other) | fixed | 0.2.15 | A qualified constant is coloured half one way, half the other |
 | [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | 0.3.0 | The unassigned-`@ivar` check is silent in an application `rails new`… |
 | [`024.23`](#02423-the-singleton-chain-did-not-model-class-module) | fixed | 0.1.14 | The singleton chain did not model `Class`/`Module` |
@@ -207,19 +207,19 @@ nobody can search is the recording habit without the benefit.
 | [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | fixed | — | `def Foo.bar` is recorded as an instance method, so both answers are… |
 | [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | fixed | — | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
 | [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
-| [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | open | 0.2.16 | A class that includes a module the workspace cannot resolve still re… |
+| [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | open | 0.3.0 | A class that includes a module the workspace cannot resolve still re… |
 | [`024.36`](#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
-| [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.2.16 | The argument-type check reports nothing on measured real Ruby |
-| [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.2.16 | `scope_at` copies the whole environment once per descent step |
-| [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.2.16 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
+| [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.3.0 | The argument-type check reports nothing on measured real Ruby |
+| [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.3.0 | `scope_at` copies the whole environment once per descent step |
+| [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.3.0 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
-| [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | open | 0.2.16 | Typing a `.` reports a method on the *next* line |
-| [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.2.16 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
+| [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | open | 0.3.0 | Typing a `.` reports a method on the *next* line |
+| [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.3.0 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
 | [`024.43`](#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | fixed | 0.2.16 | Signature help answers nothing for a receiverless stdlib call |
-| [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.2.16 | A partial's local is not resolved, and C11's stated basis names it |
-| [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.2.16 | Re-analysis after a keystroke is seconds on a large file, against a … |
+| [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.3.0 | A partial's local is not resolved, and C11's stated basis names it |
+| [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.3.0 | Re-analysis after a keystroke is seconds on a large file, against a … |
 | [`024.46`](#02446-typing-self-cost-55-false-diagnostics-and-was-rolled-back) | fixed | 0.2.1 | Typing `self` cost 55 false diagnostics and was rolled back |
-| [`024.47`](#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | open | 0.2.16 | A namespaced class named after a core class loses its diagnostics, a… |
+| [`024.47`](#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | open | 0.3.0 | A namespaced class named after a core class loses its diagnostics, a… |
 | [`024.48`](#02448-the-measurement-tool-ran-an-engine-the-server-never-runs) | fixed | 0.2.1 | The measurement tool ran an engine the server never runs |
 | [`024.49`](#02449-a-release-record-kept-asserting-durations-it-could-not-witness-ending) | fixed | 0.2.3 | A release record kept asserting durations it could not witness ending |
 | [`024.50`](#02450-the-marketplace-description-promises-the-behaviour-0-2-1-removed) | fixed | 0.2.3 | The Marketplace description promises the behaviour 0.2.1 removed |
@@ -229,11 +229,11 @@ nobody can search is the recording habit without the benefit.
 | [`024.54`](#02454-an-edit-that-changed-nothing-discarded-the-edit-before-it) | fixed | reverted | An edit that changed nothing discarded the edit before it |
 | [`024.55`](#02455-a-version-mismatch-is-reported-and-then-ignored) | fixed | 0.2.12 | A version mismatch is reported and then ignored |
 | [`024.56`](#02456-a-publish-can-land-after-the-panel-has-been-cleared-and-after-a-newer-one) | fixed | 0.2.7 | A publish can land after the panel has been cleared, and after a new… |
-| [`024.57`](#02457-the-debounce-and-why-it-was-rolled-back) | open | 0.2.16 | The debounce, and why it was rolled back |
+| [`024.57`](#02457-the-debounce-and-why-it-was-rolled-back) | open | 0.3.0 | The debounce, and why it was rolled back |
 | [`024.58`](#02458-bin-ovallsp-loaded-every-abi-s-vendored-gems-not-the-running-one-s) | fixed | 0.2.2 | `bin/ovallsp` loaded every ABI's vendored gems, not the running one's |
 | [`024.59`](#02459-the-guard-against-a-stale-example-count-could-not-run) | fixed | 0.2.3 | The guard against a stale example count could not run |
 | [`024.60`](#02460-four-test-fixtures-raced-macos-first-execution-scan) | fixed | 0.2.3 | Four test fixtures raced macOS' first-execution scan |
-| [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.2.16 | Two per-file stores are separated by nothing but their payload |
+| [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.3.0 | Two per-file stores are separated by nothing but their payload |
 | [`024.63`](#02463-the-dispatch-layer-owns-view-inference-and-it-has-broken-the-query-layer-s-one-guarantee-twice) | fixed | 0.2.16 | The dispatch layer owns view inference, and it has broken the query … |
 | [`024.64`](#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | fixed | 0.2.12 | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
 | [`024.65`](#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
@@ -241,24 +241,24 @@ nobody can search is the recording habit without the benefit.
 | [`024.67`](#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | fixed | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
 | [`024.68`](#02468-three-rounds-of-guards-on-a-hand-rolled-grammar-each-blind-one-assumption-deeper) | fixed | 0.2.12 | Three rounds of guards on a hand-rolled grammar, each blind one assu… |
 | [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | fixed | 0.2.12 | The two suites that drive a real editor are run by nobody but the ma… |
-| [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.2.16 | One mutable Rails fixture is shared by every worker, so the suite ca… |
+| [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.3.0 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
 | [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | fixed | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | fixed | 0.2.16 | The trust gate stands in front of callers, not in front of what exec… |
 | [`024.75`](#02475-a-documented-field-selects-nothing) | fixed | 0.2.12 | A documented field selects nothing |
-| [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.2.16 | Fifty-four `unknown-method` reports over real gem source, and all of… |
+| [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.3.0 | Fifty-four `unknown-method` reports over real gem source, and all of… |
 | [`024.77`](#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | fixed | 0.2.15 | A call to a method that does not exist is missed through a relation |
 | [`024.78`](#02478-completion-did-not-get-the-fix-hover-and-diagnostics-did) | fixed | 0.2.6 | Completion did not get the fix hover and diagnostics did |
 | [`024.79`](#02479-model-first-completes-to-nothing) | fixed | 0.2.6 | `Model.first` completes to nothing |
 | [`024.80`](#02480-an-unresolved-hierarchy-edge-is-expressible-as-a-method-owner) | fixed | 0.2.12 | An unresolved hierarchy edge is expressible as a method owner |
 | [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | fixed | 0.2.12 | An ancestor reference carries no lexical context, so an ambiguous na… |
 | [`024.82`](#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | fixed | 0.2.15 | `Foo = Class.new(Bar)` is not a type the index knows |
-| [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.2.16 | The undefined-method check is loudest exactly where no Runtime Agent… |
-| [`024.84`](#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | open | 0.2.16 | A constant is typed as a class object whatever it holds |
+| [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.3.0 | The undefined-method check is loudest exactly where no Runtime Agent… |
+| [`024.84`](#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | open | 0.3.0 | A constant is typed as a class object whatever it holds |
 | [`024.85`](#02485-self-completes-nothing) | fixed | 0.2.16 | `self.` completes nothing |
-| [`024.86`](#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | open | 0.2.16 | An ivar assigned in another method has no type, except in the view |
+| [`024.86`](#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | open | 0.3.0 | An ivar assigned in another method has no type, except in the view |
 | [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.3.0 | A relation stops being a relation after one hop |
-| [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.2.16 | Completion unions a union's members; the diagnostic intersects them |
+| [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.3.0 | Completion unions a union's members; the diagnostic intersects them |
 | [`024.89`](#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | fixed | 0.2.15 | Signature help strips the parameter kinds and never advances |
 | [`024.90`](#02490-smaller-answers-a-review-round-measured) | fixed | 0.2.14 | Smaller answers a review round measured |
 | [`024.91`](#02491-the-undefined-method-check-reports-on-ordinary-ruby-it-cannot-read-split-and-re-measured) | done | 0.2.16 | The undefined-method check reports on ordinary Ruby it cannot read —… |
@@ -269,14 +269,14 @@ nobody can search is the recording habit without the benefit.
 | [`024.96`](#02496-every-malformed-lsp-frame-ended-the-process) | fixed | 0.2.6 | Every malformed LSP frame ended the process |
 | [`024.97`](#02497-a-later-pass-at-the-same-version-overwrites-a-corrected-answer) | fixed | 0.2.12 | A later pass at the same version overwrites a corrected answer |
 | [`024.98`](#02498-a-workspace-opened-through-a-symlink-shows-every-file-twice-and-one-copy-can-never-be-cleared) | fixed | 0.2.8 | A workspace opened through a symlink shows every file twice, and one… |
-| [`024.99`](#02499-completion-offers-members-that-cannot-be-called-from-where-it-was-asked) | open | 0.2.16 | Completion offers members that cannot be called from where it was as… |
-| [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.2.16 | The four features answer from different code paths and disagree at o… |
+| [`024.99`](#02499-completion-offers-members-that-cannot-be-called-from-where-it-was-asked) | open | 0.3.0 | Completion offers members that cannot be called from where it was as… |
+| [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.3.0 | The four features answer from different code paths and disagree at o… |
 | [`024.101`](#024101-analysis-runs-per-keystroke-so-the-answers-fall-behind-the-cursor-and-every-wrong-one-is-published) | fixed | 0.2.10 | Analysis runs per keystroke, so the answers fall behind the cursor a… |
 | [`024.102`](#024102-eight-classes-and-the-logic-each-one-could-not-have-happened-under) | fixed | 0.2.16 | Eight classes, and the logic each one could not have happened under |
 | [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | fixed | 0.2.10 | A bare class name inside a namespace answers with an arbitrary same-… |
 | [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | fixed | 0.2.10 | `class_methods do` in a concern is attributed to the instance side |
 | [`024.105`](#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | fixed | 0.2.9 | Visibility is not recorded for singleton methods at all |
-| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.2.16 | `module_function` and `extend self` produce nothing |
+| [`024.106`](#024106-module-function-and-extend-self-produce-nothing) | open | 0.3.0 | `module_function` and `extend self` produce nothing |
 | [`024.107`](#024107-an-alias-never-appears-in-completion-though-every-other-feature-knows-it) | fixed | 0.2.9 | An alias never appears in completion, though every other feature kno… |
 | [`024.108`](#024108-protected-methods-are-offered-on-an-explicit-external-receiver) | fixed | 0.2.9 | Protected methods are offered on an explicit external receiver |
 | [`024.109`](#024109-specs-whose-fixture-cannot-distinguish-the-behaviour-they-pin) | fixed | 0.2.12 | Specs whose fixture cannot distinguish the behaviour they pin |
@@ -291,23 +291,23 @@ nobody can search is the recording habit without the benefit.
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | fixed | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
-| [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.2.16 | Nothing measures how much of this tree no test would notice changing |
+| [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.0 | Nothing measures how much of this tree no test would notice changing |
 | [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | fixed | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
 | [`024.123`](#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.124`](#024124-four-entries-named-a-release-that-had-already-shipped-for-the-third-time) | fixed | 0.3.0 | Four entries named a release that had already shipped, for the third… |
-| [`024.125`](#024125-the-packaged-core-is-never-driven-end-to-end-and-two-gates-say-it-is) | open | 0.2.16 | The packaged Core is never driven end to end, and two gates say it is |
+| [`024.125`](#024125-the-packaged-core-is-never-driven-end-to-end-and-two-gates-say-it-is) | open | 0.3.0 | The packaged Core is never driven end to end, and two gates say it is |
 | [`024.126`](#024126-a-text-scanner-matches-its-own-prose-exempts-itself-and-stops-checking-a-file-that-can-hold-the-real-thing) | fixed | 0.2.14 | A text scanner matches its own prose, exempts itself, and stops chec… |
 | [`024.127`](#024127-hover-answers-an-empty-string-where-lsp-expects-null) | fixed | 0.2.15 | Hover answers an empty string where LSP expects null |
 | [`024.128`](#024128-integer-arithmetic-answers-a-four-way-union) | fixed | 0.2.15 | Integer arithmetic answers a four-way union |
 | [`024.129`](#024129-no-undefined-method-report-on-a-core-library-receiver) | open | 0.3.0 | No undefined-method report on a core-library receiver |
 | [`024.130`](#024130-a-hover-label-drops-the-namespace-when-the-name-was-written-bare-withdrawn-it-does-not-reproduce) | fixed | 0.2.14 | A hover label drops the namespace when the name was written bare — w… |
 | [`024.131`](#024131-after-on-a-nil-local-hover-answers-nil-a-wrong-answer-not-an-absent-one) | fixed | 0.2.15 | After `||=` on a nil local, hover answers `nil` — a wrong answer, no… |
-| [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 0.2.16 | A scope defined in a concern's `included do` has no type |
+| [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 0.3.0 | A scope defined in a concern's `included do` has no type |
 | [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | fixed | 0.2.15 | A positional argument to a keyword-only method reads as nonsense |
 | [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | fixed | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
 | [`024.135`](#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | fixed | 0.2.16 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
 | [`024.136`](#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | fixed | 0.2.16 | A route's optional segments are detected by matching the literal `(.… |
-| [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | 0.2.16 | `WorkspaceIndex#search` scans every symbol in the workspace |
+| [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | 0.3.0 | `WorkspaceIndex#search` scans every symbol in the workspace |
 | [`024.138`](#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | fixed | 0.2.16 | No test mixes a schema change and a model-file change in one batch |
 | [`024.139`](#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
 | [`024.140`](#024140-a-scripted-edit-doubled-a-register-entry-and-every-check-stayed-green) | fixed | 0.2.14 | A scripted edit doubled a register entry, and every check stayed gre… |
@@ -320,30 +320,30 @@ nobody can search is the recording habit without the benefit.
 | [`024.147`](#024147-every-check-was-blind-to-a-file-until-it-was-committed-and-the-commit-gate-runs-before-that) | fixed | 0.2.14 | Every check was blind to a file until it was committed, and the comm… |
 | [`024.148`](#024148-the-check-for-did-the-suite-actually-run-could-not-fail-in-the-case-it-existed-for) | fixed | 0.2.14 | The check for "did the suite actually run" could not fail in the cas… |
 | [`024.149`](#024149-a-review-harness-that-reports-nothing-found-when-its-own-post-processing-crashed) | fixed | 0.2.14 | A review harness that reports "nothing found" when its own post-proc… |
-| [`024.150`](#024150-agents-md-paraphrases-claude-md-and-the-paraphrase-drifts) | open | 0.2.16 | `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts |
-| [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices) | open | 0.2.16 | A check can be disabled, and no check notices |
+| [`024.150`](#024150-agents-md-paraphrases-claude-md-and-the-paraphrase-drifts) | open | 0.3.0 | `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts |
+| [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices) | open | 0.3.0 | A check can be disabled, and no check notices |
 | [`024.152`](#024152-a-leak-check-counted-every-descriptor-in-the-process-and-flaked-under-load) | fixed | 0.2.14 | A leak check counted every descriptor in the process, and flaked und… |
 | [`024.153`](#024153-a-quarter-of-the-open-work-is-in-no-release-and-0-3-0-has-become-where-the-rest-goes) | fixed | 0.2.15 | A quarter of the open work is in no release, and 0.3.0 has become wh… |
-| [`024.154`](#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | open | 0.2.16 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
+| [`024.154`](#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | open | 0.3.0 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
 | [`024.155`](#024155-a-register-heading-the-entry-grammar-does-not-match-is-skipped-rather-than-failed-so-an-entry-can-exist-and-be-checked-by-nothing) | fixed | 0.2.16 | A register heading the entry grammar does not match is skipped rathe… |
 | [`024.156`](#024156-the-evidence-extractor-recognises-only-rb-sh-js-and-test-so-typescript-tests-and-ci-job-names-the-sole-evidence-for-eight-gates-are-never-checked) | fixed | 0.2.16 | The evidence extractor recognises only .rb/.sh/.js and test:, so Typ… |
 | [`024.157`](#024157-a-git-subprocess-in-a-throwaway-repository-obeys-the-inherited-git-dir-so-the-suite-commits-to-the-real-repository) | fixed | 0.2.16 | A git subprocess in a throwaway repository obeys the inherited GIT_D… |
 | [`024.158`](#024158-the-executed-pat-mode-example-passes-on-a-release-sh-that-only-warns-because-its-exit-status-comes-from-a-later-check-misreporting-a-non-repository-as-dirty) | fixed | 0.2.16 | The executed PAT-mode example passes on a release.sh that only warns… |
-| [`024.159`](#024159-the-measured-claim-marker-and-the-number-a-reader-sees-are-separate-strings-so-the-prose-can-say-anything-while-the-marker-verifies) | open | 0.2.16 | The measured-claim marker and the number a reader sees are separate … |
-| [`024.160`](#024160-counts-in-046-that-describe-this-tree-carry-no-basis-are-not-marked-and-several-are-stale-at-head) | open | 0.2.16 | Counts in 046 that describe this tree carry no basis, are not marked… |
-| [`024.161`](#024161-046-s-round-3-correction-states-that-the-4-000-lines-of-revert-phrase-is-removed-the-phrase-is-still-the-file-s-closing-sentence) | open | 0.2.16 | 046's round-3 correction states that the "4,000 lines of revert" phr… |
+| [`024.159`](#024159-the-measured-claim-marker-and-the-number-a-reader-sees-are-separate-strings-so-the-prose-can-say-anything-while-the-marker-verifies) | open | 0.3.0 | The measured-claim marker and the number a reader sees are separate … |
+| [`024.160`](#024160-counts-in-046-that-describe-this-tree-carry-no-basis-are-not-marked-and-several-are-stale-at-head) | open | 0.3.0 | Counts in 046 that describe this tree carry no basis, are not marked… |
+| [`024.161`](#024161-046-s-round-3-correction-states-that-the-4-000-lines-of-revert-phrase-is-removed-the-phrase-is-still-the-file-s-closing-sentence) | open | 0.3.0 | 046's round-3 correction states that the "4,000 lines of revert" phr… |
 | [`024.162`](#024162-046-s-recorded-departure-from-the-drive-round-rests-on-a-false-enumeration-of-the-change-set) | fixed | 0.2.16 | 046's recorded departure from the `drive` round rests on a false enu… |
-| [`024.163`](#024163-046-s-round-2-header-asserts-every-attacker-worked-in-a-clean-tree-and-046-s-own-recorded-findings-say-the-tree-was-dirty-and-changing-throughout) | open | 0.2.16 | 046's round-2 header asserts every attacker worked in a clean tree, … |
-| [`024.164`](#024164-046-states-finding-totals-whose-stated-dispositions-do-not-account-for-them) | open | 0.2.16 | 046 states finding totals whose stated dispositions do not account f… |
-| [`024.165`](#024165-046-keeps-138-acceptance-boxes-on-the-stated-ground-that-no-box-has-ever-been-ticked-56-are-ticked-13-of-them-in-a-file-this-change-set-edited) | open | 0.2.16 | 046 keeps 138 acceptance boxes on the stated ground that no box has … |
+| [`024.163`](#024163-046-s-round-2-header-asserts-every-attacker-worked-in-a-clean-tree-and-046-s-own-recorded-findings-say-the-tree-was-dirty-and-changing-throughout) | open | 0.3.0 | 046's round-2 header asserts every attacker worked in a clean tree, … |
+| [`024.164`](#024164-046-states-finding-totals-whose-stated-dispositions-do-not-account-for-them) | open | 0.3.0 | 046 states finding totals whose stated dispositions do not account f… |
+| [`024.165`](#024165-046-keeps-138-acceptance-boxes-on-the-stated-ground-that-no-box-has-ever-been-ticked-56-are-ticked-13-of-them-in-a-file-this-change-set-edited) | open | 0.3.0 | 046 keeps 138 acceptance boxes on the stated ground that no box has … |
 | [`024.166`](#024166-two-rows-of-046-s-checks-table-describe-checks-that-were-built-differently-and-the-changed-shape-list-omits-one) | fixed | 0.2.16 | Two rows of 046's checks table describe checks that were built diffe… |
-| [`024.167`](#024167-046-s-three-review-rounds-record-no-per-place-tracking-so-claude-md-s-same-place-rule-cannot-be-applied-and-was-not) | open | 0.2.16 | 046's three review rounds record no per-place tracking, so CLAUDE.md… |
+| [`024.167`](#024167-046-s-three-review-rounds-record-no-per-place-tracking-so-claude-md-s-same-place-rule-cannot-be-applied-and-was-not) | open | 0.3.0 | 046's three review rounds record no per-place tracking, so CLAUDE.md… |
 | [`024.168`](#024168-the-ledger-s-reason-for-keeping-05-protocol-md-s-section-numbering-counts-four-source-comments-where-one-exists-and-the-claim-was-copied-into-the-shipped-document) | fixed | 0.2.16 | The ledger's reason for keeping 05-protocol.md's section numbering c… |
 | [`024.169`](#024169-check-doc-links-rb-s-citation-comment-describes-anchor-punctuation-stripping-that-no-caller-performs) | fixed | 0.2.16 | `check_doc_links.rb`'s CITATION comment describes anchor/punctuation… |
 | [`024.170`](#024170-the-doubled-entry-check-counts-area-lines-so-a-body-duplicated-anywhere-below-that-line-is-invisible) | fixed | 0.2.16 | The doubled-entry check counts `**Area:**` lines, so a body duplicat… |
-| [`024.171`](#024171-three-entries-closed-in-0-2-14-state-as-done-something-head-contradicts-two-of-them-naming-a-countermeasure-that-was-never-built) | open | 0.2.16 | Three entries closed in 0.2.14 state as done something HEAD contradi… |
-| [`024.172`](#024172-four-counts-derived-about-this-tree-are-wrong-and-unmarked-one-of-them-inside-the-entry-about-a-record-that-drifted) | open | 0.2.16 | Four counts derived about this tree are wrong and unmarked, one of t… |
-| [`024.173`](#024173-the-shipped-target-guard-sees-only-kind-defect-and-released-in-is-written-by-16-entries-and-read-by-no-check) | open | 0.2.16 | The shipped-target guard sees only `kind: defect`, and `released-in:… |
+| [`024.171`](#024171-three-entries-closed-in-0-2-14-state-as-done-something-head-contradicts-two-of-them-naming-a-countermeasure-that-was-never-built) | open | 0.3.0 | Three entries closed in 0.2.14 state as done something HEAD contradi… |
+| [`024.172`](#024172-four-counts-derived-about-this-tree-are-wrong-and-unmarked-one-of-them-inside-the-entry-about-a-record-that-drifted) | open | 0.3.0 | Four counts derived about this tree are wrong and unmarked, one of t… |
+| [`024.173`](#024173-the-shipped-target-guard-sees-only-kind-defect-and-released-in-is-written-by-16-entries-and-read-by-no-check) | open | 0.3.0 | The shipped-target guard sees only `kind: defect`, and `released-in:… |
 | [`024.174`](#024174-a-relative-markdown-link-beginning-docs-is-resolved-against-the-repository-root-instead-of-the-citing-file-s-directory) | fixed | 0.2.16 | A relative Markdown link beginning `docs/` is resolved against the r… |
 | [`024.175`](#024175-doc-link-resolution-goes-through-file-file-so-a-case-only-typo-passes-on-macos-and-fails-on-linux-and-github) | fixed | 0.2.16 | Doc-link resolution goes through File.file?, so a case-only typo pas… |
 | [`024.176`](#024176-the-deletion-marker-marker-admits-a-pointer-to-a-renamed-file-which-the-paragraph-defining-it-says-is-still-a-failure) | fixed | 0.2.16 | The `[deletion marker]` marker admits a pointer to a renamed file, w… |
@@ -351,23 +351,23 @@ nobody can search is the recording habit without the benefit.
 | [`024.178`](#024178-check-doc-links-founding-census-is-stated-as-living-entirely-in-source-comments-one-of-the-nineteen-was-in-a-markdown-document) | fixed | 0.2.16 | check_doc_links' founding census is stated as living entirely in sou… |
 | [`024.179`](#024179-hand-typed-counts-in-check-doc-links-header-do-not-reproduce-and-none-carries-a-measured-marker) | fixed | 0.2.16 | Hand-typed counts in check_doc_links' header do not reproduce, and n… |
 | [`024.180`](#024180-the-citation-guard-reads-nine-file-extensions-so-the-published-site-s-register-pointers-are-outside-every-check) | fixed | 0.2.16 | The citation guard reads nine file extensions, so the published site… |
-| [`024.181`](#024181-the-measured-claim-scanner-reads-four-hand-written-globs-so-a-marker-anywhere-else-is-inert) | open | 0.2.16 | The measured-claim scanner reads four hand-written globs, so a marke… |
+| [`024.181`](#024181-the-measured-claim-scanner-reads-four-hand-written-globs-so-a-marker-anywhere-else-is-inert) | open | 0.3.0 | The measured-claim scanner reads four hand-written globs, so a marke… |
 | [`024.182`](#024182-a-sub-numbered-register-entry-is-invisible-to-the-citation-guard-and-a-citation-of-one-truncates-to-its-parent) | fixed | 0.2.16 | A sub-numbered register entry is invisible to the citation guard, an… |
 | [`024.183`](#024183-the-citation-guard-skips-the-register-itself-where-most-024-n-cross-references-are-written) | fixed | 0.2.16 | The citation guard skips the register itself, where most `024.N` cro… |
-| [`024.184`](#024184-a-dated-rev-claim-is-silently-derived-from-the-present-tree-unless-the-deriver-happens-to-use-the-revision) | open | 0.2.16 | A dated `@<rev>` claim is silently derived from the present tree unl… |
-| [`024.185`](#024185-a-second-measured-marker-on-the-same-line-is-never-parsed) | open | 0.2.16 | A second `<!-- measured: -->` marker on the same line is never parsed |
-| [`024.186`](#024186-mutex-sites-counts-the-string-mutex-new-so-a-comment-mentioning-it-inflates-the-documented-lock-count) | open | 0.2.16 | `mutex-sites` counts the string `Mutex.new`, so a comment mentioning… |
-| [`024.187`](#024187-a-single-nul-or-invalid-byte-clears-a-whole-file-from-the-home-path-scan-and-no-example-can-fail-on-it) | open | 0.2.16 | A single NUL or invalid byte clears a whole file from the home-path … |
-| [`024.188`](#024188-the-home-path-scanner-dereferences-a-symlink-instead-of-reading-the-blob-git-commits) | open | 0.2.16 | The home-path scanner dereferences a symlink instead of reading the … |
-| [`024.189`](#024189-the-home-path-pattern-matches-one-spelling-so-every-other-spelling-of-the-same-real-path-passes) | open | 0.2.16 | The home-path pattern matches one spelling, so every other spelling … |
-| [`024.190`](#024190-annotated-tag-messages-are-a-pushed-public-channel-neither-mode-of-the-home-path-check-scans) | open | 0.2.16 | Annotated tag messages are a pushed public channel neither mode of t… |
+| [`024.184`](#024184-a-dated-rev-claim-is-silently-derived-from-the-present-tree-unless-the-deriver-happens-to-use-the-revision) | open | 0.3.0 | A dated `@<rev>` claim is silently derived from the present tree unl… |
+| [`024.185`](#024185-a-second-measured-marker-on-the-same-line-is-never-parsed) | open | 0.3.0 | A second `<!-- measured: -->` marker on the same line is never parsed |
+| [`024.186`](#024186-mutex-sites-counts-the-string-mutex-new-so-a-comment-mentioning-it-inflates-the-documented-lock-count) | open | 0.3.0 | `mutex-sites` counts the string `Mutex.new`, so a comment mentioning… |
+| [`024.187`](#024187-a-single-nul-or-invalid-byte-clears-a-whole-file-from-the-home-path-scan-and-no-example-can-fail-on-it) | open | 0.3.0 | A single NUL or invalid byte clears a whole file from the home-path … |
+| [`024.188`](#024188-the-home-path-scanner-dereferences-a-symlink-instead-of-reading-the-blob-git-commits) | open | 0.3.0 | The home-path scanner dereferences a symlink instead of reading the … |
+| [`024.189`](#024189-the-home-path-pattern-matches-one-spelling-so-every-other-spelling-of-the-same-real-path-passes) | open | 0.3.0 | The home-path pattern matches one spelling, so every other spelling … |
+| [`024.190`](#024190-annotated-tag-messages-are-a-pushed-public-channel-neither-mode-of-the-home-path-check-scans) | open | 0.3.0 | Annotated tag messages are a pushed public channel neither mode of t… |
 | [`024.191`](#024191-as-utf8-s-comment-describes-a-hazard-the-same-file-s-utf8-require-already-removed) | fixed | 0.2.16 | as_utf8's comment describes a hazard the same file's utf8 require al… |
 | [`024.192`](#024192-the-case-sensitivity-decision-is-justified-by-a-count-of-37-that-was-never-right) | fixed | 0.2.16 | The case-sensitivity decision is justified by a count of 37 that was… |
 | [`024.193`](#024193-existence-is-a-suffix-glob-and-any-test-name-passes-unconditionally-so-a-citation-naming-a-file-that-does-not-exist-is-accepted) | fixed | 0.2.16 | Existence is a suffix glob and any test: name passes unconditionally… |
 | [`024.194`](#024194-release-gate-spec-s-wiring-corpus-includes-untracked-files-so-uncommitted-local-text-satisfies-a-gate-s-something-invokes-this) | fixed | 0.2.16 | release_gate_spec's wiring corpus includes untracked files, so uncom… |
 | [`024.195`](#024195-every-prose-statement-of-what-the-preflight-gate-runs-is-stale-and-nothing-derives-any-of-them) | fixed | 0.2.16 | Every prose statement of what the preflight gate runs is stale, and … |
-| [`024.196`](#024196-the-measurement-that-justifies-reading-per-example-status-is-quoted-three-times-attributed-to-a-different-file-each-time-and-matches-none-of-them) | open | 0.2.16 | The measurement that justifies reading per-example status is quoted … |
-| [`024.197`](#024197-0-2-14-s-review-loop-edited-its-own-standard-and-added-a-capability-between-rounds-with-no-departure-recorded) | open | 0.2.16 | 0.2.14's review loop edited its own standard and added a capability … |
+| [`024.196`](#024196-the-measurement-that-justifies-reading-per-example-status-is-quoted-three-times-attributed-to-a-different-file-each-time-and-matches-none-of-them) | open | 0.3.0 | The measurement that justifies reading per-example status is quoted … |
+| [`024.197`](#024197-0-2-14-s-review-loop-edited-its-own-standard-and-added-a-capability-between-rounds-with-no-departure-recorded) | open | 0.3.0 | 0.2.14's review loop edited its own standard and added a capability … |
 | [`024.198`](#024198-the-packaged-artifact-inspection-count-is-derived-from-the-directory-alone-so-a-grep-aimed-at-the-wrong-pattern-or-with-wider-exclusions-still-reports-a-healthy-count) | fixed | 0.2.16 | The packaged-artifact inspection count is derived from the directory… |
 | [`024.199`](#024199-the-guard-spec-s-absolute-grep-pin-is-satisfied-by-the-advisory-grep-and-its-bare-grep-scan-cannot-see-an-indented-call) | fixed | 0.2.16 | The guard spec's absolute-grep pin is satisfied by the advisory grep… |
 | [`024.200`](#024200-nothing-checks-that-release-sh-parses-so-a-syntax-error-past-the-first-refusal-leaves-every-check-green) | fixed | 0.2.16 | Nothing checks that release.sh parses, so a syntax error past the fi… |
@@ -391,15 +391,15 @@ nobody can search is the recording habit without the benefit.
 | [`024.218`](#024218-six-isolated-agents-branched-from-the-wrong-commit-and-the-evidence-was-deleted-before-it-was-checked) | fixed | 0.2.15 | Six isolated agents branched from the wrong commit, and the evidence… |
 | [`024.219`](#024219-a-three-part-claim-shipped-with-one-part-pinned-and-the-other-two-were-false) | fixed | 0.2.15 | A three-part claim shipped with one part pinned, and the other two w… |
 | [`024.220`](#024220-the-interpreter-sessions-pasted-through-this-tree-are-never-re-run) | fixed | 0.2.16 | The interpreter sessions pasted through this tree are never re-run |
-| [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.2.16 | A block whose receiver cannot be vouched for contains a `private` th… |
+| [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.3.0 | A block whose receiver cannot be vouched for contains a `private` th… |
 | [`024.223`](#024223-one-unresolvable-include-in-a-project-s-own-rbs-turns-its-whole-class-into-false-reports) | fixed | 0.2.15 | One unresolvable `include` in a project's own RBS turns its whole cl… |
 | [`024.224`](#024224-a-namespaced-type-is-reported-incompatible-with-itself) | open | 0.3.0 | A namespaced type is reported incompatible with itself |
 | [`024.225`](#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | fixed | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
 | [`024.226`](#024226-an-argument-written-as-a-paren-less-call-is-judged-by-its-own-last-argument) | fixed | 0.2.15 | An argument written as a paren-less call is judged by its own last a… |
 | [`024.227`](#024227-every-outline-symbol-s-selectionrange-was-its-whole-declaration) | fixed | 0.2.15 | Every outline symbol's `selectionRange` was its whole declaration |
 | [`024.228`](#024228-every-stdlib-klass-method-answered-nothing-in-three-features-at-once) | fixed | 0.2.15 | Every stdlib `Klass.method(` answered nothing, in three features at … |
-| [`024.229`](#024229-signature-help-says-nothing-at-the-top-level-of-a-file-and-cannot-be-fixed-the-way-the-register-says) | open | 0.2.16 | Signature help says nothing at the top level of a file, and cannot b… |
-| [`024.230`](#024230-a-top-level-def-is-indexed-with-no-owner-so-nothing-can-look-it-up) | open | 0.2.16 | A top-level `def` is indexed with no owner, so nothing can look it up |
+| [`024.229`](#024229-signature-help-says-nothing-at-the-top-level-of-a-file-and-cannot-be-fixed-the-way-the-register-says) | open | 0.3.0 | Signature help says nothing at the top level of a file, and cannot b… |
+| [`024.230`](#024230-a-top-level-def-is-indexed-with-no-owner-so-nothing-can-look-it-up) | open | 0.3.0 | A top-level `def` is indexed with no owner, so nothing can look it up |
 | [`024.231`](#024231-a-permission-written-down-once-was-still-missed-and-the-script-that-hid-it-said-the-opposite) | fixed | 0.2.15 | A permission written down once was still missed, and the script that… |
 | [`024.232`](#024232-the-fixture-proving-a-check-has-teeth-lost-its-own-teeth-when-a-version-shipped) | fixed | 0.2.15 | The fixture proving a check has teeth lost its own teeth when a vers… |
 | [`024.233`](#024233-the-guard-against-naming-a-shipped-release-could-not-fire-until-the-release-had-shipped) | fixed | 0.2.16 | The guard against naming a shipped release could not fire until the … |
@@ -410,7 +410,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.240`](#024240-hover-answers-nothing-in-a-view-where-completion-and-go-to-definition-both-answer) | fixed | 0.2.16 | Hover answers nothing in a view where completion and go-to-definitio… |
 | [`024.241`](#024241-find-references-answers-from-a-comment-a-bare-literal-and-end) | fixed | 0.2.16 | Find References answers from a comment, a bare literal, and `end` |
 | [`024.242`](#024242-a-class-held-in-a-local-variable-loses-an-rbs-overload) | fixed | 0.2.16 | A class held in a local variable loses an RBS overload |
-| [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 0.2.16 | Signature help says nothing for a receiverless call inside a module … |
+| [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 0.3.0 | Signature help says nothing for a receiverless call inside a module … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -1052,7 +1052,7 @@ remaining decisions the way 024.10 extracted `clientTeardown.ts`.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 and **blocked on 024.R7** for the part that needs it. Three of the five shapes are closed in 0.2.0 by staying silent rather than guessing: a class-body call this analysis does not model (which covers every gem macro), a view that renders anything, and everything rounds 3 and 4 fixed. What is left is *precision* -- turning those two silences back into answers -- and one shape that is still wrong rather than silent, and one that is wrong only at depth two or more:
@@ -1132,6 +1132,11 @@ report is worse than a missed one" -- on gem-backed controllers, which is
 most of them. Whether 0.2.0 ships it meanwhile is a decision about the
 release, not a defect to patch in the current change set.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.19 The argument-type check judges against a class the receiver is not
 
@@ -1139,7 +1144,7 @@ release, not a defect to patch in the current change set.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 Reported by an independent review that drove the engine over 25 installed gems; not reproduced from a fixture here, which is why it is recorded rather than fixed.
@@ -1285,6 +1290,11 @@ also the area `024.47` records a rollback in, which is why it is not
 being changed inside a release that already carries other changes to how
 a type name is resolved.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.20 `contains?` treats an exclusive end offset as inclusive
 
 ```yaml
@@ -1296,7 +1306,7 @@ user-visible-note: >
   block, hover, completion and signature help answer nothing for a
   receiver the inferencer can type. The wrong-answer half is `024.226`,
   fixed in 0.2.15.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **The half that reached users is fixed in 0.2.1**, and it was the
@@ -1413,6 +1423,11 @@ comment already explains that it wants the argument's last character and
 relies on the inclusive rule to get it. With that done, `locate_in_block`
 can descend and hover becomes right inside every block.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.21 A qualified constant is coloured half one way, half the other
 
@@ -2747,7 +2762,7 @@ would break.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`closed_nominal?`)
@@ -2867,6 +2882,11 @@ Stays open. Note that this is the same failure of method as `024.19`'s
 entry records: a refutation checked against the fixture it was refuting
 rather than against the entry's own claim.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.36 Instructing a reviewer narrowed what it could find, and a control run proved it
 
 ```yaml
@@ -2957,7 +2977,7 @@ user-visible-note: >
   way the check accepts, it is not silent -- it reports, and on the one
   such corpus measured every report is false. That is `024.224`, and
   the question this entry frames cannot be answered until it is fixed.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`argument_type_findings`,
@@ -3043,6 +3063,10 @@ on a typed workspace is a different row from one that fires nowhere.
 their own numbers: `024.223`, fixed in 0.2.15, and `024.224`. Neither is
 this entry, and closing either does not close this one.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.38 `scope_at` copies the whole environment once per descent step
 
@@ -3056,7 +3080,7 @@ user-visible-note: >
   measurable curve starts. Recorded rather than fixed because the fix is
   in the inference core and the round that found it was already
   repairing the round before it.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`locate`, `capture_scope`)
@@ -3168,6 +3192,10 @@ attempted here, because a review round is not where a new mechanism goes.
 
 The rest of this cluster shipped; only this file was held back.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.39 `LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread
 
@@ -3175,7 +3203,7 @@ The rest of this cluster shipped; only this file was held back.
 status: open
 kind: defect
 user-visible: no
-target: 0.2.16
+target: 0.3.0
 user-visible-note: >
   No wrong answer has been produced. A reviewer ran 2,000 concurrent
   `infer_at` pairs and 400 `scope_at`/`infer_at` pairs in both size
@@ -3204,6 +3232,10 @@ That is a probability, not an invariant, and nothing states it.
 inferencer, which is also what would let `@parse_cache` be shared safely
 instead of being the one piece of it that wants to be.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.40 Every `argument-count` report on the measurement corpus is false
 
@@ -3380,7 +3412,7 @@ from the 0.1.6 reading to here.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`analyze`'s parse
@@ -3457,6 +3489,10 @@ entry: a finding parked in a round's handover is invisible to
 `deferred_findings_spec.rb`, and `DOCUMENTATION_MAP`'s "A known
 limitation" row was therefore unenforced for it.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.42 An RBS signature label says `Unknown` where RBS says `self`, and leaks method type variables
 
@@ -3467,7 +3503,7 @@ user-visible: yes
 user-visible-note: >
   Partly fixed in 0.2.15: the label carries the word RBS wrote where
   the conversion loses it. The method type variable half is open.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/signatures/type_converter.rb` (`convert`),
@@ -3538,6 +3574,11 @@ label should say about a type parameter that is unbound at the call site
 — and it is not answered by carrying the source's word, since the source
 wrote `U` too. Left open and retargeted.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.43 Signature help answers nothing for a receiverless stdlib call
 
@@ -3838,7 +3879,7 @@ than built, because a review round reviews a fixed thing:
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`ivars_for_view`,
@@ -3863,6 +3904,10 @@ instance variables, keyed by partial name instead of by action. Deferred
 rather than done: it is a new inference path, not a correction, and 0.2.1
 is a patch.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.45 Re-analysis after a keystroke is seconds on a large file, against a stated 300 ms
 
@@ -3870,7 +3915,7 @@ is a patch.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#reindex`, `#publish_diagnostics`,
@@ -3908,6 +3953,10 @@ debouncing (which `024.41` also wants, for a different reason) and
 incremental re-analysis of the edited region rather than the file. Both
 are their own task; neither belongs in a patch.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.46 Typing `self` cost 55 false diagnostics and was rolled back
 
@@ -3971,7 +4020,7 @@ that the sentence naming what was missing turned out to name all of it.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/index/type_name_resolution.rb`
@@ -4116,6 +4165,10 @@ built a `HierarchyIndex` without the `signatures:` the then-current
 shadow rule read, so the rule was inert in every corpus measurement the
 release quoted (024.48).
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.48 The measurement tool ran an engine the server never runs
 
@@ -4622,7 +4675,7 @@ from a version that passed without exercising anything:
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#publish_diagnostics`,
@@ -4760,6 +4813,10 @@ Not everything from those rounds was part of the thread:
 - Everything from rounds 32--35 about the cache, the version checks, the
   documents and the other five countermeasures.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.58 `bin/ovallsp` loaded every ABI's vendored gems, not the running one's
 
@@ -4904,7 +4961,7 @@ user-visible-note: >
   affected. What is recorded is that the correctness rests on four
   call sites each remembering a different subset, rather than on the
   structure — a hazard for the fifth, not a fault in the fourth.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
@@ -4988,6 +5045,10 @@ produced this entry. Worth noting as a method: describing the design to
 someone who has not read it is a different probe from reviewing a diff,
 and it found something eight rounds of review over this layer had not.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.63 The dispatch layer owns view inference, and it has broken the query layer's one guarantee twice
 
@@ -5622,7 +5683,7 @@ user-visible-note: >
   Nothing an editor user sees. The suite runs serially today and is
   green that way; what the shared fixture costs is the ability to run
   it any other way, which is a contributor and CI cost.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/spec/fixtures/rails_real` (its `db/*.sqlite3`, `tmp/`
@@ -5688,6 +5749,10 @@ Worth it because CI's Core job is 5m34s today and this is most of it;
 the same measurement says a fixture-isolated 8-way split lands near a
 minute.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.72 The red toast 0.2.1 removed is still shown, from the other code path
 
@@ -5934,7 +5999,7 @@ and writing the first version taught the difference.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb`
@@ -6060,6 +6125,11 @@ Server's default `:safe` mode.
 The `include`-from-a-nested-namespace cluster (12 findings, the row that
 mattered) is gone: it was the ambiguous-bare-name resolution fixed
 earlier in this release, and none of it survives in the ten.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.77 A call to a method that does not exist is missed through a relation
 
@@ -6543,7 +6613,7 @@ way, not merely run the same way.*
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`#closed_nominal?`,
@@ -6581,13 +6651,19 @@ witness and does not know `Date`; the gem's own `sig/` is another. Until
 one exists, section 0.4 says a wrong answer on a walked path is what
 blocks, and this is one.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
+
 ## 024.84 A constant is typed as a class object whatever it holds
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`#constant_path_type`)
@@ -6608,6 +6684,11 @@ as ordinary as Ruby gets.
 object, which is right for a constant that *names a class*. The rule
 should follow the assigned value where the workspace can see it, and
 `024.82` is the same seam from the other side.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.85 `self.` completes nothing
 
@@ -6969,7 +7050,7 @@ that breaks it.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb`,
@@ -6990,6 +7071,11 @@ Separately and in the same family: diagnostics never act on an ivar
 receiver even where hover and completion do know it — in the ERB,
 `@article.no_such_method` is silent while `Post.no_such_class_method` two
 lines below is reported.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.87 A relation stops being a relation after one hop
 
@@ -7084,7 +7170,7 @@ user-visible-note: >
   (0.2.15). What stays open is whether completion should offer them at
   all, which is D3's shared-resolver question and moves with its
   siblings.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#members_of`),
@@ -7152,6 +7238,12 @@ And intersecting is not obviously right anyway: for a nilable receiver
 members offered today, 0 of them unconditional, including the class's
 own methods. Which quantifier completion wants is exactly the
 "which layer answers" decision `047` used as its cut line.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.89 Signature help strips the parameter kinds and never advances
 
@@ -7616,7 +7708,7 @@ and nobody read it as a symptom.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#members_of`),
@@ -7665,6 +7757,11 @@ already owns "can this be called from there" for diagnostics, and the
 question is whether completion should be asking it rather than
 assembling its own answer.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.100 The four features answer from different code paths and disagree at one position
 
@@ -7672,7 +7769,7 @@ assembling its own answer.*
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/query_service.rb`,
@@ -7705,6 +7802,12 @@ positions rest on; none covers the disagreement.
 is `037`'s availability item. Recorded separately because the evidence is
 different: `024.76`'s family is about precision, this is about four
 answers to one question.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.101 Analysis runs per keystroke, so the answers fall behind the cursor and every wrong one is published
 
@@ -8046,7 +8149,7 @@ Neighbour of `024.99`; both are the visibility half of `037`'s C2.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/semantic/method_resolver.rb`
@@ -8079,6 +8182,10 @@ that size rather than a rounding error — the alternative 0.2.10 tried
 reported `Rails.application`, `Rails.env` and `Rails.logger` as missing,
 which is still the worse half.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.107 An alias never appears in completion, though every other feature knows it
 
@@ -8788,7 +8895,7 @@ user-visible-note: >
   Nothing an editor user meets directly. What it costs is that a
   behaviour can be broken silently, which every user-visible entry in
   this register that began "and no test noticed" was downstream of.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `scripts/check_pinned_mutations.rb`, `scripts/hunk_sweep.rb`,
@@ -8858,6 +8965,12 @@ precondition for. A runner with no measured seed is a script nothing
 invokes and a job that cannot gate, which is worse than the gap it
 would be filling. Recorded so the next session does not re-derive the
 census to reach the same place.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.122 A failure is turned into a plausible value, in 72 measured places
 
@@ -9162,7 +9275,7 @@ inherit the situation the way three have.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `vscode/package.json` (`test:integration:packaged`),
@@ -9194,6 +9307,11 @@ its own number rather than keeping an entry open for it, which is what
 Code download the unpackaged integration job already pays for, plus a
 `vsce package` step — or stop marking rows 1 and 5 ✅ and say what really
 covers them. `046`'s C6 makes the second impossible to leave implicit.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.126 A text scanner matches its own prose, exempts itself, and stops checking a file that can hold the real thing
 
@@ -9585,7 +9703,7 @@ not measure; four examples do.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb`, `core/lib/ovallsp/models/model_registry.rb`
@@ -9598,6 +9716,12 @@ Adjacent to `024.87`, which is about a relation losing its type after one
 hop; this is about never having one.
 
 **Was one of nine bullets under `024.90` until 0.2.14.**
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.133 A positional argument to a keyword-only method reads as nonsense
 
@@ -9825,7 +9949,7 @@ substring test used to find.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/workspace_index.rb` (`#search`, `#rank`)
@@ -10004,6 +10128,11 @@ at the same moment. `CLAUDE.md` records this exact corpus as one of its
 three false results, which is what made the contradiction worth chasing
 instead of picking whichever number was more convenient. The corpus above
 is installed gems only, and the harness refuses a root inside this tree.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.138 No test mixes a schema change and a model-file change in one batch
 
@@ -10757,7 +10886,7 @@ user-visible-note: >
   Internal. What it costs is that the file a session reads first can
   state something the file it paraphrases has since corrected, and
   nothing compares them.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `AGENTS.md`, `CLAUDE.md`
@@ -10820,6 +10949,10 @@ error rate is one somebody switches off, which is the shape `024.192`
 records. What is wanted is a relationship the paraphrase itself
 declares, and that is a design question rather than a missing check.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.151 A check can be disabled, and no check notices
 
@@ -10832,7 +10965,7 @@ user-visible-note: >
   recorded: 55 confirmed instances from one review round. Nothing a
   user meets; everything this project uses to decide whether a change
   is sound.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/spec/meta/pinned_mutations.yml`,
@@ -10944,6 +11077,11 @@ and not the shape has not closed anything.
 - **design_doc_drift_spec's non-empty floor covers three of the six extractions the file reads, so §5 can pass comparing two empty lists**  
   ``core/spec/meta/design_doc_drift_spec.rb` (the `extracts a non-empty list from each place it reads` example)` — The example exists because "[e]ach example above compares two lists, and would pass on two empty ones", and its name says it checks "each place it reads". It asserts three floors — §6's documented block, `contributes.commands`, `contributes.configuration.properties` — out of six extractions in the file. Nothing floors §5's documented block, nothing floors the status strings scanned out of clientPresentation.ts, and n
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.152 A leak check counted every descriptor in the process, and flaked under load
 
@@ -11078,7 +11216,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md (lines 526-671, 1042-1380)
@@ -11089,6 +11227,11 @@ target: 0.2.16
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.155 A register heading the entry grammar does not match is skipped rather than failed, so an entry can exist and be checked by nothing
 
@@ -11279,7 +11422,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/spec/meta/measured_claims_spec.rb` (`claims`, and the `matches what the tree actually says` example), `docs/design/docs/02-architecture.md` (threading section)
@@ -11291,6 +11434,11 @@ target: 0.2.16
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.160 Counts in 046 that describe this tree carry no basis, are not marked, and several are stale at HEAD
 
 ```yaml
@@ -11300,7 +11448,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md (lines 3-4, 25-30, 42, 131, 278, 295, 336, 421)
@@ -11312,6 +11460,11 @@ The file's header says "Measured at `6bc31b9`. Every count below was re-derived 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.161 046's round-3 correction states that the "4,000 lines of revert" phrase "is removed"; the phrase is still the file's closing sentence
 
 ```yaml
@@ -11321,7 +11474,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md:302-303, :1405-1406
@@ -11332,6 +11485,11 @@ Round 3 corrected the deletion ledger and closed the correction with: "The closi
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.162 046's recorded departure from the `drive` round rests on a false enumeration of the change set
 
@@ -11382,7 +11540,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md:675-677, :762-764, :1378, :1384, :1386
@@ -11394,6 +11552,11 @@ The round-2 header states "Every attacker worked in a clone or reverted, and the
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.164 046 states finding totals whose stated dispositions do not account for them
 
 ```yaml
@@ -11403,7 +11566,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md:10-13, :691-694, :1042-1380
@@ -11415,6 +11578,11 @@ Three places state a finding total and then fail to account for it. (1) The open
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.165 046 keeps 138 acceptance boxes on the stated ground that no box has ever been ticked; 56 are ticked, 13 of them in a file this change set edited
 
 ```yaml
@@ -11424,7 +11592,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md:319-321, docs/design/tasks/008.5-runtime-and-index-corrections.md:90-102
@@ -11435,6 +11603,11 @@ The "What is kept" section keeps all 138 unticked acceptance boxes in tasks 001-
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.166 Two rows of 046's checks table describe checks that were built differently, and the "changed shape" list omits one
 
@@ -11483,7 +11656,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md:490-1380
@@ -11494,6 +11667,11 @@ CLAUDE.md's "Two rounds in a row on the same place" rule requires tracking, per 
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.168 The ledger's reason for keeping 05-protocol.md's section numbering counts four source comments where one exists, and the claim was copied into the shipped document
 
@@ -11621,7 +11799,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `docs/design/tasks/024-deferred-review-findings.md` (024.139, 024.141, 024.143), `docs/design/tasks/008.5-runtime-and-index-corrections.md`, `docs/design/tasks/008.6-agent-and-index-hardening.md`, `docs/DOCUMENTATION_MAP.md`, `scripts/preflight.rb`
@@ -11633,6 +11811,11 @@ target: 0.2.16
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.172 Four counts derived about this tree are wrong and unmarked, one of them inside the entry about a record that drifted
 
 ```yaml
@@ -11642,7 +11825,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `docs/design/tasks/024-deferred-review-findings.md` (024.141, 024.147, 024.150), `core/spec/meta/measured_claims_spec.rb`, and commit `dc9b044`'s message
@@ -11654,6 +11837,11 @@ target: 0.2.16
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.173 The shipped-target guard sees only `kind: defect`, and `released-in:` is written by 16 entries and read by no check
 
 ```yaml
@@ -11663,7 +11851,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `scripts/deferred_findings.rb` (`#open_entries_targeting_a_shipped_release`, `#open_defects`, `KNOWN_KEYS`), `core/spec/meta/deferred_findings_spec.rb` ("has no open entry naming a release that has already shipped"), `docs/design/tasks/024-deferred-review-findings.md`
@@ -11674,6 +11862,11 @@ target: 0.2.16
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.174 A relative Markdown link beginning `docs/` is resolved against the repository root instead of the citing file's directory
 
@@ -11983,7 +12176,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/spec/meta/measured_claims_spec.rb` (`claims`, line 105-119)
@@ -11994,6 +12187,11 @@ target: 0.2.16
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.182 A sub-numbered register entry is invisible to the citation guard, and a citation of one truncates to its parent
 
@@ -12089,7 +12287,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/spec/meta/measured_claims_spec.rb` (`DERIVERS["mutex-sites"]`, line 69-72; `MARKER`, line 61)
@@ -12101,6 +12299,11 @@ target: 0.2.16
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.185 A second `<!-- measured: -->` marker on the same line is never parsed
 
 ```yaml
@@ -12110,7 +12313,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/spec/meta/measured_claims_spec.rb` (`claims`, line 113; positive control, line 158-166)
@@ -12122,6 +12325,11 @@ target: 0.2.16
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.186 `mutex-sites` counts the string `Mutex.new`, so a comment mentioning it inflates the documented lock count
 
 ```yaml
@@ -12131,7 +12339,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/spec/meta/measured_claims_spec.rb` (`DERIVERS["mutex-sites"]`), `docs/design/docs/02-architecture.md:270`, `core/lib/ovallsp/signatures/type_converter.rb:112`
@@ -12143,6 +12351,11 @@ The deriver is `File.read(f, encoding: "UTF-8").scan("Mutex.new").length` — a 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.187 A single NUL or invalid byte clears a whole file from the home-path scan, and no example can fail on it
 
 ```yaml
@@ -12152,7 +12365,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** scripts/check_home_paths.rb, core/spec/meta/home_path_guard_spec.rb
@@ -12164,6 +12377,11 @@ target: 0.2.16
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.188 The home-path scanner dereferences a symlink instead of reading the blob git commits
 
 ```yaml
@@ -12173,7 +12391,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** scripts/check_home_paths.rb
@@ -12185,6 +12403,11 @@ For a symlink, git stores the target string as the blob's entire content — so 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.189 The home-path pattern matches one spelling, so every other spelling of the same real path passes
 
 ```yaml
@@ -12194,7 +12417,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** scripts/check_home_paths.rb, core/spec/meta/home_path_guard_spec.rb
@@ -12206,6 +12429,11 @@ PATTERN (line 45) requires exactly one separator character immediately followed 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.190 Annotated tag messages are a pushed public channel neither mode of the home-path check scans
 
 ```yaml
@@ -12215,7 +12443,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** scripts/check_home_paths.rb, .github/workflows/ci.yml
@@ -12226,6 +12454,11 @@ target: 0.2.16
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.191 as_utf8's comment describes a hazard the same file's utf8 require already removed
 
@@ -12424,7 +12657,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `scripts/preflight.rb:52-57`, `scripts/check_suites_ran.rb:17-23`, `CLAUDE.md:505-511`
@@ -12436,6 +12669,11 @@ The argument for `024.148`'s fix rests on one measurement -- what a fully skippe
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
+
 ## 024.197 0.2.14's review loop edited its own standard and added a capability between rounds, with no departure recorded
 
 ```yaml
@@ -12445,7 +12683,7 @@ user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `CLAUDE.md`, `docs/design/tasks/046-0.2.14-making-the-record-true.md`
@@ -12456,6 +12694,11 @@ target: 0.2.16
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep, with a control in its own fixture, and still
+reproduces. It is not fixed in 0.2.16 and the target says so rather
+than naming a release that has shipped.
 
 ## 024.198 The packaged-artifact inspection count is derived from the directory alone, so a grep aimed at the wrong pattern or with wider exclusions still reports a healthy count
 
@@ -13533,7 +13776,7 @@ nothing.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (`#iterates_a_literal?`,
@@ -13578,6 +13821,12 @@ question is answered, containing is the side to fail on.
 
 Carried in `docs/KNOWN_LIMITATIONS.md` and `.ja.md`, which described this
 residue under `024.111`'s number until 0.2.15.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.223 One unresolvable `include` in a project's own RBS turns its whole class into false reports
 
@@ -14222,7 +14471,7 @@ above is the measurement, run against both trees at the same revision.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#method_signature_help`),
@@ -14275,13 +14524,19 @@ level is this entry. So a changelog line saying "signature help now
 answers for Kernel calls" would be false either way. It must name the
 position it means.
 
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
+
 ## 024.230 A top-level `def` is indexed with no owner, so nothing can look it up
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (the owner a top-level
@@ -14314,6 +14569,12 @@ own `core/spec` alone.
 this is the index's, that is the server's — and because changing the
 owner a declaration is recorded under is read by every feature at once.
 It wants its own change set and its own corpus run.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass.** Driven during that
+release's backlog sweep and still live; the fix needs the enumeration
+question answered — what the gems actually define, or what a running
+application responds to — which is `024.R7`'s work and the dependency
+`045` records five of 0.3.0's nine promises sharing.
 
 ## 024.231 A permission written down once was still missed, and the script that hid it said the opposite
 
@@ -14990,7 +15251,7 @@ must still answer nothing.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.16
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb`
@@ -15086,6 +15347,9 @@ here completion is silent too — it reads the same chain — so the
 limitation is a plain absence rather than two features disagreeing.
 The paragraph in `KNOWN_LIMITATIONS` was rewritten to that, in both
 languages, rather than deleted with `024.43`.
+
+**Retargeted to 0.3.0 in 0.2.16's closing pass**, as the half of
+`024.43` that release did not fix.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
