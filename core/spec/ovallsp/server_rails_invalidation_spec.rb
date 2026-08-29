@@ -25,6 +25,14 @@ RSpec.describe "Ovallsp::Server Rails file-change invalidation" do
       workspace_root: workspace_root, agent_bootstrap: agent_bootstrap || Ovallsp::RailsBootstrap
     )
     server.instance_variable_set(:@agent_manager, agent_manager)
+    # A server holding a live Agent is a server whose workspace was
+    # trusted -- that is the only way one gets started. These examples
+    # inject the manager instead of handling an `initialize`, so they have
+    # to say so as well: since `024.74` the trust question is asked in
+    # front of the spawn rather than by each caller, so an untrusted
+    # server now refuses a restart it used to reach through the injected
+    # manager. Same reason as `server_status_spec.rb`'s own line.
+    server.instance_variable_set(:@workspace_trusted, true)
     server
   end
 
@@ -521,6 +529,60 @@ RSpec.describe "Ovallsp::Server Rails file-change invalidation" do
 
       expect(fetches.pop(timeout: 0.1)).to be_nil
     end
+
+    # A batch holding both kinds of change at once -- what a branch switch
+    # across a migration actually delivers. `#handle_did_change_watched_files`
+    # decides between them with an `elsif`: the bulk refresh subsumes the
+    # targeted one, so `fetch_model` is never called for a name the bulk
+    # round trip already covers.
+    #
+    # The two payloads deliberately disagree -- the bulk one reports a
+    # column the targeted one does not -- so the registry's final state
+    # says which path installed the model. A fixture where both paths
+    # answered the same would pass under either decision and assert
+    # nothing (`042`'s D7).
+    def mixed_batch_manager(fetch_model_calls)
+      Class.new do
+        define_singleton_method(:ready?) { true }
+        define_singleton_method(:reload) { |**| true }
+        define_singleton_method(:fetch_all_models) do
+          [{ name: "User", tableName: "users", columns: [{ name: "bio", type: "string", null: true }],
+             associations: [], partial: false }]
+        end
+        define_singleton_method(:fetch_model) do |name:|
+          fetch_model_calls << name
+          { name: name, tableName: "users", columns: [], associations: [], partial: false }
+        end
+      end
+    end
+
+    it "subsumes a model-file change queued in the same batch as a schema change" do
+      fetch_model_calls = Queue.new
+      server = build_server(
+        changes_input([{ uri: "file:///app/db/schema.rb", type: 2 },
+                       { uri: "file:///app/app/models/user.rb", type: 2 }]),
+        agent_manager: mixed_batch_manager(fetch_model_calls)
+      )
+      server.run
+
+      expect(wait_until { model_registry.known_model?("User") }).to be(true)
+      expect(fetch_model_calls.pop(timeout: 0.5)).to be_nil
+      expect(model_registry.column("User", "bio")&.nullable).to be(true)
+    end
+
+    it "subsumes it whichever order the two arrive in the batch" do
+      fetch_model_calls = Queue.new
+      server = build_server(
+        changes_input([{ uri: "file:///app/app/models/user.rb", type: 2 },
+                       { uri: "file:///app/db/schema.rb", type: 2 }]),
+        agent_manager: mixed_batch_manager(fetch_model_calls)
+      )
+      server.run
+
+      expect(wait_until { model_registry.known_model?("User") }).to be(true)
+      expect(fetch_model_calls.pop(timeout: 0.5)).to be_nil
+      expect(model_registry.column("User", "bio")&.nullable).to be(true)
+    end
   end
 
   it "does not fetch a changed model when the prerequisite reload fails" do
@@ -700,6 +762,9 @@ RSpec.describe "Ovallsp::Server Rails file-change invalidation" do
       workspace_root: "/workspace", agent_bootstrap: fake_bootstrap
     )
     server.instance_variable_set(:@agent_manager, initial_manager)
+    # See `#build_server`: an injected manager is not by itself a trusted
+    # workspace any more (`024.74`).
+    server.instance_variable_set(:@workspace_trusted, true)
     server.run
 
     collected = Array.new(4) { events.pop(timeout: 2) }

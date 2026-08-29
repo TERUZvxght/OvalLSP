@@ -54,6 +54,12 @@ RSpec.describe "Ovallsp::Server ancestry questions for the Runtime Agent" do
       workspace_root: "/workspace", ancestry_registry: ancestry_registry
     )
     server.instance_variable_set(:@agent_manager, agent_manager)
+    # These examples drive `#restart_agent` directly, and since `024.74`
+    # that is where workspace trust is asked -- in front of the spawn
+    # rather than at each caller. A server built here never handles an
+    # `initialize`, so nothing has told it; an Agent restart is only ever
+    # reachable on a workspace that was trusted, which is what this says.
+    server.instance_variable_set(:@workspace_trusted, true)
     server
   end
 
@@ -215,6 +221,9 @@ RSpec.describe "Ovallsp::Server ancestry questions for the Runtime Agent" do
       input: StringIO.new(""), output: output, logger: logger,
       workspace_root: "/workspace", ancestry_registry: ancestry_registry, agent_bootstrap: bootstrap
     )
+    # See `#build_server`: `#restart_agent` asks about trust itself since
+    # `024.74`, and this server never handled an `initialize`.
+    server.instance_variable_set(:@workspace_trusted, true)
 
     # The document is opened and diagnosed first, with no Agent assigned --
     # the ordering VS Code produces by restoring its editors at startup.

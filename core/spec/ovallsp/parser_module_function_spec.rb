@@ -232,11 +232,14 @@ RSpec.describe "Ovallsp::ParserService and module-level self-calling idioms" do
   # Ruby has no `extend self` in a class body -- `self` there is a Class,
   # and `Module#extend` wants a Module:
   #
-  #   $ ruby -e 'class ESC; extend self; end'
-  #   # => -e:1:in 'Kernel#extend': wrong argument type Class (expected Module) (TypeError)
-  #   # =>     from -e:1:in '<class:ESC>'
-  #   # =>     from -e:1:in '<main>'
+  #   $ ruby -e 'begin; class ESC; extend self; end; rescue TypeError => e; p [e.class, e.message]; end'
+  #   # => [TypeError, "wrong argument type Class (expected Module)"]
   #   # ruby 3.4.10
+  #
+  # (Written with the `rescue` so the session can be re-run and compared
+  # rather than merely read -- `scripts/check_interpreter_sessions.rb`.
+  # The raise is still the point; catching it is how the point is
+  # recorded as output instead of as a stack trace on stderr.)
   #
   # So a class writing it is broken code, and the engine must not record
   # an ancestor edge that Ruby refuses to make.

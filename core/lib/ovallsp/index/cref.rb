@@ -149,12 +149,19 @@ module Ovallsp
       #   # => [true, false]
       #   # ruby 3.4.10
       #
-      # 0.2.8 collected six flags into this value and the stocktake found
-      # `#defines_surface?` read at one site in the parser and
-      # `#declares_singleton?` at seven -- so a recorder could still read
-      # one predicate of nine and get the wrong answer, which is exactly
-      # what `#record_attribute_methods` did. Collecting the storage was
-      # not collecting the question.
+      # 0.2.8 collected six flags into this value, and the asymmetry that
+      # follows is why that was not enough on its own: `ParserService`
+      # asks the surface question at
+      # <!-- measured: cref-defines-surface-parser-sites = 1 -->1 site and
+      # the cref question at
+      # <!-- measured: cref-declares-singleton-parser-sites = 10 -->10, so
+      # a recorder could still read one predicate of nine and get the
+      # wrong answer -- which is exactly what `#record_attribute_methods`
+      # did. Collecting the storage was not collecting the question.
+      #
+      # Both numbers are derived rather than typed (`024.102`): the second
+      # was written as seven, from 0.2.11's stocktake, and had drifted to
+      # ten before anyone re-counted it.
       def surface_for
         return nil if owner.nil?
 

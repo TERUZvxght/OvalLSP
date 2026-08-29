@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "utf8"
+require_relative "repo_files"
 
 # Drives the diagnostics engine over a corpus of real Ruby and prints
 # every finding, one per line, in a form two revisions' runs can be
@@ -97,8 +98,12 @@ require "ovallsp"
 # than remembered.
 def provenance(key, value) = warn("corpus-diagnostics: #{key}=#{value}")
 
+# Through `RepoFiles` so an inherited `GIT_DIR` cannot make the
+# provenance lines describe a different repository from the one this run
+# is measuring -- `024.157`, and the provenance block above is exactly
+# where that would be least visible.
 def git(*args)
-  out = IO.popen(["git", *args], err: %i[child out], &:read)
+  out = RepoFiles.capture(Dir.pwd, args)
   $?.success? ? out.strip : nil
 end
 
@@ -174,6 +179,16 @@ signatures = Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace
 # `signatures:` the shadow rule of the day read -- so every number it
 # produced described a configuration no user runs. That is not a smaller
 # measurement, it is a measurement of something else, and it is why a
+# harness that builds its own engine cannot be trusted to describe the
+# product it is measuring.
+#
+# (That last clause stopped after "and it is why a" from 0.2.1 until
+# 0.2.16 -- a scripted edit whose end boundary missed, `024.215`. The
+# original wording is not recoverable from any commit, so what stands
+# above is a reconstruction from the paragraph that follows it rather
+# than a restoration; it is marked as one so nobody reads it as the
+# author's sentence.)
+#
 # **Assembled, not wired here** (`042`'s D8). This script had the
 # constructors written out, under a comment asking the reader to "keep
 # every constructor here matching `Server#initialize`" -- and the reader

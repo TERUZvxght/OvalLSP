@@ -87,8 +87,23 @@ RSpec.describe "numbers documented about this tree" do
     # documented number is what fails, and the message below tells the
     # author to write the false count into the document.
     "register-entries" => ->(rev = nil) { DeferredFindings.headings(register(rev)).length },
-    "register-open-defects" => ->(rev = nil) { DeferredFindings.open_defects(register(rev)).length }
+    "register-open-defects" => ->(rev = nil) { DeferredFindings.open_defects(register(rev)).length },
+    # How many times `ParserService` asks each of `Index::Cref`'s two
+    # surface questions. `Cref#surface_for`'s own comment argues from the
+    # gap between them, and it argued from a number typed out of 0.2.11's
+    # stocktake that had since drifted from seven to ten (`024.102`).
+    #
+    # Counted as the call, `@cref.` and all: every mention in a comment
+    # writes the bare `#name` form instead, so the receiver is what tells
+    # a call from a citation without stripping comments first.
+    "cref-defines-surface-parser-sites" => ->(_rev = nil) { parser_calls("defines_surface?") },
+    "cref-declares-singleton-parser-sites" => ->(_rev = nil) { parser_calls("declares_singleton?") }
   }.freeze
+
+  def self.parser_calls(name)
+    File.read(File.join(TREE_ROOT, "core", "lib", "ovallsp", "parser_service.rb"), encoding: "UTF-8")
+        .scan("@cref.#{name}").length
+  end
 
   REGISTER = "docs/design/tasks/024-deferred-review-findings.md"
 
@@ -96,7 +111,11 @@ RSpec.describe "numbers documented about this tree" do
   def self.register(rev = nil)
     return File.read(File.join(TREE_ROOT, REGISTER), encoding: "UTF-8") if rev.nil?
 
-    out = IO.popen(["git", "show", "#{rev}:#{REGISTER}"], chdir: TREE_ROOT, err: %i[child out], &:read)
+    # Through `RepoFiles`, which unsets `GIT_DIR` and its family at the
+    # spawn -- `024.157`. `chdir:` does not override them, so under a
+    # pre-commit hook's environment this would read a dated claim's
+    # revision out of whichever repository the hook named.
+    out = RepoFiles.capture(TREE_ROOT, ["show", "#{rev}:#{REGISTER}"])
     raise "cannot read #{REGISTER} at #{rev}: #{out}" unless $?.success?
 
     out

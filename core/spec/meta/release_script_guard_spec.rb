@@ -90,10 +90,7 @@ RSpec.describe "the release script's own guards" do
       File.chmod(0o600, pat)
 
       File.write(File.join(root, "tracked.txt"), "one\n")
-      system("git", "init", "-q", root, out: File::NULL)
-      system("git", "-C", root, "add", "-A", out: File::NULL)
-      system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
-             "commit", "-qm", "one", out: File::NULL)
+      throwaway_repo(root)
       File.write(File.join(root, "tracked.txt"), "two\n")
 
       out = IO.popen(["bash", File.join(root, "vscode", "scripts", "release.sh")],
@@ -116,10 +113,7 @@ RSpec.describe "the release script's own guards" do
       File.write(pat, "not-a-real-token")
       File.chmod(0o600, pat)
       File.write(File.join(root, "tracked.txt"), "one\n")
-      system("git", "init", "-q", root, out: File::NULL)
-      system("git", "-C", root, "add", "-A", out: File::NULL)
-      system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
-             "commit", "-qm", "one", out: File::NULL)
+      throwaway_repo(root)
 
       out = IO.popen(["bash", File.join(root, "vscode", "scripts", "release.sh")],
                      err: %i[child out], &:read)
@@ -168,10 +162,65 @@ RSpec.describe "the release script's own guards" do
   end
 
   it "refuses to publish an artifact carrying this machine's paths, from inside that check" do
-    block = block_containing(/grep -rlF --exclude/)
+    block = block_containing(/grep -rlF .*INSPECT_PATTERN.*INSPECT_ROOT/)
 
     expect(block).not_to be_nil, "the packaged-artifact path check is gone, or is no longer an if block"
     expect(block).to include("exit 1")
+  end
+
+  # **The clean-tree refusal is about *this* repository.**
+  #
+  # `024.157`: git's location variables override the working directory
+  # and `-C` does not, so an inherited `GIT_DIR` points the `git diff
+  # --quiet` below at whatever repository that variable names. The
+  # refusal would then be about someone else's tree, and a dirty one
+  # could publish a VSIX whose baked-in commit SHA names content that
+  # does not exist -- which is exactly what that refusal exists to stop.
+  #
+  # Text, because nothing in the suite executes this script's opening,
+  # and paired with the variables rather than with the word `unset`, so
+  # dropping one from the list is what fails.
+  it "unsets the variables that would aim its git commands at another repository" do
+    scrub = code[/^unset .*(?:\n\s+.*)*/]
+
+    expect(scrub).not_to be_nil, "release.sh no longer scrubs git's location variables (024.157)"
+    %w[GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY
+       GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE].each do |name|
+      expect(scrub).to include(name), "#{name} is not unset, so it can still redirect git"
+    end
+    expect(code.index("unset")).to be < code.index("git -C"),
+                                   "the scrub runs after a git command, which is too late"
+  end
+
+  # **One exclusion set, and no invocation may add to it.**
+  #
+  # The inspection, the count it prints and the control that proves the
+  # search works are three greps that have to agree about what they skip.
+  # Written out three times they did not have to: widening the exclusions
+  # on the inspection grep alone left the count healthy and the control
+  # green, and the artifact shipped with the leak. Measured against a
+  # 151-file fake artifact holding exactly one. `024.198`.
+  #
+  # A text assertion, deliberately, and about *internal agreement* rather
+  # than about a value: what it forbids is a second place where the
+  # answer could differ. The runtime half -- that the set is not widened
+  # everywhere at once -- is the control inside the script, which fails
+  # when a planted match goes unfound.
+  it "gives every path-inspection grep the same exclusion set, from one list" do
+    invocations = code.lines.select { |line| line.match?(%r{/usr/bin/grep -r[lL]F}) }
+    inspection = invocations.reject { |line| line.include?("--include=") }
+
+    expect(inspection.length).to be >= 3,
+                                 "expected the inspection, its count and its control; found " \
+                                 "#{inspection.length}:\n#{inspection.join}"
+
+    inspection.each do |line|
+      expect(line).to include('"${INSPECT_EXCLUDE[@]}"'),
+                      "this grep does not read the shared exclusion list:\n#{line}"
+      expect(line).not_to match(/--exclude/),
+                          "this grep adds an exclusion of its own, so the three can disagree " \
+                          "about what was skipped -- which is 024.198:\n#{line}"
+    end
   end
 
   # Semantic mutations -- negating a condition, pointing a check at an
@@ -239,7 +288,14 @@ RSpec.describe "the release script's own guards" do
   # (`ugrep`), and nothing else -- including a `grep` written on a
   # continuation line, after `; then`, or inside backticks.
   it "calls the grep it means, not whatever the shell resolves" do
-    hard_failure = block_containing(/grep -rlF --exclude/)
+    # The needle is the *call*, not its flags. It was
+    # `grep -rlF --exclude`, and the change that moved those flags into an
+    # `INSPECT_EXCLUDE` array — in the same patch as this example — left
+    # the needle matching nothing, so the guard reported the check gone.
+    # It found a real inconsistency in its own change set, which is what
+    # it is for; a needle that a refactor of the thing it guards can
+    # invalidate is a needle that goes quiet exactly when it should not.
+    hard_failure = block_containing(/grep -rlF/)
 
     expect(hard_failure).not_to be_nil,
                                 "the packaged-artifact path check is gone, or is no longer an if block"

@@ -78,13 +78,50 @@ RSpec.describe "no real home directory path in tracked content" do
 
   # The variant deliberately *not* matched, pinned so the decision is
   # visible rather than looking like an oversight. Case-insensitivity
-  # would catch `/users/alice` -- and flag 37 ordinary `app/views/users/`
-  # lines in this repository. The reasoning is in the scanner beside the
+  # would catch a lowercase spelling of a home path -- and flag the
+  # ordinary Rails resource directories that appear throughout the specs
+  # and the design docs. The reasoning is in the scanner beside the
   # pattern; if someone later decides the trade is worth it, this example
   # is what they must consciously change.
   it "does not treat a lowercase Rails resource directory as a home path" do
     expect(HomePaths.names_in(["", "users", "alice", "project"].join("/"))).to be_empty
     expect(HomePaths.names_in("app/views/users/show.html.erb")).to be_empty
+  end
+
+  # The example above pins the decision; this one re-derives the *reason*
+  # for it, which until 0.2.16 was a hand-typed count in two places that
+  # was wrong at every revision it was checked against (`024.192`).
+  #
+  # A floor rather than a number: the argument is "so many false reports
+  # that the check gets switched off", and that argument is about an
+  # order of magnitude, not about a total. Asserting the total would put
+  # back exactly the maintained figure this replaces. The floor is set
+  # well under the current answer so ordinary churn does not move it, and
+  # the case-sensitive side is asserted at zero in the same example so a
+  # scan that read nothing cannot satisfy either half.
+  it "would cry wolf if it were case-insensitive, which is why it is not" do
+    insensitive = Regexp.new(HomePaths::PATTERN.source, Regexp::IGNORECASE)
+
+    would_flag = HomePaths.tracked_files.sum do |relative|
+      absolute = File.join(HomePaths::ROOT, relative)
+      next 0 unless File.file?(absolute)
+
+      content = File.binread(absolute)
+      next 0 if content.include?("\0")
+
+      content.force_encoding(Encoding::UTF_8)
+      next 0 unless content.valid_encoding?
+
+      content.lines.count do |line|
+        line.scan(insensitive).flatten.reject { |name| HomePaths::SYNTHETIC.include?(name) }.any?
+      end
+    end
+
+    expect(would_flag).to be >= 20,
+                          "the case-insensitive pattern flags #{would_flag} line(s). The decision to keep " \
+                          "PATTERN case-sensitive rests on that number being large; if it has fallen to " \
+                          "nearly nothing, revisit the decision rather than lowering this floor."
+    expect(HomePaths.tree_offences).to be_empty
   end
 
   # A file this scanner cannot read is a file it cannot clear, and until

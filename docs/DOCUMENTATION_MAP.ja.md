@@ -39,6 +39,7 @@
 | **リリース作業の所在**(ブランチの作成・改名・再採番、ブランチ間の作業移動) | `main` 上のそのリリースの `NNN-*.md` がブランチ名を明記する。`AGENTS.md` の現行ループへのポインタも — 0.2.3 はこの行が無かったために並行して二度準備された(CLAUDE.md「Where a release's work lives」、028) | — |
 | **どのスレッドが何を所有するか、どのロックが何を守るか** — 背景スレッドの追加、mutex の追加や順序変更、状態オブジェクトを可変/不変に変えること | `docs/design/docs/02-architecture.md` のスレッド節（所有関係とロック順序を一箇所で述べている）と、それを自身の根拠として引用している `core/lib/ovallsp/document_store.rb` の注記 | — |
 | **このツリーの外の挙動への依存** — クライアント、VS Code、LSP 仕様、Marketplace | `docs/CLIENT_BEHAVIOUR.md` + `.ja.md`。この種の事実を述べる唯一の場所で、他は全てここを指す | `core/spec/meta/client_behaviour_spec.rb`（grep できる行を `vscode/node_modules` に照合し、他が言い直していないことも確認） |
+| **Ruby自身の挙動についての主張** — コメント・spec・記録のどこであれ、インタプリタが何をするかを述べているもの | それを支える貼り付け済みセッション。`CLAUDE.md` が要求しているもので、0.2.16 から**実際に再実行される** — 主張だけ書き換えて走らせ直さなければ落ちる。例外を出すセッションは `rescue` で書き、要点をスタックトレースではなく出力として記録する | `core/spec/meta/interpreter_sessions_spec.rb` と `scripts/check_interpreter_sessions.rb`(ツリー内の全セッションを Ruby の出力と突き合わせる — `024.220`) |
 | **進め方の取り決め**(構築・レビュー・リリースの方法) | `CLAUDE.md`、`AGENTS.md`、`CONTRIBUTING.md` + `.ja.md` | — |
 
 ## サイトもドキュメントです

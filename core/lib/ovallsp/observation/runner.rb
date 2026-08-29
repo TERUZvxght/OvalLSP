@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require "json"
 require "tempfile"
 require "timeout"
 require_relative "observed_signature"
+require_relative "wire"
 require_relative "../bundle_environment"
 require_relative "../child_process"
 
@@ -71,7 +73,7 @@ module Ovallsp
       # (mirrors RailsBootstrap.start's own `env_source:`).
       def run(command:, args:, workspace_root:, timeout_seconds: DEFAULT_TIMEOUT_SECONDS, env_source: ENV)
         run_id = "#{Time.now.to_f}-#{Process.pid}-#{rand(1_000_000)}"
-        output_file = Tempfile.new(["ovallsp-observation", ".marshal"])
+        output_file = Tempfile.new(["ovallsp-observation", ".json"])
         log_file = Tempfile.new(["ovallsp-observation", ".log"])
         output_file.close
         log_file.close
@@ -104,7 +106,7 @@ module Ovallsp
         # than an oversight (reviewed explicitly in round 9). Everything
         # this method can realistically hit is under StandardError:
         # Errno::* (SystemCallError), Timeout::Error (RuntimeError),
-        # Marshal/IOError, ArgumentError. What `Exception` would
+        # JSON::ParserError/IOError, ArgumentError. What `Exception` would
         # additionally catch is exactly what must NOT be caught here --
         # Interrupt/SignalException (the user Ctrl-C'ing the editor's
         # server must still terminate it, not be logged as "this run
@@ -316,7 +318,7 @@ module Ovallsp
       # status is genuinely unavailable) is deliberately *not* treated as
       # a failure, and that is safe only because of #read_results'
       # empty-file rule: an empty `results` here can only have come from a
-      # Marshal payload Harness' own at_exit hook wrote, i.e. the test
+      # payload Harness' own at_exit hook wrote, i.e. the test
       # process demonstrably ran to completion under observation and
       # observed nothing. That written payload is stronger evidence than
       # the exit code we couldn't read. Were an empty *file* still to
@@ -383,16 +385,24 @@ module Ovallsp
       end
 
       # `[]` -- "the suite ran and genuinely observed nothing" -- only
-      # ever comes from a Marshal payload Harness itself wrote; `nil` --
+      # ever comes from a payload Harness itself wrote; `nil` --
       # "no outcome", per #run's docs -- for anything else, so neither a
       # corrupt/truncated payload nor a result file the harness never got
       # to write masquerades as "the suite observed zero methods" and
       # wipes the store.
       #
+      # The payload is JSON since 0.2.16 (`024.135`). It was Marshal, and
+      # the shape check below ran *after* `Marshal.load` had already
+      # constructed every object the stream named -- which is the whole of
+      # `024.73`, on the channel that entry did not cover.
+      # `Observation::Wire` validates fields and only then builds the
+      # typed values, so a payload this Core did not write produces `nil`
+      # having constructed nothing.
+      #
       # An *empty* file is specifically the latter, not the former (found
-      # by an independent review, round 8). Harness#dump always writes
-      # `Marshal.dump(results)` from its at_exit hook, which is 4 bytes
-      # even for zero observations, so a zero-byte file means the harness
+      # by an independent review, round 8). Harness#dump always writes a
+      # complete envelope from its at_exit hook -- never zero bytes, even
+      # for zero observations -- so a zero-byte file means the harness
       # never ran to completion at all -- and it is the *normal* shape of
       # a perfectly ordinary configuration, not an exotic crash: a test
       # command that isn't a Ruby process (`make test`, `npm test`,
@@ -415,10 +425,10 @@ module Ovallsp
           return nil
         end
 
-        results = Marshal.load(raw)
-        return results if results.is_a?(Array) && results.all? { |r| r.is_a?(ObservedSignature) }
+        results = Wire.decode(JSON.parse(raw, symbolize_names: true))
+        return results if results
 
-        @logger.error("observation runner produced results of an unexpected shape (#{results.class})")
+        @logger.error("observation runner produced results of an unexpected shape")
         nil
       rescue StandardError => e
         @logger.error("observation runner produced unreadable results: #{e.class}: #{e.message}")

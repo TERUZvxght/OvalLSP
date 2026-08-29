@@ -27,6 +27,16 @@
 
 set -euo pipefail
 
+# This script decides which repository it is publishing from -- REPO_ROOT
+# below -- and then asks git about it. Git will not agree unless these
+# are unset: GIT_DIR and its family override the working directory, and
+# `-C` does not. Inherited from a hook or a wrapper, they would point the
+# clean-tree refusal below at a different repository, so a dirty tree
+# could publish a VSIX whose baked-in commit SHA names content that does
+# not exist. 024.157, and the same scrub RepoFiles applies in Ruby.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_OBJECT_DIRECTORY \
+      GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VSCODE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$VSCODE_DIR/.." && pwd)"
@@ -198,7 +208,22 @@ echo "-- packaged-artifact path inspection --"
 # healthy number. A count that is not derived from what was actually
 # searched guards the variable rather than the search.
 INSPECT_ROOT="$UNPACK_DIR"
-if /usr/bin/grep -rlF --exclude='*.bundle' --exclude='*.so' --exclude='*.dylib' "$HOME" "$INSPECT_ROOT"; then
+# The pattern and the exclusion set, once each, so that the count and
+# the control below test the search this check actually performs.
+#
+# One list, not three copies: with the flags written out on each
+# invocation, widening them on the *inspection* grep alone left both the
+# count and the control untouched and healthy -- measured, and it ships a
+# leaking artifact. Two expressions that must agree about the same thing
+# is the defect this whole block is about, one level in.
+#
+# The control's *content* is written from `$HOME` -- the environment,
+# not `INSPECT_PATTERN` -- so changing what is searched for cannot change
+# what is planted, and the control goes red instead of following the
+# mutation. 024.198.
+INSPECT_PATTERN="$HOME"
+INSPECT_EXCLUDE=(--exclude='*.bundle' --exclude='*.so' --exclude='*.dylib')
+if /usr/bin/grep -rlF "${INSPECT_EXCLUDE[@]}" "$INSPECT_PATTERN" "$INSPECT_ROOT"; then
   echo "release.sh: the packaged VSIX contains this build machine's own absolute path (outside native extensions)." >&2
   echo "Refusing to publish." >&2
   exit 1
@@ -209,15 +234,51 @@ fi
 # Prints what it looked at, not only that it passed. A text pin cannot
 # see a semantic mutation -- negating the condition, or aiming the check
 # at a directory that does not exist -- and an attack round demonstrated
-# both. A count turns the second into something a reader of this log
-# notices: a check aimed at nothing reports nothing inspected.
-INSPECTED="$(find "$INSPECT_ROOT" -type f 2>/dev/null | wc -l | tr -d ' ')"
+# both.
+#
+# "Aimed at nothing" has three dimensions -- the directory, the pattern,
+# and the exclusion set -- and until 0.2.16 the count covered one badly.
+# It was `find "$INSPECT_ROOT" -type f | wc -l`, which shares only the
+# variable with the grep above; measured on a 151-file fake artifact
+# holding one leak, the shipped check, a check whose pattern matched
+# nothing, and a check with four more `--exclude` flags all printed the
+# same 151. `024.198`. A count that is not derived from what was
+# actually searched guards the variable rather than the search -- which
+# this file's own comment already said, while doing it.
+#
+# **Two derivations, because one does not reach.** The count below is
+# `grep -L` with the identical flags: the files that same invocation
+# read and cleared, so an unreachable directory collapses it. But a
+# pattern that matches nothing, or a wider exclusion set, still leaves a
+# healthy-looking number -- measured: 151 and 150 against the shipped
+# 150. What catches those is a positive control: a scratch directory of
+# files that certainly contain the pattern, in the extensions an
+# exclusion could be widened to cover, which the same command with the
+# same flags must find all of.
+INSPECTED="$( { /usr/bin/grep -rLF "${INSPECT_EXCLUDE[@]}" "$INSPECT_PATTERN" "$INSPECT_ROOT" || true; } | wc -l | tr -d ' ')"
 echo "PASS: packaged-artifact path inspection (${INSPECTED} files inspected)"
 if [ "$INSPECTED" -lt 100 ]; then
   echo "release.sh: only ${INSPECTED} files were inspected -- the artifact should have over a thousand." >&2
   echo "The check is looking at the wrong place. Refusing to publish." >&2
   exit 1
 fi
+
+# The control. Scratch files, removed immediately; nothing here is ever
+# tracked, and the grep's output is discarded so the path itself is not
+# echoed into a log.
+CONTROL_DIR="$(mktemp -d)"
+for ext in js json map rb txt; do
+  printf '%s/probe\n' "$HOME" > "$CONTROL_DIR/control.$ext"
+done
+CONTROL_FOUND="$( { /usr/bin/grep -rlF "${INSPECT_EXCLUDE[@]}" "$INSPECT_PATTERN" "$CONTROL_DIR" || true; } | wc -l | tr -d ' ')"
+rm -rf "$CONTROL_DIR"
+if [ "$CONTROL_FOUND" -ne 5 ]; then
+  echo "release.sh: the path inspection found ${CONTROL_FOUND} of 5 control files that certainly match." >&2
+  echo "Its pattern or its exclusion set is wrong, so a clean result above means nothing." >&2
+  echo "Refusing to publish." >&2
+  exit 1
+fi
+echo "PASS: packaged-artifact path inspection control (5 of 5 planted matches found)"
 
 echo "-- node scripts/verify-packaged-payload-hash.js --"
 node "$VSCODE_DIR/scripts/verify-packaged-payload-hash.js" "$UNPACK_DIR/extension"

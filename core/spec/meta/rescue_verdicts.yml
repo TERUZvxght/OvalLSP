@@ -1,19 +1,35 @@
 # Every `rescue` statement in `core/lib`, and what it does with the failure.
 #
 # `042`'s D10 / `024.122`. The key is `<file>:<the rescue statement>`; the
-# value is one of `surfaces`, `contained` or `swallows`, optionally followed
-# by `: <why>` -- and for `contained`, the why is not optional in review.
+# value is one of the two verdicts below, `contained` followed by
+# `: <why>` -- and the why is not optional.
 #
 #   surfaces  -- raises, or reports through a channel a person sees
-#   contained -- the failure genuinely has no consequence, said in place
-#   swallows  -- neither. This is the group `024.122` exists to empty
+#   contained -- no caller can turn the value into an assertion about the
+#                user's code, and the argument for that is written at the
+#                site as well as here
 #
-# `scripts/check_swallowed_failures.rb` fails on a rescue with no verdict,
-# so adding one becomes an edit somebody makes on purpose. The verdicts
-# below are a *first pass*: every site whose handler raises or reports was
-# marked `surfaces` mechanically, and the rest are marked `swallows` --
-# which is the safe default and the honest one, since nothing has yet been
-# argued. Moving one to `contained` is the review work `024.122` describes.
+# There is no third option. `scripts/check_swallowed_failures.rb` refuses
+# a site that neither surfaces nor argues, and it fails on a rescue with
+# no verdict at all, so adding one is an edit somebody makes on purpose.
+# `swallows` is still a spelling the checker recognises, purely so that a
+# verdict written before that column was emptied gets the argument rather
+# than a parse complaint; it is not a value a site may carry, and it is
+# not a default.
+#
+# **The work these verdicts are waiting for is review, not writing.**
+# `024.122` closed in 0.2.13: every non-`surfaces` site now carries its
+# argument. Those arguments are one author's, reviewed by nobody else --
+# `CLAUDE.md` says so, and says a `contained` that turns out to be wrong
+# is an ordinary finding. This file is where to record that it was.
+#
+# Until 0.2.16 this header said the opposite: that the verdicts were a
+# mechanical first pass, that the rest were marked with the third
+# spelling, and that it was "the safe default and the honest one". By
+# then every clause was false and the last one was an instruction that
+# fails the suite -- `024.217`. `swallowed_failures_spec.rb` now derives
+# the option list above from the checker's own, so the two cannot drift
+# apart again without a check going red.
 
 "core/lib/ovallsp/agent_process_manager.rb#stop_registered_at_exit": "contained: at_exit teardown"
 "core/lib/ovallsp/agent_process_manager.rb#start": surfaces

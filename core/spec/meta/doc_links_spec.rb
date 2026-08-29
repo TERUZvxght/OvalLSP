@@ -33,6 +33,7 @@ RSpec.describe "documentation links" do
   DOC_LINKS_DIR = ["docs", "design", "tasks"].join("/")
   DOC_LINKS_NEVER = "#{DOC_LINKS_DIR}/999-never-#{"existed"}.md"
   DOC_LINKS_ONCE = "#{DOC_LINKS_DIR}/999-was-#{"here"}.md"
+  DOC_LINKS_MOVED = "#{DOC_LINKS_DIR}/999-lives-#{"here-now"}.md"
 
   def check(root: nil)
     env = root ? { "CHECK_DOC_LINKS_ROOT" => root } : {}
@@ -41,13 +42,16 @@ RSpec.describe "documentation links" do
   end
 
   # A throwaway repository is the only honest fixture for a checker that
-  # asks git questions, and every example below needs the same three
-  # commands.
+  # asks git questions.
+  #
+  # Through `ThrowawayRepo` rather than three bare `system("git", ...)`
+  # calls: those inherit `GIT_DIR` and its family, so a run under an
+  # inherited one aims them at another repository. The guard that says so
+  # arrived in the same release as this file's git calls and caught them
+  # on the first run after both landed, which is the two halves of one
+  # release meeting.
   def init_commit(root)
-    system("git", "init", "-q", root, out: File::NULL)
-    system("git", "-C", root, "add", "-A", out: File::NULL)
-    system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
-           "commit", "-qm", "one", out: File::NULL)
+    throwaway_repo(root)
   end
 
   it "all resolve to a file that exists" do
@@ -89,10 +93,7 @@ RSpec.describe "documentation links" do
       FileUtils.mkdir_p(File.join(root, DOC_LINKS_DIR))
       File.write(File.join(root, DOC_LINKS_DIR, "here.md"),
                  "A link to [a sibling](#{["999-absent", "md"].join(".")})\n")
-      system("git", "init", "-q", root, out: File::NULL)
-      system("git", "-C", root, "add", "-A", out: File::NULL)
-      system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
-             "commit", "-qm", "one", out: File::NULL)
+      throwaway_repo(root)
 
       output, ok = check(root: root)
 
@@ -214,10 +215,7 @@ RSpec.describe "documentation links" do
   it "still fails on a path no commit ever carried, even when the line is marked deleted" do
     Dir.mktmpdir do |root|
       File.write(File.join(root, "note.md"), "A citation of `#{DOC_LINKS_NEVER}` <!-- deleted -->\n")
-      system("git", "init", "-q", root, out: File::NULL)
-      system("git", "-C", root, "add", "-A", out: File::NULL)
-      system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
-             "commit", "-qm", "one", out: File::NULL)
+      throwaway_repo(root)
 
       output, ok = check(root: root)
       expect(ok).to be(false), "the marker admitted a path no commit carried:\n#{output}"
@@ -232,18 +230,62 @@ RSpec.describe "documentation links" do
     Dir.mktmpdir do |root|
       FileUtils.mkdir_p(File.join(root, DOC_LINKS_DIR))
       File.write(File.join(root, DOC_LINKS_ONCE), "gone soon\n")
-      system("git", "init", "-q", root, out: File::NULL)
-      system("git", "-C", root, "add", "-A", out: File::NULL)
-      system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
-             "commit", "-qm", "one", out: File::NULL)
+      throwaway_repo(root)
 
       FileUtils.rm(File.join(root, DOC_LINKS_ONCE))
       File.write(File.join(root, "note.md"), "Deleted `#{DOC_LINKS_ONCE}` <!-- deleted -->\n")
-      system("git", "-C", root, "add", "-A", out: File::NULL)
-      system("git", "-C", root, "-c", "user.email=t@example.invalid", "-c", "user.name=t",
-             "commit", "-qm", "two", out: File::NULL)
+      commit_throwaway(root, "two")
 
       output, ok = check(root: root)
+      expect(ok).to be(true), output
+      expect(output).to include("1 naming a deleted file")
+    end
+  end
+
+  # And the third case, which the marker's own paragraph called a failure
+  # while the code admitted it: a path whose content was *renamed* away.
+  # `ever_existed?` is true for it -- some commit's tree did name it --
+  # so it passed and was counted among the deletions. Renames are how
+  # documents move here, so this was the widest case, not an edge one.
+  # `024.176`.
+  it "refuses a marked path whose content was renamed rather than deleted" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, DOC_LINKS_DIR))
+      File.write(File.join(root, DOC_LINKS_ONCE), "still here, under another name\n")
+      throwaway_repo(root)
+
+      FileUtils.mv(File.join(root, DOC_LINKS_ONCE), File.join(root, DOC_LINKS_MOVED))
+      File.write(File.join(root, "note.md"), "Deleted `#{DOC_LINKS_ONCE}` <!-- deleted -->\n")
+      commit_throwaway(root, "two")
+
+      output, ok = check(root: root)
+
+      expect(ok).to be(false), "the marker admitted a path that was only renamed:\n#{output}"
+      expect(output).to include(DOC_LINKS_ONCE, DOC_LINKS_MOVED)
+      expect(output).to include("0 naming a deleted file"),
+                        "a renamed path is still being counted as a recorded deletion:\n#{output}"
+    end
+  end
+
+  # Renamed and *then* genuinely deleted is a deletion, and must still be
+  # admitted -- otherwise the fix above trades one wrong answer for
+  # another. The distinguishing fact is whether the content exists under
+  # some name now, not whether a rename ever happened.
+  it "still admits a path that was renamed and then deleted" do
+    Dir.mktmpdir do |root|
+      FileUtils.mkdir_p(File.join(root, DOC_LINKS_DIR))
+      File.write(File.join(root, DOC_LINKS_ONCE), "doomed, by way of another name\n")
+      throwaway_repo(root)
+
+      FileUtils.mv(File.join(root, DOC_LINKS_ONCE), File.join(root, DOC_LINKS_MOVED))
+      commit_throwaway(root, "two")
+
+      FileUtils.rm(File.join(root, DOC_LINKS_MOVED))
+      File.write(File.join(root, "note.md"), "Deleted `#{DOC_LINKS_ONCE}` <!-- deleted -->\n")
+      commit_throwaway(root, "three")
+
+      output, ok = check(root: root)
+
       expect(ok).to be(true), output
       expect(output).to include("1 naming a deleted file")
     end

@@ -125,6 +125,20 @@ RSpec.describe "Ovallsp::Server execution entry points are gated on workspace tr
       expect(started).to be_empty
     end
 
+    # And it says so, rather than acknowledging a restart that did not
+    # happen. The refusal payload was asserted by nothing until `024.74`
+    # moved the gate: the example above would pass just as well if the
+    # client were told the restart had been accepted.
+    it "tells the client it refused rather than acknowledging a restart that did not happen" do
+      run(
+        initialize_frame(trusted: false),
+        frame(jsonrpc: "2.0", id: 2, method: "ovallsp/restartAgent", params: {})
+      )
+
+      expect(responses.find { |m| m[:id] == 2 }[:result])
+        .to eq(acknowledged: false, reason: "workspace not trusted")
+    end
+
     # The positive half: without it, a gate that refuses everything would
     # pass the example above and break the feature. `maybe_start_agent`
     # fires on initialize when trusted, so one start is expected already;
@@ -137,6 +151,55 @@ RSpec.describe "Ovallsp::Server execution entry points are gated on workspace tr
 
       sleep 0.05 until started.size >= 1 || (defined?(@waited) && @waited)
       expect(started.size).to be >= 1
+    end
+  end
+
+  # `024.74`. The two examples above go through `restart_agent_result`,
+  # which asks; the method that actually spawns did not. Every route to it
+  # was gated, so nothing was reachable -- and "every caller happens to be
+  # right" is the property this file's own header says is not a property.
+  # A fourth caller closed nothing, and neither did the three.
+  #
+  # Driven before the fix: `#restart_agent` on this same untrusted server
+  # returned a Thread and `bootstrap.start` was called once, with no
+  # warning logged.
+  describe "#restart_agent itself" do
+    def untrusted_server
+      Ovallsp::Server.new(
+        input: StringIO.new(""), output: output, logger: logger,
+        workspace_root: "/workspace", agent_bootstrap: fake_bootstrap
+      )
+    end
+
+    it "does not spawn a bootstrap when called directly on an untrusted workspace" do
+      server = untrusted_server
+
+      server.send(:restart_agent)
+      sleep 0.1
+
+      expect(started).to be_empty
+    ensure
+      server&.send(:shutdown_background_tasks)
+    end
+
+    it "reports the refusal to its caller rather than a thread that will do nothing" do
+      server = untrusted_server
+
+      expect(server.send(:restart_agent)).to be_nil
+    ensure
+      server&.send(:shutdown_background_tasks)
+    end
+
+    # The positive half, so a gate that refuses everything cannot pass the
+    # two above: the same direct call on a server that *was* told.
+    it "still spawns one once trust has been recorded" do
+      server = untrusted_server
+      server.instance_variable_set(:@workspace_trusted, true)
+
+      expect(server.send(:restart_agent)).to be_a(Thread)
+      expect(started.pop(timeout: 2)).to eq("/workspace")
+    ensure
+      server&.send(:shutdown_background_tasks)
     end
   end
 end

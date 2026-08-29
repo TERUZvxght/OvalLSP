@@ -244,7 +244,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.2.16 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
 | [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | fixed | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
-| [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | open | 0.2.16 | The trust gate stands in front of callers, not in front of what exec… |
+| [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | fixed | 0.2.16 | The trust gate stands in front of callers, not in front of what exec… |
 | [`024.75`](#02475-a-documented-field-selects-nothing) | fixed | 0.2.12 | A documented field selects nothing |
 | [`024.76`](#02476-fifty-four-unknown-method-reports-over-real-gem-source-and-all-of-them-false) | open | 0.2.16 | Fifty-four `unknown-method` reports over real gem source, and all of… |
 | [`024.77`](#02477-a-call-to-a-method-that-does-not-exist-is-missed-through-a-relation) | fixed | 0.2.15 | A call to a method that does not exist is missed through a relation |
@@ -272,7 +272,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.99`](#02499-completion-offers-members-that-cannot-be-called-from-where-it-was-asked) | open | 0.2.16 | Completion offers members that cannot be called from where it was as… |
 | [`024.100`](#024100-the-four-features-answer-from-different-code-paths-and-disagree-at-one-position) | open | 0.2.16 | The four features answer from different code paths and disagree at o… |
 | [`024.101`](#024101-analysis-runs-per-keystroke-so-the-answers-fall-behind-the-cursor-and-every-wrong-one-is-published) | fixed | 0.2.10 | Analysis runs per keystroke, so the answers fall behind the cursor a… |
-| [`024.102`](#024102-eight-classes-and-the-logic-each-one-could-not-have-happened-under) | open | 0.2.16 | Eight classes, and the logic each one could not have happened under |
+| [`024.102`](#024102-eight-classes-and-the-logic-each-one-could-not-have-happened-under) | fixed | 0.2.16 | Eight classes, and the logic each one could not have happened under |
 | [`024.103`](#024103-a-bare-class-name-inside-a-namespace-answers-with-an-arbitrary-same-named-class) | fixed | 0.2.10 | A bare class name inside a namespace answers with an arbitrary same-… |
 | [`024.104`](#024104-class-methods-do-in-a-concern-is-attributed-to-the-instance-side) | fixed | 0.2.10 | `class_methods do` in a concern is attributed to the instance side |
 | [`024.105`](#024105-visibility-is-not-recorded-for-singleton-methods-at-all) | fixed | 0.2.9 | Visibility is not recorded for singleton methods at all |
@@ -305,10 +305,10 @@ nobody can search is the recording habit without the benefit.
 | [`024.132`](#024132-a-scope-defined-in-a-concern-s-included-do-has-no-type) | open | 0.2.16 | A scope defined in a concern's `included do` has no type |
 | [`024.133`](#024133-a-positional-argument-to-a-keyword-only-method-reads-as-nonsense) | fixed | 0.2.15 | A positional argument to a keyword-only method reads as nonsense |
 | [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | fixed | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
-| [`024.135`](#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | open | 0.2.16 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
+| [`024.135`](#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | fixed | 0.2.16 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
 | [`024.136`](#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | fixed | 0.2.16 | A route's optional segments are detected by matching the literal `(.… |
 | [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | 0.2.16 | `WorkspaceIndex#search` scans every symbol in the workspace |
-| [`024.138`](#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | open | 0.2.16 | No test mixes a schema change and a model-file change in one batch |
+| [`024.138`](#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | fixed | 0.2.16 | No test mixes a schema change and a model-file change in one batch |
 | [`024.139`](#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
 | [`024.140`](#024140-a-scripted-edit-doubled-a-register-entry-and-every-check-stayed-green) | fixed | 0.2.14 | A scripted edit doubled a register entry, and every check stayed gre… |
 | [`024.141`](#024141-publishing-md-documented-the-publish-command-that-shipped-a-corrupt-v0-1-2) | fixed | 0.2.14 | `PUBLISHING.md` documented the publish command that shipped a corrup… |
@@ -326,8 +326,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.153`](#024153-a-quarter-of-the-open-work-is-in-no-release-and-0-3-0-has-become-where-the-rest-goes) | fixed | 0.2.15 | A quarter of the open work is in no release, and 0.3.0 has become wh… |
 | [`024.154`](#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | open | 0.2.16 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
 | [`024.155`](#024155-a-register-heading-the-entry-grammar-does-not-match-is-skipped-rather-than-failed-so-an-entry-can-exist-and-be-checked-by-nothing) | fixed | 0.2.16 | A register heading the entry grammar does not match is skipped rathe… |
-| [`024.156`](#024156-the-evidence-extractor-recognises-only-rb-sh-js-and-test-so-typescript-tests-and-ci-job-names-the-sole-evidence-for-eight-gates-are-never-checked) | open | 0.2.16 | The evidence extractor recognises only .rb/.sh/.js and test:, so Typ… |
-| [`024.157`](#024157-a-git-subprocess-in-a-throwaway-repository-obeys-the-inherited-git-dir-so-the-suite-commits-to-the-real-repository) | open | 0.2.16 | A git subprocess in a throwaway repository obeys the inherited GIT_D… |
+| [`024.156`](#024156-the-evidence-extractor-recognises-only-rb-sh-js-and-test-so-typescript-tests-and-ci-job-names-the-sole-evidence-for-eight-gates-are-never-checked) | fixed | 0.2.16 | The evidence extractor recognises only .rb/.sh/.js and test:, so Typ… |
+| [`024.157`](#024157-a-git-subprocess-in-a-throwaway-repository-obeys-the-inherited-git-dir-so-the-suite-commits-to-the-real-repository) | fixed | 0.2.16 | A git subprocess in a throwaway repository obeys the inherited GIT_D… |
 | [`024.158`](#024158-the-executed-pat-mode-example-passes-on-a-release-sh-that-only-warns-because-its-exit-status-comes-from-a-later-check-misreporting-a-non-repository-as-dirty) | fixed | 0.2.16 | The executed PAT-mode example passes on a release.sh that only warns… |
 | [`024.159`](#024159-the-measured-claim-marker-and-the-number-a-reader-sees-are-separate-strings-so-the-prose-can-say-anything-while-the-marker-verifies) | open | 0.2.16 | The measured-claim marker and the number a reader sees are separate … |
 | [`024.160`](#024160-counts-in-046-that-describe-this-tree-carry-no-basis-are-not-marked-and-several-are-stale-at-head) | open | 0.2.16 | Counts in 046 that describe this tree carry no basis, are not marked… |
@@ -338,7 +338,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.165`](#024165-046-keeps-138-acceptance-boxes-on-the-stated-ground-that-no-box-has-ever-been-ticked-56-are-ticked-13-of-them-in-a-file-this-change-set-edited) | open | 0.2.16 | 046 keeps 138 acceptance boxes on the stated ground that no box has … |
 | [`024.166`](#024166-two-rows-of-046-s-checks-table-describe-checks-that-were-built-differently-and-the-changed-shape-list-omits-one) | fixed | 0.2.16 | Two rows of 046's checks table describe checks that were built diffe… |
 | [`024.167`](#024167-046-s-three-review-rounds-record-no-per-place-tracking-so-claude-md-s-same-place-rule-cannot-be-applied-and-was-not) | open | 0.2.16 | 046's three review rounds record no per-place tracking, so CLAUDE.md… |
-| [`024.168`](#024168-the-ledger-s-reason-for-keeping-05-protocol-md-s-section-numbering-counts-four-source-comments-where-one-exists-and-the-claim-was-copied-into-the-shipped-document) | open | 0.2.16 | The ledger's reason for keeping 05-protocol.md's section numbering c… |
+| [`024.168`](#024168-the-ledger-s-reason-for-keeping-05-protocol-md-s-section-numbering-counts-four-source-comments-where-one-exists-and-the-claim-was-copied-into-the-shipped-document) | fixed | 0.2.16 | The ledger's reason for keeping 05-protocol.md's section numbering c… |
 | [`024.169`](#024169-check-doc-links-rb-s-citation-comment-describes-anchor-punctuation-stripping-that-no-caller-performs) | fixed | 0.2.16 | `check_doc_links.rb`'s CITATION comment describes anchor/punctuation… |
 | [`024.170`](#024170-the-doubled-entry-check-counts-area-lines-so-a-body-duplicated-anywhere-below-that-line-is-invisible) | fixed | 0.2.16 | The doubled-entry check counts `**Area:**` lines, so a body duplicat… |
 | [`024.171`](#024171-three-entries-closed-in-0-2-14-state-as-done-something-head-contradicts-two-of-them-naming-a-countermeasure-that-was-never-built) | open | 0.2.16 | Three entries closed in 0.2.14 state as done something HEAD contradi… |
@@ -346,7 +346,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.173`](#024173-the-shipped-target-guard-sees-only-kind-defect-and-released-in-is-written-by-16-entries-and-read-by-no-check) | open | 0.2.16 | The shipped-target guard sees only `kind: defect`, and `released-in:… |
 | [`024.174`](#024174-a-relative-markdown-link-beginning-docs-is-resolved-against-the-repository-root-instead-of-the-citing-file-s-directory) | fixed | 0.2.16 | A relative Markdown link beginning `docs/` is resolved against the r… |
 | [`024.175`](#024175-doc-link-resolution-goes-through-file-file-so-a-case-only-typo-passes-on-macos-and-fails-on-linux-and-github) | fixed | 0.2.16 | Doc-link resolution goes through File.file?, so a case-only typo pas… |
-| [`024.176`](#024176-the-deletion-marker-marker-admits-a-pointer-to-a-renamed-file-which-the-paragraph-defining-it-says-is-still-a-failure) | open | 0.2.16 | The `[deletion marker]` marker admits a pointer to a renamed file, w… |
+| [`024.176`](#024176-the-deletion-marker-marker-admits-a-pointer-to-a-renamed-file-which-the-paragraph-defining-it-says-is-still-a-failure) | fixed | 0.2.16 | The `[deletion marker]` marker admits a pointer to a renamed file, w… |
 | [`024.177`](#024177-check-doc-links-names-only-an-enumerated-set-of-docs-subdirectories-so-a-citation-in-any-other-one-is-silently-unchecked) | fixed | 0.2.16 | check_doc_links names only an enumerated set of docs subdirectories,… |
 | [`024.178`](#024178-check-doc-links-founding-census-is-stated-as-living-entirely-in-source-comments-one-of-the-nineteen-was-in-a-markdown-document) | fixed | 0.2.16 | check_doc_links' founding census is stated as living entirely in sou… |
 | [`024.179`](#024179-hand-typed-counts-in-check-doc-links-header-do-not-reproduce-and-none-carries-a-measured-marker) | fixed | 0.2.16 | Hand-typed counts in check_doc_links' header do not reproduce, and n… |
@@ -361,40 +361,40 @@ nobody can search is the recording habit without the benefit.
 | [`024.188`](#024188-the-home-path-scanner-dereferences-a-symlink-instead-of-reading-the-blob-git-commits) | open | 0.2.16 | The home-path scanner dereferences a symlink instead of reading the … |
 | [`024.189`](#024189-the-home-path-pattern-matches-one-spelling-so-every-other-spelling-of-the-same-real-path-passes) | open | 0.2.16 | The home-path pattern matches one spelling, so every other spelling … |
 | [`024.190`](#024190-annotated-tag-messages-are-a-pushed-public-channel-neither-mode-of-the-home-path-check-scans) | open | 0.2.16 | Annotated tag messages are a pushed public channel neither mode of t… |
-| [`024.191`](#024191-as-utf8-s-comment-describes-a-hazard-the-same-file-s-utf8-require-already-removed) | open | 0.2.16 | as_utf8's comment describes a hazard the same file's utf8 require al… |
-| [`024.192`](#024192-the-case-sensitivity-decision-is-justified-by-a-count-of-37-that-was-never-right) | open | 0.2.16 | The case-sensitivity decision is justified by a count of 37 that was… |
-| [`024.193`](#024193-existence-is-a-suffix-glob-and-any-test-name-passes-unconditionally-so-a-citation-naming-a-file-that-does-not-exist-is-accepted) | open | 0.2.16 | Existence is a suffix glob and any test: name passes unconditionally… |
+| [`024.191`](#024191-as-utf8-s-comment-describes-a-hazard-the-same-file-s-utf8-require-already-removed) | fixed | 0.2.16 | as_utf8's comment describes a hazard the same file's utf8 require al… |
+| [`024.192`](#024192-the-case-sensitivity-decision-is-justified-by-a-count-of-37-that-was-never-right) | fixed | 0.2.16 | The case-sensitivity decision is justified by a count of 37 that was… |
+| [`024.193`](#024193-existence-is-a-suffix-glob-and-any-test-name-passes-unconditionally-so-a-citation-naming-a-file-that-does-not-exist-is-accepted) | fixed | 0.2.16 | Existence is a suffix glob and any test: name passes unconditionally… |
 | [`024.194`](#024194-release-gate-spec-s-wiring-corpus-includes-untracked-files-so-uncommitted-local-text-satisfies-a-gate-s-something-invokes-this) | fixed | 0.2.16 | release_gate_spec's wiring corpus includes untracked files, so uncom… |
 | [`024.195`](#024195-every-prose-statement-of-what-the-preflight-gate-runs-is-stale-and-nothing-derives-any-of-them) | fixed | 0.2.16 | Every prose statement of what the preflight gate runs is stale, and … |
 | [`024.196`](#024196-the-measurement-that-justifies-reading-per-example-status-is-quoted-three-times-attributed-to-a-different-file-each-time-and-matches-none-of-them) | open | 0.2.16 | The measurement that justifies reading per-example status is quoted … |
 | [`024.197`](#024197-0-2-14-s-review-loop-edited-its-own-standard-and-added-a-capability-between-rounds-with-no-departure-recorded) | open | 0.2.16 | 0.2.14's review loop edited its own standard and added a capability … |
-| [`024.198`](#024198-the-packaged-artifact-inspection-count-is-derived-from-the-directory-alone-so-a-grep-aimed-at-the-wrong-pattern-or-with-wider-exclusions-still-reports-a-healthy-count) | open | 0.2.16 | The packaged-artifact inspection count is derived from the directory… |
+| [`024.198`](#024198-the-packaged-artifact-inspection-count-is-derived-from-the-directory-alone-so-a-grep-aimed-at-the-wrong-pattern-or-with-wider-exclusions-still-reports-a-healthy-count) | fixed | 0.2.16 | The packaged-artifact inspection count is derived from the directory… |
 | [`024.199`](#024199-the-guard-spec-s-absolute-grep-pin-is-satisfied-by-the-advisory-grep-and-its-bare-grep-scan-cannot-see-an-indented-call) | fixed | 0.2.16 | The guard spec's absolute-grep pin is satisfied by the advisory grep… |
 | [`024.200`](#024200-nothing-checks-that-release-sh-parses-so-a-syntax-error-past-the-first-refusal-leaves-every-check-green) | fixed | 0.2.16 | Nothing checks that release.sh parses, so a syntax error past the fi… |
 | [`024.201`](#024201-the-not-yet-escape-hatch-is-guarded-against-a-hand-copied-two-suite-list-that-has-drifted-from-the-three-suite-table-it-covers) | fixed | 0.2.16 | The NOT YET escape hatch is guarded against a hand-copied two-suite … |
 | [`024.202`](#024202-the-release-tag-accounting-invariant-runs-nowhere-continuous-the-job-that-runs-the-suite-checks-out-without-tags) | fixed | 0.2.16 | The release-tag accounting invariant runs nowhere continuous: the jo… |
 | [`024.203`](#024203-suites-ran-spec-s-ci-yml-link-asserts-a-text-substring-so-it-passes-for-a-step-that-has-been-deleted-commented-out-or-disabled) | fixed | 0.2.16 | suites_ran_spec's ci.yml link asserts a text substring, so it passes… |
-| [`024.204`](#024204-the-git-ls-files-guard-reads-49-files-in-two-directories-so-the-enumeration-it-forbids-is-invisible-everywhere-else-in-the-tree) | open | 0.2.16 | The `git ls-files` guard reads 49 files in two directories, so the e… |
+| [`024.204`](#024204-the-git-ls-files-guard-reads-49-files-in-two-directories-so-the-enumeration-it-forbids-is-invisible-everywhere-else-in-the-tree) | fixed | 0.2.16 | The `git ls-files` guard reads 49 files in two directories, so the e… |
 | [`024.205`](#024205-the-duplicate-heading-check-tracks-a-fence-by-its-character-and-not-its-length-so-a-four-backtick-block-leaves-the-rest-of-the-file-unread) | fixed | 0.2.16 | The duplicate-heading check tracks a fence by its character and not … |
 | [`024.206`](#024206-the-duplicate-heading-check-sees-only-unindented-h1-and-h2-while-024-140-records-the-guarantee-as-every-heading) | fixed | 0.2.16 | The duplicate-heading check sees only unindented h1 and h2, while `0… |
 | [`024.207`](#024207-two-decisions-in-the-duplicate-heading-fence-parser-have-no-fixture-that-can-distinguish-them) | fixed | 0.2.16 | Two decisions in the duplicate-heading fence parser have no fixture … |
-| [`024.208`](#024208-encoding-default-internal-nil-is-the-half-of-the-locale-fix-that-nothing-pins) | open | 0.2.16 | `Encoding.default_internal = nil` is the half of the locale fix that… |
-| [`024.209`](#024209-the-5-status-bar-comparison-is-set-equality-against-a-regex-sample-of-clientpresentation-ts-not-against-the-file-s-status-strings-and-two-records-state-the-stronger-guarantee) | open | 0.2.16 | The §5 status-bar comparison is set equality against a regex sample … |
+| [`024.208`](#024208-encoding-default-internal-nil-is-the-half-of-the-locale-fix-that-nothing-pins) | fixed | 0.2.16 | `Encoding.default_internal = nil` is the half of the locale fix that… |
+| [`024.209`](#024209-the-5-status-bar-comparison-is-set-equality-against-a-regex-sample-of-clientpresentation-ts-not-against-the-file-s-status-strings-and-two-records-state-the-stronger-guarantee) | fixed | 0.2.16 | The §5 status-bar comparison is set equality against a regex sample … |
 | [`024.210`](#024210-the-plugin-sdk-check-asks-whether-a-name-is-defined-anywhere-under-core-lib-ovallsp-plugins-not-whether-it-is-callable-on-the-receiver-the-document-shows) | fixed | 0.2.16 | The plugin-sdk check asks whether a name is defined anywhere under c… |
 | [`024.211`](#024211-check-pinned-mutations-rb-verify-only-prints-the-applier-s-conclusion-after-applying-nothing) | fixed | 0.2.16 | `check_pinned_mutations.rb --verify-only` prints the applier's concl… |
 | [`024.212`](#024212-pinned-mutations-yml-s-header-documents-the-mechanism-the-applier-abandoned-and-a-scope-it-no-longer-has) | fixed | 0.2.16 | pinned_mutations.yml's header documents the mechanism the applier ab… |
 | [`024.213`](#024213-a-mutation-entry-s-stated-reason-describes-a-mutation-different-from-the-one-it-encodes) | fixed | 0.2.16 | A mutation entry's stated reason describes a mutation different from… |
 | [`024.214`](#024214-generate-sbom-rb-s-header-tells-the-reader-a-stale-sbom-is-caught-by-nobody-in-the-release-that-made-a-spec-catch-it) | fixed | 0.2.16 | generate_sbom.rb's header tells the reader a stale SBOM is caught by… |
-| [`024.215`](#024215-a-scripted-comment-rewrite-in-corpus-diagnostics-rb-cut-a-sentence-mid-clause-and-nothing-in-the-tree-can-see-it) | open | 0.2.16 | A scripted comment rewrite in corpus_diagnostics.rb cut a sentence m… |
+| [`024.215`](#024215-a-scripted-comment-rewrite-in-corpus-diagnostics-rb-cut-a-sentence-mid-clause-and-nothing-in-the-tree-can-see-it) | fixed | 0.2.16 | A scripted comment rewrite in corpus_diagnostics.rb cut a sentence m… |
 | [`024.216`](#024216-the-register-s-entry-number-is-parsed-by-six-readers-with-three-grammars-so-a-sub-numbered-entry-is-indexed-as-a-duplicate-of-its-parent) | fixed | 0.2.16 | The register's entry number is parsed by six readers with three gram… |
-| [`024.217`](#024217-rescue-verdicts-yml-s-header-tells-a-reader-the-98-arguments-are-unargued-defaults-and-names-a-verdict-the-checker-rejects-as-the-safe-one) | open | 0.2.16 | `rescue_verdicts.yml`'s header tells a reader the 98 arguments are u… |
+| [`024.217`](#024217-rescue-verdicts-yml-s-header-tells-a-reader-the-98-arguments-are-unargued-defaults-and-names-a-verdict-the-checker-rejects-as-the-safe-one) | fixed | 0.2.16 | `rescue_verdicts.yml`'s header tells a reader the 98 arguments are u… |
 | [`024.218`](#024218-six-isolated-agents-branched-from-the-wrong-commit-and-the-evidence-was-deleted-before-it-was-checked) | fixed | 0.2.15 | Six isolated agents branched from the wrong commit, and the evidence… |
 | [`024.219`](#024219-a-three-part-claim-shipped-with-one-part-pinned-and-the-other-two-were-false) | fixed | 0.2.15 | A three-part claim shipped with one part pinned, and the other two w… |
 | [`024.220`](#024220-the-interpreter-sessions-pasted-through-this-tree-are-never-re-run) | fixed | 0.2.16 | The interpreter sessions pasted through this tree are never re-run |
 | [`024.221`](#024221-a-block-whose-receiver-cannot-be-vouched-for-contains-a-private-that-ruby-would-let-through) | open | 0.2.16 | A block whose receiver cannot be vouched for contains a `private` th… |
 | [`024.223`](#024223-one-unresolvable-include-in-a-project-s-own-rbs-turns-its-whole-class-into-false-reports) | fixed | 0.2.15 | One unresolvable `include` in a project's own RBS turns its whole cl… |
 | [`024.224`](#024224-a-namespaced-type-is-reported-incompatible-with-itself) | open | 0.3.0 | A namespaced type is reported incompatible with itself |
-| [`024.225`](#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | open | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
+| [`024.225`](#024225-a-scripted-edit-inserted-the-entire-file-before-its-own-anchor-and-the-line-count-was-the-only-symptom) | fixed | 0.2.16 | A scripted edit inserted the entire file before its own anchor, and … |
 | [`024.226`](#024226-an-argument-written-as-a-paren-less-call-is-judged-by-its-own-last-argument) | fixed | 0.2.15 | An argument written as a paren-less call is judged by its own last a… |
 | [`024.227`](#024227-every-outline-symbol-s-selectionrange-was-its-whole-declaration) | fixed | 0.2.15 | Every outline symbol's `selectionRange` was its whole declaration |
 | [`024.228`](#024228-every-stdlib-klass-method-answered-nothing-in-three-features-at-once) | fixed | 0.2.15 | Every stdlib `Klass.method(` answered nothing, in three features at … |
@@ -3091,6 +3091,83 @@ is wrong: `x = <cursor>` would then see `x`, because
 It wants `spec/meta/workspace_index_cost_spec.rb`'s treatment -- a
 source assertion -- since reversing it changes no answer.
 
+### Fixed in 0.2.16 — and the Direction above was aimed one level too deep
+
+Re-measured first, at `8d39437`: the curve is the entry's, and the
+captures were counted alongside it. **803 snapshots for 800 locals** —
+so essentially every one of them came from a single site, the re-capture
+after each statement in `#locate_in_statements`, and not from `#locate`'s
+per-step capture at all. `#locate` descends only into the child holding
+the cursor, so its captures are bounded by nesting depth.
+
+That makes the fix local and provably answer-preserving: **only the last
+pre-cursor statement's snapshot is ever read.** Every earlier one is
+overwritten before anything can look at it, and nothing can read one in
+between, because a statement that *contains* the cursor is strictly after
+every statement that ends before it. So the loop takes that one and skips
+the rest.
+
+| locals | `scope_at` before | after | captures before | after |
+|---|---|---|---|---|
+| 50 | 0.418 ms | 0.169 ms | 53 | 4 |
+| 100 | 1.773 ms | 0.109 ms | 103 | 4 |
+| 200 | 3.610 ms | 0.156 ms | 203 | 4 |
+| 400 | 13.664 ms | 0.624 ms | 403 | 4 |
+| 800 | 52.851 ms | 0.695 ms | 803 | 4 |
+
+`infer_at` over the same walk is the control and does not move: 0.032 /
+0.080 / 0.133 / 0.238 / 0.454 ms before, 0.092 / 0.067 / 0.160 / 0.301 /
+0.520 after.
+
+**The Direction's "capture on write" was the wrong shape here.** Of the
+ten sites that mutate an environment, most are inside `#eval_type` —
+which `infer_at` walks too, so guarding them would have put the scope
+machinery's cost on the path that wants none of it, and would have been a
+guard at each of ten callers rather than at the thing guarded.
+
+Answers were driven rather than reasoned about: `scope_at` at 25,782
+positions over 842 files of activerecord/actionpack/activesupport 8.1.3.1,
+before and after, **byte-identical** (`9a2bec91…`). The control that the
+two sides ran different code is the table above, re-run on each.
+
+Pinned by a **count**, not a timing threshold — a threshold on a shared
+machine is a flake, and the count is the property that produced the
+timing. `spec/ovallsp/local_inferencer_spec.rb`'s "snapshots once for the
+statements before the cursor" reports 83 against 8 with the old guard
+restored, and `pinned_mutations.yml` carries that mutation.
+
+### Attempted in 0.2.16, measured unsound, and withheld
+
+The change is exactly the one this entry asks for: capture only at the
+last pre-cursor statement, since every earlier capture is overwritten
+before anything can read it, and each copies the whole environment.
+
+**It is not answer-preserving when the walk aborts.** The step budget or
+any `StandardError` inside `eval_type` ends the walk part-way, and the
+old shape had already captured at each earlier statement, so `scope_at`
+answered with everything accumulated. The new one has captured nothing
+until it reaches the last, so it answers with none.
+
+Reproduced by a verifier at the **default** budget of 5,000 — no
+production caller passes a smaller one — on a `db/seeds.rb` shape with
+2,500 top-level statements:
+
+    scope_at(..., line 3002).locals.keys
+    before  ["admin"]   (steps=5001)
+    after   []          (steps=5001)
+
+Identical through 2,400 statements and diverging from 2,500, at two
+steps per statement.
+
+So the entry's reasoning — "every earlier capture is overwritten before
+anything reads it" — is true of a walk that *finishes*, and the walk is
+budgeted precisely because it may not. The direction is to keep a single
+capture and make it survive the abort: capture on the way out rather than
+at a chosen index, or have the abort itself publish what it has. Not
+attempted here, because a review round is not where a new mechanism goes.
+
+The rest of this cluster shipped; only this file was held back.
+
 
 ## 024.39 `LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread
 
@@ -4868,20 +4945,25 @@ in at least three more (`Observation::Store`, `Routes::RouteRegistry`,
 copy's own doc comment points at the others as precedent, which is how
 seven of them came to exist without the shape ever being extracted.
 
-**Why it is not a defect today.** The update calls are spread across four
-sites, each touching a different subset, and each is currently right for
-its own reason rather than by construction:
+**Why it is not a defect today.** The update calls are spread across
+several sites, each touching a different subset, and each is currently
+right for its own reason rather than by construction:
 
 | site | touches | why it is safe |
 |---|---|---|
 | `ColdIndexer#index_file`'s direct path | workspace + hierarchy only | unreachable from `Server`, which always supplies `on_summary` and routes to `#apply_file_summary` |
 | `Server#apply_file_summary` | all four (references via a dirty mark) | the complete path |
-| `Server#apply_plugin_context` | three, and skips the generated-method write when the fact list is empty | a plugin uri is written once at boot and never re-indexed, so there is never a previous entry to clear |
 | `Server#remove_index_contribution` | all four | the complete path |
 
-Two of those four are safe because of a fact about their *caller*, not
-because of anything the stores enforce. A fifth writer added without
-noticing would be the failure.
+One of those is safe because of a fact about its *caller*, not because of
+anything the stores enforce. A fourth writer added without noticing would
+be the failure.
+
+*A fourth row stood here until 0.2.16: `Server#apply_plugin_context`, the
+one that touched three stores and skipped the generated-method write on
+an empty fact list. It went with the plugin subsystem. The entry is
+otherwise unchanged and open — the boundary question is what it is about,
+and one fewer writer does not answer it.*
 
 **Direction.** Not "merge the two" by default — the question is which of
 the two shapes below is right, and that is the work:
@@ -5741,7 +5823,7 @@ would be evidence about this Gemfile, not about the boundary.
 ## 024.74 The trust gate stands in front of callers, not in front of what executes
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -5750,6 +5832,7 @@ user-visible-note: >
   the exact property 0.2.5 spent its trust work removing, and this is the
   same shape one level down.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` — `#restart_agent`,
@@ -5774,6 +5857,35 @@ reported by a method whose callers expect it to have started something,
 so the return contract changes; that is why this is a task rather than a
 line. `Plugins::Loader` and `Observation::Runner` want the same treatment
 for the same reason.
+
+### Fixed in 0.2.16
+
+Reproduced first, on a server that never handled an `initialize`:
+`restart_agent_result` answered `{acknowledged: false, reason:
+"workspace not trusted"}` with zero `bootstrap.start` calls and a logged
+warning, while `#restart_agent` on the *same* server returned a Thread,
+called `bootstrap.start` once, and logged nothing.
+
+`#restart_agent` now asks `#trusted_for_execution?` in front of the
+`Thread.new` and answers `nil` for a refusal; `restart_agent_result`
+reads that nil instead of asking on its behalf. The return contract is
+`Thread | nil`, as the Direction predicted, and `maybe_restart_agent`'s
+`if @agent_manager` is now only "nothing to restart" — its comment says
+so.
+
+**What the change surfaced is the more interesting half.** Ten examples
+across `server_rails_invalidation_spec` and `server_ancestry_spec` broke,
+every one of them a fixture that injects `@agent_manager` directly and
+never tells the server it was trusted. That is the entry's own claim
+measured: those servers were reaching the spawn on a workspace nothing
+had granted, and only the *shape of the fixture* — not any gate — decided
+it. They now say `@workspace_trusted = true`, which is what a server
+holding a live Agent means, in the same form `server_status_spec.rb`
+already used for `restart_agent_result`.
+
+`Plugins::Loader` is gone with the plugin subsystem. `Observation::Runner`
+still wants the same treatment and is not part of this.
+
 
 ## 024.75 A documented field selects nothing
 
@@ -7638,7 +7750,7 @@ rolled-back attempt lacked; it exists as of 0.2.7.
 ## 024.102 Eight classes, and the logic each one could not have happened under
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -7647,6 +7759,7 @@ user-visible-note: >
   looking at any single entry below can see which class it belongs to and
   what is being built to make that class impossible.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** the register as a whole; `037`'s "Preventing the classes"
@@ -7767,6 +7880,31 @@ re-derivation. C1 and C8 are 0.2.8; C2, C3 and C9 are 0.2.9.
 what that costs here, and C2 in particular is the shape both had. Each
 class ships with its own corpus measurement, and one that does not move a
 measurement is one to abandon rather than defend.
+
+### Closed in 0.2.16 — the counts, and one credit withdrawn
+
+`042` supersedes the classification; what was left open here was the
+record, and a stocktake is exactly the kind of document whose numbers go
+stale where nothing recomputes them.
+
+**The count that had drifted is now derived.** `cref.rb`'s argument for
+`#surface_for` rested on the asymmetry between one read site and seven,
+typed out of the 0.2.11 stocktake. The tree has **ten** — the argument is
+stronger than it was written, which is precisely why nobody noticed it
+was wrong. Both numbers now carry `<!-- measured: -->` markers and
+`measured_claims_spec` recomputes them from `parser_service.rb`; drifting
+one back to seven fails the suite with *"cref-declares-singleton-parser-sites
+says 7, the tree has 10"*.
+
+**The `1 of 9 (024.35)` credit is withdrawn.** `024.35` is open, and has
+been through 0.2.15, which added a section saying its "does not
+reproduce" claim was never independently confirmed. C2 shipped its
+mechanism and closed none of its nine.
+
+**The stocktake table itself is left as written.** It is dated and
+attributed — "re-run against the tree at `0449007`" — and correcting a
+dated finding to today's tree is the opposite of what a record is for.
+What a reader needs is that it *is* dated, which its own heading says.
 
 ## 024.103 A bare class name inside a namespace answers with an arbitrary same-named class
 
@@ -9493,7 +9631,7 @@ one word. Ruby makes the same count and disambiguates it with a clause —
 taken from the interpreter rather than from memory:
 
 ```
-$ ruby -e 'def kwargs(name:, size: 1, **rest) = 1; kwargs("positional")'
+$ ruby -e 'begin; def kwargs(name:, size: 1, **rest) = 1; kwargs("positional"); rescue ArgumentError => e; puts e.message; end'
 wrong number of arguments (given 1, expected 0; required keyword: name)
 ```
 
@@ -9562,12 +9700,13 @@ neither Rails nor sqlite3, so it runs wherever the suite runs.
 ## 024.135 `Observation::Runner` deserialises a subprocess's output with `Marshal.load`
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   The subprocess is one this extension spawned, running code from the user's own workspace, so there is no boundary crossed that the workspace itself does not already cross. What it costs is that the shape `024.73` removed elsewhere survives here.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/lib/ovallsp/observation/runner.rb`
@@ -9579,6 +9718,43 @@ covered by it; the same reasoning applies and the same fix shape would —
 **Documented nowhere until 0.2.14**, for the same reason as `024.134`.
 
 **Was one of nine bullets under `024.90` until 0.2.14.**
+
+### Fixed in 0.2.16
+
+Reproduced first, because the entry names the call and not the harm: a
+result file holding one object with a `marshal_load` hook made
+`#read_results` answer **`nil`** — its shape check working exactly as
+written — with the hook already having run inside Core. The check runs
+after `Marshal.load` has constructed every object the stream named, which
+is `024.73` verbatim.
+
+`Observation::Wire` now carries the payload as JSON and rebuilds
+`ObservedSignature` from fields it has checked, so validation precedes
+construction. Both ends changed in the same commit, as `046` warned they
+must: `Harness#dump` writes the envelope, `#read_results` reads it, and a
+format skew between them would otherwise be silent.
+
+Two things the entry did not anticipate:
+
+- **`Plugins::Wire` is gone**, deleted with the plugin subsystem, so the
+  "same fix shape" had to be written here rather than reused. Both closed
+  lists are therefore **narrower** than the ones that boundary used, and
+  narrower than `Types`/`SymbolId` can express: `Collector` records two
+  method kinds, and `TypeNormalizer` produces four type shapes. A payload
+  naming `constant`, a `ProcType` or a `TypeParameter` is a payload this
+  Core did not write.
+- **A malformed entry rejects the whole payload**, which is the opposite
+  of what the plugin boundary did with a malformed declaration.
+  `Store#replace_run` is a generation swap, so a partially decoded run
+  would install itself as everything the suite observed;
+  `#read_results` turns the rejection into its own `nil`, which is the
+  outcome that leaves the user's evidence alone.
+
+Pinned two ways: `runner_spec` asserts `Marshal.load` is never called on
+this path *and* that a Marshal result file produces no run — both driven
+red against the old code — and `pinned_mutations.yml` carries the
+all-or-nothing decode, since `filter_map` there would pass every other
+example in the file.
 
 ## 024.136 A route's optional segments are detected by matching the literal `(.:format)`
 
@@ -9832,7 +10008,7 @@ is installed gems only, and the harness refuses a root inside this tree.
 ## 024.138 No test mixes a schema change and a model-file change in one batch
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -9840,6 +10016,7 @@ user-visible-note: >
   judged correct when this was written, and nothing has exercised the
   combination since.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/ovallsp/server_rails_invalidation_spec.rb`
@@ -9860,6 +10037,25 @@ nothing.
 
 **Where this came from:** `008.6`'s `## 残っているKnown Issue`. See
 `024.139`.
+
+### Fixed in 0.2.16
+
+Confirmed first that nothing covered it: of the thirteen examples in the
+file that name one path or the other, not one names both, and every
+schema example passes a single-element batch.
+
+Two examples, one per ordering of the two changes within the batch, and
+the decision they pin is the `elsif` in
+`#handle_did_change_watched_files` — the bulk refresh subsumes the
+targeted one. The fixture's two payloads deliberately disagree (the bulk
+one reports a column the targeted one does not), so the registry's final
+state says which path installed the model; a fixture where both answered
+the same would have passed under either decision.
+
+Watched failing with the `elsif` split into a second `if`: both examples
+report `expected: nil, got: "User"` — the targeted refresh running as
+well. `pinned_mutations.yml` carries that mutation, which is the layer-2
+half `024.121` asks for.
 
 ## 024.139 Task documents grew their own findings sections, outside the register
 
@@ -10604,6 +10800,26 @@ that decides between two different jobs:
 Measure the overlap before choosing. Deciding without that is what
 produced the assertion this entry replaces.
 
+**Measured in 0.2.16, and the answer is the second branch.** `AGENTS.md`
+is 1,769 words against `CLAUDE.md`'s 5,833, in 16 top-level bullets, 11
+of which cite `CLAUDE.md`. Three rules have **no counterpart anywhere in
+`CLAUDE.md`** — YAGNI/no speculative implementation, re-read the
+instruction files after a compaction or handoff, and consult `.claude/`
+— and neither does the opening section (the one-paragraph product
+purpose, the standing patch-publish permission, the `042` pointer, the
+maintainer's role). So it is not a pure restatement: it stays, and what
+it needs is a relationship.
+
+**Left open because the obvious relationship does not hold.** The cheap
+form — for each bullet claiming `CLAUDE.md` carries the rule, require
+one distinctive token shared with it — was tried against the tree and
+gives three false positives of eleven: two bullets cite `CLAUDE.md` as a
+file to *read* rather than as the rule's home, and the test-first bullet
+is a genuine paraphrase carrying no identifier at all. A check with that
+error rate is one somebody switches off, which is the shape `024.192`
+records. What is wanted is a relationship the paraphrase itself
+declares, and that is a design question rather than a missing check.
+
 
 ## 024.151 A check can be disabled, and no check notices
 
@@ -10919,7 +11135,7 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.156 The evidence extractor recognises only .rb/.sh/.js and test:, so TypeScript tests and CI job names — the sole evidence for eight gates — are never checked
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -10937,10 +11153,28 @@ The Task 023 gate table's evidence column holds, by its own header, CI job names
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed in 0.2.16.** The extractor recognises all four shapes the
+column's header allows -- a script path, a TypeScript test, an npm
+script and a CI job name -- and each is checked against a real list
+rather than a glob: the tracked file list, `vscode/package.json`'s
+`scripts` keys, and the job names parsed out of `.github/workflows/`.
+A CI job is matched by its *citation form* (the table's "CI の `x`
+ジョブ") rather than by intersecting backticked words with the job
+list, because an intersection would make a renamed job stop being a
+citation, which is this defect one level in.
+
+The half that stops the class coming back is a **floor per shape**
+rather than one total: this entry's own instance was a branch for a
+shape the pattern could not produce, and a single count cannot see
+that while three other shapes keep it healthy. Watched failing: the
+entry's reproduction (renaming the two TypeScript tests, the
+workspace-trust path and the two CI jobs) now names all five rows,
+and killing the TypeScript pattern fails the shape floor by name.
+
 ## 024.157 A git subprocess in a throwaway repository obeys the inherited GIT_DIR, so the suite commits to the real repository
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -10957,6 +11191,38 @@ Git exports `GIT_DIR` and `GIT_INDEX_FILE` to every hook. In a **linked worktree
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed in 0.2.16, and it reproduced exactly as written.** Run under
+the two variables git hands a hook in a linked worktree,
+`untracked_visibility_spec.rb` reported "3 examples, 0 failures" and
+left a commit on the other repository's branch deleting its tracked
+source.
+
+Contained where the spawn happens: `RepoFiles` unsets `GIT_DIR`,
+`GIT_INDEX_FILE`, `GIT_WORK_TREE`, `GIT_OBJECT_DIRECTORY`,
+`GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_COMMON_DIR` and
+`GIT_NAMESPACE` at every `git` invocation, and every call site in
+`scripts/` and `core/spec/` goes through it -- including
+`check_home_paths`' two backticks, `hunk_sweep`'s `git apply -R` and
+`git checkout`, `measure_typing_publishes`' provenance lines and
+`measured_claims_spec`'s `git show`. The three specs that built
+throwaway repositories share one `core/spec/support/throwaway_repo.rb`
+instead of three hand-written sequences. `preflight --install`'s hook
+and `release.sh` unset the same list in shell, as a second layer.
+
+Three checks, each watched failing: `untracked_visibility_spec` now
+fails on a git spawn anywhere in `scripts/` or `core/spec/` that does
+not go through the wrapper (planted, red, removed); an example asks
+git, under a poisoned `GIT_DIR`, which repository it is in, and
+`pinned_mutations.yml` pins it -- deleting the scrub makes that
+example fail. The first version of that example did **not** fail
+under the mutation, and `check_pinned_mutations.rb` said so: `list`
+unions in `--others`, which enumerates the filesystem, so the wrong
+repository gives nearly the right answer. The fixture now plants a
+tracked file in the decoy, which only the poisoned index can produce.
+
+Re-run afterwards under the same two variables, the whole `spec/meta`
+suite passes and the other repository is byte-for-byte untouched.
 
 ## 024.158 The executed PAT-mode example passes on a release.sh that only warns, because its exit status comes from a later check misreporting a non-repository as dirty
 
@@ -11232,13 +11498,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.168 The ledger's reason for keeping 05-protocol.md's section numbering counts four source comments where one exists, and the claim was copied into the shipped document
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md:283, docs/design/docs/05-protocol.md:198
@@ -11249,6 +11516,14 @@ The deletion ledger's row for 05-protocol.md gives as its reason for rewriting �
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed in 0.2.16.** Re-derived at HEAD: `core/lib` holds four
+citations of the file and exactly one names a section. `046`'s row
+says "a source comment", names which one, and records that it said
+"four" until now. `05-protocol.md` keeps both reasons and names the
+file the comment lives in rather than counting -- a location a reader
+can check beats a number a reader must trust, which is the entry's
+point rather than an aside.
 
 ## 024.169 `check_doc_links.rb`'s CITATION comment describes anchor/punctuation stripping that no caller performs
 
@@ -11479,13 +11754,14 @@ unfixed script.
 ## 024.176 The `[deletion marker]` marker admits a pointer to a renamed file, which the paragraph defining it says is still a failure
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/check_doc_links.rb` (the marker paragraph, lines 141-153; `ever_existed?`, lines 189-195)
@@ -11496,6 +11772,25 @@ The marker's design paragraph ends: "A pointer to a *renamed* file is also still
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed in 0.2.16, and made true rather than weakened.** The marker
+now asks whether the content survives under another name and reports
+a renamed-away citation separately, because the repair differs:
+nothing needs restoring, the citation needs repointing.
+
+One implementation detail worth keeping, because it is the reason the
+obvious version does not work: `git log --diff-filter=R --name-status
+-- <path>` reports **nothing** for a renamed path, since the pathspec
+limits the diff before rename detection runs and the two halves are
+never paired. Measured both ways. So the rename map is read once
+without a pathspec -- 136 renames across this history, 40ms -- and
+chased through multi-step renames.
+
+Both directions watched failing: with the detection disabled the
+renamed-away citation is admitted again; with a rename treated as
+disqualifying on its own, the *renamed-then-deleted* case goes red,
+which is the false positive the entry warned about and which the
+"does it exist now" test avoids.
 
 ## 024.177 check_doc_links names only an enumerated set of docs subdirectories, so a citation in any other one is silently unchecked
 
@@ -11935,13 +12230,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.191 as_utf8's comment describes a hazard the same file's utf8 require already removed
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** scripts/check_home_paths.rb
@@ -11953,16 +12249,24 @@ Lines 67-72 justify `as_utf8` by saying backticks hand back a string in the shel
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed in 0.2.16.** Confirmed first: under `LC_ALL=C LANG=C` the
+backtick result is already UTF-8 with the require, and US-ASCII
+without it. The comment now says what `as_utf8` still buys -- `.scrub`,
+for a commit message carrying genuinely invalid bytes, which no locale
+setting fixes -- and says that deleting the require would bring the
+old hazard back, so the two are not read as interchangeable.
+
 ## 024.192 The case-sensitivity decision is justified by a count of 37 that was never right
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** scripts/check_home_paths.rb, core/spec/meta/home_path_guard_spec.rb
@@ -11974,16 +12278,33 @@ Lines 34-44 record a deliberate decision — keep PATTERN case-sensitive — and
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed in 0.2.16, by removing the number from both copies rather
+than correcting it.** Re-derived at HEAD with the file's own
+`PATTERN` plus `/i`, its own `SYNTHETIC` list and the same skips: 35,
+not 37.
+
+The decision is right and still stands on its stated reason. What
+replaces the figure is a *derivation*: `home_path_guard_spec.rb` now
+scans this tree with the pattern plus `/i` on every run and asserts a
+floor, so the trade-off the decision rests on is re-measured rather
+than remembered. A floor rather than a total, deliberately -- the
+argument is about an order of magnitude, and asserting the total
+would put back the maintained figure this replaces.
+
+Watched failing twice: a pattern whose case-insensitive form flags
+nothing, and an enumeration that reads no files.
+
 ## 024.193 Existence is a suffix glob and any test: name passes unconditionally, so a citation naming a file that does not exist is accepted
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** core/spec/meta/release_gate_spec.rb (lines 111-112, the `exists` test)
@@ -11994,6 +12315,17 @@ Existence is `!RepoFiles.list(ROOT, "*#{base}").empty?` — a suffix glob on the
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed in 0.2.16.** Existence is membership in the tracked file
+list, not a suffix glob; a citation written as a bare basename must
+match some file's basename exactly, which is the honest equivalent
+when no directory was written and still rejects a name that is merely
+a suffix of a real one. An npm citation is an exact key of
+`vscode/package.json`'s `scripts`, and its wiring test is bounded so
+a shorter name is not satisfied by a longer one.
+
+All three of the entry's reproductions watched failing: the two paths
+that exist nowhere, the traversal path, and the two npm names.
 
 ## 024.194 release_gate_spec's wiring corpus includes untracked files, so uncommitted local text satisfies a gate's "something invokes this"
 
@@ -12128,13 +12460,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.198 The packaged-artifact inspection count is derived from the directory alone, so a grep aimed at the wrong pattern or with wider exclusions still reports a healthy count
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `vscode/scripts/release.sh` lines 165-193, `core/spec/meta/release_script_guard_spec.rb` (`"makes the artifact check say what it inspected…"`)
@@ -12145,6 +12478,27 @@ The INSPECTED countermeasure was added so that "aimed at nothing" becomes visibl
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed in 0.2.16, and the entry's own direction was not sufficient.**
+Measured against a 151-file fake artifact holding one leak: replacing
+`find` with `grep -L` catches an unreachable directory and nothing
+else -- a pattern that matches nothing still counts 151, a widened
+exclusion set still counts 150 against the shipped 150.
+
+What covers the other two dimensions is a **positive control**: a
+scratch directory of files that certainly contain the pattern, in the
+extensions an exclusion could be widened to cover, which the same
+command with the same flags must find all of. Its *content* is
+written from `$HOME` rather than from the check's own variable, so
+changing what is searched for cannot change what is planted.
+
+A fourth mutation the entry does not list survived all of that:
+widening the exclusions on the inspection grep alone, leaving the
+count and the control untouched and green, and shipping the leak.
+That is three copies of one list, which is this entry's own defect
+one level in. There is now one list all three read, and
+`release_script_guard_spec.rb` fails on an invocation that adds an
+exclusion of its own -- watched failing.
 
 ## 024.199 The guard spec's absolute-grep pin is satisfied by the advisory grep, and its bare-grep scan cannot see an indented call
 
@@ -12333,13 +12687,14 @@ divergence that produced this entry.
 ## 024.204 The `git ls-files` guard reads 49 files in two directories, so the enumeration it forbids is invisible everywhere else in the tree
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** core/spec/meta/untracked_visibility_spec.rb
@@ -12350,6 +12705,19 @@ The example is titled "is the only way this tree enumerates its own files" and i
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed in 0.2.16.** The guard reads the whole tree minus vendored
+and generated directories rather than two globs, and the exemption is
+an exact path rather than a suffix. Markdown is excluded, stated as a
+decision: a document cannot spawn a subprocess, and six tracked
+documents discuss this rule by name, so scanning them would report
+the rule's own explanation as a violation of it. The mutation
+manifest's quotation of the exempt file's own line is exempted *from
+the manifest*, so the exemption cannot outlive the entry it is about.
+
+A coverage floor and a membership assertion make an empty scan fail,
+which was the other half of the entry. Both planted offenders from
+the reproduction watched failing, and the suffix-exemption case too.
 
 ## 024.205 The duplicate-heading check tracks a fence by its character and not its length, so a four-backtick block leaves the rest of the file unread
 
@@ -12480,13 +12848,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.208 `Encoding.default_internal = nil` is the half of the locale fix that nothing pins
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** scripts/utf8.rb, core/spec/meta/script_encoding_spec.rb
@@ -12498,16 +12867,25 @@ target: 0.2.16
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
 
+**Fixed in 0.2.16.** The line is correct and now pinned, by a fixture
+that can tell its presence from its absence: an inherited `RUBYOPT`
+of `-E UTF-8:EUC-JP`, which is how an internal encoding actually
+arrives. With the line the probe prints `true,true,UTF-8,UTF-8`;
+without it the same command raises `Encoding::CompatibilityError` at
+the `include?`. Watched failing, and `pinned_mutations.yml` carries
+the mutation so the pin is re-verified rather than asserted.
+
 ## 024.209 The §5 status-bar comparison is set equality against a regex sample of clientPresentation.ts, not against the file's status strings — and two records state the stronger guarantee
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/meta/design_doc_drift_spec.rb` (the `07 §5` example), `docs/DOCUMENTATION_MAP.md` (line 41, the command-id/setting/status-string row), `docs/design/docs/07-vscode-extension.md` §5, `docs/design/tasks/046-0.2.14-making-the-record-true.md` (C5 row, line 364)
@@ -12518,6 +12896,24 @@ The code side of §5 is `source.scan(/["'](\$\([a-z~-]+\)\s*)?(OvalLSP: [^"']+)[
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed in 0.2.16.** Both reproductions confirmed first, then the
+pattern widened to accept all three of TypeScript's string delimiters
+and any codicon charset, and the inert `.reject` deleted. §5 now
+lists `statusPresentation`'s template fallback, marked as a template
+-- the string the shipped extension can produce that the section
+calling itself the only definition did not mention.
+
+The record's overstatement is repaired by saying which check covers
+which section rather than by claiming all five are the same check.
+
+**What the entry asked for and this deliberately did not do:** scan
+every `.ts` under `vscode/src`. Dozens of notification messages, log
+lines and command titles begin the same way and are not status-bar
+strings, so a wider scan would compare §5 against a list it has no
+business listing. What makes §5's claim true is asserted directly
+instead: every assignment to a status bar item's `text` takes
+`statusPresentation`'s value. Watched failing by moving one.
 
 ## 024.210 The plugin-sdk check asks whether a name is defined anywhere under core/lib/ovallsp/plugins, not whether it is callable on the receiver the document shows
 
@@ -12695,13 +13091,14 @@ pending.
 ## 024.215 A scripted comment rewrite in corpus_diagnostics.rb cut a sentence mid-clause, and nothing in the tree can see it
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `scripts/corpus_diagnostics.rb` (lines 169-175)
@@ -12712,6 +13109,18 @@ The comment above the engine assembly reads "... That is not a smaller measureme
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Repaired in 0.2.16, and no checker built.** The entry's own
+measurement is the argument: a heuristic scan of every tracked
+`.rb`/`.yml`/`.md` for this shape produced exactly one genuine hit
+against a large volume of ordinary wrapped prose, so a check would be
+almost entirely false positives. Recording that as the decision is
+the other half of the fix, so the next reader does not re-derive it.
+
+The restored clause is marked at the site as a **reconstruction**:
+the original wording is not recoverable from any commit, and a
+sentence somebody wrote later reading as the author's is the failure
+this register spends several entries on.
 
 ## 024.216 The register's entry number is parsed by six readers with three grammars, so a sub-numbered entry is indexed as a duplicate of its parent
 
@@ -12764,13 +13173,14 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.217 `rescue_verdicts.yml`'s header tells a reader the 98 arguments are unargued defaults, and names a verdict the checker rejects as the safe one
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `core/spec/meta/rescue_verdicts.yml` (header, lines 3-16), `scripts/check_swallowed_failures.rb` (the no-verdict problem message)
@@ -12781,6 +13191,25 @@ The header of `rescue_verdicts.yml` describes a state of the file that ended in 
 
 *Raised in 0.2.14's review rounds; triaged into an entry after the round
 closed, and confirmed live against HEAD rather than assumed.*
+
+**Fixed in 0.2.16.** The header states what is true: two verdicts, no
+third option, and the outstanding work is *review of* the arguments
+rather than writing them. The checker's no-verdict guidance is built
+from one list of allowed verdicts rather than typed, so the message
+and the branch that judges it cannot disagree.
+
+The countermeasure is that the two are now related rather than merely
+both correct: `swallowed_failures_spec.rb` reads the allowed list
+from the checker (`--verdicts`) and fails if the file's header offers
+anything else, and proves the guidance by *running* the checker
+against a throwaway tree holding one unverdicted rescue -- rather
+than by searching the script for its own message, which is the family
+`024.151` names. Both watched failing.
+
+A third statement of the same false claim lived in
+`swallowed_failures_spec.rb`'s own header and is corrected too; the
+register's older entries describing the first-pass state stay as they
+are, being historical.
 
 ## 024.218 Six isolated agents branched from the wrong commit, and the evidence was deleted before it was checked
 
@@ -12958,6 +13387,7 @@ user-visible-note: >
   rests on is unverifiable text, and the rule that produced it says
   it exists so the next reader need not trust that somebody checked.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** `docs/design/tasks/024-deferred-review-findings.md`,
@@ -13059,6 +13489,43 @@ inert paragraphs into 50 assertions that can fail. The cost measured
 before wiring it in: the whole run is 50 subprocesses and finishes in
 under ten seconds, which is inside the suite's budget, so it runs in
 `spec/meta` and in `preflight` rather than in CI only.
+
+**Built in 0.2.16.** `scripts/check_interpreter_sessions.rb` runs in
+the suite and in `preflight`; 64 sessions, 2.8 seconds.
+
+Three things the entry did not anticipate, each of which changed the
+design:
+
+- **Six shapes, not two.** Besides the two documented, the tree
+  writes a program that starts on the opener's own line and runs on;
+  output as an arrow annotation at the end of the line that produces
+  it; output as an arrow comment inside the program; and output as a
+  bare line after it. Accepting all six was cheaper and more honest
+  than rewriting 60-odd correct transcripts into one house style.
+- **The checker is bait for itself.** Its first draft quoted the
+  opener in its own header, twice, and then tried to run its own
+  prose -- in the file whose subject is that problem. Nothing in it
+  spells the opener now; the shapes are described and the constant is
+  assembled. The same repair was needed in this entry, which is why
+  the two illustrations above are prose.
+- **Bundler leaks into the child.** Run from inside the suite, two
+  correct ActiveSupport sessions died with "is not part of the
+  bundle" -- an error about the harness reported as a defect in the
+  transcript. The child is detached from Bundler explicitly.
+
+**It found six real defects on its first complete run**, all of them
+in evidence that had been read and believed: two transcripts merging
+two `p` outputs onto one arrow line, one omitting a warning Ruby
+prints, one gluing prose onto an arrow, and two sessions that raise
+rather than print (rewritten with a `rescue`, so the raise is
+recorded as output instead of as a stack trace nobody compares).
+
+Coverage is stated per root and floored, because a scan that found
+nothing prints the same reassuring line as one that found everything
+and cleared it -- which is the confusion this check exists about,
+arriving one level up. Watched failing three ways: a corrupted real
+transcript, an unparseable session, and an enumeration that reads
+nothing.
 
 ## 024.221 A block whose receiver cannot be vouched for contains a `private` that Ruby would let through
 
@@ -13456,7 +13923,7 @@ does have this defect, and 0.2.16 shipped without fixing it.
 ## 024.225 A scripted edit inserted the entire file before its own anchor, and the line count was the only symptom
 
 ```yaml
-status: open
+status: fixed
 kind: friction
 user-visible: no
 user-visible-note: >
@@ -13465,6 +13932,7 @@ user-visible-note: >
   thousands of lines, and the check that noticed was counting entry
   numbers rather than looking at the edit.
 target: 0.2.16
+released-in: 0.2.16
 ```
 
 **Area:** working practice; `CLAUDE.md`'s "Two working-practice traps"
@@ -13519,6 +13987,25 @@ habit, and a habit is what `024.126` records twelve failures of in one
 session. A check could plausibly catch it — the shape is "a tracked
 document grew by more than the edit could account for" — and that wants
 designing rather than asserting.
+
+**Closed in 0.2.16.** The open question the entry poses was already
+answered when it was written: `CLAUDE.md`'s working-practice traps
+carry the block-form bullet, added in the same commit. The entry now
+says so rather than leaving it open.
+
+`scripts/check_pinned_mutations.rb` uses the block form. Its `to` is
+author-supplied YAML, so "no current value bites" was a property of
+today's manifest and not of the code. `scripts/documented_counts.rb`
+is converted too -- the same shape, writing into tracked documents --
+and its comment says plainly that no test distinguishes the two forms
+there, because the difference is unreachable through that function's
+own inputs and a green suite is not cover for it.
+
+**No checker.** The shape the entry gestures at -- a tracked document
+growing by more than the edit can account for -- wants a harness
+around every scripted edit, and this session's edits print their line
+count before and after instead. Recorded as the decision so it is not
+re-opened as an oversight.
 
 ## 024.226 An argument written as a paren-less call is judged by its own last argument
 

@@ -974,7 +974,8 @@ module Ovallsp
     #   p ["go",  (App::Runner.new.go  rescue $!.class)]
     #   p ["bad", (App::Runner.new.bad rescue $!.class)]
     #   '
-    #   # => ["go", nil]  ["bad", NoMethodError]
+    #   # => ["go", nil]
+    #   # => ["bad", NoMethodError]
     #   # ruby 3.4.10
     #
     # 0.2.10 implemented step 1 and stopped, which left both directions

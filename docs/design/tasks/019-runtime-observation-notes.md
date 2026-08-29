@@ -16,8 +16,11 @@ double whose `#inspect`/`#to_s` raise if ever invoked.
 
 What crosses the process boundary is the fields of `ObservedSignature`,
 carried from `Observation::Collector` in the isolated runner process to
-`Observation::Runner` in Core via `Marshal.dump`/`Marshal.load` of an
-`Array<ObservedSignature>`. **`vscode/PRIVACY.md` is the single source of
+`Observation::Runner` in Core as plain JSON that cannot name a class,
+which Core validates field by field before it builds anything
+(`Observation::Wire`). It was `Marshal` until 0.2.16, where the check
+ran *after* construction and so could not stop a gadget; `024.135`.
+**`vscode/PRIVACY.md` is the single source of
 truth for what those fields are; do not restate the list here.** The
 enumeration that used to sit in this paragraph was itself incomplete —
 it omitted `run_id` and `created_at` — which is the whole reason the rule
@@ -26,7 +29,7 @@ value, `#inspect` output, SQL, environment variable, or file content is
 ever read or held: names and counts cross, values do not.
 
 It does *write* two files, and 0.1.12 corrected the claim that it wrote
-none: the `Marshal`'d results the boundary above is described in terms of
+none: the results the boundary above is described in terms of
 (`Harness.dump`), and a log the observed test command's own stdout and
 stderr are redirected to for the length of the run. Nothing reads,
 indexes or surfaces that log — the redirect exists only because in

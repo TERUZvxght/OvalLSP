@@ -195,6 +195,18 @@
   to: "  if true"
   spec: spec/meta/sbom_spec.rb
   example: "reports a divergence rather than passing on anything"
+- why: "repo_files' environment scrub -- 024.157, without which an inherited GIT_DIR aims every git subprocess in scripts/ and core/spec/ at another repository, and the suite stays green while committing to it."
+  file: scripts/repo_files.rb
+  from: "    LOCATION_ENV.to_h { |name| [name, nil] }\n"
+  to: "    {}\n"
+  spec: spec/meta/untracked_visibility_spec.rb
+  example: "answers about the directory it was given, not about an inherited GIT_DIR"
+- why: "utf8's internal encoding -- 024.208, the half of the locale fix nothing pinned: without it an inherited RUBYOPT -E transcodes every read and a UTF-8 needle stops comparing."
+  file: scripts/utf8.rb
+  from: "Encoding.default_internal = nil\n"
+  to: ""
+  spec: spec/meta/script_encoding_spec.rb
+  example: "survives an inherited internal encoding, not only a bare locale"
 - why: "024.40's parameter list -- a define_method recording an empty one, which is not 'unknown' but the assertion that the method takes no arguments."
   file: core/lib/ovallsp/parser_service.rb
   from: "          parameters: defined_method_parameters(node)\n"
@@ -324,3 +336,22 @@
   to: "      candidate = nil\n"
   spec: spec/ovallsp/server_references_spec.rb
   example: "still answers both call sites with the caret on a call site"
+
+- why: "008.6's subsumption -- a full model refresh takes priority over the per-file one in the same batch, which nothing distinguished before 024.138."
+  file: core/lib/ovallsp/server.rb
+  from: "      elsif !changed_models.empty?\n"
+  to: "      end\n      if !changed_models.empty?\n"
+  spec: spec/ovallsp/server_rails_invalidation_spec.rb
+  example: "subsumes a model-file change queued in the same batch as a schema change"
+- why: "024.135's all-or-nothing decode -- dropping the entry it cannot read instead of the payload, which installs a partial run as a complete one over a generation swap."
+  file: core/lib/ovallsp/observation/wire.rb
+  from: "        decoded = payload[:signatures].map { |entry| decode_signature(entry) }\n        decoded.any?(&:nil?) ? nil : decoded\n"
+  to: "        payload[:signatures].filter_map { |entry| decode_signature(entry) }\n"
+  spec: spec/ovallsp/observation/wire_spec.rb
+  example: "rejects the whole payload rather than dropping the entry it cannot read"
+- why: "024.74's gate in front of the spawn -- removing it puts the trust question back at each caller, which is what closed nothing against a fourth."
+  file: core/lib/ovallsp/server.rb
+  from: "      return nil unless trusted_for_execution?(\"restarting the Runtime Agent\")\n\n"
+  to: ""
+  spec: spec/ovallsp/server_trust_execution_gates_spec.rb
+  example: "does not spawn a bootstrap when called directly on an untrusted workspace"

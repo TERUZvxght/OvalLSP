@@ -31,17 +31,25 @@ module HomePaths
   # Both separators, so Windows' `C:\\Users\\name` is caught -- it was not
   # matched at all before, and it costs nothing to add.
   #
-  # **Case-sensitive, deliberately, and this was measured rather than
-  # assumed.** An audit pointed out that macOS' filesystem is
-  # case-insensitive, so the all-lowercase spelling of a home path
-  # reaches the same directory as the real one and slips past. Adding
-  # `/i` does catch that -- and
-  # flags 37 lines in this repository, because `app/views/users/...` is
-  # ordinary Rails and appears throughout the specs and the design docs.
-  # A check that cries wolf 37 times is a check people switch off, and
-  # the case it buys is a tool that lowercases a path prefix, which
-  # nothing here does. The real form is what is matched; the theoretical
-  # one is recorded here instead of being defended against at that price.
+  # **Case-sensitive, deliberately, and the cost of the alternative is
+  # re-derived rather than typed.** An audit pointed out that macOS'
+  # filesystem is case-insensitive, so the all-lowercase spelling of a
+  # home path reaches the same directory as the real one and slips past.
+  # Adding `/i` does catch that -- and flags dozens of ordinary
+  # `app/views/users/...` lines, because that is ordinary Rails and
+  # appears throughout the specs and the design docs. A check that cries
+  # wolf that often is a check people switch off, and the case it buys is
+  # a tool that lowercases a path prefix, which nothing here does. The
+  # real form is what is matched; the theoretical one is recorded here
+  # instead of being defended against at that price.
+  #
+  # This paragraph carried a count until 0.2.16, and the count was never
+  # right at any revision -- `024.192`. It is not restated here, and it is
+  # not restated in the spec either: `home_path_guard_spec.rb`'s
+  # "would cry wolf if it were case-insensitive" example scans this
+  # tree with this pattern plus `/i` on every run and asserts a floor, so
+  # the trade-off above is a live derivation rather than a number
+  # somebody remembered.
   PATTERN = %r{[/\\](?:Users|home)[/\\](?=[A-Za-z0-9._-]*[A-Za-z0-9])([A-Za-z0-9._-]+)}
 
   # Synthetic, or unambiguously a CI machine rather than a person's.
@@ -64,12 +72,25 @@ module HomePaths
     text.scan(PATTERN).flatten.reject { |name| SYNTHETIC.include?(name) }
   end
 
-  # Backticks hand back a string tagged with the *shell's* external
-  # encoding, which is US-ASCII whenever LANG is unset -- so this repo's
-  # Japanese commit messages raise on the first `split` under a bare
-  # local shell while passing in CI's UTF-8 locale. Reading the bytes as
-  # UTF-8 and scrubbing what is not valid makes the answer independent of
-  # the environment the check happens to run in.
+  # What this still buys is `.scrub`, and only `.scrub`.
+  #
+  # It was written for a different hazard: backticks hand back a string
+  # tagged with the *shell's* external encoding, US-ASCII whenever LANG
+  # is unset, so this repository's Japanese commit messages raised on the
+  # first `split` under a bare local shell while passing in CI. That
+  # hazard is gone -- line 4's `require_relative "utf8"` fixes
+  # `Encoding.default_external` before anything here shells out, so the
+  # backtick result is already UTF-8 under `LC_ALL=C`. The comment
+  # describing it outlived it by a release (`024.191`), which is the
+  # shape `CLAUDE.md`'s revert/documentation rule warns about: the prose
+  # was correct when written and nothing about the fix announced that it
+  # had made it false.
+  #
+  # A commit message can still carry genuinely invalid bytes, which no
+  # locale setting fixes and which would make `scan` raise here rather
+  # than not-match. That is what `.scrub` is for, and why the method
+  # stays. Deleting line 4 would bring the old hazard back; the two are
+  # not interchangeable.
   def as_utf8(text)
     text.dup.force_encoding(Encoding::UTF_8).scrub
   end
@@ -119,8 +140,13 @@ module HomePaths
     tracked_files.flat_map { |path| offences_in_file(path) }
   end
 
+  # Through `RepoFiles` rather than a backtick in `Dir.chdir(ROOT)`:
+  # `chdir` does not override an inherited `GIT_DIR`, so under a
+  # pre-commit hook's environment this guard read whichever repository
+  # that variable named and reported clean about it -- the privacy check
+  # answering about the wrong tree, which is `024.157`.
   def shallow?
-    Dir.chdir(ROOT) { `git rev-parse --is-shallow-repository`.strip == "true" }
+    RepoFiles.capture(ROOT, %w[rev-parse --is-shallow-repository]).strip == "true"
   end
 
   # `actions/checkout` fetches a single commit by default, and this mode
@@ -133,7 +159,7 @@ module HomePaths
     raise "refusing to scan commit messages in a shallow clone -- fetch the full history (fetch-depth: 0)" if shallow?
 
     marker = "@@commit@@"
-    log = Dir.chdir(ROOT) { as_utf8(`git log --all --format=#{marker}%H%n%B`) }
+    log = as_utf8(RepoFiles.capture(ROOT, ["log", "--all", "--format=#{marker}%H%n%B"]))
 
     log.split(marker).reject { |entry| entry.strip.empty? }.flat_map do |entry|
       sha, body = entry.split("\n", 2)

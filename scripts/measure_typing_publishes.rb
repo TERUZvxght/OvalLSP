@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require_relative "utf8"
+require_relative "repo_files"
 
 # Counts how many `publishDiagnostics` a burst of edits produces, and how
 # long the burst takes to go quiet -- 037's C9 measured rather than
@@ -33,8 +34,17 @@ puts "measure-typing-publishes: cwd #{Dir.pwd}, version #{File.read(File.join(RO
 # Which code this side actually ran, printed before it runs rather than
 # assumed afterwards -- three of this project's corpus comparisons were
 # false because both sides ran the same tree (CLAUDE.md).
-puts "measure-typing-publishes: HEAD #{`git -C #{ROOT} rev-parse --short HEAD`.strip}, " \
-     "server.rb #{`git -C #{ROOT} diff --stat -- core/lib/ovallsp/server.rb core/lib/ovallsp/io/framed_reader.rb`.strip.empty? ? 'clean' : 'MODIFIED'}"
+#
+# Through `RepoFiles` rather than a backtick: `-C` sets the working
+# directory and does *not* override an inherited `GIT_DIR`, so under a
+# hook's environment these two lines would name a different repository's
+# HEAD while claiming to say which code this side ran -- `024.157`, in
+# the two lines whose entire purpose is that claim.
+head = RepoFiles.capture(ROOT, %w[rev-parse --short HEAD]).strip
+dirty = RepoFiles.capture(ROOT, ["diff", "--stat", "--",
+                                 "core/lib/ovallsp/server.rb",
+                                 "core/lib/ovallsp/io/framed_reader.rb"]).strip
+puts "measure-typing-publishes: HEAD #{head}, server.rb #{dirty.empty? ? 'clean' : 'MODIFIED'}"
 
 def frame(message)
   body = JSON.generate(message)

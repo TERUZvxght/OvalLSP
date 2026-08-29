@@ -21,15 +21,44 @@ require_relative "utf8"
 
 require "yaml"
 
-ROOT = File.expand_path("..", __dir__)
+# Overridable so the guidance below can be checked by *running* this on a
+# throwaway tree rather than by grepping this file for its own message --
+# `024.151`'s direction, and the reason `check_doc_links.rb` takes a root
+# the same way.
+ROOT = File.expand_path(ENV.fetch("CHECK_SWALLOWED_FAILURES_ROOT", File.expand_path("..", __dir__)))
 LIB = File.join(ROOT, "core", "lib")
 VERDICTS = File.join(ROOT, "core", "spec", "meta", "rescue_verdicts.yml")
 
+# What a site may actually carry. Two, and only two:
+#
 # - surfaces:   raises, or reports through a channel a person sees
 # - contained:  the failure genuinely has no consequence, and the reason
 #               is written at the site
-# - swallows:   neither. This is the group `024.122` exists to empty.
-VERDICT_KINDS = %w[surfaces contained swallows].freeze
+ALLOWED_VERDICTS = %w[surfaces contained].freeze
+
+# Spellings this file can *parse*. `swallows` is here so that a verdict
+# written before `024.122` emptied that column gets the argument below
+# instead of "not one of surfaces, contained" -- it is a recognised
+# spelling with a refusal attached, never an option.
+#
+# The guidance a site with no verdict receives is built from
+# `ALLOWED_VERDICTS`, not typed. It named `swallows` until 0.2.16, so the
+# message offered the verdict its very next branch refuses, and
+# `rescue_verdicts.yml`'s header called that same verdict the safe
+# default -- `024.217`. Two strings that had to agree with a third and
+# were each written independently; now there is one list and both read
+# it.
+VERDICT_KINDS = (ALLOWED_VERDICTS + %w[swallows]).freeze
+REFUSED_VERDICTS = (VERDICT_KINDS - ALLOWED_VERDICTS).freeze
+
+# `--verdicts` prints what a site may carry, one per line, from the list
+# the messages are built from. `core/spec/meta/swallowed_failures_spec.rb`
+# reads it so that the yml header and this script cannot drift apart
+# again without a check going red.
+if ARGV.include?("--verdicts")
+  puts ALLOWED_VERDICTS
+  exit 0
+end
 
 def sites
   Dir.glob(File.join(LIB, "**", "*.rb")).sort.flat_map do |path|
@@ -66,14 +95,15 @@ found.each do |site|
   verdict = recorded[key]
   if verdict.nil?
     problems << "#{site["file"]}:#{site["line"]}  #{site["source"]}\n      has no verdict. Add one to " \
-                "core/spec/meta/rescue_verdicts.yml -- surfaces, contained, or swallows."
+                "core/spec/meta/rescue_verdicts.yml -- #{ALLOWED_VERDICTS.first} or " \
+                "#{ALLOWED_VERDICTS.last}: <why>."
   elsif !VERDICT_KINDS.include?(verdict.to_s.split(":").first)
-    problems << "#{site["file"]}:#{site["line"]}  verdict #{verdict.inspect} is not one of #{VERDICT_KINDS.join(", ")}."
-  elsif verdict.to_s.split(":").first == "swallows"
-    # **The column is empty, and stays empty.** Every one of the 158
-    # sites either surfaces or carries an argument for why the failure
-    # cannot become an assertion. `swallows` remains spellable so that
-    # this message can name it, not so that a site can sit in it.
+    problems << "#{site["file"]}:#{site["line"]}  verdict #{verdict.inspect} is not one of #{ALLOWED_VERDICTS.join(", ")}."
+  elsif REFUSED_VERDICTS.include?(verdict.to_s.split(":").first)
+    # **The column is empty, and stays empty.** Every site either
+    # surfaces or carries an argument for why the failure cannot become
+    # an assertion. A refused spelling stays parseable so that this
+    # message can name it, not so that a site can sit in it.
     problems << "#{site["file"]}:#{site["line"]}  #{site["source"]}\n      is marked `swallows`. " \
                 "Catching a failure and continuing is not allowed by default (CLAUDE.md): make it surface, " \
                 "or write the argument for why no caller can assert from the value it returns and mark it " \

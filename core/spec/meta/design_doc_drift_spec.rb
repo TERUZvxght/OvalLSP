@@ -61,20 +61,65 @@ RSpec.describe "design documents that restate something the code owns" do
     expect(documented.sort).to eq(real.sort)
   end
 
+  # Any `OvalLSP: ...` label in a string literal of any of TypeScript's
+  # three delimiters, with or without a `$(icon)` prefix of any shape.
+  #
+  # Each of the three conditions the 0.2.14 version still imposed was a
+  # shape ordinary TypeScript takes, and the consequence was
+  # one-directional and unreported: the file could define a status string
+  # the document does not list, with every example green. `024.209`.
+  #
+  #   * `'` and `"` only, so a **template literal was invisible** -- and
+  #     `statusPresentation`'s own fallback is one, so the check was
+  #     already blind to a string the shipped extension can produce;
+  #   * an icon name of `[a-z~-]` only, so **one digit in a codicon name**
+  #     made the whole literal unmatchable rather than partly matched,
+  #     because the optional group failed and the label no longer abutted
+  #     the opening quote.
+  #
+  # Both were measured against this tree before the pattern was widened:
+  # appending either shape to `clientPresentation.ts` left all six
+  # examples passing while §5 listed five strings and the file defined
+  # six.
+  DESIGN_DRIFT_STATUS = /["'`](\$\([^)]*\)\s*)?(OvalLSP: [^"'`]*)["'`]/
+
   it "07 §5 lists exactly the status-bar strings clientPresentation defines" do
     documented = block_in("docs/design/docs/07-vscode-extension.md", "## 5. Status Bar").lines.map(&:strip).reject(&:empty?)
     source = self.class.read("vscode/src/clientPresentation.ts")
-    # Any quoted `OvalLSP: ...` label, single or double quoted, with or
-    # without a `$(icon)` prefix. The narrower form saw only the shape
-    # today's five happen to take, so a new status string added in any
-    # other shape would be invisible on the code side and the document
-    # could omit it with this example green.
-    real = source.scan(/["'](\$\([a-z~-]+\)\s*)?(OvalLSP: [^"']+)["']/)
+    real = source.scan(DESIGN_DRIFT_STATUS)
                  .map { |icon, label| "#{icon}#{label}" }
-                 .reject { |s| s.include?("\#{") }
                  .uniq
 
     expect(documented.sort).to eq(real.sort)
+  end
+
+  # And §5's claim is that `clientPresentation.ts` is the *only* place
+  # the status bar's text comes from -- 唯一の定義, in its own words. The
+  # example above cannot see that: it reads one file, so a status string
+  # assigned anywhere else in `vscode/src` is simply outside it.
+  #
+  # Asserted structurally rather than by widening the scan to every `.ts`
+  # file, which would be wrong: dozens of notification messages, log
+  # lines and command titles begin `OvalLSP: ` and are not status-bar
+  # strings at all, so a wider scan would compare §5 against a list it
+  # has no business listing. What makes §5 true is that every assignment
+  # to a status bar item's `text` takes `statusPresentation`'s value.
+  it "assigns the status bar's text only from clientPresentation's own decision" do
+    assignments = RepoFiles.list(DESIGN_DRIFT_ROOT, "vscode/src/*.ts")
+                           .reject { |rel| rel.start_with?("vscode/src/test/") }
+                           .flat_map do |rel|
+      self.class.read(rel).each_line.with_index(1).filter_map do |line, number|
+        "#{rel}:#{number}  #{line.strip}" if line.match?(/\.text\s*=/) && line.match?(/status/i)
+      end
+    end
+
+    expect(assignments).not_to be_empty, "no status-bar text assignment was found at all"
+    assignments.each do |site|
+      expect(site).to match(/=\s*shown\.text|=\s*statusPresentation\(/),
+                      "this assigns the status bar's text from something other than " \
+                      "`statusPresentation`, so 07 §5's claim that clientPresentation.ts is the " \
+                      "only definition is no longer true: #{site}"
+    end
   end
 
   it "07 §3 lists exactly the activation events package.json declares" do

@@ -151,9 +151,13 @@ CITATION = %r{
 # below rather than a wider version of the pattern above.
 RELATIVE_LINK = %r{\]\((?<path>(?!https?://|/|\#)[A-Za-z0-9._/-]+\.md)(?:\#[^)]*)?\)}
 
+# Every caller here runs git, and goes through `RepoFiles` so that the
+# inherited `GIT_DIR`/`GIT_INDEX_FILE` a hook is given cannot aim it at
+# another repository -- `024.157`, which is why this is not a bare
+# `IO.popen(["git", ...])` any more.
 def run(*args)
-  out = IO.popen(args, chdir: ROOT, err: %i[child out], &:read)
-  [out, $?]
+  args = args.drop(1) if args.first == "git"
+  [RepoFiles.capture(ROOT, args), $?]
 end
 
 def refuse(message)
@@ -184,8 +188,16 @@ end
 # still a failure with the marker present -- which is the case this
 # check was built for, since all 19 of its founding citations were
 # names no commit had ever carried. A pointer to a *renamed* file is
-# also still a failure, because the marker is a deliberate edit on the
-# line that needs it rather than a mode the file is in.
+# also still a failure, and is reported separately, because the content
+# is not gone and "restore the file" is not the repair -- the citation
+# should name where it went.
+#
+# That last sentence described nothing until 0.2.16. `ever_existed?`
+# asks whether any commit's tree named the path, which is true for a
+# path git carried under its pre-rename name, so a renamed-away pointer
+# passed and was counted in the deleted-file total -- and renames are
+# how documents move in this tree, which made the exemption widest
+# exactly where it was meant to be narrowest. `024.176`.
 DELETED_MARKER = "<!-- deleted -->"
 
 # Whether a path ever existed. `--diff-filter=D` alone misses a file
@@ -250,6 +262,74 @@ def ever_existed?(path)
   @ever_existed[path] = status.success? && !out.strip.empty?
 end
 
+# The name a renamed path lives under **now**, or nil.
+#
+# `024.176`. The marker paragraph above says a pointer to a renamed file
+# is still a failure, and until 0.2.16 nothing made that true:
+# `ever_existed?` asks whether any commit's tree named the path, which is
+# yes for a path git carried under its pre-rename name. So a citation of
+# a file that was renamed away passed, and was counted in the "naming a
+# deleted file" total -- the count the check prints was not the count it
+# names. Renames are the common case for documents in this tree, so the
+# exemption was widest exactly where it was meant to be narrowest.
+#
+# The question asked is not "was this ever renamed" but "did the content
+# end up somewhere that still exists". A file renamed and *then* deleted
+# is a genuine deletion and is still admitted, which is why the target is
+# tested against the working tree rather than the rename being treated as
+# disqualifying on its own.
+# Every rename this history records, old name to new, read in one call.
+#
+# **Without a pathspec, deliberately.** `git log --diff-filter=R
+# --name-status -- <path>` reports *nothing* for a path that was renamed:
+# the pathspec limits the diff before rename detection runs, so the two
+# halves are never paired. Measured before this was written -- with the
+# pathspec the output is empty, without it the same history prints the
+# `R100  <old>  <new>` line. That is also why this is one call for the
+# whole run rather than one per marked citation: 136 renames across this
+# history, 40ms, against 24 marked citations.
+def rename_map
+  @rename_map ||= begin
+    out, status = run("git", "log", "--all", "--find-renames", "--diff-filter=R",
+                      "--name-status", "--pretty=format:")
+    map = {}
+    if status.success?
+      out.each_line do |line|
+        kind, from, to = line.strip.split("\t")
+        next unless kind.to_s.start_with?("R") && from && to
+
+        # Oldest wins: `git log` walks newest first, so a later
+        # assignment is an earlier rename in a chain.
+        map[from] = to
+      end
+    end
+    map
+  end
+end
+
+# Where a renamed path's content lives **now**, or nil.
+def renamed_target(path)
+  @renamed_target ||= {}
+  return @renamed_target[path] if @renamed_target.key?(path)
+
+  seen = {}
+  current = path
+  result = nil
+  while (nxt = rename_map[current]) && !seen[current]
+    seen[current] = true
+    current = nxt
+    if File.file?(File.join(ROOT, current))
+      result = current
+      break
+    end
+  end
+  @renamed_target[path] = result
+end
+
+def renamed_target_anywhere(raw)
+  candidates_for(raw).filter_map { |c| renamed_target(c) }.first
+end
+
 files = tracked_files.reject { |f| f.match?(SKIP) }
 
 # What this repository carries, as an exact set -- see `carried?`.
@@ -259,6 +339,7 @@ dangling = []
 inspected = 0
 citations = 0
 recorded_deletions = 0
+renamed = []
 unreadable = []
 relative_citations = 0
 
@@ -293,7 +374,12 @@ files.each do |rel|
       next if target.nil?
 
       if line.include?(DELETED_MARKER) && ever_existed_anywhere?(raw)
-        recorded_deletions += 1
+        moved = renamed_target_anywhere(raw)
+        if moved.nil?
+          recorded_deletions += 1
+          next
+        end
+        renamed << { file: rel, line: number, cited: raw, moved: moved }
         next
       end
 
@@ -322,7 +408,12 @@ files.each do |rel|
       next if carried?(target)
 
       if line.include?(DELETED_MARKER) && ever_existed?(target)
-        recorded_deletions += 1
+        moved = renamed_target(target)
+        if moved.nil?
+          recorded_deletions += 1
+          next
+        end
+        renamed << { file: rel, line: number, cited: raw, moved: moved }
         next
       end
 
@@ -388,6 +479,21 @@ unless unreadable.empty?
   unreadable.each { |u| warn("    #{u[:file]}  (#{u[:reason]})") }
   warn("check-doc-links: a file this cannot read is not a file it found clean. Fix its encoding, " \
        "or add it to SKIP with a reason if it is genuinely not authored text.")
+  exit 1
+end
+
+# A marked citation of a path the content merely *moved* out of.
+# Reported separately because the repair is different: the path is not
+# gone, so restoring a file is not the fix and neither is deleting the
+# line -- the citation should name where the content went. `024.176`.
+unless renamed.empty?
+  warn("check-doc-links: #{renamed.length} citation(s) marked as recording a deletion name a file " \
+       "that was renamed, not deleted:")
+  renamed.sort_by { |r| [r[:file], r[:line]] }.each do |r|
+    warn("    #{r[:file]}:#{r[:line]}  `#{r[:cited]}` now lives at `#{r[:moved]}`")
+  end
+  warn("check-doc-links: the marker admits a path whose content is gone. Repoint the citation at " \
+       "the current name.")
   exit 1
 end
 

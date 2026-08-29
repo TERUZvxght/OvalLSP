@@ -12,6 +12,7 @@ require_relative "type_normalizer"
 require_relative "fingerprint"
 require_relative "observed_signature"
 require_relative "collector"
+require_relative "wire"
 require_relative "../index/symbol_id"
 require_relative "../types"
 
@@ -71,8 +72,12 @@ module Ovallsp
         nil
       end
 
+      # JSON rather than Marshal since 0.2.16: this file runs inside the
+      # workspace's own test process and its output is read back by Core,
+      # so what crosses is untrusted by construction. `Observation::Wire`
+      # says why, and `Runner#read_results` is the other end.
       def dump(results, output_path)
-        File.binwrite(output_path, Marshal.dump(results))
+        File.binwrite(output_path, JSON.generate(Wire.encode(results)))
       rescue StandardError
         nil
       end

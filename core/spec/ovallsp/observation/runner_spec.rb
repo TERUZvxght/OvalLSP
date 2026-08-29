@@ -214,20 +214,57 @@ RSpec.describe Ovallsp::Observation::Runner do
 
   it "returns nil, not an empty array, when the result file is corrupt rather than merely empty" do
     allow(File).to receive(:binread).and_call_original
-    allow(File).to receive(:binread).with(a_string_including("ovallsp-observation")).and_return("not a Marshal payload")
+    allow(File).to receive(:binread).with(a_string_including("ovallsp-observation")).and_return("not a payload")
 
     expect(runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)).to be_nil
   end
 
   # The sibling of the test above, covering #read_results' *other*
-  # untrusted-payload branch: a payload that deserializes perfectly well
-  # but isn't an Array of ObservedSignature (a version skew, a stale
-  # result file from an older Core) never reaches the rescue the corrupt
-  # case does, so "corrupt" coverage alone doesn't imply it.
-  it "returns nil, not an empty array, when the result payload deserializes to the wrong shape" do
+  # untrusted-payload branch: a payload that parses perfectly well but
+  # isn't the envelope Harness writes (a version skew, a stale result
+  # file from an older Core) never reaches the rescue the corrupt case
+  # does, so "corrupt" coverage alone doesn't imply it.
+  it "returns nil, not an empty array, when the result payload parses to the wrong shape" do
     allow(File).to receive(:binread).and_call_original
     allow(File).to receive(:binread).with(a_string_including("ovallsp-observation"))
-                                    .and_return(Marshal.dump({ "not" => "signatures" }))
+                                    .and_return(JSON.generate({ "not" => "signatures" }))
+
+    expect(runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)).to be_nil
+  end
+
+  # `024.135`, and the same argument `plugins/loader_spec.rb` makes one
+  # boundary over for `024.73`. The subprocess runs the workspace's own
+  # test command, so those bytes are written by code Core did not author,
+  # and `Marshal.load` instantiates whatever classes the stream names --
+  # in Core's process, before the shape check below it looks at anything.
+  # Driven at `bdd0ebe` before the fix: `#read_results` answered `nil`,
+  # having already run a `marshal_load` hook the payload carried.
+  #
+  # Asserted as "never calls it" rather than by demonstrating a gadget:
+  # a gadget is a property of whichever classes happen to be loaded, so a
+  # passing gadget test would be evidence about this Gemfile, while this
+  # is evidence about the boundary. It fails the moment anyone puts
+  # `Marshal.load` back on this path.
+  it "never reconstructs the subprocess's results with Marshal" do
+    expect(Marshal).not_to receive(:load)
+
+    results = runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)
+
+    expect(results.map { |r| r.symbol_id.name }).to include("add")
+  end
+
+  # The other half: a result file holding a Marshal payload -- what the
+  # harness used to write, and what a stale file from an older Core still
+  # holds -- produces no run rather than a decoded object graph.
+  it "rejects a Marshal payload in the result file instead of loading it" do
+    signature = Ovallsp::Observation::ObservedSignature.new(
+      symbol_id: sym(kind: :instance_method, owner: "::Calculator", name: "add"),
+      parameter_types: [], return_type: Ovallsp::Types::UNKNOWN, samples: 1,
+      run_id: "run", code_fingerprint: "fp", created_at: Time.now
+    )
+    allow(File).to receive(:binread).and_call_original
+    allow(File).to receive(:binread).with(a_string_including("ovallsp-observation"))
+                                    .and_return(Marshal.dump([signature]))
 
     expect(runner.run(command: "ruby", args: ["run_tests.rb"], workspace_root: fixtures_root)).to be_nil
   end

@@ -111,6 +111,7 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a macro it cannot read" do
   #   class Widget; end
   #   p Widget.nope
   #   '
+  #   # => -e:1: warning: redefining Object#method_missing may cause infinite loop
   #   # => :mm
   #   # ruby 3.4.10
   it "says nothing about a class-level call when a workspace Object declares method_missing" do

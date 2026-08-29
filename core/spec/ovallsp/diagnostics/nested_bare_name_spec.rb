@@ -16,7 +16,8 @@ require "stringio"
 #     class Config; def app_only; end; end
 #     class Runner; def go = Config.new.app_only; end
 #   end
-#   p App::Runner.new.go            # => nil, and it does not raise
+#   p App::Runner.new.go            # => nil
+#   # -- and, the point of the session, it does not raise
 #   '
 #
 # (An earlier version of this comment added an `instance_eval` line

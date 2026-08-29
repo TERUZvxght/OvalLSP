@@ -103,6 +103,48 @@ RSpec.describe "scripts and the invoking shell's locale" do
     end
   end
 
+  # `utf8.rb` sets two things, and until 0.2.16 only the first was pinned:
+  # deleting `Encoding.default_external = ...` failed the example above,
+  # deleting `Encoding.default_internal = nil` failed nothing. Nothing in
+  # this tree sets an internal encoding, so the probe above cannot tell
+  # the line's presence from its absence -- `024.208`, an unpinned line
+  # that happens to be correct, which this project counts as a defect in
+  # its own right.
+  #
+  # The distinguishing fixture is an inherited `RUBYOPT`, which is how an
+  # internal encoding actually arrives: a wrapper script, a CI step or a
+  # shell profile exporting `-E`. With an internal encoding in force,
+  # `File.read` and `IO.popen` transcode on the way in, and a UTF-8
+  # needle no longer compares against what they return. Measured both
+  # ways before this example was written: with line 32 the probe prints
+  # `true,true,UTF-8,UTF-8`; without it, the same command raises
+  # `Encoding::CompatibilityError: incompatible character encodings:
+  # EUC-JP and UTF-8` at the `include?`.
+  it "survives an inherited internal encoding, not only a bare locale" do
+    Dir.mktmpdir do |dir|
+      probe = File.join(dir, "internal.rb")
+      File.write(probe, <<~RUBY, encoding: "UTF-8")
+        # frozen_string_literal: true
+
+        require_relative "#{File.join(SCRIPT_ENCODING_ROOT, "scripts/utf8")}"
+
+        document = "#{File.join(SCRIPT_ENCODING_ROOT, "docs/KNOWN_LIMITATIONS.ja.md")}"
+        text = File.read(document)
+        piped = IO.popen(["cat", document], &:read)
+        needle = [0xE5, 0x88, 0xB6, 0xE9, 0x99, 0x90].pack("C*").force_encoding(Encoding::UTF_8)
+
+        print [text.scan(/^# /).length.positive?, piped.include?(needle),
+               text.encoding, piped.encoding].join(",")
+      RUBY
+
+      env = { "LC_ALL" => "C", "LANG" => "C", "RUBYOPT" => "-E UTF-8:EUC-JP" }
+      out = IO.popen(env, ["ruby", probe], err: %i[child out], &:read)
+
+      expect($?).to be_success, out
+      expect(out).to eq("true,true,UTF-8,UTF-8")
+    end
+  end
+
   # And it must fail without the fix, or the example above proves only
   # that Ruby works. Same probe, same locale, no `require_relative`.
   it "would fail without it, which is why the require is not decoration" do

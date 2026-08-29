@@ -31,11 +31,18 @@ OvalLSPはローカル開発マシン上で動くLSPサーバーであり、ネ�
 | 脅威 | 緩和策 | 根拠 |
 |---|---|---|
 | ワークスペースを開いただけでRails Runtime Agent(任意のRailsアプリの`config/environment.rb`をロードし、結果的に任意コードを実行しうる)が自動起動してしまう | Workspace Trustが`true`の場合のみAgentを起動。`initializationOptions.workspaceTrusted`が明示的に`true`でない限り、値の欠如・`false`・フィールド自体の欠如を含め全て起動を拒否するfail-closed設計 | `core/lib/ovallsp/server.rb`の`maybe_start_agent`/`workspace_trusted?` |
+| Agentを*起動する*経路は問うのに、*再起動する*経路は問わない — 呼び出し側が全員たまたま正しいだけで、4人目が増えれば破れる | 0.2.16で判定をプロセス生成の直前へ移した(`024.74`)。`#restart_agent`自身が`#trusted_for_execution?`に尋ね、拒否は`nil`。`restart_agent_result`はその`nil`を読むだけで、代わりに尋ねることはしない | `core/lib/ovallsp/server.rb`の`restart_agent`/`trusted_for_execution?` |
 | Agentプロセスが、Coreサーバー自身のBundler/Gemfileコンテキストを引き継いでしまう(依存関係の混線) | Agent子プロセスの`BUNDLE_GEMFILE`を明示的にunset | `core/lib/ovallsp/rails_bootstrap.rb` |
 | ワークスペースが偽装したAgentプロトコル応答を返し、Coreがそれを信頼してしまう | `agent/hello`ハンドシェイクで`RuntimeAgent::Agent::PROTOCOL_VERSION`の完全一致を要求。不一致時は`:static_only`にフォールバックし子プロセスを終了、以後Agentを信頼しない(Task 022) | `core/lib/ovallsp/agent_process_manager.rb` |
 | Agentがクラッシュを繰り返し、無限に再起動しリソースを消費し続ける | `AgentSupervisor`が指数バックオフ+最大試行回数(デフォルト5回)でcrash-loop保護。手動リスタートは`reset`でこのキャップをバイパス可能(意図的なユーザー操作は自動保護でブロックしない) | `core/lib/ovallsp/agent_supervisor.rb`(Task 022) |
 
 ### 2. 信頼できないプラグインをロードする
+
+> **プラグインサブシステムは0.2.16で削除された。** 以下の表と、上の脅威
+> モデル2番は、それが存在した間に何を緩和していたかの記録であり、現在の
+> 実装ではない — 根拠列が指すファイルはもう無い。同じ形の脅威が再び現れ
+> るのは、Coreが再び別プロセスの結果を読むときで、そのときの記録は4節の
+> 観測チャネルの行にある。
 
 | 脅威 | 緩和策 | 根拠 |
 |---|---|---|
@@ -68,6 +75,7 @@ OvalLSPはローカル開発マシン上で動くLSPサーバーであり、ネ�
 | 実行時の型観測(Task 019)が引数/戻り値の実値やその文字列表現を保存してしまう | `TypeNormalizer`は観測対象の値に対して`#nil?`/`#is_a?`/`.class`/`.name`しか呼ばない。`#inspect`/`#to_s`は一切呼ばない | `core/lib/ovallsp/observation/type_normalizer.rb` |
 | 敵対的に`#class`/`#name`をオーバーライドしたオブジェクトが、非String値をJSON応答(`ovallsp/showTypeEvidence`)に紛れ込ませる | `as_nominal_name`が`.name`の戻り値が`String`であることを検証し、そうでなければ`Types::UNKNOWN`に丸める(019-022レビューRound 1で発見・修正) | `core/lib/ovallsp/observation/type_normalizer.rb` |
 | 型観測がCoreプロセス自身の中で(本番のLSPサービング処理と同じプロセスで)動いてしまう | `Observation::Collector`はワークスペース自身のテストコマンドに`RUBYOPT`経由で注入される、完全に別のOSプロセス内でのみ動作する。Core自身のプロセスへの注入は設計上スコープ外 | `core/lib/ovallsp/observation/runner.rb` |
+| 別プロセスの分離が、その結果の*読み方*で無効化される — 観測結果を`Marshal.load`で読むと、ストリームが名指したクラスが検証より**前に**Coreプロセス内で生成される | 0.2.16でJSONに変更(`024.135`。プラグイン境界で`024.73`が直した形と同じものが、こちらのチャネルに残っていた)。ペイロードはクラスを名指しできず、Coreは検証済みフィールドからのみ型付き値を組み立てる。`kind`は既知の閉じた一覧との照合のみで、`const_get`にも`to_sym`にも届かない。壊れた要素は1件でもペイロード全体を破棄する(`Store#replace_run`は世代まるごとの入れ替えであり、部分的な復元は「スイートが観測した全て」として保存されてしまうため) | `core/lib/ovallsp/observation/wire.rb`, `runner.rb`(`read_results`), `harness.rb`(`dump`) |
 | 観測実行中の一時ログに、テストスイート自身の出力(Railsアプリなら日常的にSQL)がそのまま入る | **意図的に未対策(accepted risk)**。`--stdio`モードではfd 1が稼働中のLSPトランスポートであるため、子プロセスの出力をそこへ流すわけにいかない。所有者のみ読み書き可能な権限で作成し、実行終了時に削除する(削除は静かに失敗しうるため、一時ディレクトリが読み取り専用になっている場合は残る。クラッシュや強制終了では削除処理自体が実行されない)。OvalLSPはこのログを読みも索引もしない。0.1.12 で「パースキャッシュ以外ディスクには何も書かない」という記述が誤りであると判明し訂正した。記録内容の唯一の正は`vscode/PRIVACY.ja.md` | `core/lib/ovallsp/observation/runner.rb` |
 
 ### 5. 永続キャッシュのデシリアライズ

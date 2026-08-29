@@ -1032,20 +1032,18 @@ module Ovallsp
     # itself returns immediately rather than blocking on however long a
     # full Rails boot takes.
     def restart_agent_result(_params)
-      # The Agent executes the workspace's own Rails and Bundler code,
-      # which is the thing trust gates. A restart is another way to start
-      # it, so it asks the same question -- and it must ask the *stored*
-      # answer, because a restart request carries no initializationOptions
-      # of its own to inspect.
-      return { acknowledged: false, reason: "workspace not trusted" } unless trusted_for_execution?("restarting the Runtime Agent")
-
       # A user-initiated restart always gets a fresh attempt, regardless
       # of how many *automatic* attempts were already exhausted --
       # "manual restart" is its own capability (Task 022), not gated by
       # the automatic backoff's own crash-loop cap.
       @agent_supervisor.reset
       cancel_scheduled_agent_retries
-      restart_agent
+      # The Agent executes the workspace's own Rails and Bundler code,
+      # which is the thing trust gates, and `#restart_agent` is where that
+      # is asked now (`024.74`) -- it answers nil for a refusal. This used
+      # to ask on its behalf, one level up from the spawn.
+      return { acknowledged: false, reason: "workspace not trusted" } if restart_agent.nil?
+
       { acknowledged: true }
     end
 
@@ -2932,6 +2930,12 @@ module Ovallsp
     # was ever started for this workspace in the first place; a workspace
     # with none (not Rails, or trust not yet granted) has nothing to
     # restart and stays quiet, same as #with_ready_agent's nil case.
+    #
+    # Since `024.74` the guard is only that -- "nothing to restart". It
+    # used to be load-bearing for trust as well, because an untrusted
+    # workspace has no manager and so never reached the spawn; trust is
+    # now asked in front of the spawn itself, where a caller cannot
+    # forget it.
     def maybe_restart_agent
       restart_agent if @agent_manager
     end
@@ -3205,7 +3209,18 @@ module Ovallsp
     # (not capturing it beforehand) means a second, serialized restart
     # correctly stops the process the first restart just started, instead
     # of a stale reference to the one from before either ran.
+    #
+    # The trust question is asked *here*, in front of the spawn, rather
+    # than by each route to it (`024.74`). It used to be asked by
+    # `restart_agent_result`, while `maybe_restart_agent` relied on its
+    # `@agent_manager` guard and the scheduled retry on there having been
+    # an Agent to lose -- three routes that all happened to be right,
+    # which closed nothing against a fourth. Answers `nil` for a refusal
+    # and the spawned Thread otherwise, so a caller that has to report
+    # the refusal can.
     def restart_agent(retry_generation: nil)
+      return nil unless trusted_for_execution?("restarting the Runtime Agent")
+
       bootstrap = @agent_bootstrap
       root = @workspace_root
       route_registry = @route_registry

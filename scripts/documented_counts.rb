@@ -62,8 +62,21 @@ module DocumentedCounts
   # report every stale document as re-derived whether or not anything was
   # written, so a document whose wording moved out from under its pattern
   # was counted as a success and the command exited 0.
+  # Block form for the inner `sub`, and it changes nothing today: the
+  # replacement is `grouped`'s output, which is digits and commas, so no
+  # backreference can appear in it. It is here because the *two-argument*
+  # form is the one that has to be argued about every time it is read --
+  # `\0`, `\1`, `\&` and a backslash-backtick are all special in a
+  # replacement string, and the last of those took a tracked document
+  # from 11,555 lines to 25,878 twice (`024.225`). The block form expands
+  # nothing, so the argument is not needed at all.
+  #
+  # No test distinguishes the two here, and there is no honest way to
+  # write one: the difference is unreachable through this function's own
+  # inputs. Said so rather than implied, so nobody reads a green suite as
+  # cover for it.
   def substituted(text, pattern, count)
-    updated = text.gsub(pattern) { |match| match.sub(Regexp.last_match(1), grouped(count)) }
+    updated = text.gsub(pattern) { |match| match.sub(Regexp.last_match(1)) { grouped(count) } }
     updated == text ? nil : updated
   end
 

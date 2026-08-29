@@ -86,7 +86,16 @@ $(check) OvalLSP: Ready (static)
 $(check) OvalLSP: Ready (Rails)
 $(warning) OvalLSP: Agent unavailable
 $(error) OvalLSP: Configuration error
+OvalLSP: ${outcome.state}
 ```
+
+最後の行はテンプレートリテラルであり、固定文字列ではない。
+`statusPresentation` が `STATUS_LABELS` に無い state を受け取ったときの
+フォールバックで、`clientPresentation.test.ts` の "renders an
+unrecognised state by name, not as an error" が固定している。0.2.16 まで
+この行はここに無く、`design_doc_drift_spec.rb` の照合もテンプレート
+リテラルを見ていなかったので、出荷される拡張が出しうる文字列を
+「唯一の定義」と称する節が挙げていなかった（`024.209`）。
 
 クリックで開くのは Quick Pick ではなく Output channel である。
 

@@ -2,6 +2,7 @@
 # frozen_string_literal: true
 
 require_relative "utf8"
+require_relative "repo_files"
 
 # Reverse-applies each behavioural hunk of a change set on its own and
 # runs the suite, so a line no test fails on is found by a machine
@@ -43,7 +44,13 @@ LOCK = File.join(Dir.tmpdir, "ovallsp-hunk-sweep.lock")
 # the change set that introduced it -- which is the only way this kind of
 # thing is found, and the reason the script is in the tree rather than
 # rebuilt from memory each release.
+#
+# The environment scrub matters more here than anywhere else in this
+# tree: this script runs `git apply -R` and `git checkout --`, and an
+# inherited `GIT_DIR` from a pre-commit hook would aim both at whichever
+# repository that variable names rather than at `ROOT` -- `024.157`.
 def run(*command, chdir: ROOT)
+  command = RepoFiles.spawn_args(*command.drop(1)) if command.first == "git"
   stdout, status = Open3.capture2e(*command, chdir: chdir)
   [stdout.force_encoding(Encoding::UTF_8), status.success?]
 end

@@ -121,7 +121,14 @@ entries.each_with_index do |entry, i|
   at_exit(&restore)
 
   begin
-    File.write(source, original.sub(entry["from"], entry["to"]))
+    # **Block form.** `String#sub` expands backreferences in a
+    # replacement *string* -- `\0`, `\1`, `\&`, and a backslash-backtick
+    # meaning everything before the match. `to` is author-supplied YAML,
+    # so whether any of them bites is a property of today's manifest and
+    # not of this code. The block form expands nothing, and costs two
+    # characters. `024.225`, whose instance took a tracked document from
+    # 11,555 lines to 25,878 twice.
+    File.write(source, original.sub(entry["from"]) { entry["to"] })
 
     command = ["bundle", "exec", "rspec", "-e", entry["example"].to_s.strip, entry["spec"]]
     output = IO.popen(command, chdir: CORE, err: %i[child out], &:read)
