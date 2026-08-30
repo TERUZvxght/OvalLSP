@@ -201,6 +201,24 @@
   to: "    {}\n"
   spec: spec/meta/untracked_visibility_spec.rb
   example: "answers about the directory it was given, not about an inherited GIT_DIR"
+- why: "024.257's compact-path head lookup -- without it the whole written path is glued onto the enclosing frame, so `module App; class Other::Runner` where no `App::Other` exists names nothing and a bare constant falls through to the top level: the call that runs is reported and the call that raises is silent."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "      resolved = qualify_constant(head).to_s.delete_prefix(\"::\")\n      \"#{resolved}::#{rest}\""
+  to: "      parent ? \"#{parent}::#{written}\" : written"
+  spec: spec/ovallsp/diagnostics/nested_bare_name_spec.rb
+  example: "says nothing about the call the resolved head makes correct"
+- why: "024.271's receiver visit, hoisted above the cref switch and the frame push -- without it the `ty` on a `def ty.outer` line is never recorded, so rename rewrites every other mention and leaves the file not running."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        owner_receiver&.accept(self)\n"
+  to: ""
+  spec: spec/ovallsp/server_rename_spec.rb
+  example: "rewrites a local used as a `def` receiver, so the file still parses"
+- why: "024.271's skip of the already-visited receiver -- without it the receiver is walked twice, the second time under the method's own cref, and a receiver this parser cannot name has no owner: one variable with two identities again."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "          node.each_child_node { |child| child.accept(self) unless child.equal?(owner_receiver) }"
+  to: "          node.each_child_node { |child| child.accept(self) }"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "gives the receiver and the assignment that created it one identity"
 - why: "the shipped-target guard reading every open entry -- 024.173, without which an open friction or roadmap entry naming a released version passes silently, which is the state 024.124 built this guard to make unreachable."
   file: scripts/deferred_findings.rb
   from: "    open_entries(markdown).filter_map do |number, fields|"

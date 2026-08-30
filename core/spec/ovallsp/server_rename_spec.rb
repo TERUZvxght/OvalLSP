@@ -288,4 +288,59 @@ RSpec.describe "Ovallsp::Server textDocument/prepareRename and textDocument/rena
     )
     expect(Prism.parse(lines.join)).to be_success
   end
+
+  # `024.271`. `def <local>.name` evaluates its receiver in the enclosing
+  # scope -- the local is not visible inside the singleton body at all:
+  #
+  #   $ ruby -e '
+  #   class Runner
+  #     def go
+  #       ty = Object.new
+  #       def ty.reads_outer
+  #         defined?(ty)
+  #       end
+  #       [ty.reads_outer, binding.local_variable_defined?(:ty)]
+  #     end
+  #   end
+  #   p Runner.new.go
+  #   '
+  #   # => [nil, true]
+  #   # ruby 3.4.10
+  #
+  # The receiver is one of the `def` node's children and was walked with
+  # the rest of them, after `@cref` had already become the method's. A
+  # receiver this parser cannot name has no owner at all, so that `ty`
+  # was recorded as `nil#3` while the `ty =` that created it was
+  # `::Runner#3` -- one variable, two identities. Rename rewrote every
+  # mention *except* the one on the `def` line, and the file stopped
+  # running: `024.28`'s failure, produced by rename rather than refused
+  # by it.
+  #
+  # The whole file is compared, because the thing being got wrong is the
+  # text, and it is parsed, because "still runs" is the actual guarantee.
+  it "rewrites a local used as a `def` receiver, so the file still parses" do
+    source = "class Runner\n  def go\n    ty = Thing.new\n    def ty.outer\n      :x\n    end\n    ty\n  end\nend\n"
+    input =
+      did_open("file:///a.rb", source) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 2, character: 4 }, newName: "thing" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    edits = sent_messages.first[:result][:changes][:"file:///a.rb"]
+    lines = source.lines
+    edits.sort_by { |e| [-e[:range][:start][:line], -e[:range][:start][:character]] }.each do |edit|
+      line = edit[:range][:start][:line]
+      lines[line] = lines[line].dup
+      lines[line][edit[:range][:start][:character]...edit[:range][:end][:character]] = edit[:newText]
+    end
+
+    expect(lines.join).to eq(
+      "class Runner\n  def go\n    thing = Thing.new\n    def thing.outer\n      :x\n    end\n    thing\n  end\nend\n"
+    )
+    expect(Prism.parse(lines.join)).to be_success
+  end
 end

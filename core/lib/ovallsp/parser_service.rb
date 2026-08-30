@@ -504,12 +504,49 @@ module Ovallsp
         # so a receiverless call written there is not a call on the
         # enclosing class and must not be reported against it, and a
         # `def` written there has nowhere to go either.
+        # **Ruby evaluates the receiver of `def <expr>.name` in the
+        # enclosing scope**, and the local is not visible inside the
+        # singleton body at all:
+        #
+        #   $ ruby -e '
+        #   class Runner
+        #     def go
+        #       ty = Object.new
+        #       def ty.reads_outer
+        #         defined?(ty)
+        #       end
+        #       [ty.reads_outer, binding.local_variable_defined?(:ty)]
+        #     end
+        #   end
+        #   p Runner.new.go
+        #   '
+        #   # => [nil, true]
+        #   # ruby 3.4.10
+        #
+        # So it is visited here -- above the `@cref` switch and outside
+        # the frame `#in_scope` pushes -- rather than as one of the
+        # children below. Walked below, it took this method's cref, and a
+        # receiver this parser cannot name has *no owner*: `def ty.outer`
+        # recorded `ty` as `nil#3` while the `ty =` that created it was
+        # `::Runner#3`. One variable, two identities, and Rename rewrote
+        # every mention except the one on the `def` line -- `024.28`'s
+        # failure, a WorkspaceEdit that leaves the file not running.
+        # `024.271`.
+        #
+        # Visited before the push rather than with the frame temporarily
+        # lifted: there is no frame to take off and put back, so nothing
+        # here needs an `ensure` of its own -- which is the shape
+        # `024.258` and `024.259` exist to keep out of this method.
+        owner_receiver&.accept(self)
+
         @cref = unnameable_receiver ? @cref.in_unnameable_method : @cref.in_method(singleton: singleton)
         # What `super` did while this was `#visit_def_node` itself:
         # `Prism::Visitor#visit_def_node` *is* this line. `#visit_namespace`
         # already spells it out, and for the same reason -- the body has to
         # be walked from a method that is not the overridden visit.
-        in_scope(node) { node.each_child_node { |child| child.accept(self) } }
+        in_scope(node) do
+          node.each_child_node { |child| child.accept(self) unless child.equal?(owner_receiver) }
+        end
       ensure
         @cref = previous_cref
         @included_hook_parameter = previous_hook_parameter

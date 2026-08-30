@@ -424,7 +424,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.254`](#024254-active-record-s-own-api-is-labelled-one-branch-only-on-a-union-of-two-models-so-save-destroy) | fixed | 0.2.17 | Active Record's own API is labelled one-branch-only on a Union of tw… |
 | [`024.255`](#024255-completion-answered-nothing-at-all-for-a-union-of-class-objects-k-cond-foo-bar-then-k) | fixed | 0.2.17 | Completion answered nothing at all for a Union of class objects — `k… |
 | [`024.256`](#024256-go-to-definition-still-answers-nothing-for-a-union-of-class-objects-and-this-patch-makes-the-as) | fixed | 0.2.17 | Go to definition still answers nothing for a Union of class objects,… |
-| [`024.257`](#024257-an-unrooted-compact-class-path-whose-head-resolves-outward-gets-the-enclosing-frame-glued-onto-i) | open | 0.2.17 | An unrooted compact class path whose head resolves OUTWARD gets the … |
+| [`024.257`](#024257-an-unrooted-compact-class-path-whose-head-resolves-outward-gets-the-enclosing-frame-glued-onto-i) | fixed | 0.2.17 | An unrooted compact class path whose head resolves OUTWARD gets the … |
 | [`024.258`](#024258-visit-def-node-s-method-level-ensure-popped-scope-stack-for-a-push-its-early-return-ha) | fixed | 0.2.17 | `#visit_def_node`'s method-level `ensure` popped `@scope_stack` for … |
 | [`024.259`](#024259-the-same-ensure-restored-included-hook-parameter-from-a-local-the-early-return-never-assi) | fixed | 0.2.17 | The same `ensure` restored `@included_hook_parameter` from a local t… |
 | [`024.260`](#024260-textdocument-rename-on-a-local-misses-every-binding-written-as-a-compound-or-target-node) | fixed | 0.2.17 | `textDocument/rename` on a local misses every binding written as a c… |
@@ -438,7 +438,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.268`](#024268-agentprocessmanager-force-kill-the-sigkill-escalation-behind-a-sigterm-that-never-landed-i) | open | 0.2.17 | `AgentProcessManager#force_kill` — the SIGKILL escalation behind a S… |
 | [`024.269`](#024269-agentprocessmanager-alive-is-asserted-only-in-the-false-direction) | open | 0.2.17 | `AgentProcessManager#alive?` is asserted only in the false direction |
 | [`024.270`](#024270-not-a-defect-recorded-so-nobody-promotes-it-into-one) | open | 0.2.17 | Not a defect — recorded so nobody promotes it into one |
-| [`024.271`](#024271-renaming-a-local-leaves-def-local-method-behind-so-the-file-stops-running) | open | 0.2.17 | Renaming a local leaves `def <local>.method` behind, so the file sto… |
+| [`024.271`](#024271-renaming-a-local-leaves-def-local-method-behind-so-the-file-stops-running) | fixed | 0.2.17 | Renaming a local leaves `def <local>.method` behind, so the file sto… |
 | [`024.272`](#024272-renaming-a-local-leaves-every-value-omitted-shorthand-behind-so-the-rename-is-still-partial) | fixed | 0.2.17 | Renaming a local leaves every value-omitted shorthand behind, so the… |
 | [`024.273`](#024273-renaming-a-local-that-is-a-parameter-leaves-the-parameter-behind-and-the-answer-can-be-silent) | open | 0.3.0 | Renaming a local that is a parameter leaves the parameter behind, an… |
 | [`024.274`](#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | open | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
@@ -16478,11 +16478,21 @@ neither branch declares still answering nothing.
 ## 024.257 An unrooted compact class path whose head resolves OUTWARD gets the enclosing frame glued onto i
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.2.17
+released-in: 0.2.17
 ```
+
+**Fixed in 0.2.17**, at `#push_nesting` rather than at `#locate_in_namespace` as the Direction proposed. The two are the same place: `#push_nesting` is where the frame is built, and at that moment `@lexical_nesting` still holds the *parent* frames -- which is exactly the cref Ruby resolves a compact head against. So `#qualify_constant` is called on the head with nothing rearranged, and `#nesting_frame_for` states the rule in one place.
+
+**A compact path's head is looked up; a simple name is not.** `class Runner` inside `module App` means `App::Runner` whatever else exists. `class Other::Runner` written there means whichever `Other` the enclosing nesting resolves to, and `Runner` inside that -- which is why the same source answers `[Other::Runner, App]` with no `App::Other` and `[App::Other::Runner, App]` with one. Both sessions are in the spec.
+
+A rooted `class ::Widget::Inner` is handled by the same method: the frame is the written path with the prefix stripped, whatever encloses it.
+
+**Blast radius, driven rather than assumed.** The four Rails gems contain 11 compact class paths and *none* nested, so that corpus could not distinguish anything -- output byte-identical, control `unresolved-constant` at 2,987. The corpus that does contain the shape is bundler and rubygems: **29 nested compact paths**, all of the `module Bundler; class CLI::Add` form where `Bundler::CLI` exists, so the head must resolve *inward*. Byte-identical there too, control at 2,114, same corpus sha256 on both sides and twelve dirty tracked files on the after side to prove the two ran different code. That is the answer the change must give: it is a lookup, and where the lookup already agreed with gluing, nothing moves.
+
+Four examples in `nested_bare_name_spec.rb`, two per direction, because either direction alone passes against a wrong fix: dropping the enclosing frame for every compact path satisfies the outward pair, and keeping the old rule satisfies the inward pair. One mutation entry reverts it.
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb`
 
@@ -17361,12 +17371,21 @@ Identical on both sides. The pump always wins the race, because the teardown onl
 ## 024.271 Renaming a local leaves `def <local>.method` behind, so the file stops running
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.2.17
+released-in: 0.2.17
 ```
 
+**Fixed in 0.2.17, and the cause was not quite the one written above.** The receiver is visited before the `@cref` switch and outside the frame `#in_scope` pushes -- not with the frame temporarily lifted, as the Direction proposed. There is nothing to take off and put back that way, so nothing here needs an `ensure` of its own, which is what `024.258` and `024.259` exist to keep out of this method.
+
+**Driven at `160cfe6`, the scope-id half no longer reproduced.** 0.2.17's scope-frames work had already fixed it: `ty` on the `def` line binds in the enclosing frame, because it is not in the `def` node's `#locals` and `#binding_scope` walks out to find it. All three occurrences came back `scope=3`.
+
+What was still live was the **owner**. The receiver was walked with the other children, after `@cref` had become `in_unnameable_method` -- and a receiver this parser cannot name has no owner at all, so the `def` line's `ty` was `nil#3` while the assignment that created it was `::Runner#3`. The identity is `owner#scope_id`, so one variable still had two of them and rename still left the file not running. Same symptom, other half of the cause.
+
+Measured over 1,973 files -- activesupport, activerecord, actionpack, railties and Ruby 3.4.10's own stdlib. Six `def <local>.name` receivers in all of it: **0 of 6 carried an owner before, 6 of 6 after.** A corpus diagnostics run over the four gems came out byte-identical on both sides, `unresolved-constant` held at 2,987 as the control and the same corpus sha256 on each, which is the expected answer -- the change moves what the *reference* index records and diagnostics do not read it for locals. The two sides were confirmed to differ: the after run reported seven dirty tracked files against the same revision.
+
+Pinned three ways. `parser_scope_frames_spec.rb` asserts the receiver and its assignment share one identity, that a local written *inside* the singleton body still does not, and that the receiver is recorded at all -- without the third, the cheapest wrong fix is to stop visiting it and the first two pass with nothing to compare. `server_rename_spec.rb` drives the real rename end to end and parses the result. Two mutation entries revert each half, and the harness confirms both examples fail without them.
 **Area:** `core/lib/ovallsp/parser_service.rb`
 
 `ParserService#record_and_walk_def` pushes the `def`'s own

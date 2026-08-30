@@ -811,10 +811,6 @@ local in a thousand files of real gem source and running what came out.
   such a name twice, and two edits that are each correct would then
   make the file stop parsing, so none is
   made. <!-- documents: 024.274 -->
-- **Renaming a local leaves the `obj` in `def obj.thing` behind**, because
-  that mention is recorded under the method's own scope rather than the
-  one the local belongs to. Every other mention is rewritten and the file
-  stops running. <!-- documents: 024.271 -->
 - **The first rename of a session is refused if nothing else has been
   asked yet**: press F2 straight after opening a file and the rename does
   not start, while using Find All References once makes the same position
@@ -822,10 +818,3 @@ local in a thousand files of real gem source and running what came out.
   and is being kept on purpose until the shapes above are, because it is
   what stops a local-variable rename being one keystroke
   away. <!-- documents: 024.245 -->
-
-
-## Class bodies written in unusual shapes
-
-- **`module App; class Other::Runner`, where no `App::Other` exists**,
-  glues the enclosing frame onto a path that should resolve outward, and
-  both directions invert. <!-- documents: 024.257 -->

@@ -692,4 +692,65 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
         .to eq("def m(h)\n  case h\n  in {a: renamed}\n    renamed\n  end\nend\n")
     end
   end
+
+  # `024.271`. `def <local>.name` evaluates its receiver in the
+  # *enclosing* scope, and the local is not visible inside the singleton
+  # body at all:
+  #
+  #   $ ruby -e '
+  #   class Runner
+  #     def go
+  #       ty = Object.new
+  #       def ty.reads_outer
+  #         defined?(ty)
+  #       end
+  #       [ty.reads_outer, binding.local_variable_defined?(:ty)]
+  #     end
+  #   end
+  #   p Runner.new.go
+  #   '
+  #   # => [nil, true]
+  #   # ruby 3.4.10
+  #
+  # The receiver is one of the `def` node's children, and the whole child
+  # walk happened inside the method's own frame -- so the `ty` on the
+  # `def` line got the method's scope id while the assignment and every
+  # later read got the enclosing one. Two identities for one variable,
+  # and Rename rewrote every mention *except* the one on the `def` line:
+  # a WorkspaceEdit that leaves the file not running, which is `024.28`'s
+  # failure exactly.
+  describe "the receiver of `def <expr>.name` binds outside the method" do
+    it "gives the receiver and the assignment that created it one identity" do
+      source = "class Runner\n  def go\n    ty = Thing.new\n    def ty.outer\n      :x\n    end\n    ty\n  end\nend\n"
+
+      answers = identity(source)
+
+      expect(answers[["ty", 3, 8]]).to eq(answers[["ty", 2, 4]])
+      expect(answers[["ty", 6, 4]]).to eq(answers[["ty", 2, 4]])
+    end
+
+    # The distinguishing half, and the reason the fix is not "give the
+    # receiver the enclosing frame and stop there": the singleton body is
+    # still its own scope, and a local written inside it is not the outer
+    # one. Without this, walking the whole `def` in the enclosing frame
+    # would pass the example above and be wrong.
+    it "still separates a local written inside the singleton body" do
+      source = "class Runner\n  def go\n    ty = Thing.new\n    def ty.outer\n      ty = 1\n      ty\n    end\n    ty\n  end\nend\n"
+
+      answers = identity(source)
+
+      expect(answers[["ty", 4, 6]]).not_to eq(answers[["ty", 2, 4]])
+      expect(answers[["ty", 5, 6]]).to eq(answers[["ty", 4, 6]])
+      expect(answers[["ty", 7, 4]]).to eq(answers[["ty", 2, 4]])
+    end
+
+    # And the receiver is still *recorded*, in either shape -- the
+    # cheapest wrong fix is to stop visiting it, which makes both
+    # examples above pass by having nothing to compare.
+    it "records the receiver rather than skipping it" do
+      source = "class Runner\n  def go\n    ty = Thing.new\n    def ty.outer\n      :x\n    end\n  end\nend\n"
+
+      expect(positions(source)).to include(["ty", 3, 8])
+    end
+  end
 end

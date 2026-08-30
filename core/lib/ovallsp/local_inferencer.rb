@@ -555,11 +555,50 @@ module Ovallsp
     # distinguishable from a real frame. A `def` opens no nesting frame.
     #
     # A compact `class App::Runner` is one frame, not two, which is why
-    # the written path is appended whole rather than split.
+    # the resolved path is pushed whole rather than split.
     def push_nesting(written)
       @lexical_nesting ||= []
-      parent = @lexical_nesting.last
-      @lexical_nesting.push(parent ? "#{parent}::#{written}" : written.to_s)
+      @lexical_nesting.push(nesting_frame_for(written.to_s, @lexical_nesting.last))
+    end
+
+    # **A compact path's head is looked up; a simple name is not.**
+    # `class Runner` inside `module App` always means `App::Runner`
+    # whatever else exists. `class Other::Runner` written there means
+    # whichever `Other` the enclosing nesting resolves to, and `Runner`
+    # inside *that*:
+    #
+    #   $ ruby -e '
+    #   class Other; class Runner; end; end
+    #   module App
+    #     class Other::Runner
+    #       def nesting_here = Module.nesting
+    #     end
+    #   end
+    #   p Other::Runner.new.nesting_here
+    #   '
+    #   # => [Other::Runner, App]
+    #   # ruby 3.4.10
+    #
+    # and the same source with `App::Other` present resolves the other
+    # way, to `[App::Other::Runner, App]` -- so this is a lookup, not a
+    # rule about compact paths. `024.257`: gluing the whole written path
+    # onto the enclosing frame built `App::Other::Runner`, which names
+    # nothing, and a bare constant in that body fell through to the
+    # top-level class. Both directions inverted -- the call that runs
+    # reported, the call that raises silent.
+    #
+    # `#qualify_constant` is exactly Ruby's rule for the head, and at
+    # this point `@lexical_nesting` still holds the *parent* frames,
+    # which is the cref the head is resolved against.
+    def nesting_frame_for(written, parent)
+      # `class ::Widget` opens the top level whatever encloses it, and
+      # the type model's names are bare.
+      return written.delete_prefix("::") if written.start_with?("::")
+      return parent ? "#{parent}::#{written}" : written unless written.include?("::")
+
+      head, rest = written.split("::", 2)
+      resolved = qualify_constant(head).to_s.delete_prefix("::")
+      "#{resolved}::#{rest}"
     end
 
     # `class << self` -- unlike ClassNode/ModuleNode, Prism::SingletonClassNode

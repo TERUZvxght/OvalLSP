@@ -206,4 +206,97 @@ RSpec.describe "Ovallsp::Diagnostics::Engine and a bare class name inside a name
 
     expect(unknown_methods(document)).to be_empty
   end
+
+  # `024.257`. **Ruby resolves the head of a compact class path through
+  # the enclosing nesting; it does not glue the whole path onto the
+  # enclosing frame.** `module App; class Other::Runner` where no
+  # `App::Other` exists opens `Other::Runner`, and `Module.nesting` there
+  # is `[Other::Runner, App]`:
+  #
+  #   $ ruby -e '
+  #   class Cfg; def top_only; end; end
+  #   class Other; class Runner; class Cfg; def cfg_only; end; end; end; end
+  #   module App
+  #     class Other::Runner
+  #       def nesting_here = Module.nesting
+  #       def go  = Cfg.new.cfg_only
+  #       def bad = Cfg.new.top_only
+  #     end
+  #   end
+  #   p Other::Runner.new.nesting_here
+  #   p ["go",  (Other::Runner.new.go  rescue $!.class)]
+  #   p ["bad", (Other::Runner.new.bad rescue $!.class)]
+  #   '
+  #   # => [Other::Runner, App]
+  #   # => ["go", nil]
+  #   # => ["bad", NoMethodError]
+  #   # ruby 3.4.10
+  #
+  # The frame was built as `App::Other::Runner`, which names nothing, so
+  # a bare constant fell through to the top-level class and **both
+  # directions inverted**: the call that runs was reported, and the call
+  # that raises was not. A false report, not a decline.
+  #
+  # And the head really is looked up rather than assumed outward -- the
+  # same source with `App::Other` present resolves the other way:
+  #
+  #   $ ruby -e '
+  #   class Other; class Runner; end; end
+  #   module App; module Other; class Runner; end; end; end
+  #   module App
+  #     class Other::Runner
+  #       def nesting_here = Module.nesting
+  #     end
+  #   end
+  #   p App::Other::Runner.new.nesting_here
+  #   '
+  #   # => [App::Other::Runner, App]
+  #   # ruby 3.4.10
+  describe "a compact class path's head is resolved, not glued to the frame" do
+    before do
+      index("class Cfg\n  def top_only; end\nend\n", uri: "file:///cfg.rb")
+      index("class Other\n  class Runner\n    class Cfg\n      def cfg_only; end\n    end\n  end\nend\n",
+            uri: "file:///other.rb")
+    end
+
+    let(:outward) do
+      "module App\n  class Other::Runner\n    def go\n      Cfg.new.cfg_only\n    end\n  end\nend\n"
+    end
+
+    it "says nothing about the call the resolved head makes correct" do
+      expect(unknown_methods(index(outward, uri: "file:///re.rb"))).to be_empty
+    end
+
+    # The distinguishing half. Without it, a fix that simply dropped the
+    # enclosing frame for every compact path would pass the example above
+    # while still answering the top-level `Cfg`.
+    it "reports the call that same head makes wrong" do
+      source = "module App\n  class Other::Runner\n    def go\n      Cfg.new.top_only\n    end\n  end\nend\n"
+
+      expect(unknown_methods(index(source, uri: "file:///re.rb"))).to eq(["top_only"])
+    end
+
+    # And the other direction of the lookup: with `App::Other` present,
+    # the head resolves *inward* and the frame is `App::Other::Runner`.
+    # This is what makes the fix a lookup rather than a rule about
+    # compact paths -- one that always resolved outward would fail here.
+    context "when the enclosing namespace does declare the head" do
+      before do
+        index("module App\n  module Other\n    class Runner\n      class Cfg\n        def app_only; end\n" \
+              "      end\n    end\n  end\nend\n", uri: "file:///app/other.rb")
+      end
+
+      it "resolves the head inward and answers from there" do
+        source = "module App\n  class Other::Runner\n    def go\n      Cfg.new.app_only\n    end\n  end\nend\n"
+
+        expect(unknown_methods(index(source, uri: "file:///re2.rb"))).to be_empty
+      end
+
+      it "reports the outward namespace's method, which is unreachable there" do
+        source = "module App\n  class Other::Runner\n    def go\n      Cfg.new.cfg_only\n    end\n  end\nend\n"
+
+        expect(unknown_methods(index(source, uri: "file:///re2.rb"))).to eq(["cfg_only"])
+      end
+    end
+  end
 end
