@@ -793,33 +793,35 @@ internally rather than via a public issue tracker for now.
 ## What rename does that it should not
 
 Rename and Find References are listed as working, and there are shapes
-where they are not. Each of these was found in 0.2.16's closing
-measurement by driving the product; none had been reported before.
+where they are not. Most of these were found in 0.2.16's closing
+measurement by driving the product, and none of those had been reported
+before; the first three below were found in 0.2.17, by renaming every
+local in a thousand files of real gem source and running what came out.
 
-- **Renaming a local leaves its uses inside a block behind**, producing
-  code that no longer runs. Find References misses them
-  too. <!-- documents: 024.262 -->
-- **Renaming a local rewrites an arrow lambda's own parameter** when the
-  lambda names its parameter the same thing, silently changing what the
-  lambda returns. `lambda { |v| … }` was already correct;
-  `->(v) { … }` was not. <!-- documents: 024.263 -->
-- **Renaming a local misses every binding written as `+=`, `||=`, `&&=`,
-  or as a multiple assignment target** — `a, b = 1, 2`, a `for` variable,
-  a rescue's `=> e`. Four of Ruby's six local-variable forms are ignored,
-  so the rename is partial and the file stops
-  running. <!-- documents: 024.260 -->
-- **Rename is refused outright on a class or module written inside
-  another class or module body**, while the identical position on the
-  compact `class A::B` spelling is offered. <!-- documents: 024.244 -->
-- **Rename asked before anything else has been asked answers nothing**,
-  because it is the one request of the three that does not bring the
-  reference index up to date first. <!-- documents: 024.245 -->
-- **A method defined on a local — `def obj.thing`** — is recorded against
-  the class the code is written in, so rename and go to definition answer
-  about the wrong thing. <!-- documents: 024.251 -->
-- **A lambda body shares the enclosing scope**, so a lambda parameter and
-  an outer local of the same name are treated as one
-  binding. <!-- documents: 024.261 -->
+- **Renaming a local that is a method or block parameter leaves the
+  parameter behind**, so the renamed method stops working — and where
+  the body assigns before it reads (`names = names || []`), nothing
+  raises and the method quietly answers something else. This is the
+  largest of the shapes here by a long way: of the local renames that
+  change what a file means across 1,179 gem files, 99% are
+  this. <!-- documents: 024.273 -->
+- **A binding whose name begins with an underscore is left behind**
+  when it is written as a multiple-assignment target, a `for`
+  variable, a `rescue => _e` or a pattern. Ruby lets one pattern bind
+  such a name twice, and two edits that are each correct would then
+  make the file stop parsing, so none is
+  made. <!-- documents: 024.274 -->
+- **Renaming a local leaves the `obj` in `def obj.thing` behind**, because
+  that mention is recorded under the method's own scope rather than the
+  one the local belongs to. Every other mention is rewritten and the file
+  stops running. <!-- documents: 024.271 -->
+- **The first rename of a session is refused if nothing else has been
+  asked yet**: press F2 straight after opening a file and the rename does
+  not start, while using Find All References once makes the same position
+  work. That is one line away from being fixed
+  and is being kept on purpose until the shapes above are, because it is
+  what stops a local-variable rename being one keystroke
+  away. <!-- documents: 024.245 -->
 
 
 ## Class bodies written in unusual shapes
@@ -827,9 +829,3 @@ measurement by driving the product; none had been reported before.
 - **`module App; class Other::Runner`, where no `App::Other` exists**,
   glues the enclosing frame onto a path that should resolve outward, and
   both directions invert. <!-- documents: 024.257 -->
-- **A `def` inside a nameless block empties the scope stack**, so every
-  later top-level local in that file is tagged with the wrong
-  scope. <!-- documents: 024.265 -->
-- **A `def` inside `base.class_eval do … end`, written before
-  `base.extend(ClassMethods)`, is falsely reported as an unknown
-  method.** <!-- documents: 024.264 -->

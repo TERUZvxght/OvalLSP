@@ -287,6 +287,30 @@ module Ovallsp
       @mutex.synchronize { resolve_type_symbol_locked(name)&.name }
     end
 
+    # **The identity, not a projection of it.** `#resolve_type_name` and
+    # `#type_kind` each answer with one field of the SymbolId this finds,
+    # and a caller that wants the whole thing asks here instead of asking
+    # twice and inventing the fields neither returns. There is no owner
+    # to invent: a class written inside a `module` body is declared under
+    # that module, and the `nil` a rebuilt id had to supply for it named
+    # nothing the index holds -- so `#declarations_with_uri` answered
+    # zero, and prepareRename, which has only declarations to go on until
+    # something has rebuilt the reference index, refused the class while
+    # offering the compact spelling of the same thing (`024.244`).
+    #
+    # `nesting` is asked first, for the reason `#nested_type_name` gives:
+    # a bare name written inside a namespace means that namespace's
+    # class, and `#resolve_type_symbol_locked` behind it is a
+    # workspace-wide pick that cannot know that. Without it, handing back
+    # a *declared* id turned an already wrong answer into a confidently
+    # wrong one -- renaming one of two same-named classes in different
+    # namespaces rewrote both `class` lines. Empty nesting (a use written
+    # at the top level, a rooted name) skips straight to the pick,
+    # exactly as before.
+    def resolve_type_symbol(name, nesting: [])
+      @mutex.synchronize { nested_type_symbol_locked(name, nesting) || resolve_type_symbol_locked(name) }
+    end
+
     # The name `nesting` makes this bare name mean, or **nil when the
     # nesting decides nothing** -- which is the whole difference between
     # this and `#resolve_type_name`. A caller rewriting a name it will
@@ -297,8 +321,10 @@ module Ovallsp
     # replaced was the one RBS could still answer for. Measured; the fix
     # for `024.103` shipped with this distinction and not without it.
     #
-    # Both readers go through `#nesting_match`, so the lookup rule itself
-    # is in one place.
+    # Both readers go through `#nested_type_symbol_locked`, and it through
+    # `#nesting_match`, so the lookup rule itself is in one place. (This
+    # sentence named `#nesting_match` directly while this method inlined
+    # the walk; the helper is the layer both readers now share.)
     # `nesting` is Ruby's `Module.nesting` at the point the name was
     # written, innermost first.
     #
@@ -312,13 +338,7 @@ module Ovallsp
     # its own right (CLAUDE.md), and it was carrying the comment that
     # argued it was not 024.47. Removed; this is where the rule lives.
     def nested_type_name(name, nesting: [])
-      raw = name.to_s
-      return nil if raw.start_with?("::") || nesting.empty?
-
-      @mutex.synchronize do
-        candidates, = type_candidates_locked(raw)
-        nesting_match(candidates, raw, nesting)&.name
-      end
+      @mutex.synchronize { nested_type_symbol_locked(name, nesting)&.name }
     end
 
     # Whether a *bare* name is claimed by more than one declared type, so
@@ -696,6 +716,36 @@ module Ovallsp
       return false unless symbol_id.kind == :singleton_method
 
       @module_function_names.key?([Index::SymbolId.bare_name(symbol_id.owner), symbol_id.name])
+    end
+
+    # The nesting rule itself, in one place, so the two callers that read
+    # it -- `#nested_type_name`, which wants the name, and
+    # `#resolve_type_symbol`, which wants the whole identity -- cannot
+    # come to disagree about which frame wins.
+    #
+    # **Both guards are early-outs, not decisions**, and saying so is the
+    # point, because the hunk sweep will report the line unpinned and the
+    # next reader should know that is expected. `#nesting_match` builds a
+    # `<frame>::<raw>` name, so a rooted `raw` produces one with a
+    # doubled separator that no declaration can carry, and an empty
+    # nesting gives it nothing to iterate. Asked directly, with a
+    # top-level `Widget` and an `Api::Widget` both declared:
+    #
+    #   nesting_match(candidates, "::Widget", ["::Api"])  # => nil
+    #   nesting_match(candidates, "Widget",   [])         # => nil
+    #   nesting_match(candidates, "Widget",   ["::Api"])  # => ::Api::Widget
+    #
+    # So what these two save is the `#type_candidates_locked` scan, and
+    # what they carry is the rule in the place a reader looks for it. The
+    # *rule* is pinned where it is observable, by the example in
+    # `reference_resolver_spec.rb` asserting that a rooted name written
+    # inside a namespace still names the top-level class.
+    def nested_type_symbol_locked(name, nesting)
+      raw = name.to_s
+      return nil if raw.start_with?("::") || nesting.empty?
+
+      candidates, = type_candidates_locked(raw)
+      nesting_match(candidates, raw, nesting)
     end
 
     def resolve_type_symbol_locked(name)

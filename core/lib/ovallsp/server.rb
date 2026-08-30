@@ -2037,10 +2037,49 @@ module Ovallsp
     # Task 016: LSP `textDocument/prepareRename` -- answers whether the
     # symbol under the cursor can be renamed at all, and what range/
     # placeholder the editor should show while the user types the new
-    # name. Returning nil (a null LSP result) tells the client to refuse
-    # the rename UI outright, before the user even gets to type anything
-    # -- used for generated Rails methods and positions with nothing
-    # renameable under the cursor.
+    # name. Returning nil is the protocol's "renaming here is not valid"
+    # -- what a client does with that is `docs/CLIENT_BEHAVIOUR.md`'s row
+    # and not this file's, and the sentence here said it directly until
+    # that row existed. Used for generated Rails methods and positions
+    # with nothing renameable under the cursor.
+    #
+    # **It does not call `#ensure_reference_index_current`, and that is a
+    # decision rather than the omission `024.245` reported it as.**
+    # `Rename::Planner#prepare` refuses a symbol it can find no location
+    # for, and a local variable and an instance variable have no
+    # declaration in the workspace index at all -- so cold, which is the
+    # index's state until something else has asked, F2 on a local is
+    # refused while `textDocument/rename` at the identical caret produces
+    # edits. Adding the rebuild is a one-line change and it closes that;
+    # what it also does, and the only thing it does, is let the rename
+    # through -- this answer is the gate in front of
+    # `textDocument/rename`, which is `docs/CLIENT_BEHAVIOUR.md`'s row to
+    # state and not this file's.
+    #
+    # Driven both ways with the emitted edits applied back to the source
+    # and re-parsed, that reach is eight local-variable shapes whose
+    # rename produces code that no longer means what it meant -- six of
+    # them a file that stops running, one of those a syntax error. The
+    # entry lists all eight. Six of them are not a wrong *edit* this
+    # engine emits but a mention it does not hold against the symbol at
+    # all: four never recorded, one recorded under another scope, one
+    # recorded as a different variable. So the deferral cannot be "warm
+    # the index and refuse the bad shapes" -- the bad shapes are the ones
+    # nothing here can see. The two that could be seen were fixed
+    # (`024.274`).
+    #
+    # So this is sequenced behind them, not dropped. The refusal is worth
+    # less than it looks -- one Find All References warms the index and
+    # F2 starts answering, which is measured in the entry -- but it is
+    # the difference between a wrong edit being one keystroke away and
+    # two. What it costs is one refusal, on the first rename gesture of a
+    # session, of something the engine could have renamed correctly, and
+    # `docs/KNOWN_LIMITATIONS.md` tells the user about it in both
+    # languages rather than leaving it to be discovered.
+    #
+    # `core/spec/ovallsp/server_rename_spec.rb` holds the decision, with
+    # the warm ask beside it as the control, so re-adding the line here
+    # goes red rather than waiting for a reviewer.
     def prepare_rename_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       document = analyzable_document(@document_store.fetch(uri: uri))

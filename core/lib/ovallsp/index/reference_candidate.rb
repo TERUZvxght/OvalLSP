@@ -48,10 +48,20 @@ module Ovallsp
     #   does not model. `splat` being true means the positional count is
     #   a lower bound, not a count, so no arity conclusion may be drawn
     #   from it.
+    # - implicit_hash_value: this site is Ruby's shorthand -- `{ name: }`,
+    #   `take(name:)` -- where **one token is both the hash key and the
+    #   value**. `location` covers that whole token, colon included,
+    #   because that is what the reference occupies; there is no
+    #   sub-range of it that is only the value. A caller rewriting the
+    #   name has to expand rather than substitute (`Rename::Planner`),
+    #   and a caller that only highlights can ignore this. `false`
+    #   everywhere else, which is every site where `location` is exactly
+    #   the identifier.
     ReferenceCandidate = Data.define(:kind, :name, :location, :scope_id, :owner, :singleton, :receiver,
-                                      :lexical_nesting, :arguments) do
-      def initialize(lexical_nesting: [], arguments: nil, **rest)
-        super(lexical_nesting: lexical_nesting, arguments: arguments, **rest)
+                                      :lexical_nesting, :arguments, :implicit_hash_value) do
+      def initialize(lexical_nesting: [], arguments: nil, implicit_hash_value: false, **rest)
+        super(lexical_nesting: lexical_nesting, arguments: arguments,
+              implicit_hash_value: implicit_hash_value, **rest)
       end
     end
   end

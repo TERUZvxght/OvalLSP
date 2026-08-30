@@ -207,6 +207,82 @@ module Ovallsp
       # leaves `P.respond_to?(:b)` false (ruby 3.4.10).
       def in_method(singleton:) = with(self_is_module: singleton, in_method_body: true, module_function: false)
 
+      # `def <expr>.name` where `<expr>` is something this parser cannot
+      # name -- a local variable, an ivar, a call. Ruby attaches the
+      # method to the singleton class of whatever that expression
+      # evaluates to, and `self` inside the body is that object; neither
+      # is the lexically enclosing class:
+      #
+      #   $ ruby -e '
+      #   class Runner
+      #     def go
+      #       ty = Object.new
+      #       def ty.tagged_zzz; :from_local; end
+      #       ty
+      #     end
+      #   end
+      #   p [Runner.singleton_methods(false), Runner.new.go.tagged_zzz,
+      #      Runner.respond_to?(:tagged_zzz), Runner.new.respond_to?(:tagged_zzz)]
+      #   '
+      #   # => [[], :from_local, false, false]
+      #   # ruby 3.4.10
+      #
+      # It is an ordinary method body -- so it is built from
+      # `#in_method`, and every decision that makes (self is not a
+      # module, a `private` written here is not the class's, a
+      # `module_function` section does not carry in) holds unchanged --
+      # with the two that do not: there is no owner to attribute anything
+      # to, and the depth says so. `#nameless_context?` is `owner.nil? &&
+      # block_depth.positive?`, which is exactly the question a `def`
+      # written inside this body has, and it already has exactly one
+      # reader asking it. `024.251`.
+      #
+      # `module_owner` goes with the owner, because it describes one: a
+      # field saying "the owner is a module" while the owner is nil is a
+      # claim about nothing, and `#record_concern_hook` is the reader
+      # that acts on it. `def <local>.included` is not the enclosing
+      # module's `included` hook, so the `base.extend` in it arranges
+      # nothing for anybody who includes that module:
+      #
+      #   $ ruby -e '
+      #   module Helpers; def helper_zzz; :h; end; end
+      #   module M
+      #     def self.build
+      #       ty = Object.new
+      #       def ty.included(base)
+      #         base.extend(Helpers)
+      #       end
+      #       ty
+      #     end
+      #   end
+      #   M.build
+      #   class C; include M; end
+      #   p [C.respond_to?(:helper_zzz), M.singleton_class.instance_methods(false)]
+      #   '
+      #   # => [false, [:build]]
+      #   # ruby 3.4.10
+      #
+      # `nesting` is deliberately untouched, and that is a claim about
+      # Ruby rather than a convenience -- `self` moving does not move the
+      # cref, so a constant written in there resolves against the
+      # enclosing class exactly as one written beside it does:
+      #
+      #   $ ruby -e '
+      #   class Runner
+      #     def go
+      #       ty = Object.new
+      #       def ty.where_am_i; [Module.nesting, self.class]; end
+      #       ty
+      #     end
+      #   end
+      #   p Runner.new.go.where_am_i
+      #   '
+      #   # => [[Runner], Object]
+      #   # ruby 3.4.10
+      def in_unnameable_method
+        in_method(singleton: false).with(owner: nil, module_owner: false, block_depth: block_depth + 1)
+      end
+
       # A block or lambda body. Visibility is inherited rather than reset:
       # a plain iterator block does not open a new cref, so a `def` inside
       # it really does take the enclosing section's visibility.
@@ -267,9 +343,11 @@ module Ovallsp
       # recorded -- rather than the enclosing class's name being invented
       # for it, which is `024.31`.
       # Inside a block whose owner this parser cannot name -- a
-      # `Class.new { }`, an `other.instance_eval { }`. A *top-level* `def`
-      # also has no owner and must still be recorded, which is why the
-      # block depth is part of the question rather than the owner alone.
+      # `Class.new { }`, an `other.instance_eval { }` -- or inside a
+      # `def` written on a receiver it cannot name
+      # (`#in_unnameable_method`). A *top-level* `def` also has no owner
+      # and must still be recorded, which is why the block depth is part
+      # of the question rather than the owner alone.
       def nameless_context? = owner.nil? && block_depth.positive?
 
       def in_eval_block(owner)

@@ -35,6 +35,16 @@ module Ovallsp
     #   carry one either): a caller building an LSP Location from a Find
     #   References result needs to know *which file*, not just *where in
     #   it*.
-    Reference = Data.define(:symbol_id, :location, :kind, :confidence, :origin, :receiver_type, :generation, :uri)
+    # - implicit_hash_value: carried through from the candidate of the
+    #   same name -- `location` is a `key:` token that is at once the
+    #   hash key and the value, so an edit here expands rather than
+    #   substitutes. Read by Rename::Planner and by nothing else;
+    #   `false` for every site whose `location` is just the identifier.
+    Reference = Data.define(:symbol_id, :location, :kind, :confidence, :origin, :receiver_type, :generation, :uri,
+                            :implicit_hash_value) do
+      def initialize(implicit_hash_value: false, **rest)
+        super(implicit_hash_value: implicit_hash_value, **rest)
+      end
+    end
   end
 end

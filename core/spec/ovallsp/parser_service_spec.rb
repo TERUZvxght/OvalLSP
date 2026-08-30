@@ -740,5 +740,82 @@ RSpec.describe Ovallsp::ParserService do
       expect(summary.reference_candidates).to be_empty
     end
   end
+
+  # Ruby's `{ name: }` / `take(name:)` shorthand. Prism wraps the read it
+  # stands for in an `ImplicitNode`, and the read carries the whole
+  # `name:` token as its location because that token is both the key and
+  # the value:
+  #
+  #   $ ruby -rprism -e '
+  #   n = Prism.parse(%q(name = 1; { name: })).value.statements.body.last.elements.first
+  #   p [n.key.slice, n.value.class, n.value.value.class, n.value.value.slice]
+  #   '
+  #   # => ["name:", Prism::ImplicitNode, Prism::LocalVariableReadNode, "name:"]
+  #   # ruby 3.4.10
+  #
+  # What is recorded is the token with the flag saying what it is, once,
+  # so a reader that rewrites it knows it cannot substitute. The slice is
+  # asserted rather than the offsets, because the defect this pins is
+  # about which characters an edit would land on.
+  describe "Ruby's hash shorthand" do
+    let(:source) do
+      "class Cart\n  def name = \"c\"\n  def take(name:) = name\n" \
+        "  def go\n    label = \"n\"\n    [{ label: }, take(label:), { name: }]\n  end\nend\n"
+    end
+
+    def sites(summary)
+      summary.reference_candidates
+             .reject { |c| c.kind == :constant }
+             .select { |c| c.location[:start][:line] == 5 }
+             .sort_by { |c| c.location[:start][:character] }
+             .map do |c|
+               line = source.lines[5]
+               [c.kind, c.name, line[c.location[:start][:character]...c.location[:end][:character]],
+                c.implicit_hash_value]
+             end
+    end
+
+    # `take` and the `{ name: }` standing for the *method* are the
+    # controls. Both are on the same line as the two flagged sites, and
+    # both have to come back with the flag clear and a range that is the
+    # identifier alone -- a rule applied to every implicit value, or to
+    # every site on the line, fails here.
+    it "records one flagged site per shorthand, and leaves the ordinary sites alone" do
+      expect(sites(described_class.new.summarize(document(source)))).to eq(
+        [[:local_variable, "label", "label:", true],
+         [:method_call, "take", "take", false],
+         [:local_variable, "label", "label:", true],
+         [:method_call, "name", "name", false]]
+      )
+    end
+
+    # **A pattern match's `in { a: }` is an `ImplicitNode` too**, and it
+    # is the shape that punishes a guard written as "any local node":
+    # its range is the identifier *without* the colon, so expanding
+    # there would write a key that is not in the source. Prism tells the
+    # two apart and this reads the distinction rather than the class
+    # name:
+    #
+    #   $ ruby -rprism -e '
+    #   h = Prism.parse(%q(a = 1; { a: })).value.statements.body.last.elements.first.value
+    #   m = Prism.parse(%q(case x; in {a:}; a; end)).value.statements.body.first.conditions.first.pattern.elements.first.value
+    #   p [[h.location.slice, h.value.class], [m.location.slice, m.value.class]]
+    #   '
+    #   # => [["a:", Prism::LocalVariableReadNode], ["a", Prism::LocalVariableTargetNode]]
+    #   # ruby 3.4.10
+    #
+    # What the pattern's binding site records is `024.260`'s business,
+    # not this one's: it is a target node and this parser records no
+    # target nodes at all. The assertion is that nothing on that line
+    # carries the flag, which is what stays true whichever way `024.260`
+    # goes.
+    it "leaves a pattern match's shorthand to the ordinary walk" do
+      pattern = "def go\n  a = 1\n  case a\n  in { a: }\n    a\n  end\nend\n"
+      summary = described_class.new.summarize(document(pattern))
+
+      flagged = summary.reference_candidates.select(&:implicit_hash_value)
+      expect(flagged).to be_empty
+    end
+  end
 end
 

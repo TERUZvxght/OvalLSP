@@ -426,6 +426,39 @@ RSpec.describe Ovallsp::WorkspaceIndex do
       expect(index.find_by_simple_name("Thing").map { |r| r[:uri] }).to eq(["file:///admin.rb", "file:///api.rb"])
     end
 
+    # **The nesting rule, asked of the reader that wants a name.**
+    # `#nested_type_name` and `#resolve_type_symbol` share one
+    # implementation of it so they cannot come to disagree, and until
+    # 0.2.17 nothing asked this method anything directly -- its three
+    # callers exercise it through `024.103`'s fix, which is coverage of
+    # the fix rather than of the rule.
+    #
+    # The two same-named classes are what tells the rule from the
+    # workspace-wide pick `#resolve_type_name` makes: that pick answers
+    # `::Api::Thing` for a bare `Thing` whatever nesting it was written
+    # in, and the whole point here is that it must not. The nil rows are
+    # the other half -- **nil means "the nesting decides nothing"**, and a
+    # caller rewriting a name it will hand downstream depends on getting
+    # nil rather than a guess.
+    it "resolves a bare name through the nesting, and answers nil where the nesting decides nothing" do
+      index.replace_file(summary(uri: "file:///api.rb", content_hash: "a",
+                                 declarations: [declaration(kind: :class, owner: "::Api", name: "::Api::Thing")]))
+      index.replace_file(summary(uri: "file:///web.rb", content_hash: "w",
+                                 declarations: [declaration(kind: :class, owner: "::Web", name: "::Web::Thing")]))
+
+      expect(index.nested_type_name("Thing", nesting: ["::Web"])).to eq("::Web::Thing")
+      expect(index.nested_type_name("Thing", nesting: ["::Api"])).to eq("::Api::Thing")
+      # No frame declares it, so the nesting decides nothing -- and this
+      # must not fall through to the pick, which would answer.
+      expect(index.nested_type_name("Thing", nesting: ["::Other"])).to be_nil
+      expect(index.nested_type_name("Thing", nesting: [])).to be_nil
+      # A rooted name means the top level, whatever it is written inside.
+      expect(index.nested_type_name("::Thing", nesting: ["::Web"])).to be_nil
+      # The control: the pick does answer, which is what makes the four
+      # nils above a decision rather than an empty index.
+      expect(index.resolve_type_name("Thing")).to eq("::Api::Thing")
+    end
+
     # The kind element of the ordering key. `class Thing` and `module
     # Thing` in two files agree on the qualified name and on the owner
     # (both nil), so they tie on everything else -- and `type_kind` is

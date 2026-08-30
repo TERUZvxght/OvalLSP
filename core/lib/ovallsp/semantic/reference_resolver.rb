@@ -69,12 +69,29 @@ module Ovallsp
         build_reference(candidate, symbol_id, :high, :source, nil, uri, generation)
       end
 
+      # **The declaration's own SymbolId, not one rebuilt from a name and
+      # a kind.** Rebuilding had to supply an `owner` that neither
+      # `#resolve_type_name` nor `#type_kind` carries, and the `nil` it
+      # supplied is right only for the compact spelling: `module Api;
+      # class Widget` is declared under `::Api`, so the rebuilt id
+      # matched no declaration at all. `Rename::Planner` found none, and
+      # prepareRename -- which sees declarations and nothing else until
+      # something has rebuilt the reference index -- refused the class
+      # while offering `class Api2::Widget2` at the identical caret
+      # (`024.244`).
+      #
+      # `lexical_nesting` is passed because a bare name written inside a
+      # namespace means *that* namespace's class. `ReferenceCandidate`
+      # has carried it since 0.2.10 and the receiver path already walks
+      # it; this path did not, so a caret on one of two same-named
+      # classes in different namespaces answered about the other one, and
+      # renaming it rewrote both `class` lines. Handing back the declared
+      # identity without this would have made that answer confident
+      # rather than merely reachable.
       def resolve_constant(candidate, uri, generation)
-        resolved_name = @workspace_index.resolve_type_name(candidate.name)
-        return nil unless resolved_name
+        symbol_id = @workspace_index.resolve_type_symbol(candidate.name, nesting: candidate.lexical_nesting)
+        return nil unless symbol_id
 
-        kind = @workspace_index.type_kind(resolved_name)
-        symbol_id = Index::SymbolId.new(kind: kind, owner: nil, name: resolved_name, discriminator: nil)
         build_reference(candidate, symbol_id, :high, :source, nil, uri, generation)
       end
 
@@ -141,7 +158,8 @@ module Ovallsp
       def build_reference(candidate, symbol_id, confidence, origin, receiver_type, uri, generation)
         Index::Reference.new(
           symbol_id: symbol_id, location: candidate.location, kind: candidate.kind, confidence: confidence,
-          origin: origin, receiver_type: receiver_type, uri: uri, generation: generation
+          origin: origin, receiver_type: receiver_type, uri: uri, generation: generation,
+          implicit_hash_value: candidate.implicit_hash_value
         )
       end
     end

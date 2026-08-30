@@ -270,14 +270,50 @@ module Ovallsp
         # 037's C1 for the five register entries this arrangement cost.
         @cref = Index::Cref.top_level
         # Task 014: a fresh local-variable scope id per class/module body,
-        # `def`, `class << self`, and block — matching real Ruby's own
-        # local-scoping boundaries (verified live: `class << self` does
-        # NOT see an enclosing class body's locals, the same as a `def`
-        # wouldn't). #next_scope_id is only ever called while entering one
-        # of those, so two same-named locals in different scopes never
-        # share a scope id.
+        # `def`, `class << self`, lambda and block — matching real Ruby's
+        # own local-scoping boundaries, which Prism has already worked out
+        # per scope node and publishes as `#locals`. A frame carries that
+        # list, so #binding_scope can pick the frame that *binds* a name
+        # rather than the innermost frame that happens to be open. See
+        # there for why the difference is the whole point.
         @scope_counter = 0
-        @scope_stack = [next_scope_id]
+        # Pushed by #in_scope, from the visit of each scope node —
+        # including the ProgramNode, which is why this starts empty rather
+        # than with a hand-made root frame that no node backs.
+        @scopes = []
+      end
+
+      # A local-variable scope: the id references written in it are tagged
+      # with, and the names Prism says this scope binds.
+      Scope = Data.define(:id, :locals)
+
+      # The one push site for all six scope-opening visits, so a frame
+      # cannot be popped without having been pushed. `#visit_namespace`'s
+      # own comment already states that rule -- it moved four pushes into
+      # `#within_namespace` precisely so an early `return` above an
+      # `ensure` could not unbalance them -- and `#visit_def_node` was
+      # where the shape was still written until the guard was split out
+      # of the method carrying the `ensure` (`024.258`, `024.265`).
+      # The `begin` is the point rather than a habit: a method-level
+      # `ensure` here would cover the push as well, so a node that turned
+      # out not to answer `#locals` would pop a frame that was never
+      # pushed -- which is the shape this method exists to make
+      # unwritable, written inside it.
+      def in_scope(node)
+        @scopes.push(Scope.new(id: next_scope_id, locals: node.locals))
+        begin
+          yield
+        ensure
+          @scopes.pop
+        end
+      end
+
+      # The file's own top-level scope. A frame from a node rather than a
+      # hand-made one, so every scope in the stack is answered the same
+      # way: `rescue => e` written at the top level and a regexp named
+      # capture both bind here, and Prism records them on ProgramNode.
+      def visit_program_node(node)
+        in_scope(node) { super }
       end
 
       def visit_module_node(node)
@@ -300,11 +336,9 @@ module Ovallsp
         # detection began filtering on `visibility == :public`, at which
         # point those methods stopped being actions and their ivars
         # silently vanished from the corresponding views.
-        @scope_stack.push(next_scope_id)
-        super
+        in_scope(node) { super }
       ensure
         @cref = previous_cref
-        @scope_stack.pop
       end
 
       # A `def` inside a block whose owner nothing can name belongs to
@@ -321,8 +355,9 @@ module Ovallsp
       # by hoisting that save above the guard (`@cref`, `024.122`); the
       # other two were still live, and both changed an answer:
       #
-      # - `@scope_stack` was popped for a push that never happened, so the
-      #   frame the *enclosing* construct opened was thrown away and every
+      # - the scope-frame stack was popped for a push that never
+      #   happened, so the frame the *enclosing* construct opened was
+      #   thrown away and every
       #   local after it was attributed one scope further out. Two
       #   unrelated locals then shared one `owner#scope_id`, which is the
       #   key `Rename::Planner` selects edits by -- renaming a class-body
@@ -359,26 +394,24 @@ module Ovallsp
       #   # => nil
       #   # ruby 3.4.10
       #
-      # A bare `return super` here reads as free and is not: it would be
-      # the fourth save/restore split this method was broken up to remove,
-      # with the pop in one method and no push in the other.
+      # A bare `return super` here reads as free and is not: without a
+      # frame, two `def`s in one `Class.new do … end` share the block's
+      # frame and their same-named locals are one variable.
       def walk_nameless_def(node)
-        @scope_stack.push(next_scope_id)
-        node.each_child_node { |child| child.accept(self) }
-      ensure
-        @scope_stack.pop
+        in_scope(node) { node.each_child_node { |child| child.accept(self) } }
       end
 
       # Every save this method's `ensure` restores is made here, above any
       # line that could exit -- `#within_namespace`'s discipline, applied
       # inside the method that carries the `ensure` rather than around it.
-      # Nothing between the old positions and this one reads `@scope_stack`
-      # or `@included_hook_parameter`, so hoisting them changes no answer;
-      # what it removes is an invariant a reader had to check by eye.
+      # Nothing between the old position and this one reads
+      # `@included_hook_parameter`, so hoisting it changes no answer; what
+      # it removes is an invariant a reader had to check by eye. The scope
+      # frame is not on this list at all any more -- `#in_scope` pairs its
+      # own push and pop, so there is nothing for an `ensure` here to undo.
       def record_and_walk_def(node)
         previous_cref = @cref
         previous_hook_parameter = @included_hook_parameter
-        @scope_stack.push(next_scope_id)
 
         owner_receiver = node.receiver
         # **A written receiver is a singleton definition, whatever it
@@ -389,46 +422,55 @@ module Ovallsp
         # the 0.2.1 corpus were this shape, `net/http.rb`'s `HTTP.start`
         # among them (`024.32`).
         singleton = !owner_receiver.nil? || (@cref.declares_singleton? && owner_receiver.nil?)
-        owner =
-          if owner_receiver && !owner_receiver.is_a?(Prism::SelfNode)
-            receiver_owner_name(owner_receiver) || current_owner
-          else
-            current_owner
-          end
+        written_receiver = owner_receiver && !owner_receiver.is_a?(Prism::SelfNode)
+        # **A receiver this parser cannot name is not the enclosing
+        # class.** `#receiver_owner_name` answers nil for `def
+        # <local>.name`, and the `|| current_owner` that stood behind it
+        # turned "I cannot say" into that class -- inventing a singleton
+        # method Ruby attaches to the singleton class of whatever the
+        # local holds, and attributing every receiverless call in the
+        # body to a class that is not `self` there.
+        # `Index::Cref#in_unnameable_method` carries the Ruby session,
+        # and nothing is recorded, which is the answer a block whose
+        # owner cannot be named already gets (`024.31`, `024.251`).
+        owner = written_receiver ? receiver_owner_name(owner_receiver) : current_owner
+        unnameable_receiver = written_receiver && owner.nil?
 
-        symbol_id = Index::SymbolId.new(
-          kind: singleton ? :singleton_method : :instance_method,
-          owner: owner,
-          name: node.name.to_s,
-          discriminator: nil
-        )
+        unless unnameable_receiver
+          symbol_id = Index::SymbolId.new(
+            kind: singleton ? :singleton_method : :instance_method,
+            owner: owner,
+            name: node.name.to_s,
+            discriminator: nil
+          )
 
-        # A pending entry means this def is the argument of a
-        # `private def …`/`protected def …`, which names it explicitly and
-        # so outranks whatever section is currently open.
-        inline_visibility = @pending_visibility_names&.delete([owner, node.name.to_s])
+          # A pending entry means this def is the argument of a
+          # `private def …`/`protected def …`, which names it explicitly and
+          # so outranks whatever section is currently open.
+          inline_visibility = @pending_visibility_names&.delete([owner, node.name.to_s])
 
-        @declarations << Index::Declaration.new(
-          symbol_id: symbol_id,
-          location: Index::SourceLocation.to_range(node.location, @lines),
-          # A singleton method carried no visibility at all until 0.2.9,
-          # so `private` inside `class << self` and `private_class_method`
-          # had nothing downstream to filter on and both were offered by
-          # completion and accepted by the check (`024.105`; the booted
-          # app raises `private method 'x' called for class`).
-          #
-          # The distinction is *why* it is singleton. Inside `class <<
-          # self` the surrounding body's section applies, exactly as a
-          # class body's does to a `def`. Written `def self.x` in a class
-          # body it does not -- Ruby leaves that public however many
-          # `private`s precede it, and 0.2.8's round confirmed this engine
-          # already had that right.
-          visibility: visibility_for_definition(node, singleton, inline_visibility),
-          parameters: extract_parameters(node.parameters),
-          origin: :source,
-          body_source: node.body&.slice,
-          name_location: Index::SourceLocation.to_range(node.name_loc, @lines)
-        )
+          @declarations << Index::Declaration.new(
+            symbol_id: symbol_id,
+            location: Index::SourceLocation.to_range(node.location, @lines),
+            # A singleton method carried no visibility at all until 0.2.9,
+            # so `private` inside `class << self` and `private_class_method`
+            # had nothing downstream to filter on and both were offered by
+            # completion and accepted by the check (`024.105`; the booted
+            # app raises `private method 'x' called for class`).
+            #
+            # The distinction is *why* it is singleton. Inside `class <<
+            # self` the surrounding body's section applies, exactly as a
+            # class body's does to a `def`. Written `def self.x` in a class
+            # body it does not -- Ruby leaves that public however many
+            # `private`s precede it, and 0.2.8's round confirmed this engine
+            # already had that right.
+            visibility: visibility_for_definition(node, singleton, inline_visibility),
+            parameters: extract_parameters(node.parameters),
+            origin: :source,
+            body_source: node.body&.slice,
+            name_location: Index::SourceLocation.to_range(node.name_loc, @lines)
+          )
+        end
         record_module_function_twin(node, owner) if @cref.module_function? && !singleton
 
         # The parameter `def self.included(base)` binds, so a
@@ -456,16 +498,21 @@ module Ovallsp
         # `def wrapper; private; end` privatised every method declared
         # after it. Guarding one call site was the symptom fix -- the
         # frame is the cause.
-        @cref = @cref.in_method(singleton: singleton)
+        #
+        # A receiver this parser could not name gets a frame of its own:
+        # `self` in that body is the object the expression evaluated to,
+        # so a receiverless call written there is not a call on the
+        # enclosing class and must not be reported against it, and a
+        # `def` written there has nowhere to go either.
+        @cref = unnameable_receiver ? @cref.in_unnameable_method : @cref.in_method(singleton: singleton)
         # What `super` did while this was `#visit_def_node` itself:
         # `Prism::Visitor#visit_def_node` *is* this line. `#visit_namespace`
         # already spells it out, and for the same reason -- the body has to
         # be walked from a method that is not the overridden visit.
-        node.each_child_node { |child| child.accept(self) }
+        in_scope(node) { node.each_child_node { |child| child.accept(self) } }
       ensure
         @cref = previous_cref
         @included_hook_parameter = previous_hook_parameter
-        @scope_stack.pop
       end
 
       # A block whose body becomes an *instance* method: `self` inside it
@@ -709,7 +756,7 @@ module Ovallsp
       # and read-and-cleared eighty lines below, plus the convention that
       # both ends agree it is cleared exactly once.
       def visit_concern_class_methods_body(node, absolute_name)
-        within_namespace(absolute_name, module_owner: true) do
+        within_namespace(absolute_name, node.block, module_owner: true) do
           node.block.each_child_node { |child| child.accept(self) }
         end
       end
@@ -782,7 +829,6 @@ module Ovallsp
       end
 
       def visit_block_node(node)
-        @scope_stack.push(next_scope_id)
         # A visibility section opened inside a block belongs to that
         # block. `concerning :Auth do private; def authenticate; end end`
         # and `included do ... end` and `class_eval do ... end` all run
@@ -823,10 +869,9 @@ module Ovallsp
         opened_a_frame = !block_cref.equal?(@cref)
         previous_cref = @cref
         @cref = block_cref
-        super
+        in_scope(node) { super }
       ensure
         @cref = previous_cref if opened_a_frame
-        @scope_stack.pop
       end
 
       # A lambda body is a block that Prism models separately, and it is
@@ -836,7 +881,13 @@ module Ovallsp
       def visit_lambda_node(node)
         previous_cref = @cref
         @cref = @cref.in_block
-        super
+        # `->(v) {}` binds `v`, exactly as `lambda { |v| }` does, and this
+        # was the one scope node with no frame. The two spellings of one
+        # construct therefore answered differently about their own
+        # parameter: the arrow form shared the enclosing method's frame,
+        # so Find References offered the lambda's `v` among the method's
+        # `v`s and Rename rewrote it (`024.261`, `024.263`).
+        in_scope(node) { super }
       ensure
         @cref = previous_cref
       end
@@ -861,13 +912,190 @@ module Ovallsp
       end
 
       def visit_local_variable_read_node(node)
-        record_reference(:local_variable, node.name.to_s, node.location, scope_id: current_scope_id)
+        record_local_variable(node.name, node.location)
         super
       end
 
+      # Ruby's shorthand -- `{ name: }`, `take(name:)` -- which Prism
+      # models as an `ImplicitNode` wrapping the read it stands for. The
+      # read it wraps carries the *whole* `name:` token as its location,
+      # colon included, because that is all there is: one token is both
+      # the key and the value.
+      #
+      #   $ ruby -rprism -e '
+      #   n = Prism.parse(%q(name = 1; { name: })).value.statements.body.last.elements.first
+      #   p [n.key.slice, n.value.class, n.value.value.class, n.value.value.slice]
+      #   '
+      #   # => ["name:", Prism::ImplicitNode, Prism::LocalVariableReadNode, "name:"]
+      #   # ruby 3.4.10
+      #
+      # Recorded unchanged, with the flag saying so, rather than trimmed
+      # to the identifier: trimming makes a substitution rewrite the
+      # *key*, which for a hash silently changes the data and for a
+      # keyword argument names a parameter the callee does not have.
+      # `Rename::Planner` is the one reader that has to care, and it
+      # expands. Recorded here rather than in
+      # `#visit_local_variable_read_node`, which cannot see its parent.
+      #
+      # Only the local-variable value is taken over; a shorthand standing
+      # for a *method* call goes to `super` and is recorded by
+      # `#visit_call_node` from its `message_loc`, which is the
+      # identifier alone. That is a narrower range than this one and it
+      # has the same expansion problem when the method is renamed; it is
+      # left as it was and recorded, because changing it changes an
+      # answer this entry did not measure.
       def visit_local_variable_write_node(node)
-        record_reference(:local_variable, node.name.to_s, node.name_loc, scope_id: current_scope_id)
+        record_local_variable(node.name, node.name_loc)
         super
+      end
+
+      # Prism spells one variable's bindings with six node kinds and only
+      # the two above were recorded, so Find References answered with a
+      # subset and Rename rewrote that subset -- leaving `n += 1` behind
+      # after renaming `n`, which is a file that no longer runs
+      # (`024.260`, `024.266`). `semantic_tokens.rb` already enumerates
+      # the same six.
+      def visit_local_variable_operator_write_node(node)
+        record_local_variable(node.name, node.name_loc)
+        super
+      end
+
+      def visit_local_variable_or_write_node(node)
+        record_local_variable(node.name, node.name_loc)
+        super
+      end
+
+      def visit_local_variable_and_write_node(node)
+        record_local_variable(node.name, node.name_loc)
+        super
+      end
+
+      # `a, b = 1, 2`, a `for` variable, `rescue => e`, a pattern capture
+      # and a regexp named capture all arrive here. This node has no
+      # `#name_loc`, so its own location is the name -- except where it
+      # is not, which is what #record_local_variable checks.
+      #
+      # **The underscore is a rule no question asked at one range could
+      # answer.** A pattern may bind the same name twice only when the
+      # name begins with an underscore, so two edits that are each
+      # exactly the name combine into a file that does not parse:
+      #
+      #   $ ruby -e '
+      #   ["case [1, 2]; in [_a, _a] then :ok; end",
+      #    "case [1, 2]; in [zz, zz] then :ok; end"].each { |src|
+      #     begin
+      #       p eval(src)
+      #     rescue SyntaxError => e
+      #       p e.message.include?("duplicated variable name")
+      #     end
+      #   }
+      #   '
+      #   # => :ok
+      #   # => true
+      #   # ruby 3.4.10
+      #
+      # `Rename::Planner` builds one `newText` per range and cannot see
+      # that two of its ranges share a pattern, so the decline is here,
+      # and it is written about the name rather than about patterns
+      # because that is the whole of what Ruby's own rule keys on.
+      # Declining an underscore-prefixed *target* costs nothing anybody
+      # had: until this release no target spelling was recorded at all.
+      # A plain `_a = 1` write is unaffected -- that is a write node, and
+      # writes may repeat freely.
+      def visit_local_variable_target_node(node)
+        record_local_variable(node.name, node.location) unless node.name.start_with?("_")
+        super
+      end
+
+      # **A value nobody wrote.** `{a:}`, `helper(limit:)` and `in {a:}`
+      # are all one construct -- a hash entry whose value is omitted --
+      # and Prism says so by wrapping the value it supplied in an
+      # `ImplicitNode`. The range that node carries is the *key's*, so
+      # rewriting it is not renaming the local:
+      #
+      #   $ ruby -e '
+      #   require "prism"
+      #   { "in {a:}" => "case h\nin {a:}\nend\n",
+      #     "h = {a:}" => "a = 1\nh = {a:}\n",
+      #     "helper(limit:)" => "limit = 1\nhelper(limit:)\n" }.each { |label, src|
+      #     Prism.parse(src).value.breadth_first_search { |node|
+      #       next false unless node.is_a?(Prism::ImplicitNode)
+      #       p [label, node.value.class.name.split("::").last, node.value.location.slice]
+      #       false
+      #     }
+      #   }
+      #   '
+      #   # => ["in {a:}", "LocalVariableTargetNode", "a"]
+      #   # => ["h = {a:}", "LocalVariableReadNode", "a:"]
+      #   # => ["helper(limit:)", "LocalVariableReadNode", "limit:"]
+      #   # ruby 3.4.10
+      #
+      # **Only the target, and the session above is the argument for
+      # that.** Two of those three ranges carry the colon, so
+      # #record_local_variable's "is this range the name?" comparison
+      # already answers *no* for them -- correctly, not by luck: a range
+      # holding `limit:` is not the name, and that is the whole of what
+      # the comparison asks. The pattern is the shape where the range
+      # **is** the bare name, so the comparison answers yes and hands
+      # Rename a key to rewrite; a `case` with an `else` then takes the
+      # other branch with nothing raised. That one needs a question the
+      # text cannot answer, and Prism has already answered it one node
+      # up.
+      #
+      # Declining the read spellings here as well would be a line no
+      # example could fail on, which this project treats as a defect of
+      # its own -- and the property it would be insuring against, that
+      # both read ranges carry the colon, is not left to memory: the
+      # session above is re-run by `scripts/check_interpreter_sessions.rb`
+      # on every suite run, so a Prism that stopped including the colon
+      # fails a check rather than quietly widening a rename.
+      #
+      # Only the local-variable target is skipped. `{a:}` where `a` is a
+      # method still walks its `CallNode`, so the call is still a
+      # reference.
+      # **Two spellings arrive here and they want opposite answers**, which
+      # is why one method makes both decisions rather than two methods
+      # each making one. Two clusters of this release wrote a
+      # `#visit_implicit_node` independently and the second silently
+      # replaced the first, so the expansion below was dead code until the
+      # suite said so.
+      #
+      # A *target* binds FROM the key: `in {a:}` matches the key `a` and
+      # binds a local of that name. Expanding it would rewrite the key and
+      # change which key is matched, so the site is not recorded at all
+      # and `024.272` publishes what that costs.
+      #
+      # A *read* is the value half: `{a:}` is `{a: a}` and `f(a:)` is
+      # `f(a: a)`. Here the whole `a:` is the site and the edit *expands*
+      # it, which is the one shape where replacing the recorded range with
+      # a longer string is right rather than lossy.
+      def visit_implicit_node(node)
+        value = node.value
+        return if value.is_a?(Prism::LocalVariableTargetNode)
+
+        unless value.is_a?(Prism::LocalVariableReadNode)
+          super
+          return
+        end
+
+        # Through `binding_scope`, like every other local reference: the
+        # frame that *binds* the name, not the innermost one that is open.
+        # This read was written against `current_scope_id`, which the
+        # scope-frame change replaced, and the two arrived in one release.
+        frame = binding_scope(value.name)
+        return unless frame
+
+        record_reference(:local_variable, value.name.to_s, node.location,
+                         scope_id: frame.id, implicit_hash_value: true)
+        # `super` is deliberately not called, and deliberately not
+        # *guarded against* either: measured, descending adds no second
+        # candidate for the same name, because the read inside an
+        # `ImplicitNode` is not visited as an ordinary read. A comment
+        # claiming it would double-record was carried here from the
+        # cluster that wrote the first version of this method, and it is
+        # a claim no example could fail on -- which this project treats
+        # as a defect of its own. Stated as what it is: nothing depends
+        # on the omission.
       end
 
       def visit_instance_variable_read_node(node)
@@ -1006,19 +1234,21 @@ module Ovallsp
 
         record_superclass(node, absolute_name) if node.is_a?(Prism::ClassNode)
 
-        within_namespace(absolute_name, module_owner: kind == :module) do
+        within_namespace(absolute_name, node, module_owner: kind == :module) do
           node.each_child_node { |child| child.accept(self) }
         end
       end
 
-      def within_namespace(absolute_name, module_owner: false)
+      # `scope_node` is the node whose `#locals` the frame carries, which
+      # is not always the node naming the namespace: `class_methods do …
+      # end` opens a module body written as a block, and the block is what
+      # binds.
+      def within_namespace(absolute_name, scope_node, module_owner: false)
         previous_cref = @cref
         @cref = @cref.in_namespace(absolute_name, module_owner: module_owner)
-        @scope_stack.push(next_scope_id)
-        yield
+        in_scope(scope_node) { yield }
       ensure
         @cref = previous_cref
-        @scope_stack.pop
       end
 
       # For `class Foo::Bar`, `node.constant_path` is a Prism::ConstantPathNode
@@ -1976,15 +2206,132 @@ module Ovallsp
         @scope_counter += 1
       end
 
-      def current_scope_id
-        @scope_stack.last
+      # Every local-variable reference goes through here, so the two
+      # questions below are asked once rather than at each of the six
+      # visits. Two further declines are *not* here, because neither can
+      # be answered from a name and a range: #visit_implicit_node knows
+      # the node above, and #visit_local_variable_target_node knows the
+      # spelling Ruby lets a pattern repeat.
+      #
+      # **Is this location really the name?** Prism hands back the whole
+      # enclosing literal when it cannot locate a name inside it -- a
+      # regexp named capture in a pattern containing an escape is the
+      # shape:
+      #
+      #   $ ruby -e '
+      #   require "prism"
+      #   ["/(?<n>x)/o =~ s", "/(?<n>\\d)/ =~ s"].each { |src|
+      #     Prism.parse(src).value.breadth_first_search { |node|
+      #       p node.location.slice if node.is_a?(Prism::LocalVariableTargetNode)
+      #       false
+      #     }
+      #   }
+      #   '
+      #   # => "n"
+      #   # => "/(?<n>\\d)/"
+      #   # ruby 3.4.10
+      #
+      # A rename edit replaces whatever range it is handed, so recording
+      # the second would swap the pattern for the new name. Section 0
+      # ranks that below saying nothing, and `semantic_tokens.rb` declines
+      # the same shape for the same reason.
+      #
+      # **That comparison is necessary and it is not sufficient**, which
+      # is worth stating here because for one round it was written as
+      # though it were the whole answer. A value-omitted shorthand's
+      # range is the *key's*, and in a pattern the key is spelled without
+      # its colon -- so the slice equals the name, the comparison passes,
+      # and the edit rewrites a hash pattern's key. Those three spellings
+      # are declined one node up instead, where Prism marks them; see
+      # #visit_implicit_node. What is left for the comparison is the
+      # shape above, where there is no node to ask and the text is all
+      # there is.
+      #
+      # Neither decline is a complete answer. The edit that would be
+      # right for a shorthand *inserts* (`helper(limit: renamed)`) where
+      # `Rename::Planner` replaces, and one `newText` is built from the
+      # new name for every range it is handed, so what the user gets is a
+      # rename that stops at that occurrence. It is published as a
+      # limitation, and it is the better of the two answers available
+      # here rather than a fixed feature.
+      #
+      # **And neither rule is `semantic_tokens.rb`'s `NAME_SHAPE`.** That
+      # regex ends `[?!=]?:?`, so it accepts the trailing colon, and it
+      # is right to: a highlighter marking `limit:` marks something a
+      # reader sees, while an editor replacing that range writes source.
+      # The two readers want different answers, so they get their own
+      # rules rather than one both would have to bend to.
+      #
+      # **Which scope binds it?** See #binding_scope.
+      def record_local_variable(name, location)
+        return unless location.slice == name.to_s
+
+        frame = binding_scope(name)
+        # Not "some scope, then" but "no answer": a nil scope id puts
+        # every unplaced occurrence of one name under one owner into a
+        # single identity, and Find References and Rename would act on
+        # that group. Declining leaves the name unresolvable, which is
+        # what they already do for a name they cannot place.
+        return unless frame
+
+        record_reference(:local_variable, name.to_s, location, scope_id: frame.id)
       end
 
-      def record_reference(kind, name, location, scope_id: nil)
+      # The frame that *binds* this name, not the innermost one that is
+      # open. A block body is both a new binding scope for its own
+      # parameters and a closure over the enclosing one, and one id per
+      # lexical node cannot express both:
+      #
+      #   $ ruby -e '
+      #   def m
+      #     w = 1
+      #     [1].each { w = 2 }
+      #     w
+      #   end
+      #   p m
+      #   v = 1
+      #   f = ->(v) { v * 10 }
+      #   p f.call(7)
+      #   p v
+      #   '
+      #   # => 2
+      #   # => 70
+      #   # => 1
+      #   # ruby 3.4.10
+      #
+      # The first says the `w` inside the block is the same variable as
+      # the one outside; the last two say the `v` inside the lambda is a
+      # different one. The innermost-frame rule answered both backwards
+      # (`024.262`, `024.263`).
+      #
+      # The stack is a superset of the Ruby scopes enclosing the node
+      # being visited, never a subset -- every scope node opens a frame
+      # and nothing pops one early -- so a name Prism emitted a local
+      # read for is bound by one of them. Where it is not, the caller
+      # declines rather than guessing; see #record_local_variable for the
+      # one shape that reaches that, and for what it costs to guess.
+      #
+      # **What the search does not fix** is a frame the visit opens where
+      # Ruby has not. `#visit_namespace` walks a superclass expression
+      # inside the class's own frame, and Ruby evaluates it in the scope
+      # around it. The search now hands such a read the enclosing frame's
+      # id when nothing in the body binds that name -- but the same
+      # misplaced walk also records the *owner* as the class, and an
+      # identity is `owner#scope_id`, so Find References still does not
+      # group it. Only moving the walk fixes that, and moving it changes
+      # which owner every constant in a superclass expression is recorded
+      # under: a wider change than this one, with its own corpus to drive.
+      # `parser_scope_frames_spec.rb` asserts both halves so the gap is
+      # written down rather than remembered.
+      def binding_scope(name)
+        @scopes.reverse_each.find { |scope| scope.locals.include?(name) }
+      end
+
+      def record_reference(kind, name, location, scope_id: nil, implicit_hash_value: false)
         @reference_candidates << Index::ReferenceCandidate.new(
           kind: kind, name: name, location: Index::SourceLocation.to_range(location, @lines), scope_id: scope_id,
           owner: current_owner, singleton: @cref.declares_singleton?, receiver: nil,
-          lexical_nesting: current_lexical_nesting
+          lexical_nesting: current_lexical_nesting, implicit_hash_value: implicit_hash_value
         )
       end
 

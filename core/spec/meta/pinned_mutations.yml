@@ -358,15 +358,15 @@
 
 - why: "the nameless def's own scope frame -- popping in the guard's method for a push it never made, which hands the enclosing construct's frame away and merges two unrelated locals under one owner#scope_id."
   file: core/lib/ovallsp/parser_service.rb
-  from: "      def walk_nameless_def(node)\n        @scope_stack.push(next_scope_id)\n"
-  to: "      def walk_nameless_def(node)\n"
+  from: "      def walk_nameless_def(node)\n        in_scope(node) { node.each_child_node { |child| child.accept(self) } }\n"
+  to: "      def walk_nameless_def(node)\n        node.each_child_node { |child| child.accept(self) }\n"
   spec: spec/ovallsp/parser_def_frame_spec.rb
   example: "gives the def's body a scope of its own rather than the block's"
 
 - why: "the guard leaving the included-hook parameter alone -- clearing it, which is what a method-level ensure restoring an unassigned local did, and the rest of an old-style concern's self.included stops recognising its hook."
   file: core/lib/ovallsp/parser_service.rb
-  from: "      def walk_nameless_def(node)\n        @scope_stack.push(next_scope_id)\n"
-  to: "      def walk_nameless_def(node)\n        @included_hook_parameter = nil\n        @scope_stack.push(next_scope_id)\n"
+  from: "      def walk_nameless_def(node)\n"
+  to: "      def walk_nameless_def(node)\n        @included_hook_parameter = nil\n"
   spec: spec/ovallsp/parser_def_frame_spec.rb
   example: "keeps the included-hook parameter bound across a nameless def"
 
@@ -425,3 +425,162 @@
   to: "          candidate.declarations.map { |uri, decl| { uri: uri, range: decl.location } }\n        end\n"
   spec: spec/ovallsp/semantic/union_branch_members_spec.rb
   example: "answers with that declaration once, not once per branch"
+
+- why: "The binder search itself -- taking the innermost open frame instead is the rule that split one closed-over local in two."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        @scopes.reverse_each.find { |scope| scope.locals.include?(name) }\n"
+  to: "        @scopes.last\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "gives a write outside a block and a write to the same name inside it one identity"
+- why: "Innermost binder wins -- searching outward-in hands a shadowing lambda parameter the enclosing method's id."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        @scopes.reverse_each.find { |scope| scope.locals.include?(name) }\n"
+  to: "        @scopes.find { |scope| scope.locals.include?(name) }\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "separates an arrow lambda's parameter from an enclosing local of the same name"
+- why: "The search continuing outward past a frame that does not bind -- a superclass expression is walked inside the class frame and Ruby evaluates it outside one."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        @scopes.reverse_each.find { |scope| scope.locals.include?(name) }\n"
+  to: "        @scopes.last\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "gives a superclass expression the enclosing scope's id"
+- why: "The check that the location really is the name -- without it a regexp named capture hands Rename the whole literal to replace."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        return unless location.slice == name.to_s\n\n"
+  to: ""
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "declines a named capture whose location is the whole literal"
+- why: "The range comparison in `record_local_variable` -- Prism hands back the whole enclosing literal when it cannot locate a name inside it, so a regexp named capture would hand Rename the pattern to replace."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        return unless location.slice == name.to_s\n\n"
+  to: ""
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "declines a named capture whose location is the whole literal"
+- why: "Declining when no frame binds -- a nil scope id makes every unplaced occurrence of one name under one owner a single identity Rename would act on."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        return unless frame\n\n        record_reference(:local_variable, name.to_s, location, scope_id: frame.id)"
+  to: "        record_reference(:local_variable, name.to_s, location, scope_id: frame&.id)"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "declines a target Prism recovered for a name no scope binds"
+- why: "The pop in #in_scope's ensure -- a frame left open after its node closes still binds, so a block parameter captures the enclosing scope's later use of that name."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        begin\n          yield\n        ensure\n          @scopes.pop\n        end\n"
+  to: "        yield\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "still separates a block parameter that shadows a same-named local"
+- why: "The root frame coming from ProgramNode -- without it nothing is open at the top level and every file-level local is declined."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "      def visit_program_node(node)\n        in_scope(node) { super }\n      end\n"
+  to: "      def visit_program_node(node)\n        super\n      end\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "keeps every top-level local in the file's own frame across a nameless def"
+- why: "The lambda's own frame -- the one scope node that had none, so an arrow lambda's body shared the enclosing method's scope id."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        in_scope(node) { super }\n      ensure\n        @cref = previous_cref\n      end\n\n      def visit_constant_read_node"
+  to: "        super\n      ensure\n        @cref = previous_cref\n      end\n\n      def visit_constant_read_node"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "separates a name only an arrow lambda's body binds from an enclosing local"
+- why: "The block's own frame -- without it a name only the block binds is the same variable as a same-named local written after it."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        @cref = block_cref\n        in_scope(node) { super }\n"
+  to: "        @cref = block_cref\n        super\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "separates a name that only the block binds from a same-named local written after it"
+- why: "Recording LocalVariableTargetNode -- `a, b = 1, 2`, a `for` variable and `rescue => e` are bindings Rename has to rewrite with the rest."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        record_local_variable(node.name, node.location) unless node.name.start_with?(\"_\")\n"
+  to: "        nil unless node.name.start_with?(\"_\")\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "records a multiple-assignment target"
+- why: "Declining an underscore-prefixed target -- Ruby lets one pattern bind such a name twice, so two edits that are each the name exactly make the file stop parsing."
+  file: core/lib/ovallsp/parser_service.rb
+  from: " unless node.name.start_with?(\"_\")\n"
+  to: "\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "declines an underscore-prefixed target, which a pattern may repeat"
+- why: "Declining a value-omitted shorthand's pattern binding -- the range Prism reports for it is the hash key's and is spelled without the colon, so the range comparison passes it and Rename rewrites a pattern's key."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        return if value.is_a?(Prism::LocalVariableTargetNode)\n\n"
+  to: ""
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "declines a hash pattern's shorthand binding, whose range is the pattern's key too"
+- why: "The read half of a value-omitted shorthand reaching `record_reference` -- declining it the way the target is declined leaves `{a:}` and `f(a:)` unrecorded, so a rename leaves them written as they were and the file stops running."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        return if value.is_a?(Prism::LocalVariableTargetNode)\n"
+  to: "        return if value.is_a?(Prism::LocalVariableTargetNode) || value.is_a?(Prism::LocalVariableReadNode)\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "records the same shorthand written as a hash literal's value"
+- why: "Recording LocalVariableOperatorWriteNode -- leaving `n += 1` behind after renaming `n` writes a file that does not run."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "      def visit_local_variable_operator_write_node(node)\n        record_local_variable(node.name, node.name_loc)\n        super\n      end\n"
+  to: "      def visit_local_variable_operator_write_node(node)\n        super\n      end\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "records the target of `+=`"
+- why: "Recording LocalVariableOrWriteNode -- the same gap in the `||=` spelling."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "      def visit_local_variable_or_write_node(node)\n        record_local_variable(node.name, node.name_loc)\n        super\n      end\n"
+  to: "      def visit_local_variable_or_write_node(node)\n        super\n      end\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "records the target of `||=` and `&&=`"
+- why: "Recording LocalVariableAndWriteNode -- the third compound spelling, whose recorder the sweep cannot pin separately because all four arrive in one added block."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "      def visit_local_variable_and_write_node(node)\n        record_local_variable(node.name, node.name_loc)\n        super\n      end\n"
+  to: "      def visit_local_variable_and_write_node(node)\n        super\n      end\n"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "records the target of `||=` and `&&=`"
+- why: "The concern body's frame carries the block's locals -- the call that opens `class_methods do` is not a scope node and has none."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "within_namespace(absolute_name, node.block, module_owner: true)"
+  to: "within_namespace(absolute_name, node, module_owner: true)"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "binds a local written in a `class_methods do` body to that body"
+
+- why: "024.251's declined owner -- keeping the enclosing class as the owner of a `def` on a receiver this parser cannot name, which invents a singleton method Ruby puts nowhere near it and attributes the body's receiverless calls to it."
+  file: core/lib/ovallsp/index/cref.rb
+  from: "        in_method(singleton: false).with(owner: nil, module_owner: false, block_depth: block_depth + 1)\n"
+  to: "        in_method(singleton: false).with(module_owner: false, block_depth: block_depth + 1)\n"
+  spec: spec/ovallsp/diagnostics/def_on_constant_spec.rb
+  example: "declines a `def` nested inside a `def` on an unnameable receiver"
+- why: "024.251's depth -- the half that tells the unnameable body's nil apart from the top level's, so a `def` written inside it declines instead of landing in the top-level bucket."
+  file: core/lib/ovallsp/index/cref.rb
+  from: "        in_method(singleton: false).with(owner: nil, module_owner: false, block_depth: block_depth + 1)\n"
+  to: "        in_method(singleton: false).with(owner: nil, module_owner: false)\n"
+  spec: spec/ovallsp/diagnostics/def_on_constant_spec.rb
+  example: "declines a `def` nested inside a `def` on an unnameable receiver"
+- why: "024.244's nesting-first lookup -- picking a type identity workspace-wide when the reference was written inside a namespace, so a caret on one of two same-named classes answers about the other and renaming it rewrites both."
+  file: core/lib/ovallsp/workspace_index.rb
+  from: "      @mutex.synchronize { nested_type_symbol_locked(name, nesting) || resolve_type_symbol_locked(name) }\n"
+  to: "      @mutex.synchronize { resolve_type_symbol_locked(name) }\n"
+  spec: spec/ovallsp/server_rename_spec.rb
+  example: "renames only the same-named class the caret is actually inside"
+- why: "024.251's module_owner reset -- leaving the flag that says the owner is a module set while the owner is gone, so a `def <local>.included` in a module body records a Concern class-methods edge the module does not have."
+  file: core/lib/ovallsp/index/cref.rb
+  from: "        in_method(singleton: false).with(owner: nil, module_owner: false, block_depth: block_depth + 1)\n"
+  to: "        in_method(singleton: false).with(owner: nil, block_depth: block_depth + 1)\n"
+  spec: spec/ovallsp/diagnostics/def_on_constant_spec.rb
+  example: "records no concern hook for an `included` written on an unnameable receiver"
+- why: "024.244's shared nesting rule, read for a name -- falling through to the workspace-wide pick, which answers about whichever same-named class sorts first rather than the one the nesting names. The hunk sweep reports this method's hunk unpinned, correctly: reverting it restores an inline body that computes the same thing. This is the decision inside it."
+  file: core/lib/ovallsp/workspace_index.rb
+  from: "      @mutex.synchronize { nested_type_symbol_locked(name, nesting)&.name }\n"
+  to: "      @mutex.synchronize { resolve_type_symbol_locked(name)&.name }\n"
+  spec: spec/ovallsp/workspace_index_spec.rb
+  example: "resolves a bare name through the nesting, and answers nil where the nesting decides nothing"
+- why: "the shorthand takeover applied to whatever the implicit value is -- recording a `{ name: }` that stands for a *method* as a local variable, over a range that includes the colon."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        unless value.is_a?(Prism::LocalVariableReadNode)\n          super\n          return\n        end\n\n"
+  to: ""
+  spec: spec/ovallsp/parser_service_spec.rb
+  example: "records one flagged site per shorthand, and leaves the ordinary sites alone"
+- why: "the flag that says this range is a `key:` token rather than an identifier -- without it a rewrite substitutes over the colon, and the hash literal stops parsing."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "                         scope_id: frame.id, implicit_hash_value: true)\n"
+  to: "                         scope_id: frame.id, implicit_hash_value: false)\n"
+  spec: spec/ovallsp/parser_service_spec.rb
+  example: "records one flagged site per shorthand, and leaves the ordinary sites alone"
+
+- why: "the expansion itself -- substituting the new name over a `key:` token instead of writing the key back out, which is the syntax error the entry reproduces."
+  file: core/lib/ovallsp/rename/planner.rb
+  from: "        return new_name unless implicit_hash_value\n"
+  to: "        return new_name\n"
+  spec: spec/ovallsp/server_rename_spec.rb
+  example: "expands Ruby's hash shorthand rather than overwriting its colon"

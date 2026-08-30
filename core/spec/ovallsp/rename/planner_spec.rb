@@ -105,11 +105,45 @@ RSpec.describe Ovallsp::Rename::Planner do
       expect(text.lines[3][before...after]).to eq("Bar")
     end
 
+    # **prepareRename has only declarations to go on.** `024.244`. The
+    # workspace-wide reference index is rebuilt lazily, and pressing F2
+    # is the first thing an editor does -- so the id a caret on a class
+    # resolves to has to be the id its declaration is stored under. For a
+    # class written inside a `module` body it was not, and the class was
+    # refused outright while the identical caret on the compact spelling
+    # was offered.
+    #
+    # The reference index is left empty on purpose: populating it hides
+    # the defect, because the *use* sites resolved to the same wrong id
+    # and prepare then answered from those instead of from the
+    # declaration. The compact spelling in the same fixture is the
+    # control -- it was already offered and has to stay offered.
+    it "offers a class written inside a module body with the reference index still cold" do
+      text = "module Api\n  class Widget\n  end\nend\n\nclass Api2::Widget2\nend\n"
+      document = Ovallsp::TextDocument.new(uri: "file:///a.rb", text: text, version: 1, language_id: "ruby")
+      summary = Ovallsp::ParserService.new.summarize(document)
+      workspace_index.replace_file(summary)
+      hierarchy_index.replace_file(summary)
+
+      at = lambda do |line|
+        candidate = summary.reference_candidates.find { |c| c.kind == :constant && c.location[:start][:line] == line }
+        reference_resolver.resolve(document, [candidate], uri: "file:///a.rb", generation: 1).first.symbol_id
+      end
+
+      expect(planner.prepare(at.call(1))).to eq(placeholder: "Widget")
+      expect(planner.prepare(at.call(5))).to eq(placeholder: "Widget2")
+    end
+
+    # The target's `owner` is the module, because that is what a class
+    # written inside a `module` body is declared under. It read `nil`
+    # here while a use of the name resolved to `nil` as well, so the two
+    # agreed about an identity the index does not hold and this example
+    # passed without either side naming the declaration.
     it "renames only the identifier segment of a compact-nested constant reference, keeping its namespace prefix intact" do
       text = "module Foo\n  class Bar\n  end\nend\n\nFoo::Bar.new\n"
       index_source(text)
 
-      plan = planner.plan(sym(kind: :class, owner: nil, name: "::Foo::Bar"), new_name: "Container", generation: 1)
+      plan = planner.plan(sym(kind: :class, owner: "::Foo", name: "::Foo::Bar"), new_name: "Container", generation: 1)
 
       ref_edit = plan.confirmed_edits.find { |e| e[:range][:start][:line] == 5 }
       expect(ref_edit).not_to be_nil

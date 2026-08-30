@@ -37,6 +37,95 @@ RSpec.describe Ovallsp::Semantic::ReferenceResolver do
     expect(constant_ref.confidence).to eq(:high)
   end
 
+  # **The identity a use resolves to is the identity the declaration is
+  # stored under, or it names nothing.** `024.244`. A class written
+  # inside a `module` body is declared with that module as its owner, and
+  # this rebuilt a SymbolId from a resolved *name* and a *kind* -- two
+  # projections that carry no owner -- so it had to supply one, and the
+  # `nil` it supplied is right only for the compact spelling. The rebuilt
+  # id matched no declaration, `Rename::Planner` found none, and
+  # prepareRename refused the class outright while the identical caret on
+  # the compact spelling was offered.
+  #
+  # Both spellings are in the one fixture so each is the other's control:
+  # the compact one was already right and has to stay right, and the two
+  # expected owners differ, so a fix that answered one owner for every
+  # class fails here rather than passing.
+  it "resolves a use of a nested class to the identity its declaration is stored under" do
+    document, summary = index_source(<<~RUBY)
+      module Api
+        class Widget
+        end
+      end
+
+      class Api2::Widget2
+      end
+
+      Api::Widget.new
+      Api2::Widget2.new
+    RUBY
+
+    refs = resolver.resolve(document, summary.reference_candidates, uri: document.uri, generation: 1)
+    nested = sym(kind: :class, owner: "::Api", name: "::Api::Widget")
+    compact = sym(kind: :class, owner: nil, name: "::Api2::Widget2")
+
+    expect(refs.select { |r| r.symbol_id.name == "::Api::Widget" }.map(&:symbol_id).uniq).to eq([nested])
+    expect(refs.select { |r| r.symbol_id.name == "::Api2::Widget2" }.map(&:symbol_id).uniq).to eq([compact])
+    # The half a name-only assertion cannot make: the index really holds
+    # a declaration under each of those two ids.
+    expect(workspace_index.declarations(nested).size).to eq(1)
+    expect(workspace_index.declarations(compact).size).to eq(1)
+  end
+
+  # **A leading `::` is the whole meaning of the reference**, so the
+  # nesting must not rewrite it -- the decision the constant path now
+  # depends on, pinned where it is observable rather than at the guard
+  # that expresses it. Both directions are Ruby's, not this engine's:
+  #
+  #   $ ruby -e '
+  #   class Widget; def self.who = :top_level; end
+  #   module Api
+  #     class Widget; def self.who = :in_api; end
+  #     class Caller
+  #       def rooted = ::Widget.who
+  #       def bare = Widget.who
+  #     end
+  #   end
+  #   p [Api::Caller.new.rooted, Api::Caller.new.bare]
+  #   '
+  #   # => [:top_level, :in_api]
+  #   # ruby 3.4.10
+  #
+  # The unrooted spelling in the same fixture is the control, and has to
+  # resolve the other way.
+  it "keeps a rooted constant reference rooted, whatever namespace it is written inside" do
+    document, summary = index_source(<<~RUBY)
+      class Widget
+      end
+
+      module Api
+        class Widget
+        end
+
+        class Caller
+          def rooted
+            ::Widget.new
+          end
+
+          def bare
+            Widget.new
+          end
+        end
+      end
+    RUBY
+
+    refs = resolver.resolve(document, summary.reference_candidates, uri: document.uri, generation: 1)
+    at = ->(line) { refs.find { |r| r.kind == :constant && r.location[:start][:line] == line }.symbol_id }
+
+    expect(at.call(9)).to eq(sym(kind: :class, owner: nil, name: "::Widget"))
+    expect(at.call(13)).to eq(sym(kind: :class, owner: "::Api", name: "::Api::Widget"))
+  end
+
   it "gives two same-named locals in different scopes distinct SymbolIds" do
     document, summary = index_source("def a\n  x = 1\n  x\nend\n\ndef b\n  x = 2\n  x\nend\n")
 

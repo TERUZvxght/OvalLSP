@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**266 entries below** <!-- measured: register-entries = 266 -->,
+**271 entries below** <!-- measured: register-entries = 271 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -411,14 +411,14 @@ nobody can search is the recording habit without the benefit.
 | [`024.241`](#024241-find-references-answers-from-a-comment-a-bare-literal-and-end) | fixed | 0.2.16 | Find References answers from a comment, a bare literal, and `end` |
 | [`024.242`](#024242-a-class-held-in-a-local-variable-loses-an-rbs-overload) | fixed | 0.2.16 | A class held in a local variable loses an RBS overload |
 | [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 0.3.0 | Signature help says nothing for a receiverless call inside a module … |
-| [`024.244`](#024244-preparerename-is-refused-on-any-class-or-module-written-inside-a-module-class-body-while-th) | open | 0.2.17 | prepareRename is refused on any class or module written inside a `mo… |
+| [`024.244`](#024244-preparerename-is-refused-on-any-class-or-module-written-inside-a-module-class-body-while-th) | fixed | 0.2.17 | prepareRename is refused on any class or module written inside a `mo… |
 | [`024.245`](#024245-server-prepare-rename-result-does-not-call-ensure-reference-index-current-while-referenc) | open | 0.2.17 | `Server#prepare_rename_result` does not call `#ensure_reference_inde… |
 | [`024.246`](#024246-one-unresolvable-include-in-a-project-s-own-rbs-makes-the-engine-report-a-method-the-same-file) | fixed | 0.2.17 | One unresolvable `include` in a project's own RBS makes the engine r… |
 | [`024.247`](#024247-a-constant-declared-only-in-a-signature-file-is-reported-cannot-resolve-constant-when-that-fil) | fixed | 0.2.17 | A constant declared only in a signature file is reported `cannot res… |
 | [`024.248`](#024248-diagnostics-engine-ancestor-names-calls-ancestorentry-name-with-no-identified-guard-so) | fixed | 0.2.17 | `Diagnostics::Engine#ancestor_names` calls `AncestorEntry#name` with… |
 | [`024.249`](#024249-queryservice-member-available-on-asked-the-signature-environment-about-the-union-branch-s-own) | fixed | 0.2.17 | `QueryService#member_available_on?` asked the signature environment … |
 | [`024.250`](#024250-queryservice-member-available-on-cannot-answer-about-a-nil-branch-so-every-member-of-a-nil) | fixed | 0.2.17 | `QueryService#member_available_on?` cannot answer about a `nil` bran… |
-| [`024.251`](#024251-def-local-method-is-recorded-on-the-lexically-enclosing-class) | open | 0.2.17 | `def <local>.method` is recorded on the lexically enclosing class |
+| [`024.251`](#024251-def-local-method-is-recorded-on-the-lexically-enclosing-class) | fixed | 0.2.17 | `def <local>.method` is recorded on the lexically enclosing class |
 | [`024.252`](#024252-conditional-says-a-method-is-on-every-branch-of-a-union-when-one-branch-declares-it-private-s) | fixed | 0.2.17 | `conditional` says a method is on every branch of a Union when one b… |
 | [`024.253`](#024253-every-object-kernel-inherited-name-on-a-union-of-two-workspace-classes-was-labelled-one-branch-o) | fixed | 0.2.17 | Every Object/Kernel-inherited name on a Union of two workspace class… |
 | [`024.254`](#024254-active-record-s-own-api-is-labelled-one-branch-only-on-a-union-of-two-models-so-save-destroy) | fixed | 0.2.17 | Active Record's own API is labelled one-branch-only on a Union of tw… |
@@ -427,17 +427,22 @@ nobody can search is the recording habit without the benefit.
 | [`024.257`](#024257-an-unrooted-compact-class-path-whose-head-resolves-outward-gets-the-enclosing-frame-glued-onto-i) | open | 0.2.17 | An unrooted compact class path whose head resolves OUTWARD gets the … |
 | [`024.258`](#024258-visit-def-node-s-method-level-ensure-popped-scope-stack-for-a-push-its-early-return-ha) | fixed | 0.2.17 | `#visit_def_node`'s method-level `ensure` popped `@scope_stack` for … |
 | [`024.259`](#024259-the-same-ensure-restored-included-hook-parameter-from-a-local-the-early-return-never-assi) | fixed | 0.2.17 | The same `ensure` restored `@included_hook_parameter` from a local t… |
-| [`024.260`](#024260-textdocument-rename-on-a-local-misses-every-binding-written-as-a-compound-or-target-node) | open | 0.2.17 | `textDocument/rename` on a local misses every binding written as a c… |
-| [`024.261`](#024261-visit-lambda-node-pushes-no-scope-frame-where-visit-block-node-does-so-a-lambda-body-shar) | open | 0.2.17 | `#visit_lambda_node` pushes no scope frame where `#visit_block_node`… |
-| [`024.262`](#024262-rename-leaves-a-closed-over-local-s-uses-inside-a-block-behind-producing-code-that-no-longer-ru) | open | 0.2.17 | Rename leaves a closed-over local's uses inside a block behind, prod… |
-| [`024.263`](#024263-rename-rewrites-an-arrow-lambda-s-own-parameter-when-renaming-a-same-named-enclosing-local-sile) | open | 0.2.17 | Rename rewrites an arrow lambda's own parameter when renaming a same… |
-| [`024.264`](#024264-a-false-unknown-method-on-a-concern-s-class-methods) | open | 0.2.17 | a false `unknown-method` on a concern's class methods |
-| [`024.265`](#024265-the-same-ensure-popped-the-scope-stack-without-a-matching-push-so-one-def-inside-a-nameless) | open | 0.2.17 | the same `ensure` popped the scope stack without a matching push, so… |
+| [`024.260`](#024260-textdocument-rename-on-a-local-misses-every-binding-written-as-a-compound-or-target-node) | fixed | 0.2.17 | `textDocument/rename` on a local misses every binding written as a c… |
+| [`024.261`](#024261-visit-lambda-node-pushes-no-scope-frame-where-visit-block-node-does-so-a-lambda-body-shar) | fixed | 0.2.17 | `#visit_lambda_node` pushes no scope frame where `#visit_block_node`… |
+| [`024.262`](#024262-rename-leaves-a-closed-over-local-s-uses-inside-a-block-behind-producing-code-that-no-longer-ru) | fixed | 0.2.17 | Rename leaves a closed-over local's uses inside a block behind, prod… |
+| [`024.263`](#024263-rename-rewrites-an-arrow-lambda-s-own-parameter-when-renaming-a-same-named-enclosing-local-sile) | fixed | 0.2.17 | Rename rewrites an arrow lambda's own parameter when renaming a same… |
+| [`024.264`](#024264-a-false-unknown-method-on-a-concern-s-class-methods) | fixed | 0.2.17 | a false `unknown-method` on a concern's class methods |
+| [`024.265`](#024265-the-same-ensure-popped-the-scope-stack-without-a-matching-push-so-one-def-inside-a-nameless) | fixed | 0.2.17 | the same `ensure` popped the scope stack without a matching push, so… |
 | [`024.266`](#024266-find-references-and-rename-ignore-four-of-prism-s-six-local-variable-node-kinds) | done | 0.2.17 | Find References and Rename ignore four of Prism's six local-variable… |
 | [`024.267`](#024267-latent-spec-suite-only) | open | 0.2.17 | latent, spec suite only |
 | [`024.268`](#024268-agentprocessmanager-force-kill-the-sigkill-escalation-behind-a-sigterm-that-never-landed-i) | open | 0.2.17 | `AgentProcessManager#force_kill` — the SIGKILL escalation behind a S… |
 | [`024.269`](#024269-agentprocessmanager-alive-is-asserted-only-in-the-false-direction) | open | 0.2.17 | `AgentProcessManager#alive?` is asserted only in the false direction |
 | [`024.270`](#024270-not-a-defect-recorded-so-nobody-promotes-it-into-one) | open | 0.2.17 | Not a defect — recorded so nobody promotes it into one |
+| [`024.271`](#024271-renaming-a-local-leaves-def-local-method-behind-so-the-file-stops-running) | open | 0.2.17 | Renaming a local leaves `def <local>.method` behind, so the file sto… |
+| [`024.272`](#024272-renaming-a-local-leaves-every-value-omitted-shorthand-behind-so-the-rename-is-still-partial) | fixed | 0.2.17 | Renaming a local leaves every value-omitted shorthand behind, so the… |
+| [`024.273`](#024273-renaming-a-local-that-is-a-parameter-leaves-the-parameter-behind-and-the-answer-can-be-silent) | open | 0.3.0 | Renaming a local that is a parameter leaves the parameter behind, an… |
+| [`024.274`](#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | open | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
+| [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | 0.2.17 | A workspace-identity example fails only in a full-suite run, and not… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -15405,10 +15410,11 @@ languages, rather than deleted with `024.43`.
 ## 024.244 prepareRename is refused on any class or module written inside a `module`/`class` body, while th
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/semantic/reference_resolver.rb`, `core/lib/ovallsp/server.rb`
@@ -15488,6 +15494,78 @@ Corpus census over `/opt/homebrew/lib/ruby/gems/3.4.0/gems/activerecord-8.1.3.1/
 The census reconciles against an independent count that touches 
 ```
 
+**Fixed in 0.2.17, and it needed a second half nobody had asked for.**
+`ReferenceResolver#resolve_constant` asks
+`WorkspaceIndex#resolve_type_symbol` for the declared identity instead
+of rebuilding one from `#resolve_type_name` and `#type_kind` and
+inventing the owner those two do not carry. That alone would have made
+a *latent* wrong answer reachable: the same method resolved a bare name
+with no nesting at all, so a caret on one of two same-named classes in
+different namespaces answered about the other, and handing back a
+declared identity would have turned an answer the cold path refused
+into one it offers. `ReferenceCandidate` has carried `lexical_nesting`
+since 0.2.10 and the *receiver* path has walked it since `024.103`; the
+constant path had not, and now does.
+
+Driven through the real server on `module Api; class Widget; end; end`
+beside `module Web; class Widget; end; end`, caret on the one in `Web`,
+`newName: "Gadget"`:
+
+```
+before   edits at lines [1, 6]    (both `class` lines -- two classes, one name)
+after    edits at lines [6]
+```
+
+**The census, re-run against the tree this was fixed in**, over
+`activerecord 8.1.3.1`'s `lib`. Both sides were handed the identical
+file list (`corpus-sha256 fb3648b6…` on each), and the declaration
+counts are the control -- the change resolves uses and declares
+nothing, so they must not move:
+
+```
+                                     before   after
+class/module declarations               799     799   (control)
+  declared under >1 identity              2       2   (control)
+never used in this corpus                78       4
+used in this corpus                     721     795
+  identity agrees with declaration        6     795
+  identity splits                       715       0
+prepareRename (cold) answers              6     795
+prepareRename (cold) refuses            715       0
+```
+
+Two rows are worth reading past the headline. `never used` falls
+because the workspace-wide pick was sending uses of 74 of these names
+to some *other* class's name entirely; the nesting sends them to the
+one they were written under. And `declared under >1 identity` is the
+residue this does not touch: a class spelled `class Foo::Bar` in one
+file and `module Foo; class Bar` in another is two SymbolIds, and a
+rename still reaches only one of them. Two of 799 here.
+
+**One hunk of this came back from the sweep unpinned, and the second
+sweep's "0 unpinned" is worth less than it looks.** The hunk is
+`#nested_type_name` delegating to the helper `#resolve_type_symbol`
+reads. Reverse-applying it leaves the suite green because the body it
+restores computes the same answer -- a behaviour-preserving extraction,
+which from outside is indistinguishable from a line nothing tests.
+
+What the sweep was pointing at underneath is real: that method had no
+example of its own in nine releases, only three callers exercising it
+through `024.103`'s fix. It has one now, over two same-named classes in
+different namespaces, and it fails when the body is changed to fall
+through to the workspace-wide pick -- which is the decision, and is in
+`pinned_mutations.yml`.
+
+**The second sweep then reported the hunk pinned, and that is not what
+it sounds like.** Reverse-applying it now deletes the line the new
+manifest entry names, so what goes red is
+`pinned_mutations_spec.rb`'s "matches 0 times", not a behavioural
+example -- checked by hand, by reverting that hunk alone and running
+both spec files. The extraction remains behaviour-preserving and
+nothing can pin it, because there is no behaviour to pin; the decision
+inside it is what is covered. Recorded here rather than left to read as
+a clean sweep.
+
 ## 024.245 `Server#prepare_rename_result` does not call `#ensure_reference_index_current`, while `#referenc
 
 ```yaml
@@ -15540,6 +15618,163 @@ The local-variable row is the clean one: source `def a\n  x = 1\n  x\nend\n`, ca
 
 (The `rename=nil` cells on the three class/ivar rows are an artefact of the probe's `newName: "zzz"`, which `Planner#valid_identifier?` rejects for `:class` and `:ivar`. They are not part of the finding; the prepare columns are.)
 ```
+
+**Not fixed in 0.2.17. Deferred deliberately, and this section is the
+record of the decision rather than a note that nobody got to it.**
+
+The one-line change was made, measured, and taken back out. It does
+exactly what the paragraphs above ask — `#prepare_rename_result` calls
+`#ensure_reference_index_current`, and cold F2 stops refusing. **The
+only other thing it does is put `textDocument/rename` within reach of
+F2 alone**, and rename is not correct for local variables.
+
+Driven both ways: the emitted edits applied back to the source, the
+result re-parsed, and where it parses, run. Eight shapes, each a `def`
+holding one local, renamed at its assignment (at its use for the rescue
+row). Both sides were handed the identical eight fixtures
+(`corpus-sha256 c3ce1d89` on each). The run below is `98fc14e` itself,
+with a Find All References at the same caret ahead of the F2 so that
+every row gets an answer — which is also, exactly, what the one-line
+change makes the *first* F2 do: measured separately against the patched
+tree, cold, and identical row for row.
+
+```
+shape                    prepare  edits  parses  ruby before -> ruby after
+hash shorthand           offers   2      NO      {name: "n"}  ->  SyntaxError
+keyword shorthand        offers   2      yes     "n"  ->  ArgumentError (given 1, expected 0; required keyword: name)
+arrow lambda parameter   offers   3      yes     [50, 1]  ->  [10, 1]
+multiple assignment      offers   2      yes     [2, 3]  ->  [1, 3]
+rescue binding           offers   1      yes     "boom"  ->  NameError: undefined local variable or method 'err'
+def on a local receiver  offers   2      yes     :x  ->  NameError: undefined local variable or method 'ty'
+use inside a block       offers   2      yes     4  ->  NoMethodError: undefined method '+' for nil
+op-assign binding        offers   2      yes     1  ->  NoMethodError: undefined method '+' for nil
+```
+
+Eight for eight the file stops meaning what it meant; six of them stop
+running, and the first does not parse. `KNOWN_LIMITATIONS` already
+describes six of these eight, in both languages, as making the file
+stop running — so this is not a discovery, it is the same list arriving
+one keystroke closer to the user.
+
+**Without the change, at the same revision, every one of the eight is
+refused**, because prepareRename is the first request of the session and
+the reference index is cold:
+
+```
+shape                    prepare
+hash shorthand           refuses
+keyword shorthand        refuses
+arrow lambda parameter   refuses
+multiple assignment      refuses
+rescue binding           refuses
+def on a local receiver  refuses
+use inside a block       refuses
+op-assign binding        refuses
+```
+
+**So the refusal is load-bearing, and it is load-bearing by accident.**
+Nothing in `#prepare_rename_result` decided it; it is what a missing
+call happens to do. A protection nobody designed is still a protection,
+and removing it is still removing it.
+
+**It is one gesture's worth of protection, not a guard**, and that half
+of the measurement is why this entry stays open rather than being closed
+as working-as-intended. At `98fc14e`, unchanged, one Find All References
+at the caret is enough:
+
+```
+                                       prepareRename on `n` in
+                                       `def go; n = 1; [1,2].each { |i| n += i }; n; end`
+cold (F2 first)                        null
+warm (Find All References, then F2)    {range: …1:2–1:3, placeholder: "n"}
+```
+
+So a user who has used Find References once is already exposed to all
+eight. What the deferral buys is the first gesture of a session, and
+the difference between a wrong edit being one keystroke away and two.
+Worth having; not worth calling safe.
+
+**The obvious middle course does not exist.** "Warm the index, and have
+`#prepare_rename_result` decline for the shapes known to be wrong" needs
+those shapes to be *nameable*, and six of the eight are not. They are
+not a wrong *edit* the planner emits; they are a mention the engine does
+not hold against this symbol, and there is nothing to decline on:
+
+- `+=`, `||=`, `&&=`, a multiple-assignment target, a `for` variable and
+  a rescue's `=> e` are not recorded as local-variable sites at all
+  (`024.260`).
+- A closed-over local's uses inside a block are not recorded
+  (`024.262`).
+- An arrow lambda's parameter is recorded as the *enclosing* local
+  rather than as a binding of its own (`024.261`, `024.263`), so the
+  engine believes it has every mention.
+- The `ty` in `def ty.outer` is recorded under the method's own scope
+  (`024.271`) — a different symbol rather than a missing one, so this
+  one is nameable in principle, and only by fixing it.
+
+The two that *were* nameable are the two this change set fixed: the
+shorthand rows, where the site is recorded and the edit over it was
+wrong (`024.274`).
+
+The general form — decline when the local's own scope contains an
+identifier we did not record — is a larger change than this entry, and
+every version of it refuses renames that are fine: the same word appears
+as a method call, a symbol, a string and a comment inside the body it
+would scan.
+
+**What the cost measurement said, since the paragraphs above asked for
+one and it is the reason the change looked cheap.** Driven through the
+real server, both sides, with the rebuild timed inside the one method
+the change touches; the gesture is F2 on a local then rename at the same
+caret, over a real gem's `lib` opened file by file, each pair given the
+identical file list:
+
+```
+activemodel 8.1.3.1                without    with
+workspace files                        73       73
+ensure_reference_index_current          1        2   calls
+  call 1                            1.095s   1.089s
+  call 2                                 -   0.000s
+prepareRename answered               null    {…, placeholder: "x"}
+rename edits                            2        2   (control, unchanged)
+
+activerecord 8.1.3.1               without    with
+workspace files                       397      397
+ensure_reference_index_current          1        2   calls
+  call 1                           56.698s  51.566s
+  call 2                                 -   0.000s
+prepareRename answered               null    {…, placeholder: "x"}
+rename edits                            2        2   (control, unchanged)
+```
+
+One real rebuild per gesture either way, because the rebuild is a no-op
+when the index is current — so the gesture as a whole costs what it
+always did, and the second call is free. **The 56.698 against 51.566 is
+not a speed-up**: nothing here touches the rebuild and another agent's
+corpus pass was running across both pairs. Read them as one number with
+several seconds of noise. What is new is where the wait falls: somebody
+who starts a rename and abandons it would pay a rebuild they used to get
+out of. That is a real cost and it is *not* what stopped this — an
+instant refusal to rename something the engine can rename correctly is
+still the wrong answer. What stopped it is the eight rows above.
+
+**What was done instead.** The call is not there; the comment on
+`#prepare_rename_result` says the absence is a decision and names what
+it is sequenced behind; and
+`core/spec/ovallsp/server_rename_spec.rb` holds that decision with the
+warm ask beside it as a control, so re-adding the line goes red rather
+than waiting for a reviewer. The example fails in the other direction
+too — if the deferral were turned into a blanket refusal of local
+variables, which is a different decision and would need its own record
+and its own `KNOWN_LIMITATIONS` paragraph.
+
+This closes when the shapes close, which is why it keeps `target:
+0.2.17` beside them rather than moving out on its own.
+
+**Two of the eight were closed on the way past**, because that defect
+was this change set's own to fix rather than the scope-frame work's: the
+two shorthand rows, where the recorded range covered the colon.
+`024.274`. The six that remain are what this is waiting on.
 
 ## 024.246 One unresolvable `include` in a project's own RBS makes the engine report a method the same file
 
@@ -15891,10 +16126,11 @@ mean.
 ## 024.251 `def <local>.method` is recorded on the lexically enclosing class
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/semantic/method_resolver.rb`, `core/lib/ovallsp/semantic/query_service.rb`, `core/lib/ovallsp/diagnostics/engine.rb`
@@ -15957,6 +16193,86 @@ Taken from Ruby, `ruby 3.4.10`:
 
 So the engine records a singleton method Ruby puts nowhere near `Runner`, and `Runner.respond_to?(:tagged_zzz)` is `false`. Both halves are user-visible: go-to-definition and signature help on `Runner.to_s` land on the wrong body, and the two `location` calls are reported on code that runs.
 ```
+
+**Fixed in 0.2.17 by declining, which was a choice.** The engine cannot
+know what the local holds, so `#receiver_owner_name` answering nil is
+the honest answer and the `|| current_owner` behind it was what turned
+it into an assertion. Nothing is recorded for the `def`, and its body
+gets `Index::Cref#in_unnameable_method` -- an ordinary method body with
+no owner and a depth that says so -- so the receiverless calls in it are
+attributed to no class rather than to the wrong one. Both halves of the
+reproduction above go quiet and the `control_typo` beside them still
+reports.
+
+**What declining costs, stated because it is not free.** Ruby's default
+definee inside such a body is the lexical cref, so a `def` written
+*inside* `def <local>.m` really does land on the enclosing class -- the
+session is in `def_on_constant_spec.rb`. Keeping that one true answer
+means keeping the owner that produces the false reports above, so it is
+given up: a `def` nested there is declined too. That is the same answer
+a block whose owner cannot be named already gives (`024.31`).
+
+**How much that costs was counted rather than guessed**, over every
+installed gem plus the 3.4.10 stdlib, with Prism alone
+(`corpus-sha256 bcfec38a…`):
+
+```
+files parsed:                               9160
+def on a NAMED (constant or self) receiver: 5507
+def on an UNNAMEABLE receiver:                76
+plain def nested inside an unnameable one:     0
+files carrying at least one unnameable:       38
+```
+
+The shape the fix is about occurs 76 times in 38 files, and the one true
+answer the fix gives up occurs zero times.
+
+**Driven, both sides, over 1,763 files** -- the `lib` of seven Rails
+components, `rbs` at three versions, `concurrent-ruby`, `irb` and
+`minitest`. The two runs were given the identical file list
+(`corpus-sha256 695f9f80…` on each) and the control was stated before
+the second ran, from the first's own count: `unresolved-constant` at
+4,759, which came out at 4,759. **Nothing was introduced anywhere.**
+What went away was the shape the entry names, in every version of `rbs`
+measured:
+
+```
+code            path                                  message
+unknown-method  rbs-3.8.0/lib/rbs/prototype/runtime.rb:262,263  Runtime has no method named `location`
+unknown-method  rbs-4.0.3/lib/rbs/prototype/runtime.rb:272,273  Runtime has no method named `location`
+unknown-method  rbs-4.2.0/lib/rbs/prototype/runtime.rb:274,275  Runtime has no method named `location`
+```
+
+`unknown-method` 447 → 441; `argument-count` 5 → 5 and `argument-type`
+1 → 1, neither of which the change can reach.
+
+**Re-measured from scratch in the repair round that followed**, because
+the numbers above were carried in the same change set that produced
+them and a `reproduce` pass is worth more than a re-read. Both sides
+were run again over the identical file list
+(`corpus-sha256 695f9f80…`, 1,763 files), the base side from a
+`git archive` of `98fc14e` into a plain directory — which is why its
+header prints `revision=(not a git repository)` while the other prints
+the SHA and a dirty count, so the two sides are visibly different code.
+`unresolved-constant` came out at 4,759 on both, `unknown-method` 447
+against 441, `argument-count` 5 against 5, `argument-type` 1 against 1,
+and the set difference is exactly the six `location` lines above with
+nothing introduced anywhere. The figures reproduce.
+
+**`block_depth` is reused rather than a flag added**, and that is worth
+a sentence because the first attempt at this entry, written against an
+older `#visit_def_node`, argued the opposite. It had to: back then
+`Cref#nameless_context?` was read by an early `return` that skipped a
+scope-frame push the method-level `ensure` popped anyway, so declining
+through it collapsed the enclosing method's frame. `024.258` moved that
+guard into a method of its own which pushes and pops its own frame, so
+the hazard is gone and the field that already means "a definition here
+belongs to something this parser cannot name" is the right one to say
+it with. A second flag would have been a third place to keep in
+agreement, and two more transitions that must remember to clear it.
+What *is* reset beside the owner is `module_owner`, because it
+describes an owner that is no longer there; the example that says so is
+in `def_on_constant_spec.rb`.
 
 ## 024.252 `conditional` says a method is on every branch of a Union when one branch declares it private, s
 
@@ -16425,10 +16741,11 @@ Found by building `049`'s substitution, not by a review round.
 ## 024.260 `textDocument/rename` on a local misses every binding written as a compound or target node: `+=`
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
@@ -16492,13 +16809,131 @@ Driven through the real server at HEAD, rename `total` at line 2 char 4 of:
 Lines 3, 4, 5 and 8 are silently left alone (line 11's `|total|` is correctly left alone — a block parameter shadows). After the rename the file has `renamed = 0` followed by `total += 1` on an undefined local. Identical at BASE, so this is pre-existing and not a regression.
 ```
 
+### Fixed by making a scope frame carry the names Prism says it binds
+
+`@scope_counter` and `@scope_stack` — two ivars that had to stay in
+step — are one array of frames, each carrying its node's own `#locals`,
+pushed and popped by a single `#in_scope`. Every scope node opens one
+through it, `ProgramNode` and `LambdaNode` included; the second had
+none at all.
+
+The rule that closes this entry is in `#binding_scope`: a reference is
+tagged with the id of the frame that *binds* the name, not the
+innermost frame that happens to be open. Ruby says the `w` inside
+`[1].each { w = 2 }` is the same variable as the one outside, and the
+`v` inside `->(v) { v }` is a different one; the innermost-frame rule
+answered both backwards, and Prism had already computed both facts per
+scope node.
+
+Pinned in `core/spec/ovallsp/parser_scope_frames_spec.rb`.
+
+### The four declines, and that none is a dead branch
+
+Recording four more node kinds means recording ranges Prism did not
+compute as names, and two of the new spellings carry rules of their own,
+so a local-variable node is declined in four places. Each was counted at
+the site that decides, rather than assumed, by wrapping those sites and
+driving the Ruby 3.4.10 stdlib plus every installed gem:
+
+```
+9,160 files, 610,104 local-variable node visits:
+
+  recorded                                604,577
+  declined: the range is not the name         330  -- 305 a value-omitted shorthand read,
+                                                     whose range carries the colon
+                                                     (`JITState.new(iseq:, cfp:)`); 25 a
+                                                     named capture whose range is the whole
+                                                     regexp literal
+  declined: a shorthand pattern binding        18  -- `024.272`; its range is the bare name,
+                                                     so the comparison above cannot see it
+  declined: an underscore-prefixed target   5,179  -- `024.274`
+  declined: no frame binds the name             0
+
+  604,577 + 330 + 18 + 5,179 + 0 = 610,104, so nothing here is counted twice or missed.
+
+The no-frame branch, driven directly on the minimal case Prism recovers from:
+  `x, nil = 1, 2\n`  ->  2 visits, 1 recorded, 1 declined (no frame); the declined
+                        one is `[:nil, "nil"]`, a target node for a name
+                        `ProgramNode#locals` does not contain.
+```
+
+So three of the four are reached constantly on real source and the
+no-frame decline only on source Prism recovered from -- which is what an
+editor holds mid-edit, and why it declines rather than guessing. All
+four are pinned as examples rather than left as branches nothing
+reaches.
+
+**The 305 are also the measurement behind `024.272`'s shape.** Those
+reads reach the range comparison and it declines every one, which is why
+the node-level question is asked for the pattern binding alone: asking
+it for the reads as well would be a line no example could fail on.
+
+### The corpus, and why its headline number is zero
+
+`scope_id` is a key every reader of `reference_candidates` sees, so the
+blast radius was measured rather than reasoned about. Both sides over
+the identical corpus, each printing its own provenance first:
+
+```
+scripts/corpus_diagnostics.rb over the Ruby 3.4.10 stdlib, 976 files,
+corpus-sha256=2decf7788c4f16a241859c6de298c1150fd1af0c945805367f3cc4a8034ec9ef on both sides.
+
+before  98fc14e extracted with `git archive`   7,435 findings
+after   the same tree with this change set     7,435 findings
+control count.unresolved-constant=7204 on both sides -- a category this change
+        cannot touch, printed by each run before its findings.
+count.unknown-method=231 on both sides.
+sorted diff: 0 lines.
+
+Each side printed its own cwd and corpus sha before it ran, and both say
+`revision=(not a git repository)` because both are extracted trees rather than
+checkouts -- so provenance alone does not distinguish them, which is the shape
+`026` records as a false result. What does: `diff` of the file the change set
+touches reports 343 changed lines between the two trees, so the two sides really
+did run different code.
+```
+
+**Zero is the expected answer here and it is also what a run against
+the wrong tree looks like**, so it is not read on its own. No check in
+`Diagnostics::Engine` reads a `:local_variable` candidate — they filter
+for `:method_call`, `:ivar` and `:constant` — so what changed is
+Find References and Rename, which that script does not drive. The two
+sides really did run different code, and the thing that changed was
+measured directly over the same 976 files:
+
+```
+`summary.reference_candidates` where `kind == :local_variable`, dumped as
+path/line/character/name/"owner#scope_id":
+
+  before  103,090 occurrences recorded
+  after   105,672
+
+  recorded now and not before   2,647  -- `+=`, `||=`, `&&=`, and every target node
+                                          except the underscore-prefixed ones (`024.274`)
+  recorded before and not now      65  -- every one a value-omitted shorthand (`024.272`)
+                                          (`JITState.new(iseq:, cfp:)`, `dump_disasm(from, to, test:)`)
+
+Each of those 65 was classified by asking Prism which node is at the position
+rather than by reading the names: 65 of 65 are reached through an `ImplicitNode`.
+The 202 positions this release records less than its first attempt are, by the
+same classification, 202 of 202 underscore-prefixed targets and nothing else.
+
+Grouping, over the positions both sides recorded (raw ids are not comparable
+between the two implementations, so the partition is):
+
+  files with occurrences on both sides   831
+  files whose grouping changed           479
+  positions regrouped                 37,554
+```
+
 ## 024.261 `#visit_lambda_node` pushes no scope frame where `#visit_block_node` does, so a lambda body shar
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
@@ -16545,13 +16980,32 @@ Driven through the real server at HEAD, rename `n` at line 3 char 4 (the method'
 Both occurrences on line 2 are inside the lambda and are a different variable. Parser keys confirm the merge: every local in that fixture is `::A#3`. Identical at BASE — pre-existing, not a regression.
 ```
 
+### Fixed by making a scope frame carry the names Prism says it binds
+
+`@scope_counter` and `@scope_stack` — two ivars that had to stay in
+step — are one array of frames, each carrying its node's own `#locals`,
+pushed and popped by a single `#in_scope`. Every scope node opens one
+through it, `ProgramNode` and `LambdaNode` included; the second had
+none at all.
+
+The rule that closes this entry is in `#binding_scope`: a reference is
+tagged with the id of the frame that *binds* the name, not the
+innermost frame that happens to be open. Ruby says the `w` inside
+`[1].each { w = 2 }` is the same variable as the one outside, and the
+`v` inside `->(v) { v }` is a different one; the innermost-frame rule
+answered both backwards, and Prism had already computed both facts per
+scope node.
+
+Pinned in `core/spec/ovallsp/parser_scope_frames_spec.rb`.
+
 ## 024.262 Rename leaves a closed-over local's uses inside a block behind, producing code that no longer ru
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
@@ -16577,13 +17031,32 @@ textDocument/references at the same caret: BASE [[0,0]] over the two-line form `
 Ruby says they are one variable: `def m; w = 1; [1].each { w = 2 }; w; end` returns 2.
 ```
 
+### Fixed by making a scope frame carry the names Prism says it binds
+
+`@scope_counter` and `@scope_stack` — two ivars that had to stay in
+step — are one array of frames, each carrying its node's own `#locals`,
+pushed and popped by a single `#in_scope`. Every scope node opens one
+through it, `ProgramNode` and `LambdaNode` included; the second had
+none at all.
+
+The rule that closes this entry is in `#binding_scope`: a reference is
+tagged with the id of the frame that *binds* the name, not the
+innermost frame that happens to be open. Ruby says the `w` inside
+`[1].each { w = 2 }` is the same variable as the one outside, and the
+`v` inside `->(v) { v }` is a different one; the innermost-frame rule
+answered both backwards, and Prism had already computed both facts per
+scope node.
+
+Pinned in `core/spec/ovallsp/parser_scope_frames_spec.rb`.
+
 ## 024.263 Rename rewrites an arrow lambda's own parameter when renaming a same-named enclosing local, sile
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
@@ -16610,13 +17083,32 @@ textDocument/references at (1,2): BASE [[1,2],[2,14],[3,2]]; WITH PATCH [[1,2],[
 Ruby: `v = 1; f = ->(v) { v * 10 }; f.call(7) # => 70; v # => 1`. Cause: `#visit_lambda_node` was the one scope node with no frame.
 ```
 
+### Fixed by making a scope frame carry the names Prism says it binds
+
+`@scope_counter` and `@scope_stack` — two ivars that had to stay in
+step — are one array of frames, each carrying its node's own `#locals`,
+pushed and popped by a single `#in_scope`. Every scope node opens one
+through it, `ProgramNode` and `LambdaNode` included; the second had
+none at all.
+
+The rule that closes this entry is in `#binding_scope`: a reference is
+tagged with the id of the frame that *binds* the name, not the
+innermost frame that happens to be open. Ruby says the `w` inside
+`[1].each { w = 2 }` is the same variable as the one outside, and the
+`v` inside `->(v) { v }` is a different one; the innermost-frame rule
+answered both backwards, and Prism had already computed both facts per
+scope node.
+
+Pinned in `core/spec/ovallsp/parser_scope_frames_spec.rb`.
+
 ## 024.264 a false `unknown-method` on a concern's class methods
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
@@ -16644,13 +17136,37 @@ WITH PATCH: count.unknown-method=1, stated as --expect-control=unknown-method:1 
 Cause: `previous_hook_parameter` was assigned BELOW `return super if @cref.nameless_context?` and restored unconditionally by the method-level `ensure`, so the early path restored nil.
 ```
 
+### Already closed on `main` by the guard split, before this entry was worked
+
+This is the user-visible statement of a defect recorded twice: the
+cause is `#visit_def_node`'s method-level `ensure` undoing saves its
+early `return` had skipped, which `024.258` and `024.259` record from
+the mechanism's side and which the guard split fixed. Re-driven against
+`98fc14e` — the tree that split landed in, and the base 0.2.17's scope
+frames were built on — the reproduction above no longer reproduces, and
+the scope-frame change did not touch it either:
+
+```
+`ParserService#summarize` of the concern from the reproduction above — a `def track_now` inside
+`base.class_eval do … end`, written before `base.extend(ClassMethods)` — reading
+`ancestor_facts` for the `concern_class_methods` relation.
+
+98fc14e (base):                    ["ClassMethods"]
+with the scope frames (this set):  ["ClassMethods"]
+```
+
+Pinned on `main` already, as `parser_def_frame_spec.rb`'s "keeps the
+included-hook parameter bound across a nameless def", with the same
+hook and no nested `def` as its control.
+
 ## 024.265 the same `ensure` popped the scope stack without a matching push, so one `def` inside a nameless
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
@@ -16675,6 +17191,32 @@ WITH PATCH: 1, 1, 1.
 The file already knew the rule: `#visit_namespace`'s comment says "Guarding with a bare early `return` above an `ensure` in this same method would have popped four stacks that were never pushed", and moved its pushes into `#within_namespace` for exactly this. `#visit_def_node` was the place where the shape was still written.
 ```
 
+### Already closed on `main` by the guard split, before this entry was worked
+
+This is the user-visible statement of a defect recorded twice: the
+cause is `#visit_def_node`'s method-level `ensure` popping a frame its
+early `return` had never pushed, which `024.258` records from the
+mechanism's side and which the guard split fixed. Re-driven against
+`98fc14e` — the tree that split landed in, and the base 0.2.17's scope
+frames were built on — the reproduction above no longer reproduces:
+
+```
+`ParserService#summarize` of `x = 1\nClass.new do\n  def a\n    q = 1\n  end\nend\nx = 2\nx\n`,
+reading the local_variable reference candidates' scope_ids.
+
+98fc14e (base):                    x@0:0 -> 1, q@3:4 -> 3, x@6:0 -> 1, x@7:0 -> 1
+with the scope frames (this set):  x@0:0 -> 1, q@3:4 -> 3, x@6:0 -> 1, x@7:0 -> 1
+```
+
+The entry recorded `nil` for the last two, against `7bce3c4`. What
+changed between them is `c612669`, not this change set — the scope
+frames keep the answer rather than producing it. Pinned on `main`
+already, as `parser_def_frame_spec.rb`'s "leaves the enclosing method
+body its own scope after a nameless def"; `parser_scope_frames_spec.rb`
+adds this entry's own fixture as "keeps every top-level local in the
+file's own frame across a nameless def", because the frames are now
+built a different way and the answer has to survive that too.
+
 ## 024.266 Find References and Rename ignore four of Prism's six local-variable node kinds
 
 ```yaml
@@ -16686,6 +17228,7 @@ user-visible-note: >
   same measurement. The published limitation is there; this entry keeps
   the second reproduction, which is the more precise of the two.
 target: 0.2.17
+released-in: 0.2.17
 ```
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
@@ -16860,6 +17403,460 @@ A generated Agent that answers hello, writes N stderr lines and then `exit 1` (t
 
 Identical on both sides. The pump always wins the race, because the teardown only starts once the reader thread sees stdout EOF, by which time the pump has drained. `#log_stderr(stderr_read, pid)` takes the pid as an argument now as a consequence of the slot going away, not as a fix; no example distinguishes the two, and I am not claiming one. The probe doubles as a control that the change did not break the labelling.
 ```
+
+## 024.271 Renaming a local leaves `def <local>.method` behind, so the file stops running
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`
+
+`ParserService#record_and_walk_def` pushes the `def`'s own
+local-variable frame before walking its children, and the receiver of
+`def <expr>.name` is one of those children. So the `ty` written in `def
+ty.outer` is recorded under the *method's* scope id while the `ty = …`
+that created it, and every later read, are under the enclosing one. The
+two get different `owner#scope_id` keys, Find References answers about
+one of them, and a rename rewrites every mention except the one on the
+`def` line -- which is `024.28`'s failure exactly: a WorkspaceEdit that
+leaves the file not running.
+
+Ruby evaluates that receiver in the enclosing scope, and the local is
+not visible inside the singleton body at all, `ruby 3.4.10`:
+
+```
+$ ruby -e '
+class Runner
+  def go
+    ty = Object.new
+    def ty.reads_outer
+      defined?(ty)
+    end
+    [ty.reads_outer, binding.local_variable_defined?(:ty)]
+  end
+end
+p Runner.new.go
+'
+# => [nil, true]
+```
+
+**Found while building `024.251`'s fix.** The scope example written for
+it asserted that `ty` and a local beside it shared one frame, passed,
+and could not have failed -- the fixture could not distinguish the two
+candidate answers. Strengthening it so that it could is what surfaced
+this, and the strengthened example no longer makes the claim, because
+the claim is false.
+
+Driven through the real server at `98fc14e`, source
+`class Runner\n  def go\n    ty = Thing.new\n    def ty.outer\n      :x\n    end\n    ty\n  end\nend\n`,
+caret on the assignment at line 2, `newName: "thing"`:
+
+```
+rename `ty` -> edits at lines [2, 6]
+
+class Runner
+  def go
+    thing = Thing.new
+    def ty.outer
+      :x
+    end
+    thing
+  end
+end
+```
+
+The parser's own view of the same file, three candidates for one local:
+
+```
+line 2   name=ty     scope=3
+line 3   name=ty     scope=4      <-- the receiver, in the def's frame
+line 6   name=ty     scope=3
+```
+
+**Direction.** The receiver has to be walked with the enclosing frame on
+top -- the push stays where it is, and the one child that is the
+receiver is visited with the frame temporarily off, restored in an
+`ensure` of its own. Not done in the change set that found it, for two
+reasons: the edit moves a walk relative to the frame push whose
+placement `024.258` and `024.259` exist to protect, and 0.2.17's
+scope-frame work is rebuilding that same method in parallel. It belongs
+there rather than bolted onto a change set about what rename can name.
+
+## 024.272 Renaming a local leaves every value-omitted shorthand behind, so the rename is still partial
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.2.17
+released-in: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
+
+`helper(limit:)` is `helper(limit: limit)`, `{a:}` is `{a: a}`, and
+`in {a:}` binds `a` from the key `a:`. Renaming the local needs
+`helper(limit: renamed)` — an **insert**, where `Rename::Planner`
+replaces one range with one `newText` built from the new name. Both
+edits that shape can express are wrong, and each is wrong silently:
+
+- replace the range Prism reports for the read, which carries the
+  colon, and `helper(limit:)` becomes `helper(renamed)` — a keyword
+  argument turned into a positional one, which still parses;
+- replace the name alone and it becomes `helper(renamed:)` — a
+  *different keyword* passed, which also still parses.
+
+0.2.17 takes neither. All three spellings are declined, by two rules
+that answer the same question for different shapes:
+`#record_local_variable`'s "is this range the name?" comparison, which
+answers *no* for the two whose range holds `name:`, and
+`#visit_implicit_node`, which declines the pattern binding — the one
+whose range **is** the bare name, so the comparison cannot see it. The
+occurrence is then not a reference candidate at all: rename leaves it as
+written, Find References does not list it, and what the user gets is a
+file where `helper(limit:)` names a local that no longer exists. That
+is the same partial rename `024.260` published, in the one shape
+0.2.17 did not close.
+
+**Ranked deliberately, not overlooked.** Section 0 puts the two wrong
+edits below saying nothing, and the first of them is what the engine
+did until 0.2.17 — so this entry records a narrowing that is an
+improvement and still not an answer. What it needs is an edit kind
+`Rename::Planner` does not have.
+
+### The pattern spelling is why the decline moved, and it is the one that mattered
+
+0.2.17's first attempt declined on a comparison —
+`location.slice == name.to_s` — which catches the two spellings whose
+reported range carries the colon **by accident** and says nothing
+about the third. A *pattern's* shorthand target is reported without
+the colon, so the comparison passes it and the edit rewrites the hash
+pattern's key:
+
+```
+$ ruby -e '
+require "prism"
+{ "in {a:}" => "case h\nin {a:}\nend\n",
+  "h = {a:}" => "a = 1\nh = {a:}\n",
+  "helper(limit:)" => "limit = 1\nhelper(limit:)\n" }.each { |label, src|
+  Prism.parse(src).value.breadth_first_search { |node|
+    next false unless node.is_a?(Prism::ImplicitNode)
+    p [label, node.value.class.name.split("::").last, node.value.location.slice]
+    false
+  }
+}
+'
+# => ["in {a:}", "LocalVariableTargetNode", "a"]
+# => ["h = {a:}", "LocalVariableReadNode", "a:"]
+# => ["helper(limit:)", "LocalVariableReadNode", "limit:"]
+# ruby 3.4.10
+```
+
+Rewriting a key changes which values the `case` matches, and with an
+`else` branch **nothing raises at all**:
+
+```
+$ ruby -e '
+def before(h) = (case h; in {a:} then a + 1; else :fell_through; end)
+def after(h)  = (case h; in {renamed:} then renamed + 1; else :fell_through; end)
+p before({ a: 1 })
+p after({ a: 1 })
+'
+# => 2
+# => :fell_through
+# ruby 3.4.10
+```
+
+Driven on real gem source — `net-imap-0.6.6/lib/net/imap/errors.rb`,
+caret on `tag`, `textDocument/rename`:
+
+```
+BASE 98fc14e         3 edits, lines 337, 338, 342.
+the comparison-only guard  4 edits — line 334's `response => TaggedResponse[tag:, name: status]`
+                           among them, so the destructuring looks for a key the response
+                           does not have and the method raises ArgumentError instead of working.
+asking Prism (shipped)     3 edits, lines 337, 338, 342 — the same as BASE.
+```
+
+So the comparison is necessary and is not sufficient, and asking the
+node above is asking Prism for the thing itself rather than inferring
+it from the text.
+
+**The node question is asked only where the comparison cannot answer**,
+which is the pattern. Declining the two read spellings there as well
+would be a line no example could fail on — the comparison has already
+declined them by the time it would run — and this project treats an
+unpinnable behavioural line as a defect of its own. What that leans on
+is the property in the session above, that both read ranges carry the
+colon, and that is not left to memory:
+`scripts/check_interpreter_sessions.rb` re-runs the session on every
+suite run, so a Prism that stopped including the colon fails a check
+instead of quietly widening a rename.
+
+**Found while closing `024.260`**, by counting where the location
+guard fires rather than assuming it fired only on the regexp shape it
+was written for; the pattern half was found by a review round driving
+the first attempt.
+
+```
+How often each spelling occurs, counted with Prism over every installed gem
+(7,647 files) and over the Ruby 3.4.10 stdlib (976 files):
+
+  stdlib      read, range carries the colon        65
+  gems        read, range carries the colon       221
+  gems        pattern binding, bare name            3   net-imap errors.rb:334, 337, 338
+
+Over the stdlib, the positions 0.2.17 stops recording relative to BASE are
+exactly 65, and every one of them is this shape — `JITState.new(iseq:, cfp:)`,
+`dump_disasm(from, to, test:)`, `Label.new(id: @label_id += 1, name:)`.
+```
+
+Pinned as `parser_scope_frames_spec.rb`'s "declines keyword-argument
+shorthand, whose location carries the colon", "declines a hash
+pattern's shorthand binding, whose range is the pattern's key too",
+"declines the same shorthand written as a hash literal's value" and
+"leaves a hash pattern's shorthand key as written", with "records a
+pattern binding the source writes out in full" as the control — so the
+decline is a decision with an example rather than a side effect nobody
+stated.
+
+### Closed by the other half of the same release, once the two halves met
+
+Filed as a narrowing on the argument that "the correct edit inserts where
+`Rename::Planner` replaces one range with one newText". A sibling cluster
+had already made the planner expand it: the whole `name:` is the site and
+`name: renamed` is the new text.
+
+The two never met because **both clusters wrote a `#visit_implicit_node`
+and the later silently replaced the earlier**, so the expansion was dead
+code. The suite said so — two examples failed the moment both landed —
+and one method now makes both decisions, because the two spellings that
+arrive there want opposite answers:
+
+- a **target** binds *from* the key (`in {a:}` matches the key `a`), so
+  expanding rewrites the key and changes which key is matched. Declined,
+  and `024.274`'s neighbour records what that costs.
+- a **read** is the value half (`{a:}` is `{a: a}`), so expanding is
+  right, and it is the one shape where replacing a range with a longer
+  string is not lossy.
+
+Driven through a real server after the merge, renaming `label`:
+
+```
+  [{ label: }, take(label:)]   ->   [{ label: renamed }, take(label: renamed)]
+```
+
+three edits, the file parses, and the keys are untouched.
+
+
+## 024.273 Renaming a local that is a parameter leaves the parameter behind, and the answer can be silent
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`
+
+`ParserService::Visitor` records a local-variable reference from the
+six node kinds that *use* a local. It records nothing from the node
+kinds that declare a **parameter** — `RequiredParameterNode`,
+`OptionalParameterNode`, the two keyword parameter nodes,
+`RestParameterNode`, `KeywordRestParameterNode`, `BlockParameterNode`
+— and a parameter is where most locals in real code are bound. So
+renaming `value` in `def double(value); value * 2; end` rewrites the
+body and leaves the `def` line, and the method stops working.
+
+**The failure is not always loud, and that is what makes this the
+largest of the rename findings rather than an untidy one.** Where the
+remaining occurrence assigns before reading, the renamed file runs and
+answers something else:
+
+```
+$ ruby -e '
+def before(names) = ((names = names || ["fallback"]); names)
+def after(names)  = ((renamed = renamed || ["fallback"]); renamed)
+p before(["given"])
+p after(["given"])
+'
+# => ["given"]
+# => ["fallback"]
+# ruby 3.4.10
+```
+
+Both halves reproduce at BASE `98fc14e`, so this predates 0.2.17 and
+is not caused by it.
+
+**Measured, because the size of it is the argument for taking it
+next.** Every local-variable symbol in 1,179 files of activerecord,
+activesupport, actionpack, railties, rbs and irb was renamed to a
+fresh same-length name, the edits applied, the file re-parsed, and the
+two syntax trees compared with the new name mapped back:
+
+```
+ruby rename_oracle.rb, 1,179 files, identical corpus on every side.
+
+                                renames   locals whose rename       of those, the name is
+                                checked   changes the meaning       a parameter in that file
+  BASE 98fc14e                   25,863                 9,157                        —
+  this release                   23,091                 7,813                    7,816 of 7,901*
+
+  renames that stop the file parsing:  BASE 130    this release 0
+
+* the parameter count is over this release's set including the 88 that are also
+  counted under another shape; 99% of what remains is this entry.
+```
+
+**0.2.17 adds instances to it**, and the entry says so rather than
+leaving it to be discovered: recording the compound spellings
+(`024.260`) makes a parameter renameable from an occurrence that used
+to have no candidate. Over the same corpus that is **one** local —
+`activerecord/lib/active_record/encryption/encryptable_record.rb`'s
+`attribute_names`, an optional parameter whose only other spelling is
+`|=`, where the renamed file runs and answers `true`. Against 130
+non-parsing renames and 1,344 broken locals removed, the release is
+taken with this recorded rather than held.
+
+**The direction** is to record the parameter's own range, declining
+the two keyword-parameter nodes for `024.272`'s reason — `def m(by:)`
+spells the method's interface, and rewriting it renames the keyword
+every caller passes, not the local. That is a capability change with
+its own corpus to drive, which is why it is an entry rather than a
+hunk in a review round.
+
+Pinned as `parser_scope_frames_spec.rb`'s "does not record a
+parameter's own range, so a rename leaves the `def` line behind", so
+the gap is a written decision rather than an absence.
+
+## 024.274 An underscore-prefixed target is not recorded, because Ruby lets one pattern bind it twice
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`
+
+A pattern may bind the same name twice only when the name begins with
+an underscore:
+
+```
+$ ruby -e '
+["case [1, 2]; in [_a, _a] then :ok; end",
+ "case [1, 2]; in [zz, zz] then :ok; end"].each { |src|
+  begin
+    p eval(src)
+  rescue SyntaxError => e
+    p e.message.include?("duplicated variable name")
+  end
+}
+'
+# => :ok
+# => true
+# ruby 3.4.10
+```
+
+Each of those two ranges really is the name and nothing else, so no
+question asked *at a range* can see the problem: it is the pair that
+is illegal. `Rename::Planner` builds one `newText` per range and has
+no way to know that two of its ranges share a pattern, so renaming
+`_a` to anything without the underscore produces a file that does not
+parse.
+
+`024.260` recorded `LocalVariableTargetNode` for the first time in
+0.2.17, which is what made those two ranges reachable. 0.2.17 declines
+an underscore-prefixed target rather than emitting the pair — the
+state before `024.260` for exactly those names, so no user loses an
+answer they had — and what that leaves is a partial rename: the
+binding is not rewritten and the reads are.
+
+```
+Driven, rbs-4.2.0/lib/rbs/prototype/helpers.rb, caret on `_rest` at line 50:
+
+  BASE 98fc14e            1 edit  (line 50)              — partial
+  without this decline    2 edits (lines 34 and 50)      — complete
+  shipped                 1 edit  (line 50)              — partial, as BASE
+
+Over the Ruby 3.4.10 stdlib, 976 files, the decline costs 202 positions and
+every one of them is an underscore-prefixed target; nothing else changes.
+```
+
+**The rule is blunter than Ruby's**, which keys on the name *and* on
+the name being bound twice by one pattern. Writing it precisely means
+a per-pattern set of repeated names, carried across
+`InNode`/`MatchRequiredNode`/`MatchPredicateNode` — three visits that
+must agree and one more piece of state. Measured against what that
+buys: over 23,091 corpus renames the blunt rule costs **one** local
+the precise one would have kept. So the blunt one is written, and this
+entry is where the precise one is recorded for whoever finds the cost
+higher than that.
+
+Pinned as `parser_scope_frames_spec.rb`'s "declines an
+underscore-prefixed target, which a pattern may repeat", "declines an
+underscore-prefixed multiple-assignment target" — the reach of the
+rule, so it is not inferred from prose — and "still records a target a
+pattern may not repeat" as the control.
+
+## 024.275 A workspace-identity example fails only in a full-suite run, and not reproducibly
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets that is known. It is filed because the example
+  guards a user-visible invariant -- that the root is the one the editor
+  named -- and an assertion that fails sometimes is either a defect in
+  the product or a defect in the test, and neither is acceptable
+  unexamined.
+target: 0.2.17
+```
+
+**Area:** `core/spec/ovallsp/server_workspace_identity_spec.rb`,
+`core/lib/ovallsp/server.rb` (`#client_workspace_root`)
+
+`takes the first workspace folder when the client sends no rootUri`, and
+its neighbour `keeps its own cwd when the named root does not exist`,
+failed in a full-suite run during 0.2.17. What is known, all measured:
+
+- Three consecutive full runs gave **2 failures, then 1, then 0**, in
+  declining step with the number of other agents running suites on the
+  same machine.
+- **The same seed is not deterministic**: `--seed 48603` gave one failure
+  and then, re-run, none. So it is not example ordering.
+- The file alone passes: six runs, and six more while four other suites
+  were deliberately loading the machine.
+- Pairing it with the neighbours most likely to leak — the cache specs,
+  the cold-index spec, the observation directory, the cache-sweep spec —
+  passes every time.
+
+**One hypothesis was tested and refuted**, and it is worth recording
+because it is the one this repository's own history points at. If a
+`Cache::Store` prune ever aimed outside its cache root it could delete
+another process's `Dir.mktmpdir` — the `/Applications` incident's shape,
+with the tmpdir parent shared by every agent on the machine. Driven:
+`remove_within` refuses any path not strictly inside the expanded cache
+root, and `prune_generations_of` is aimed by `File.dirname(current)` with
+`root` passed separately rather than derived. The containment holds.
+
+**What has not been established** is the value the assertion actually
+saw. Both runs that captured the message were the runs that passed, so
+the `got` side is unknown, and the two obvious readings —
+`File.directory?` answering false for a symlink whose target still
+exists, and the root simply never being adopted — have not been told
+apart.
+
+Filed rather than guessed at. The next full-suite run that reproduces it
+should capture the failure message before anything else; that one line
+decides whether this is the product or the test.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

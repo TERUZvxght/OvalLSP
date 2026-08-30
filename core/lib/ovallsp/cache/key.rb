@@ -38,7 +38,17 @@ module Ovallsp
       # keeping them in two files is why the bump was missed.
       # 3 since 0.2.12, when `FileSummary` gained `module_function_names`;
       # 4 in the same release, when it gained `buffer_id` (`024.118`).
-      SCHEMA_VERSION = 4
+      # 5 since 0.2.17, when `ReferenceCandidate` gained
+      # `implicit_hash_value`. Note where that field is: **not on
+      # `FileSummary` itself**, one hop down the `reference_candidates`
+      # list, and `Marshal.load` refuses on the same "struct size
+      # differs" either way -- so this constant's doc above, which says
+      # "FileSummary-*reachable*", is what covers it and the golden pair
+      # in `schema_version_spec.rb` did not: that pair compared
+      # `FileSummary.members`, which this change leaves untouched. It
+      # compares the reachable Data shapes now, for the same reason it
+      # exists at all.
+      SCHEMA_VERSION = 5
 
       module_function
 

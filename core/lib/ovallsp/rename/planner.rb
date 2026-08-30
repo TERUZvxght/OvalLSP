@@ -160,8 +160,9 @@ module Ovallsp
         conflicts = conflicts_for(symbol_id, new_name)
         return conflicted_plan(symbol_id, conflicts, generation) unless conflicts.empty?
 
-        locations = locations_for(symbol_id)
-        edits = locations.map { |(uri, range)| { uri: uri, range: range, new_text: new_name } }
+        edits = locations_for(symbol_id).map do |(uri, range, implicit_hash_value)|
+          { uri: uri, range: range, new_text: edit_text(symbol_id, new_name, implicit_hash_value) }
+        end
         Plan.new(target: symbol_id, confirmed_edits: edits, generation: generation)
       end
 
@@ -184,9 +185,42 @@ module Ovallsp
       # new name instead of renaming the identifier.
       def locations_for(symbol_id)
         decl_locations = @workspace_index.declarations_with_uri(symbol_id)
-                                          .filter_map { |(uri, decl)| [uri, decl.name_location] if decl.name_location }
-        ref_locations = @reference_index.references(symbol_id, minimum_confidence: :high).map { |r| [r.uri, r.location] }
+                                          .filter_map do |(uri, decl)|
+          [uri, decl.name_location, false] if decl.name_location
+        end
+        ref_locations = @reference_index.references(symbol_id, minimum_confidence: :high)
+                                         .map { |r| [r.uri, r.location, r.implicit_hash_value] }
         (decl_locations + ref_locations).uniq
+      end
+
+      # **Ruby's `{ name: }` / `take(name:)` shorthand is one token doing
+      # two jobs**, and `Reference#location` covers all of it because
+      # there is no sub-range that is only the value. Substituting the
+      # new name over it deletes the colon -- a hash literal becomes a
+      # syntax error, a keyword argument becomes positional -- and
+      # trimming the range to the identifier instead rewrites the *key*,
+      # which is a symbol in the hash and the callee's parameter name in
+      # the call. Neither is a rename of the local. Writing the key back
+      # out with the new name after it is:
+      #
+      #   $ ruby -e '
+      #   def take(name:) = name
+      #   label = "n"
+      #   p({ name: label })
+      #   p take(name: label)
+      #   '
+      #   # => {name: "n"}
+      #   # => "n"
+      #   # ruby 3.4.10
+      #
+      # The key is `simple_name(symbol_id)` rather than anything read
+      # back from the file, because the shorthand exists only where the
+      # two are the same word -- Ruby has no spelling of it where they
+      # differ.
+      def edit_text(symbol_id, new_name, implicit_hash_value)
+        return new_name unless implicit_hash_value
+
+        "#{simple_name(symbol_id)}: #{new_name}"
       end
 
       def simple_name(symbol_id)

@@ -205,6 +205,16 @@ here, with what each one is:
 | `spike/049-visit-def-guard` | `#visit_def_node`'s guard split out of the method carrying the `ensure`, and `@skip_block_frame` deleted — a one-shot flag set in one method and read eighty lines away | moving parts 5 → 1; suites identical both sides |
 | `spike/049-scope-locals` | scope frames carry Prism's own `#locals` and the frame that binds a name is picked, replacing a counter and a stack that had to stay in step | moving parts 6 → 3; two corpora, controls held, 0-line diffs |
 
+**Both have since been rebuilt on the release branch, and the branches
+are now only history.** `spike/049-visit-def-guard`'s content is on
+`main` as the guard split (`024.258`, `024.259`, and with them the
+user-visible `024.264` and `024.265`); `spike/049-scope-locals`'s is
+0.2.17's scope frames (`024.260` through `024.263`, `024.266`).
+Neither was applied — the two restructure one method and the second
+was rebuilt against the first — which is the same conclusion this
+section reaches from the other direction: the document is the record
+and the branch is the convenience.
+
 **Both are local to the machine the audit ran on and are not pushed.**
 That is deliberate rather than an oversight: their conclusions are in
 this document, 0.3.0 will re-derive from it, and the branches are a
