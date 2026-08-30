@@ -6,6 +6,102 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.17 — rename stops writing files that do not run
+
+Renaming a local variable rewrote most of its mentions and left the rest,
+which is worse than refusing: the editor hands back a file that no longer
+parses, or one that parses and means something else. Nine shapes of that
+are fixed, and the release closes 42 findings in all.
+
+The measurement that decided it now ships as `scripts/rename_oracle.rb`:
+every local in a corpus renamed through the real Server, the edits
+applied, the file re-parsed, and the sequence of local-variable names
+compared with the new name mapped back. Over 1,043 files of
+activesupport, activerecord, actionpack, railties and i18n — 3,123
+renames, with the refused, shadowed and skipped counts identical on both
+sides as the control:
+
+| | 0.2.16 | 0.2.17 |
+|---|---|---|
+| the file no longer parses | 6 | **0** |
+| it parses and means something else | 704 | **74** |
+
+The 74 that remain are one shape, published below.
+
+- **A local written as `+=`, `||=`, `&&=`, a multiple-assignment target,
+  a `for` variable, a `rescue => e` or a pattern is rewritten.** Four of
+  Prism's six local-variable node kinds were not read at all, so those
+  mentions were left behind.
+- **A local used inside a block is rewritten with the ones outside it.**
+  A block is both a new scope for its own parameters and a closure over
+  the enclosing one, and one frame per lexical node cannot say both. A
+  frame now carries the names its node binds, so `w` inside `[1].each { }`
+  is the same variable as the `w` outside it and a block parameter that
+  shadows a name is still a different one.
+- **An arrow lambda's own parameter is left alone** when a same-named
+  local outside it is renamed.
+- **Ruby's hash shorthand is expanded rather than overwritten.**
+  Renaming `name` where `{ name: }` is written produced
+  `{ label: }` — a hash whose key silently changed, and a keyword call
+  that started raising. It writes `{ name: label }` now.
+- **The `obj` in `def obj.thing` is rewritten** with the rest.
+- **A class or module written inside a `module` body can be renamed.**
+  The rename box was refused there outright.
+- **`module App; class Other::Runner` resolves its head the way Ruby
+  does.** Where no `App::Other` exists, this named a class that does not
+  exist and both directions inverted: the call that runs was reported
+  missing and the call that raises was not.
+- **One unresolvable `include` in a project's own RBS no longer removes
+  every answer that file's signatures supply.**
+- **A method on one branch of a union is no longer offered as though it
+  were on both** — and a union of two model classes gets Active Record's
+  own API, which was labelled one-branch-only.
+
+### Details
+
+**What a corpus-scale round trip found that fixtures did not.** The
+rename oracle above is the whole reason this release is shaped as it is.
+Nine of its shapes had passing specs beside them; what none of the specs
+could see was a *file that stops running*, because a fixture asserts the
+edits and not the program. Two review rounds then found the same class
+from the other side — a change that turns "the editor refuses" into "the
+editor rewrites your file wrongly" — and one of them is deliberately not
+fixed: `prepareRename` still declines a local until something else has
+warmed the reference index, and that refusal is load-bearing while the
+remaining shape is open.
+
+**The remaining shape, and why it is not fixed here.** Renaming a local
+whose declaration is a parameter leaves the parameter behind, because a
+parameter's own range is not recorded — so the uses that *were* rewritten
+stop naming anything. It is what the 74 above are, it is published in
+`KNOWN_LIMITATIONS`, and recording that range changes what every feature
+reads about a `def` line: its own change set, with its own corpus.
+
+**A privacy scan that could not see four spellings of a real path.** The
+home-path guard matched exactly one separator, so a Windows doubled
+backslash, a JSON-escaped solidus, a doubled slash and an agent
+scratchpad's hyphen-joined path all passed. Widening it found that last
+spelling of a real home directory already committed to this public
+repository, in a record written *after* the gap was reported, because
+nothing could see it. It is removed. The username in it is the published
+Marketplace publisher id; the directory layout was not.
+
+Three more holes in the same scan are closed: a file with one stray byte
+was dropped whole rather than read, a symlink was followed instead of
+having its stored target read — which is the string git actually commits
+— and the 28 annotated tag bodies, written by hand at release time and
+pushed publicly, were read by nothing at all.
+
+**The backlog was relabelled rather than cleared, and the release says
+so.** 0.2.16's closing pass retargeted 54 findings at 0.3.0, and 53 of
+them justified it with one of three paragraphs, identical within each
+group, each asserting how *that* finding had been verified. Driven, they
+were not: one had been fixed before 0.2.15 shipped, one carried its own
+contradicting reason a paragraph above, and one said no check existed for
+something a check has caught since 0.2.3. All 54 are re-triaged with a
+reason of their own, and a check now fails when open entries repeat a
+paragraph word for word.
+
 ## 0.2.16 — the backlog, driven
 
 Every open finding this release named was reproduced against the tree

@@ -200,6 +200,40 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0217">
+          <div class="tl-version">
+            <span class="v">0.2.17</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>Rename stops writing files that do not run</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Renaming a local rewrites every mention of it.</strong> Four of Prism&rsquo;s six local-variable node kinds were unread, so <code>+=</code>, <code>||=</code>, <code>&amp;&amp;=</code>, a multiple-assignment target, a <code>for</code> variable, a <code>rescue =&gt; e</code> and a pattern were all left behind &mdash; and the file the editor handed back stopped running.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A local used inside a block is rewritten with the ones outside it</strong>, while a block parameter that shadows the name is still left alone. A frame carries the names its node binds now, rather than one frame per lexical node.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Ruby&rsquo;s hash shorthand is expanded, not overwritten.</strong> Renaming <code>name</code> where <code>{ name: }</code> is written produced <code>{ label: }</code> &mdash; a hash whose key silently changed. It writes <code>{ name: label }</code>.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>A class or module written inside a <code>module</code> body can be renamed</strong>, and the <code>obj</code> in <code>def obj.thing</code> is rewritten with the rest.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>module App; class Other::Runner</code> resolves its head the way Ruby does.</strong> Where no <code>App::Other</code> exists, both directions were inverted: the call that runs was reported missing and the call that raises was not.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>One unresolvable <code>include</code> in a project&rsquo;s own RBS no longer removes every answer that file&rsquo;s signatures supply</strong>, and a method on one branch of a union is no longer offered as though it were on both.</span>
+            </li>
+          </ul>
+        </article>
+
         <article class="tl-item" id="v0216">
           <div class="tl-version">
             <span class="v">0.2.16</span>

@@ -195,10 +195,18 @@ RSpec.describe Ovallsp::AgentProcessManager do
     end
   end
 
+  # `024.269`. The `false` half was asserted five times over and the
+  # `true` half not once, so replacing `#alive?`'s whole body with
+  # `false` left every example in this file green -- the method round 13
+  # was written to make total could have been a constant, and a live
+  # Agent would have been reported as gone. The assertion before `#stop`
+  # is what makes the one after it mean anything.
   it "leaves no process behind after #stop" do
     @manager = build_manager
     @manager.start
     pid = @manager.pid
+
+    expect(@manager.alive?).to be(true)
 
     @manager.stop
 
@@ -303,6 +311,45 @@ RSpec.describe Ovallsp::AgentProcessManager do
   ensure
     begin
       real_kill&.call("KILL", pid)
+    rescue Errno::ESRCH, Errno::EPERM, TypeError
+      nil
+    end
+  end
+
+  # `024.268`. The example above says the SIGKILL escalation "must still
+  # get to run" and does not make it run: `#stop` sends `agent/shutdown`
+  # before the teardown, the `rails_minimal` fixture Agent obliges and
+  # exits, and `#wait_for_exit`'s first `WNOHANG` reaps the corpse -- so
+  # `wait_for_exit(2) || force_kill` short-circuits and never calls it.
+  # Replacing `#force_kill`'s first statement with a `raise` left the
+  # whole file green.
+  #
+  # The fixture here ignores `agent/shutdown` *and* traps SIGTERM, so
+  # nothing but SIGKILL can end it. That is what makes the assertion
+  # distinguishing rather than merely true: if the process is gone, the
+  # escalation ran.
+  #
+  # It costs the two seconds `#wait_for_exit`'s deadline is set to, and
+  # there is no way to reach the branch without paying them.
+  it "escalates to SIGKILL when the Agent ignores both shutdown and TERM" do
+    @manager = described_class.new(
+      command: RbConfig.ruby,
+      args: [File.join(core_root, "spec/fixtures/stubborn_agent/boot.rb")],
+      chdir: fixture_root, logger: logger, hello_timeout: 5
+    )
+    expect(@manager.start).to eq(:ready)
+    pid = @manager.pid
+    expect(process_alive?(pid)).to be(true)
+
+    @manager.stop
+
+    expect(@manager.pid).to be_nil
+    expect(process_alive?(pid)).to be(false),
+                                  "the fixture traps TERM and ignores shutdown, so it is still running unless " \
+                                  "`#force_kill` sent SIGKILL"
+  ensure
+    begin
+      Process.kill("KILL", pid) if pid
     rescue Errno::ESRCH, Errno::EPERM, TypeError
       nil
     end

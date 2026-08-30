@@ -412,7 +412,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.242`](#024242-a-class-held-in-a-local-variable-loses-an-rbs-overload) | fixed | 0.2.16 | A class held in a local variable loses an RBS overload |
 | [`024.243`](#024243-signature-help-says-nothing-for-a-receiverless-call-inside-a-module-body) | open | 0.3.0 | Signature help says nothing for a receiverless call inside a module … |
 | [`024.244`](#024244-preparerename-is-refused-on-any-class-or-module-written-inside-a-module-class-body-while-th) | fixed | 0.2.17 | prepareRename is refused on any class or module written inside a `mo… |
-| [`024.245`](#024245-server-prepare-rename-result-does-not-call-ensure-reference-index-current-while-referenc) | open | 0.2.17 | `Server#prepare_rename_result` does not call `#ensure_reference_inde… |
+| [`024.245`](#024245-server-prepare-rename-result-does-not-call-ensure-reference-index-current-while-referenc) | open | 0.3.0 | `Server#prepare_rename_result` does not call `#ensure_reference_inde… |
 | [`024.246`](#024246-one-unresolvable-include-in-a-project-s-own-rbs-makes-the-engine-report-a-method-the-same-file) | fixed | 0.2.17 | One unresolvable `include` in a project's own RBS makes the engine r… |
 | [`024.247`](#024247-a-constant-declared-only-in-a-signature-file-is-reported-cannot-resolve-constant-when-that-fil) | fixed | 0.2.17 | A constant declared only in a signature file is reported `cannot res… |
 | [`024.248`](#024248-diagnostics-engine-ancestor-names-calls-ancestorentry-name-with-no-identified-guard-so) | fixed | 0.2.17 | `Diagnostics::Engine#ancestor_names` calls `AncestorEntry#name` with… |
@@ -434,16 +434,16 @@ nobody can search is the recording habit without the benefit.
 | [`024.264`](#024264-a-false-unknown-method-on-a-concern-s-class-methods) | fixed | 0.2.17 | a false `unknown-method` on a concern's class methods |
 | [`024.265`](#024265-the-same-ensure-popped-the-scope-stack-without-a-matching-push-so-one-def-inside-a-nameless) | fixed | 0.2.17 | the same `ensure` popped the scope stack without a matching push, so… |
 | [`024.266`](#024266-find-references-and-rename-ignore-four-of-prism-s-six-local-variable-node-kinds) | done | 0.2.17 | Find References and Rename ignore four of Prism's six local-variable… |
-| [`024.267`](#024267-latent-spec-suite-only) | open | 0.2.17 | latent, spec suite only |
-| [`024.268`](#024268-agentprocessmanager-force-kill-the-sigkill-escalation-behind-a-sigterm-that-never-landed-i) | open | 0.2.17 | `AgentProcessManager#force_kill` — the SIGKILL escalation behind a S… |
-| [`024.269`](#024269-agentprocessmanager-alive-is-asserted-only-in-the-false-direction) | open | 0.2.17 | `AgentProcessManager#alive?` is asserted only in the false direction |
-| [`024.270`](#024270-not-a-defect-recorded-so-nobody-promotes-it-into-one) | open | 0.2.17 | Not a defect — recorded so nobody promotes it into one |
+| [`024.267`](#024267-latent-spec-suite-only) | done | 0.2.17 | latent, spec suite only |
+| [`024.268`](#024268-agentprocessmanager-force-kill-the-sigkill-escalation-behind-a-sigterm-that-never-landed-i) | fixed | 0.2.17 | `AgentProcessManager#force_kill` — the SIGKILL escalation behind a S… |
+| [`024.269`](#024269-agentprocessmanager-alive-is-asserted-only-in-the-false-direction) | fixed | 0.2.17 | `AgentProcessManager#alive?` is asserted only in the false direction |
+| [`024.270`](#024270-not-a-defect-recorded-so-nobody-promotes-it-into-one) | done | 0.2.17 | Not a defect — recorded so nobody promotes it into one |
 | [`024.271`](#024271-renaming-a-local-leaves-def-local-method-behind-so-the-file-stops-running) | fixed | 0.2.17 | Renaming a local leaves `def <local>.method` behind, so the file sto… |
 | [`024.272`](#024272-renaming-a-local-leaves-every-value-omitted-shorthand-behind-so-the-rename-is-still-partial) | fixed | 0.2.17 | Renaming a local leaves every value-omitted shorthand behind, so the… |
 | [`024.273`](#024273-renaming-a-local-that-is-a-parameter-leaves-the-parameter-behind-and-the-answer-can-be-silent) | open | 0.3.0 | Renaming a local that is a parameter leaves the parameter behind, an… |
 | [`024.274`](#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | open | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
-| [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | 0.2.17 | A workspace-identity example fails only in a full-suite run, and not… |
-| [`024.276`](#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | open | 0.2.17 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
+| [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | 0.2.18 | A workspace-identity example fails only in a full-suite run, and not… |
+| [`024.276`](#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | fixed | 0.2.17 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -15535,7 +15535,7 @@ a clean sweep.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.17
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/reference_resolver.rb`, `core/lib/ovallsp/server.rb`
@@ -15736,6 +15736,8 @@ This closes when the shapes close, which is why it keeps `target:
 was this change set's own to fix rather than the scope-frame work's: the
 two shorthand rows, where the recorded range covered the colon.
 `024.274`. The six that remain are what this is waiting on.
+
+**Retargeted in 0.2.17 to the release its blockers are in.** The refusal is the guard, and it stays until the shapes behind it are fixed: six of the eight remain, and the two largest — `024.273` and `024.274` — are at 0.3.0. Warming the index here before they are done converts "the editor refuses" into "the editor rewrites your file wrongly", which section 0.4 ranks the other way round. Nothing about this waits on 0.2.17; it waits on them.
 
 ## 024.246 One unresolvable `include` in a project's own RBS makes the engine report a method the same file
 
@@ -17241,14 +17243,20 @@ local-variable node kinds** are ignored, not "some compound forms".
 ## 024.267 latent, spec suite only
 
 ```yaml
-status: open
+status: done
 kind: defect
 user-visible: no
 user-visible-note: >
   Nothing a user meets directly. Recorded because it was found by
   driving the product and is invisible to a reader of the code.
-target: 0.2.17
+released-in: 0.2.17
 ```
+
+**It does not reproduce, and the entry was wrong when it was written.** `core/spec/meta/spec_constants_spec.rb` has carried the example "defines each one in only one file" since 0.2.3 -- it walks every spec file with Prism, collects the constants that land on Object, and fails on a name defined in two of them. That is exactly the check this entry says nothing does.
+
+It is not merely present, it is live: it fired during 0.2.17 on a `ROOT` written inside a new meta spec's `describe` block, which had silently taken the value of another file's `ROOT` and made that spec read its paths relative to the wrong directory. Caught in the same session, by the check this entry says does not exist.
+
+Closed as not reproducing rather than fixed. The hazard is real and is what the entry describes; the claim that nothing checks for it is what was false.
 
 **Area:** `core/lib/ovallsp/parser_service.rb`, `core/lib/ovallsp/rename/planner.rb`
 
@@ -17268,14 +17276,22 @@ Scope of the exposure at 7bce3c4: `/usr/bin/grep -rnE "^  [A-Z][A-Z0-9_]+ *=" co
 ## 024.268 `AgentProcessManager#force_kill` — the SIGKILL escalation behind a SIGTERM that never landed — i
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Nothing a user meets directly. Recorded because it was found by
   driving the product and is invisible to a reader of the code.
-target: 0.2.17
+released-in: 0.2.17
 ```
+
+**Fixed in 0.2.17.** `core/spec/fixtures/stubborn_agent/boot.rb` answers `agent/hello`, ignores `agent/shutdown`, and traps SIGTERM -- so nothing but the SIGKILL escalation can end it, and "the process is gone" is a distinguishing assertion rather than a true one.
+
+`mute_agent` was not enough on its own: it ignores shutdown but dies on the default TERM handler, so `#wait_for_exit` still succeeds and the branch is still not reached. Trapping TERM is the half that does it.
+
+The example costs the two seconds `#wait_for_exit`'s deadline is set to, and there is no way to reach the branch without paying them.
+
+A mutation entry removes the `ChildProcess.signal(@pid)` from `#force_kill`; the harness confirms the example fails without it, which is the direct evidence the branch is now reached at all. The older example this entry criticises keeps its own subject -- that the teardown still runs when TERM is refused -- and its comment no longer has to carry a claim about the escalation.
 
 **Area:** `core/lib/ovallsp/agent_process_manager.rb`
 
@@ -17307,14 +17323,18 @@ Fixed in this patch: the example now uses `spec/fixtures/mute_agent/boot.rb`, wh
 ## 024.269 `AgentProcessManager#alive?` is asserted only in the false direction
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Nothing a user meets directly. Recorded because it was found by
   driving the product and is invisible to a reader of the code.
-target: 0.2.17
+released-in: 0.2.17
 ```
+
+**Fixed in 0.2.17.** "leaves no process behind after #stop" asserts `alive?` is `true` before the stop as well as `false` after it. Five examples asserted the false direction and none the true one, so the whole body could be replaced with `false` and every example stayed green -- a live Agent reported as gone, with nothing able to say so.
+
+Pinned by a mutation entry that returns `false` from the method's first line, which the harness confirms the example now catches. `CLAUDE.md` classes an unpinned behavioural line as a defect in its own right, and this was one in the purest form: the method could have been a constant.
 
 **Area:** `core/lib/ovallsp/agent_process_manager.rb`
 
@@ -17338,14 +17358,18 @@ Fixed in this patch: "leaves no process behind after #stop" now asserts `expect(
 ## 024.270 Not a defect — recorded so nobody promotes it into one
 
 ```yaml
-status: open
+status: done
 kind: defect
 user-visible: no
 user-visible-note: >
   Nothing a user meets directly. Recorded because it was found by
   driving the product and is invisible to a reader of the code.
-target: 0.2.17
+released-in: 0.2.17
 ```
+
+**Closed as recorded rather than fixed**, which is what it was filed for: it is not a defect, it was driven on both sides at `LINES=400` and `LINES=20000`, three runs each at BASE and two after, and every line came back labelled with the Agent's pid. The pump always wins the race, because the teardown only begins once the reader thread sees stdout EOF and the pump has drained by then.
+
+Kept in the register so the next reader who notices `#log_stderr` taking the pid as an argument does not read it as a fix and re-raise it. The signature changed because the slot went away, not because anything was wrong.
 
 **Area:** `core/lib/ovallsp/agent_process_manager.rb`
 
@@ -17790,7 +17814,7 @@ user-visible-note: >
   named -- and an assertion that fails sometimes is either a defect in
   the product or a defect in the test, and neither is acceptable
   unexamined.
-target: 0.2.17
+target: 0.2.18
 ```
 
 **Area:** `core/spec/ovallsp/server_workspace_identity_spec.rb`,
@@ -17831,10 +17855,14 @@ Filed rather than guessed at. The next full-suite run that reproduces it
 should capture the failure message before anything else; that one line
 decides whether this is the product or the test.
 
+**Not reproduced in 0.2.17, and not fixed.** Three full-suite runs during this release — 2,791, 2,794 and 2,799 examples — came back with zero failures in this file, on a machine running nothing else. That is consistent with the load hypothesis the entry already records and is not evidence of anything on its own: the same file passed twelve times during the original investigation too.
+
+Moved to the patch line rather than left naming a release that is being cut, because there is nothing here to do until it fails again. The instruction stands and is the whole of the work: **the next full-suite run that reproduces it captures the failure message before anything else.** That one line decides whether this is the product or the test, and it has never been captured.
+
 ## 024.276 A closing pass retargeted 54 entries at 0.3.0, and 53 of them give one of two pasted reasons
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -17842,8 +17870,22 @@ user-visible-note: >
   defect that decides which user-visible defects get worked on: 35 open
   user-visible entries name a release that two scope documents say is
   not taking them, so nothing schedules them at all.
-target: 0.2.17
+released-in: 0.2.17
 ```
+
+**Fixed in 0.2.17**, both halves of the Direction.
+
+**All 54 re-triaged**, each with a reason of its own taken from its own body rather than from a template. The triage rule is `docs/PUBLISHING.md`'s own table: a wrong answer is a repair and belongs on the patch line, a silence turned into an answer is capability and belongs in a minor, and something about this repository's own checks or record is neither and belongs on the patch line. 25 moved to 0.2.18; 27 kept 0.3.0 on an argument of their own -- for `024.76`, `024.83` and `024.106` that argument really is the enumeration question, which is what `045` records as D2.
+
+Driving them found what the pasted paragraphs had hidden. **`024.163` had been fixed before 0.2.15 shipped** and was carried open through two releases under a sentence saying it still reproduced. **`024.20` carries its own Direction one paragraph above** the sentence claiming it needs to know what gems define. **`024.267`, re-driven while closing it, turned out to be wrong when written** -- the check it says nothing does has existed since 0.2.3 and fired during this release.
+
+**The countermeasure** is `DeferredFindings.repeated_paragraphs`, read by `deferred_findings_spec`. It groups open entries by verbatim paragraph and fails on any shared by three or more. The threshold is read off the distribution rather than picked: at the revision it was written, 570 paragraphs of 120 characters or more appeared in exactly one open entry and four appeared in two, then nothing until 6, 13, 21 and 40. Three sits in the gap.
+
+It cannot tell a true reason from a false one and does not try. What it can see is that forty entries gave the same one, which was available and unread. Five examples distinguish it -- a shared paragraph in three entries is reported, in two is not, the metadata block is not read (twenty-one entries share a `user-visible-note` legitimately), a resolved entry does not count, and a repeated line under the length floor does not.
+
+The sixth group it found was honest shared provenance: six entries repeating the same sentence about the measurement that surfaced them. That is what the Direction says to do with one -- write it once and cite it -- so they now carry a one-line pointer to `051` instead.
+
+What this does not do is make a reason true. A release that moves 25 entries to 0.2.19 can still give each a distinct sentence that says nothing. What it removes is the cheapest way to do it, and the one that happened.
 
 **Area:** `docs/design/tasks/024-deferred-review-findings.md` (the
 `target:` field and the closing paragraph on the entries counted below),

@@ -195,6 +195,40 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0217">
+          <div class="tl-version">
+            <span class="v">0.2.17</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>rename が「動かないファイル」を書き出さなくなりました</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>ローカル変数の rename が、その全出現を書き換えます。</strong> Prism の6種類あるローカル変数ノードのうち4種類が読まれていなかったため、<code>+=</code>・<code>||=</code>・<code>&amp;&amp;=</code>・多重代入の左辺・<code>for</code> の変数・<code>rescue =&gt; e</code>・パターンがすべて取り残され、エディタが返すファイルが動かなくなっていました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>ブロック内で使われるローカルが、ブロック外のものと一緒に書き換わります。</strong> 同名を隠すブロック仮引数は、これまで通り触りません。字句ノード1つにつき1フレームではなく、フレームがそのノードの束縛する名前を持つようになりました。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Ruby のハッシュ省略記法は、上書きではなく展開されます。</strong> <code>{ name: }</code> の <code>name</code> を rename すると <code>{ label: }</code> になっていました &mdash; キーが黙って変わったハッシュです。いまは <code>{ name: label }</code> と書きます。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>module</code> 本体の中に書かれたクラス・モジュールも rename できます。</strong> <code>def obj.thing</code> の <code>obj</code> も一緒に書き換わります。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong><code>module App; class Other::Runner</code> の先頭が Ruby と同じ規則で解決されます。</strong> <code>App::Other</code> が存在しない場合、両方向が逆転していました &mdash; 動く呼び出しが未定義と報告され、例外になる呼び出しは報告されない、という状態です。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>プロジェクト自身の RBS の解決できない <code>include</code> 1つが、そのファイルのシグネチャによる答えを全部消してしまうことはなくなりました。</strong> Union の片方の枝にしかないメソッドが、両方にあるかのように提示されることもなくなりました。</span>
+            </li>
+          </ul>
+        </article>
+
         <article class="tl-item" id="v0216">
           <div class="tl-version">
             <span class="v">0.2.16</span>
