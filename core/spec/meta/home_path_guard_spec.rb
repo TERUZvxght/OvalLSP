@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "tmpdir"
+
 require_relative "../../../scripts/check_home_paths"
 
 # 0.2.3's countermeasure for a class the norm alone failed to hold twice.
@@ -124,16 +126,100 @@ RSpec.describe "no real home directory path in tracked content" do
     expect(HomePaths.tree_offences).to be_empty
   end
 
-  # A file this scanner cannot read is a file it cannot clear, and until
-  # 0.2.5 both skips returned an empty list silently -- so a compiled
-  # artefact or a mis-encoded file simply did not exist as far as the
-  # guard's answer was concerned. It still skips them, for the reason its
-  # own comment gives, but it says so.
-  it "reports what it skipped rather than returning silence" do
-    skipped = HomePaths.skipped_files
+  # `024.187`. A NUL byte or one invalid UTF-8 sequence used to remove the
+  # **whole file** from the scan, plain-ASCII home path and all -- the
+  # rule was a property of the bytes rather than of the file, so a text
+  # file that acquired a stray byte silently stopped being checked and no
+  # example could fail on it. The bytes are scrubbed and read now.
+  #
+  # This is the distinguishing form, and it needs no fixture: the tree
+  # carries two files with NUL bytes in them, they are exactly the files
+  # the old rule declined, and `skipped_files` comes back empty only
+  # because they were read. Put the skip back and this fails.
+  # The distinguishing half: a name in the file's plain-ASCII portion is
+  # reported even though the file also holds a NUL. Asserting only that
+  # nothing was *skipped* would pass against a silent skip, which is the
+  # arrangement 0.2.5 already had to fix once.
+  it "reads a file with stray bytes rather than dropping it from the scan" do
+    Dir.mktmpdir("home-path-") do |root|
+      File.binwrite(File.join(root, "with-stray.md"), "built under #{path_for('frank')}\n\x00\n")
 
-    expect(skipped).to be_an(Array)
-    expect(skipped.map { |entry| entry[:reason] }.uniq - %i[binary invalid_encoding]).to be_empty
+      expect(HomePaths.offences_in_file("with-stray.md", root: root)).to eq(["with-stray.md:1: frank"])
+    end
+  ensure
+    HomePaths.skipped_files.clear
+  end
+
+  # And the same decision at tree scale, which is where it mattered: the
+  # two files the old rule declined are still here, and the scan now
+  # declines nothing at all.
+  it "declines no file in this tree, including the two that hold stray bytes" do
+    stray = HomePaths.files_with_stray_bytes
+
+    expect(stray.length).to be >= 2,
+                            "this example distinguishes nothing unless the tree still carries a file " \
+                            "with a NUL byte in it. It carried two."
+
+    HomePaths.tree_offences
+
+    expect(HomePaths.skipped_files).to be_empty,
+                                       "the scan declined #{HomePaths.skipped_files.inspect}. A skip is a file " \
+                                       "the check could not clear, and it must not be one it merely would not read."
+  end
+
+  # The one skip left is for a path that is not a file at all, and it is
+  # recorded rather than returned as silence -- which it was until
+  # `024.188`, a third silent skip beside the two 0.2.5 announced.
+  it "records a path it could not read as a file, rather than returning silence" do
+    Dir.mktmpdir("home-path-") do |root|
+      Dir.mkdir(File.join(root, "a-directory"))
+      HomePaths.skipped_files.clear
+
+      expect(HomePaths.offences_in_file("a-directory", root: root)).to be_empty
+      expect(HomePaths.skipped_files.map { |entry| entry[:reason] }).to eq([:not_a_file])
+      expect(HomePaths.skipped_files.first[:path]).to eq("a-directory")
+    end
+  ensure
+    HomePaths.skipped_files.clear
+  end
+
+  # `024.188`. For a symlink, git stores the *target string* as the whole
+  # blob -- so committing one publishes a real home path verbatim, and
+  # `File.file?`/`File.binread` both dereference: a live link made the
+  # scanner read bytes from outside the repository and report a line
+  # number in a file that is not in it, and a broken link returned `[]`
+  # with no skip recorded.
+  #
+  # Both halves, because they fail differently. The target here is
+  # deliberately broken: the stored string is the whole content, so
+  # nothing needs to exist at the other end, and pointing a fixture at a
+  # real home directory is the thing this check is about.
+  it "reads the target a symlink stores, not whatever it points at" do
+    Dir.mktmpdir("home-path-") do |root|
+      target = ["", "Users", "carol", "WorkSpace", "nothing-here"].join("/")
+      File.symlink(target, File.join(root, "link"))
+      HomePaths.skipped_files.clear
+
+      expect(HomePaths.offences_in_file("link", root: root)).to eq(["link:1: carol"])
+      expect(HomePaths.skipped_files).to be_empty
+    end
+  ensure
+    HomePaths.skipped_files.clear
+  end
+
+  it "does not read a symlinked file's contents in place of its stored target" do
+    Dir.mktmpdir("home-path-") do |root|
+      File.write(File.join(root, "real.txt"), "#{path_for('dave')}\n")
+      File.symlink(File.join(root, "real.txt"), File.join(root, "link"))
+
+      # The link stores an absolute path built by `mktmpdir`, which names
+      # no home directory; the file it points at names one. Reporting
+      # `dave` here would mean the scanner had followed the link.
+      expect(HomePaths.offences_in_file("link", root: root)).to be_empty
+      expect(HomePaths.offences_in_file("real.txt", root: root)).to eq(["real.txt:1: dave"])
+    end
+  ensure
+    HomePaths.skipped_files.clear
   end
 
   it "reads an ellipsis as prose about the class rather than a name" do
@@ -157,7 +243,71 @@ RSpec.describe "no real home directory path in tracked content" do
     expect(files.size).to be > 100
   end
 
-  it "skips compiled payloads, which carry build paths that are not authored" do
-    expect(HomePaths.offences_in_file("does/not/exist.bundle")).to be_empty
+  # `024.189`. The pattern required exactly one separator, so every other
+  # on-disk spelling of the *same real path* was invisible. Each fixture
+  # is assembled, never typed: this file is scanned by the pattern it
+  # tests.
+  #
+  # The last of them is the one that was not hypothetical. Widening the
+  # scan found that spelling of the maintainer's own home directory
+  # already committed to this public repository, in a register entry
+  # written after `024.189` was raised -- because nothing could see it.
+  it "catches every on-disk spelling of one real path, not just the first" do
+    name = "carol"
+
+    doubled_slash    = ["", "Users", name, "project"].join("//")
+    doubled_backslash = ["C:", "Users", name, "project"].join("\\\\")
+    json_escaped     = ["", "Users", name, "project"].join("\\/")
+    hyphen_mangled   = ["", "Users", name, "WorkSpace", "Github"].join("-")
+
+    [doubled_slash, doubled_backslash, json_escaped, hyphen_mangled].each do |spelling|
+      expect(HomePaths.names_in(spelling)).to eq([name]), "missed a spelling of the same real path"
+    end
+  end
+
+  # And the other side of widening: the hyphen form must not read an
+  # ordinary hyphenated phrase as a path. `home` is deliberately not in
+  # that pattern for this reason -- the scanner's own output strings
+  # contain one.
+  it "does not read a hyphenated English phrase as a path" do
+    expect(HomePaths.names_in("check-home-paths: clean")).to be_empty
+    expect(HomePaths.names_in("a-single-nul-clears-a-whole-file-from-the-home-path-scan")).to be_empty
+  end
+
+  # `024.190`. An annotated tag's body is written by hand at release time
+  # and pushed to the public remote, and it is not a commit message --
+  # so neither the tree scan, nor the commit half, nor gitleaks read a
+  # byte of it. Release time is exactly when 0.2.3 pasted a build
+  # machine's home directory into a commit message.
+  #
+  # The floor is what makes this more than a green light: a wrong format
+  # string, or a clone fetched without tags, returns an empty list that
+  # looks exactly like a clean one.
+  it "reads the annotated tag bodies, and there are some to read" do
+    bodies = HomePaths.tag_bodies
+    substantial = bodies.count { |_, body| body.strip.length > 20 }
+
+    expect(substantial).to be >= 20,
+                           "only #{substantial} tag(s) came back with a body. Either the format string " \
+                           "stopped reading `%(contents)`, or this clone was fetched without tags -- and " \
+                           "in both cases the scan below is clean because it read nothing."
+    expect(HomePaths.tag_offences).to be_empty
+  end
+
+  # The floor above says the tag bodies were read; this says `--messages`
+  # actually reports them. Without it, deleting the tag half from
+  # `message_offences` leaves every example green -- which is what the
+  # mutation manifest found on the first run.
+  it "reports the tag half under --messages, not only when asked directly" do
+    allow(HomePaths).to receive(:shallow?).and_return(false)
+    allow(HomePaths).to receive(:commit_offences).and_return([])
+    allow(HomePaths).to receive(:tag_offences).and_return(["tag v0.0.0-synthetic: carol"])
+
+    expect(HomePaths.message_offences).to eq(["tag v0.0.0-synthetic: carol"])
+  end
+
+  it "reports which tag, so a failure names the thing to rewrite" do
+    expect(HomePaths.names_in("released from #{path_for('erin')}")).to eq(["erin"])
+    expect(HomePaths.tag_bodies.map(&:first)).to all(match(/\A\S+\z/))
   end
 end

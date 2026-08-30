@@ -43,6 +43,10 @@ require "tmpdir"
 RSpec.describe "numbers documented about this tree" do
   TREE_ROOT = File.expand_path("../../..", __dir__)
 
+  # `mutex_call_sites` is defined with `def self.` so `DERIVERS` can call
+  # it while the constant is being built. Examples reach it through this.
+  def described_class_module = self.class.parent_groups.last
+
   # `@<rev>` makes the claim historical: it is derived from the file as
   # it stood at that revision, not as it stands now.
   #
@@ -66,9 +70,22 @@ RSpec.describe "numbers documented about this tree" do
     # Every `Mutex.new` in the shipped library. The architecture
     # document's threading section states the lock order and was wrong
     # about this count on the release that introduced it.
-    "mutex-sites" => lambda { |_rev = nil|
-      Dir.glob(File.join(TREE_ROOT, "core", "lib", "**", "*.rb"))
-         .sum { |f| File.read(f, encoding: "UTF-8").scan("Mutex.new").length }
+    #
+    # **Parsed, not grepped.** `024.186`: this counted the *substring*,
+    # so a comment writing `Mutex.new` while explaining how RBS renders a
+    # type name counted as a lock. The deriver answered 31 for 30 real
+    # sites and the architecture document asserted 31 with a green guard
+    # behind it -- the check passing for a reason other than the one it
+    # states, which is this file's own stated failure mode. Prism is
+    # already a dependency and cannot be fooled by prose.
+    #
+    # Present-tense only: `-> {}` rather than `->(rev = nil) {}`, so a
+    # dated claim naming it is refused rather than silently answered from
+    # the working tree (`024.184`).
+    "mutex-sites" => lambda {
+      Dir.glob(File.join(TREE_ROOT, "core", "lib", "**", "*.rb")).sum do |file|
+        mutex_call_sites(Prism.parse(File.read(file, encoding: "UTF-8")).value)
+      end
     },
     # Entries in the deferred-findings register, and the open defects in
     # it -- the number a reader of `036` is deciding against.
@@ -97,8 +114,38 @@ RSpec.describe "numbers documented about this tree" do
     # writes the bare `#name` form instead, so the receiver is what tells
     # a call from a citation without stripping comments first.
     "cref-defines-surface-parser-sites" => ->(_rev = nil) { parser_calls("defines_surface?") },
-    "cref-declares-singleton-parser-sites" => ->(_rev = nil) { parser_calls("declares_singleton?") }
+    "cref-declares-singleton-parser-sites" => ->(_rev = nil) { parser_calls("declares_singleton?") },
+    # `046`'s "What is kept" keeps every unticked acceptance box in tasks
+    # 001-022 and states the count. `024.165` found the *reason* beside it
+    # false; `024.160` found this file's counts unmarked and several of
+    # them stale. The count itself re-derives, so it gets a deriver rather
+    # than a rewrite.
+    #
+    # The range is by filename prefix, which is what "tasks 001-022"
+    # means here: `022.2` is inside it and `023.1` is not.
+    "unticked-acceptance-boxes-001-022" => lambda { |_rev = nil|
+      Dir.glob(File.join(TREE_ROOT, "docs", "design", "tasks", "*.md"))
+         .select { |path| File.basename(path).match?(/\A(?:00|01|02[0-2])/) }
+         .sum { |path| File.read(path, encoding: "UTF-8").scan(/^- \[ \]/).length }
+    }
   }.freeze
+
+  # `Mutex.new` as a call, wherever it appears in the tree of nodes: a
+  # receiver named `Mutex` and the method `new`. A comment is not a node,
+  # which is the whole point.
+  def self.mutex_call_sites(node)
+    return 0 unless node.is_a?(Prism::Node)
+
+    here =
+      if node.is_a?(Prism::CallNode) && node.name == :new &&
+         node.receiver.is_a?(Prism::ConstantReadNode) && node.receiver.name == :Mutex
+        1
+      else
+        0
+      end
+
+    here + node.compact_child_nodes.sum { |child| mutex_call_sites(child) }
+  end
 
   def self.parser_calls(name)
     File.read(File.join(TREE_ROOT, "core", "lib", "ovallsp", "parser_service.rb"), encoding: "UTF-8")
@@ -121,20 +168,87 @@ RSpec.describe "numbers documented about this tree" do
     out
   end
 
-  def claims
-    patterns = %w[docs/**/*.md core/lib/**/*.rb core/spec/**/*.rb vscode/src/**/*.ts]
-    # This file writes a sample marker to exercise the scanner, so it
-    # scans everything but itself.
-    patterns.flat_map { |glob| Dir.glob(File.join(TREE_ROOT, glob)) }
-            .reject { |path| path.end_with?(File.basename(__FILE__)) }
-            .sort.flat_map do |path|
-      File.read(path, encoding: "UTF-8").lines.each_with_index.filter_map do |line, index|
-        next unless (m = line.match(MARKER))
+  # `024.181`. This read four hand-written globs -- which is the pre-fix
+  # shape of the citation scanner ninety lines below, the one whose own
+  # comment says "a guard whose scope is a list somebody remembered has
+  # the defect it was built to catch". A marker in a repo-root document,
+  # in either changelog, in `scripts/`, in `site/` or in `.github/` was
+  # inert, including one naming a deriver that does not exist.
+  #
+  # `RepoFiles.list` is the same enumeration the other tree-wide scanners
+  # read, and it includes untracked files, so a marker written into a new
+  # file is checked before it is committed.
+  def scanned_files
+    RepoFiles.list(TREE_ROOT).reject do |relative|
+      # This file writes sample markers to exercise the scanner, so it
+      # scans everything but itself.
+      relative.end_with?(File.basename(__FILE__))
+    end
+  end
 
-        { path: path.delete_prefix("#{TREE_ROOT}/"), line: index + 1, name: m[:name],
-          rev: m[:rev], value: Integer(m[:value]) }
+  def claims
+    scanned_files.sort.flat_map do |relative|
+      absolute = File.join(TREE_ROOT, relative)
+      next [] unless File.file?(absolute) && !File.symlink?(absolute)
+
+      claims_in(relative, File.binread(absolute).dup.force_encoding(Encoding::UTF_8).scrub)
+    end
+  end
+
+  # Split out so an example can drive it against planted text: the two
+  # rules below are about *a line*, and the tree happens to carry no line
+  # that breaks either, so a test using the tree would distinguish
+  # nothing.
+  def claims_in(relative_path, content)
+    content.lines.each_with_index.flat_map do |line, index|
+      # `024.185`. `line.match` returns the first `MatchData` only, so a
+      # second marker on the same line escaped every example that reads
+      # this. Two claims on one line is the natural shape, not an exotic
+      # one -- a sentence stating a total and how many of them are open
+      # puts both on one line.
+      line.to_enum(:scan, MARKER).map { Regexp.last_match }.map do |m|
+        { path: relative_path, line: index + 1, name: m[:name],
+          rev: m[:rev], value: Integer(m[:value]), prose: line }
       end
     end
+  end
+
+  # `024.159`. The marker's integer and the number a reader sees were
+  # separate strings, and nothing compared them -- so the guarantee as
+  # literally stated held while the thing it exists for, the number in
+  # the sentence, was free to rot, and rotted invisibly because the
+  # marker beside it reads as proof it was checked.
+  #
+  # Thousands separators are stripped before comparing: the documents
+  # write `1,503` and the marker writes the digits.
+  def prose_numbers(line)
+    line.gsub(MARKER, " ").scan(/\d[\d,]*/).map { |n| n.delete(",").to_i }
+  end
+
+  # `024.184`. `MARKER` accepts `@<rev>` on any deriver and the comment
+  # above it explains at length that this is what makes a historical
+  # number checkable. Two derivers honoured it; a third took the
+  # revision and discarded it, the `_` prefix suppressing the lint that
+  # would have said so, and answered from the working tree.
+  #
+  # The consequence is inverted, which is what made it worse than a
+  # missing check: a historical document carrying the **true** count for
+  # its own revision fails, and the message tells the author to write
+  # today's number into a document about last month.
+  #
+  # A deriver's arity is the declaration now. `->(rev = nil)` answers
+  # about a revision; `-> {}` answers about the present and a dated claim
+  # naming it is refused.
+  def derive(claim)
+    deriver = DERIVERS.fetch(claim[:name])
+    return deriver.call(claim[:rev]) if deriver.arity != 0
+
+    if claim[:rev]
+      raise "#{claim[:path]}:#{claim[:line]}: #{claim[:name]} is dated @#{claim[:rev]}, and its deriver " \
+            "answers about the present tree only. Either drop the revision or give the deriver one."
+    end
+
+    deriver.call
   end
 
   it "names a deriver for every claim, so none can be marked and left uncomputed" do
@@ -147,13 +261,25 @@ RSpec.describe "numbers documented about this tree" do
 
   it "matches what the tree actually says" do
     wrong = claims.select { |c| DERIVERS.key?(c[:name]) }.filter_map do |c|
-      actual = DERIVERS.fetch(c[:name]).call(c[:rev])
+      actual = derive(c)
       next if actual == c[:value]
 
       "#{c[:path]}:#{c[:line]}: #{c[:name]} says #{c[:value]}, the tree has #{actual}"
     end
 
     expect(wrong).to be_empty, "#{wrong.join("\n")}\nRe-derive the number rather than editing the prose around it."
+  end
+
+  # And the number the *reader* takes away, which is a different string
+  # from the marker's and was checked by nothing at all (`024.159`).
+  it "says in its prose what its marker says" do
+    disagreeing = claims.reject { |c| prose_numbers(c[:prose]).include?(c[:value]) }
+
+    expect(disagreeing).to be_empty,
+                          "#{disagreeing.map { |c| "#{c[:path]}:#{c[:line]}: the marker says #{c[:value]}, " \
+                            "the sentence says #{prose_numbers(c[:prose]).inspect}" }.join("\n")}\n" \
+                          "The marker is re-derived every run; the sentence beside it is not, so they " \
+                          "must be the same number or the marker is proof of nothing."
   end
 
   # Every deriver is attached to a claim somewhere. Without this the file
@@ -174,13 +300,19 @@ RSpec.describe "numbers documented about this tree" do
   # And the marker machinery is exercised rather than assumed: the file's
   # positive control used to call one deriver directly and assert it was
   # not 27, which passes whether or not anything scans for markers at all.
+  #
+  # Through `claims_in` rather than a second `line.match` written out
+  # here: the inline copy is what let `024.185` past -- the control
+  # re-implemented the scan, so it carried the same first-match-only bug
+  # as the thing it was controlling for and agreed with it.
   it "reads a claim out of a document and compares it" do
     Dir.mktmpdir do |dir|
       path = File.join(dir, "sample.md")
       File.write(path, "the tree has 4 of them <!-- measured: sample-claim = 4 -->\n")
-      parsed = File.read(path).lines.filter_map { |line| line.match(MARKER) }
 
-      expect(parsed.map { |m| [m[:name], Integer(m[:value])] }).to eq([["sample-claim", 4]])
+      parsed = claims_in("sample.md", File.read(path, encoding: "UTF-8"))
+
+      expect(parsed.map { |c| [c[:name], c[:value]] }).to eq([["sample-claim", 4]])
     end
   end
 
@@ -189,6 +321,88 @@ RSpec.describe "numbers documented about this tree" do
   # architecture section shipped wrong.
   it "would have caught the count that shipped wrong" do
     expect(DERIVERS.fetch("mutex-sites").call).not_to eq(27)
+  end
+
+  # `024.186`. It also has to catch the count the *deriver* got wrong,
+  # which is a different failure and had a green guard in front of it for
+  # two releases: counting the substring made a comment about how RBS
+  # renders a type name into a lock.
+  it "counts a lock, not a sentence that mentions one" do
+    parsed = Prism.parse(<<~RUBY).value
+      class Sample
+        # `Mutex.new` in prose, explaining something else entirely.
+        LOCK = Mutex.new
+        def other = "Mutex.new"
+      end
+    RUBY
+
+    expect(described_class_module.mutex_call_sites(parsed)).to eq(1)
+  end
+
+  # `024.185`. `String#match` returns the first `MatchData` only, so a
+  # second marker on one line escaped every example that reads `claims`.
+  # A sentence stating a total and how many of them are open puts both
+  # markers on one line, which is the natural shape rather than an
+  # exotic one.
+  it "reads every marker on a line, not only the first" do
+    line = "12 entries, 3 of them open " \
+           "<!-- measured: sample-total = 12 --> <!-- measured: sample-open = 3 -->\n"
+
+    found = claims_in("sample.md", line)
+
+    expect(found.map { |c| [c[:name], c[:value]] })
+      .to eq([["sample-total", 12], ["sample-open", 3]])
+  end
+
+  # `024.159`. The marker's integer and the number a reader takes away
+  # were separate strings, and nothing compared them.
+  it "notices a sentence that disagrees with the marker beside it" do
+    agreeing = claims_in("s.md", "the tree has 4 <!-- measured: sample = 4 -->\n").first
+    drifted  = claims_in("s.md", "the tree has 9 <!-- measured: sample = 4 -->\n").first
+
+    expect(prose_numbers(agreeing[:prose])).to include(agreeing[:value])
+    expect(prose_numbers(drifted[:prose])).not_to include(drifted[:value])
+  end
+
+  # The documents write thousands separators and the marker writes
+  # digits, so the comparison strips them. Without this the rule above
+  # would fail on every large number and get relaxed away.
+  it "reads a thousands separator as the same number" do
+    claim = claims_in("s.md", "1,503 citations <!-- measured: sample = 1503 -->\n").first
+
+    expect(prose_numbers(claim[:prose])).to include(1503)
+  end
+
+  # `024.184`. A dated claim on a deriver that answers about the present
+  # tree was silently answered from the working tree -- and the
+  # consequence is inverted, so the *correct* historical number is what
+  # failed, with a message telling the author to write today's count into
+  # a document about last month.
+  it "refuses a dated claim whose deriver answers about the present only" do
+    present_only = DERIVERS.find { |_, d| d.arity.zero? }
+    dated_capable = DERIVERS.find { |_, d| !d.arity.zero? }
+
+    expect(present_only).not_to be_nil, "no present-only deriver left to distinguish against"
+    expect(dated_capable).not_to be_nil, "no dated-capable deriver left to distinguish against"
+
+    dated = { path: "s.md", line: 1, name: present_only.first, rev: "abcdef1", value: 0, prose: "" }
+    expect { derive(dated) }.to raise_error(/answers about the present tree only/)
+
+    undated = { path: "s.md", line: 1, name: present_only.first, rev: nil, value: 0, prose: "" }
+    expect { derive(undated) }.not_to raise_error
+  end
+
+  # `024.181`. The scan read four hand-written globs -- the pre-fix shape
+  # of the citation scanner in this same file, whose comment says a guard
+  # whose scope is a list somebody remembered has the defect it was built
+  # to catch. A marker in a repo-root document, either changelog,
+  # `scripts/`, `site/` or `.github/` was inert.
+  it "reads the whole tree, not a list of directories somebody remembered" do
+    files = scanned_files
+
+    expect(files).to include("CLAUDE.md", "vscode/CHANGELOG.md", "scripts/preflight.rb")
+    expect(files).to include(a_string_starting_with("site/"))
+    expect(files.size).to be > 100
   end
 
   # The same failure without a number: a pointer into the register that

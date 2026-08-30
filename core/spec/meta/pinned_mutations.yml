@@ -201,6 +201,48 @@
   to: "    {}\n"
   spec: spec/meta/untracked_visibility_spec.rb
   example: "answers about the directory it was given, not about an inherited GIT_DIR"
+- why: "the shipped-target guard reading every open entry -- 024.173, without which an open friction or roadmap entry naming a released version passes silently, which is the state 024.124 built this guard to make unreachable."
+  file: scripts/deferred_findings.rb
+  from: "    open_entries(markdown).filter_map do |number, fields|"
+  to: "    open_defects(markdown).filter_map do |number, fields|"
+  spec: spec/meta/deferred_findings_spec.rb
+  example: "notices an open entry of any kind, not only a defect"
+- why: "released-in having a reader at all -- 024.173, without which sixteen entries can assert a release that never shipped and only the index renderer ever looks at the value."
+  file: scripts/deferred_findings.rb
+  from: "      next if key && highest && (key <=> highest) == 1\n"
+  to: "      next if key\n"
+  spec: spec/meta/deferred_findings_spec.rb
+  example: "reports a version at or below the highest published that was never published"
+- why: "the home-path pattern's second separator -- 024.189, without which a doubled slash, a doubled backslash and a JSON-escaped solidus all spell a real home path the scan cannot see."
+  file: scripts/check_home_paths.rb
+  from: "[/\\\\]{1,2}(?:Users|home)[/\\\\]{1,2}"
+  to: "[/\\\\](?:Users|home)[/\\\\]"
+  spec: spec/meta/home_path_guard_spec.rb
+  example: "catches every on-disk spelling of one real path, not just the first"
+- why: "the hyphen-mangled spelling -- 024.189, the one that was not hypothetical: a scratchpad path joined with hyphens carried the maintainer's own username into this public tree and no scan could see it."
+  file: scripts/check_home_paths.rb
+  from: "text.scan(MANGLED_PATTERN).flatten"
+  to: "[]"
+  spec: spec/meta/home_path_guard_spec.rb
+  example: "catches every on-disk spelling of one real path, not just the first"
+- why: "reading the string a symlink stores -- 024.188, without which git commits the target verbatim while the scanner dereferences and reads something that is not what would be pushed."
+  file: scripts/check_home_paths.rb
+  from: "        File.readlink(absolute)\n"
+  to: "        \"\"\n"
+  spec: spec/meta/home_path_guard_spec.rb
+  example: "reads the target a symlink stores, not whatever it points at"
+- why: "scanning a file that holds a stray byte -- 024.187, without which one NUL removes the whole file from the scan including the plain-ASCII home path beside it, and nothing reports the skip."
+  file: scripts/check_home_paths.rb
+  from: "    as_utf8(content).lines"
+  to: "    return [] if content.include?(\"\\0\")\n\n    as_utf8(content).lines"
+  spec: spec/meta/home_path_guard_spec.rb
+  example: "reads a file with stray bytes rather than dropping it from the scan"
+- why: "the annotated-tag half of the message scan -- 024.190, a hand-written body pushed to the public remote that neither the tree scan nor the commit scan nor gitleaks reads."
+  file: scripts/check_home_paths.rb
+  from: "    commit_offences + tag_offences\n"
+  to: "    commit_offences\n"
+  spec: spec/meta/home_path_guard_spec.rb
+  example: "reports the tag half under --messages, not only when asked directly"
 - why: "utf8's internal encoding -- 024.208, the half of the locale fix nothing pinned: without it an inherited RUBYOPT -E transcodes every read and a UTF-8 needle stops comparing."
   file: scripts/utf8.rb
   from: "Encoding.default_internal = nil\n"

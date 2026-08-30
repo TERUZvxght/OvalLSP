@@ -16,12 +16,14 @@ require "json"
 #   spec/e2e/capabilities_spec.rb         same fixture
 #   spec/meta/client_behaviour_spec.rb    needs vscode/node_modules
 #
-# Measured with the fixture unavailable: the e2e suite gives "45
-# examples, 0 failures, 41 pending" and exit status 0.
+# Measured with the fixture unavailable: the e2e suite reports every one
+# of its examples as pending, zero failures, and exit status 0.
 #
 # **An example count cannot see this**, which is the trap. A skipped
-# example is still an example, so "45 examples, 0 failures" is what a
-# fully skipped file looks like. `scripts/preflight.rb`'s first version
+# example is still an example, so a full count with zero failures is
+# exactly what a fully skipped file looks like. The figure that used to
+# stand here was a frozen one, and it had drifted from the suite it
+# named by the time anyone re-read it -- `024.196`. `scripts/preflight.rb`'s first version
 # asserted a non-zero count and therefore could not fail in the one case
 # it existed for -- found by review round 1. This logic lived only inside
 # `.github/workflows/ci.yml`, forty lines of Ruby embedded in YAML that

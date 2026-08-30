@@ -183,12 +183,68 @@ module DeferredFindings
   # sees it while there is still something to do about it. Reading both
   # keeps the later signal as a backstop without waiting for it
   # (`024.233`).
+  # Every *open* entry, whatever its kind. `024.173`: this read
+  # `open_defects`, which also filters `kind == "defect"`, so an open
+  # `friction` or `roadmap` entry naming a shipped release passed
+  # silently -- exactly the state `024.124` was written to make
+  # unreachable, in the guard written to make it so.
   def open_entries_targeting_a_shipped_release(markdown, artifacts, changelog = nil)
     shipped = published_versions(artifacts) | changelog_versions(changelog)
-    open_defects(markdown).filter_map do |number, fields|
+    open_entries(markdown).filter_map do |number, fields|
       target = fields["target"]
       "#{number} (#{target})" if target && shipped.include?(target)
     end
+  end
+
+  def open_entries(markdown)
+    entries(markdown).reject { |_, fields| RESOLVED.include?(fields["status"]) }
+  end
+
+  # The mirror direction, which was unguarded outright. `released-in:`
+  # sat in `KNOWN_KEYS` and its only reader anywhere was the index
+  # renderer's display fallback -- so sixteen entries could assert a
+  # release that had not shipped, and if the branch went out under
+  # another number the register would re-create `024.124`'s situation in
+  # the key added to prevent it, with nothing able to say so.
+  #
+  # A resolved entry names a version this project actually published, or
+  # one it has written release notes for -- the same two sources, and for
+  # the same reason: `RELEASE_ARTIFACTS.md` gains its row after the VSIX
+  # is published, so reading it alone means the mistake is reported only
+  # once it has shipped.
+  # A fix that was rolled back before release belongs to no version, and
+  # says so. A deliberate value with a reason, like the home-path
+  # scanner's synthetic names -- not a blank, which would read as
+  # somebody forgetting to fill it in.
+  REVERTED = "reverted"
+
+  def resolved_entries_naming_an_unshipped_release(markdown, artifacts, changelog = nil)
+    shipped = published_versions(artifacts) | changelog_versions(changelog)
+    highest = shipped.map { |v| version_key(v) }.max
+
+    resolved(markdown).filter_map do |number, fields|
+      released = fields["released-in"].to_s
+      next if released == REVERTED || shipped.include?(released)
+
+      # A version above everything published is the release being
+      # prepared, and an entry naming it is the ordinary state of a
+      # branch mid-flight. What must not stand is a value at or below the
+      # highest published version that was never published -- which is
+      # `024.124`'s situation arriving through this key instead of
+      # `target:`, and is exactly what sixteen entries asserted while
+      # `version.rb` still held the release before it.
+      key = version_key(released)
+      next if key && highest && (key <=> highest) == 1
+
+      "#{number} (released-in: #{released.empty? ? '(none)' : released})"
+    end
+  end
+
+  def version_key(version)
+    parts = version.to_s.split(".")
+    return nil unless parts.length == 3 && parts.all? { |p| p.match?(/\A\d+\z/) }
+
+    parts.map(&:to_i)
   end
 
   # A version with a changelog section is one this project has written
@@ -205,10 +261,66 @@ module DeferredFindings
   AREA_PATH = %r{`((?:core|vscode|scripts|docs|site|\.github)/[A-Za-z0-9._/-]+)`}
 
   def area_paths(markdown)
-    markdown.scan(/#{HEADING_LINE.source}(.*?)(?=^## 024\.|\z)/m).to_h do |number, body|
+    bodies(markdown).to_h do |number, body|
       line = body[AREA_LINE, 1].to_s
       [number, line.scan(AREA_PATH).flatten]
     end
+  end
+
+  # Every entry as `[number, prose]`, the prose running to the next
+  # heading. Two readers want exactly this and had a copy each until
+  # `024.276` needed a third.
+  def bodies(markdown)
+    markdown.scan(/#{HEADING_LINE.source}(.*?)(?=^## 024\.|\z)/m)
+  end
+
+  # A paragraph that several open entries give word for word.
+  #
+  # `024.276`. 0.2.16's closing pass retargeted 54 entries and gave 53 of
+  # them one of three pasted paragraphs, each asserting something about
+  # how *that* entry had been checked -- driven with a control in its own
+  # fixture, confirmed live against HEAD, blocked on the gem index. On an
+  # entry whose Area is a document, none of the three can mean what it
+  # says: a document has no fixture to put a control in.
+  #
+  # This cannot tell a true reason from a false one, and does not try.
+  # What it can see is that forty entries gave the same one -- a signal
+  # that was there and unread, and one grouping to read it.
+  #
+  # **The threshold is read off the distribution rather than chosen.** At
+  # the revision this was written, 570 paragraphs at or above the length
+  # floor below appeared in exactly one open entry and four appeared in
+  # two; then nothing until 6, 13, 21 and 40. Three sits in the gap.
+  #
+  # A repeated paragraph that is honest shared provenance -- one
+  # measurement that surfaced six entries -- is reported too. Its repair
+  # is to write it once and have the six cite it, which is the better
+  # record anyway.
+  MIN_SHARED_ENTRIES = 3
+
+  # Short enough to catch a pasted justification, long enough that a
+  # sentence two entries would independently write is not a finding.
+  MIN_PARAGRAPH_CHARS = 120
+
+  def repeated_paragraphs(markdown)
+    open_numbers = entries(markdown).reject { |_, f| RESOLVED.include?(f["status"]) }.keys
+    seen = Hash.new { |h, k| h[k] = [] }
+    bodies(markdown).each do |number, body|
+      next unless open_numbers.include?(number)
+
+      # The metadata block is structured data with its own guards, and
+      # entries that share a `user-visible-note` verbatim share it
+      # legitimately -- 21 of them say "Internal" the same way. This is
+      # about the prose reason underneath it.
+      prose = body.sub(/```yaml\n.*?```\n/m, "")
+      prose.split(/\n[ \t]*\n/).each do |paragraph|
+        text = paragraph.gsub(/\s+/, " ").strip
+        next if text.length < MIN_PARAGRAPH_CHARS
+
+        seen[text] << number unless seen[text].include?(number)
+      end
+    end
+    seen.select { |_, numbers| numbers.length >= MIN_SHARED_ENTRIES }
   end
 
   def resolved(markdown)

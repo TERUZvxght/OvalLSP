@@ -663,8 +663,11 @@ still exits 0.
 
 It reads **each example's status**, not the count. A count cannot see
 this: a skipped example is still an example, so a fully skipped file
-reports "45 examples, 0 failures, 41 pending" and satisfies any
-count-based rule. This paragraph described the count-based version until
+reports every one of its examples as pending, zero failures, and exit 0,
+which satisfies any count-based rule. (This paragraph quoted a specific
+example count until 0.2.17, and so did both scripts, each attributing it
+to a different file and none of them to one that still had that many —
+`024.196`.) This paragraph described the count-based version until
 round 3 found it — which meant the operating document was instructing a
 reader to rely on the exact check `024.148` records as unable to fail in
 the case it existed for. Twice in one

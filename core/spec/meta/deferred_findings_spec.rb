@@ -690,6 +690,83 @@ RSpec.describe "deferred findings metadata" do
     MD
   end
 
+  # `024.173`. `024.124` states this guard as failing "on an **open**
+  # entry whose target is in that table". It was built on `open_defects`,
+  # which also filters `kind == "defect"`, so an open `friction` or
+  # `roadmap` entry naming a shipped release passed silently -- the state
+  # `024.124` was written to make unreachable, in the guard written to
+  # make it so. Latent when found: the open non-defect entries were all
+  # roadmap and none named a published version.
+  it "notices an open entry of any kind, not only a defect" do
+    %w[friction roadmap].each do |kind|
+      planted = deferred + "\n" + entry_with(target: "0.2.13").sub("kind: defect", "kind: #{kind}")
+
+      expect(DeferredFindings.open_entries_targeting_a_shipped_release(planted, artifacts))
+        .to include(a_string_including("0.2.13")), "an open #{kind} entry naming a shipped release passed"
+    end
+  end
+
+  # And the mirror direction, which had no reader at all: `released-in:`
+  # sat in `KNOWN_KEYS` and was read only by the index renderer, as a
+  # display fallback. Sixteen entries once asserted a release while
+  # `version.rb` still held the one before it and no artifact row
+  # existed, so the branch shipping under any other number would have
+  # left them claiming a release that never happened, with nothing able
+  # to say so.
+  describe "released-in has a reader" do
+    it "accepts the release being prepared, which is above everything published" do
+      planted = deferred + "\n" + resolved_entry_released_in("99.0.0")
+
+      expect(DeferredFindings.resolved_entries_naming_an_unshipped_release(planted, artifacts, changelog))
+        .to be_empty
+    end
+
+    it "reports a version at or below the highest published that was never published" do
+      planted = deferred + "\n" + resolved_entry_released_in("0.1.999")
+
+      expect(DeferredFindings.resolved_entries_naming_an_unshipped_release(planted, artifacts, changelog))
+        .to include(a_string_including("0.1.999"))
+    end
+
+    it "reports a resolved entry that names no release at all" do
+      planted = deferred + "\n" + resolved_entry_released_in(nil)
+
+      expect(DeferredFindings.resolved_entries_naming_an_unshipped_release(planted, artifacts, changelog))
+        .to include(a_string_including("(none)"))
+    end
+
+    # A fix rolled back before release belongs to no version and says so.
+    # Two entries in the register carry this today.
+    it "accepts a fix that was reverted rather than released" do
+      planted = deferred + "\n" + resolved_entry_released_in(DeferredFindings::REVERTED)
+
+      expect(DeferredFindings.resolved_entries_naming_an_unshipped_release(planted, artifacts, changelog))
+        .to be_empty
+    end
+
+    it "leaves the register itself alone" do
+      expect(DeferredFindings.resolved_entries_naming_an_unshipped_release(deferred, artifacts, changelog))
+        .to be_empty
+    end
+  end
+
+  def resolved_entry_released_in(version)
+    line = version.nil? ? "" : "released-in: #{version}\n"
+    <<~MD
+      ## #{unspellable_number(998)} A synthetic resolved entry
+
+      ```yaml
+      status: fixed
+      kind: defect
+      #{line}user-visible: no
+      user-visible-note: >
+        Synthetic.
+      ```
+
+      **Area:** `core/lib`
+    MD
+  end
+
   it "notices an open entry planted on a shipped release" do
     planted = deferred + "\n" + entry_with(target: "0.2.13")
 
@@ -733,5 +810,109 @@ RSpec.describe "deferred findings metadata" do
     expect(missing).to be_empty,
                        "open entries whose Area names a path that does not exist: #{missing.join(", ")}. " \
                        "That path is the first thing whoever picks the entry up will open."
+  end
+
+  # `024.276`. 0.2.16's closing pass retargeted 54 entries and gave 53 of
+  # them one of three paragraphs, pasted word for word, each asserting
+  # something about how *that* entry had been checked: driven with a
+  # control in its own fixture, confirmed live against HEAD, blocked on
+  # the gem index. Seven of the entries carrying the fixture claim have
+  # an Area entirely under `docs/`, where there is no fixture to put a
+  # control in.
+  #
+  # Nothing in the tree could tell a reason written for an entry from one
+  # pasted onto it, which is what made it cheap to do and invisible
+  # afterwards. Reading the repetition is one grouping.
+  #
+  # The threshold is read off the distribution rather than picked: at the
+  # revision this was written 570 paragraphs at or above the length floor
+  # appeared in exactly one open entry and four appeared in two, then
+  # nothing until 6, 13, 21 and 40.
+  describe "an entry's reason is its own" do
+    def synthetic(number_tail, prose, status: "open")
+      <<~MD
+        ## #{unspellable_number(number_tail)} A synthetic entry
+
+        ```yaml
+        status: #{status}
+        kind: defect
+        user-visible: no
+        user-visible-note: >
+          Synthetic. Every entry built here shares this note, so an example
+          that reported it would be reporting the metadata block.
+        target: 0.9.9
+        ```
+
+        **Area:** `core/lib`
+
+        #{prose}
+      MD
+    end
+
+    # Long enough to clear the floor, and distinct per call so an example
+    # controls exactly how many entries share one.
+    def paragraph(word)
+      "This paragraph is #{word}, and it is written out at a length that clears the floor the " \
+        "check applies so that a sentence two entries might independently write is not mistaken " \
+        "for a justification that was pasted onto both of them."
+    end
+
+    it "reports a paragraph three open entries give word for word" do
+      shared = paragraph("shared")
+      md = [synthetic(991, shared), synthetic(992, shared), synthetic(993, shared)].join("\n")
+
+      groups = DeferredFindings.repeated_paragraphs(md)
+
+      expect(groups.values).to contain_exactly(
+        [unspellable_number(991), unspellable_number(992), unspellable_number(993)]
+      )
+    end
+
+    # The distinguishing half. Without it the example above passes against
+    # a check that reports every paragraph appearing more than once, and
+    # the threshold would be asserting nothing.
+    it "leaves a paragraph only two entries share" do
+      shared = paragraph("shared")
+      md = [synthetic(991, shared), synthetic(992, shared), synthetic(993, paragraph("its own"))].join("\n")
+
+      expect(DeferredFindings.repeated_paragraphs(md)).to be_empty
+    end
+
+    # Twenty-one open entries share a `user-visible-note` verbatim and
+    # share it legitimately -- it is structured data with its own guards
+    # above. The subject here is the prose reason underneath.
+    it "does not read the metadata block" do
+      md = (991..993).map { |n| synthetic(n, paragraph("number #{n}")) }.join("\n")
+
+      expect(DeferredFindings.repeated_paragraphs(md)).to be_empty
+    end
+
+    # A resolved entry's prose is history. Three entries sharing a
+    # paragraph is only a finding while three of them are still open.
+    it "counts only entries that are open" do
+      shared = paragraph("shared")
+      md = [synthetic(991, shared),
+            synthetic(992, shared, status: "fixed"),
+            synthetic(993, shared, status: "done")].join("\n")
+
+      expect(DeferredFindings.repeated_paragraphs(md)).to be_empty
+    end
+
+    it "leaves a repeated line shorter than the floor" do
+      short = "Not fixed here."
+      md = (991..993).map { |n| synthetic(n, short) }.join("\n")
+
+      expect(DeferredFindings.repeated_paragraphs(md)).to be_empty
+    end
+
+    it "gives every open entry a reason written for it rather than pasted onto it" do
+      groups = DeferredFindings.repeated_paragraphs(deferred)
+      report = groups.map { |text, numbers| "#{numbers.length}x (#{numbers.join(', ')}): #{text[0, 90]}" }
+
+      expect(groups).to be_empty,
+                        "open entries repeating a paragraph word for word:\n#{report.join("\n")}\n" \
+                        "A reason pasted onto an entry is not a reason for it; shared provenance " \
+                        "belongs in one place the entries cite."
+    end
   end
 end

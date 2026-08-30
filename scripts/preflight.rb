@@ -58,10 +58,18 @@ end
 
 # `024.148`. The count above is not enough on its own and this is the
 # check that needs more: a **skipped example is still an example**, so a
-# fully skipped `real_rails_spec.rb` reports "45 examples, 0 failures, 41
-# pending" and satisfies any count-based rule. The first version of this
-# file had only the count, and therefore could not fail in the one case
-# it existed for -- found by review round 1.
+# suite that skipped in full reports every one of its examples as
+# pending, zero failures, and exit 0 -- which satisfies any count-based
+# rule. The first version of this file had only the count, and therefore
+# could not fail in the one case it existed for -- found by review round
+# 1.
+#
+# No example figure is quoted here. `024.196`: one was, in three places,
+# attributed to a different file each time and matching none of them by
+# the release that found it -- this comment named `real_rails_spec.rb`
+# for a figure belonging to the e2e suite, while the entry it cites as
+# its authority gives that file's real count. A suite's size is a number
+# about this tree; the shape is what the argument rests on.
 #
 # `scripts/check_suites_ran.rb` reads the JSON formatter's per-example
 # status, and is the same script ci.yml runs.
