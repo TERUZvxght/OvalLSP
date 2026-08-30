@@ -134,11 +134,34 @@ module RenameOracle
     found
   end
 
-  def line_and_character(source, offset)
-    before = source[0...offset]
-    line = before.count("\n")
-    character = offset - (before.rindex("\n")&.+(1) || 0)
-    [line, character]
+  # **The caret, in the coordinate system LSP actually uses**, and this
+  # was wrong in the oracle's first two runs.
+  #
+  # The first version sliced the whole source by *characters* up to
+  # Prism's `start_offset`, which is a **byte** offset. Any multi-byte
+  # character anywhere earlier in the file moved the caret, and the
+  # server then answered about whatever symbol it landed on --
+  # `activesupport`'s `redis_cache_store.rb` put it on `failsafe` and the
+  # run recorded ten edits renaming a *method* as a failed local rename.
+  # Every number the oracle produced before this was part measurement and
+  # part that.
+  #
+  # Prism gives the line and the byte column within it directly, and the
+  # column is converted to UTF-16 units per line -- the same conversion
+  # `Index::SourceLocation.to_position` makes, because it is the
+  # protocol's rule rather than this engine's choice. Reading it from the
+  # engine's own recorded range instead would make the caret depend on
+  # the thing under test.
+  def caret_of(location)
+    [location.start_line - 1, utf16_column(location.slice_lines.lines.first || "", location.start_column)]
+  end
+
+  def utf16_column(line, byte_column)
+    return 0 if byte_column <= 0
+    return byte_column if line.ascii_only?
+
+    prefix = line.byteslice(0, byte_column) || ""
+    prefix.encode("UTF-16LE", invalid: :replace, undef: :replace).bytesize / 2
   end
 
   def apply(source, edits)
@@ -153,8 +176,8 @@ module RenameOracle
     lines.join
   end
 
-  def rename_once(uri, source, name, offset, new_name)
-    line, character = line_and_character(source, offset)
+  def rename_once(uri, source, name, location, new_name)
+    line, character = caret_of(location)
     input =
       frame(jsonrpc: "2.0", method: "textDocument/didOpen",
             params: { textDocument: { uri: uri, text: source, version: 1, languageId: "ruby" } }) +
@@ -201,7 +224,7 @@ module RenameOracle
       end
 
       counts[:renames] += 1
-      edits = rename_once(uri, source, name, location.start_offset, new_name)
+      edits = rename_once(uri, source, name, location, new_name)
       if edits.nil? || edits.empty?
         counts[:refused] += 1
         next

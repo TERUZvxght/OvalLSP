@@ -343,4 +343,77 @@ RSpec.describe "Ovallsp::Server textDocument/prepareRename and textDocument/rena
     )
     expect(Prism.parse(lines.join)).to be_success
   end
+
+  # `024.278`. **A local variable never spans files**, and its identity
+  # had no file in it. `Semantic::ReferenceResolver#resolve_local` builds
+  # a synthetic owner of `"#{owner}##{scope_id}"`; scope ids are counted
+  # per file, so two files whose locals land on the same counter and the
+  # same cref owner share one identity.
+  #
+  # A top-level `def` has no owner at all, so any two files written that
+  # way collide on their first method's locals. Renaming `ks` in one
+  # rewrote `ks` in the other -- a WorkspaceEdit against a file the user
+  # never opened, which is a worse failure than the nine shapes 0.2.17
+  # fixed: those left one file wrong, this one edits a second file.
+  #
+  # Two classes are enough to make it not require top-level code, and
+  # that is asserted separately below.
+  it "renames a local in one file without touching a same-named local in another" do
+    source_a = "def m\n  ks = 1\n  ks\nend\n"
+    source_b = "def n\n  ks = 2\n  ks\nend\n"
+    input =
+      did_open("file:///a.rb", source_a) +
+      did_open("file:///b.rb", source_b) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 1, character: 2 }, newName: "zz" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    changes = sent_messages.first[:result][:changes]
+    expect(changes.keys).to eq([:"file:///a.rb"])
+    expect(changes[:"file:///a.rb"].length).to eq(2)
+  end
+
+  # The same collision without top-level code: one class reopened in two
+  # files, which is ordinary Rails. Both locals are `::Widget#<n>` with
+  # the same counter.
+  it "renames a local in one file of a reopened class without touching the other" do
+    source_a = "class Widget\n  def m\n    ks = 1\n    ks\n  end\nend\n"
+    source_b = "class Widget\n  def n\n    ks = 2\n    ks\n  end\nend\n"
+    input =
+      did_open("file:///wa.rb", source_a) +
+      did_open("file:///wb.rb", source_b) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///wa.rb" }, position: { line: 2, character: 4 }, newName: "zz" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    changes = sent_messages.first[:result][:changes]
+    expect(changes.keys).to eq([:"file:///wa.rb"])
+  end
+
+  # The control, and the reason the fix is "put the file in the identity"
+  # rather than "only ever edit the caret's file": a *method* rename must
+  # still cross files, and does.
+  it "still renames a method's call sites in other files" do
+    input =
+      did_open("file:///w.rb", "class Widget\n  def build\n  end\nend\n") +
+      did_open("file:///u.rb", "class User\n  def go\n    Widget.new.build\n  end\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///w.rb" }, position: { line: 1, character: 6 }, newName: "assemble" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    changes = sent_messages.first[:result][:changes]
+    expect(changes.keys).to contain_exactly(:"file:///w.rb", :"file:///u.rb")
+  end
 end

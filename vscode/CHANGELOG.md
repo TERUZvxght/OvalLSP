@@ -24,14 +24,18 @@ sides as the control:
 | | 0.2.16 | 0.2.17 |
 |---|---|---|
 | the file no longer parses | 6 | **0** |
-| it parses and means something else | 704 | **74** |
+| it parses and means something else | 711 | **58** |
 
-The 74 that remain are one shape, published below.
+Of the 58 that remain, 57 are one shape and 1 is another; both are
+published below.
 
 - **A local written as `+=`, `||=`, `&&=`, a multiple-assignment target,
   a `for` variable, a `rescue => e` or a pattern is rewritten.** Four of
   Prism's six local-variable node kinds were not read at all, so those
-  mentions were left behind.
+  mentions were left behind. An *underscore-prefixed* target is the
+  exception and is still left behind, deliberately — Ruby lets one
+  pattern bind such a name twice, and two edits that are each correct
+  would then stop the file parsing.
 - **A local used inside a block is rewritten with the ones outside it.**
   A block is both a new scope for its own parameters and a closure over
   the enclosing one, and one frame per lexical node cannot say both. A
@@ -51,6 +55,16 @@ The 74 that remain are one shape, published below.
   does.** Where no `App::Other` exists, this named a class that does not
   exist and both directions inverted: the call that runs was reported
   missing and the call that raises was not.
+- **A local closed over inside a `module_eval`, `class_eval`,
+  `instance_eval` or `*_exec` block is rewritten with the rest.** Those
+  blocks change `self`, and a local's identity was following that — so
+  the mention inside the block was treated as a different variable,
+  left behind, and then named nothing.
+- **Renaming a local no longer edits a same-named local in another
+  file.** A local's identity had no file in it, so two files whose
+  scope counters and enclosing class agreed shared one — which for a
+  top-level `def`, or a class reopened across files, is ordinary. The
+  editor was writing into files you never opened.
 - **One unresolvable `include` in a project's own RBS no longer removes
   every answer that file's signatures supply.**
 - **A method on one branch of a union is no longer offered as though it
@@ -70,12 +84,25 @@ fixed: `prepareRename` still declines a local until something else has
 warmed the reference index, and that refusal is load-bearing while the
 remaining shape is open.
 
-**The remaining shape, and why it is not fixed here.** Renaming a local
-whose declaration is a parameter leaves the parameter behind, because a
-parameter's own range is not recorded — so the uses that *were* rewritten
-stop naming anything. It is what the 74 above are, it is published in
-`KNOWN_LIMITATIONS`, and recording that range changes what every feature
-reads about a `def` line: its own change set, with its own corpus.
+**The remaining shapes, and why they are not fixed here.** 57 of the 58
+are a local whose declaration is a parameter: a parameter's own range is
+not recorded, so the parameter is left behind and the uses that *were*
+rewritten stop naming anything. The 58th is a local bound by a regexp
+named capture, which fails *silently* — the renamed name is a
+defined-but-nil local, so a guard on it goes false and nothing raises.
+Both are published in `KNOWN_LIMITATIONS`. The first changes what every
+feature reads about a `def` line; the second has two candidate fixes
+that trade completeness against safety. Each is its own change set, with
+its own corpus.
+
+**And the measurement that produced these numbers was wrong twice before
+it was right.** The oracle's caret was computed by slicing the source by
+characters up to a *byte* offset, so any multi-byte character earlier in
+a file moved it — in one case onto a different symbol entirely, which the
+run then recorded as a failed local rename. An earlier version of this
+section published `704` and `74` from that. The numbers above are the
+re-measured ones; what produced the wrong ones is recorded rather than
+quietly corrected.
 
 **A privacy scan that could not see four spellings of a real path.** The
 home-path guard matched exactly one separator, so a Windows doubled

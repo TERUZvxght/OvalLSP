@@ -204,7 +204,7 @@
           <ul class="feature-list">
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>ローカル変数の rename が、その全出現を書き換えます。</strong> Prism の6種類あるローカル変数ノードのうち4種類が読まれていなかったため、<code>+=</code>・<code>||=</code>・<code>&amp;&amp;=</code>・多重代入の左辺・<code>for</code> の変数・<code>rescue =&gt; e</code>・パターンがすべて取り残され、エディタが返すファイルが動かなくなっていました。</span>
+              <span><strong>ローカル変数の rename が、<code>+=</code>・<code>||=</code>・<code>&amp;&amp;=</code>・多重代入の左辺・<code>for</code> の変数・<code>rescue =&gt; e</code>・パターンとして書かれた出現も書き換えます。</strong> Prism の6種類あるローカル変数ノードのうち4種類が読まれていなかったため、それらが取り残され、エディタが返すファイルが動かなくなっていました。宣言が仮引数であるローカルと、アンダースコアで始まる左辺は、いまも取り残されます &mdash; どちらも既知の制限に記載しています。</span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>

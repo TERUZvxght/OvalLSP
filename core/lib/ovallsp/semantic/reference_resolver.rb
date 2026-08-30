@@ -55,10 +55,26 @@ module Ovallsp
         end
       end
 
+      # **A local variable never spans files, and the identity has to say
+      # so.** Scope ids are counted per file, so `"#{owner}##{scope_id}"`
+      # alone puts two files' locals under one id whenever their counters
+      # and their cref owner agree -- which for a top-level `def` (owner
+      # nil) is the first method of any two such files, and for a class
+      # reopened across files is ordinary Rails.
+      #
+      # Renaming one then produced a WorkspaceEdit against a file the
+      # user never opened. That is a worse failure than a rename that
+      # leaves one file wrong, and it is why the `uri` -- already a
+      # parameter here for the location -- is part of the identity now.
+      # `024.278`.
+      #
+      # A method rename must still cross files and does: it is only this
+      # kind whose scope is one file by construction, and only this
+      # branch that is qualified.
       def resolve_local(candidate, uri, generation)
         symbol_id = Index::SymbolId.new(
-          kind: :local_variable, owner: "#{candidate.owner}##{candidate.scope_id}", name: candidate.name,
-          discriminator: nil
+          kind: :local_variable, owner: "#{uri}\u0000#{candidate.owner}##{candidate.scope_id}",
+          name: candidate.name, discriminator: nil
         )
         build_reference(candidate, symbol_id, :high, :source, nil, uri, generation)
       end

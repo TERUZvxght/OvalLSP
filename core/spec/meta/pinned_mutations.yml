@@ -219,18 +219,24 @@
   to: "      parent ? \"#{parent}::#{written}\" : written"
   spec: spec/ovallsp/diagnostics/nested_bare_name_spec.rb
   example: "says nothing about the call the resolved head makes correct"
+- why: "024.277's binding-frame owner -- without it a local takes the cref owner at the point of use, so the same variable read inside a `module_eval` block and outside it gets two identities and rename rewrites only one side."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        record_reference(:local_variable, name.to_s, location, scope_id: frame.id, owner: frame.owner)"
+  to: "        record_reference(:local_variable, name.to_s, location, scope_id: frame.id)"
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "keeps one identity across a `module_eval` block, which changes self but not the binding"
 - why: "024.271's receiver visit, hoisted above the cref switch and the frame push -- without it the `ty` on a `def ty.outer` line is never recorded, so rename rewrites every other mention and leaves the file not running."
   file: core/lib/ovallsp/parser_service.rb
   from: "        owner_receiver&.accept(self)\n"
   to: ""
   spec: spec/ovallsp/server_rename_spec.rb
   example: "rewrites a local used as a `def` receiver, so the file still parses"
-- why: "024.271's skip of the already-visited receiver -- without it the receiver is walked twice, the second time under the method's own cref, and a receiver this parser cannot name has no owner: one variable with two identities again."
+- why: "024.271's skip of the already-visited receiver -- without it the receiver is walked twice and recorded twice. Since 024.277 gave the binding frame the owner the duplicate is no longer a second *identity*, but it is still two identical edits in one WorkspaceEdit and one occurrence counted twice by Find References."
   file: core/lib/ovallsp/parser_service.rb
   from: "          node.each_child_node { |child| child.accept(self) unless child.equal?(owner_receiver) }"
   to: "          node.each_child_node { |child| child.accept(self) }"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
-  example: "gives the receiver and the assignment that created it one identity"
+  example: "records the receiver exactly once, rather than skipping or duplicating it"
 - why: "the shipped-target guard reading every open entry -- 024.173, without which an open friction or roadmap entry naming a released version passes silently, which is the state 024.124 built this guard to make unreachable."
   file: scripts/deferred_findings.rb
   from: "    open_entries(markdown).filter_map do |number, fields|"
@@ -515,7 +521,7 @@
   from: "        @scopes.reverse_each.find { |scope| scope.locals.include?(name) }\n"
   to: "        @scopes.last\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
-  example: "gives a superclass expression the enclosing scope's id"
+  example: "gives a superclass expression the enclosing scope's whole identity"
 - why: "The check that the location really is the name -- without it a regexp named capture hands Rename the whole literal to replace."
   file: core/lib/ovallsp/parser_service.rb
   from: "        return unless location.slice == name.to_s\n\n"
@@ -530,8 +536,8 @@
   example: "declines a named capture whose location is the whole literal"
 - why: "Declining when no frame binds -- a nil scope id makes every unplaced occurrence of one name under one owner a single identity Rename would act on."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        return unless frame\n\n        record_reference(:local_variable, name.to_s, location, scope_id: frame.id)"
-  to: "        record_reference(:local_variable, name.to_s, location, scope_id: frame&.id)"
+  from: "        return unless frame\n\n        # The binding frame's owner"
+  to: "        # The binding frame's owner"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "declines a target Prism recovered for a name no scope binds"
 - why: "The pop in #in_scope's ensure -- a frame left open after its node closes still binds, so a block parameter captures the enclosing scope's later use of that name."
@@ -645,8 +651,8 @@
   example: "records one flagged site per shorthand, and leaves the ordinary sites alone"
 - why: "the flag that says this range is a `key:` token rather than an identifier -- without it a rewrite substitutes over the colon, and the hash literal stops parsing."
   file: core/lib/ovallsp/parser_service.rb
-  from: "                         scope_id: frame.id, implicit_hash_value: true)\n"
-  to: "                         scope_id: frame.id, implicit_hash_value: false)\n"
+  from: "                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: true)\n"
+  to: "                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: false)\n"
   spec: spec/ovallsp/parser_service_spec.rb
   example: "records one flagged site per shorthand, and leaves the ordinary sites alone"
 

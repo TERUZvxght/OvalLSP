@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**272 entries below** <!-- measured: register-entries = 272 -->,
+**276 entries below** <!-- measured: register-entries = 276 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -444,6 +444,10 @@ nobody can search is the recording habit without the benefit.
 | [`024.274`](#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | open | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
 | [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | 0.2.18 | A workspace-identity example fails only in a full-suite run, and not… |
 | [`024.276`](#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | fixed | 0.2.17 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
+| [`024.277`](#024277-a-local-variable-s-identity-follows-the-cref-so-a-block-that-changes-self-splits-it) | fixed | 0.2.17 | A local variable's identity follows the cref, so a block that change… |
+| [`024.278`](#024278-a-local-variable-s-identity-has-no-file-in-it-so-renaming-one-edits-another-file) | fixed | 0.2.17 | A local variable's identity has no file in it, so renaming one edits… |
+| [`024.279`](#024279-the-rename-oracle-put-the-caret-in-the-wrong-place-so-its-first-numbers-were-part-measurement) | fixed | 0.2.17 | The rename oracle put the caret in the wrong place, so its first num… |
+| [`024.280`](#024280-renaming-a-local-bound-by-a-regexp-named-capture-leaves-the-capture-silently) | open | 0.2.18 | Renaming a local bound by a regexp named capture leaves the capture,… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -17979,6 +17983,266 @@ its reachability is not defended.
    the duplication as one entry, not as another instance — which is why
    this one describes the two paragraphs rather than quoting them.
 
+
+## 024.277 A local variable's identity follows the cref, so a block that changes `self` splits it
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+released-in: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`
+
+**A local variable has no owner.** Ruby's locals are lexical, and a
+block that changes `self` does not change which variable a name is:
+
+```
+$ ruby -e '
+module Mod; end
+def m
+  ks = [1]
+  Mod.module_eval do
+    ks << 2
+  end
+  ks
+end
+p m
+'
+# => [1, 2]
+# ruby 3.4.10
+```
+
+`#record_reference` took every candidate's owner from `@cref` at the
+point of *use*, and `#visit_block_node` gives an `instance_eval`,
+`instance_exec`, `class_eval`, `class_exec`, `module_eval` or
+`module_exec` block the receiver as its owner -- correctly, for the
+macros those blocks contain. Identity is `owner#scope_id`, so the `ks`
+inside came out `::Mod#2` while the same variable outside was `nil#2`.
+Rename rewrote the outer occurrences and left the inner one, which then
+names nothing: the file the editor hands back calls a method that does
+not exist.
+
+**Found by the rename oracle, in the release that shipped the oracle,
+and only by enumerating what it reported.** The release record said the
+residual meaning-changing renames were all `024.273` and `024.274`.
+Listed rather than asserted, some were neither -- `activerecord`'s
+`store.rb`, whose `keys` is closed over inside a `module_eval do` block,
+is the clean instance and is fixed here. Two others in
+`activesupport`'s `redis_cache_store.rb` turned out to be the oracle's
+own defect rather than the product's (`024.279`), which only appeared
+because they were investigated one at a time instead of being counted
+and characterised in a batch.
+
+**This is `024.271`'s cause in its general form.** That entry moved the
+`def` receiver's walk above the cref switch, which fixed the one
+instance. The rule is that the owner belongs to the frame that *binds*
+the name, so `Scope` carries the cref owner captured when the frame was
+pushed and `#record_local_variable` reads it from there. One rule covers
+the `def` receiver, the six `*_eval` spellings, and a superclass
+expression -- `parser_scope_frames_spec.rb` had an example asserting the
+last of those was *still broken*, whose comment said only moving the
+walk could fix it and called that "a wider change than this one, with
+its own corpus to drive". That was the wrong diagnosis; nothing had to
+move.
+
+`024.271`'s skip of the already-visited receiver is kept and re-pinned:
+the duplicate it prevents is no longer a second *identity*, but it is
+still two identical edits in one WorkspaceEdit and one occurrence
+counted twice by Find References. Measured -- without the skip that
+position appears twice.
+
+Pinned by six examples, one per `*_eval` spelling, plus two controls: a
+macro inside such a block is still recorded against the block's own
+owner, and two same-named locals in different methods are still apart.
+One mutation entry -- blanking `owner: frame.owner` at the call site.
+
+**A second mutation was written for `Scope#owner` itself and removed,
+because nothing distinguishes it.** Blanking the field left every
+example green, and asking why is what led to `024.278`: within one file
+the frame id is already unique, so once the *file* is in the identity
+the owner adds nothing to it.
+
+**So the simplification was attempted, and measured, and rolled back.**
+Dropping the field and building a local's identity from the file and the
+frame alone is genuinely fewer places that must agree, and it makes this
+defect unrepresentable rather than corrected. What it broke is
+`parser_scope_frames_spec.rb`'s `identity` helper, which reads the
+*candidate*'s owner -- 7 examples. Repairing that means either teaching
+the helper to go through the resolver, or restating `#resolve_local`'s
+rule inside the spec, and the second is a new place that must agree in
+the layer whose job is to catch places that disagree. `048`'s result
+stands: measured, the simplification did not reduce the number this
+project counts. The field stays, redundant and correct, and this
+paragraph is why -- so the next reader who notices it does not spend the
+same afternoon.
+
+## 024.278 A local variable's identity has no file in it, so renaming one edits another file
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+released-in: 0.2.17
+```
+
+**Area:** `core/lib/ovallsp/semantic/reference_resolver.rb`
+
+`#resolve_local` builds a synthetic owner of `"#{owner}##{scope_id}"`.
+**Scope ids are counted per file**, so two files whose counters and cref
+owner agree share one identity -- and a local variable never spans
+files.
+
+A top-level `def` has no owner at all, so any two files written that way
+collide on their first method's locals. A class reopened across two
+files collides on `::Widget#<n>`, which is ordinary Rails.
+
+Driven through the real server at `279e7e5` -- the 0.2.17 tag commit --
+with `a.rb` holding `def m; ks = 1; ks; end` and `b.rb` holding
+`def n; ks = 2; ks; end`, renaming `ks` in `a.rb`:
+
+```
+file:///a.rb: 2 edit(s)
+file:///b.rb: 2 edit(s)      <-- a file the user never opened
+```
+
+**This is a worse failure than the nine shapes 0.2.17 fixed.** Those
+left one file wrong. This one writes edits into a second file, and Find
+References over-answers in the same way for the same reason.
+
+Found while pinning `024.277`: a mutation that blanked the frame owner
+was *not* caught by the example claiming to distinguish two same-named
+locals, because within one file the scope id already separates them.
+Asking what the owner was actually for is what surfaced that it was
+carrying the file, badly.
+
+**Fixed** by putting the `uri` -- already a parameter of that method,
+for the location -- into the identity. Only this kind is qualified: a
+method rename must still cross files, and a control example asserts it
+does.
+
+## 024.279 The rename oracle put the caret in the wrong place, so its first numbers were part measurement
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. Recorded because the numbers it produced were
+  published in a changelog, a release record and two register entries
+  before the defect was found, which is the failure `CLAUDE.md`'s
+  "a measurement is a claim" section exists to prevent.
+released-in: 0.2.17
+```
+
+**Area:** `scripts/rename_oracle.rb`
+
+`#line_and_character` sliced the source by **characters** up to Prism's
+`start_offset`, which is a **byte** offset. Any multi-byte character
+earlier in the file moved the caret, and the server then answered about
+whatever symbol it landed on.
+
+Driven, `activesupport`'s `redis_cache_store.rb`: the caret meant for
+`values` at line 356 column 10 was placed at column 26, which is inside
+`failsafe`. The run recorded ten edits renaming a *method* as a failed
+local rename, and the file was reported twice in the residual as a
+product defect it does not have.
+
+**What it cost.** The numbers `6 / 704` and `0 / 74` were published in
+`vscode/CHANGELOG.md` and `.ja.md`, in `052`, and in `024.277`'s first
+draft, and were part measurement and part this. Re-measured with the
+caret corrected, on the identical corpus of 1,043 files and 3,123
+renames:
+
+```
+                       v0.2.16              0.2.17
+  unparseable                6                   0
+  meaning-changed          711                  58
+    binding behind         471                  57
+    occurrences behind     240                   1
+  refused                    0                   0
+```
+
+`refused` was 33 on both sides before the correction and is 0 after: a
+misplaced caret often lands where nothing is renameable, and the oracle
+counted that as the product declining.
+
+**Fixed** by taking the line and the byte column from Prism directly --
+it provides both -- and converting the column to UTF-16 units per line,
+which is the protocol's rule and the same conversion
+`Index::SourceLocation.to_position` makes. Reading the caret back out of
+the engine's own recorded range was rejected: it would make the measure
+depend on the thing measured.
+
+**The general lesson is the one already written down and not followed.**
+`CLAUDE.md` says to print the thing you are asserting rather than
+assuming it. The oracle printed totals and a truncated list of forty
+details. Nothing printed a caret next to the line it was supposed to be
+on, and one line of that would have shown this immediately.
+
+## 024.280 Renaming a local bound by a regexp named capture leaves the capture, silently
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.2.18
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`
+
+A named capture in a regexp used with `=~` binds a local:
+
+```
+$ ruby -e '
+/(?<where>\d+)/ =~ "a12"
+p where
+p defined?(where)
+'
+# => "12"
+# => "local-variable"
+# ruby 3.4.10
+```
+
+`024.260` records that this binding is **declined** -- 25 of 610,104
+local-variable node visits over 9,160 files -- because Prism gives the
+read's range as the whole regexp literal rather than as the name. The
+decline is right on its own terms: rewriting the literal's whole range
+would destroy the regexp.
+
+What was never recorded is the consequence at the other end. The
+*binding* is not recorded and the *uses* are, so renaming from a use
+rewrites the uses and leaves the capture behind. It is the last of the
+58 residual meaning-changing renames that is not `024.273`, in
+`activerecord`'s `sqlite3/schema_statements.rb`:
+
+```
+                   /...(?<where>.+).../ =~ index_sql     LEFT
+  line 30          where = where.sub(...) if where       EDITED
+  line 50          where: where,                         EDITED
+```
+
+**And it fails silently rather than loudly**, which is why it is filed
+rather than left inside `024.260`'s notes. Line 30 assigns before it
+reads, so the renamed name is a defined-but-nil local: `if zzz` is
+false, the `sub` never runs, and line 50 passes `nil` where a string was
+expected. Nothing raises.
+
+**Direction.** Two candidates, and the choice is not obvious, which is
+why this is an entry. **Refuse**: a use whose binding could not be
+recorded should not be renameable at all -- section 0.4 ranks a decline
+above a wrong answer -- but the resolver has no way today to know a
+binding was declined, so this needs the decline to be recorded rather
+than dropped. **Record the capture's own range**: the name appears
+literally inside the regexp source, so its sub-range is computable, and
+renaming it is what Ruby needs. That one is complete rather than safe:
+it changes the regexp, and anything reading the match by `[:where]`
+elsewhere is a string this rename cannot see.
+
+Not attempted here. `024.277` and `024.278` are two parser changes in
+this change set already, and `CLAUDE.md`'s review cadence says a third
+belongs in its own round rather than bolted onto this one.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

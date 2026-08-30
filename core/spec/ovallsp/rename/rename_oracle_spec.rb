@@ -23,16 +23,21 @@ require_relative "../../../../scripts/rename_oracle"
 #     (`024.273`).
 #
 # Measured over 1,043 files of activesupport, activerecord, actionpack,
-# railties and i18n -- 3,123 renames, with `refused`, `shadowed` and the
-# corpus identical on both sides as the control:
+# railties and i18n -- 3,123 renames, with `shadowed` and the corpus
+# identical on both sides as the control:
 #
-#   v0.2.16   unparseable=6   meaning-changed=704
-#   0.2.17    unparseable=0   meaning-changed=74
+#   v0.2.16   unparseable=6   meaning-changed=711
+#   0.2.17    unparseable=0   meaning-changed=58
 #
-# The 74 that remain are `024.273` and `024.274`, both published in
-# `KNOWN_LIMITATIONS`: a binding whose declaration is a parameter, or an
-# underscore-prefixed target, is left behind, so the uses that *were*
-# rewritten stop resolving.
+# Of the 58, 57 are `024.273` -- a binding whose declaration is a
+# parameter -- and 1 is `024.280`, a regexp named capture. Both are
+# published in `KNOWN_LIMITATIONS`.
+#
+# **An earlier version of this comment said 704 and 74.** The oracle's
+# caret was computed by slicing the source by characters up to a *byte*
+# offset, so a multi-byte character earlier in a file moved it onto
+# whatever else was there. `024.279`. The numbers above are the
+# re-measured ones.
 #
 # The fixture here is small on purpose -- this runs on every suite run,
 # and the gem corpus is a measurement rather than a check. What it holds

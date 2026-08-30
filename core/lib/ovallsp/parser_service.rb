@@ -285,7 +285,34 @@ module Ovallsp
 
       # A local-variable scope: the id references written in it are tagged
       # with, and the names Prism says this scope binds.
-      Scope = Data.define(:id, :locals)
+      # `owner` is the cref owner at the moment the frame was pushed, and
+      # it is here rather than read from `@cref` at the point of use
+      # because **a local variable has no owner**. Ruby's locals are
+      # lexical, and a block that changes `self` does not change which
+      # variable a name is:
+      #
+      #   $ ruby -e '
+      #   module Mod; end
+      #   def m
+      #     ks = [1]
+      #     Mod.module_eval do
+      #       ks << 2
+      #     end
+      #     ks
+      #   end
+      #   p m
+      #   '
+      #   # => [1, 2]
+      #   # ruby 3.4.10
+      #
+      # `#visit_block_node` gives an `instance_eval`/`class_eval`/
+      # `module_eval`/`*_exec` block the receiver as its cref owner, which
+      # is right for the macros those blocks contain and wrong for the
+      # locals they close over. Identity is `owner#scope_id`, so the `ks`
+      # inside came out `::Mod#2` and the same variable outside `nil#2`:
+      # Rename rewrote the outer occurrences and left the inner one, which
+      # then names nothing. `024.277`.
+      Scope = Data.define(:id, :locals, :owner)
 
       # The one push site for all six scope-opening visits, so a frame
       # cannot be popped without having been pushed. `#visit_namespace`'s
@@ -300,7 +327,7 @@ module Ovallsp
       # pushed -- which is the shape this method exists to make
       # unwritable, written inside it.
       def in_scope(node)
-        @scopes.push(Scope.new(id: next_scope_id, locals: node.locals))
+        @scopes.push(Scope.new(id: next_scope_id, locals: node.locals, owner: current_owner))
         begin
           yield
         ensure
@@ -1123,7 +1150,7 @@ module Ovallsp
         return unless frame
 
         record_reference(:local_variable, value.name.to_s, node.location,
-                         scope_id: frame.id, implicit_hash_value: true)
+                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: true)
         # `super` is deliberately not called, and deliberately not
         # *guarded against* either: measured, descending adds no second
         # candidate for the same name, because the read inside an
@@ -2311,7 +2338,9 @@ module Ovallsp
         # what they already do for a name they cannot place.
         return unless frame
 
-        record_reference(:local_variable, name.to_s, location, scope_id: frame.id)
+        # The binding frame's owner, not the current cref's -- see
+        # `Scope`. `024.277`.
+        record_reference(:local_variable, name.to_s, location, scope_id: frame.id, owner: frame.owner)
       end
 
       # The frame that *binds* this name, not the innermost one that is
@@ -2364,10 +2393,13 @@ module Ovallsp
         @scopes.reverse_each.find { |scope| scope.locals.include?(name) }
       end
 
-      def record_reference(kind, name, location, scope_id: nil, implicit_hash_value: false)
+      # `owner` defaults to the cref's, which is what every kind but a
+      # local variable wants. A local's comes from the frame that binds
+      # it, because it does not have one of its own -- `Scope`, `024.277`.
+      def record_reference(kind, name, location, scope_id: nil, implicit_hash_value: false, owner: current_owner)
         @reference_candidates << Index::ReferenceCandidate.new(
           kind: kind, name: name, location: Index::SourceLocation.to_range(location, @lines), scope_id: scope_id,
-          owner: current_owner, singleton: @cref.declares_singleton?, receiver: nil,
+          owner: owner, singleton: @cref.declares_singleton?, receiver: nil,
           lexical_nesting: current_lexical_nesting, implicit_hash_value: implicit_hash_value
         )
       end

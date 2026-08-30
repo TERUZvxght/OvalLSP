@@ -802,9 +802,16 @@ local in a thousand files of real gem source and running what came out.
   parameter behind**, so the renamed method stops working — and where
   the body assigns before it reads (`names = names || []`), nothing
   raises and the method quietly answers something else. This is the
-  largest of the shapes here by a long way: of the local renames that
-  change what a file means across 1,179 gem files, 99% are
+  largest of the shapes here by a long way: renaming every local across
+  1,043 files of Rails and i18n source leaves 58 renames that change
+  what the file means, and 57 of them are
   this. <!-- documents: 024.273 -->
+- **Renaming a local bound by a regexp named capture leaves the capture
+  behind**, and this one fails silently: `/(?<where>...)/ =~ line` binds
+  `where`, the capture inside the regexp is not rewritten, and the
+  renamed name becomes a defined-but-nil local — so a guard on it goes
+  false and nothing raises. It is the 58th of the
+  58. <!-- documents: 024.280 -->
 - **A binding whose name begins with an underscore is left behind**
   when it is written as a multiple-assignment target, a `for`
   variable, a `rescue => _e` or a pattern. Ruby lets one pattern bind

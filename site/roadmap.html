@@ -209,7 +209,7 @@
           <ul class="feature-list">
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
-              <span><strong>Renaming a local rewrites every mention of it.</strong> Four of Prism&rsquo;s six local-variable node kinds were unread, so <code>+=</code>, <code>||=</code>, <code>&amp;&amp;=</code>, a multiple-assignment target, a <code>for</code> variable, a <code>rescue =&gt; e</code> and a pattern were all left behind &mdash; and the file the editor handed back stopped running.</span>
+              <span><strong>Renaming a local rewrites the mentions written as <code>+=</code>, <code>||=</code>, <code>&amp;&amp;=</code>, a multiple-assignment target, a <code>for</code> variable, a <code>rescue =&gt; e</code> or a pattern.</strong> Four of Prism&rsquo;s six local-variable node kinds were unread, so those were left behind and the file the editor handed back stopped running. A local whose declaration is a parameter, and an underscore-prefixed target, are still left behind &mdash; both are in the known limitations.</span>
             </li>
             <li>
               <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>

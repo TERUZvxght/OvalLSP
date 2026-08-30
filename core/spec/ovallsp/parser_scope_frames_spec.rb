@@ -272,26 +272,31 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
     #   # ruby 3.4.10
     #
     # Searching for the frame that binds passes through the class frame
-    # to the one that does, so the *scope id* is now the enclosing one.
+    # to the one that does, so the *scope id* is the enclosing one.
     #
-    # **That is half of an identity, and the other half is still wrong.**
-    # `Semantic::ReferenceResolver#resolve_local` keys on
-    # `"#{owner}##{scope_id}"`, and the same misplaced walk records this
-    # occurrence's owner as the class it is written in front of, so Find
-    # References still does not group it with the local it names. Only
-    # moving the walk outside the frame fixes that, and moving it changes
-    # which owner every constant in a superclass expression is recorded
-    # under — a wider change than this one, with its own corpus to drive.
-    # The example asserts what did change and names what did not, rather
-    # than claiming a user-visible fix this is not.
-    it "gives a superclass expression the enclosing scope's id" do
+    # **The owner half was wrong for two releases, and this example said
+    # so.** `Semantic::ReferenceResolver#resolve_local` keys on
+    # `"#{owner}##{scope_id}"`, and the occurrence in front of the class
+    # took its owner from the cref there — `::Foo` — while the local it
+    # names had none. The example asserted the two identities *differed*,
+    # and its comment said only moving the walk outside the frame could
+    # fix it: "a wider change than this one, with its own corpus to
+    # drive".
+    #
+    # It was the wrong diagnosis. Nothing about the walk had to move: the
+    # owner belongs to the frame that binds the name, and reading it from
+    # there fixes this occurrence, the six `*_eval` block spellings, and
+    # `024.271`'s `def` receiver with one rule. `024.277`. Driven, the
+    # rename is now three edits and the file still runs.
+    it "gives a superclass expression the enclosing scope's whole identity" do
       source = "base = Class.new\nclass Foo < base\nend\nbase\n"
 
       scopes = locals(source)
       identities = identity(source)
 
       expect(scopes[["base", 1, 12]]).to eq(scopes[["base", 0, 0]])
-      expect(identities[["base", 1, 12]]).not_to eq(identities[["base", 0, 0]])
+      expect(identities[["base", 1, 12]]).to eq(identities[["base", 0, 0]])
+      expect(identities[["base", 3, 0]]).to eq(identities[["base", 0, 0]])
     end
 
     it "keeps a `class << self` body's local apart from the class body's" do
@@ -744,13 +749,95 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
       expect(answers[["ty", 7, 4]]).to eq(answers[["ty", 2, 4]])
     end
 
-    # And the receiver is still *recorded*, in either shape -- the
-    # cheapest wrong fix is to stop visiting it, which makes both
-    # examples above pass by having nothing to compare.
-    it "records the receiver rather than skipping it" do
+    # And the receiver is still *recorded*, exactly once. Two things are
+    # asserted here and they fail in opposite directions.
+    #
+    # **Recorded at all**: the cheapest wrong fix is to stop visiting the
+    # receiver, which makes both examples above pass by having nothing to
+    # compare.
+    #
+    # **Exactly once**: the receiver is visited before the frame, so the
+    # child walk skips it. Since `024.277` gave the binding frame the
+    # owner, a second visit no longer produces a *different* identity --
+    # it produces a duplicate of the same one, which is two identical
+    # edits in a WorkspaceEdit and one occurrence counted twice by Find
+    # References. Measured: without the skip this position appears twice.
+    it "records the receiver exactly once, rather than skipping or duplicating it" do
       source = "class Runner\n  def go\n    ty = Thing.new\n    def ty.outer\n      :x\n    end\n  end\nend\n"
 
-      expect(positions(source)).to include(["ty", 3, 8])
+      expect(positions(source).count(["ty", 3, 8])).to eq(1)
+    end
+  end
+
+  # A local variable has no owner. Ruby's locals are lexical: the block
+  # passed to `module_eval` closes over the method's `ks`, and changing
+  # `self` does not change which variable that is.
+  #
+  #   $ ruby -e '
+  #   module Mod; end
+  #   def m
+  #     ks = [1]
+  #     Mod.module_eval do
+  #       ks << 2
+  #     end
+  #     ks
+  #   end
+  #   p m
+  #   '
+  #   # => [1, 2]
+  #   # ruby 3.4.10
+  #
+  # A reference candidate took its owner from `@cref` at the point of
+  # *use*, and `#visit_block_node` gives an `instance_eval`, `class_eval`,
+  # `module_eval` or `*_exec` block the receiver as its owner -- correctly,
+  # for the macros those blocks contain. The local inside then came out
+  # `::Mod#2` while the same variable outside was `nil#2`, and identity is
+  # `owner#scope_id`. So Rename rewrote the outer occurrences and left the
+  # inner one, which no longer names anything: the file the editor hands
+  # back calls a method that does not exist.
+  #
+  # This is `024.271`'s cause in its general form. That entry fixed the
+  # one instance -- a `def` receiver walked under the method's own cref --
+  # by moving the walk. The rule is that the owner belongs to the frame
+  # that *binds* the name, so it is captured when the frame is pushed and
+  # read from there.
+  describe "a local's identity does not follow the cref" do
+    EVAL_BLOCK_SPELLINGS = %w[instance_eval instance_exec class_eval class_exec module_eval module_exec].freeze
+
+    EVAL_BLOCK_SPELLINGS.each do |spelling|
+      it "keeps one identity across a `#{spelling}` block, which changes self but not the binding" do
+        source = "def m\n  ks = [1]\n  Mod.#{spelling} do\n    ks.size\n  end\n  ks\nend\n"
+
+        answers = identity(source)
+
+        expect(answers[["ks", 3, 4]]).to eq(answers[["ks", 1, 2]])
+        expect(answers[["ks", 5, 2]]).to eq(answers[["ks", 1, 2]])
+        expect(answers[["ks", 1, 2]]).not_to be_nil
+      end
+    end
+
+    # The control. If the fix were "stop giving blocks an owner at all",
+    # this would break: a macro written inside the same block still has to
+    # be recorded against the receiver, which is why the block's cref is
+    # what it is.
+    it "still records a macro inside the block against the block's own owner" do
+      source = "module Mod\nend\ndef m\n  ks = 1\n  Mod.module_eval do\n    attr_reader :tag\n  end\n  ks\nend\n"
+
+      declarations = service.summarize(document(source)).declarations.map { |d| "#{d.symbol_id.owner}##{d.symbol_id.name}" }
+
+      expect(declarations).to include("::Mod#tag")
+    end
+
+    # And the other control: two same-named locals in genuinely different
+    # scopes must stay apart. An owner captured at the frame cannot be the
+    # thing that separates them -- the scope id is -- so this fails if the
+    # frame ever stops being distinguishing.
+    it "still separates two same-named locals in different methods" do
+      source = "class Host\n  def a\n    ks = 1\n    ks\n  end\n  def b\n    ks = 2\n    ks\n  end\nend\n"
+
+      answers = identity(source)
+
+      expect(answers[["ks", 6, 4]]).not_to eq(answers[["ks", 2, 4]])
     end
   end
 end
