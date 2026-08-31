@@ -39,4 +39,28 @@ RSpec.describe "pinned mutations" do
     expect(output).to include("Nothing was applied here")
     expect(output).not_to include("caught by the example that names it")
   end
+
+  # **How many decisions are pinned**, which nothing here asserted.
+  #
+  # `024.151` is the class: "the checks are correct; their reachability
+  # is not defended".
+  #
+  # **The checker already refuses an *empty* manifest** — driven, it
+  # exits 1 and says so, and the first draft of this comment claimed
+  # otherwise. What nothing caught is a *gutted* one: a manifest cut to
+  # a single entry is not empty, is consistent with itself, and passes
+  # both examples above. The manifest that exists to stop a guarantee
+  # being quietly disabled could itself be quietly narrowed.
+  #
+  # A floor rather than the count: entries are added every release, and
+  # an exact number fails on the next one for a reason nobody wants to
+  # read.
+  it "is pinning a manifest, rather than reporting an empty one consistent" do
+    output = verify_only
+
+    pinned = output[/(\d+) mutation\(s\)/, 1].to_i
+    expect(pinned).to be >= 50,
+                      "the manifest holds #{pinned} mutations. An empty one is consistent with itself and " \
+                      "reports exactly what a full one reports when nothing is wrong (024.151).\n#{output}"
+  end
 end

@@ -38,6 +38,34 @@ RSpec.describe "rescue verdicts" do
     expect($?).to be_success, output
   end
 
+  # **How much of the tree it read**, which nothing here asserted.
+  #
+  # `024.151` is the class: "the checks are correct; their reachability
+  # is not defended". Its sharpest instance was `check_doc_links`' `SKIP`
+  # constant — widening it dropped inspection from 537 files to 117 and
+  # every example still passed, because they asserted outcomes on
+  # fixtures and none asserted how much was read.
+  #
+  # **This checker has the same gap, and unlike its sibling no guard
+  # against it.** `check_pinned_mutations` refuses an empty manifest
+  # outright; `check_swallowed_failures` has no emptiness test at all —
+  # its `Dir.glob` returning nothing makes `problems` empty, which is
+  # what it reports as success. Narrow the scan and every rescue is
+  # accounted for, because none was found.
+  #
+  # The floor is a floor, not the count. Rescues are added and removed
+  # every release, and an exact number would fail on the next one for a
+  # reason nobody wants to read — while a scan that has stopped seeing
+  # `core/lib` does not return 140-something, it returns nothing.
+  it "read the whole of core/lib, rather than reporting a narrowed scan clean" do
+    output = IO.popen(["ruby", SWALLOWED_FAILURES_SCRIPT], err: %i[child out], &:read)
+
+    sites = output[/(\d+) rescue site\(s\)/, 1].to_i
+    expect(sites).to be >= 100,
+                     "the scan found #{sites} rescue sites in core/lib. A checker that reads less than it " \
+                     "thinks reports exactly what a working one reports when nothing is wrong (024.151).\n#{output}"
+  end
+
   # The header of the verdicts file is a set of instructions, and an
   # instruction is a claim. Its option bullets are parsed structurally --
   # a `#` comment line of `name -- description` inside the header block --

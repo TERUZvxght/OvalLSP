@@ -321,7 +321,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.148`](#024148-the-check-for-did-the-suite-actually-run-could-not-fail-in-the-case-it-existed-for) | fixed | 0.2.14 | The check for "did the suite actually run" could not fail in the cas… |
 | [`024.149`](#024149-a-review-harness-that-reports-nothing-found-when-its-own-post-processing-crashed) | fixed | 0.2.14 | A review harness that reports "nothing found" when its own post-proc… |
 | [`024.150`](#024150-agents-md-paraphrases-claude-md-and-the-paraphrase-drifts) | open | 0.2.18 | `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts |
-| [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices) | open | 0.2.18 | A check can be disabled, and no check notices |
+| [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices) | open | 0.3.0 | A check can be disabled, and no check notices |
 | [`024.152`](#024152-a-leak-check-counted-every-descriptor-in-the-process-and-flaked-under-load) | fixed | 0.2.14 | A leak check counted every descriptor in the process, and flaked und… |
 | [`024.153`](#024153-a-quarter-of-the-open-work-is-in-no-release-and-0-3-0-has-become-where-the-rest-goes) | fixed | 0.2.15 | A quarter of the open work is in no release, and 0.3.0 has become wh… |
 | [`024.154`](#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | fixed | 0.2.18 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
@@ -11307,8 +11307,43 @@ user-visible-note: >
   recorded: 55 confirmed instances from one review round. Nothing a
   user meets; everything this project uses to decide whether a change
   is sound.
-target: 0.2.18
+target: 0.3.0
 ```
+
+### 0.2.18: the two checks that had no reachability assertion at all
+
+Surveyed rather than assumed. Of the seven `scripts/check_*.rb`, five
+have a spec that asserts how much they read — `doc_links` and
+`site_links` six ways, `home_paths` and `suites_ran` two,
+`interpreter_sessions` its `sessions=` count, which this session added
+for exactly this reason. **Two had none: `check_pinned_mutations` and
+`check_swallowed_failures`.**
+
+Both now do, and the two gaps are not the same size, which took driving
+to find out:
+
+- **`check_swallowed_failures` has no emptiness guard at all.** Its
+  `Dir.glob` returning nothing leaves `problems` empty, and empty is
+  what it reports as success. The spec now asserts it found at least 100
+  rescue sites in `core/lib` — a floor, because the exact number changes
+  every release and a scan that has stopped seeing the directory does
+  not return 140-something.
+- **`check_pinned_mutations` already refuses an empty manifest** — exit
+  1, with a message. *The first draft of this note said it did not, and
+  driving it said otherwise.* What nothing caught is a manifest cut to a
+  handful: not empty, consistent with itself, and it passed both
+  examples. The floor is 50.
+
+**This does not close the class.** 55 instances were confirmed and these
+are two; what it closes is the two checks whose own reachability nothing
+defended, which is the shape at its most embarrassing — a checker that
+guards other people's guarantees and not its own.
+
+**Retargeted to 0.3.0.** The remaining instances are spread across the
+tree and each needs its own assertion; the countermeasure is a habit
+(every check asserts what it read) rather than a change, and
+`pinned_mutations.yml` at 100 entries is that habit already working. It
+is not a defect one release closes.
 
 **Area:** `core/spec/meta/pinned_mutations.yml`,
 `scripts/check_pinned_mutations.rb`
