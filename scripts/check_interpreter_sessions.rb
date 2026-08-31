@@ -90,7 +90,23 @@ module InterpreterSessions
   # pasted into a doc comment.
   WARNING_LINE = /\A-e:\d+: warning:/
 
-  Session = Struct.new(:file, :line, :flags, :code, :expected, :closed, keyword_init: true)
+  # `recorded_ruby` is the version the session's own note names, and it is
+  # a *condition* rather than decoration.
+  #
+  # A session records what one interpreter said. Ruby's own output moves
+  # between minor versions -- 3.4 prints `{name: "n"}` where 3.3 prints
+  # `{:name=>"n"}`, and their backtraces name the method differently -- so
+  # comparing a 3.4 recording against 3.3 compares two true answers and
+  # calls one of them wrong. The CI matrix runs 3.3, 3.4 and 4.0, and this
+  # is what made the 3.3 job red on sessions that reproduce exactly on the
+  # interpreter they were taken from. `024.286`.
+  #
+  # Dropped from the *answer* either way -- it is a note, not output --
+  # but kept here so the comparison can decline where it does not apply.
+  # A session with no note carries no condition and is compared on every
+  # interpreter, which is the right default: it claims to be about Ruby
+  # rather than about one Ruby.
+  Session = Struct.new(:file, :line, :flags, :code, :expected, :closed, :recorded_ruby, keyword_init: true)
 
   module_function
 
@@ -159,6 +175,7 @@ module InterpreterSessions
     end
 
     expected = []
+    recorded_ruby = nil
     while closed && cursor < lines.length
       text = strip_prefix(lines[cursor], prefix)
       break if text.nil?
@@ -173,18 +190,23 @@ module InterpreterSessions
       # accept only the first at first, and four sessions written the
       # second way failed on their first run -- the needle was the
       # spelling rather than the thing.
-      if stripped =~ /\A#\s*ruby\s+[\d.]/
+      if (note = stripped[/\A#\s*ruby\s+([\d.]+)/, 1])
+        recorded_ruby ||= note
         cursor += 1
         next
       end
 
       answer = stripped.sub(/\A#\s*(?:=>)?\s?/, "")
+      if (note = answer[/\((?:ruby|Ruby)\s+([\d.]+)[^)]*\)\s*\z/, 1])
+        recorded_ruby ||= note
+      end
       expected << answer.sub(/\s*\((?:ruby|Ruby)\s+[\d.]+[^)]*\)\s*\z/, "")
       cursor += 1
     end
 
     [Session.new(file: nil, line: start + 1, flags: match[:flags].to_s.split,
-                 code: body.join("\n"), expected: expected, closed: closed),
+                 code: body.join("\n"), expected: expected, closed: closed,
+                 recorded_ruby: recorded_ruby),
      cursor]
   end
 
@@ -252,10 +274,19 @@ module InterpreterSessions
     executable[HAZARDS]
   end
 
+  # Minor-version equality, because that is the granularity Ruby's own
+  # output changes at: 3.4 prints `{name: "n"}` where 3.3 prints
+  # `{:name=>"n"}`. Patch releases are not compared, so a session recorded
+  # on 3.4.10 is still checked on 3.4.12.
+  def same_minor?(a, b)
+    a.split(".").first(2) == b.split(".").first(2)
+  end
+
   def check(files)
     problems = []
     total = 0
     compared = 0
+    other_version = 0
 
     files.each do |path|
       extract(path).each do |session|
@@ -276,6 +307,15 @@ module InterpreterSessions
         # demonstrate a *shape* of code that the prose around them describes.
         next if session.expected.empty?
 
+        # A recording made on another minor version is not a claim about
+        # this interpreter -- see `Session#recorded_ruby`. Declined rather
+        # than compared, and **counted separately and printed**, because a
+        # decline this script does not name reads exactly like a pass.
+        if (want = session.recorded_ruby) && !same_minor?(want, RUBY_VERSION)
+          other_version += 1
+          next
+        end
+
         compared += 1
         want = normalise(session.expected)
         got = normalise(run(session))
@@ -285,7 +325,7 @@ module InterpreterSessions
       end
     end
 
-    [total, compared, problems]
+    [total, compared, other_version, problems]
   end
 end
 
@@ -298,15 +338,16 @@ if $PROGRAM_NAME == __FILE__
             InterpreterSessions.tracked_files
           end
 
-  total, compared, problems = InterpreterSessions.check(files)
+  total, compared, other_version, problems = InterpreterSessions.check(files)
 
   if count_only
-    puts "check-interpreter-sessions: sessions=#{total} compared=#{compared}"
+    puts "check-interpreter-sessions: sessions=#{total} compared=#{compared} other-version=#{other_version}"
     exit(problems.empty? ? 0 : 1)
   end
 
   if problems.empty?
-    puts "check-interpreter-sessions: #{total} session(s), #{compared} with a recorded answer, all reproduce."
+    puts "check-interpreter-sessions: #{total} session(s), #{compared} compared on ruby #{RUBY_VERSION}, " \
+         "all reproduce; #{other_version} recorded on another minor version and declined."
     exit 0
   end
 

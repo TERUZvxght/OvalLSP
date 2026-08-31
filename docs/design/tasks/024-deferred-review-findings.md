@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**281 entries below** <!-- measured: register-entries = 281 -->,
+**282 entries below** <!-- measured: register-entries = 282 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -453,6 +453,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.283`](#024283-the-packaged-core-is-driven-only-on-linux-so-the-macos-build-is-still-smoke-tested) | open | 0.3.0 | The packaged Core is driven only on Linux, so the macOS build is sti… |
 | [`024.284`](#024284-nothing-local-can-see-that-ci-is-red-and-preflight-does-not-run-the-extension) | open | 0.2.18 | Nothing local can see that CI is red, and preflight does not run the… |
 | [`024.285`](#024285-three-interpreter-sessions-resolved-against-whatever-the-machine-had-installed) | fixed | 0.2.17 | Three interpreter sessions resolved against whatever the machine had… |
+| [`024.286`](#024286-a-session-recorded-on-one-ruby-was-compared-against-another-so-the-3-3-job-called-true-answers-wrong) | fixed | 0.2.17 | A session recorded on one Ruby was compared against another, so the … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -18548,6 +18549,65 @@ answerable.
 
 Found by pushing, on the run after `024.282`'s `fetch-depth` fix took
 the same job from seven failures to two.
+
+## 024.286 A session recorded on one Ruby was compared against another, so the 3.3 job called true answers wrong
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. Recorded because it kept a gating CI job red on
+  code that was correct, which is the kind of red that teaches people to
+  ignore CI.
+released-in: 0.2.17
+```
+
+**Area:** `scripts/check_interpreter_sessions.rb`
+
+Every session in this tree carries a note saying which interpreter
+answered — `# ruby 3.4.10`. The checker read that note only to *drop* it
+from the expected output, and then compared the recording against
+whatever interpreter it was running on.
+
+**Ruby's own output moves between minor versions.** The CI matrix runs
+3.3, 3.4 and 4.0:
+
+```
+  3.4   p({name: "n"})   =>  {name: "n"}
+  3.3   p({name: "n"})   =>  {:name=>"n"}
+
+  3.4   backtrace: -e:3:in 'Somewhere::User#go': ... (NameError)
+  3.3   backtrace: -e:3:in `go': ... (NameError)
+```
+
+So the 3.3 job reported sessions as not reproducing when they reproduce
+exactly on the interpreter they were taken from. Two true answers, one
+called wrong.
+
+**The note is the condition, and it was being read as decoration.** A
+session records what *one* interpreter said; comparing it elsewhere is
+comparing different things. The checker now declines where the recorded
+minor version differs, and **counts and prints the declines** —
+`other-version=N` — because a decline this script does not name reads
+exactly like a pass, which is the failure the script exists to prevent.
+
+A session with no note carries no condition and is compared on every
+interpreter. That is the right default: with no note it claims to be
+about Ruby rather than about one Ruby, and if it turns out to be
+version-sensitive, the right repair is to record which Ruby answered.
+
+Minor-version granularity, not patch: 3.4.10's recording is still
+checked on 3.4.12.
+
+Pinned by a pair in `interpreter_sessions_spec.rb`, and neither example
+means anything alone — a foreign-version recording with a wrong answer
+must be declined, and a same-version one with a wrong answer must still
+fail. Without the second, "decline everything" passes.
+
+Found by pushing, on the third CI run of the day: `024.282`'s
+`fetch-depth` took the job from seven failures to two, `024.285`'s
+declared gem took 3.4 to green, and this is what was left holding 3.3.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

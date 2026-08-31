@@ -156,4 +156,43 @@ RSpec.describe "interpreter sessions" do
       expect(output).to match(/refus/i)
     end
   end
+
+  # `024.286`. A session records what *one* interpreter said, and Ruby's
+  # output moves between minor versions -- 3.4 prints `{name: "n"}` where
+  # 3.3 prints `{:name=>"n"}`, and their backtraces name the method
+  # differently. The CI matrix runs 3.3, 3.4 and 4.0, so comparing a 3.4
+  # recording on 3.3 compares two true answers and calls one wrong. It
+  # made the 3.3 job red on sessions that reproduce exactly on the
+  # interpreter they were taken from.
+  #
+  # The note each session already carries is the condition. These two
+  # examples are a pair and neither means anything alone: the first shows
+  # a foreign-version recording is declined, the second shows a
+  # same-version one is still compared. Without the second, "decline
+  # everything" passes.
+  it "declines a session recorded on another minor version rather than failing it" do
+    Dir.mktmpdir("session-check-") do |dir|
+      other = "#{RUBY_VERSION.split('.').first}.#{RUBY_VERSION.split('.')[1].to_i + 1}.0"
+      File.write(File.join(dir, "foreign.rb"), session_fixture(["p [1, 2].sum"], ["7 (ruby #{other})"]))
+      output, status = Open3.capture2e(
+        RbConfig.ruby, File.join(SESSIONS_ROOT, "scripts", "check_interpreter_sessions.rb"),
+        "--count", "--file", File.join(dir, "foreign.rb"), chdir: SESSIONS_ROOT
+      )
+      expect(status).to be_success, output
+      expect(output[/\bother-version=(\d+)/, 1].to_i).to eq(1)
+      expect(output[/\bcompared=(\d+)/, 1].to_i).to eq(0)
+    end
+  end
+
+  it "still compares a session recorded on this minor version" do
+    Dir.mktmpdir("session-check-") do |dir|
+      File.write(File.join(dir, "same.rb"), session_fixture(["p [1, 2].sum"], ["7 (ruby #{RUBY_VERSION})"]))
+      output, status = Open3.capture2e(
+        RbConfig.ruby, File.join(SESSIONS_ROOT, "scripts", "check_interpreter_sessions.rb"),
+        "--file", File.join(dir, "same.rb"), chdir: SESSIONS_ROOT
+      )
+      expect(status).not_to be_success, output
+      expect(output).to include("3").and include("7")
+    end
+  end
 end
