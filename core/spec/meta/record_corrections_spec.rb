@@ -96,6 +96,37 @@ RSpec.describe "corrections that stay corrected" do
   # now. This is the regression: a frozen count about a suite's size is
   # a claim about this tree, and the three places that make it are not
   # where a claim can be re-derived.
+  describe "051, the release record whose own claim 024.276 disproved" do
+    let(:record) { read("docs", "design", "tasks", "051-0.2.16-shipped.md") }
+
+    # `024.276`. That entry's Area names three files, and this is the one
+    # that was never edited: `051` says twice that every entry naming
+    # 0.2.16 was retargeted with a reason of its own, taken from the
+    # release's own measurements. `024.276` counted them -- 53 of 54
+    # carried one of exactly two byte-identical paragraphs, and driving
+    # them found one entry fixed two releases earlier, one contradicting
+    # its own Direction a paragraph above, and one that was wrong when
+    # written.
+    #
+    # Found in 0.2.18 by asking whether the 0.2.x line was really closed,
+    # rather than by a reviewer -- which is why it is pinned here and not
+    # only corrected: an entry marked `fixed` whose own Area still
+    # carries the disproved claim is the shape this file exists for.
+    #
+    # Needle assembled, per this file's header.
+    it "does not still assert every retarget carried a reason of its own" do
+      needle = %w[retargeted with a reason].join(" ")
+      corrected = flat(record)
+
+      expect(corrected).to include("024.276"),
+                           "051 makes the claim 024.276 disproved and does not cite it; " \
+                           "the correction has been reverted or was never applied."
+      expect(corrected.scan(needle).length).to be <= 1,
+                                                "the claim appears #{corrected.scan(needle).length} times. " \
+                                                "024.276 established it was false of 53 of 54 entries."
+    end
+  end
+
   describe "the argument for reading per-example status" do
     let(:sources) do
       { "scripts/preflight.rb" => read("scripts", "preflight.rb"),

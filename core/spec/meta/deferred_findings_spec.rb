@@ -915,4 +915,33 @@ RSpec.describe "deferred findings metadata" do
                         "belongs in one place the entries cite."
     end
   end
+
+  # A metadata block is a `key: value` list read by `DeferredFindings`,
+  # and a key written twice is resolved by keeping the last one. Nothing
+  # says which was meant, and the reader cannot tell it happened -- which
+  # is this repository's commonest failure shape: the answer that would
+  # be right if nothing had gone wrong.
+  #
+  # Found in 0.2.18 by sweeping the register for it rather than by a
+  # reviewer, and it was not harmless. `024.153` carried two
+  # `user-visible-note` keys: the first said the entry had been
+  # **withdrawn** because it does not reproduce, the second described the
+  # defect as live, and the parser kept the second. So every machine
+  # reading the register saw a real defect that had been fixed, while the
+  # entry's own text said it had been withdrawn -- `024.130`'s class,
+  # arriving through the metadata instead of the prose.
+  it "gives each entry's metadata block no key twice" do
+    offenders = deferred.split(/^## (?=024\.)/).drop(1).filter_map do |section|
+      yaml = section[/```yaml\n(.*?)```/m, 1] or next
+
+      repeated = yaml.scan(/^([a-z-]+):/).flatten.tally.select { |_, n| n > 1 }
+      next if repeated.empty?
+
+      "#{section[/\A(024\.[0-9R.]+)/, 1]}: #{repeated.keys.join(', ')}"
+    end
+
+    expect(offenders).to be_empty,
+                         "a repeated key is resolved by keeping the last, and nothing says which was " \
+                         "meant:\n  #{offenders.join("\n  ")}"
+  end
 end

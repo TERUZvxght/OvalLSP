@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**286 entries below** <!-- measured: register-entries = 286 -->,
+**287 entries below** <!-- measured: register-entries = 287 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -443,7 +443,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.273`](#024273-renaming-a-local-that-is-a-parameter-leaves-the-parameter-behind-and-the-answer-can-be-silent) | open | 0.3.0 | Renaming a local that is a parameter leaves the parameter behind, an… |
 | [`024.274`](#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | open | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
 | [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | unscheduled | A workspace-identity example fails only in a full-suite run, and not… |
-| [`024.276`](#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | fixed | 0.2.17 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
+| [`024.276`](#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | open | 0.3.0 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
 | [`024.277`](#024277-a-local-variable-s-identity-follows-the-cref-so-a-block-that-changes-self-splits-it) | fixed | 0.2.17 | A local variable's identity follows the cref, so a block that change… |
 | [`024.278`](#024278-a-local-variable-s-identity-has-no-file-in-it-so-renaming-one-edits-another-file) | fixed | 0.2.17 | A local variable's identity has no file in it, so renaming one edits… |
 | [`024.279`](#024279-the-rename-oracle-put-the-caret-in-the-wrong-place-so-its-first-numbers-were-part-measurement) | fixed | 0.2.17 | The rename oracle put the caret in the wrong place, so its first num… |
@@ -458,6 +458,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.288`](#024288-ruby-4-0-puts-a-fourth-name-on-object-that-rbs-does-not-declare) | open | 0.3.0 | Ruby 4.0 puts a fourth name on Object that RBS does not declare |
 | [`024.289`](#024289-a-class-that-includes-an-unread-module-is-not-checked-at-class-level-so-a-typo-there-is-silent) | open | 0.3.0 | A class that includes an unread module is not checked at class level… |
 | [`024.290`](#024290-nothing-is-reported-about-a-call-whose-receiver-is-object) | open | 0.3.0 | Nothing is reported about a call whose receiver is `Object` |
+| [`024.291`](#024291-a-repeated-key-in-a-metadata-block-is-resolved-silently-and-one-of-them-discarded-a-withdrawal) | fixed | 0.2.18 | A repeated key in a metadata block is resolved silently, and one of … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -11852,12 +11853,11 @@ status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
-  Withdrawn rather than fixed: re-driven in 0.2.15 and it does not reproduce.
-user-visible-note: >
-  18 of the untargeted entries are open, user-visible defects: they are
-  published to users as limitations, and no release has undertaken to
-  fix them. That is a statement to a user that something is broken and
-  nobody has said when it will not be.
+  Withdrawn rather than fixed: re-driven in 0.2.15 and it does not
+  reproduce. What it said when filed, and what the parser read until
+  0.2.18 because this key was written twice: 18 of the untargeted
+  entries are open, user-visible defects, published to users as
+  limitations with no release undertaking to fix them.
 target: 0.2.15
 released-in: 0.2.15
 ```
@@ -14561,7 +14561,6 @@ in a sentence. Saying a table catches it would be the same error again.
 status: fixed
 kind: friction
 user-visible: no
-released-in: 0.2.16
 user-visible-note: >
   Nothing a user meets. What it costs is that the evidence a fix
   rests on is unverifiable text, and the rule that produced it says
@@ -18967,7 +18966,8 @@ ordinary work in whatever release that is.
 ## 024.276 A closing pass retargeted 54 entries at 0.3.0, and 53 of them give one of two pasted reasons
 
 ```yaml
-status: fixed
+status: open
+target: 0.3.0
 kind: defect
 user-visible: no
 user-visible-note: >
@@ -18975,7 +18975,6 @@ user-visible-note: >
   defect that decides which user-visible defects get worked on: 35 open
   user-visible entries name a release that two scope documents say is
   not taking them, so nothing schedules them at all.
-released-in: 0.2.17
 ```
 
 **Fixed in 0.2.17**, both halves of the Direction.
@@ -19083,6 +19082,35 @@ its reachability is not defended.
    available and unread here. It has to count an entry that *describes*
    the duplication as one entry, not as another instance — which is why
    this one describes the two paragraphs rather than quoting them.
+### 0.2.18: marked fixed with one of its own three files untouched
+
+**This entry's Area names three files. Two were edited in 0.2.17 and
+`051` was not**, so the sentence this entry disproved — that every
+entry naming 0.2.16 was "retargeted with a reason each, from the
+release's own measurements" — stood in `051` for two more releases, in
+a summary table row and again in its "What is left of 0.2.x" section.
+
+Confirmed rather than assumed: `git log` shows `051` last touched by
+`7bce3c4`, the commit that created it, while the register and `045`
+both moved afterwards.
+
+Corrected in both places, with what was actually counted, and pinned by
+`core/spec/meta/record_corrections_spec.rb` — the file this entry's own
+re-triage created, for exactly this ("a record defect fixed by editing
+a document leaves nothing behind that would fail if it came back").
+
+**The shape worth keeping.** A `status: fixed` is a claim about every
+place the entry's Area names, and nothing checked that the Area had
+been walked. This is the same defect as the one the entry records,
+one level up: the 0.2.17 pass verified the *entries* and not its own
+*file list*. Found in 0.2.18 by asking whether the 0.2.x line was
+genuinely closed, which is the only reason it was looked for at all.
+
+**Reopened rather than left fixed**, because what is unpaid is not the
+correction — that is done — but the check: nothing today reads an
+entry's Area and asks whether those files changed when it was closed.
+`024.190` already records annotated tag messages as a channel no scan
+reads; this is the same class in the register itself.
 
 
 ## 024.277 A local variable's identity follows the cref, so a block that changes `self` splits it
@@ -19913,6 +19941,63 @@ is nothing to narrow here that would not be the 25 reports again.
 Asserted rather than described: `object_receiver_decline_spec.rb`'s
 "also says nothing about a genuine typo at the top level, which is what
 it costs".
+
+## 024.291 A repeated key in a metadata block is resolved silently, and one of them discarded a withdrawal
+
+```yaml
+status: fixed
+released-in: 0.2.18
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it cost is that the register's
+  machine-readable view of an entry disagreed with the entry's own
+  text about whether the defect was real, and every count derived
+  from the register read the wrong one.
+```
+
+**Area:** `docs/design/tasks/024-deferred-review-findings.md`,
+`core/spec/meta/deferred_findings_spec.rb`
+
+A metadata block is a `key: value` list, and `DeferredFindings` keeps
+the **last** occurrence of a repeated key. Nothing said which was
+meant, and no reader could tell it had happened.
+
+**It was not harmless.** `024.153` carried `user-visible-note` twice.
+The first said the entry had been **withdrawn** because it does not
+reproduce; the second described the defect as live and published to
+users. The parser kept the second — so every derived count, and every
+check reading that field, saw a real defect that had been fixed, while
+the entry's own text said it had been withdrawn. That is `024.130`'s
+class arriving through the metadata rather than the prose, and
+`024.130` is the entry about publishing a limitation the product does
+not have.
+
+`024.220` had `released-in` twice with the same value: idempotent, and
+the same defect.
+
+Merged so the withdrawal is what a reader and the parser both see, and
+checked by an example in `deferred_findings_spec` that names the entry
+and the key. Watched failing on both before the fix.
+
+**How it was found, which is the part worth keeping.** Not by a
+reviewer. 0.2.18 was published, and the question "is 0.2.x really
+closed" was asked once more. A sweep for entries marked `fixed` whose
+Area named files that never changed in the closing release produced
+seven candidates — and **the sweep's premise was wrong**: an Area names
+where a defect *lives*, and this repository fixes many by pinning
+rather than by editing the named file, so `024.268` and `024.269`
+correctly leave `agent_process_manager.rb` untouched. Narrowed to
+entries whose Area is *documents only*, where a documentary correction
+has nowhere else to land, it produced one — and that one
+(`024.153`) was also a false positive, because `045` had been updated a
+release earlier than the sweep assumed.
+
+The duplicate key was seen while checking that false positive. The
+sound narrowing found nothing; looking closely at what it did find
+found this. Recorded because the useful move was **not trusting the
+sweep's own hits**, which is the same discipline the measurement
+section asks for.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
