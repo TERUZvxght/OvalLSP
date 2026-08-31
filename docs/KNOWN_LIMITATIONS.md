@@ -298,14 +298,18 @@ missed one", so each is narrow on purpose. What that costs a user:
   "typo in a call on a module" section below gives. So a third of the
   argument-count mistakes in a codebase shaped like this one go
   unreported, all of them on module receivers.
-- **Argument types** are checked so narrowly that on the code measured
-  so far they are not reported at all. Over Ruby's standard library, five
-  Rails gems and minitest — 2,042 files — this check produces
-  **zero** findings, and over prism with its own RBS loaded it produces
-  zero as well (024.37). Before 0.2.0's last round of fixes those two
-  corpora produced 795 and 151, and every one was wrong. Treat it as
-  something that will not contradict your code rather than something that
-  will catch a mistake in it; the shapes below say why. <!-- documents: 024.37 -->
+- **Argument types** are checked so narrowly that on most code they are
+  not reported at all, and where they *are* reported they have so far
+  been wrong. Over Ruby's standard library, five Rails gems and minitest
+  — 2,042 files — this check produces **zero** findings. Over the `rbs`
+  gem with its own RBS loaded, measured again in 0.2.18, it produces
+  **six**, and all six are the same false report: a namespaced type
+  called incompatible with itself (`RBS::Location` against `Location`,
+  which are one class). Before 0.2.0's last round of fixes two corpora
+  produced 795 and 151, and every one of those was wrong too. **No
+  measurement of this check has yet produced a true report on real
+  code.** Treat it as something that will not catch a mistake in yours;
+  the shapes below say why. <!-- documents: 024.37 -->
 
   Checked only where every input is *stated*: the
   expected type comes from an RBS/RBI declaration (Ruby source declares

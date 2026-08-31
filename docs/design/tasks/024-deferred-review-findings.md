@@ -209,7 +209,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
 | [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | done | 0.2.18 | A class that includes a module the workspace cannot resolve still re… |
 | [`024.36`](#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
-| [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.2.18 | The argument-type check reports nothing on measured real Ruby |
+| [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.3.0 | The argument-type check reports nothing on measured real Ruby |
 | [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.2.18 | `scope_at` copies the whole environment once per descent step |
 | [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.2.18 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
@@ -3106,7 +3106,7 @@ user-visible-note: >
   way the check accepts, it is not silent -- it reports, and on the one
   such corpus measured every report is false. That is `024.224`, and
   the question this entry frames cannot be answered until it is fixed.
-target: 0.2.18
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`argument_type_findings`,
@@ -3193,6 +3193,58 @@ their own numbers: `024.223`, fixed in 0.2.15, and `024.224`. Neither is
 this entry, and closing either does not close this one.*
 
 **Re-triaged in 0.2.17** (`024.276`). Blocked on `024.224` by its own body — a check that fires nowhere is a different row from one that fires correctly on a typed workspace, and the measurement cannot be read until the namespaced-type comparison stops rejecting a type as incompatible with itself. Both are repairs to a shipped check, so both belong on the patch line and in that order.
+
+### Re-measured in 0.2.18, and the answer to the open question is worse than zero
+
+The entry's own note says the premise changed: on a workspace that
+states types the way the check accepts, it is not silent. Driven at
+HEAD against the `rbs` gem with its own `sig/` as the signature root —
+109 files, `unresolved-constant` at 369 as the control:
+
+```
+  argument-type: 6
+
+  inline_parser.rb:559  `new` expects RBS::Location here, but Location is given
+  inline_parser.rb:560  `new` expects RBS::Location here, but Location is given
+  prototype/runtime.rb:527  `generate_mixin` expects RBS::TypeName here, but TypeName is given
+  prototype/runtime.rb:530  `generate_methods` expects RBS::TypeName ...
+  prototype/runtime.rb:567  `generate_mixin` expects RBS::TypeName ...
+  prototype/runtime.rb:569  `generate_methods` expects RBS::TypeName ...
+```
+
+**All six are `024.224`** — a namespaced type reported incompatible with
+itself. So the honest statement of this check's measured yield is not
+"zero findings" but **zero true findings, ever, on any corpus this
+project has pointed it at**, and a non-zero false yield wherever types
+are actually declared.
+
+**The published limitation understated it** and said the check produces
+zero. It now says what the measurement says, in both languages. An
+entry that understates its own defect is harder to catch than one that
+is simply wrong, which is `024.131`.
+
+### Where the six come from, which is not where the entry looks
+
+Traced: the *actual* side is a signature return type —
+`def rbs_location: (Prism::Location) -> Location`, declared inside a
+namespace, which RBS resolves to `RBS::Location` and
+`Signatures::TypeConverter` then flattens to the bare string `Location`.
+The *expected* side keeps its namespace. `#compatible_nominal?` reduces
+the expected side with `bare_name` (leading `::` only), so it compares
+`RBS::Location` against a reachable set holding `Location` and
+`::Location`.
+
+That is the example `CLAUDE.md` names in its own words: "`TypeConverter`
+knows an absolute `RBS::TypeName` at the moment it builds a
+`Types::Nominal`, flattens it to a String, and three downstream readers
+then normalise spellings to get the identity back." The fix is not to
+widen the comparison — `024.224`'s pending spec measures what that costs
+— but to stop throwing the identity away.
+
+**Retargeted to 0.3.0, beside `024.224`**, which this entry's own note
+already said: "the question this entry frames cannot be answered until
+it is fixed". Whether a capability row survives is a question about a
+check that currently answers wrongly; fixing the wrongness comes first.
 
 ## 024.38 `scope_at` copies the whole environment once per descent step
 
