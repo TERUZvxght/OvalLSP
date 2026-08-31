@@ -178,7 +178,17 @@ jobs:
     # verifies 4.0", and it was right.
     continue-on-error: true
     steps:
+      # Same full checkout as the gating job, and for the same reason
+      # (`024.282`): `spec/meta`'s tree-census checks refuse a shallow
+      # clone, and `home_path_guard_spec` refuses a clone whose tags have
+      # no bodies. Without it this job reported five clone failures
+      # alongside its one real 4.0 difference, and a reader cannot tell a
+      # forward-compatibility signal from checkout noise — which is the
+      # whole of what an informational job is for. `024.287`.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
 
       - uses: ruby/setup-ruby@v1
         with:

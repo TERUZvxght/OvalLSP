@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**282 entries below** <!-- measured: register-entries = 282 -->,
+**284 entries below** <!-- measured: register-entries = 284 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -454,6 +454,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.284`](#024284-nothing-local-can-see-that-ci-is-red-and-preflight-does-not-run-the-extension) | open | 0.2.18 | Nothing local can see that CI is red, and preflight does not run the… |
 | [`024.285`](#024285-three-interpreter-sessions-resolved-against-whatever-the-machine-had-installed) | fixed | 0.2.17 | Three interpreter sessions resolved against whatever the machine had… |
 | [`024.286`](#024286-a-session-recorded-on-one-ruby-was-compared-against-another-so-the-3-3-job-called-true-answers-wrong) | fixed | 0.2.17 | A session recorded on one Ruby was compared against another, so the … |
+| [`024.287`](#024287-the-informational-ruby-4-0-job-reported-five-checkout-failures-and-one-real-difference) | fixed | 0.2.18 | The informational Ruby 4.0 job reported five checkout failures and o… |
+| [`024.288`](#024288-ruby-4-0-puts-a-fourth-name-on-object-that-rbs-does-not-declare) | open | 0.3.0 | Ruby 4.0 puts a fourth name on Object that RBS does not declare |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -18608,6 +18610,83 @@ fail. Without the second, "decline everything" passes.
 Found by pushing, on the third CI run of the day: `024.282`'s
 `fetch-depth` took the job from seven failures to two, `024.285`'s
 declared gem took 3.4 to green, and this is what was left holding 3.3.
+
+## 024.287 The informational Ruby 4.0 job reported five checkout failures and one real difference
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. Recorded because an informational job whose
+  output is mostly noise is one nobody reads, which costs exactly the
+  signal it exists to carry.
+released-in: 0.2.18
+```
+
+**Area:** `.github/workflows/ci.yml`
+
+`024.282` gave the gating `core` job `fetch-depth: 0` and did not give it
+to `core-ruby-4`. So that job went on reporting the same five
+shallow-clone refusals — three from `doc_links_spec`, one from
+`measured_claims_spec`, one from `home_path_guard_spec` — alongside its
+**one** real 4.0 difference (`024.288`).
+
+An informational job exists to carry a signal nobody is required to act
+on. Five sixths noise is how that signal stops being read, and this job's
+own comment says what it is for: "that row used to end 'nothing
+continuously verifies 4.0', and it was right."
+
+Fixed by giving it the same checkout as the gating job.
+
+## 024.288 Ruby 4.0 puts a fourth name on Object that RBS does not declare
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/signatures/environment.rb`
+
+`024.239` records that the signature set's `::Object` omits names the
+running Ruby gives every object, and that each omission became a false
+`unknown-method` report against the user's own class. Three were found
+on Ruby 3.4 — `trap`, `set_trace_func`, `iterator?` — and
+`UNIVERSAL_RUBY_NAMES` names them.
+
+`object_signature_gap_spec` re-derives that list rather than trusting it,
+"because a written list is exactly the thing that goes stale on the next
+Ruby or the next RBS". **It went stale, and the spec said so**, on the
+informational 4.0 job:
+
+```
+  expected: ["iterator?", "set_trace_func", "trap"]
+       got: ["instance_variables_to_inspect", "iterator?", "set_trace_func", "trap"]
+```
+
+So on Ruby 4.0 a call to `instance_variables_to_inspect` on the user's
+own class is reported missing, exactly as `trap` was before `024.239`.
+
+**Recorded rather than fixed, which is this job's standing decision**:
+`docs/SUPPORT_MATRIX.md` calls 4.0 best effort, and ci.yml says in as
+many words that "a 4.0-specific failure gets recorded rather than fixed
+— a required job would turn the first one into work nobody agreed to
+do."
+
+**And the one-line fix is the wrong one.** Adding the name
+unconditionally would make the engine decline on it under 3.3 and 3.4,
+where Ruby does not define it — so a genuine typo of that name goes
+silent on every currently supported Ruby. That is `024.13`'s failure,
+which cost four real typo reports for exactly this kind of proxy.
+
+**Direction.** The list is hand-derived and pinned by a spec that
+re-derives it; the shape that does not go stale is to derive it at load
+from the running interpreter minus the signature set, which is what the
+spec already does in a subprocess. Cost is startup time on every boot
+against a list that changes once per Ruby release, so it is a real
+trade rather than an obvious win — hence an entry.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
