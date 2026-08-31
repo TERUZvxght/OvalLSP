@@ -447,7 +447,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.277`](#024277-a-local-variable-s-identity-follows-the-cref-so-a-block-that-changes-self-splits-it) | fixed | 0.2.17 | A local variable's identity follows the cref, so a block that change… |
 | [`024.278`](#024278-a-local-variable-s-identity-has-no-file-in-it-so-renaming-one-edits-another-file) | fixed | 0.2.17 | A local variable's identity has no file in it, so renaming one edits… |
 | [`024.279`](#024279-the-rename-oracle-put-the-caret-in-the-wrong-place-so-its-first-numbers-were-part-measurement) | fixed | 0.2.17 | The rename oracle put the caret in the wrong place, so its first num… |
-| [`024.280`](#024280-renaming-a-local-bound-by-a-regexp-named-capture-leaves-the-capture-silently) | open | 0.2.18 | Renaming a local bound by a regexp named capture leaves the capture,… |
+| [`024.280`](#024280-renaming-a-local-bound-by-a-regexp-named-capture-leaves-the-capture-silently) | fixed | 0.2.18 | Renaming a local bound by a regexp named capture leaves the capture,… |
 | [`024.281`](#024281-the-erb-integration-test-asserted-an-answer-the-engine-correctly-declines) | fixed | 0.2.17 | The `.erb` integration test asserted an answer the engine correctly … |
 | [`024.282`](#024282-ci-was-red-on-main-for-a-week-and-nothing-in-the-tree-said-so) | fixed | 0.2.17 | CI was red on `main` for a week and nothing in the tree said so |
 | [`024.283`](#024283-the-packaged-core-is-driven-only-on-linux-so-the-macos-build-is-still-smoke-tested) | open | 0.3.0 | The packaged Core is driven only on Linux, so the macOS build is sti… |
@@ -18284,6 +18284,26 @@ decides whether this is the product or the test.
 
 Moved to the patch line rather than left naming a release that is being cut, because there is nothing here to do until it fails again. The instruction stands and is the whole of the work: **the next full-suite run that reproduces it captures the failure message before anything else.** That one line decides whether this is the product or the test, and it has never been captured.
 
+### A second example of the same shape, 0.2.18
+
+`spec/ovallsp/observation/collector_spec.rb`'s "lets an object given a
+singleton method inside an observed run be collected" failed once in a
+full-suite preflight and passed three times out of three when run alone.
+
+It is a **GC** example — it asserts an object becomes collectable — so
+the obvious hypothesis is different from the workspace-identity one:
+the longer the suite, the more live objects a `GC.start` has to work
+through, and a test that asserts collection has happened by a given
+point is measuring the collector's schedule rather than the code.
+
+Recorded here rather than as its own entry because what this entry is
+about is the *class*: an example that fails only in a full run and not
+reproducibly. Two of them now, in unrelated subsystems, which is itself
+the argument that the cause is the run and not either subject.
+
+**Still nothing captured.** Neither instance has had its failure message
+read at the moment it failed. That remains the whole of the work.
+
 ## 024.276 A closing pass retargeted 54 entries at 0.3.0, and 53 of them give one of two pasted reasons
 
 ```yaml
@@ -18605,11 +18625,46 @@ on, and one line of that would have shown this immediately.
 ## 024.280 Renaming a local bound by a regexp named capture leaves the capture, silently
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**Fixed in 0.2.18 by recording the name's own range**, which is the
+second of the two candidate directions this entry names.
+
+`024.260`'s decline was right about what it declined: Prism gives the
+`LocalVariableTargetNode` the range of the *whole regexp literal*, and
+rewriting that destroys the pattern. What it could not do was leave the
+uses recorded and the binding not — that is the half-rename this entry
+is, and it fails silently.
+
+The name is written literally inside the pattern, so its own range is
+computable. `#visit_match_write_node` finds `(?<name>` or `(?'name'` in
+the regexp's own source and records *that*. Both of Ruby's spellings are
+handled; an interpolated pattern, or a name the scan cannot find, stays
+declined — which is where this started, and is a decline rather than a
+wrong answer.
+
+**Prism does not always hand back the literal**, which the first attempt
+did not know: `/(?<n>x)/o` — with a flag — gives the target the name's
+own range and was already recorded. Recording it again here is a
+duplicate, so a target whose range already is the name is skipped.
+`parser_scope_frames_spec`'s "records each named capture exactly once,
+whichever way Prism gives it" is the control, and it is what caught it.
+
+**Measured.** The rename oracle over 1,043 files of activesupport,
+activerecord, actionpack, railties and i18n: meaning-changing renames
+**58 -> 57**, `unparseable` 0 on both sides, and the residual is now a
+single shape — **all 57 are `024.273`**, a binding whose declaration is a
+parameter. The one case that was neither that nor `024.274` is gone.
+
+**What it still cannot see** is a `Regexp.last_match[:where]` written
+elsewhere: that is a string, the same blind spot `send` has, and the
+same one every other rename lives with. Refusing instead would have kept
+that safe and left the silent half-rename in place, which section 0
+ranks lower.
 
 **Area:** `core/lib/ovallsp/parser_service.rb`
 

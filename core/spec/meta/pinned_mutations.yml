@@ -219,6 +219,18 @@
   to: "          open_document ||= document\n"
   spec: spec/ovallsp/server_publish_invariant_spec.rb
   example: "publishes nothing when the close lands while it is still computing"
+- why: "024.280's capture-name range -- without it a regexp named capture is not recorded at all, so a rename rewrites the uses and leaves the capture, and the renamed name becomes a defined-but-nil local rather than an error."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "            record_local_variable(target.name, location) if location\n"
+  to: ""
+  spec: spec/ovallsp/server_rename_spec.rb
+  example: "rewrites a regexp named capture with the local it binds"
+- why: "024.280's skip of a target Prism already gave the name's own range -- without it the `/o` spelling is recorded twice, which is two identical edits in one WorkspaceEdit."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "            next if target.location.slice == target.name.to_s\n"
+  to: ""
+  spec: spec/ovallsp/parser_scope_frames_spec.rb
+  example: "records each named capture exactly once, whichever way Prism gives it"
 - why: "024.230's owner for a top-level `def` -- without it the declaration is indexed under no owner at all, so neither an Object nor a Kernel receiver reaches it and a call to it answers nothing."
   file: core/lib/ovallsp/parser_service.rb
   from: "        owner = \"Object\" if top_level_object_method\n"
@@ -558,18 +570,12 @@
   to: "        @scopes.last\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "gives a superclass expression the enclosing scope's whole identity"
-- why: "The check that the location really is the name -- without it a regexp named capture hands Rename the whole literal to replace."
+- why: "The check that the location really is the name -- without it a regexp named capture is recorded twice, once at the name (024.280's own visit) and once at the whole literal, and the second hands Rename the pattern to replace."
   file: core/lib/ovallsp/parser_service.rb
   from: "        return unless location.slice == name.to_s\n\n"
   to: ""
   spec: spec/ovallsp/parser_scope_frames_spec.rb
-  example: "declines a named capture whose location is the whole literal"
-- why: "The range comparison in `record_local_variable` -- Prism hands back the whole enclosing literal when it cannot locate a name inside it, so a regexp named capture would hand Rename the pattern to replace."
-  file: core/lib/ovallsp/parser_service.rb
-  from: "        return unless location.slice == name.to_s\n\n"
-  to: ""
-  spec: spec/ovallsp/parser_scope_frames_spec.rb
-  example: "declines a named capture whose location is the whole literal"
+  example: "records each named capture exactly once, whichever way Prism gives it"
 - why: "Declining when no frame binds -- a nil scope id makes every unplaced occurrence of one name under one owner a single identity Rename would act on."
   file: core/lib/ovallsp/parser_service.rb
   from: "        return unless frame\n\n        # The binding frame's owner"

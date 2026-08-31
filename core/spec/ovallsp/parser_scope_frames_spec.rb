@@ -379,14 +379,36 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
     #   # => "/(?<n>\\d)/"
     #   # ruby 3.4.10
     #
-    # Recording the second would let Rename replace the pattern with the
-    # new name. Section 0 ranks that below saying nothing.
+    # Recording the second *as Prism hands it over* would let Rename
+    # replace the pattern with the new name, and section 0 ranks that
+    # below saying nothing — which is why it was declined until 0.2.18.
+    #
+    # **Declining left something worse than silence, though**, and that
+    # is `024.280`: the binding was not recorded and the *uses* were, so
+    # a rename rewrote the uses and left the capture, and the renamed
+    # name became a defined-but-nil local rather than an error. The name
+    # is written literally inside the pattern, so its own range is
+    # computable, and `#visit_match_write_node` records *that* — both
+    # spellings now land on the name and nothing rewrites a pattern.
     it "records a named capture whose location really is the name" do
       expect(positions("def m(s)\n  /(?<n>x)/o =~ s\n  n\nend\n")).to eq([["n", 1, 6], ["n", 2, 2], ["s", 1, 16]])
     end
 
-    it "declines a named capture whose location is the whole literal" do
-      expect(positions("def m(s)\n  /(?<n>\\d)/ =~ s\n  n\nend\n")).to eq([["n", 2, 2], ["s", 1, 16]])
+    it "records a named capture whose location is the whole literal, at the name's own range" do
+      expect(positions("def m(s)\n  /(?<n>\\d)/ =~ s\n  n\nend\n"))
+        .to eq([["n", 1, 6], ["n", 2, 2], ["s", 1, 16]])
+    end
+
+    # And exactly once. Prism gives the `/o` spelling a target whose
+    # range already is the name, so both visitors would record it —
+    # two identical edits in one WorkspaceEdit, and one occurrence
+    # counted twice by Find References.
+    it "records each named capture exactly once, whichever way Prism gives it" do
+      %w[/(?<n>x)/o /(?<n>\d)/].each do |pattern|
+        found = positions("def m(s)\n  #{pattern} =~ s\n  n\nend\n").select { |name, _, _| name == "n" }
+
+        expect(found.count { |_, line, _| line == 1 }).to eq(1), "recorded the capture in #{pattern} twice"
+      end
     end
 
     # The other decline, and the one only broken source reaches. This

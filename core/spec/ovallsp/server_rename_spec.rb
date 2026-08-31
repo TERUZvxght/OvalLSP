@@ -416,4 +416,55 @@ RSpec.describe "Ovallsp::Server textDocument/prepareRename and textDocument/rena
     changes = sent_messages.first[:result][:changes]
     expect(changes.keys).to contain_exactly(:"file:///w.rb", :"file:///u.rb")
   end
+
+  # `024.280`. A named capture in a regexp used with `=~` binds a local:
+  #
+  #   $ ruby -e '
+  #   /(?<where>\d+)/ =~ "a12"
+  #   p [where, defined?(where)]
+  #   '
+  #   # => ["12", "local-variable"]
+  #   # ruby 3.4.10
+  #
+  # Prism gives that binding's `LocalVariableTargetNode` the range of the
+  # **whole regexp literal**, so `024.260` declined to record it — right,
+  # because rewriting that range destroys the regexp. What nobody
+  # recorded is the consequence at the other end: the *uses* were
+  # recorded and the *binding* was not, so renaming from a use rewrote
+  # the uses and left the capture.
+  #
+  # **And it failed silently**, which is why it is fixed rather than
+  # refused. `where = where.sub(...) if where` assigns before it reads,
+  # so the renamed name is a defined-but-nil local: the guard goes false,
+  # the `sub` never runs, and the next line passes `nil`. Nothing raises.
+  #
+  # The name is written literally inside the pattern, so its own range is
+  # computable, and rewriting *that* is what Ruby needs. What the rename
+  # still cannot see is a `Regexp.last_match[:where]` elsewhere — a
+  # string, the same blind spot `send` has, and the same one every other
+  # rename in this file lives with.
+  it "rewrites a regexp named capture with the local it binds" do
+    source = "/(?<where>\\d+)/ =~ line\nwhere = where.to_i if where\nputs where\n"
+    input =
+      did_open("file:///a.rb", source) +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 1, character: 0 },
+                  newName: "digits" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    edits = sent_messages.first[:result][:changes][:"file:///a.rb"]
+    lines = source.lines
+    edits.sort_by { |e| [-e[:range][:start][:line], -e[:range][:start][:character]] }.each do |edit|
+      line = edit[:range][:start][:line]
+      lines[line] = lines[line].dup
+      lines[line][edit[:range][:start][:character]...edit[:range][:end][:character]] = edit[:newText]
+    end
+
+    expect(lines.join).to eq("/(?<digits>\\d+)/ =~ line\ndigits = digits.to_i if digits\nputs digits\n")
+    expect(Prism.parse(lines.join)).to be_success
+  end
 end

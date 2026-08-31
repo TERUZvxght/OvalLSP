@@ -1105,6 +1105,70 @@ module Ovallsp
         super
       end
 
+      # **A regexp named capture binds a local, and Prism points at the
+      # whole literal.**
+      #
+      #   $ ruby -e '
+      #   /(?<where>\d+)/ =~ "a12"
+      #   p [where, defined?(where)]
+      #   '
+      #   # => ["12", "local-variable"]
+      #   # ruby 3.4.10
+      #
+      # The `LocalVariableTargetNode`s a `MatchWriteNode` carries all have
+      # the regexp's own range, so `#record_local_variable`'s "the range
+      # really is the name" guard declined every one (`024.260`) --
+      # rightly, because rewriting that range destroys the pattern. What
+      # that left is the shape `024.280` records: the *uses* recorded and
+      # the *binding* not, so a rename rewrote the uses and left the
+      # capture, and the renamed name became a defined-but-nil local
+      # rather than an error.
+      #
+      # The name is written literally inside the pattern, so its own range
+      # is computable, and rewriting *that* is what Ruby needs. Ruby
+      # spells a named group two ways and both are handled; anything else
+      # -- an interpolated pattern, a name the scan cannot find -- is left
+      # declined, which is where this started.
+      def visit_match_write_node(node)
+        pattern = node.call.receiver
+        if pattern.respond_to?(:content_loc)
+          node.targets.each do |target|
+            # Prism does not always hand back the literal. `/(?<n>x)/o
+            # =~ s` -- with a flag -- gives the target the *name's* own
+            # range, and `#visit_local_variable_target_node` has already
+            # recorded it; recording it again here is a duplicate, which
+            # is two identical edits in one WorkspaceEdit and one
+            # occurrence counted twice by Find References.
+            next if target.location.slice == target.name.to_s
+
+            location = capture_name_location(pattern, target.name.to_s)
+            record_local_variable(target.name, location) if location
+          end
+        end
+        super
+      end
+
+      # The range of `name` inside the regexp's own source, or nil.
+      #
+      # Only the first spelling of a given name: Ruby refuses a pattern
+      # that binds one twice unless it begins with an underscore, and
+      # those are declined a layer up (`024.274`).
+      def capture_name_location(pattern, name)
+        content = pattern.content_loc
+        text = content.slice
+        offset = nil
+        ["(?<#{name}>", "(?'#{name}'"].each do |opening|
+          found = text.index(opening)
+          next unless found
+
+          offset = found + opening.bytesize - name.bytesize - 1
+          break
+        end
+        return nil unless offset
+
+        Prism::Location.new(pattern.send(:source), content.start_offset + offset, name.bytesize)
+      end
+
       # **A value nobody wrote.** `{a:}`, `helper(limit:)` and `in {a:}`
       # are all one construct -- a hash entry whose value is omitted --
       # and Prism says so by wrapping the value it supplied in an
