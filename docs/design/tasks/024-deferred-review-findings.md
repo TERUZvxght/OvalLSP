@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**280 entries below** <!-- measured: register-entries = 280 -->,
+**281 entries below** <!-- measured: register-entries = 281 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -452,6 +452,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.282`](#024282-ci-was-red-on-main-for-a-week-and-nothing-in-the-tree-said-so) | fixed | 0.2.17 | CI was red on `main` for a week and nothing in the tree said so |
 | [`024.283`](#024283-the-packaged-core-is-driven-only-on-linux-so-the-macos-build-is-still-smoke-tested) | open | 0.3.0 | The packaged Core is driven only on Linux, so the macOS build is sti… |
 | [`024.284`](#024284-nothing-local-can-see-that-ci-is-red-and-preflight-does-not-run-the-extension) | open | 0.2.18 | Nothing local can see that CI is red, and preflight does not run the… |
+| [`024.285`](#024285-three-interpreter-sessions-resolved-against-whatever-the-machine-had-installed) | fixed | 0.2.17 | Three interpreter sessions resolved against whatever the machine had… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -18495,6 +18496,58 @@ probably a check that *reports* rather than gates: one line of
 skipped without network, so a session learns the state of the gate
 without waiting on it. That is a decision about the working loop and
 belongs in its own change set.
+
+## 024.285 Three interpreter sessions resolved against whatever the machine had installed
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. Recorded because the checker built in 0.2.17 to
+  stop a claim about Ruby going unchecked was itself resolving against
+  an undeclared gem, which is the same defect one layer up.
+released-in: 0.2.17
+```
+
+**Area:** `core/ovallsp.gemspec`, `scripts/check_interpreter_sessions.rb`
+
+Three sessions ask Ruby about `delegate` and `ActiveSupport::Concern`,
+so they open with `gem "activesupport"`. The checker runs each session
+with `BUNDLE_*` cleared — deliberately, because **a session is a claim
+about Ruby, not about this bundle**, and `024.220` records a session
+behaving differently inside one.
+
+Cleared of the bundle, `gem "activesupport"` resolved against whatever
+the machine happened to have installed. On this maintainer's machine
+that is Rails 8.1.3.1, so all three passed. On a CI runner `GEM_PATH` is
+the vendored bundle and nothing else, and activesupport was not in it:
+
+```
+  Could not find 'activesupport' (>= 0) among 69 total gem(s)
+  Checked in 'GEM_PATH=/home/runner/work/OvalLSP/OvalLSP/core/vendor/bundle/ruby/3.4.0'
+```
+
+The checker reported **four wrong answers that were really four
+absences** — three sessions plus one more in this register — and the
+`--count` example failed with it.
+
+**This is the defect the checker exists to prevent, one layer up.**
+`024.220` built it because a claim about Ruby's semantics can go stale
+or be mis-transcribed and read exactly like a correct one. A session
+that runs only where an undeclared gem happens to be installed is the
+same thing: it reads as checked, everywhere, while being checked in one
+place.
+
+**Fixed by declaring it** — `activesupport` is a development dependency
+of `core` now, so it is in the bundle both environments read, and the
+sessions run where they are asked to run rather than where the gems
+happen to be. Clearing `BUNDLE_*` stays: it is what makes a session a
+claim about Ruby, and the gem being *declared* is what makes that claim
+answerable.
+
+Found by pushing, on the run after `024.282`'s `fetch-depth` fix took
+the same job from seven failures to two.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

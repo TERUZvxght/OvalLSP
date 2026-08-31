@@ -19,6 +19,16 @@ Gem::Specification.new do |spec|
   spec.add_dependency "prism", ">= 0.24"
   spec.add_dependency "rbs", ">= 3.0"
 
+  # Three pasted interpreter sessions ask Ruby about `delegate` and
+  # `ActiveSupport::Concern`, so `scripts/check_interpreter_sessions.rb`
+  # has to be able to run them. It runs each session with `BUNDLE_*`
+  # cleared -- a session is a claim about *Ruby*, not about this
+  # bundle -- and that made them resolve against whatever the machine
+  # happened to have installed. On a CI runner, where `GEM_PATH` is the
+  # vendored bundle and nothing else, they could not run at all and the
+  # checker reported four wrong answers that were really four absences.
+  # Declaring it puts the gem where both environments look. `024.285`.
+  spec.add_development_dependency "activesupport"
   spec.add_development_dependency "benchmark"
   spec.add_development_dependency "rspec", "~> 3.13"
 end
