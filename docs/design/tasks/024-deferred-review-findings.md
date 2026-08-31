@@ -191,7 +191,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.16`](#02416-the-capability-e2e-suite-can-skip-in-full-while-ci-stays-green) | fixed | 0.1.13 | The capability E2E suite can skip in full while CI stays green |
 | [`024.17`](#02417-vscode-src-extension-ts-is-covered-by-no-test-that-runs-anywhere) | fixed | 0.1.13 | `vscode/src/extension.ts` is covered by no test that runs anywhere |
 | [`024.18`](#02418-the-unassigned-ivar-check-cannot-enumerate-what-it-needs-to) | open | 0.3.0 | The unassigned-`@ivar` check cannot enumerate what it needs to |
-| [`024.19`](#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | open | 0.2.18 | The argument-type check judges against a class the receiver is not |
+| [`024.19`](#02419-the-argument-type-check-judges-against-a-class-the-receiver-is-not) | open | 0.3.0 | The argument-type check judges against a class the receiver is not |
 | [`024.20`](#02420-contains-treats-an-exclusive-end-offset-as-inclusive) | open | 0.3.0 | `contains?` treats an exclusive end offset as inclusive |
 | [`024.21`](#02421-a-qualified-constant-is-coloured-half-one-way-half-the-other) | fixed | 0.2.15 | A qualified constant is coloured half one way, half the other |
 | [`024.22`](#02422-the-unassigned-ivar-check-is-silent-in-an-application-rails-new-produces) | open | 0.3.0 | The unassigned-`@ivar` check is silent in an application `rails new`… |
@@ -1187,7 +1187,7 @@ release, not a defect to patch in the current change set.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.18
+target: 0.3.0
 ```
 
 Reported by an independent review that drove the engine over 25 installed gems; not reproduced from a fixture here, which is why it is recorded rather than fixed.
@@ -1334,6 +1334,63 @@ being changed inside a release that already carries other changes to how
 a type name is resolved.
 
 **Re-triaged in 0.2.17** (`024.276`). A false report, so a patch is the shape: the release makes the product do what an earlier one already claimed. The residual is a constant-resolution question — respecting `Module.nesting` for a bare name, which `Index::Cref` already models — as this entry's own body says two paragraphs up. It is also the area `024.47` records a rollback in, which is the real reason to give it a change set that carries nothing else. Not re-driven since the triage agents' pass, whose method its own body criticises.
+
+### Reproduced in 0.2.18, after two fixtures that said it was gone
+
+`024.35` records the same trap and this entry hit it twice more. Driven
+against HEAD, **two shapes are silent and either alone reads as
+"fixed"**:
+
+```
+  ::Vendor::Gadgets::Widget.new.make("s")     []      rooted; 0.2.11 fixed this
+  bare Widget, nested Widget declared         []      the nesting rule finds it
+  bare Widget, nested Widget NOT declared     reported  <- the defect
+  Widget.new.make("s") at the top level       reported  <- the control, must stay
+```
+
+The published limitation names the third exactly — "a **bare** name that
+exactly one class in your workspace claims" — and it is the only one that
+makes the index's last-segment path reachable.
+
+### And the engine is right about the code it can see, which is why it moves
+
+With no `Vendor::Gadgets::Widget` anywhere, Ruby resolves a bare `Widget`
+written inside that namespace to the top-level one:
+
+```
+$ ruby -e '
+class Widget; def make(n) = n; end
+module Vendor; module Gadgets
+  class Caller; def go = Widget.new.make("s"); end
+end; end
+p Vendor::Gadgets::Caller.new.go
+'
+# => "s"
+# ruby 3.4.10
+```
+
+So the check is not applying a wrong rule. It is asserting on a
+workspace that cannot see the gem where the real
+`Vendor::Gadgets::Widget` lives, and **neither direction in this entry's
+own Direction reaches that**: the closedness gate does not fire, because
+the top-level `Widget` genuinely is closed and workspace-declared; and
+"require the resolved name to end with the constant path as written"
+passes, because the written path *is* `Widget`.
+
+**Retargeted to 0.3.0, beside `024.R7`.** Knowing what the gems declare
+is what makes this answerable; until then the only alternative is to
+stop asserting about every bare name in a namespace, which would take
+the control above with it.
+
+**The reported instance is already fixed.** It is
+`::Parser::Source::Comment.new(...)` — a *rooted* path, and 0.2.11
+stopped those reaching the fallback. What remains is the bare case,
+which no report in the wild has yet been attributed to.
+
+`bare_name_argument_type_spec.rb` holds all four rows: the reproduction
+pending with its reason, the two silences that misled, and the control
+that makes them mean something. The entry said "not reproduced from a
+fixture here"; it is now.
 
 ## 024.20 `contains?` treats an exclusive end offset as inclusive
 
