@@ -4295,6 +4295,64 @@ hunk in this one.
 
 **Stays open**, with the numbers above rather than the ones it was
 written with.
+### 0.2.18: the published numbers were the discredited ones, and 710,425
+
+**What shipped to users was the measurement this entry had already
+retracted.** `KNOWN_LIMITATIONS` said 2.1 s and 5.3 s in both
+languages, from 0.2.1 to 0.2.17 — the five-`didChange`-minus-none
+method the section above records as measuring the coalescing rather
+than the analysis. The retraction was written into the register and
+never carried to the document, which is `CLAUDE.md`'s "a revert is the
+change most likely to leave documentation behind" arriving through a
+correction instead of a revert.
+
+Corrected in both languages, with the method named and the old numbers
+explained rather than silently replaced. Re-measured here, one
+`analyze` on a warm stack, median of five:
+
+| file | lines | before | after |
+|---|---|---|---|
+| `uri/generic.rb` | 1,592 | 4.094 s | 3.911 s |
+| `net/http.rb` | 2,574 | 2.838 s | 2.688 s |
+| `rubygems/specification.rb` | 2,594 | 4.971 s | 4.744 s |
+
+### What the 5% came from, and why it is only 5%
+
+`Index::SymbolId.qualify_owner` is now memoised. Counted, not inferred:
+one `analyze` of `net/http.rb` calls it **1,961,027 times for 385
+distinct inputs**, and every call allocated a `"::#{...}"`. Removing
+two million allocations bought **4.5–5.3%**.
+
+That is the second time this entry has recorded the same lesson — the
+`Environment` memo above removed 76,365 redundant builds and bought
+10%. A call count says how often something happens, not what it costs,
+and both times the profile was right and the count was not.
+
+Three notes for whoever takes this further, each measured here:
+
+- **710,425 `SymbolId` constructions for one 2,574-line file** — 276
+  per line. That is the shape of the problem: the same identities are
+  rebuilt per query rather than computed once, which is what this
+  entry's profile section already concluded and what the count now
+  quantifies.
+- `%i[class module]` in `SymbolId#initialize` is reallocated on every
+  one of those constructions, and a frozen constant is 28% faster on
+  that line. At 710,425 calls it is about **7 ms** of 2,688 — *not*
+  taken, because `CLAUDE.md` records that 0.1.12 lost a round to logic
+  moved into this exact constructor, and 7 ms does not buy that risk.
+- The memo's cache is keyed by the argument, so `"Widget"` and
+  `"::Widget"` are two entries. Unifying them means running
+  `delete_prefix` on every call to find the key, which is the
+  allocation the memo removes, paid on the fast path to buy an
+  identity nothing asks for. The spec was **written asserting the
+  unified form and corrected** — it was a wish, not a requirement.
+
+**Stays open.** 2.7 s is still nine times the stated 300 ms, and the
+direction is unchanged: an identity computed once rather than per
+query, plus incremental re-analysis. What 0.2.x owed here was that the
+published figure be true, and that is what was paid.
+
+
 ## 024.46 Typing `self` cost 55 false diagnostics and was rolled back
 
 ```yaml

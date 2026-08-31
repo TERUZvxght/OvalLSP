@@ -473,11 +473,20 @@ what does not match.
 
 ## How long an edit takes to re-analyse
 
-**Seconds, on a file of a couple of thousand lines.** Measured per
-keystroke, with the one-off signature load excluded: `net/http.rb` (2,574
-lines) 2.1 s, `rubygems/specification.rb` (2,666 lines) 5.3 s, and it
-grows faster than the file does. The Core answers one request at a time,
-so hover, completion and signature help wait behind it.
+**Seconds, on a file of a couple of thousand lines.** One full
+re-analysis on a warm server, median of five, with the one-off signature
+load excluded: `uri/generic.rb` (1,592 lines) 3.9 s, `net/http.rb` (2,574
+lines) 2.7 s, `rubygems/specification.rb` (2,594 lines) 4.7 s. It grows
+faster than the file does. The Core answers one request at a time, so
+hover, completion and signature help wait behind it.
+
+*These numbers replace lower ones published from 0.2.1 to 0.2.17. Those
+were taken as the difference between a session with five `didChange`
+notifications and one with none — and since 0.2.10 five edits with no
+read between them coalesce into a single analysis, while the baseline
+already performs one on `didOpen`, so the difference between them was
+close to zero whatever an analysis cost. It measured the coalescing. The
+figures above are one analysis, timed directly.*
 
 The design document states 300 ms for this, so it is not a matter of
 taste — it is a requirement the product misses by an order of magnitude,

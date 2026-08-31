@@ -17,8 +17,41 @@ module Ovallsp
       # index also compares a bare owner string against stored ones, and
       # the diagnostics engine asks the signature environment with the
       # same shape of name.
+      # Memoised, and by identity rather than by value, which is what
+      # `symbol_id_memo_spec.rb` pins: `#eql?` was already true, so an
+      # example asserting equality would pass with this reverted.
+      #
+      # 024.45 counted it rather than inferring it -- one `analyze` of
+      # `net/http.rb` makes 1,961,027 calls here for **385** distinct
+      # inputs, and every one allocated a new String. The profile that
+      # entry records attributes roughly half of an analysis to building
+      # and hashing `SymbolId`s, and two of these sit on the path of every
+      # one of them.
+      #
+      # `Hash#[]=` dups and freezes a String key, so the cache's key is
+      # never the caller's object and a caller mutating its own argument
+      # afterwards cannot reach in. The value is frozen for the mirror
+      # reason: one String is now handed to every caller.
+      #
+      # A class-level ivar and not a constant: the block `Data.define`
+      # takes is `class_eval`'d, so an assignment here defines the
+      # constant in the *enclosing* `Ovallsp::Index` rather than on this
+      # class -- which is how the first version leaked one and then
+      # failed its own `private_constant`.
+      #
+      # Unsynchronised deliberately, which is safe here and is not a
+      # general licence (see 024.39): two threads racing this compute
+      # the same String from the same input, so the loser wastes an
+      # allocation and no reader can observe a wrong value. A mutex
+      # would sit on the hottest line in an analysis to prevent that.
+      #
+      # Unbounded by construction, and bounded in fact by the number of
+      # distinct constant names a workspace contains -- every one of which
+      # the indexes already retain.
       def self.qualify_owner(owner)
-        owner.nil? ? nil : "::#{owner.to_s.delete_prefix('::')}"
+        return nil if owner.nil?
+
+        (@qualified ||= {})[owner] ||= "::#{owner.to_s.delete_prefix('::')}".freeze
       end
 
       # The same rule read the other way: the name without its leading
