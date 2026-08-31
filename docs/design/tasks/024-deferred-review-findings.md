@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**285 entries below** <!-- measured: register-entries = 285 -->,
+**286 entries below** <!-- measured: register-entries = 286 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -399,7 +399,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.227`](#024227-every-outline-symbol-s-selectionrange-was-its-whole-declaration) | fixed | 0.2.15 | Every outline symbol's `selectionRange` was its whole declaration |
 | [`024.228`](#024228-every-stdlib-klass-method-answered-nothing-in-three-features-at-once) | fixed | 0.2.15 | Every stdlib `Klass.method(` answered nothing, in three features at … |
 | [`024.229`](#024229-signature-help-says-nothing-at-the-top-level-of-a-file-and-cannot-be-fixed-the-way-the-register-says) | open | 0.3.0 | Signature help says nothing at the top level of a file, and cannot b… |
-| [`024.230`](#024230-a-top-level-def-is-indexed-with-no-owner-so-nothing-can-look-it-up) | open | 0.2.18 | A top-level `def` is indexed with no owner, so nothing can look it up |
+| [`024.230`](#024230-a-top-level-def-is-indexed-with-no-owner-so-nothing-can-look-it-up) | fixed | 0.2.18 | A top-level `def` is indexed with no owner, so nothing can look it up |
 | [`024.231`](#024231-a-permission-written-down-once-was-still-missed-and-the-script-that-hid-it-said-the-opposite) | fixed | 0.2.15 | A permission written down once was still missed, and the script that… |
 | [`024.232`](#024232-the-fixture-proving-a-check-has-teeth-lost-its-own-teeth-when-a-version-shipped) | fixed | 0.2.15 | The fixture proving a check has teeth lost its own teeth when a vers… |
 | [`024.233`](#024233-the-guard-against-naming-a-shipped-release-could-not-fire-until-the-release-had-shipped) | fixed | 0.2.16 | The guard against naming a shipped release could not fire until the … |
@@ -457,6 +457,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.287`](#024287-the-informational-ruby-4-0-job-reported-five-checkout-failures-and-one-real-difference) | fixed | 0.2.18 | The informational Ruby 4.0 job reported five checkout failures and o… |
 | [`024.288`](#024288-ruby-4-0-puts-a-fourth-name-on-object-that-rbs-does-not-declare) | open | 0.3.0 | Ruby 4.0 puts a fourth name on Object that RBS does not declare |
 | [`024.289`](#024289-a-class-that-includes-an-unread-module-is-not-checked-at-class-level-so-a-typo-there-is-silent) | open | 0.3.0 | A class that includes an unread module is not checked at class level… |
+| [`024.290`](#024290-nothing-is-reported-about-a-call-whose-receiver-is-object) | open | 0.3.0 | Nothing is reported about a call whose receiver is `Object` |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -14841,11 +14842,91 @@ position it means.
 ## 024.230 A top-level `def` is indexed with no owner, so nothing can look it up
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+### Fixed in 0.2.18, and it took three places agreeing plus a fourth decision
+
+**The blast radius this entry feared is not where it is.** Before
+changing anything: over 513 files of activesupport and bundler, 7,384
+declarations, the ones carrying `owner: nil` are 358 modules and 177
+classes — top-level namespaces, where `nil` is correct — one constant,
+and exactly **one** instance method. The owner rule changes for that
+kind and nothing else.
+
+**Fixing the index alone bought nothing.** With the declaration recorded
+on `::Object`, all four features still answered exactly what they
+answered before, and so did the tree at BASE — checked, so that this was
+not read as a regression. Three places have to agree:
+
+1. the **declaration's** owner (`ParserService`), which is this entry;
+2. the **call candidate's** owner — a bare call at the top level has
+   `Object` as its receiver, and with none `ReceiverResolution` answers
+   no receiver type at all;
+3. what a **bare call's receiver is** at the top level, which
+   `Server#receiverless_definitions` asks of `scope_at`.
+
+Driven end to end afterwards: definition jumps to the `def`, hover shows
+`helper(a)` and its location, signature help shows the parameter, and
+Find References finds the call.
+
+### Two questions were being asked of one value, and separating them is the fix
+
+The first attempt gave `Scope#self_type` an `Object` fallback and broke
+completion's banding: `puts` moved from band 3 (Kernel's) to band 1
+(your own class's), above a workspace `Putter`. The existing example
+`reports no self type at the top level of a file` failed, and **it was
+right** — there is no lexically enclosing class there.
+
+`self_type` and "what a bare call's receiver is" are different
+questions. `Scope#implicit_self_type` is the second; definition, hover
+and signature help read it, completion keeps reading the first.
+`CLAUDE.md`'s test — do all the readers want the same answer? — says
+they want it *most* of the time, which is the case that says they do not.
+
+### And the check had to stop reporting about `Object`
+
+Giving a bare call its `Object` receiver made `Object` a
+workspace-declared class with a complete chain, so the undefined-method
+check began judging it **closed**. Measured over 997 files of
+activesupport, activerecord, actionpack and railties:
+
+```
+  25 introduced, 0 removed        every one false
+     9 x  Object has no method named `gem`          (RubyGems' Kernel#gem)
+     4 x  Object has no method named `include`      (top-level include is main's)
+     7 x  java_import / javax / java / org          (a JRuby-only file)
+```
+
+`Object`'s member set is whatever the process has loaded, so no static
+analysis can enumerate it — which `024.239` had already met from the
+other side, hard-coding `trap`, `set_trace_func` and `iterator?` because
+the signature set omits them. A list like that can only ever be partial;
+the argument is for declining, not for extending it.
+
+With the decline: **0 introduced and 2 removed**, both pre-existing false
+reports in activesupport's own `core_ext` duck-typing. Control
+`unresolved-constant` held at 2,987 throughout.
+
+What it costs is a genuine typo written at the top level, which is not
+reported. `024.129` records the same decline and the same cost for the
+other core classes, and `unread_include_spec`-style, the cost is an
+assertion rather than a sentence.
+
+**Four fixtures had to reopen `Object` to mean anything.** Written
+without a `class Object` in the workspace, all four passed with the
+decline removed — the check never judges a receiver closed unless the
+workspace declares it. Every Rails application has one;
+`core_ext/object/blank.rb` is exactly it.
+
+Three mutation entries, one per decision, and each needed a different
+example: the declaration owner is caught by the index example, the call
+owner **only** by Find References — definition, hover and signature help
+work without it — and the decline only by a fixture that reopens
+`Object`.
 
 **Area:** `core/lib/ovallsp/parser_service.rb` (the owner a top-level
 `def` is recorded under), `core/lib/ovallsp/index/symbol_id.rb`
@@ -18974,6 +19055,47 @@ with that work rather than standing on its own.
 Asserted rather than described: `unread_include_spec.rb`'s "also says
 nothing about a genuine typo there, which is what the rule costs" fails
 if the decline ever narrows by accident.
+
+## 024.290 Nothing is reported about a call whose receiver is `Object`
+
+```yaml
+status: open
+kind: friction
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`closed_nominal?`)
+
+The cost of `024.230`'s decline, and the entry that carries it now that
+`024.230` is closed.
+
+**`Object`'s member set is whatever the process has loaded.** Every gem,
+every core extension and RubyGems itself adds to it at run time, and the
+bundled signatures declare a fraction. So the undefined-method check
+never judges an `Object` receiver closed — which includes every bare
+call written at the top level of a file.
+
+What that costs is a genuine typo written there, which is silent.
+
+**Measured in the other direction**, which is why the decline exists: over
+997 files of activesupport, activerecord, actionpack and railties,
+judging `Object` enumerable produced **25 reports and removed none** —
+nine `gem`, four top-level `include`, seven JRuby-only names — every one
+false. `024.239` met the same fact from the other side and had to
+hard-code three names Ruby gives every object that RBS omits; a list
+like that can only ever be partial.
+
+**Friction rather than a defect**, on section 0's distinction: this is
+the engine declining, not asserting.
+
+**It resolves the way `024.129` does** — by knowing what is actually on
+`Object` in this project, which is `024.R7`'s question. Until then there
+is nothing to narrow here that would not be the 25 reports again.
+
+Asserted rather than described: `object_receiver_decline_spec.rb`'s
+"also says nothing about a genuine typo at the top level, which is what
+it costs".
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

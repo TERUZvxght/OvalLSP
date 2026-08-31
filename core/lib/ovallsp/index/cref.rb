@@ -98,6 +98,13 @@ module Ovallsp
 
       def in_method_body? = in_method_body
 
+      # **The file's own top level, and nothing that merely lacks an
+      # owner.** A `def` written here belongs to `Object`; a `def`
+      # written inside a method whose receiver this parser cannot name
+      # also has no owner, and that one belongs to nothing it can say.
+      # `024.230`.
+      def top_level? = owner.nil? && nesting.empty? && !in_method_body
+
       # Whether a receiverless call written here can add to `owner`'s
       # method surface. Three conditions that used to be assembled at each
       # call site: there has to be an owner, the call has to run when the

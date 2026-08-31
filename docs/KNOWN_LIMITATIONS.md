@@ -729,11 +729,14 @@ method was found:
   stdlib method of the same name, and `open` is the name that collides
   most. It is being fixed properly rather than
   quickly (024.229). <!-- documents: 024.229 -->
-- **A method you define at the top level of a file, outside any class,
-  is not found by anything** — no hover, no completion, no signature
-  help, no go to definition, from anywhere. Ruby puts such a method on
-  `Object`; this extension records it with no owner at all, so nothing
-  can look it up (024.230). <!-- documents: 024.230 -->
+- **Nothing is reported about a call whose receiver is `Object`** —
+  which includes every bare call written at the top level of a file.
+  What is on `Object` is whatever your process has loaded, and no static
+  analysis can enumerate that, so a typo written there is not reported.
+  The other direction is why: judging it enumerable produced 25 false
+  reports across the Rails gems — nine of them `gem`, which RubyGems
+  really does put there. Hover, go to definition, signature help and Find
+  References on a top-level method all work. <!-- documents: 024.290 -->
 
 ## Rename refuses on a method a macro declared
 

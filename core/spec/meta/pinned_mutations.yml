@@ -219,6 +219,24 @@
   to: "          open_document ||= document\n"
   spec: spec/ovallsp/server_publish_invariant_spec.rb
   example: "publishes nothing when the close lands while it is still computing"
+- why: "024.230's owner for a top-level `def` -- without it the declaration is indexed under no owner at all, so neither an Object nor a Kernel receiver reaches it and a call to it answers nothing."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        owner = \"Object\" if top_level_object_method\n"
+  to: ""
+  spec: spec/ovallsp/index/top_level_def_owner_spec.rb
+  example: "records it on Object, where Ruby puts it"
+- why: "024.230's receiver for a bare top-level call -- without it the call candidate has no owner, ReceiverResolution answers no receiver type, and Find References cannot group the call with the definition."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        call_owner = \"Object\" if call_owner.nil? && node.receiver.nil? && @cref.top_level?\n"
+  to: ""
+  spec: spec/ovallsp/index/top_level_def_owner_spec.rb
+  example: "finds the call from the definition"
+- why: "024.230's decline on an Object receiver -- Object's surface is whatever the process has loaded, and judging it closed produced 25 false reports over the Rails corpus, every one of them a real Ruby method the signature set does not declare."
+  file: core/lib/ovallsp/diagnostics/engine.rb
+  from: "        return false if OPEN_BY_CONSTRUCTION.include?(Index::SymbolId.bare_name(nominal.name.to_s))\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/object_receiver_decline_spec.rb
+  example: "says nothing about a name Ruby gives every object that the signatures omit"
 - why: "024.41's requirement that the dot ends its line -- without it a caret just after the dot of an ordinary `a.b` suppresses that call's report, so a complete expression stops being checked while the caret rests in it."
   file: core/lib/ovallsp/diagnostics/mid_edit_call.rb
   from: "        return nil unless newline && rest[0...newline].strip.empty?"

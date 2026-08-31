@@ -462,6 +462,35 @@ module Ovallsp
         # owner cannot be named already gets (`024.31`, `024.251`).
         owner = written_receiver ? receiver_owner_name(owner_receiver) : current_owner
         unnameable_receiver = written_receiver && owner.nil?
+        # **A top-level `def` belongs to `Object`, privately.** Recorded
+        # with no owner at all, so neither an `Object` nor a `Kernel`
+        # receiver reached it and a call to one got nothing from hover,
+        # completion, signature help or go to definition (`024.230`).
+        #
+        #   $ ruby -e '
+        #   def helper(a); end
+        #   p [Object.private_instance_methods(false).include?(:helper), self.class]
+        #   '
+        #   # => [true, Object]
+        #   # ruby 3.4.10
+        #
+        # Only the instance side. A top-level `def self.x` lands on
+        # `main`'s singleton class rather than on `Object`'s, so it is
+        # left exactly as it was:
+        #
+        #   $ ruby -e '
+        #   def self.top_singleton; end
+        #   p [Object.singleton_methods(false).include?(:top_singleton),
+        #      self.singleton_class.instance_methods(false).include?(:top_singleton)]
+        #   '
+        #   # => [false, true]
+        #   # ruby 3.4.10
+        #
+        # `@cref.top_level?` rather than `owner.nil?`: a `def` whose
+        # receiver this parser cannot name also has no owner, and that one
+        # is declined below rather than attributed to anything.
+        top_level_object_method = owner.nil? && !singleton && !written_receiver && @cref.top_level?
+        owner = "Object" if top_level_object_method
 
         unless unnameable_receiver
           symbol_id = Index::SymbolId.new(
@@ -491,7 +520,12 @@ module Ovallsp
             # body it does not -- Ruby leaves that public however many
             # `private`s precede it, and 0.2.8's round confirmed this engine
             # already had that right.
-            visibility: visibility_for_definition(node, singleton, inline_visibility),
+            # A top-level `def` is *private* on Object -- see the Ruby
+            # session above. Recorded public, `"str".helper` would be
+            # offered and accepted, which Ruby refuses, so the owner and
+            # the visibility travel together. `024.230`.
+            visibility: top_level_object_method ? :private : visibility_for_definition(node, singleton,
+                                                                                       inline_visibility),
             parameters: extract_parameters(node.parameters),
             origin: :source,
             body_source: node.body&.slice,
@@ -2478,9 +2512,28 @@ module Ovallsp
             [{ position: position, written_self: node.receiver.is_a?(Prism::SelfNode) }, false]
           end
 
+        # **`self` at the top level is an `Object`**, so a bare call
+        # written there has a receiver after all. Recorded with no owner,
+        # `ReceiverResolution` answered no receiver type and every such
+        # call resolved to nothing -- which is the other half of
+        # `024.230`: giving the *declaration* an owner buys nothing while
+        # the *call* still has none.
+        #
+        #   $ ruby -e '
+        #   def helper(a); end
+        #   p [Object.private_instance_methods(false).include?(:helper), self.class]
+        #   '
+        #   # => [true, Object]
+        #   # ruby 3.4.10
+        #
+        # Only a call with no written receiver: one with a receiver
+        # already has a type, and the owner is not what answers for it.
+        call_owner = current_owner
+        call_owner = "Object" if call_owner.nil? && node.receiver.nil? && @cref.top_level?
+
         @reference_candidates << Index::ReferenceCandidate.new(
           kind: :method_call, name: node.name.to_s, location: Index::SourceLocation.to_range(node.message_loc, @lines),
-          scope_id: nil, owner: current_owner, singleton: singleton, receiver: receiver,
+          scope_id: nil, owner: call_owner, singleton: singleton, receiver: receiver,
           lexical_nesting: current_lexical_nesting, arguments: call_argument_shape(node)
         )
       end

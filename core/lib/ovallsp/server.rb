@@ -1972,7 +1972,10 @@ module Ovallsp
     def receiverless_definitions(document, position, word)
       return [] unless receiverless_call_at?(document, position)
 
-      self_type = @query_service.scope_at(document, position)&.self_type
+      # `#implicit_self_type`, not `#self_type`: a bare call at the top
+      # level of a file has `Object` as its receiver, and a `def helper`
+      # written there is `Object`'s. `024.230`.
+      self_type = @query_service.scope_at(document, position)&.implicit_self_type
       return [] unless self_type
 
       @query_service.definitions_of(self_type, word)
@@ -2405,7 +2408,7 @@ module Ovallsp
       # nothing -- the third row whose example covered only the
       # receiver-qualified half of what it promises.
       receiver_type = receiver_type_before_dot(document, call_start) ||
-                      @query_service.scope_at(document, call_start)&.self_type
+                      @query_service.scope_at(document, call_start)&.implicit_self_type
       return { signatures: [] } unless receiver_type
 
       signatures = @query_service.signatures_of(receiver_type, method_name)
@@ -3498,7 +3501,7 @@ module Ovallsp
     def enclosing_self_type(document, position)
       return nil unless receiverless_call_at?(document, position)
 
-      @query_service.scope_at(document, position)&.self_type
+      @query_service.scope_at(document, position)&.implicit_self_type
     end
 
     # Whether the cursor is on the *message* of a call that was written

@@ -28,6 +28,11 @@ module Ovallsp
     # receiver, or any external/unresolved ancestor in the chain simply
     # produces no finding at all -- never a guess.
     class Engine
+      # The three receivers whose member set no static analysis can
+      # enumerate: everything loaded into the process adds to them.
+      # `024.230`.
+      OPEN_BY_CONSTRUCTION = %w[Object Kernel BasicObject].freeze
+
       MODES = %i[safe standard strict].freeze
       MODE_RANK = { safe: 0, standard: 1, strict: 2 }.freeze
       ROUTE_HELPER_PATTERN = /\A(?<base>.+)_(?:path|url)\z/
@@ -925,6 +930,28 @@ module Ovallsp
       end
 
       def closed_nominal?(nominal, singleton, context)
+        # **`Object`'s surface is the least knowable there is**, so this
+        # never reports about one. Everything every gem, every core
+        # extension and RubyGems itself adds to `Object` and `Kernel` at
+        # run time lands here, and the bundled signatures declare a
+        # fraction of it: `024.239` had to hard-code `trap`,
+        # `set_trace_func` and `iterator?` because they were reported
+        # missing on the user's own class, and `gem` is another.
+        #
+        # It became reachable when `024.230` gave a top-level bare call
+        # the `Object` receiver Ruby gives it. Measured over 997 files of
+        # activesupport, activerecord, actionpack and railties, that
+        # produced **25 new reports and removed none** — nine `gem`, four
+        # top-level `include`, seven JRuby-only names — every one of them
+        # false. Section 0 ranks a wrong answer below a missing one, and
+        # the enumeration this check needs is the one enumeration Ruby
+        # makes impossible.
+        #
+        # What it costs is a genuine typo in top-level code, which is not
+        # reported. `024.129` records the same decline for the other core
+        # classes and the same reason.
+        return false if OPEN_BY_CONSTRUCTION.include?(Index::SymbolId.bare_name(nominal.name.to_s))
+
         entries = context.hierarchy_index.ancestors(nominal.name, singleton: singleton)
 
         # Four of the reasons this method used to keep for itself now live

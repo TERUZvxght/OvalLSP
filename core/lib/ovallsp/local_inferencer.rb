@@ -106,7 +106,34 @@ module Ovallsp
     # there (name String => Types value) and the type of `self`, or nil
     # for `self` at the top level of a file, where there is no useful
     # enclosing type to offer members from.
-    Scope = Data.define(:locals, :self_type)
+    # **Two questions, and conflating them costs a completion band.**
+    #
+    # `self_type` is the class the cursor is lexically inside, and it is
+    # `nil` at the top level of a file because there is no such class.
+    # Completion ranks a member of *that* class in its first band —
+    # "methods your own class declares" — above workspace constants and
+    # above Kernel's.
+    #
+    # `implicit_self_type` is what a bare call's receiver actually is,
+    # and at the top level that is an `Object`:
+    #
+    #   $ ruby -e 'p self.class'
+    #   # => Object
+    #   # ruby 3.4.10
+    #
+    # Definition, hover and signature help want the second: a call to a
+    # top-level `def helper` resolves through `Object` or through nothing
+    # (`024.230`). Completion wants the first, and answering it with
+    # `Object` floods band 1 with everything Kernel gives — `puts` above
+    # a workspace `Putter`, which is the ranking `024.230`'s first
+    # attempt broke.
+    #
+    # `CLAUDE.md`'s test for whether one value serves two readers is
+    # whether they want the same answer; these want it *most* of the
+    # time, which is the case that says they do not.
+    Scope = Data.define(:locals, :self_type) do
+      def implicit_self_type = self_type || Types::Nominal.new(name: "Object")
+    end
 
     # The environment `locate` builds on its way to `offset`, rather than
     # the type it arrives at. Completion from a bare prefix needs the
