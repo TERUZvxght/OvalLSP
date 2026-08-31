@@ -132,13 +132,18 @@ read carries no marker.*
   once created while fixing the same line. A pointer that has to be
   edited every release is a pointer that will be wrong most of the time;
   the instruction to list the directory cannot go stale.*
-- **And it lives on a named, pushed branch.** Before starting or
-  resuming release work: `git fetch --all --prune`, list the remote
-  branches, and read the highest-numbered task file on every branch
-  whose name or record claims the release — not only on `main`. 0.2.3
-  was prepared twice in parallel because a pointer on `main` named a
-  file that existed only on a branch nothing named. `CLAUDE.md` has the
-  rule; 028's "Two preparations, one release" records the episode.
+- **One branch per version, merged into `main` by pull request.**
+  `release/<version>`. Every commit for a release goes on it; `main` is
+  what has shipped, not where a release is assembled. Set by the
+  maintainer on 2026-09-01, and it replaces four releases built
+  directly on `main` that had no reviewable unit between a commit and a
+  tag. Before starting or resuming release work: `git fetch --all
+  --prune`, list the remote branches, and read the highest-numbered
+  task file on every branch whose name or record claims the release —
+  not only on `main`. 0.2.3 was prepared twice in parallel because a
+  pointer on `main` named a file that existed only on a branch nothing
+  named. `CLAUDE.md` has the rule and why the name carries no `feat/`
+  or `fix/`; 028's "Two preparations, one release" records the episode.
   <!-- restates: Where a release's work lives (mandatory) -->
 - **Never write a real absolute home path into the tree or a commit
   message.** Write `$HOME`, `~`, or a description. This is machine-checked
