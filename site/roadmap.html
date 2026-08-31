@@ -200,6 +200,28 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0218">
+          <div class="tl-version">
+            <span class="v">0.2.18</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>A latency figure we published for seventeen releases was wrong</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Re-analysing a 2,574-line file costs 2.7 seconds, not the 2.1 we published.</strong> <code>uri/generic.rb</code> costs 3.9. The old figures came from a way of measuring that stopped working in 0.2.10 &mdash; it timed five edits against none, and since 0.2.10 five edits with no read between them coalesce into a single analysis, so it measured the coalescing. Corrected in both languages, with the method and an explanation of the old figures rather than a quiet swap.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Editing large files is about 5% faster.</strong> One method identity is now built once per distinct name instead of on every lookup &mdash; 1,961,027 calls for 385 distinct inputs, per analysis. 2.7 seconds is still nine times the 300&nbsp;ms this project&rsquo;s design document states, and that limitation stays published.</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>Nothing changes about what the extension can do.</strong> This release closes the 0.2.x line: no open finding is targeted at any 0.2.x version, and every user-visible one is published in both languages.</span>
+            </li>
+          </ul>
+        </article>
+
         <article class="tl-item" id="v0217">
           <div class="tl-version">
             <span class="v">0.2.17</span>

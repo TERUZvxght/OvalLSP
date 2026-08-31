@@ -217,7 +217,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.3.0 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
 | [`024.43`](#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | fixed | 0.2.16 | Signature help answers nothing for a receiverless stdlib call |
 | [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.3.0 | A partial's local is not resolved, and C11's stated basis names it |
-| [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.2.18 | Re-analysis after a keystroke is seconds on a large file, against a … |
+| [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.3.0 | Re-analysis after a keystroke is seconds on a large file, against a … |
 | [`024.46`](#02446-typing-self-cost-55-false-diagnostics-and-was-rolled-back) | fixed | 0.2.1 | Typing `self` cost 55 false diagnostics and was rolled back |
 | [`024.47`](#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | open | 0.3.0 | A namespaced class named after a core class loses its diagnostics, a… |
 | [`024.48`](#02448-the-measurement-tool-ran-an-engine-the-server-never-runs) | fixed | 0.2.1 | The measurement tool ran an engine the server never runs |
@@ -291,7 +291,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.118`](#024118-workspaceindex-stale-compares-versions-across-buffers) | fixed | 0.2.12 | `WorkspaceIndex#stale?` compares versions across buffers |
 | [`024.119`](#024119-twenty-eight-spec-files-assemble-their-own-analysis-stack) | fixed | 0.2.12 | Twenty-eight spec files assemble their own analysis stack |
 | [`024.120`](#024120-the-integration-watcher-example-could-not-retry-and-it-looked-like-a-linux-defect) | fixed | 0.2.12 | The integration watcher example could not retry, and it looked like … |
-| [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.2.18 | Nothing measures how much of this tree no test would notice changing |
+| [`024.121`](#024121-nothing-measures-how-much-of-this-tree-no-test-would-notice-changing) | open | 0.3.0 | Nothing measures how much of this tree no test would notice changing |
 | [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | fixed | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
 | [`024.123`](#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.124`](#024124-four-entries-named-a-release-that-had-already-shipped-for-the-third-time) | fixed | 0.3.0 | Four entries named a release that had already shipped, for the third… |
@@ -442,7 +442,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.272`](#024272-renaming-a-local-leaves-every-value-omitted-shorthand-behind-so-the-rename-is-still-partial) | fixed | 0.2.17 | Renaming a local leaves every value-omitted shorthand behind, so the… |
 | [`024.273`](#024273-renaming-a-local-that-is-a-parameter-leaves-the-parameter-behind-and-the-answer-can-be-silent) | open | 0.3.0 | Renaming a local that is a parameter leaves the parameter behind, an… |
 | [`024.274`](#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | open | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
-| [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | 0.2.18 | A workspace-identity example fails only in a full-suite run, and not… |
+| [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | unscheduled | A workspace-identity example fails only in a full-suite run, and not… |
 | [`024.276`](#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | fixed | 0.2.17 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
 | [`024.277`](#024277-a-local-variable-s-identity-follows-the-cref-so-a-block-that-changes-self-splits-it) | fixed | 0.2.17 | A local variable's identity follows the cref, so a block that change… |
 | [`024.278`](#024278-a-local-variable-s-identity-has-no-file-in-it-so-renaming-one-edits-another-file) | fixed | 0.2.17 | A local variable's identity has no file in it, so renaming one edits… |
@@ -4180,7 +4180,7 @@ is a patch.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.18
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/server.rb` (`#reindex`, `#publish_diagnostics`,
@@ -4351,6 +4351,15 @@ Three notes for whoever takes this further, each measured here:
 direction is unchanged: an identity computed once rather than per
 query, plus incremental re-analysis. What 0.2.x owed here was that the
 published figure be true, and that is what was paid.
+**Target moved to 0.3.0.** It said 0.2.18, and this release's own
+section above concludes the opposite: 2.7 s is nine times the stated
+300 ms and the direction is an identity computed once rather than per
+query — 710,425 constructions for one file is a lookup path, not a
+hunk. Leaving `target: 0.2.18` would assert a resolution the entry
+itself argues against, which is the shape `024.276` records. What
+0.2.x owed was that the published number be true, and that is paid.
+Travels with `024.38` and `024.121`, which are the same measurement
+from the other two sides.
 
 
 ## 024.46 Typing `self` cost 55 false diagnostics and was rolled back
@@ -9428,7 +9437,7 @@ user-visible-note: >
   Nothing an editor user meets directly. What it costs is that a
   behaviour can be broken silently, which every user-visible entry in
   this register that began "and no test noticed" was downstream of.
-target: 0.2.18
+target: 0.3.0
 ```
 
 **Area:** `scripts/check_pinned_mutations.rb`, `scripts/hunk_sweep.rb`,
@@ -9502,6 +9511,44 @@ census to reach the same place.
 **Re-triaged in 0.2.17** (`024.276`). Nothing about gems: this is about how much of *this tree* no test would notice changing, and its Area is `scripts/check_pinned_mutations.rb` and `scripts/hunk_sweep.rb`. It adds no capability and repairs no claim the product makes, so it belongs on the patch line and not in a capability release.
 
 0.2.17 paid part of it in passing and found the shape sharply: five decisions fixed in `core/spec/meta/measured_claims_spec.rb` could not be pinned at all, because the manifest mutates `core/lib/` and `scripts/` only and refuses a spec file. Machinery that lives in a spec is machinery nothing can mutate — which is the gap this entry is about, arriving from inside it.
+### 0.2.18: the 0.2.17 sentence above overstates it, measured
+
+That paragraph says five decisions in `core/spec/meta/measured_claims_spec.rb`
+"could not be pinned at all". **They cannot be pinned by the manifest,
+and they are pinned.** Four of them were inverted by hand in a scratch
+copy, one at a time:
+
+```
+scope narrowed to one file      17 examples, 2 failures
+published pages excluded        17 examples, 1 failure
+thousands separator ignored     17 examples, 1 failure
+citation pattern unused         17 examples, 5 failures
+```
+
+Every one is caught, by a second example in the same file — which is
+precisely what `check_pinned_mutations.rb`'s own header prescribes for
+a spec, and for a stated reason: the applier writes to the real file
+and restores it, so mutating a spec could delete the example being run.
+The manifest's silence there is a scope decision, not a hole.
+
+This is the class this register calls "promoting a finding is making a
+claim": the sentence was written in the release that found the shape,
+read true, and was never run against the tree.
+
+### Retargeted to 0.3.0, on this entry's own argument
+
+Layer 3 is unbuilt and its blocker is unchanged: a ratchet is a number
+that may only move one way, `040`'s correction says to seed it from a
+measured run rather than a guess, and the run that produces the seed is
+the one `024.71` is the precondition for. `024.71` was measured in this
+release and moved to 0.3.0 — it needs a parallel runner that does not
+exist, and copying a booted Rails application per worker is minutes of
+setup to save minutes of run.
+
+A layer-3 entry cannot land in a release its own precondition is not
+in. Both travel to 0.3.0 together, with `024.45` and `024.38`, which
+are the same measurement problem seen from the product's side.
+
 
 ## 024.122 A failure is turned into a plausible value, in 72 measured places
 
@@ -18779,7 +18826,7 @@ user-visible-note: >
   named -- and an assertion that fails sometimes is either a defect in
   the product or a defect in the test, and neither is acceptable
   unexamined.
-target: 0.2.18
+target: unscheduled
 ```
 
 **Area:** `core/spec/ovallsp/server_workspace_identity_spec.rb`,
@@ -18905,6 +18952,16 @@ scratch copy — the example still fails, `expected: < 2`.
 **Still open**, and now for a reason it can discharge: nothing here
 claims to have found the cause. What changed is that the next
 reproduction will say what it was, without anyone having to be present.
+**Target moved to `unscheduled`, which is what it has always been.**
+It said 0.2.18, and there is nothing here anyone can schedule: the
+work is to read a failure message, and the failure has occurred twice
+in some sixty full-suite runs. Naming a release for it makes a
+commitment nobody can keep and pushes it forward one release at a
+time, which is how it reached 0.2.18 from 0.2.16.
+
+What changed in 0.2.18 is that the trigger no longer needs a person.
+When it fires, the message arrives with it, and the entry becomes
+ordinary work in whatever release that is.
 
 
 ## 024.276 A closing pass retargeted 54 entries at 0.3.0, and 53 of them give one of two pasted reasons

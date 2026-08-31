@@ -6,6 +6,64 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.2.18 — a published latency figure was the one we had already retracted
+
+- **A latency figure we published for seventeen releases was wrong**, in
+  both languages. Re-analysing a 2,574-line file costs 2.7 seconds, not
+  the 2.1 we said; `uri/generic.rb` costs 3.9. Corrected, with the method
+  and the old figures explained rather than quietly swapped.
+- **Editing large files is about 5% faster.**
+- Nothing changes about what the extension can do.
+
+Nothing changes about what the extension can do. What changes is that a
+number it told you about itself is now true.
+
+`KNOWN_LIMITATIONS` said re-analysing a 2,574-line file cost 2.1 seconds,
+in both languages, from 0.2.1 through 0.2.17. It does not: it costs 2.7,
+and `uri/generic.rb` costs 3.9. The old figures came from a way of
+measuring that stopped working in 0.2.10 — it timed five edits against
+none, and since 0.2.10 five edits with no read between them coalesce into
+a single analysis, so it was measuring the coalescing rather than the
+analysis. The correction was written into this project's own register and
+never carried to the document you read.
+
+Both language versions now carry the current figures, the method that
+produced them, and an explanation of the old ones rather than a quiet
+swap.
+
+Editing is also about 5% faster on large files.
+
+### Details
+
+**Where the 5% came from.** `SymbolId.qualify_owner` is called 1,961,027
+times per analysis of `net/http.rb`, for 385 distinct inputs, and every
+call allocated a string. It is memoised now. Two million allocations
+removed buys 4.5–5.3% — which is the second time this measurement has
+found that a call count says how often something happens, not what it
+costs.
+
+**Why it is not more.** One analysis builds 710,425 method identities for
+one 2,574-line file: 276 per line. The same identities are rebuilt on
+every lookup rather than computed once, and fixing that is a change to
+how the index is queried rather than a line anyone can change. 2.7
+seconds is still nine times the 300 ms this project's design document
+states, and that limitation stays published.
+
+**Not taken:** a symbol-array literal inside the identity constructor is
+reallocated on each of those 710,425 constructions, and a frozen constant
+is 28% faster on that line — 7 ms of 2,688. This project lost a review
+round in 0.1.12 to logic moved into that same constructor, and 7 ms does
+not buy that risk.
+
+**Also in this release, none of it user-facing:** the pre-commit gate now
+reports what CI last said about the branch (it had no way to see that the
+extension's own tests were failing, which is how two CI failures survived
+a week of green local runs); the two agent-facing rule documents now
+declare which sections of each other they restate, so a rename cannot
+leave them disagreeing silently; and a test that failed once and has
+never failed since now records the state that would explain it, instead
+of asking whoever is present to remember to look.
+
 ## 0.2.17 — rename stops writing files that do not run
 
 Renaming a local variable rewrote most of its mentions and left the rest,

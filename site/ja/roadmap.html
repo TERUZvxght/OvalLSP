@@ -195,6 +195,28 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v0218">
+          <div class="tl-version">
+            <span class="v">0.2.18</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>17リリース公開していた再解析時間の数字が誤りでした</h3>
+          <ul class="feature-list">
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>2,574行のファイルの再解析は、公開していた2.1秒ではなく2.7秒です。</strong><code>uri/generic.rb</code> は3.9秒です。古い数字は0.2.10で成り立たなくなった測り方から来ていました &mdash; 編集5回と0回の差を測るものでしたが、0.2.10以降、間に読み取りを挟まない5回の編集は1回の解析にまとめられるため、「まとめられたこと」を測っていました。両言語で、測り方と古い数字の説明を添えて訂正しました。黙って差し替えてはいません。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>大きなファイルの編集が約5%速くなりました。</strong>メソッド識別子を問い合わせのたびではなく、異なる名前ごとに1度だけ作るようにしました &mdash; 解析1回あたり1,961,027回の呼び出しに対し、異なる入力は385個でした。2.7秒は設計文書が書いている300&nbsp;msの9倍のままで、その制限は公開したままです。</span>
+            </li>
+            <li>
+              <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+              <span><strong>拡張機能にできることは変わりません。</strong>このリリースで0.2.x系は終わりです。0.2.xのいずれかを目標とする未解決の指摘はゼロで、利用者に見えるものはすべて両言語で公開しています。</span>
+            </li>
+          </ul>
+        </article>
+
         <article class="tl-item" id="v0217">
           <div class="tl-version">
             <span class="v">0.2.17</span>
