@@ -315,6 +315,53 @@ jobs:
             exit 1
           fi
 
+      # **The same suite again, against the Core laid out the way a VSIX
+      # lays it out.** `test:integration` runs `ensure-core-absent`, so the
+      # extension resolves the Core from the monorepo; this one runs
+      # `copy-core`, which puts the Core and its vendored runtime gems
+      # inside the extension. That bundled-core load path is what broke in
+      # `023.5` and in `024.64`'s round 40, and it is the half the step
+      # above cannot reach.
+      #
+      # It runs second because the two set up opposite states and this one
+      # is additive: `ensure-core-absent` removes the bundled Core, then
+      # `copy-core` puts one there.
+      #
+      # `vsce package` is deliberately not run. It was named as the cost in
+      # `024.125`'s Direction and is not needed -- `package` is
+      # `copy-core` plus `compile` plus `vsce`, and only the first two
+      # decide the layout under test. The Ruby, Node and xvfb this needs
+      # are already installed above for the step before it.
+      #
+      # **What this does not cover**, stated because the row it makes true
+      # is otherwise easy to read as covering more: this runner is
+      # `ubuntu-latest`, so `copy-core` vendors *Linux* native extensions.
+      # darwin-arm64 packaging -- which is what `023.5` was specifically
+      # about -- is still verified only by `vsix_semantic_smoke.rb` at
+      # publish time and by hand, exactly as `docs/EXTENSION_CAPABILITIES.md`
+      # says.
+      - name: Integration tests (packaged Core layout)
+        working-directory: vscode
+        shell: bash
+        run: |
+          set -o pipefail
+          xvfb-run -a npm run test:integration:packaged 2>&1 | tee integration-packaged.log
+
+      # The same guard as above, and for the same reason: a harness that
+      # discovers nothing exits 0. Adding the run without adding this would
+      # replace "nobody runs it" with "CI runs it and would not notice if
+      # it stopped", which is the sentence the step above was written to
+      # avoid.
+      - name: Fail if the packaged integration suite reported no examples
+        working-directory: vscode
+        run: |
+          count=$(grep -oE '[0-9]+ passing' integration-packaged.log | tail -1 | grep -oE '[0-9]+' || echo 0)
+          echo "packaged integration examples: $count"
+          if [ "${count:-0}" -lt 1 ]; then
+            echo "The packaged integration suite reported no passing examples (024.125, 024.69)." >&2
+            exit 1
+          fi
+
   # `046`'s C1. Every documentation path in tracked content resolves.
   # Nineteen citations across seventeen files named five task filenames
   # that had never existed in any commit, every one of them in a source

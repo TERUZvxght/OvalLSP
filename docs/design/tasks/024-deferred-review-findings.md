@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**276 entries below** <!-- measured: register-entries = 276 -->,
+**279 entries below** <!-- measured: register-entries = 279 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -295,7 +295,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.122`](#024122-a-failure-is-turned-into-a-plausible-value-in-72-measured-places) | fixed | 0.2.13 | A failure is turned into a plausible value, in 72 measured places |
 | [`024.123`](#024123-a-private-alias-was-offered-and-the-register-said-it-was-not) | fixed | 0.2.12 | A private alias was offered, and the register said it was not |
 | [`024.124`](#024124-four-entries-named-a-release-that-had-already-shipped-for-the-third-time) | fixed | 0.3.0 | Four entries named a release that had already shipped, for the third… |
-| [`024.125`](#024125-the-packaged-core-is-never-driven-end-to-end-and-two-gates-say-it-is) | open | 0.2.18 | The packaged Core is never driven end to end, and two gates say it is |
+| [`024.125`](#024125-the-packaged-core-is-never-driven-end-to-end-and-two-gates-say-it-is) | fixed | 0.2.17 | The packaged Core is never driven end to end, and two gates say it is |
 | [`024.126`](#024126-a-text-scanner-matches-its-own-prose-exempts-itself-and-stops-checking-a-file-that-can-hold-the-real-thing) | fixed | 0.2.14 | A text scanner matches its own prose, exempts itself, and stops chec… |
 | [`024.127`](#024127-hover-answers-an-empty-string-where-lsp-expects-null) | fixed | 0.2.15 | Hover answers an empty string where LSP expects null |
 | [`024.128`](#024128-integer-arithmetic-answers-a-four-way-union) | fixed | 0.2.15 | Integer arithmetic answers a four-way union |
@@ -448,6 +448,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.278`](#024278-a-local-variable-s-identity-has-no-file-in-it-so-renaming-one-edits-another-file) | fixed | 0.2.17 | A local variable's identity has no file in it, so renaming one edits… |
 | [`024.279`](#024279-the-rename-oracle-put-the-caret-in-the-wrong-place-so-its-first-numbers-were-part-measurement) | fixed | 0.2.17 | The rename oracle put the caret in the wrong place, so its first num… |
 | [`024.280`](#024280-renaming-a-local-bound-by-a-regexp-named-capture-leaves-the-capture-silently) | open | 0.2.18 | Renaming a local bound by a regexp named capture leaves the capture,… |
+| [`024.281`](#024281-the-erb-integration-test-asserted-an-answer-the-engine-correctly-declines) | fixed | 0.2.17 | The `.erb` integration test asserted an answer the engine correctly … |
+| [`024.282`](#024282-ci-was-red-on-main-for-a-week-and-nothing-in-the-tree-said-so) | open | 0.2.18 | CI was red on `main` for a week and nothing in the tree said so |
+| [`024.283`](#024283-the-packaged-core-is-driven-only-on-linux-so-the-macos-build-is-still-smoke-tested) | open | 0.3.0 | The packaged Core is driven only on Linux, so the macOS build is sti… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -9234,11 +9237,42 @@ inherit the situation the way three have.
 ## 024.125 The packaged Core is never driven end to end, and two gates say it is
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.2.18
+released-in: 0.2.17
 ```
+
+**Fixed in 0.2.17 by running it, not by withdrawing the claim.** The
+`vscode-integration` job now runs `test:integration:packaged` after the
+unpackaged run, with the same "fail if it reported no examples" guard —
+without which this would have replaced "nobody runs it" with "CI runs it
+and would not notice if it stopped".
+
+**The Direction's cost was wrong, which is why this was cheap.** It said
+the job "needs the same `xvfb-run` and VS Code download the unpackaged
+integration job already pays for, plus a `vsce package` step". There is
+no `vsce package` step: `test:integration:packaged` is `copy-core` plus
+`compile` plus the same runner, and `copy-core` is the only thing that
+differs from the step already there. The job already installs Ruby 3.4,
+Node 20 and xvfb for the run above it.
+
+**And running it found a failing test rather than a green one.** Driven
+locally at HEAD, both variants failed the same example — `.erb` hover —
+so it was not a packaged-only regression. CI had been failing on it
+since 2026-08-24. `024.281` is the test; `024.282` is the week of red CI
+that nothing in the tree recorded.
+
+**What this does and does not cover**, stated because the ✅ it restores
+is otherwise easy to over-read: the runner is `ubuntu-latest`, so
+`copy-core` vendors *Linux* native extensions. The bundled-core load
+path — what broke in `023.5` and `024.64`'s round 40 — is now verified
+on every push. darwin-arm64 packaging is not, and remains covered by
+`vsix_semantic_smoke.rb` at publish time and by hand, which
+`docs/EXTENSION_CAPABILITIES.md` already discloses in both languages.
+
+Rows 1 and 5 of `docs/RELEASE_CHECKLIST.md` now say which job runs them
+and what the Linux runner does not reach.
 
 **Area:** `vscode/package.json` (`test:integration:packaged`),
 `.github/workflows/ci.yml`, `docs/RELEASE_CHECKLIST.md` rows 1 and 5
@@ -18243,6 +18277,146 @@ elsewhere is a string this rename cannot see.
 Not attempted here. `024.277` and `024.278` are two parser changes in
 this change set already, and `CLAUDE.md`'s review cadence says a third
 belongs in its own round rather than bolted onto this one.
+
+## 024.281 The `.erb` integration test asserted an answer the engine correctly declines
+
+```yaml
+status: fixed
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. The product was right and the test was wrong, so
+  no shipped behaviour changes -- but it held the extension's only
+  end-to-end ERB check red for a week, which is why it is recorded.
+released-in: 0.2.17
+```
+
+**Area:** `vscode/src/test/integration/erb.spec.ts`,
+`vscode/test-fixtures/sample-workspace/view.html.erb`
+
+The test opened `view.html.erb`, whose whole content was
+`<h1><%= @title %></h1>`, and polled `vscode.executeHoverProvider` at
+**position (0, 0)** for ten seconds. Position (0, 0) is the `<` of an
+HTML tag. The only Ruby in the file is `@title`, an ivar nothing in the
+fixture workspace assigns.
+
+So the assertion could not pass unless the engine asserted something it
+does not know, at a position that is not Ruby. **That is the shape
+section 0 ranks worst, written into a test as the pass condition.** It
+is the twin of `CLAUDE.md`'s "an assertion that cannot fail is not a
+test": this one could not *pass* without the product being wrong.
+
+**Driven before rewriting it**, because "the test is wrong" is a claim
+about the product and needed checking. Through the real Core:
+
+```
+  <% name = "x" %>
+  <h1><%= name.upcase %></h1>
+
+  hover on `name` (the use)      -> String
+  hover on `name` (the binding)  -> String
+  hover on `upcase`              -> upcase() -> String
+  hover on `@title` (old fixture)-> nil
+  hover on `<`     (old position)-> nil
+```
+
+`.erb` reaches the Core and answers; the fixture was the only thing in
+the way. The fixture now binds a local and the test asks about it, and
+asserts the answer *contains* `String` rather than merely being
+non-empty — without that it is satisfied by any hover from any provider.
+
+Found while wiring `024.125`. Both integration variants now report
+6 passing, 0 failing, against the source Core and the packaged layout.
+
+## 024.282 CI was red on `main` for a week and nothing in the tree said so
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets directly. Recorded because the gate that decides
+  whether the product is fit to ship was failing while release work
+  continued on top of it, and no local check could see that.
+target: 0.2.18
+```
+
+**Area:** `.github/workflows/ci.yml`, `scripts/preflight.rb`
+
+`gh run list --branch main` at `cf97c72e`:
+
+```
+  33263014821  cf97c72e  failure  2026-08-29
+  33241282125  7bce3c4f  failure  2026-08-29
+  33240634626  9f5d97a6  failure  2026-08-29
+  32688579193  bdd0ebeb  failure  2026-08-24
+  32686673234  ab893c1d  failure  2026-08-24
+  32557978897  57e98da2  success  2026-08-22
+```
+
+Five consecutive red runs across six days. `Core Server (Ruby 3.4)`
+reported `2653 examples, 6 failures` — all in `spec/meta`: three in
+`doc_links_spec`, one in `measured_claims_spec`, two in
+`interpreter_sessions_spec`. `VS Code extension (integration, real
+editor)` was red from 2026-08-24 on `024.281`.
+
+**Why no local run could see it.** `scripts/preflight.rb` runs the Ruby
+suites and the tree checks. It does not run anything under `vscode/`, so
+a local "all 9 checks passed" says nothing about the extension — which
+is precisely the state this session was in while `024.281` was failing
+on every push. The Ruby-side failures are the other half: they are
+`spec/meta` examples that read the *tree*, and several are sensitive to
+what a CI checkout contains, so a green local run does not predict them.
+
+**Not fixed here, and the reason is which fix.** The cheap move is to add
+`vscode` to preflight, and that is the wrong shape: preflight would then
+need a VS Code download and a display, so the gate most often run by
+hand becomes the slowest one. The question worth answering is how a
+session learns CI is red without being told — a `gh run list` line in
+preflight's output costs nothing and needs network, or the release
+record grows a row. That is a decision about the working loop rather
+than a hunk, and `CLAUDE.md`'s review cadence says an addition mid-loop
+is a finding to record.
+
+The six Ruby failures were at `cf97c72e`; this tree is seven commits
+further on and green locally on all of them. **Whether they are fixed or
+merely invisible here is unknown until something is pushed**, and that
+is the entry's own reproduction step.
+
+## 024.283 The packaged Core is driven only on Linux, so the macOS build is still smoke-tested
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `.github/workflows/ci.yml`
+
+The residue of `024.125`. That entry is closed because the packaged
+*layout* — the Core inside the extension, runtime gems vendored — is now
+driven through a full editor session on every push. The runner is
+`ubuntu-latest`, so what is driven has **Linux** native extensions.
+
+The VSIX that is published is `darwin-arm64`, and its native extensions
+are still exercised only by `vsix_semantic_smoke.rb` at publish time and
+by hand. `023.5` was specifically a darwin-arm64 packaging and update
+regression, so this is the half of `024.125`'s risk that survives its
+fix, not a hypothetical.
+
+Published in `KNOWN_LIMITATIONS` in both languages, which is what
+`024.125`'s paragraph became rather than being deleted: the section it
+had was correct about a gap and wrong about which one.
+
+**Direction.** A macOS runner for the packaged integration job is the
+obvious answer and is not free — `macos-latest` minutes are billed at a
+multiple of Linux, and this job downloads VS Code and vendors gems. It
+is also entangled with `024.R4`, which is about publishing more than one
+platform at all: if a second target is ever published, this job has to
+run per target rather than once, and deciding that first avoids building
+the one-target version twice. Targeted at 0.3.0 for that reason rather
+than because the risk is small.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

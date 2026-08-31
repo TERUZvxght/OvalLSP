@@ -439,14 +439,20 @@ characters or more the picker uses an index", which describes a switch
 that does not exist, at "roughly four times" where the measurement says
 2.6.)
 
-## The packaged extension is smoke-tested, not driven
+## The packaged extension is driven on Linux, and smoke-tested on macOS
 
-The Core Server inside the VSIX — the one you install, with its own
-vendored native extensions — is exercised at publish time by a smoke test
-that checks hover, go to definition and a clean shutdown. It is not
-driven through a full editor session on every change the way the
-repository copy is. A defect that appears only in the packaged build is
-therefore caught at publish rather than in review. <!-- documents: 024.125 -->
+The Core Server laid out the way a VSIX lays it out — inside the
+extension, with its runtime gems vendored — is driven through a full
+editor session on every push, alongside the repository copy. That covers
+the bundled-Core load path, which is where the packaged build has
+actually broken before.
+
+What it does not cover is the platform. That run is on Linux, so the
+**darwin-arm64** native extensions you actually install are still only
+exercised at publish time, by a smoke test that checks hover, go to
+definition and a clean shutdown. A defect specific to the macOS build is
+therefore still caught at publish rather than in
+review. <!-- documents: 024.283 -->
 
 ## What a version mismatch actually does
 
