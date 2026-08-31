@@ -18843,6 +18843,69 @@ the argument that the cause is the run and not either subject.
 
 **Still nothing captured.** Neither instance has had its failure message
 read at the moment it failed. That remains the whole of the work.
+### 0.2.18: the instruction is now the assertion, not a sentence
+
+**What this entry has been waiting on is one line of output, and it
+asked for it in a way that could not fire.** "The next full-suite run
+that reproduces it captures the failure message before anything else"
+addresses whoever happens to be watching. Nobody was, twice, across two
+releases — and *both* runs that recorded a message were runs that
+passed, so the `got` side has still never been seen.
+
+So the capture is built into the assertion.
+`spec/support/workspace_identity_report.rb` is attached to **all five**
+root assertions in that file, not only the two that have failed, and a
+reproduction now records itself:
+
+```
+workspace root is not the one the editor named.
+expected="…/link"
+got="…/real"
+load=3.02
+  real: …/real exists=true directory=true symlink=false
+  link: …/link exists=true directory=true symlink=true -> …/real
+```
+
+That tells the entry's two readings apart in one line each:
+`File.directory?` answering false for a symlink whose target still
+exists shows as `symlink=true exists=false dangling`, and a root never
+adopted shows as `got=` the cwd with `link` intact. The load figure is
+there because the load hypothesis is the only one both halves of this
+entry share. `server_identity_report_spec.rb` pins what the report
+says, so it cannot quietly stop naming one of them.
+
+**Verified by forcing it**: `client_workspace_root` was made to decline
+every path in a scratch copy, and the report above is what came out.
+
+### And the fabricated absolute path is gone
+
+`keeps its own cwd when the named root does not exist` named
+`file:///nonexistent-<pid>` — a path at the filesystem root chosen to
+be obviously fake, which is the shape `CLAUDE.md`'s `/Applications`
+rule is about. Nothing here deletes, so it was never that incident's
+hazard. What it was is an assertion whose verdict depended on the state
+of the machine's root directory, in a file whose failures came and went
+with how many other processes were running. The absent root is now
+inside the example's own tmpdir; the guard is still pinned (removing
+`File.directory?` still fails it).
+
+### The GC pair, same entry, different hypothesis
+
+The two `collector_spec.rb` examples recorded above now re-collect and
+re-measure up to ten times rather than asserting on the first count.
+Their hypothesis is specific — they assert an object *has been*
+collected by a given point, which measures the collector's schedule as
+much as the code.
+
+**It cannot weaken them**, which is what made it allowed: pre-fix the
+delta is `CHURN_COUNT` *permanently*, so no number of further
+collections moves it. Confirmed by reintroducing the retention in a
+scratch copy — the example still fails, `expected: < 2`.
+
+**Still open**, and now for a reason it can discharge: nothing here
+claims to have found the cause. What changed is that the next
+reproduction will say what it was, without anyone having to be present.
+
 
 ## 024.276 A closing pass retargeted 54 entries at 0.3.0, and 53 of them give one of two pasted reasons
 

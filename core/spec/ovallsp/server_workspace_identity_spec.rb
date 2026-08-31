@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../support/workspace_identity_report"
+
 require "stringio"
 require "tmpdir"
 require "fileutils"
@@ -55,6 +57,7 @@ RSpec.describe "Ovallsp::Server and a workspace reached through a symlink" do
 
   around do |example|
     Dir.mktmpdir do |parent|
+      @parent = parent
       @real = File.join(parent, "real")
       @link = File.join(parent, "link")
       FileUtils.mkdir_p(File.join(@real, "app"))
@@ -63,6 +66,26 @@ RSpec.describe "Ovallsp::Server and a workspace reached through a symlink" do
       example.run
     end
   end
+
+
+# 024.275: two of the examples below failed once in a full-suite run
+# and have never failed since, and *both runs that recorded a message
+# were runs that passed* -- so the value the assertion actually saw has
+# never been seen. The entry's instruction is to capture it on the next
+# reproduction, which has stood unexecuted for two releases because it
+# addresses whoever happens to be watching.
+#
+# Attached to the assertion instead. A reproduction now records itself:
+# what was expected, what was got, the load the machine was under, and
+# for each path whether it exists, is a directory, is a symlink, and
+# where it points -- which is what tells the entry's two readings apart.
+def expect_root(server, to_be:)
+  got = server.instance_variable_get(:@workspace_root)
+  expect(got).to eq(to_be),
+                 "workspace root is not the one the editor named." +
+                 WorkspaceIdentityReport.for(expected: to_be, got: got,
+                                             paths: { real: @real, link: @link })
+end
 
   def server_started_from(cwd, root_uri:)
     output = StringIO.new
@@ -76,7 +99,7 @@ RSpec.describe "Ovallsp::Server and a workspace reached through a symlink" do
   it "takes the root the editor named, not the one its own cwd resolves to" do
     server = server_started_from(@real, root_uri: @link)
 
-    expect(server.instance_variable_get(:@workspace_root)).to eq(@link)
+    expect_root(server, to_be: @link)
   end
 
   # The consequence, stated as the property a user meets: the diagnostics
@@ -137,7 +160,7 @@ RSpec.describe "Ovallsp::Server and a workspace reached through a symlink" do
   it "keeps using its own cwd when the client names no root" do
     server = server_started_from(@real, root_uri: nil)
 
-    expect(server.instance_variable_get(:@workspace_root)).to eq(@real)
+    expect_root(server, to_be: @real)
   end
 
   # `workspaceFolders` is what a client may send instead: `rootUri` is
@@ -150,9 +173,20 @@ RSpec.describe "Ovallsp::Server and a workspace reached through a symlink" do
                              params: { rootUri: nil,
                                        workspaceFolders: [{ uri: Ovallsp::UriUtil.from_path(@link), name: "w" }] } })
 
-    expect(server.instance_variable_get(:@workspace_root)).to eq(@link)
+    expect_root(server, to_be: @link)
   end
 
+  # The absent root is **inside this example's own tmpdir**, not a
+  # fabricated path at `/`. The previous form was `/nonexistent-<pid>`,
+  # which is the shape CLAUDE.md's `/Applications` rule names: a path
+  # chosen to be obviously fake is chosen without looking at what is
+  # actually there, and it made this example's verdict depend on the
+  # state of the machine's root directory. Nothing here deletes, so it
+  # was never that incident's hazard -- but 024.275 is a failure that
+  # came and went with machine load, and an assertion answered from
+  # outside the fixture is one candidate fewer once it is answered from
+  # inside it.
+  #
   # And a root the client names that is not there is refused rather than
   # adopted: an editor can send a folder that has since been deleted, and
   # indexing nothing is worse than indexing the cwd.
@@ -160,9 +194,9 @@ RSpec.describe "Ovallsp::Server and a workspace reached through a symlink" do
     output = StringIO.new
     server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: @real)
     server.send(:dispatch, { method: "initialize", id: 1,
-                             params: { rootUri: "file:///nonexistent-#{Process.pid}" } })
+                             params: { rootUri: Ovallsp::UriUtil.from_path(File.join(@parent, "gone")) } })
 
-    expect(server.instance_variable_get(:@workspace_root)).to eq(@real)
+    expect_root(server, to_be: @real)
   end
 
   # The signature environment is built in the constructor, from the cwd,

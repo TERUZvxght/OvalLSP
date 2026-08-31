@@ -1078,6 +1078,35 @@ RSpec.describe Ovallsp::Observation::Collector do
       3.times { GC.start(full_mark: true, immediate_sweep: true) }
     end
 
+    # 024.275 records the two examples below as a second instance of its own
+    # shape: one failed once in a full-suite preflight and passed three times
+    # out of three when run alone. Unlike the workspace-identity pair the
+    # hypothesis here is specific -- they assert an object *has been*
+    # collected by a given point, which measures the collector's schedule as
+    # much as the code, and a longer suite gives a full mark more to walk.
+    #
+    # So: ask again rather than once. Up to ten further full collections, and
+    # the first measurement under `below` ends it.
+    #
+    # **This cannot weaken either assertion, which is the only reason it is
+    # allowed to stop as soon as it likes the answer.** What they guard is a
+    # cache that pins every object it ever saw, and pre-fix the delta is
+    # CHURN_COUNT *permanently* -- no number of further collections moves it,
+    # because nothing is collectable. Retrying turns "not collected yet" into
+    # a pass and leaves "can never be collected" a failure, which is exactly
+    # the distinction the examples exist to make. The limit is written once
+    # and read by both the helper and the expectation, so they cannot drift.
+    def settled(below:)
+      value = yield
+      10.times do
+        break if value < below
+
+        GC.start(full_mark: true, immediate_sweep: true)
+        value = yield
+      end
+      value
+    end
+
     def live_holders = ObjectSpace.each_object(ObservationFixture::ChurnHolder).count
 
     def live_classes = ObjectSpace.each_object(Class).count
@@ -1103,7 +1132,8 @@ RSpec.describe Ovallsp::Observation::Collector do
       # exactly CHURN_COUNT -- every object that was ever handed a
       # singleton method, pinned through its singleton class by the cache
       # key, for the rest of the user's suite.
-      expect(live_holders - baseline).to be <= 1
+      limit = 2
+      expect(settled(below: limit) { live_holders - baseline }).to be < limit
     end
 
     it "lets a class created inside an observed run be collected" do
@@ -1119,7 +1149,8 @@ RSpec.describe Ovallsp::Observation::Collector do
       # Loose relative to CHURN_COUNT (the VM creates and drops classes of
       # its own during any of this) but far below it: pre-fix the delta is
       # CHURN_COUNT itself, because not one of them can ever be freed.
-      expect(live_classes - baseline).to be < (CHURN_COUNT / 4)
+      limit = CHURN_COUNT / 4
+      expect(settled(below: limit) { live_classes - baseline }).to be < limit
     end
 
     it "still memoizes, so the churn above is not bought by recomputing per call" do
