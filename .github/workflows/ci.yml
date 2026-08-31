@@ -33,8 +33,25 @@ jobs:
       # trusted on its own: the "must not skip" step below fails the job
       # if those examples are pending anyway, so a wrong belief here is a
       # red build rather than a gate that goes on being vacuously green.
+      #
+      # **And the claim was wrong, in the way the comment above predicted.**
+      # `fetch-tags: true` on the default `fetch-depth: 1` brings the tag
+      # *refs* without their objects, so `git for-each-ref --format=%(contents)`
+      # returned 28 tags and 0 bodies -- and `home_path_guard_spec`'s
+      # "there are some to read" example is the only reason anyone found
+      # out, because a scan that reads nothing is clean. Two other checks
+      # refuse a partial tree outright and said so in as many words:
+      # `check_doc_links` ("this is a shallow clone; a citation census
+      # over part of a tree is not a census") and the interpreter-session
+      # checker. Six examples were failing on every push from 2026-08-24
+      # for this one reason. `024.282`.
+      #
+      # `fetch-depth: 0` is what those checks need: full history, and tags
+      # with their bodies. `fetch-tags` is kept because it states the
+      # intent that depth 0 happens to satisfy.
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           fetch-tags: true
 
       - uses: ruby/setup-ruby@v1

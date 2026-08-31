@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**279 entries below** <!-- measured: register-entries = 279 -->,
+**280 entries below** <!-- measured: register-entries = 280 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -449,8 +449,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.279`](#024279-the-rename-oracle-put-the-caret-in-the-wrong-place-so-its-first-numbers-were-part-measurement) | fixed | 0.2.17 | The rename oracle put the caret in the wrong place, so its first num… |
 | [`024.280`](#024280-renaming-a-local-bound-by-a-regexp-named-capture-leaves-the-capture-silently) | open | 0.2.18 | Renaming a local bound by a regexp named capture leaves the capture,… |
 | [`024.281`](#024281-the-erb-integration-test-asserted-an-answer-the-engine-correctly-declines) | fixed | 0.2.17 | The `.erb` integration test asserted an answer the engine correctly … |
-| [`024.282`](#024282-ci-was-red-on-main-for-a-week-and-nothing-in-the-tree-said-so) | open | 0.2.18 | CI was red on `main` for a week and nothing in the tree said so |
+| [`024.282`](#024282-ci-was-red-on-main-for-a-week-and-nothing-in-the-tree-said-so) | fixed | 0.2.17 | CI was red on `main` for a week and nothing in the tree said so |
 | [`024.283`](#024283-the-packaged-core-is-driven-only-on-linux-so-the-macos-build-is-still-smoke-tested) | open | 0.3.0 | The packaged Core is driven only on Linux, so the macOS build is sti… |
+| [`024.284`](#024284-nothing-local-can-see-that-ci-is-red-and-preflight-does-not-run-the-extension) | open | 0.2.18 | Nothing local can see that CI is red, and preflight does not run the… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -18331,14 +18332,14 @@ Found while wiring `024.125`. Both integration variants now report
 ## 024.282 CI was red on `main` for a week and nothing in the tree said so
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Nothing a user meets directly. Recorded because the gate that decides
   whether the product is fit to ship was failing while release work
   continued on top of it, and no local check could see that.
-target: 0.2.18
+released-in: 0.2.17
 ```
 
 **Area:** `.github/workflows/ci.yml`, `scripts/preflight.rb`
@@ -18383,6 +18384,45 @@ further on and green locally on all of them. **Whether they are fixed or
 merely invisible here is unknown until something is pushed**, and that
 is the entry's own reproduction step.
 
+
+**Answered by pushing, which is what the entry said its reproduction
+was.** The eight commits went to `main` and the run at `6ee8c878` came
+back with `VS Code extension (integration, real editor)` **green** —
+`024.281`'s repair and `024.125`'s new packaged step both pass in CI —
+and `Core Server` still red at `2815 examples, 7 failures`.
+
+So the Ruby-side failures were not fixed by those commits and were never
+visible locally. **All seven have one cause**, and the checks diagnosed
+it themselves:
+
+```
+  home_path_guard_spec:286   "only 0 tag(s) came back with a body. Either the
+                              format string stopped reading `%(contents)`, or
+                              this clone was fetched without tags"
+  doc_links_spec (x3)        "check-doc-links: this is a shallow clone; a
+                              citation census over part of a tree is not a census."
+  measured_claims_spec:262   the same tree census
+  interpreter_sessions_spec  found no sessions to run
+```
+
+The `core` job checked out with `fetch-tags: true` and the default
+`fetch-depth: 1`. That brings the tag *refs* without their objects, so
+`%(contents)` was empty for all 28 of them — and a scan that reads
+nothing is clean, which is why only the "there are some to read" example
+could catch it. **The comment above that line already said the claim was
+not to be trusted on its own; the claim was wrong and the example it
+pointed at is what found out.**
+
+Fixed with `fetch-depth: 0`. The seven examples are the same ones this
+entry lists at `cf97c72e`, plus `home_path_guard_spec` — which was
+*added* by 0.2.17 and started failing immediately, on a job that had
+been red for a week, so nothing distinguished the new failure from the
+old ones.
+
+**What stays open is the other half**, and it is now its own entry:
+`preflight` runs nothing under `vscode/` and cannot see a red CI, which
+is the state this session worked in for a day. `024.284`.
+
 ## 024.283 The packaged Core is driven only on Linux, so the macOS build is still smoke-tested
 
 ```yaml
@@ -18417,6 +18457,44 @@ platform at all: if a second target is ever published, this job has to
 run per target rather than once, and deciding that first avoids building
 the one-target version twice. Targeted at 0.3.0 for that reason rather
 than because the risk is small.
+
+## 024.284 Nothing local can see that CI is red, and preflight does not run the extension
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. Recorded because it is the reason `024.281` and
+  `024.282` survived a week: every local signal said the tree was fine.
+target: 0.2.18
+```
+
+**Area:** `scripts/preflight.rb`
+
+Two gaps, one consequence.
+
+**`preflight` runs nothing under `vscode/`.** Its nine checks are the
+Ruby suites and the tree checks. So "all 9 checks passed" is a statement
+about the Core and says nothing about the extension — and `024.281` was
+failing the extension's only end-to-end ERB check on every push while
+this session ran preflight to green eight times.
+
+**And nothing local reads CI at all.** `024.282`'s seven failures were
+invisible here by construction: they are `spec/meta` examples that refuse
+a partial tree, and a local clone is never partial. A green local run
+cannot predict them and never could.
+
+**Direction, and why neither obvious fix is taken here.** Adding
+`vscode` to preflight needs a VS Code download and a display, which makes
+the most-run gate the slowest — and the packaged variant additionally
+vendors gems, so it is minutes, not seconds. Adding a `gh run list` line
+needs network and fails differently offline. The cheap honest form is
+probably a check that *reports* rather than gates: one line of
+`gh run list --branch main --limit 1` output at the end of preflight,
+skipped without network, so a session learns the state of the gate
+without waiting on it. That is a decision about the working loop and
+belongs in its own change set.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
