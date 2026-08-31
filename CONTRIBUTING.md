@@ -125,6 +125,32 @@ itself.
   a test watched failing and a corpus driven, and this project's record
   on retrospective simplifications is 0 for 8.
 
+## Branches and pull requests
+
+**One branch per version, merged into `main` by pull request.** The
+branch is `release/<version>` — `release/0.3.0` — and every commit for
+that release goes on it.
+
+```bash
+git switch -c release/0.3.0
+```
+
+`main` is what has shipped. A release is assembled on its branch and
+arrives as one pull request, which is the unit a reviewer reads: 0.2.15
+through 0.2.18 were built directly on `main`, and the change set for
+each of them existed only as a commit range somebody had to
+reconstruct.
+
+The name carries no `feat/` or `fix/` prefix, because that is a claim
+about the release's contents made before the work starts — 0.2.17 was
+named a fix and shipped a capability. One name per version needs no
+such guess.
+
+Work that is not a release — a correction to the record, a fix to a
+check — takes a short-lived branch of its own and the same pull
+request. `docs/design/tasks/`'s highest-numbered file for a release
+names its branch, so a session that starts from `main` can find it.
+
 ## Before committing: `preflight`
 
 ```bash

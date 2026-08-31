@@ -714,9 +714,29 @@ full list.
 
 ## Where a release's work lives (mandatory)
 
-A release's work in progress lives on a pushed branch, and the task
-file on `main` that names the release also names that branch. A
-pointer to a file that exists only on an unnamed branch is a pointer
+**One branch per version, merged into `main` by pull request.** The
+branch is `release/<version>` — `release/0.3.0` — and every commit for
+that release goes on it. `main` is what has shipped; it is not where a
+release is assembled. Set by the maintainer on 2026-09-01.
+
+*This is (b) in section 0.6's terms — a dated instruction — and the
+paragraphs below it are (c), this project's own reasons, which predate
+it and are what it replaces. 0.2.15 through 0.2.18 were built directly
+on `main`, so those four releases had no reviewable unit between "a
+commit" and "a tag": the change set a reviewer would read existed only
+as a range somebody had to reconstruct. A pull request is that unit,
+and it is also the place a review round's findings can be answered
+where the next reader will find them.*
+
+`release/<version>`, not `feat/` or `fix/`: the older branches were
+`feat/0.2.6`, `feat/0.2.7`, `feat/0.2.8` and `fix/0.2.3`, and the
+prefix is a claim about the release's contents made before the work
+starts. 0.2.17 was named a fix and shipped a capability; 0.2.18 was
+going to be a fix and turned out to be a record release. One name per
+version needs no such guess.
+
+The task file on `main` that names the release also names that branch.
+A pointer to a file that exists only on an unnamed branch is a pointer
 to nothing for every session that cannot see the branch.
 
 Starting or resuming release work begins with `git fetch --all
