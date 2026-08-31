@@ -330,14 +330,14 @@ nobody can search is the recording habit without the benefit.
 | [`024.157`](#024157-a-git-subprocess-in-a-throwaway-repository-obeys-the-inherited-git-dir-so-the-suite-commits-to-the-real-repository) | fixed | 0.2.16 | A git subprocess in a throwaway repository obeys the inherited GIT_D… |
 | [`024.158`](#024158-the-executed-pat-mode-example-passes-on-a-release-sh-that-only-warns-because-its-exit-status-comes-from-a-later-check-misreporting-a-non-repository-as-dirty) | fixed | 0.2.16 | The executed PAT-mode example passes on a release.sh that only warns… |
 | [`024.159`](#024159-the-measured-claim-marker-and-the-number-a-reader-sees-are-separate-strings-so-the-prose-can-say-anything-while-the-marker-verifies) | fixed | 0.2.17 | The measured-claim marker and the number a reader sees are separate … |
-| [`024.160`](#024160-counts-in-046-that-describe-this-tree-carry-no-basis-are-not-marked-and-several-are-stale-at-head) | open | 0.2.18 | Counts in 046 that describe this tree carry no basis, are not marked… |
+| [`024.160`](#024160-counts-in-046-that-describe-this-tree-carry-no-basis-are-not-marked-and-several-are-stale-at-head) | fixed | 0.2.18 | Counts in 046 that describe this tree carry no basis, are not marked… |
 | [`024.161`](#024161-046-s-round-3-correction-states-that-the-4-000-lines-of-revert-phrase-is-removed-the-phrase-is-still-the-file-s-closing-sentence) | fixed | 0.2.17 | 046's round-3 correction states that the "4,000 lines of revert" phr… |
 | [`024.162`](#024162-046-s-recorded-departure-from-the-drive-round-rests-on-a-false-enumeration-of-the-change-set) | fixed | 0.2.16 | 046's recorded departure from the `drive` round rests on a false enu… |
 | [`024.163`](#024163-046-s-round-2-header-asserts-every-attacker-worked-in-a-clean-tree-and-046-s-own-recorded-findings-say-the-tree-was-dirty-and-changing-throughout) | fixed | 0.2.15 | 046's round-2 header asserts every attacker worked in a clean tree, … |
 | [`024.164`](#024164-046-states-finding-totals-whose-stated-dispositions-do-not-account-for-them) | fixed | 0.2.18 | 046 states finding totals whose stated dispositions do not account f… |
 | [`024.165`](#024165-046-keeps-138-acceptance-boxes-on-the-stated-ground-that-no-box-has-ever-been-ticked-56-are-ticked-13-of-them-in-a-file-this-change-set-edited) | fixed | 0.2.17 | 046 keeps 138 acceptance boxes on the stated ground that no box has … |
 | [`024.166`](#024166-two-rows-of-046-s-checks-table-describe-checks-that-were-built-differently-and-the-changed-shape-list-omits-one) | fixed | 0.2.16 | Two rows of 046's checks table describe checks that were built diffe… |
-| [`024.167`](#024167-046-s-three-review-rounds-record-no-per-place-tracking-so-claude-md-s-same-place-rule-cannot-be-applied-and-was-not) | open | 0.2.18 | 046's three review rounds record no per-place tracking, so CLAUDE.md… |
+| [`024.167`](#024167-046-s-three-review-rounds-record-no-per-place-tracking-so-claude-md-s-same-place-rule-cannot-be-applied-and-was-not) | fixed | 0.2.18 | 046's three review rounds record no per-place tracking, so CLAUDE.md… |
 | [`024.168`](#024168-the-ledger-s-reason-for-keeping-05-protocol-md-s-section-numbering-counts-four-source-comments-where-one-exists-and-the-claim-was-copied-into-the-shipped-document) | fixed | 0.2.16 | The ledger's reason for keeping 05-protocol.md's section numbering c… |
 | [`024.169`](#024169-check-doc-links-rb-s-citation-comment-describes-anchor-punctuation-stripping-that-no-caller-performs) | fixed | 0.2.16 | `check_doc_links.rb`'s CITATION comment describes anchor/punctuation… |
 | [`024.170`](#024170-the-doubled-entry-check-counts-area-lines-so-a-body-duplicated-anywhere-below-that-line-is-invisible) | fixed | 0.2.16 | The doubled-entry check counts `**Area:**` lines, so a body duplicat… |
@@ -367,7 +367,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.194`](#024194-release-gate-spec-s-wiring-corpus-includes-untracked-files-so-uncommitted-local-text-satisfies-a-gate-s-something-invokes-this) | fixed | 0.2.16 | release_gate_spec's wiring corpus includes untracked files, so uncom… |
 | [`024.195`](#024195-every-prose-statement-of-what-the-preflight-gate-runs-is-stale-and-nothing-derives-any-of-them) | fixed | 0.2.16 | Every prose statement of what the preflight gate runs is stale, and … |
 | [`024.196`](#024196-the-measurement-that-justifies-reading-per-example-status-is-quoted-three-times-attributed-to-a-different-file-each-time-and-matches-none-of-them) | fixed | 0.2.17 | The measurement that justifies reading per-example status is quoted … |
-| [`024.197`](#024197-0-2-14-s-review-loop-edited-its-own-standard-and-added-a-capability-between-rounds-with-no-departure-recorded) | open | 0.2.18 | 0.2.14's review loop edited its own standard and added a capability … |
+| [`024.197`](#024197-0-2-14-s-review-loop-edited-its-own-standard-and-added-a-capability-between-rounds-with-no-departure-recorded) | fixed | 0.2.18 | 0.2.14's review loop edited its own standard and added a capability … |
 | [`024.198`](#024198-the-packaged-artifact-inspection-count-is-derived-from-the-directory-alone-so-a-grep-aimed-at-the-wrong-pattern-or-with-wider-exclusions-still-reports-a-healthy-count) | fixed | 0.2.16 | The packaged-artifact inspection count is derived from the directory… |
 | [`024.199`](#024199-the-guard-spec-s-absolute-grep-pin-is-satisfied-by-the-advisory-grep-and-its-bare-grep-scan-cannot-see-an-indented-call) | fixed | 0.2.16 | The guard spec's absolute-grep pin is satisfied by the advisory grep… |
 | [`024.200`](#024200-nothing-checks-that-release-sh-parses-so-a-syntax-error-past-the-first-refusal-leaves-every-check-green) | fixed | 0.2.16 | Nothing checks that release.sh parses, so a syntax error past the fi… |
@@ -11952,14 +11952,29 @@ than naming a release that has shipped.
 ## 024.160 Counts in 046 that describe this tree carry no basis, are not marked, and several are stale at HEAD
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**Corrected in 0.2.18 by dating the file rather than the numbers.**
+
+The header claimed "Every count below was re-derived at that revision",
+which reads as a live guarantee and is not one: the file carries zero
+`<!-- measured: -->` markers and nothing re-derives anything in it. Its
+header now says so — that every number in it describes `6bc31b9`, that
+several have since moved, that one quantity has two denominators, and
+that a reader must re-derive before quoting one forward.
+
+**Not marked live, deliberately.** A `<!-- measured: -->` marker with a
+present-tense deriver would rewrite these numbers on every release,
+which is `024.184`'s defect and is exactly how `024.172`'s (c) came to
+be wrong. A release record is a claim about the revision it was written
+at; the repair is to say which revision, not to keep it current.
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md (lines 3-4, 25-30, 42, 131, 278, 295, 336, 421)
 
@@ -12185,14 +12200,29 @@ last day, and the comment says so now.
 ## 024.167 046's three review rounds record no per-place tracking, so CLAUDE.md's same-place rule cannot be applied and was not
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**Recorded in 0.2.18 in the place the rule asks for.**
+
+Nothing can retroactively add per-place tracking to three rounds that
+did not keep it. What can be said, and now is, in `046`'s own header:
+the rounds kept none, so `CLAUDE.md`'s "two rounds in a row on the same
+place" rule could not be applied and was not — and the two places that
+qualify are named, `release.sh`'s clean-tree refusal and the
+`RELEASE_CHECKLIST` evidence column, each hand-fixed where the rule asks
+for a mechanical countermeasure.
+
+That is the whole of the available repair. The rule's value is in the
+round that applies it; a release four releases past cannot supply that,
+and pretending otherwise would make the record read as if the rule had
+been followed.
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md:490-1380
 
@@ -13346,14 +13376,28 @@ than naming a release that has shipped.
 ## 024.197 0.2.14's review loop edited its own standard and added a capability between rounds, with no departure recorded
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**Recorded in 0.2.18 as the departure `CLAUDE.md` requires.**
+
+The rule is "Departing from this rule is written down, where the release
+is recorded". `046` now records it: each round was given `CLAUDE.md` as
+its standard, three of the four commits in the range edited `CLAUDE.md`,
+and the three rounds were therefore held to three standards — so their
+counts, 18 / 70 / 63, are not comparable the way the cadence rule
+assumes.
+
+Written four releases late, which is itself the finding: a departure
+noticed by a later audit rather than by the round that made it is a
+departure nobody chose. `024.36` is the same failure arriving through
+the *instructions* rather than through the standard.
 
 **Area:** `CLAUDE.md`, `docs/design/tasks/046-0.2.14-making-the-record-true.md`
 
