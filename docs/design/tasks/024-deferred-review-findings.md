@@ -307,7 +307,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.134`](#024134-wait-until-ready-never-returns-for-a-non-rails-workspace) | fixed | 0.2.15 | `wait_until_ready` never returns for a non-Rails workspace |
 | [`024.135`](#024135-observation-runner-deserialises-a-subprocess-s-output-with-marshal-load) | fixed | 0.2.16 | `Observation::Runner` deserialises a subprocess's output with `Marsh… |
 | [`024.136`](#024136-a-route-s-optional-segments-are-detected-by-matching-the-literal-format) | fixed | 0.2.16 | A route's optional segments are detected by matching the literal `(.… |
-| [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | 0.2.18 | `WorkspaceIndex#search` scans every symbol in the workspace |
+| [`024.137`](#024137-workspaceindex-search-scans-every-symbol-in-the-workspace) | open | 0.3.0 | `WorkspaceIndex#search` scans every symbol in the workspace |
 | [`024.138`](#024138-no-test-mixes-a-schema-change-and-a-model-file-change-in-one-batch) | fixed | 0.2.16 | No test mixes a schema change and a model-file change in one batch |
 | [`024.139`](#024139-task-documents-grew-their-own-findings-sections-outside-the-register) | fixed | 0.2.14 | Task documents grew their own findings sections, outside the register |
 | [`024.140`](#024140-a-scripted-edit-doubled-a-register-entry-and-every-check-stayed-green) | fixed | 0.2.14 | A scripted edit doubled a register entry, and every check stayed gre… |
@@ -10245,7 +10245,7 @@ substring test used to find.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.18
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/workspace_index.rb` (`#search`, `#rank`)
@@ -10426,6 +10426,44 @@ instead of picking whichever number was more convenient. The corpus above
 is installed gems only, and the harness refuses a root inside this tree.
 
 **Re-triaged in 0.2.17** (`024.276`). Workspace symbol search scans every symbol on every keystroke. No capability, no gem question — a repair to something `W3` already claims works. Its body carries a warning worth heeding before re-measuring: a corpus run once looked as though the change had altered the answers while an in-process comparison of both implementations against one index said they were identical, and `CLAUDE.md` names that exact corpus among its three false results.
+
+### 0.2.18: the empty query's cost, split — and why it stays where it is
+
+The table above times the query end to end. Split, on 997 files of four
+Rails components (8,241 simple names, 14,590 symbols), median of 15:
+
+| query | matches | building the list | ranking | whole |
+|---|---|---|---|---|
+| `""` | 16,194 | 5.9ms | 6.5ms | 12.4ms |
+| `"a"` | 10,612 | 4.2ms | 4.3ms | 8.5ms |
+| `"save"` | 59 | 0.4ms | 0.0ms | 0.5ms |
+
+Roughly half and half for the state that costs the most. Nobody had
+split it before; the previous rounds timed the whole call, and the entry
+above says in as many words what that hides.
+
+**Two optimisations were considered against that split and neither is
+taken.**
+
+*A streaming top-N*, fusing the build and the rank so 16,194 hashes are
+never allocated, is worth about 2x on one frame — and replaces a legible
+`min_by(limit)` with a hand-rolled bounded heap. `048`'s result is that
+eight of eight optimisations of working code failed measurement; this
+one passes, narrowly, and buys a frame the user sees once per picker
+opening.
+
+*Early exit on the empty query* looked free and is not. The rank key's
+primary discriminator is `symbol_id.name`, **not** the
+`@by_simple_name` bucket key — so walking the buckets in sorted order
+and stopping at `limit` would change *which* hundred symbols the picker
+shows. That is a user-visible answer, not a speed-up.
+
+**Retargeted to 0.3.0.** What remains is inherent to "match everything":
+the empty query is every symbol in the workspace by definition, and the
+Direction rules out a second index by default. The published limitation
+already states the cost, with its measured numbers, in both languages.
+
+`024.139` is the sibling that this one's `#find` sentence pointed at.
 
 ## 024.138 No test mixes a schema change and a model-file change in one batch
 
