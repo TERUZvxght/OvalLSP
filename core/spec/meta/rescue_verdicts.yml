@@ -167,7 +167,7 @@
 "core/lib/ovallsp/signatures/environment.rb#add_gem_signatures": surfaces
 "core/lib/ovallsp/signatures/environment.rb#add_gem_signatures[2]": surfaces
 "core/lib/ovallsp/signatures/environment.rb#build_signature_method": surfaces
-"core/lib/ovallsp/signatures/environment.rb#build_definition": "contained: nil reads as no signature, which is what a type without one gives -- and now records the failure, so a definition that could not be built is explainable rather than silent (024.223)"
+"core/lib/ovallsp/signatures/environment.rb#build_definition_uncached": "contained: nil reads as no signature, which is what a type without one gives -- and now records the failure, so a definition that could not be built is explainable rather than silent (024.223). Renamed from #build_definition in 0.2.18 when the memo went in front of it (024.45) -- the failure is still caught here, and now remembered, so a build that fails is recorded once rather than on every ask"
 "core/lib/ovallsp/signatures/environment.rb#signature_location": "contained: nil means hover shows no source link, never a wrong one"
 "core/lib/ovallsp/signatures/environment.rb#compute_member_names": "contained: the RBI half when it has one, a narrower answer rather than a wrong one; UNAVAILABLE when it has none, because an empty list would read as this type declares no methods (024.223)"
 "core/lib/ovallsp/signatures/environment.rb#compute_ancestors": "contained: returns UNAVAILABLE, an empty chain a caller about to conclude not-declared-anywhere can tell from the [] an unknown type gives (024.223 -- the previous verdict here was wrong, and two consumers did turn the emptiness into an assertion)"

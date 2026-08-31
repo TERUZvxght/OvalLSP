@@ -4015,6 +4015,81 @@ are their own task; neither belongs in a patch.
 
 **Re-triaged in 0.2.17** (`024.276`). This one is a published requirement the product misses by an order of magnitude, with no limitation row — which makes it exactly the class 0.2.x exists to clear: something the project said it did and does not. Its own body's "neither belongs in a patch" is an argument about size, not about kind, and size is a reason for a change set of its own rather than for a capability release. Travels with `024.57`, which holds the rolled-back half of the same work.
 
+### Re-measured in 0.2.18, and one of the measurements was wrong
+
+**The table above no longer describes this tree, and the first attempt
+to say so measured the wrong thing.**
+
+Driven through the real Server, five `didChange` against a baseline with
+none — the method this entry's own table used — the per-edit cost came
+out at 0.007–0.061 s and looked like a fix. **It was not.** Since 0.2.10
+five edits with no read between them coalesce into *one* analysis, and
+the baseline run already performs one on `didOpen`, so the difference
+between them is close to zero whatever an analysis costs. It measured
+the coalescing.
+
+Measured where the cost actually is — one `summarize` plus one
+`analyze`, on a warm stack, five repeats, at `ecdb4e6`:
+
+| file | lines | summarize | analyze |
+|---|---|---|---|
+| `uri/generic.rb` | 1,592 | 0.008 s | 4.96 s |
+| `net/http.rb` | 2,574 | 0.010 s | 3.53 s |
+| `rubygems/specification.rb` | 2,594 | 0.025 s | 5.41 s |
+
+So `summarize` is 0.2–0.7% of it, as this entry said, and **a single
+re-analysis is 12–19x the stated 300 ms p95** — worse than the 2.06–5.25 s
+recorded when this entry was written. `:safe` mode, which is what a
+default user runs, costs the same as `:standard`.
+
+### What was fixed here, and what it bought
+
+`Signatures::Environment`'s own header said definitions are "built
+lazily per symbol_id and memoized". The memo was
+`@method_cache[symbol_id] ||= build_signature_method(symbol_id)`, and
+**`||=` does not remember a `nil`** — which is the answer for every name
+a type does not declare, and therefore the answer to almost every
+question the undefined-method check asks. Counted over one `analyze` of
+`net/http.rb`: **76,365 definition builds for 42 distinct
+(type, singleton) pairs**, 62,644 of them `::HTTP`'s singleton side.
+
+Two memos now: `#method_signatures` remembers a `nil`, and
+`#build_definition` is keyed by (type, singleton) rather than by symbol,
+so a *second* absent name on one owner no longer rebuilds it.
+
+**It bought about 10%** — 4.96 → 4.42, 3.53 → 3.02, 5.41 → 5.38 — which
+is what the profile predicted and less than the count suggested. RBS's
+own `DefinitionBuilder` was absorbing most of those 76,365 calls; what
+they cost was the call, not the build. Recorded because the inference
+"76,365 calls must be the cost" was wrong and the profile was right.
+
+### Where the time actually is, for whoever takes this
+
+Sampled at `ecdb4e6`, 4.3M samples over three analyses of `net/http.rb`,
+attributed to the deepest frame inside this project's own `lib`:
+
+```
+   7.5%  workspace_index.rb   String#to_s
+   6.2%  hierarchy_index.rb   dedupe_named
+   5.5%  index/symbol_id.rb   SymbolId#initialize
+   5.1%  workspace_index.rb   String#split
+   4.2%  workspace_index.rb   Array#each
+   3.6%  workspace_index.rb   Kernel#lambda
+   3.5%  hierarchy_index.rb   AncestorEntry#identified?
+   3.5%  index/symbol_id.rb   SymbolId.qualify_owner
+   3.3%  index/symbol_id.rb   core#hash_merge_kwd
+```
+
+Roughly **half the time is constructing and hashing `Index::SymbolId`s
+and scanning the two indexes**, and the `String#split`/`#to_s`/
+`qualify_owner` share says the same names are being taken apart and put
+back together on every lookup. There is no single hotspot to remove;
+what the shape suggests is that an identity computed once should not be
+recomputed per query, which is `024.230`'s neighbourhood rather than a
+hunk in this one.
+
+**Stays open**, with the numbers above rather than the ones it was
+written with.
 ## 024.46 Typing `self` cost 55 false diagnostics and was rolled back
 
 ```yaml

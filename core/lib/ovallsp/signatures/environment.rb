@@ -60,6 +60,7 @@ module Ovallsp
         @type_parameter_cache = {}
         @rbs_environment = nil
         @definition_builder = nil
+        @definition_cache = {}
         @rbi_methods = {}
       end
 
@@ -83,6 +84,7 @@ module Ovallsp
 
           @rbs_environment = env
           @definition_builder = RBS::DefinitionBuilder.new(env: env)
+          @definition_cache = {}
           @rbi_methods = load_rbi_methods(workspace_root, diagnostics)
           @diagnostics = diagnostics
           @method_cache = {}
@@ -125,8 +127,26 @@ module Ovallsp
       # Returns a SignatureMethod (one per symbol_id, packing every RBS
       # `overload` into its own Overload) or nil if the owning type isn't
       # known to the loaded environment, or it has no such method.
+      # **`fetch` with a block, not `||=`, because the answer is usually
+      # `nil` and `||=` does not remember one.**
+      #
+      # `#build_signature_method` answers `nil` for every name the type
+      # does not declare, and that is precisely what the undefined-method
+      # check asks about — it is the question that check exists to
+      # answer. So each such ask missed the cache for ever and rebuilt
+      # the owner's whole RBS definition. Counted over one `analyze` of
+      # Ruby 3.4.10's `net/http.rb`: 76,365 builds for 42 distinct
+      # (type, singleton) pairs, 62,644 of them `::HTTP`'s singleton
+      # side, every one through here. `024.45`.
+      #
+      # The header above this class said definitions were "memoized" and
+      # meant it; what it did not say is that the memo could only hold an
+      # answer that was not `nil`.
       def method_signatures(symbol_id)
-        @mutex.synchronize { @rbi_methods[symbol_id] || (@method_cache[symbol_id] ||= build_signature_method(symbol_id)) }
+        @mutex.synchronize do
+          @rbi_methods[symbol_id] ||
+            @method_cache.fetch(symbol_id) { @method_cache[symbol_id] = build_signature_method(symbol_id) }
+        end
       end
 
       # Ordered ancestor names (most specific first) for a fully-qualified
@@ -328,7 +348,27 @@ module Ovallsp
         nil
       end
 
+      # **Keyed by the type, not by the symbol.** `#method_signatures`
+      # memoises per `symbol_id`, so a *second* name on the same owner
+      # missed that cache and rebuilt the owner's entire definition. The
+      # undefined-method check asks about many names on one receiver by
+      # construction, so that is the common case rather than the corner:
+      # 40 absent names on `::String` rebuilt `::String` 40 times.
+      #
+      # A failed build is remembered too. It is `nil` either way to every
+      # caller, and not remembering it is the same defect one layer up —
+      # `#method_signatures`' `||=`, which is what `024.45` found first.
+      #
+      # Reset wherever `@definition_builder` is, because that is the only
+      # thing that can change what a definition is.
       def build_definition(type_name, singleton:)
+        key = [type_name.to_s, singleton]
+        return @definition_cache[key] if @definition_cache.key?(key)
+
+        @definition_cache[key] = build_definition_uncached(type_name, singleton: singleton)
+      end
+
+      def build_definition_uncached(type_name, singleton:)
         if singleton
           @definition_builder.build_singleton(type_name)
         else
