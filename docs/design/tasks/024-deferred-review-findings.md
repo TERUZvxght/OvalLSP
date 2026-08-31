@@ -229,7 +229,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.54`](#02454-an-edit-that-changed-nothing-discarded-the-edit-before-it) | fixed | reverted | An edit that changed nothing discarded the edit before it |
 | [`024.55`](#02455-a-version-mismatch-is-reported-and-then-ignored) | fixed | 0.2.12 | A version mismatch is reported and then ignored |
 | [`024.56`](#02456-a-publish-can-land-after-the-panel-has-been-cleared-and-after-a-newer-one) | fixed | 0.2.7 | A publish can land after the panel has been cleared, and after a new… |
-| [`024.57`](#02457-the-debounce-and-why-it-was-rolled-back) | open | 0.2.18 | The debounce, and why it was rolled back |
+| [`024.57`](#02457-the-debounce-and-why-it-was-rolled-back) | fixed | 0.2.18 | The debounce, and why it was rolled back |
 | [`024.58`](#02458-bin-ovallsp-loaded-every-abi-s-vendored-gems-not-the-running-one-s) | fixed | 0.2.2 | `bin/ovallsp` loaded every ABI's vendored gems, not the running one's |
 | [`024.59`](#02459-the-guard-against-a-stale-example-count-could-not-run) | fixed | 0.2.3 | The guard against a stale example count could not run |
 | [`024.60`](#02460-four-test-fixtures-raced-macos-first-execution-scan) | fixed | 0.2.3 | Four test fixtures raced macOS' first-execution scan |
@@ -4801,11 +4801,47 @@ from a version that passed without exercising anything:
 ## 024.57 The debounce, and why it was rolled back
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**Closed in 0.2.18, and the deliverable really was the record.** Driven
+against HEAD, the direction this entry wrote down has been built —
+partly by later releases that did not know they were answering it, and
+partly here.
+
+**"One writer that remembers what it last published" exists.**
+`#publish_findings` carries `@last_published_version[uri]`, keyed *per
+buffer* rather than per uri, ordered by generation, with a clear that
+wins and resets. That is this entry's direction, item for item, arrived
+at through `024.56`, `024.97` and `024.113` rather than through this
+entry.
+
+**The deferral no longer has the shape the entry argued about.** 0.2.10
+replaced the synchronous publish with `#drain_settled_analyses`, which
+analyses when the input queue settles. So round 35's second finding — the
+debounce cannot bound concurrent analyses — is moot: there is no waiter
+to start a second one, and the analysis runs on the dispatch thread.
+
+**What was actually left was the invariant spec's table**, and this
+entry named it: "the invariant spec written as the countermeasure has no
+row containing a republish — a property is only as wide as its table."
+It has three now. The one that matters reproduces the ordering the
+defect was, deterministically and without a thread: the close lands
+*while the republish is computing*, so findings computed against an open
+buffer arrive after it is gone. It passes, and a mutation that lets the
+funnel treat the closed buffer as open makes it fail.
+
+**And the report this was all in aid of is fixed elsewhere.** `024.41`'s
+false report on a half-typed call is gone as of 0.2.18, by reading the
+client's edit position rather than by deferring — see that entry for why
+deferring could not have reached it.
+
+`024.45` stays open and no longer travels with this one: it is a latency
+number, not an ordering property, and its cost is inside `analyze` where
+no publish discipline can reach it.
 
 **Area:** `core/lib/ovallsp/server.rb` (`#publish_diagnostics`,
 `#republish_open_diagnostics`, `#publish_findings`), and whatever

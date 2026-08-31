@@ -35,12 +35,18 @@ require "stringio"
 # synchronous path every release ships. That is the argument for
 # writing a property rather than a regression test.
 #
-# What it does *not* reach, which that branch's rounds 35 and 36 both
-# found and 024.56 records: `#republish_open_diagnostics` is another
-# publisher, and no row here involves one -- so the tree violates the
-# closed-document half of this property today, by that path. **A
-# property is only as wide as its table**, and the header above it must
-# not claim more than the table covers.
+# **The publisher this did not reach, until 0.2.18.** Rounds 35 and 36 of
+# that branch found `#republish_open_diagnostics` to be a fourth writer
+# with no row here, and this header used to end by saying the tree
+# violated the closed-document half of the property by that path. It
+# does not any more -- `#publish_findings`' rule that a versioned publish
+# belongs to a buffer still open was built after those rounds, for
+# exactly this -- and there are three rows for it now, including the
+# ordering that actually was the defect: computed while the buffer was
+# open, published after the close landed. `024.57`.
+#
+# **A property is only as wide as its table** stays true, and is why the
+# rows exist rather than why the note did.
 
 RSpec.describe "Ovallsp::Server publish invariant" do
   let(:output) { StringIO.new }
@@ -72,6 +78,7 @@ RSpec.describe "Ovallsp::Server publish invariant" do
   def did_close = frame(jsonrpc: "2.0", method: "textDocument/didClose",
                         params: { textDocument: { uri: URI_UNDER_TEST } })
 
+
   def published
     output.rewind
     reader = Ovallsp::IO::FramedReader.new(output)
@@ -89,7 +96,9 @@ RSpec.describe "Ovallsp::Server publish invariant" do
 
   def run_sequence(*notifications)
     input = notifications.join + frame(jsonrpc: "2.0", method: "exit", params: nil)
-    Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger).run
+    server = Ovallsp::Server.new(input: StringIO.new(input), output: output, logger: logger)
+    server.run
+    server
   end
 
   # `[description, notifications, ends_broken]`. `nil` means the document
@@ -132,6 +141,77 @@ RSpec.describe "Ovallsp::Server publish invariant" do
           expect(published.last[:diagnostics]).to be_empty
         end
       end
+    end
+  end
+
+  # **The publisher this table did not reach**, and the reason its header
+  # used to end by saying so. Rounds 35 and 36 of the rolled-back
+  # debounce found that `#republish_open_diagnostics` is a fourth writer
+  # and no row here involved one — "a property is only as wide as its
+  # table".
+  #
+  # Its six call sites are all Agent-driven — routes arriving, models
+  # refreshing, the Agent restarting — and every one runs on a background
+  # thread, which is what made the original race a race. Booting an Agent
+  # to reach them would make this a different spec, so the publisher is
+  # called directly: what is under test is the publisher, not the road to
+  # it.
+  #
+  # It passes today, and it did not when the note was written. What
+  # closed it is `#publish_findings`' rule that a versioned publish
+  # belongs to a buffer that is still open — built after those rounds,
+  # for exactly this. The note is removed rather than kept as a warning
+  # about something that no longer happens.
+  describe "a republish that runs after the document was closed" do
+    it "publishes nothing for it" do
+      server = run_sequence(did_open(CLEAN), did_change(BROKEN, version: 2), did_close)
+      before = published.length
+
+      server.send(:republish_open_diagnostics)
+
+      expect(published.length).to eq(before), "the republish wrote for a document nobody has open"
+      expect(published.last[:diagnostics]).to be_empty
+    end
+
+    # The control. If `run_sequence` left no document open for reasons of
+    # its own, the example above would pass with the publisher doing
+    # nothing at all — so an *open* document must still be republished.
+    it "still publishes for a document that is open" do
+      server = run_sequence(did_open(BROKEN))
+      before = published.length
+
+      server.send(:republish_open_diagnostics)
+
+      expect(published.length).to be > before
+      expect(published.last[:diagnostics]).not_to be_empty
+    end
+
+    # **And the sequence that actually was the defect**, which the two
+    # above do not reach: the republish snapshots the open documents and
+    # then computes, and the close lands *during* the computation. By the
+    # time it publishes, the buffer is gone — but it is holding findings
+    # it computed while the buffer was still there.
+    #
+    # Reproduced deterministically by closing the document from inside
+    # the analysis rather than by racing a thread: the ordering under
+    # test is "computed before, published after", and that is exactly
+    # what this produces.
+    it "publishes nothing when the close lands while it is still computing" do
+      server = run_sequence(did_open(BROKEN))
+      before = published.length
+      store = server.instance_variable_get(:@document_store)
+      engine = server.instance_variable_get(:@diagnostics_engine)
+      real = engine.method(:analyze)
+      allow(engine).to receive(:analyze) do |**kwargs|
+        findings = real.call(**kwargs)
+        store.close(uri: URI_UNDER_TEST)
+        findings
+      end
+
+      server.send(:republish_open_diagnostics)
+
+      expect(published.length).to eq(before),
+                                  "wrote findings computed before a close that had already landed"
     end
   end
 end

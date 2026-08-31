@@ -213,6 +213,12 @@
   to: "    def alive?\n      return false\n"
   spec: spec/ovallsp/agent_process_manager_spec.rb
   example: "leaves no process behind after #stop"
+- why: "the funnel's rule that a versioned publish belongs to a buffer that is still open -- without it a republish already walking the open set writes findings for a file the user just closed, which is 024.56's reproduced sequence and the half 024.57 recorded as still open."
+  file: core/lib/ovallsp/server.rb
+  from: "          return false if open_document.nil?\n"
+  to: "          open_document ||= document\n"
+  spec: spec/ovallsp/server_publish_invariant_spec.rb
+  example: "publishes nothing when the close lands while it is still computing"
 - why: "024.41's requirement that the dot ends its line -- without it a caret just after the dot of an ordinary `a.b` suppresses that call's report, so a complete expression stops being checked while the caret rests in it."
   file: core/lib/ovallsp/diagnostics/mid_edit_call.rb
   from: "        return nil unless newline && rest[0...newline].strip.empty?"

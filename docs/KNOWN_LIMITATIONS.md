@@ -488,7 +488,7 @@ keystroke, and — the part you feel — a hover asked while you are typing
 is answered before the pending analysis runs, in about 0.04 s instead of
 1.4. What is still per-keystroke is a burst slower than the analysis: an
 edit that settles is always analysed, which is the property that matters
-more. <!-- documents: 024.57 -->
+more.
 
 ## What the undefined-method check gets wrong on real code
 
