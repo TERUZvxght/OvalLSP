@@ -324,7 +324,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices) | open | 0.2.18 | A check can be disabled, and no check notices |
 | [`024.152`](#024152-a-leak-check-counted-every-descriptor-in-the-process-and-flaked-under-load) | fixed | 0.2.14 | A leak check counted every descriptor in the process, and flaked und… |
 | [`024.153`](#024153-a-quarter-of-the-open-work-is-in-no-release-and-0-3-0-has-become-where-the-rest-goes) | fixed | 0.2.15 | A quarter of the open work is in no release, and 0.3.0 has become wh… |
-| [`024.154`](#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | open | 0.2.18 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
+| [`024.154`](#024154-findings-recorded-in-046-are-truncated-mid-sentence-in-rounds-1-and-3-in-the-same-commit-that-untruncated-round-2) | fixed | 0.2.18 | Findings recorded in 046 are truncated mid-sentence in rounds 1 and … |
 | [`024.155`](#024155-a-register-heading-the-entry-grammar-does-not-match-is-skipped-rather-than-failed-so-an-entry-can-exist-and-be-checked-by-nothing) | fixed | 0.2.16 | A register heading the entry grammar does not match is skipped rathe… |
 | [`024.156`](#024156-the-evidence-extractor-recognises-only-rb-sh-js-and-test-so-typescript-tests-and-ci-job-names-the-sole-evidence-for-eight-gates-are-never-checked) | fixed | 0.2.16 | The evidence extractor recognises only .rb/.sh/.js and test:, so Typ… |
 | [`024.157`](#024157-a-git-subprocess-in-a-throwaway-repository-obeys-the-inherited-git-dir-so-the-suite-commits-to-the-real-repository) | fixed | 0.2.16 | A git subprocess in a throwaway repository obeys the inherited GIT_D… |
@@ -334,7 +334,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.161`](#024161-046-s-round-3-correction-states-that-the-4-000-lines-of-revert-phrase-is-removed-the-phrase-is-still-the-file-s-closing-sentence) | fixed | 0.2.17 | 046's round-3 correction states that the "4,000 lines of revert" phr… |
 | [`024.162`](#024162-046-s-recorded-departure-from-the-drive-round-rests-on-a-false-enumeration-of-the-change-set) | fixed | 0.2.16 | 046's recorded departure from the `drive` round rests on a false enu… |
 | [`024.163`](#024163-046-s-round-2-header-asserts-every-attacker-worked-in-a-clean-tree-and-046-s-own-recorded-findings-say-the-tree-was-dirty-and-changing-throughout) | fixed | 0.2.15 | 046's round-2 header asserts every attacker worked in a clean tree, … |
-| [`024.164`](#024164-046-states-finding-totals-whose-stated-dispositions-do-not-account-for-them) | open | 0.2.18 | 046 states finding totals whose stated dispositions do not account f… |
+| [`024.164`](#024164-046-states-finding-totals-whose-stated-dispositions-do-not-account-for-them) | fixed | 0.2.18 | 046 states finding totals whose stated dispositions do not account f… |
 | [`024.165`](#024165-046-keeps-138-acceptance-boxes-on-the-stated-ground-that-no-box-has-ever-been-ticked-56-are-ticked-13-of-them-in-a-file-this-change-set-edited) | fixed | 0.2.17 | 046 keeps 138 acceptance boxes on the stated ground that no box has … |
 | [`024.166`](#024166-two-rows-of-046-s-checks-table-describe-checks-that-were-built-differently-and-the-changed-shape-list-omits-one) | fixed | 0.2.16 | Two rows of 046's checks table describe checks that were built diffe… |
 | [`024.167`](#024167-046-s-three-review-rounds-record-no-per-place-tracking-so-claude-md-s-same-place-rule-cannot-be-applied-and-was-not) | open | 0.2.18 | 046's three review rounds record no per-place tracking, so CLAUDE.md… |
@@ -11536,14 +11536,41 @@ above are what that turned out to be.*
 ## 024.154 Findings recorded in 046 are truncated mid-sentence in rounds 1 and 3, in the same commit that untruncated round 2
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**Corrected in 0.2.18 by making the record say what it is**, which is
+the only repair available: the bodies were cut when they were written,
+and the journal they came from is gone.
+
+Re-run against HEAD, and **half of this entry no longer reproduces**.
+Round 1: all 18 items still end mid-token, at 574–643 characters —
+confirmed. Round 3: its findings are prose bullets, not the `^ \``
+shape the entry's own reproduce command assumes, and none of them is
+truncated. The command was written against a layout the file no longer
+has.
+
+Three sentences were false and are now true:
+
+- the note under round 2 said "Recorded in full and untruncated" of a
+  list that is round 2's alone, in the same commit that wrote round 1's
+  eighteen with the same cut. It says which list it means now.
+- round 3's own summary said round 1's list was "Now written, in full,
+  including the refutations". It was written truncated.
+- the round-1 list carried no note at all. It now says it is cut, where
+  the cut lands, and that commit `8f1d4f4`'s message records the round
+  in prose — 84 raised, 30 deduplicated, 18 survived, 12 refuted — which
+  is where a reader can get the substance the bullets stop short of.
+
+**Not reconstructed**, deliberately: a bullet completed from memory
+reads exactly like one that was never cut, and this register already
+carries what that costs.
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md (lines 526-671, 1042-1380)
 
@@ -11894,14 +11921,33 @@ than naming a release that has shipped.
 ## 024.164 046 states finding totals whose stated dispositions do not account for them
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**Corrected in 0.2.18 for the one of the three that can be**, and the
+correction is a subtraction rather than an addition.
+
+The opening audit's arithmetic reproduces exactly: 15 + 9 + 28 = **52 of
+122**, and the other 70 have no stated disposition anywhere. The
+document now says that, in the paragraph that states the totals, rather
+than leaving it to be summed — it *was* summed, by a reader two releases
+later, and not by whoever wrote it.
+
+The other two are not repairable from here. Round 2's 15-fixed/55-open
+split cannot be reconstructed: no item carries a marker and the commits
+that "named them" name them in prose. Round 3 states no disposition at
+all. Inventing either would produce a record that reads as verified and
+is not, which is `024.154`'s reason in the other direction.
+
+What that leaves is `024.151`'s reader, who gets 70 items of which some
+number are already done. That is now visible in the document rather than
+discoverable by arithmetic, which is as far as this can honestly go.
 
 **Area:** docs/design/tasks/046-0.2.14-making-the-record-true.md:10-13, :691-694, :1042-1380
 
