@@ -127,7 +127,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**284 entries below** <!-- measured: register-entries = 284 -->,
+**285 entries below** <!-- measured: register-entries = 285 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -207,7 +207,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.32`](#02432-def-foo-bar-is-recorded-as-an-instance-method-so-both-answers-are-inverted) | fixed | 0.2.13 | `def Foo.bar` is recorded as an instance method, so both answers are… |
 | [`024.33`](#02433-k-instance-eval-attr-accessor-x-is-reported-k-class-eval-is-not) | fixed | 0.2.13 | `K.instance_eval { attr_accessor :x }` is reported; `K.class_eval` i… |
 | [`024.34`](#02434-attr-inside-a-def-inside-class-self-is-kinded-singleton) | fixed | 0.2.13 | `attr_*` inside a `def` inside `class << self` is kinded singleton |
-| [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | open | 0.2.18 | A class that includes a module the workspace cannot resolve still re… |
+| [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | done | 0.2.18 | A class that includes a module the workspace cannot resolve still re… |
 | [`024.36`](#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
 | [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.2.18 | The argument-type check reports nothing on measured real Ruby |
 | [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.2.18 | `scope_at` copies the whole environment once per descent step |
@@ -456,6 +456,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.286`](#024286-a-session-recorded-on-one-ruby-was-compared-against-another-so-the-3-3-job-called-true-answers-wrong) | fixed | 0.2.17 | A session recorded on one Ruby was compared against another, so the … |
 | [`024.287`](#024287-the-informational-ruby-4-0-job-reported-five-checkout-failures-and-one-real-difference) | fixed | 0.2.18 | The informational Ruby 4.0 job reported five checkout failures and o… |
 | [`024.288`](#024288-ruby-4-0-puts-a-fourth-name-on-object-that-rbs-does-not-declare) | open | 0.3.0 | Ruby 4.0 puts a fourth name on Object that RBS does not declare |
+| [`024.289`](#024289-a-class-that-includes-an-unread-module-is-not-checked-at-class-level-so-a-typo-there-is-silent) | open | 0.3.0 | A class that includes an unread module is not checked at class level… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -2796,11 +2797,47 @@ would break.
 ## 024.35 A class that includes a module the workspace cannot resolve still reads as closed
 
 ```yaml
-status: open
+status: done
 kind: defect
 user-visible: yes
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+### Closed in 0.2.18: does not reproduce, confirmed with a control that distinguishes
+
+0.2.15's assessment reached this conclusion and was refused because its
+fixture could not tell *"the defect is gone"* from *"nothing of this kind
+is reported at all"*. **That refusal was right, and finding out why took
+building the control it asked for.**
+
+Driven again, a receiverless macro in a class body — the entry's own
+`validate :ensure_ok` — is reported in **no** arrangement: not with an
+unread include, not with a readable one, not with no include at all. So
+any fixture built from that shape proves nothing in either direction,
+which is exactly what 0.2.15 hit.
+
+An explicit receiver *is* reported, and with it the four cases separate:
+
+```
+  includes an unread module         Configish.validate(:ensure_ok)          []
+  includes nothing                  Plain.validate(:ensure_ok)              reported
+  includes a readable module        Known.validate(:ensure_ok)              reported
+  unread module, a real typo        Configish.definitely_not_a_member       []
+```
+
+The defect is gone and the check is awake, which the middle two prove.
+
+**And the cost this entry predicted is real**, which the fourth line
+shows: "it will silence genuine class-level reports on every class that
+includes anything unread". It does. That is the trade the rule makes
+rather than a second defect, and it is now an assertion in
+`unread_include_spec.rb` rather than a sentence, so it cannot be
+undone by accident and called an improvement.
+
+**The published limitation was stale in the other direction** and said
+the macro *is* reported. Corrected in both languages, and it now states
+the cost as well — which is the half a user actually meets, because it
+is the half that is silent.
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`closed_nominal?`)
 
@@ -18843,6 +18880,49 @@ from the running interpreter minus the signature set, which is what the
 spec already does in a subprocess. Cost is startup time on every boot
 against a list that changes once per Ruby release, so it is a real
 trade rather than an obvious win — hence an entry.
+
+## 024.289 A class that includes an unread module is not checked at class level, so a typo there is silent
+
+```yaml
+status: open
+kind: friction
+user-visible: yes
+target: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`closed_nominal?`)
+
+The cost of `024.35`'s rule, and the entry that carries it now that
+`024.35` is closed.
+
+`include SomeGem::Model` makes a class's class-level surface unbounded —
+whatever that Concern's `class_methods do` block installs is real and
+invisible from a workspace that has not read the gem. So the check
+declines about that class entirely:
+
+```
+  Configish.validate(:ensure_ok)          []   <- right: the module may add it
+  Configish.definitely_not_a_member       []   <- the cost: a real typo, silent
+```
+
+`024.35` predicted this in as many words — "it will silence genuine
+class-level reports on every class that includes anything unread, which
+is most of a Rails app before the Agent is ready" — and measured, that
+is what happens.
+
+**Friction rather than a defect**, and the distinction is section 0's:
+this is the engine declining, not asserting. A decline ranks above a
+wrong answer, and the alternative — judging such a class closed — is the
+defect `024.35` was.
+
+**It resolves when the gems are indexed** (`024.R7`), which is what makes
+the surface knowable rather than unbounded. Until then there is nothing
+to fix here that would not be `024.35` again, which is why it travels
+with that work rather than standing on its own.
+
+Asserted rather than described: `unread_include_spec.rb`'s "also says
+nothing about a genuine typo there, which is what the rule costs" fails
+if the decline ever narrows by accident.
 
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 

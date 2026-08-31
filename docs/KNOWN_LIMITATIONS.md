@@ -244,10 +244,15 @@ than carried into this release (024.23).
 
 Seven more are older than this release and untouched by it:
 
-- **A class that includes a module the workspace has not read still has
-  its class-level macros reported.** `include SomeGem::Model` followed by
-  `validate :ensure_ok` is reported, though the Concern installs
-  `validate`. Introduced by 0.1.14 and not fixed here (024.35). <!-- documents: 024.35 -->
+- **A class that includes a module the workspace has not read is not
+  checked at class level at all.** `include SomeGem::Model` makes that
+  class's class-level surface unbounded — whatever the Concern's
+  `class_methods do` block installs is real and invisible from here — so
+  nothing class-level on it is reported. That is the right way round:
+  `validate :ensure_ok` beside such an include used to be reported and no
+  longer is. **What it costs is the other direction**: a genuine typo on
+  that class, `Configish.definitely_not_a_member`, is not reported
+  either, and will not be until the gems are indexed. <!-- documents: 024.289 -->
 - **A method a loop defines is reported as unknown.** `EVENTS.each { |id,
   _| alias_method "on_#{id}", :_dispatch_1 }` is idiomatic in generated
   code, and the name is not a literal, so the index records nothing and
