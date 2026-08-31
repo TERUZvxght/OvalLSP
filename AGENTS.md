@@ -101,10 +101,23 @@ while the work continues — which is why it is written here rather than
 carried in a conversation.
 
 
+*A bullet below that restates a `CLAUDE.md` rule ends with an HTML comment
+naming the section it restates — look at any of them for the spelling; it is
+deliberately not quoted here, because a quoted one is a marker and this
+paragraph is not a bullet. `core/spec/meta/agents_restates_spec.rb` holds
+`CLAUDE.md` to still having every section they name. The relationship is
+declared rather than inferred because inferring it from shared wording was
+measured at three false positives in eleven, and a check with that error rate
+gets switched off (`024.150`). A bullet that cites `CLAUDE.md` as a file to
+read carries no marker.*
+
 - Never implement functionality speculatively or in advance. Apply the YAGNI principle rigorously, and implement only what is explicitly required for the current task.
 - Write the simplest construction that satisfies the requirement in front of you, and let the next requirement change the shape. The measure of simpler is *places that must agree*, not lines — a measured simplification in `048` came out at +3 net lines once it had to work. This governs code being written; a simplification of code that already works is an ordinary change and carries an ordinary change's obligations. See `CLAUDE.md` for the rule, the four shapes to stop at, and the counter-rule about centralising.
+  <!-- restates: The simplest thing that could possibly work (mandatory) -->
 - Write tests first: a test must be observed failing before the code that makes it pass is written. Behaviour that no test fails on when it is reverted counts as a defect. See `CLAUDE.md` for the full rule and for how to verify it mechanically.
+  <!-- restates: Test-first discipline (mandatory) -->
 - When asking another agent for an independent review, do not tell it what not to count, where to concentrate, or that finding nothing is fine. Each of those narrows what it can report, and a falling defect count then measures the instructions rather than the code. See `CLAUDE.md` for the rule and 024.36 for the control run that established it.
+  <!-- restates: How to ask for an independent review (mandatory) -->
 - **Work in progress lives in `docs/design/tasks/`, not in a transcript.**
   The open findings of the current review loop are in the
   highest-numbered `NNN-*.md` there — **list the directory on the branch
@@ -112,6 +125,7 @@ carried in a conversation.
   including here. Anything a reviewer reported and nobody has fixed
   exists only in that file; agent reports are not kept. Read it before
   deciding what to do next, and add to it before a long session ends.
+  <!-- restates: Where a release's work lives (mandatory) -->
 
   *This bullet used to name the current file by number, and went stale
   three times — twice pointing at a file the branch did not contain,
@@ -125,6 +139,7 @@ carried in a conversation.
   was prepared twice in parallel because a pointer on `main` named a
   file that existed only on a branch nothing named. `CLAUDE.md` has the
   rule; 028's "Two preparations, one release" records the episode.
+  <!-- restates: Where a release's work lives (mandatory) -->
 - **Never write a real absolute home path into the tree or a commit
   message.** Write `$HOME`, `~`, or a description. This is machine-checked
   now, in both channels — `core/spec/meta/home_path_guard_spec.rb` for
@@ -132,11 +147,13 @@ carried in a conversation.
   reading the one detector in `scripts/check_home_paths.rb`. The prose
   rule alone missed it twice, which is why the check exists; `CLAUDE.md`
   has the rule and what it deliberately does not cover.
+  <!-- restates: Public repository privacy and secret handling -->
 - **Run the tool the thing under test runs.** 0.2.3 read a release
   gate's `grep` result in a shell where the name resolves to a `ugrep`
   wrapper that skips binary files, contradicted the gate, and filed a
   register entry against a defect that did not exist. `CLAUDE.md`'s
   measurement section carries this with the others.
+  <!-- restates: A measurement is a claim, and it needs the same care as a test -->
 - **A measurement that disagrees with a spec you have watched fail is
   wrong until proven otherwise.** The corpus comparisons that went wrong
   are catalogued in `CLAUDE.md`'s measurement section — read them before
@@ -144,10 +161,12 @@ carried in a conversation.
   used to carry its own list, which drifted out of agreement with it.
   `026-0.2.1-review-loop.md` records what each invented and what caught
   it.
+  <!-- restates: A measurement is a claim, and it needs the same care as a test -->
 - **During a review loop, fix; do not add.** A capability a reviewer asks
   for is an entry in `024-deferred-review-findings.md`, not work to do
   before the next round. 0.2.1 ran nine rounds and seven found a defect
   in code the previous round had written.
+  <!-- restates: Review cadence (mandatory) -->
 - **Two review rounds on the same place buys a mechanical countermeasure;
   a third buys a rollback.** Not a third hand fix, and not a regression
   test for the one instance — something that makes the class of defect
@@ -155,12 +174,14 @@ carried in a conversation.
   at the symptom too, roll back the whole thread and write down the root
   cause; the entry is the deliverable, not the code. `CLAUDE.md` has the
   rule; 024.15 records the first time it fired.
+  <!-- restates: Two rounds in a row on the same place: mechanise, then roll back (mandatory) -->
 - **A green `rspec` run can be green because the decisive suites did not
   run.** Without `rails ~> 8.1` and `sqlite3` as local gems,
   `spec/e2e/capabilities_spec.rb` and `spec/integration/real_rails_spec.rb`
   skip in full and the run still exits 0. Run those two files and check
   the example count before reporting a suite as passing. See `CLAUDE.md`
   and `CONTRIBUTING.md`.
+  <!-- restates: A measurement is a claim, and it needs the same care as a test -->
 - **A test that deletes must be given a temporary directory, never a
   fabricated absolute path.** `bundle exec rspec` emptied
   `/Applications` for six days because one example passed `current: "/x"`
@@ -168,5 +189,6 @@ carried in a conversation.
   `.not_to raise_error` against a method that swallows every error, so it
   could not have failed. `CLAUDE.md` has the three rules; 027 records the
   incident.
+  <!-- restates: A test that deletes things, and an assertion that could not fail (mandatory) -->
 - Proactively locate and consult Claude-specific source files and instructions, including `CLAUDE.md` and relevant files under `.claude/`, before beginning work, and follow any applicable guidance.
 - Context compaction or a task handoff may omit project instructions. After every compaction/handoff, re-read `AGENTS.md`, `CLAUDE.md`, and relevant files under `.claude/` before resuming work.

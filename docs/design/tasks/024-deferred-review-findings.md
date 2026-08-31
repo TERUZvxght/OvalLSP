@@ -210,8 +210,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.35`](#02435-a-class-that-includes-a-module-the-workspace-cannot-resolve-still-reads-as-closed) | done | 0.2.18 | A class that includes a module the workspace cannot resolve still re… |
 | [`024.36`](#02436-instructing-a-reviewer-narrowed-what-it-could-find-and-a-control-run-proved-it) | fixed | 0.1.15 | Instructing a reviewer narrowed what it could find, and a control ru… |
 | [`024.37`](#02437-the-argument-type-check-reports-nothing-on-measured-real-ruby) | open | 0.3.0 | The argument-type check reports nothing on measured real Ruby |
-| [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.2.18 | `scope_at` copies the whole environment once per descent step |
-| [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.2.18 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
+| [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.3.0 | `scope_at` copies the whole environment once per descent step |
+| [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.3.0 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
 | [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | fixed | 0.2.18 | Typing a `.` reports a method on the *next* line |
 | [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.3.0 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
@@ -233,7 +233,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.58`](#02458-bin-ovallsp-loaded-every-abi-s-vendored-gems-not-the-running-one-s) | fixed | 0.2.2 | `bin/ovallsp` loaded every ABI's vendored gems, not the running one's |
 | [`024.59`](#02459-the-guard-against-a-stale-example-count-could-not-run) | fixed | 0.2.3 | The guard against a stale example count could not run |
 | [`024.60`](#02460-four-test-fixtures-raced-macos-first-execution-scan) | fixed | 0.2.3 | Four test fixtures raced macOS' first-execution scan |
-| [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.2.18 | Two per-file stores are separated by nothing but their payload |
+| [`024.62`](#02462-two-per-file-stores-are-separated-by-nothing-but-their-payload) | open | 0.3.0 | Two per-file stores are separated by nothing but their payload |
 | [`024.63`](#02463-the-dispatch-layer-owns-view-inference-and-it-has-broken-the-query-layer-s-one-guarantee-twice) | fixed | 0.2.16 | The dispatch layer owns view inference, and it has broken the query … |
 | [`024.64`](#02464-three-rounds-on-extension-ts-s-wiring-and-the-countermeasure-was-aimed-at-the-symptom) | fixed | 0.2.12 | Three rounds on `extension.ts`'s wiring, and the countermeasure was … |
 | [`024.65`](#02465-a-different-ruby-engine-produces-two-error-toasts-where-it-produced-one) | fixed | 0.2.3 | A different Ruby engine produces two error toasts where it produced … |
@@ -241,7 +241,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.67`](#02467-seven-register-numbers-are-cited-from-the-tree-and-resolve-to-nothing) | fixed | 0.3.0 | Seven register numbers are cited from the tree and resolve to nothing |
 | [`024.68`](#02468-three-rounds-of-guards-on-a-hand-rolled-grammar-each-blind-one-assumption-deeper) | fixed | 0.2.12 | Three rounds of guards on a hand-rolled grammar, each blind one assu… |
 | [`024.69`](#02469-the-two-suites-that-drive-a-real-editor-are-run-by-nobody-but-the-maintainer) | fixed | 0.2.12 | The two suites that drive a real editor are run by nobody but the ma… |
-| [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.2.18 | One mutable Rails fixture is shared by every worker, so the suite ca… |
+| [`024.71`](#02471-one-mutable-rails-fixture-is-shared-by-every-worker-so-the-suite-cannot-be-parallelised) | open | 0.3.0 | One mutable Rails fixture is shared by every worker, so the suite ca… |
 | [`024.72`](#02472-the-red-toast-0-2-1-removed-is-still-shown-from-the-other-code-path) | fixed | 0.2.2 | The red toast 0.2.1 removed is still shown, from the other code path |
 | [`024.73`](#02473-the-fork-boundary-is-undone-by-marshal-load-in-the-parent) | fixed | 0.2.6 | The fork boundary is undone by `Marshal.load` in the parent |
 | [`024.74`](#02474-the-trust-gate-stands-in-front-of-callers-not-in-front-of-what-executes) | fixed | 0.2.16 | The trust gate stands in front of callers, not in front of what exec… |
@@ -320,7 +320,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.147`](#024147-every-check-was-blind-to-a-file-until-it-was-committed-and-the-commit-gate-runs-before-that) | fixed | 0.2.14 | Every check was blind to a file until it was committed, and the comm… |
 | [`024.148`](#024148-the-check-for-did-the-suite-actually-run-could-not-fail-in-the-case-it-existed-for) | fixed | 0.2.14 | The check for "did the suite actually run" could not fail in the cas… |
 | [`024.149`](#024149-a-review-harness-that-reports-nothing-found-when-its-own-post-processing-crashed) | fixed | 0.2.14 | A review harness that reports "nothing found" when its own post-proc… |
-| [`024.150`](#024150-agents-md-paraphrases-claude-md-and-the-paraphrase-drifts) | open | 0.2.18 | `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts |
+| [`024.150`](#024150-agents-md-paraphrases-claude-md-and-the-paraphrase-drifts) | fixed | 0.2.18 | `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts |
 | [`024.151`](#024151-a-check-can-be-disabled-and-no-check-notices) | open | 0.3.0 | A check can be disabled, and no check notices |
 | [`024.152`](#024152-a-leak-check-counted-every-descriptor-in-the-process-and-flaked-under-load) | fixed | 0.2.14 | A leak check counted every descriptor in the process, and flaked und… |
 | [`024.153`](#024153-a-quarter-of-the-open-work-is-in-no-release-and-0-3-0-has-become-where-the-rest-goes) | fixed | 0.2.15 | A quarter of the open work is in no release, and 0.3.0 has become wh… |
@@ -451,7 +451,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.281`](#024281-the-erb-integration-test-asserted-an-answer-the-engine-correctly-declines) | fixed | 0.2.17 | The `.erb` integration test asserted an answer the engine correctly … |
 | [`024.282`](#024282-ci-was-red-on-main-for-a-week-and-nothing-in-the-tree-said-so) | fixed | 0.2.17 | CI was red on `main` for a week and nothing in the tree said so |
 | [`024.283`](#024283-the-packaged-core-is-driven-only-on-linux-so-the-macos-build-is-still-smoke-tested) | open | 0.3.0 | The packaged Core is driven only on Linux, so the macOS build is sti… |
-| [`024.284`](#024284-nothing-local-can-see-that-ci-is-red-and-preflight-does-not-run-the-extension) | open | 0.2.18 | Nothing local can see that CI is red, and preflight does not run the… |
+| [`024.284`](#024284-nothing-local-can-see-that-ci-is-red-and-preflight-does-not-run-the-extension) | fixed | 0.2.18 | Nothing local can see that CI is red, and preflight does not run the… |
 | [`024.285`](#024285-three-interpreter-sessions-resolved-against-whatever-the-machine-had-installed) | fixed | 0.2.17 | Three interpreter sessions resolved against whatever the machine had… |
 | [`024.286`](#024286-a-session-recorded-on-one-ruby-was-compared-against-another-so-the-3-3-job-called-true-answers-wrong) | fixed | 0.2.17 | A session recorded on one Ruby was compared against another, so the … |
 | [`024.287`](#024287-the-informational-ruby-4-0-job-reported-five-checkout-failures-and-one-real-difference) | fixed | 0.2.18 | The informational Ruby 4.0 job reported five checkout failures and o… |
@@ -3258,7 +3258,7 @@ user-visible-note: >
   measurable curve starts. Recorded rather than fixed because the fix is
   in the inference core and the round that found it was already
   repairing the round before it.
-target: 0.2.18
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`locate`, `capture_scope`)
@@ -3372,13 +3372,53 @@ The rest of this cluster shipped; only this file was held back.
 
 **Re-triaged in 0.2.17** (`024.276`). Nothing user-facing and nothing to do with gems: a per-descent copy of the whole environment inside a walk that is budgeted precisely because it may not finish. The Direction is to keep a single capture and make it survive the abort. Its own body says why it was held back — a review round is not where a new mechanism goes — which is an argument for a change set of its own, on the patch line.
 
+### 0.2.18: the curve is real and no real code is on it
+
+Re-measured, and the distribution measured for the first time.
+
+```
+  locals in one scope    scope_at
+             10          0.021 ms
+             50          0.272 ms
+            100          0.874 ms
+            200          3.645 ms
+```
+
+Quadratic, as recorded — 5x the locals for 13x the time, then 2x for
+4x. And over **27,297 methods in 1,973 files** (four Rails gems plus
+Ruby 3.4.10's stdlib):
+
+```
+  <10 locals   26,980   98.84%
+  10-24           307    1.12%
+  25-49             8    0.03%
+  50-99             1
+  100+              1     (rdoc's markdown.rb#_Code, 155)
+```
+
+**Two methods in the whole corpus** are past 50, and at 10 the call
+costs 0.021ms. The entry's own note said "real code keeps small"; that
+is now a number rather than a belief.
+
+**And the obvious fix does not work.** `capture_scope` cannot store the
+`env` by reference and build the Hash once at the end: `locate`
+*mutates* `env` as it descends — its own comment says so — so a stored
+reference would answer with the deepest scope's bindings at every
+level. Capturing only where the descent stops is the shape, and it
+trades a guarantee (whatever path `locate` takes, the last capture is
+right) for 0.85ms on a method one corpus in two has.
+
+Retargeted to 0.3.0, where the inference core's cost is `024.45`'s
+subject anyway — and `024.45`'s profile says the time is in `SymbolId`
+and the indexes, not here.
+
 ## 024.39 `LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread
 
 ```yaml
 status: open
 kind: defect
 user-visible: no
-target: 0.2.18
+target: 0.3.0
 user-visible-note: >
   No wrong answer has been produced. A reviewer ran 2,000 concurrent
   `infer_at` pairs and 400 `scope_at`/`infer_at` pairs in both size
@@ -3408,6 +3448,24 @@ inferencer, which is also what would let `@parse_cache` be shared safely
 instead of being the one piece of it that wants to be.
 
 **Re-triaged in 0.2.17** (`024.276`). Per-request state on a shared object, safe today only because the GVL rarely preempts inside one walk — a probability, not an invariant, and nothing states it. Moving the state into a per-call object repairs an existing guarantee rather than adding one, so it is patch work.
+
+### 0.2.18: recorded, and the cheap fix is measurably the wrong trade
+
+Nothing new reproduces — the entry already records 2,400 concurrent
+pairs with zero wrong answers, zero leaked locals and zero exceptions.
+What it says is that the reason it holds is not an invariant, and that
+is still true.
+
+**The cheap fix is a mutex around `infer_at` and `scope_at`**, and it
+serialises hover and completion against diagnostics — on the path
+`024.45` measures at 3.0–5.4 seconds per analysis. That is the one place
+in this server where a lock is most expensive, and buying an invariant
+there with a keystroke's latency is the wrong way round.
+
+The shape that works is per-request state threaded as arguments rather
+than held on the instance, which is a rewrite of the inference core's
+entry points. Retargeted to 0.3.0 with `024.45` and `024.38`, which are
+the same core and the same rewrite.
 
 ## 024.40 Every `argument-count` report on the measurement corpus is false
 
@@ -5324,7 +5382,7 @@ user-visible-note: >
   affected. What is recorded is that the correctness rests on four
   call sites each remembering a different subset, rather than on the
   structure — a hazard for the fifth, not a fault in the fourth.
-target: 0.2.18
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`,
@@ -5409,6 +5467,26 @@ someone who has not read it is a different probe from reviewing a diff,
 and it found something eight rounds of review over this layer had not.
 
 **Re-triaged in 0.2.17** (`024.276`). Two per-file stores in one layer with different update disciplines and nothing saying so. Internal, and worth keeping for how it was found: describing the design to someone who has not read it turned this up where eight review rounds over the same layer had not.
+
+### 0.2.18: this is `048`'s question, and `048` answered it
+
+The entry's own note is the disposition: "Nothing is wrong in the tree
+today. Every call site was checked and each one is currently correct."
+What it records is a hazard for the fifth call site.
+
+`048` audited ten subsystems for exactly this and produced eight
+proposals; **every one failed measurement**, four would have made the
+product worse, and the headline consolidation came out at +3 net lines
+after the compensations it needed. `CLAUDE.md` draws the rule from that:
+applied to code that works, a consolidation is an ordinary change with
+an ordinary change's obligations, and the measure is places that must
+agree rather than lines.
+
+Two stores updated in one mutex block from one `FileSummary` are two
+places that must agree — so the direction is right. What is missing is
+a measurement showing the merged shape is not a third place, and this
+release has no corpus that would show it. Retargeted rather than
+attempted on the strength of the idea.
 
 ## 024.63 The dispatch layer owns view inference, and it has broken the query layer's one guarantee twice
 
@@ -6043,7 +6121,7 @@ user-visible-note: >
   Nothing an editor user sees. The suite runs serially today and is
   green that way; what the shared fixture costs is the ability to run
   it any other way, which is a contributor and CI cost.
-target: 0.2.18
+target: 0.3.0
 ```
 
 **Area:** `core/spec/fixtures/rails_real` (its `db/*.sqlite3`, `tmp/`
@@ -6110,6 +6188,23 @@ the same measurement says a fixture-isolated 8-way split lands near a
 minute.
 
 **Re-triaged in 0.2.17** (`024.276`). One mutable Rails fixture shared by every worker, so the suite cannot be split safely. Test infrastructure — it changes nothing a user meets and adds no capability. The first attempt at a splitter ran 2,991 examples instead of 1,964 because it split by example rather than by location, which is recorded here so the next one weights whole locations.
+
+### 0.2.18: a contributor cost, and the release line is the wrong place for it
+
+Nothing an editor user meets, which the entry says. What it costs is the
+ability to run the suite any way but serially — and the suite is now
+2,866 examples at roughly ten minutes, run twice per change set in this
+release alone.
+
+That cost is real and it is *this project's*, not the product's. Giving
+each worker its own `rails_real` means copying a booted Rails app's
+`db/`, `tmp/` and `.bundle` per worker, which is minutes of setup to
+save minutes of run — a trade that needs measuring before it is made,
+and measuring it needs the parallel runner that does not exist yet.
+
+Retargeted to 0.3.0. It is on the list of things that make the loop
+faster, not on the list of things that make a released claim true, and
+0.2.x is the second list.
 
 ## 024.72 The red toast 0.2.1 removed is still shown, from the other code path
 
@@ -11327,14 +11422,14 @@ not allowed:**
 ## 024.150 `AGENTS.md` paraphrases `CLAUDE.md`, and the paraphrase drifts
 
 ```yaml
-status: open
+status: fixed
+released-in: 0.2.18
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. What it costs is that the file a session reads first can
   state something the file it paraphrases has since corrected, and
   nothing compares them.
-target: 0.2.18
 ```
 
 **Area:** `AGENTS.md`, `CLAUDE.md`
@@ -11401,6 +11496,36 @@ records. What is wanted is a relationship the paraphrase itself
 declares, and that is a design question rather than a missing check.
 
 **Re-triaged in 0.2.17** (`024.276`). Two copies of one set of rules with no relationship between them. A citation check was tried and gives three false positives in eleven, which is the error rate that gets a check switched off — so what is wanted is a relationship the paraphrase itself declares. A design question about this repository's own documents; nothing a user meets, and nothing a capability release should be carrying.
+### Fixed in 0.2.18: the relationship is declared, not inferred
+
+Each bullet that restates a `CLAUDE.md` rule now ends with an HTML
+comment naming the section it restates, and
+`core/spec/meta/agents_restates_spec.rb` fails when `CLAUDE.md` no
+longer has one. Twelve bullets carry one; the spec also requires at
+least ten, because a check whose subject is its own input passes
+trivially once the input is deleted.
+
+**Watched failing both ways.** Renaming one `CLAUDE.md` heading in a
+scratch copy produced:
+
+```
+AGENTS.md restates sections CLAUDE.md no longer has: ["Review cadence (mandatory)"]
+```
+
+**Declared rather than inferred, which is what this entry was waiting
+on.** The inferred form measured three false positives in eleven: two
+bullets cite `CLAUDE.md` as a file to *read*, and the test-first bullet
+is a genuine paraphrase carrying no shared identifier. Under a
+declaration all three disappear without an exception list — the two
+pointer bullets simply carry no marker, and the paraphrase says what it
+paraphrases instead of a scanner guessing from wording. Zero false
+positives is what stops it being switched off (`024.192`).
+
+**What it does and does not catch.** It catches a renamed or deleted
+section, which is the drift that has a mechanism. It does not catch a
+section whose *content* changes while its heading stands — that is
+still a reader's job, and this entry does not claim otherwise.
+
 
 ## 024.151 A check can be disabled, and no check notices
 
@@ -19259,13 +19384,13 @@ than because the risk is small.
 ## 024.284 Nothing local can see that CI is red, and preflight does not run the extension
 
 ```yaml
-status: open
+status: fixed
+released-in: 0.2.18
 kind: defect
 user-visible: no
 user-visible-note: >
   Nothing a user meets. Recorded because it is the reason `024.281` and
   `024.282` survived a week: every local signal said the tree was fine.
-target: 0.2.18
 ```
 
 **Area:** `scripts/preflight.rb`
@@ -19293,6 +19418,51 @@ probably a check that *reports* rather than gates: one line of
 skipped without network, so a session learns the state of the gate
 without waiting on it. That is a decision about the working loop and
 belongs in its own change set.
+### Fixed in 0.2.18: it reports, and it cannot gate
+
+`scripts/ci_status.rb` prints one line saying what CI last said about
+the current branch, and preflight runs it **after** its verdict, on
+both the passing and the failing path.
+
+```
+ci: main success -- https://github.com/<owner>/<repo>/actions/runs/<id>
+ci: cannot tell -- `gh` is not installed (see CONTRIBUTING.md)
+```
+
+It **exits 0 in every case**, including the ones it cannot answer,
+because neither "no network" nor "no `gh`" says anything about the
+tree. That is what makes it safe at the front of every commit, and it
+is why it is not a tenth `Check`: a check that needs the network would
+turn an offline commit into a failing one.
+
+**This covers both gaps, and it covers the second one better than
+running the extension locally would.** CI runs `vscode/`'s suites and
+the packaged Core, so a red extension check is now visible from here —
+without a VS Code download, a display, or the minutes of vendoring the
+packaged variant needs. And the `spec/meta` examples that refuse a
+partial tree are *only* observable through CI, because a local clone is
+never partial: nothing run locally could ever have caught `024.282`.
+
+**Three defects on the way in, each caught by something this repository
+already had:**
+
+- The first run raised `Encoding::InvalidByteSequenceError` out of
+  `JSON.parse` — a pipe arrives as US-ASCII, and the first non-ASCII
+  byte in a run title escaped a `rescue JSON::ParserError`, which is
+  the too-narrow-rescue shape. Fixed at the layer that owns it:
+  `scripts/utf8.rb`, which a meta example requires of every script.
+- It spawned `git` directly, so an inherited `GIT_DIR` would have aimed
+  it at another repository. Now through `RepoFiles.capture`.
+- The paragraph in `AGENTS.md` explaining `024.150`'s markers spelled
+  one the way a real one is spelled, and that file's own new scanner
+  read it as a marker — in the commit that wrote the scanner. Exactly
+  "writing a check means writing bait for the other checks", found by
+  the check rather than by a reviewer.
+
+It also reports when the newest run is not HEAD's commit, because
+"success" about a commit you have since amended is the misreading this
+entry exists to prevent.
+
 
 ## 024.285 Three interpreter sessions resolved against whatever the machine had installed
 

@@ -149,6 +149,15 @@ list: the three environment-dependent suites skip *in full* without local
 so preflight reads each example's **status** rather than the count — a
 skipped example is still an example, and a count-based check cannot tell
 a fully skipped file from a passing one.
+After its verdict, preflight prints one `ci:` line saying what CI last
+said about your branch. **It is not a tenth check and cannot change the
+result** — it needs the network, and it exits 0 whether it reaches
+GitHub, finds no `gh`, or times out, because none of those say anything
+about your tree. It is there because a green preflight is a statement
+about the Core: it runs nothing under `vscode/`, and it cannot see the
+`spec/meta` examples that refuse a partial tree, so two CI failures once
+stayed red for a week while every local signal said the tree was fine
+(`024.284`).
 
 Install it as a git hook once:
 

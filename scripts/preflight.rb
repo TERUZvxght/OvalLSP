@@ -185,6 +185,21 @@ if ARGV.include?("--install")
   exit 0
 end
 
+
+# 024.284: a green preflight is a statement about the Core. It runs
+# nothing under `vscode/`, and it cannot see the `spec/meta` examples
+# that refuse a partial tree -- which is why 024.281 and 024.282 stayed
+# red for a week while every local signal said the tree was fine.
+#
+# So: report, do not gate. This runs *after* the verdict and cannot
+# change it. It is deliberately not a tenth `Check` -- it needs the
+# network, and a check that needs the network at the front of every
+# commit is not one this repository wants. `--list` therefore does not
+# print it, and "all N checks passed" stays true about the N checks.
+def report_ci_status(root)
+  system("ruby", File.join(root, "scripts", "ci_status.rb"))
+end
+
 failures = []
 CHECKS.each do |check|
   print "preflight: #{check.name}... "
@@ -201,6 +216,7 @@ end
 
 if failures.empty?
   puts "preflight: all #{CHECKS.length} checks passed."
+  report_ci_status(ROOT)
   exit 0
 end
 
@@ -215,4 +231,6 @@ failures.each do |check, complaint, out|
   warn out.lines.last(30).join
 end
 warn "\npreflight: #{failures.length} of #{CHECKS.length} checks failed."
+$stderr.flush
+report_ci_status(ROOT)
 exit 1

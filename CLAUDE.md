@@ -673,7 +673,7 @@ reader to rely on the exact check `024.148` records as unable to fail in
 the case it existed for. Twice in one
 session a commit was made on a partial run — the suite had been run for
 one directory, it was green, and the full run afterwards was not.
-`--install` puts it in a pre-commit hook.
+It also prints one non-gating `ci:` line after its verdict, because a green preflight is a statement about the Core and says nothing about `vscode/` or about CI (`024.284`). `--install` puts it in a pre-commit hook.
 
 ## Documentation is part of the change (mandatory)
 
