@@ -49,10 +49,17 @@ module Ovallsp
     # increasingly large Union over.
     MAX_ARRAY_ELEMENT_UNION = 8
 
+    # How far `#assigned_constant_type` will follow one constant into
+    # another. `KLASS = Widget` needs one level; `A = B` beside `B = A` is
+    # a program somebody can write, and this is what makes that a decline
+    # rather than a hang. `024.84`.
+    MAX_CONSTANT_DEPTH = 3
+
     def initialize(max_steps: 5000, model_registry: Models::ModelRegistry.new, generic_rules: nil,
                    method_resolver: nil, method_analyzer: nil, signatures: nil, observation_store: nil,
                    workspace_index: nil, hierarchy_index: nil)
       @max_steps = max_steps
+      @constant_depth = 0
       @model_registry = model_registry
       @generic_rules = generic_rules || self.class.default_generic_rules
       # Both optional and nil-safe: a caller with no HierarchyIndex/
@@ -970,14 +977,103 @@ module Ovallsp
     # `Foo.new`/`Foo.find` do not come through here: #eval_call resolves a
     # constant receiver from the AST directly, which is why those worked
     # while the receiver's own type did not.
+    # **A constant that holds a value is not a class object.**
+    # `MAX_RETRIES = 3` read as `ClassOf[MAX_RETRIES]`, and so did a
+    # String, an Array, a Float and a frozen Hash — an assertion, not a
+    # decline, on the most ordinary thing in Ruby, and it silenced
+    # completion and the undefined-method check at every use (`024.84`).
+    #
+    # Three answers, in this order:
+    #
+    # - the workspace declares a **class or module** by that name, so it
+    #   really is a class object. This is what `ClassOf` exists for and
+    #   what makes `Widget.new` work.
+    # - the workspace declares a **constant** by that name and recorded
+    #   what it was assigned, so the type is the assigned value's. Even
+    #   `KLASS = Widget` was wrong before this: it answered
+    #   `ClassOf[KLASS]`, naming the constant rather than the class.
+    # - neither, so nothing here knows better than the guess that was
+    #   always made. An unread gem's `SomeGem::Thing.new` depends on it.
     def eval_constant(node)
       name = node.full_name
       return Types::UNKNOWN if name.nil? || name.empty?
+
+      assigned = assigned_constant_type(name)
+      return assigned if assigned
 
       Types.class_object(Types::Nominal.new(name: constant_type_name(name)))
     rescue StandardError
       # `full_name` raises on a dynamic constant path (`Foo::(bar)`).
       Types::UNKNOWN
+    end
+
+    # The type of what a constant was assigned, or nil when the workspace
+    # cannot say — which is every case the answer above already handles.
+    #
+    # Depth-bounded because constants can name each other, and a cycle
+    # (`A = B` beside `B = A`) is a program a user can write. One level
+    # of indirection is what `KLASS = Widget` needs; the bound is what
+    # stops a cycle from being a hang.
+    def assigned_constant_type(written)
+      return nil unless @workspace_index
+      return nil if @constant_depth >= MAX_CONSTANT_DEPTH
+
+      body = assigned_constant_body(written)
+      return nil if body.nil? || body.empty?
+
+      result = Prism.parse(body)
+      statement = result.success? ? result.value.statements.body.first : nil
+      return nil unless statement
+
+      @constant_depth += 1
+      begin
+        type = eval_type(statement, {})
+        type unless type.nil? || type == Types::UNKNOWN
+      ensure
+        @constant_depth -= 1
+      end
+    end
+
+    # **Ruby's constant lookup, for a constant rather than a type.**
+    # `#qualify_constant` answers about *type* names -- it asks
+    # `WorkspaceIndex#nested_type_name` -- so `MAX` written inside
+    # `class C` came back as `MAX` and every lookup missed. Written that
+    # way first, and the symptom was every constant answering exactly as
+    # it had before, which is what a lookup that silently finds nothing
+    # looks like.
+    #
+    # The index keys a constant by owner and bare name (`owner: "::C",
+    # name: "MAX"`), so a written name is tried against each enclosing
+    # frame, innermost first, and then at the top level -- which is the
+    # order Ruby resolves one in. A name written with `::` in it is
+    # already qualified and is only split.
+    def assigned_constant_body(written)
+      text = written.to_s
+      owners =
+        if text.include?("::")
+          owner, _, bare = text.rpartition("::")
+          return nil if bare.empty?
+
+          return constant_body(owner.empty? ? nil : owner, bare)
+        else
+          current_nesting + [nil]
+        end
+
+      owners.each do |owner|
+        body = constant_body(owner, text)
+        return body if body
+      end
+      nil
+    end
+
+    def constant_body(owner, bare)
+      symbol = Index::SymbolId.new(kind: :constant, owner: owner, name: bare, discriminator: nil)
+      # `[uri, declaration]`, in that order. Read the other way round
+      # first, and the `NoMethodError` that produced was swallowed whole
+      # by `#eval_constant`'s `rescue` -- which is there for `full_name`
+      # raising on a dynamic path and caught this instead.
+      _uri, declaration = @workspace_index.declarations_with_uri(symbol).first
+      declaration&.body_source
     end
 
     # **The one place a constant node becomes a class name.** There were

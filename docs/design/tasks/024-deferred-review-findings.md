@@ -254,7 +254,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.81`](#02481-an-ancestor-reference-carries-no-lexical-context-so-an-ambiguous-name-is-picked-rather-than-resolved) | fixed | 0.2.12 | An ancestor reference carries no lexical context, so an ambiguous na… |
 | [`024.82`](#02482-foo-class-new-bar-is-not-a-type-the-index-knows) | fixed | 0.2.15 | `Foo = Class.new(Bar)` is not a type the index knows |
 | [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.3.0 | The undefined-method check is loudest exactly where no Runtime Agent… |
-| [`024.84`](#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | open | 0.2.18 | A constant is typed as a class object whatever it holds |
+| [`024.84`](#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | fixed | 0.2.18 | A constant is typed as a class object whatever it holds |
 | [`024.85`](#02485-self-completes-nothing) | fixed | 0.2.16 | `self.` completes nothing |
 | [`024.86`](#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | open | 0.3.0 | An ivar assigned in another method has no type, except in the view |
 | [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.3.0 | A relation stops being a relation after one hop |
@@ -6846,11 +6846,62 @@ blocks, and this is one.
 ## 024.84 A constant is typed as a class object whatever it holds
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**Fixed in 0.2.18**, and the case that was supposed to be right was
+wrong too: `KLASS = Widget` answered `ClassOf[KLASS]` — the constant's
+own name rather than the class it holds — so even the intended behaviour
+named the wrong thing.
+
+Two halves. `ParserService` records what a constant was assigned, as
+source text, in the `body_source` a method declaration has carried since
+0.1.x; inference needs a workspace and the parser has none to ask.
+`LocalInferencer#eval_constant` then answers in three steps: a class or
+module by that name is a class object, which is what `ClassOf` exists
+for; a constant whose assignment the workspace recorded takes that
+value's type; anything else keeps the guess it always had, because an
+unread gem's `SomeGem::Thing.new` depends on it.
+
+**Measured over activesupport's 289 files, 2,655 constant reads:**
+
+| | before | after |
+|---|---|---|
+| `ClassOf[...]` | 1,551 | 1,354 |
+| a concrete type | **0** | **219** |
+| unknown | 1,104 | 1,082 |
+
+No constant lost an answer — `unknown` went *down*. And a corpus
+diagnostics run over 997 files of activesupport, activerecord, actionpack
+and railties came out **byte-identical**, control `unresolved-constant`
+held at 2,987: nothing started or stopped being reported, so the gain is
+in hover and completion rather than in the checks.
+
+**Three attempts to reach the index, and each failed silently**, which is
+worth recording because they all looked the same from outside — every
+constant answering exactly as before:
+
+- looked up by the qualified name whole, where the index keys a constant
+  by owner plus bare name;
+- destructured `[uri, declaration]` the wrong way round, and the
+  `NoMethodError` was swallowed by `#eval_constant`'s `rescue` — which is
+  there for `full_name` raising on a dynamic path and caught this
+  instead;
+- qualified through `#constant_type_name`, which resolves *type* names
+  only, so `MAX` inside `class C` stayed `MAX` and missed.
+
+A lookup that silently finds nothing is indistinguishable from a
+constant the workspace has not seen, which is the answer the third step
+gives on purpose. Only the spec's five literal cases told the three
+apart.
+
+Depth-bounded at three: `A = B` beside `B = A` is a program somebody can
+write, and one level of indirection is what `KLASS = Widget` needs.
+
+`024.82` is the same seam from the other side and stays open.
 
 **Area:** `core/lib/ovallsp/local_inferencer.rb` (`#constant_path_type`)
 

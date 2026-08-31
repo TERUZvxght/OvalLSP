@@ -1230,6 +1230,18 @@ module Ovallsp
           visibility: nil,
           parameters: [],
           origin: :source,
+          # **What the constant was assigned**, which nothing recorded
+          # until 0.2.18. Every constant read as a class object named
+          # after itself -- `MAX_RETRIES = 3` hovered
+          # `ClassOf[MAX_RETRIES]` -- because the only thing downstream
+          # had was the name (`024.84`). A method declaration has carried
+          # its `body_source` since 0.1.x for the same kind of reason;
+          # this is the same field, filled for the same purpose.
+          #
+          # The source text rather than an inferred type: inference needs
+          # the workspace, and this runs while the file is being parsed,
+          # with no workspace to ask.
+          body_source: kind == :constant ? node.value&.slice : nil,
           name_location: Index::SourceLocation.to_range(node.name_loc, @lines)
         )
         if kind == :class

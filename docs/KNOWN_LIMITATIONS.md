@@ -625,13 +625,6 @@ Restricted Mode, which is every Rails project until you trust the
 folder. Trusting the workspace is what makes these go
 away. <!-- documents: 024.83 -->
 
-## What a constant hovers as
-
-**Its own name, as a class.** `MAX_RETRIES = 3` then `MAX_RETRIES` hovers
-`ClassOf[MAX_RETRIES]`, not `Integer` — and the same for a string, a
-float, an array or a frozen hash. Completion after a constant offers
-nothing, and nothing assigned from one carries a usable
-type. <!-- documents: 024.84 -->
 
 ## An instance variable set in another method
 
