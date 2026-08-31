@@ -213,6 +213,18 @@
   to: "    def alive?\n      return false\n"
   spec: spec/ovallsp/agent_process_manager_spec.rb
   example: "leaves no process behind after #stop"
+- why: "024.41's requirement that the dot ends its line -- without it a caret just after the dot of an ordinary `a.b` suppresses that call's report, so a complete expression stops being checked while the caret rests in it."
+  file: core/lib/ovallsp/diagnostics/mid_edit_call.rb
+  from: "        return nil unless newline && rest[0...newline].strip.empty?"
+  to: "        return nil unless newline"
+  spec: spec/ovallsp/diagnostics/mid_edit_call_spec.rb
+  example: "still reports a trailing dot's call when the caret is at an earlier dot on the line"
+- why: "024.41's requirement that the character before the caret is a dot -- without it every edit suppresses whatever report starts the next line, which is most of the check."
+  file: core/lib/ovallsp/diagnostics/mid_edit_call.rb
+  from: "        return nil unless text[caret - 1] == \".\"\n"
+  to: ""
+  spec: spec/ovallsp/diagnostics/mid_edit_call_spec.rb
+  example: "still reports when the caret ends a line but not at a dot"
 - why: "024.257's compact-path head lookup -- without it the whole written path is glued onto the enclosing frame, so `module App; class Other::Runner` where no `App::Other` exists names nothing and a bare constant falls through to the top level: the call that runs is reported and the call that raises is silent."
   file: core/lib/ovallsp/local_inferencer.rb
   from: "      resolved = qualify_constant(head).to_s.delete_prefix(\"::\")\n      \"#{resolved}::#{rest}\""

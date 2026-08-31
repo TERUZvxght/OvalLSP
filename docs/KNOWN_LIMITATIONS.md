@@ -224,23 +224,6 @@ one of them as a colour, the rest as diagnostics. Every one is recorded
 and all are visible on ordinary code, so they are listed here rather
 than left for you to find.
 
-**The one you will meet first is typing a `.`.** Half of it is fixed in
-0.2.1: `a.` at the end of a method no longer reports that your class has
-no method named `end`. The other half is not, because there is nothing
-to notice — `a.` followed by a line like `b = "str"` is valid Ruby
-meaning `a.b = "str"`, and it is reported as such:
-
-```ruby
-a = Article.new
-a.
-b = "str"        # → Article has no method named `b=`
-```
-
-A next line of `value`, `if true` or `return 1` does the same; `puts 1`
-and `other_thing(1)` do not. The report goes away as soon as you finish
-the name. It cannot be told apart from the same code written on purpose,
-so the fix is to stop publishing while you are still typing rather than
-to add another check, and that is not in this release (024.41). <!-- documents: 024.41 -->
 
 Two that this list used to carry are gone — fixed in earlier releases,
 not this one. **A `*_path`/`*_url` call is no longer reported as a

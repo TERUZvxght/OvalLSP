@@ -545,7 +545,12 @@ module Ovallsp
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
       end
-      publish_findings(document.uri, findings, document: document)
+      # A call the caret is still inside is not a call the user wrote --
+      # `Diagnostics::MidEditCall`, `024.41`. Filtered here rather than in
+      # the engine because the caret is a fact about the *buffer*, which
+      # the engine is deliberately not given: it analyses text, and the
+      # same text opened from disk must still say what Ruby says.
+      publish_findings(document.uri, Diagnostics::MidEditCall.filter(findings, document), document: document)
     rescue StandardError => e
       @logger.error("failed to compute diagnostics for #{document.uri}: #{e.class}: #{e.message}")
     ensure

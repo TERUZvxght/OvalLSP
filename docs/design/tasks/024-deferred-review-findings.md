@@ -213,7 +213,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.38`](#02438-scope-at-copies-the-whole-environment-once-per-descent-step) | open | 0.2.18 | `scope_at` copies the whole environment once per descent step |
 | [`024.39`](#02439-localinferencer-keeps-per-request-state-and-0-2-0-gave-it-a-second-thread) | open | 0.2.18 | `LocalInferencer` keeps per-request state, and 0.2.0 gave it a secon… |
 | [`024.40`](#02440-every-argument-count-report-on-the-measurement-corpus-is-false) | fixed | 0.2.15 | Every `argument-count` report on the measurement corpus is false |
-| [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | open | 0.2.18 | Typing a `.` reports a method on the *next* line |
+| [`024.41`](#02441-typing-a-reports-a-method-on-the-next-line) | fixed | 0.2.18 | Typing a `.` reports a method on the *next* line |
 | [`024.42`](#02442-an-rbs-signature-label-says-unknown-where-rbs-says-self-and-leaks-method-type-variables) | open | 0.3.0 | An RBS signature label says `Unknown` where RBS says `self`, and lea… |
 | [`024.43`](#02443-signature-help-answers-nothing-for-a-receiverless-stdlib-call) | fixed | 0.2.16 | Signature help answers nothing for a receiverless stdlib call |
 | [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.3.0 | A partial's local is not resolved, and C11's stated basis names it |
@@ -3434,11 +3434,56 @@ from the 0.1.6 reading to here.
 ## 024.41 Typing a `.` reports a method on the *next* line
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: yes
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**Fixed in 0.2.18, and not by the debounce this entry asked for.**
+
+Driven first, because the entry's own table had already moved twice
+without anyone noticing. At `6dfd63c` all six rows reproduce exactly as
+re-measured, and the control — the same text with the trailing `.`
+removed — is silent.
+
+**The Direction was written when `didChange` published synchronously,
+and that stopped being true in 0.2.10.** Analysis already waits for the
+input queue to settle (`#drain_settled_analyses`, 037's C9), so a
+debounce cannot reach this shape: **a pause is what settles the queue,
+and pausing to read the completion popup is the scenario.** Deferring
+harder would defer this report to exactly the moment it is published.
+
+What distinguishes a half-typed call from a deliberate one is not in the
+text — the entry is right about that, and right that a rule about
+receivers and lines would silence trailing-dot chain style. It is in the
+client's *edit*, which `didChange` carries, this server takes
+incrementally, and `TextDocument` was throwing away.
+
+`Diagnostics::MidEditCall` suppresses an `unknown-method` report whose
+message is the first token after a `.` that both ends its line and sits
+exactly where the last edit finished. Three conditions, each pinned by a
+control that fails without it, and the filter lives at the Server rather
+than in the engine: the caret is a fact about the *buffer*, and the same
+text opened from disk must still say what Ruby says.
+
+**It is a decline and it expires.** The next edit moves the caret and
+the report returns, which is right — at that point it is code the user
+left rather than code being typed.
+
+**Deliberately not widened.** The obvious generalisation also suppresses
+`a.tit` while someone is halfway through `title`, and that shape does
+reach the user — measured, typing it and pausing publishes one report
+naming `tit`. The two differ in the one way that decides it: `a.` can
+never be a finished expression and `a.titel` can, so suppressing a
+half-typed *name* would silence a genuine typo for as long as the caret
+rests on it, which is the whole time somebody types one and looks.
+
+Eight examples, four of them controls, and two mutation entries. The
+first draft of the spec passed for the wrong reason twice — a uri
+compared as a Symbol against a String, then an unqualified constant
+raising inside a `rescue` that swallowed the publish — and both times
+only the controls said so.
 
 **Area:** `core/lib/ovallsp/diagnostics/engine.rb` (`analyze`'s parse
 gate), `core/lib/ovallsp/server.rb` (`did_change`, which publishes with

@@ -82,10 +82,11 @@ module Ovallsp
     # other way. No comparison of integers can, because the two integers
     # are not on the same scale. Carrying which buffer they came from is
     # what makes them comparable at all (037's C3).
-    def initialize(uri:, text:, version:, language_id:, buffer_id: nil)
+    def initialize(uri:, text:, version:, language_id:, buffer_id: nil, last_edit_end: nil)
       @uri = uri
       @language_id = language_id
       @version = version
+      @last_edit_end = last_edit_end
       @buffer_id = buffer_id || self.class.next_buffer_id
       # Frozen through, not just at the top. `freeze` alone is shallow and
       # `attr_reader :text` hands the string out, so `doc.text << "x"`
@@ -106,13 +107,31 @@ module Ovallsp
       self.class.new(uri: @uri, text: text, version: version, language_id: @language_id, buffer_id: @buffer_id)
     end
 
+    # **Where the last edit left off**, which is the only thing in this
+    # protocol that says a document is being typed rather than read.
+    #
+    # `024.41`: typing the `.` that asks for completion leaves
+    # `a.\nb = "str"`, which Ruby says is `a.b = "str"` and the engine
+    # is right to report. Nothing in the *text* distinguishes that from
+    # the same code written deliberately, and a rule that keyed on the
+    # text would have to suppress trailing-dot chain style, which is
+    # ordinary Ruby. The client's own edit is what distinguishes them, and
+    # this class threw it away.
+    #
+    # Char offset rather than a position, because every reader wants to
+    # index `@text` with it. `nil` on a document that has only been
+    # opened -- no edit, no caret, and `Diagnostics::MidEditCall` treats
+    # that as "say what Ruby says".
+    attr_reader :last_edit_end
+
     def with_incremental_change(range:, new_text:, version:)
       start_offset = position_to_char_offset(range.fetch(:start))
       end_offset = position_to_char_offset(range.fetch(:end))
 
       updated = @text.dup
       updated[start_offset...end_offset] = new_text
-      with_full_change(text: updated, version: version)
+      self.class.new(uri: @uri, text: updated, version: version, language_id: @language_id,
+                     buffer_id: @buffer_id, last_edit_end: start_offset + new_text.length)
     end
 
     # Ruby character (codepoint) offset — use for indexing/slicing `@text`
