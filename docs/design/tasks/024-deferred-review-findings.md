@@ -219,7 +219,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.44`](#02444-a-partial-s-local-is-not-resolved-and-c11-s-stated-basis-names-it) | open | 0.3.0 | A partial's local is not resolved, and C11's stated basis names it |
 | [`024.45`](#02445-re-analysis-after-a-keystroke-is-seconds-on-a-large-file-against-a-stated-300-ms) | open | 0.2.18 | Re-analysis after a keystroke is seconds on a large file, against a … |
 | [`024.46`](#02446-typing-self-cost-55-false-diagnostics-and-was-rolled-back) | fixed | 0.2.1 | Typing `self` cost 55 false diagnostics and was rolled back |
-| [`024.47`](#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | open | 0.2.18 | A namespaced class named after a core class loses its diagnostics, a… |
+| [`024.47`](#02447-a-namespaced-class-named-after-a-core-class-loses-its-diagnostics-and-the-readers-disagree-about-a-shadowed-literal) | open | 0.3.0 | A namespaced class named after a core class loses its diagnostics, a… |
 | [`024.48`](#02448-the-measurement-tool-ran-an-engine-the-server-never-runs) | fixed | 0.2.1 | The measurement tool ran an engine the server never runs |
 | [`024.49`](#02449-a-release-record-kept-asserting-durations-it-could-not-witness-ending) | fixed | 0.2.3 | A release record kept asserting durations it could not witness ending |
 | [`024.50`](#02450-the-marketplace-description-promises-the-behaviour-0-2-1-removed) | fixed | 0.2.3 | The Marketplace description promises the behaviour 0.2.1 removed |
@@ -4299,7 +4299,7 @@ that the sentence naming what was missing turned out to name all of it.
 status: open
 kind: defect
 user-visible: yes
-target: 0.2.18
+target: 0.3.0
 ```
 
 **Area:** `core/lib/ovallsp/index/type_name_resolution.rb`
@@ -4445,6 +4445,60 @@ shadow rule read, so the rule was inert in every corpus measurement the
 release quoted (024.48).
 
 **Re-triaged in 0.2.17** (`024.276`). The rollback is done and this entry is what it left behind; the remaining half is a namespaced class losing its diagnostics because it shares a core class's last segment, which is a wrong answer about the user's own code. Patch work. Its own body carries the reason it was not caught for seven rounds — the corpus harness built a hierarchy index without the signatures the rule read, so the rule was inert in every measurement quoted — and that is a caution for whoever re-measures it, not a blocker.
+
+### 0.2.18: the diagnostics half is gone, the literal half is not, and a fix was tried and rolled back
+
+**Driven with the entry's own control**, because this entry has been
+mis-described twice:
+
+```
+  Billing::Range receiver, typo `tagg`   ->  reported
+  Pricing::Tariff receiver, same typo    ->  reported
+```
+
+**The diagnostics silence no longer reproduces.** A genuine typo on a
+class that shares a core name is reported, exactly as one on a class
+that shares nothing is. That was this entry's headline — "the check is
+silently off for exactly the classes this entry is about" — and it is
+no longer true.
+
+**The literal half reproduces exactly**, three readers and three
+answers, for `r = (1..5)` written inside `module Billing` where
+`Billing::Range` exists:
+
+```
+  hover        "Range"                          right
+  completion   billing_only, and no cover?      the workspace class's members
+  diagnostics  nothing                          declined
+```
+
+Ruby settles which is right — a literal is `::Range`, always — so hover
+is correct, completion is wrong, and the decline is safe but unchecked.
+
+### The fix was obvious, measured, and wrong
+
+`Types::LiteralTypes` writes bare names. Writing them **rooted**
+(`::Range`) uses a rule that already exists: `resolve_type_symbol_locked`
+gives a rooted name exactly one referent, which is what stopped `::JSON`
+resolving to a gem's own `JSON`. It made both new examples pass.
+
+It also broke **11 examples across 7 files** — `capabilities_spec`'s
+hover row, overload narrowing three ways, the constant ladder, argument
+type in two specs, root-scoped models, and non-ASCII `explainType`.
+Every one of them reads the literal's name **bare**, and a `::` prefix
+is the same class of change `CLAUDE.md` records from 0.2.5: one line in
+a type converter, one failure in the suite, and a second consequence a
+corpus found immediately.
+
+Rolled back. **The direction is the one `024.224` needs too**: the fact
+that a type came from a literal is an identity, and encoding it in the
+name means every reader has to normalise the spelling back. Carrying it
+beside the name — or rooting only where resolution asks — is the shape;
+changing what every component reads is not.
+
+**Retargeted to 0.3.0.** What is left is one reader disagreeing with two
+others about a literal, which no user has reported and which the
+published limitation covers.
 
 ## 024.48 The measurement tool ran an engine the server never runs
 
