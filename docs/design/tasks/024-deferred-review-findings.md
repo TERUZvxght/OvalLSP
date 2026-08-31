@@ -341,8 +341,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.168`](#024168-the-ledger-s-reason-for-keeping-05-protocol-md-s-section-numbering-counts-four-source-comments-where-one-exists-and-the-claim-was-copied-into-the-shipped-document) | fixed | 0.2.16 | The ledger's reason for keeping 05-protocol.md's section numbering c… |
 | [`024.169`](#024169-check-doc-links-rb-s-citation-comment-describes-anchor-punctuation-stripping-that-no-caller-performs) | fixed | 0.2.16 | `check_doc_links.rb`'s CITATION comment describes anchor/punctuation… |
 | [`024.170`](#024170-the-doubled-entry-check-counts-area-lines-so-a-body-duplicated-anywhere-below-that-line-is-invisible) | fixed | 0.2.16 | The doubled-entry check counts `**Area:**` lines, so a body duplicat… |
-| [`024.171`](#024171-three-entries-closed-in-0-2-14-state-as-done-something-head-contradicts-two-of-them-naming-a-countermeasure-that-was-never-built) | open | 0.2.18 | Three entries closed in 0.2.14 state as done something HEAD contradi… |
-| [`024.172`](#024172-four-counts-derived-about-this-tree-are-wrong-and-unmarked-one-of-them-inside-the-entry-about-a-record-that-drifted) | open | 0.2.18 | Four counts derived about this tree are wrong and unmarked, one of t… |
+| [`024.171`](#024171-three-entries-closed-in-0-2-14-state-as-done-something-head-contradicts-two-of-them-naming-a-countermeasure-that-was-never-built) | fixed | 0.2.18 | Three entries closed in 0.2.14 state as done something HEAD contradi… |
+| [`024.172`](#024172-four-counts-derived-about-this-tree-are-wrong-and-unmarked-one-of-them-inside-the-entry-about-a-record-that-drifted) | fixed | 0.2.18 | Four counts derived about this tree are wrong and unmarked, one of t… |
 | [`024.173`](#024173-the-shipped-target-guard-sees-only-kind-defect-and-released-in-is-written-by-16-entries-and-read-by-no-check) | fixed | 0.2.17 | The shipped-target guard sees only `kind: defect`, and `released-in:… |
 | [`024.174`](#024174-a-relative-markdown-link-beginning-docs-is-resolved-against-the-repository-root-instead-of-the-citing-file-s-directory) | fixed | 0.2.16 | A relative Markdown link beginning `docs/` is resolved against the r… |
 | [`024.175`](#024175-doc-link-resolution-goes-through-file-file-so-a-case-only-typo-passes-on-macos-and-fails-on-linux-and-github) | fixed | 0.2.16 | Doc-link resolution goes through File.file?, so a case-only typo pas… |
@@ -10553,8 +10553,18 @@ rather than assumed:
 | Runtime Plugin mechanism 未着手 (twice) | **false** — Task 018 shipped it; `server_plugins_spec.rb` and `Plugins::CURRENT_PROTOCOL_VERSION` |
 
 Three of six were real and unregistered; two restated a "not started"
-that has since been done. Both sections are deleted, and this entry is
-where they went.
+that has since been done. Both sections' **items** are gone, replaced by a pointer to this entry
+and a sentence saying where findings go. The headings themselves remain,
+and that is the right outcome rather than a shortfall — a reader who
+opens 008.5 looking for its residual issues finds out where they are.
+
+*This sentence said "Both sections are deleted" until 0.2.18, and
+`## 残課題` is still at 008.5:104 and `## 残っているKnown Issue` at
+008.6:89 (`024.171`). The countermeasure it named — "a check can assert
+that `docs/design/tasks/*.md` other than 024 carry no findings section
+of their own" — was never built by the work it pointed at, and is now
+`core/spec/meta/task_findings_section_spec.rb`, asserting the thing that
+actually matters: a findings section has to say where findings go.*
 
 **The general form:** a document that records work has no reason not to
 end with what is left over, which is why this happened twice in adjacent
@@ -10684,7 +10694,7 @@ found by downloading the published VSIX and rehashing its `core/`.
 
 **What makes this its own entry rather than a typo.** The fix for
 v0.1.2 went into the script *and its comment*, and stopped there. The
-document describing the script kept the pre-fix command for eleven
+document describing the script kept the pre-fix command for twenty-five
 releases. A fix applied at the place that runs and not at the place that
 *tells a person what to run* leaves the failure reachable by anyone who
 reads instead of executing — and `PUBLISHING.md`'s whole audience is
@@ -10792,8 +10802,8 @@ installs as a pre-commit hook with `--install`. Two properties it needed:
 
 - **A skipped check is reported, never assumed passed.** The real-Rails
   and capability suites skip in full without local `rails` and `sqlite3`
-  while `rspec` still exits 0. It asserts a non-zero example count
-  rather than reading the exit status — `CLAUDE.md` already said to do
+  while `rspec` still exits 0. It reads **each example's status**
+  rather than a non-zero example count — `CLAUDE.md` already said to do
   this by hand, which is exactly the kind of instruction that gets
   skipped.
 - **Its own output must survive a locale-less shell.** The first version
@@ -10982,7 +10992,8 @@ released-in: 0.2.14
 **Area:** `scripts/repo_files.rb`,
 `core/spec/meta/untracked_visibility_spec.rb`
 
-Ten checks — two scripts and eight specs — enumerated their input with
+Ten call sites across nine files — two scripts and seven specs, one of
+which has two — enumerated their input with
 `git ls-files`, which lists **tracked** files only. A file you have just
 written is untracked until `git add`. And `scripts/preflight.rb`, the
 gate whose entire purpose is to run *before* a commit, runs in exactly
@@ -11238,7 +11249,10 @@ highest-numbered task file), and pinned by `agents_pointer_spec.rb`.
 nothing would.
 
 **Why it is open rather than done.** `046` asserted that the paraphrase
-would shrink in 0.2.14. It grew by 15 words, and the assertion sat in
+would shrink in 0.2.14. It grew — by 15 words at `8f1d4f4^`, to 1,562
+in the very commit that wrote the claim, and to 1,856 by 0.2.18
+(`024.172`; dated, because an undated one is what that entry is
+about). The assertion sat in
 the plan as if it were a disposition until round 1 measured it — which
 is the same defect as the ones this release exists to fix, so it is
 recorded rather than quietly executed. Restructuring the file a session
@@ -12167,14 +12181,52 @@ closed, and confirmed live against HEAD rather than assumed.*
 ## 024.171 Three entries closed in 0.2.14 state as done something HEAD contradicts, two of them naming a countermeasure that was never built
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**All three reproduce at HEAD, and all three are repaired in 0.2.18.**
+
+**(1) `024.139`.** `## 残課題` is still at 008.5:104 and
+`## 残っているKnown Issue` still at 008.6:89. The sentence said "Both
+sections are deleted"; it now says what happened — the *items* are gone,
+replaced by a pointer, and the headings remain, which is the better
+outcome rather than a shortfall.
+
+The countermeasure it named was never built, and now is:
+`core/spec/meta/task_findings_section_spec.rb`. It asserts the thing
+that matters rather than the thing the sentence promised — not that a
+task document may have no findings section, but that one carrying items
+has to say where findings actually go. Watched failing: removing the
+pointer from 008.5 names that file and nothing else.
+
+Top-level `##` sections only. `023.8` has a `####` heading naming one
+known gap inside a numbered list, which is a detail of the task rather
+than a findings section, and sweeping it in would make the check fire on
+ordinary writing.
+
+**(2) `024.141`.** `DOCUMENTATION_MAP` had no row for the release
+procedure — `grep` for `release.sh` in it returned nothing — so editing
+it triggered no documentation obligation, which is that entry's own
+diagnosis happening to that entry. The row exists now, and says plainly
+that neither check it cites fires on an edit to `release.sh` itself.
+
+**(3) `024.143`.** It listed as one of preflight's two needed properties
+"It asserts a non-zero example count", which is the exact assertion
+`024.148` — released alongside it — records as unable to fail, because a
+skipped example is still an example. Corrected to what preflight does:
+it reads each example's status.
+
+**The common cause is what the entry says**: an entry's closing
+paragraph is prose nothing re-reads, and the countermeasures it names
+change shape afterwards. Two of these three were a *countermeasure named
+and not built*; the third was a rule superseded in the same release that
+wrote it.
 
 **Area:** `docs/design/tasks/024-deferred-review-findings.md` (024.139, 024.141, 024.143), `docs/design/tasks/008.5-runtime-and-index-corrections.md`, `docs/design/tasks/008.6-agent-and-index-hardening.md`, `docs/DOCUMENTATION_MAP.md`, `scripts/preflight.rb`
 
@@ -12187,14 +12239,50 @@ target: 0.2.18
 ## 024.172 Four counts derived about this tree are wrong and unmarked, one of them inside the entry about a record that drifted
 
 ```yaml
-status: open
+status: fixed
 kind: defect
 user-visible: no
 user-visible-note: >
   Internal. It is a defect in what this project uses to decide whether
   a change is sound, not in what the extension answers.
-target: 0.2.18
+released-in: 0.2.18
 ```
+
+**Three corrected in place in 0.2.18; the fourth cannot be.**
+
+Re-derived first, and **(c) had drifted again** since this entry was
+written — which is the entry making its own point:
+
+```
+  (a) git grep -l 'ls-files' 23196a8^ -- 'scripts/*' 'core/spec/*'  ->  9
+  (b) rows in docs/RELEASE_ARTIFACTS.md                             -> 33
+  (c) wc -w AGENTS.md                                               -> 1,856
+      (1,478 at 8f1d4f4^, 1,562 in the commit that wrote the claim)
+```
+
+- **(a)** `024.147` said "Ten checks — two scripts and eight specs". It
+  now says ten *call sites* across **nine files** — two scripts and
+  seven specs, one of which has two — which is what makes its own later
+  "all ten sites use it" true.
+- **(b)** `024.141` said "eleven releases", which is the 0.1.x line
+  alone. Twenty-five.
+- **(c)** `024.150` said "It grew by 15 words". That was true at
+  `8f1d4f4^` and at no time since; the sentence now carries all three
+  figures **with the revisions they belong to**, because an undated
+  number is precisely what this entry is about.
+
+**(d) stays as a note**, and deliberately: `dc9b044`'s "seven numbered
+gates" lives in an immutable commit message, where five other places say
+five. Correcting it would mean rewriting history to make a record look
+better than it was, which is the opposite of what this entry is for.
+
+**The Direction is followed rather than the corrections alone.** Its
+words: "a count stated about this tree in the release record gets a
+`<!-- measured: -->` marker and a deriver, or a `@<rev>` date". (a) and
+(b) are historical facts about a named revision and now read as such;
+(c) carries its dates inline. None of the three gets a live marker,
+because a live marker would rewrite them on every release — which is
+`024.184`'s defect, and is how (c) came to be wrong in the first place.
 
 **Area:** `docs/design/tasks/024-deferred-review-findings.md` (024.141, 024.147, 024.150), `core/spec/meta/measured_claims_spec.rb`, and commit `dc9b044`'s message
 
