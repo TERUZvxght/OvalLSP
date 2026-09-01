@@ -54,8 +54,12 @@ module E2E
 
     def open(path, text: nil)
       uri = "file://#{path}"
+      # Kept so a caller can re-send the document unchanged, which is
+      # how an analysis deferred on an Agent round trip gets re-run.
+      @texts ||= {}
+      @texts[uri] = text || File.read(path)
       notify("textDocument/didOpen", {
-               textDocument: { uri: uri, text: text || File.read(path), version: 1, languageId: "ruby" }
+               textDocument: { uri: uri, text: @texts[uri], version: 1, languageId: "ruby" }
              })
       uri
     end
@@ -199,6 +203,40 @@ module E2E
 
     # `textDocument/documentHighlight`. Ranges plus the protocol's kind,
     # which is 1 = Text, 2 = Read, 3 = Write.
+    # `024.R7`. The gem index is asked for once an Agent is ready and
+    # walks every loaded module -- 2,077 classes here -- so a request
+    # made before it lands is answered without it. Not a defect: a
+    # file opened during boot is re-answered by the republish that
+    # follows. An example about the index has to wait for it.
+    # The undefined-method check defers on an ancestor it has asked the
+    # Agent about and not yet heard back on -- reporting before the
+    # answer is the guess `024.R5` records as already known wrong. So an
+    # example about a report has to let that round trip finish, and a
+    # `didChange` is what re-runs the analysis once it has.
+    def wait_for_diagnostic(uri, needle, timeout: 30)
+      deadline = monotonic + timeout
+      while monotonic < deadline
+        found = diagnostic_messages(uri, timeout: 2).join(" ")
+        return found if found.include?(needle)
+
+        notify("textDocument/didChange",
+               { textDocument: { uri: uri, version: (@next_id += 1) },
+                 contentChanges: [{ text: @texts[uri] }] })
+      end
+      ""
+    end
+
+    def wait_for_gem_index(timeout: 120)
+      deadline = monotonic + timeout
+      while monotonic < deadline
+        loaded = request("ovallsp/status", {})[:gemIndexClasses].to_i
+        return loaded if loaded.positive?
+
+        sleep 0.2
+      end
+      0
+    end
+
     def document_highlights(uri, line, character)
       request("textDocument/documentHighlight",
               { textDocument: { uri: uri }, position: { line: line, character: character } })

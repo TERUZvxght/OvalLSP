@@ -556,6 +556,7 @@ module Ovallsp
       # statically is one it must defer on rather than guess about, and
       # deferring is only right when an answer can actually arrive.
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
+      ensure_gem_index
       findings = with_index_snapshot do
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
@@ -724,6 +725,7 @@ module Ovallsp
     # answer differently about one view.
     def workspace_findings_for(document)
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
+      ensure_gem_index
       with_index_snapshot do
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
@@ -1041,6 +1043,23 @@ module Ovallsp
     # silence into reports across every Rails file owes a corpus run with
     # a control that this repository has no Agent-backed corpus tool for.
     # `024.R7` carries what is left.
+    # Beside `@ancestry_registry.activate!`, because that is where
+    # "is there a running application to ask" is already decided, and
+    # because both paths that answer a document run through it.
+    #
+    # The first version called this once, from the bootstrap's own
+    # success branch -- a path the shared E2E client does not take, so
+    # the index loaded in some sessions and not others and the
+    # capability was off in the one that mattered. Idempotent and
+    # asked-once, rather than placed once.
+    def ensure_gem_index
+      return if @gem_index_loaded
+      return unless agent_manager_ready?(@agent_manager)
+
+      @gem_index_loaded = true
+      load_gem_index
+    end
+
     def load_gem_index
       # `respond_to?` rather than a rescue: a manager that cannot answer
       # this question is not a failure to contain, it is a manager from
@@ -1053,6 +1072,10 @@ module Ovallsp
       return if payload.nil?
 
       @gem_index = Semantic::GemIndex.from_agent(payload)
+      # Into the stack that is already running, which is the only place
+      # it changes an answer. Holding it on the server alone is what the
+      # first version did, and the capability it exists for stayed off.
+      @hierarchy_index.gem_index = @gem_index
       @logger.info("gem index: #{@gem_index.size} class(es) from the running application")
     end
 
@@ -1715,7 +1738,6 @@ module Ovallsp
         end
         if agent_manager_ready?(@agent_manager)
           @agent_supervisor.record_success
-          load_gem_index
           cancel_scheduled_agent_retries
           # Only now is there an Agent to ask. The snapshot's own republish
           # already ran, from inside the bootstrap call above, while

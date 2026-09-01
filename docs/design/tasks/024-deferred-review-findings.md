@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**290 entries below** <!-- measured: register-entries = 290 -->,
+**291 entries below** <!-- measured: register-entries = 291 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -467,13 +467,14 @@ nobody can search is the recording habit without the benefit.
 | [`024.292`](024-deferred-review-findings-resolved.md#024292-045-disagrees-with-its-own-table-about-what-0-3-0-is-blocked-on) | fixed | 0.3.0 | `045` disagrees with its own table about what 0.3.0 is blocked on |
 | [`024.293`](024-deferred-review-findings-resolved.md#024293-check-pinned-mutations-rb-reads-a-skipped-example-as-a-mutation-that-escaped) | fixed | 0.3.0 | `check_pinned_mutations.rb` reads a skipped example as a mutation th… |
 | [`024.294`](#024294-diagnostics-do-not-act-on-an-ivar-receiver-even-where-hover-and-completion-know-its-type) | open | 0.3.1 | Diagnostics do not act on an `@ivar` receiver, even where hover and … |
+| [`024.295`](#024295-the-gem-index-is-fetched-on-every-boot-and-persisted-nowhere) | open | 0.3.1 | The gem index is fetched on every boot and persisted nowhere |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
 | [`024.R4`](#024R4-only-one-platform-is-published-or-verified-roadmap-1-0-0) | open | 1.0.0 | Only one platform is published or verified (roadmap, 1.0.0) |
 | [`024.R5`](024-deferred-review-findings-resolved.md#024R5-a-reopened-gem-class-still-looks-closed-done-0-1-7) | done | 0.1.7 | A reopened gem class still looks closed (done, 0.1.7) |
 | [`024.R6`](024-deferred-review-findings-resolved.md#024R6-reading-an-instance-variable-that-is-never-assigned-done-0-2-0) | done | 0.2.0 | Reading an instance variable that is never assigned (done, 0.2.0) |
-| [`024.R7`](#024R7-index-what-the-gems-actually-define-and-keep-it-fresh-roadmap-0-3-0) | open | 0.3.0 | Index what the gems actually define, and keep it fresh (roadmap, 0.3… |
+| [`024.R7`](024-deferred-review-findings-resolved.md#024R7-index-what-the-gems-actually-define-and-keep-it-fresh-roadmap-0-3-0) | done | 0.3.0 | Index what the gems actually define, and keep it fresh (roadmap, 0.3… |
 | [`024.R8`](024-deferred-review-findings-resolved.md#024R8-completion-does-nothing-until-you-type-a-dot-done-0-2-0) | done | 0.2.0 | Completion does nothing until you type a dot (done, 0.2.0) |
 | [`024.R9`](024-deferred-review-findings-resolved.md#024R9-this-register-outgrew-its-file-and-0-3-0-moves-it) | done | 0.3.0 | This register outgrew its file, and 0.3.0 moves it |
 
@@ -4697,6 +4698,37 @@ decline into an answer is the shape `045` calls capability.
 **Not re-driven since `024.86` closed**, and the reproduction to run
 first is the plain-class one rather than the ERB one the body names —
 the ivar type arrives by a different path now.
+## 024.295 The gem index is fetched on every boot and persisted nowhere
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.1
+```
+
+**Area:** `core/lib/ovallsp/server.rb`, `core/lib/ovallsp/cache/`
+
+`024.R7` shipped the index without the fourth of the four things its
+Direction names: persistence per gem-version. Measured against this
+repository's Rails fixture, the walk answers **2,077 classes and 938 KB
+of JSON**, and it is asked once per Core start and thrown away at exit.
+
+**What a user meets** is that the undefined-method check on
+gem-inheriting classes is off for the first seconds of every session,
+not only the first ever — the walk runs after the Agent is ready, and a
+file analysed before it lands is analysed without it. The republish
+that follows re-answers open documents, so nothing is *wrong*; it is
+late, every time.
+
+`Gemfile.lock` already contributes to the cache key, so the shape is in
+place. `024.R7`'s Direction asks for it to become **per gem** rather
+than whole-index, so a single bumped gem re-indexes one gem and not
+thirty-three.
+
+**Not attempted in 0.3.0** rather than half-done: a cache that answers
+a stale surface would turn this capability from late into wrong, and
+the invalidation is the whole of the work.
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml
@@ -4851,144 +4883,4 @@ and what 1.0.0 requires").
 
 ---
 
-
-## 024.R7 Index what the gems actually define, and keep it fresh (roadmap, 0.3.0)
-
-```yaml
-status: open
-kind: roadmap
-target: 0.3.0
-```
-
-**Area:** `core/lib/ovallsp/runtime_agent/agent.rb`,
-`core/lib/ovallsp/cache/`, `core/lib/ovallsp/diagnostics/engine.rb`
-
-Today the unknown-method check only fires on a *closed* receiver, and a
-class is closed only when the workspace can see its whole ancestry. In a
-Rails application that is a minority of classes: a controller inherits
-from `ApplicationController`, whose parent is in a gem, so the check
-stays silent there — correctly, but silently. The result is that the
-check works where it is least needed and says nothing where most code is
-written.
-
-The running application knows all of it. Measured against a small Rails 8
-app: 3027 named modules loaded, 2204 of them attributable to one of 63
-gems, contributing 15868 methods defined directly on them. Names only,
-that is roughly 365KB — small enough to persist, far too much to send on
-every query.
-
-**Direction:**
-
-- the Agent walks loaded modules once, attributing each to a gem through
-  `Object.const_source_location` and the `…/gems/<name>-<version>/` path,
-  and reports, per class: its own methods, its ancestors, and whether it
-  defines `method_missing`;
-- Core persists that per gem-version, in the cache store that already
-  exists for file summaries. `Gemfile.lock` already contributes to the
-  cache key, so the invalidation shape is in place — but it should become
-  per gem rather than whole-index, so a single bumped gem re-indexes one
-  gem and not sixty-three;
-- with that, "closed" stops meaning "declared in this workspace" and
-  starts meaning "we know its full method set", which is the honest
-  question. Most receivers in a Rails app become closed, and the check
-  becomes useful where the code actually is.
-
-**It is also what 024.18 waits for.** The unassigned-`@ivar` check
-currently stays silent whenever a controller's class body calls anything
-it does not model, because a gem's macro
-(`load_and_authorize_resource`, `expose`, Devise, ActiveAdmin) installs a
-callback that assigns at runtime and nothing can tell that call apart
-from a harmless one. With this index, such a call is attributable: "a
-method CanCanCan defines, whose body this analysis has not read" is a
-sound reason to stay silent, and a class-body call that resolves to a
-*workspace* method that *was* read is a sound reason to report. That
-narrows the guard rather than replacing it -- every answer the check
-gives today it still gives, and it starts covering controllers it
-currently declines. Doing it before this index exists would mean
-guessing, which is the thing this check refuses to do. **This is a
-required part of R7, not an optional extension of it: 024.18 is not
-closed until it lands.**
-
-It also subsumes several entries above: 024.R5's reopened-gem-class case
-(the index knows `ActiveSupport::TestCase` is a gem class), and the
-latent `unresolved-constant` flood (the index knows `Rails` exists).
-024.R5 stays as the narrow, cheap version for 0.1.7 — one question per
-constant, no persistence — and is a stepping stone to this rather than a
-competing design.
-
-**Risks to settle when building it, not after:**
-
-- what is loaded depends on the environment and on eager loading, so the
-  index describes *a* boot, not the gem in the abstract. It must be
-  recorded as such and never treated as proof a method is absent unless
-  the class was actually seen;
-- classes that define methods at runtime (`define_method` in an included
-  hook, `method_missing`) are already handled by the existing
-  `method_missing` rule, which must apply to gem classes too;
-- the walk costs real time on a large app and must not block the first
-  query — the same background/degrade-to-static shape the Agent already
-  uses.
-
----
-### 0.3.0: the Agent half is done, and the Core half is scoped by what it owes
-
-**Done, and measured against this repository's own Rails fixture
-rather than against this entry's estimate:**
-
-| | this entry said | measured |
-|---|---|---|
-| gems | 63 | **33** |
-| classes attributed | 2,204 | **2,098** |
-| methods defined directly on them | 15,868 | **14,617** |
-| payload | ~365 KB, names only | **938 KB** |
-| classes defining `method_missing` | — | **17** |
-
-The payload is 2.6x the estimate because ancestors are reported too and
-`Object`'s chain repeats 2,098 times. Asked once per boot, never on the
-request path, which is the decision that estimate was for.
-
-- `agent/gemIndex` walks every loaded module and attributes each to the
-  gem whose directory `Object.const_source_location` puts it in — **by
-  definition site, not by namespace**, so a class the application
-  reopens is still the gem's.
-- `Semantic::GemIndex` holds it Core-side. **A class defining
-  `method_missing` is never `knows?`**, whatever the index holds: it
-  answers to names no enumeration can list.
-- The Server asks once when an Agent becomes ready and reports the size
-  through `ovallsp/status`, which is what an E2E example asserts
-  against real Rails.
-- Protocol version 1 → 2.
-
-**Nothing reads it to decide an answer yet, and that is deliberate.**
-
-### What the Core half owes, precisely
-
-Making a gem class *closed* without also giving the engine that class's
-methods turns every correct call on a gem into a report. So four
-things move together or none of them do:
-
-1. `HierarchyIndex` must continue an ancestor chain **into** gem
-   classes. Today it is built from the workspace, so
-   `ActiveRecord::Base` has no entry and the chain stops.
-2. `MethodResolver#candidates_for_type` must offer the gem's methods,
-   or a closed receiver becomes a report factory.
-3. `#accounted_for?` and `#declares_method_missing?` must consult the
-   index — those two are one-line changes and are the *only* part that
-   looks small.
-4. Persistence per gem-version in the cache store, so a single bumped
-   gem re-indexes one gem and not thirty-three.
-
-**And the measurement it owes does not exist.** `045` requires a corpus
-run with a control for any change that alters what the engine asserts,
-and `scripts/corpus_diagnostics.rb` has no Agent path at all — grep it
-for `agent` and the answer is nothing. This change turns silence into
-reports across every file of every Rails application, which is the
-largest assertion change this product has ever made, and the tool that
-would measure it has to be built first.
-
-`024.18` remains a required part of this and is untouched.
-
-**Not started rather than half-built**, deliberately: a capability that
-answers *sometimes* is a wrong answer where it does not, and this one
-answers about the code every Rails developer writes.
 

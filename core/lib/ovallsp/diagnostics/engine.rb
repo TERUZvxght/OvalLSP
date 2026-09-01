@@ -1079,6 +1079,16 @@ module Ovallsp
         resolved = context.workspace_index.resolve_type_name(name)
         return true if resolved && Index::SymbolId.bare_name(resolved) == Index::SymbolId.bare_name(name)
 
+        # 024.R7. A third way a name is accounted for, and the strongest
+        # of the three: the running application loaded it and told us
+        # its whole surface. Without this the Agent's own evidence
+        # defeats the index that came from the same Agent -- the chain
+        # is rooted, the receiver is closed, and then the deferral fires
+        # because a gem ancestor is neither workspace code nor declared
+        # by RBS. Measured: every report this capability exists for was
+        # suppressed here.
+        return true if context.hierarchy_index.gem_index.knows?(name)
+
         context.signatures&.declares?(name) == true
       end
 

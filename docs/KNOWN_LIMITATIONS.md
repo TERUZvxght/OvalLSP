@@ -843,3 +843,14 @@ on that receiver.
 So this is a silence rather than a wrong report: nothing incorrect is
 said, and a real mistake goes unmentioned where the engine had enough
 to mention it. <!-- documents: 024.294 -->
+
+## The gem index is rebuilt on every start
+
+**The check that reports a typo on a class inheriting from a gem is off
+for the first seconds of each session.** It needs the running
+application's own class list — 2,077 classes on a small Rails 8 app — and
+that list is asked for once the app has booted and kept only in memory,
+so every Core start pays for it again.
+
+Nothing is reported wrongly in the meantime; the files you have open are
+re-answered once it lands. It is late, every time, rather than once. <!-- documents: 024.295 -->

@@ -118,7 +118,8 @@ module Ovallsp
         AncestorEntry.identified(name: "Kernel", kind: :module, origin: :default, location: nil),
         AncestorEntry.identified(name: "BasicObject", kind: :class, origin: :default, location: nil)
       ].freeze
-      private_constant :DEFAULT_OBJECT_CHAIN
+      DEFAULT_CHAIN_NAMES = %w[Object Kernel BasicObject].freeze
+      private_constant :DEFAULT_OBJECT_CHAIN, :DEFAULT_CHAIN_NAMES
 
       # What a class object *is*, which is what its singleton chain ends
       # in: `Widget.private` finds `Module#private` because `Widget` is a
@@ -176,8 +177,11 @@ module Ovallsp
       ROOT_SUPERCLASS_NAMES = %w[Object ::Object].freeze
       private_constant :ROOT_SUPERCLASS_NAMES
 
-      def initialize(workspace_index:)
+      def initialize(workspace_index:, gem_index: GemIndex.empty)
         @workspace_index = workspace_index
+        # 024.R7. Empty unless a Runtime Agent has answered. Read at the
+        # one place a chain stops for want of a superclass fact.
+        @gem_index = gem_index
         @mutex = Mutex.new
         @facts_by_uri = {}
         @superclass_by_owner = {}
@@ -231,6 +235,16 @@ module Ovallsp
       # chain recursively — or, for `singleton: true`, the type's own
       # singleton "self" entry, extended modules (most recently extended
       # first), then the superclass's singleton chain.
+      # 024.R7. Installed after the stack is built, because it is the
+      # running application's answer and the stack exists before there
+      # is one. Under the same mutex as everything else here: a query
+      # on another thread must see one index or the other, never half.
+      def gem_index = @mutex.synchronize { @gem_index }
+
+      def gem_index=(index)
+        @mutex.synchronize { @gem_index = index }
+      end
+
       def ancestors(type_name, singleton: false)
         @mutex.synchronize do
           entries = compute_ancestors_locked(type_name, singleton: singleton, visited: Set.new)
@@ -359,8 +373,62 @@ module Ovallsp
           entries.concat(DEFAULT_OBJECT_CHAIN)
         end
 
+        entries.concat(gem_ancestry(canonical, entries))
         entries
       end
+
+      # 024.R7. Where the workspace's knowledge stops and the running
+      # application's begins.
+      #
+      # A class whose parent is in a gem has no superclass fact, so the
+      # walk above ends at that parent without reaching `BasicObject` --
+      # honest while nothing knows what the gem defines, and the reason
+      # the undefined-method check goes quiet for every Rails
+      # controller.
+      #
+      # **Here rather than in `MethodResolver`, and that was measured.**
+      # Splicing it there produced 47 reports over activerecord's own
+      # source and every one was false -- `Foo.new` and `raise` among
+      # them -- because rooting a chain needs three things this class
+      # owns and a splice elsewhere skips: `DEFAULT_OBJECT_CHAIN`, whose
+      # `Kernel` is a **module** and which the splice called a class;
+      # the singleton tail, without which `.new` is not on the chain at
+      # all; and `dedupe_named`.
+      #
+      # Only the gem's own links are added. `Object`/`Kernel`/
+      # `BasicObject` come from the default chain, which is what every
+      # other rooted class gets.
+      def gem_ancestry(canonical, entries)
+        return [] if @gem_index.empty?
+        # **Classes only.** Rooting a module`s chain makes every
+        # `ClassMethods`-style module a closed receiver -- and what
+        # `self` is inside one at call time is the class that extended
+        # it, which nothing here knows. Measured: with modules rooted,
+        # activerecord`s own source reported `superclass`, `name` and
+        # `primary_key` on its own modules, all of them correct code.
+        return [] unless kind_of(canonical) == :class
+        return [] if entries.any? { |e| e.identified? && qualify(e.identified_name) == "::BasicObject" }
+
+        tail = entries.reverse.find { |e| e.identified? && @gem_index.knows?(e.identified_name) }
+        return [] unless tail
+
+        known = @gem_index.ancestors(tail.identified_name).drop(1).reject do |name|
+          DEFAULT_CHAIN_NAMES.include?(name)
+        end
+        known.map { |name| AncestorEntry.identified(name: name, kind: kind_for_gem(name), origin: :superclass, location: nil) } +
+          DEFAULT_OBJECT_CHAIN
+      end
+
+      # The gem index does not say class or module, and the distinction
+      # decides which side a link is asked about. A gem entry whose own
+      # ancestry starts with itself and then `Object` is a class; one
+      # that does not reach `Object` is a module, which is what Ruby's
+      # own `Module#ancestors` shows for a bare module.
+      def kind_for_gem(name)
+        @gem_index.ancestors(name).include?("Object") ? :class : :module
+      end
+
+      def qualify(name) = Index::SymbolId.qualify_owner(name)
 
       def singleton_ancestors_locked(canonical, visited, origin_for_self)
         entries = [AncestorEntry.identified(name: canonical, kind: kind_of(canonical), origin: origin_for_self, location: nil)]

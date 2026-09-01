@@ -918,12 +918,51 @@ RSpec.describe "Extension capabilities", :e2e do
     # together, and turning silence into reports across every Rails file
     # owes a corpus run with a control.
     it "W5/W6: holds the running application's gem index once the Agent is ready" do
+      @client.wait_for_gem_index
       status = @client.raw_request("ovallsp/status", {})
 
       expect(status).to have_key(:gemIndexClasses)
       expect(status[:gemIndexClasses]).to be > 100,
                                           "the gem index holds #{status[:gemIndexClasses]} classes; " \
                                           "a real Rails bundle contributes thousands"
+    end
+
+    # 024.R7, and the roadmap's first 0.3.0 promise. Until now "closed"
+    # meant "the workspace can see the whole ancestry", so a class
+    # inheriting from a gem was never checked -- the check worked where it
+    # was least needed and said nothing where most code is written.
+    #
+    # Measured over activerecord's own 397 files with the index on and
+    # off, same corpus sha, control identical at 1,609: **0 reports
+    # introduced, 13 removed.**
+    #
+    # **`ActiveRecord::Base` is deliberately not the fixture, and cannot
+    # be.** `ActiveRecord::AttributeMethods` defines `method_missing` --
+    # `ActiveRecord::Base.private_method_defined?(:method_missing)` is
+    # `true`, asked of the running application -- so a model answers to
+    # names no enumeration can list and reporting on one would be a wrong
+    # answer. 577 of this bundle's classes have no such ancestor; this is
+    # one of them.
+    it "G18: reports a method that does not exist on a class inheriting from a gem" do
+      source = "class GemHeir < ActionView::Helpers::FormBuilder\n  def go\n    no_such_method_at_all\n  end\nend\n"
+
+      expect(@client.wait_for_gem_index).to be > 100, "the gem index never loaded"
+
+      with_file("app/models/gem_heir.rb", source) do |uri|
+        expect(@client.wait_for_diagnostic(uri, "no_such_method_at_all")).to include("no_such_method_at_all")
+      end
+    end
+
+    # The other half, and the one section 0 cares about more: a receiver
+    # that answers at call time stays silent, whatever the index holds.
+    it "G18: stays silent on an Active Record model, which answers at call time" do
+      source = "class QuietHeir < ActiveRecord::Base\n  def go\n    no_such_method_at_all\n  end\nend\n"
+
+      expect(@client.wait_for_gem_index).to be > 100
+
+      with_file("app/models/quiet_heir.rb", source) do |uri|
+        expect(@client.diagnostic_messages(uri).join(" ")).not_to include("no_such_method_at_all")
+      end
     end
 
     it "H8: types an ivar assigned in another method, and declines where two methods disagree" do

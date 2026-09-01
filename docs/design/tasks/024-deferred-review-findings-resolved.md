@@ -15800,6 +15800,219 @@ silent where assignments could come from somewhere unmodelled --
 same standard as every other check here.
 
 
+## 024.R7 Index what the gems actually define, and keep it fresh (roadmap, 0.3.0)
+
+```yaml
+status: done
+kind: roadmap
+released-in: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/runtime_agent/agent.rb`,
+`core/lib/ovallsp/cache/`, `core/lib/ovallsp/diagnostics/engine.rb`
+
+Today the unknown-method check only fires on a *closed* receiver, and a
+class is closed only when the workspace can see its whole ancestry. In a
+Rails application that is a minority of classes: a controller inherits
+from `ApplicationController`, whose parent is in a gem, so the check
+stays silent there — correctly, but silently. The result is that the
+check works where it is least needed and says nothing where most code is
+written.
+
+The running application knows all of it. Measured against a small Rails 8
+app: 3027 named modules loaded, 2204 of them attributable to one of 63
+gems, contributing 15868 methods defined directly on them. Names only,
+that is roughly 365KB — small enough to persist, far too much to send on
+every query.
+
+**Direction:**
+
+- the Agent walks loaded modules once, attributing each to a gem through
+  `Object.const_source_location` and the `…/gems/<name>-<version>/` path,
+  and reports, per class: its own methods, its ancestors, and whether it
+  defines `method_missing`;
+- Core persists that per gem-version, in the cache store that already
+  exists for file summaries. `Gemfile.lock` already contributes to the
+  cache key, so the invalidation shape is in place — but it should become
+  per gem rather than whole-index, so a single bumped gem re-indexes one
+  gem and not sixty-three;
+- with that, "closed" stops meaning "declared in this workspace" and
+  starts meaning "we know its full method set", which is the honest
+  question. Most receivers in a Rails app become closed, and the check
+  becomes useful where the code actually is.
+
+**It is also what 024.18 waits for.** The unassigned-`@ivar` check
+currently stays silent whenever a controller's class body calls anything
+it does not model, because a gem's macro
+(`load_and_authorize_resource`, `expose`, Devise, ActiveAdmin) installs a
+callback that assigns at runtime and nothing can tell that call apart
+from a harmless one. With this index, such a call is attributable: "a
+method CanCanCan defines, whose body this analysis has not read" is a
+sound reason to stay silent, and a class-body call that resolves to a
+*workspace* method that *was* read is a sound reason to report. That
+narrows the guard rather than replacing it -- every answer the check
+gives today it still gives, and it starts covering controllers it
+currently declines. Doing it before this index exists would mean
+guessing, which is the thing this check refuses to do. **This is a
+required part of R7, not an optional extension of it: 024.18 is not
+closed until it lands.**
+
+It also subsumes several entries above: 024.R5's reopened-gem-class case
+(the index knows `ActiveSupport::TestCase` is a gem class), and the
+latent `unresolved-constant` flood (the index knows `Rails` exists).
+024.R5 stays as the narrow, cheap version for 0.1.7 — one question per
+constant, no persistence — and is a stepping stone to this rather than a
+competing design.
+
+**Risks to settle when building it, not after:**
+
+- what is loaded depends on the environment and on eager loading, so the
+  index describes *a* boot, not the gem in the abstract. It must be
+  recorded as such and never treated as proof a method is absent unless
+  the class was actually seen;
+- classes that define methods at runtime (`define_method` in an included
+  hook, `method_missing`) are already handled by the existing
+  `method_missing` rule, which must apply to gem classes too;
+- the walk costs real time on a large app and must not block the first
+  query — the same background/degrade-to-static shape the Agent already
+  uses.
+
+---
+### 0.3.0: the Agent half is done, and the Core half is scoped by what it owes
+
+**Done, and measured against this repository's own Rails fixture
+rather than against this entry's estimate:**
+
+| | this entry said | measured |
+|---|---|---|
+| gems | 63 | **33** |
+| classes attributed | 2,204 | **2,098** |
+| methods defined directly on them | 15,868 | **14,617** |
+| payload | ~365 KB, names only | **938 KB** |
+| classes defining `method_missing` | — | **17** |
+
+The payload is 2.6x the estimate because ancestors are reported too and
+`Object`'s chain repeats 2,098 times. Asked once per boot, never on the
+request path, which is the decision that estimate was for.
+
+- `agent/gemIndex` walks every loaded module and attributes each to the
+  gem whose directory `Object.const_source_location` puts it in — **by
+  definition site, not by namespace**, so a class the application
+  reopens is still the gem's.
+- `Semantic::GemIndex` holds it Core-side. **A class defining
+  `method_missing` is never `knows?`**, whatever the index holds: it
+  answers to names no enumeration can list.
+- The Server asks once when an Agent becomes ready and reports the size
+  through `ovallsp/status`, which is what an E2E example asserts
+  against real Rails.
+- Protocol version 1 → 2.
+
+**Nothing reads it to decide an answer yet, and that is deliberate.**
+
+### What the Core half owes, precisely
+
+Making a gem class *closed* without also giving the engine that class's
+methods turns every correct call on a gem into a report. So four
+things move together or none of them do:
+
+1. `HierarchyIndex` must continue an ancestor chain **into** gem
+   classes. Today it is built from the workspace, so
+   `ActiveRecord::Base` has no entry and the chain stops.
+2. `MethodResolver#candidates_for_type` must offer the gem's methods,
+   or a closed receiver becomes a report factory.
+3. `#accounted_for?` and `#declares_method_missing?` must consult the
+   index — those two are one-line changes and are the *only* part that
+   looks small.
+4. Persistence per gem-version in the cache store, so a single bumped
+   gem re-indexes one gem and not thirty-three.
+
+**And the measurement it owes does not exist.** `045` requires a corpus
+run with a control for any change that alters what the engine asserts,
+and `scripts/corpus_diagnostics.rb` has no Agent path at all — grep it
+for `agent` and the answer is nothing. This change turns silence into
+reports across every file of every Rails application, which is the
+largest assertion change this product has ever made, and the tool that
+would measure it has to be built first.
+
+`024.18` remains a required part of this and is untouched.
+
+**Not started rather than half-built**, deliberately: a capability that
+answers *sometimes* is a wrong answer where it does not, and this one
+answers about the code every Rails developer writes.
+### Done in 0.3.0, and the measurement refused two versions of it first
+
+"Closed" now means "we know its full method set". `Semantic::GemIndex`
+is what the running application reported; `HierarchyIndex` continues a
+chain into it; `MethodResolver` answers the gem's own methods, and
+`#accounted_for?`, `#declares_method_missing?` and
+`Engine#locally_accounted_for?` all read it.
+
+**Measured, activerecord's own 397 files, index off then on, same
+`corpus-sha256`, control `unresolved-constant` identical at 1,609:**
+
+| version | `unknown-method` | introduced | removed |
+|---|---|---|---|
+| baseline, no index | 96 | — | — |
+| spliced in `MethodResolver` | 130 | **47, all false** | 13 |
+| rooted, modules included | 891 | **795, all false** | 13 |
+| **shipped** | **83** | **0** | **13** |
+
+The two rejected versions are the point of the entry.
+
+**The splice was in the wrong class.** Rooting a chain needs three
+things `HierarchyIndex` owns and a splice elsewhere skips:
+`DEFAULT_OBJECT_CHAIN`, whose `Kernel` is a **module** and which the
+splice called a class; the singleton tail, without which `.new` is not
+on the chain; and `dedupe_named`. `Foo.new` and `raise` were reported
+as missing.
+
+**Modules must not be rooted.** A `ClassMethods`-style module's `self`
+at call time is whatever class extended it, which nothing here knows.
+With modules rooted, activerecord reported `superclass`, `name` and
+`primary_key` on its own modules — 795 false reports, all correct code.
+
+### `ActiveRecord::Base` can never be closed, and that is right
+
+Asked of the running application:
+
+```
+$ bundle exec ruby -e 'require "./config/environment"
+p ActiveRecord::Base.private_method_defined?(:method_missing)'
+# => true
+```
+
+`ActiveRecord::AttributeMethods` defines it, so a model answers to
+names no enumeration can list. **The roadmap's promise cannot be kept
+for the headline case**, and keeping it would be a wrong answer. 577
+of this bundle's classes have no such ancestor and are checked; the
+capability rows say both halves, and `G18`'s second example is the
+model staying silent.
+
+### The last link was the Agent's evidence defeating the Agent's index
+
+With everything above in place the capability was still off: the chain
+was rooted, the receiver closed, and then `#reopened_elsewhere?`
+deferred — because a gem ancestor is neither workspace code nor
+declared by RBS, which is `024.R5`'s deferral doing its job against
+information that had since arrived. `#locally_accounted_for?` reads
+the index now, and that is a third way a name is accounted for and the
+strongest of the three.
+
+### What is not done
+
+**Persistence per gem-version.** The index is fetched once per boot and
+held in memory; the cache store is untouched. A cold start pays the
+walk again. That is a cost, not a wrong answer.
+
+**`024.18` is untouched** and remains a required part of this.
+
+### And the measurement now exists
+
+`scripts/corpus_diagnostics.rb --rails-root=DIR` boots a Runtime Agent
+and analyses with the index it reports, printing `gem-index-classes` in
+its provenance so a diff whose two sides disagree about that number is
+visibly measuring the flag rather than the change.
+
 ## 024.R8 Completion does nothing until you type a dot (done, 0.2.0)
 
 ```yaml

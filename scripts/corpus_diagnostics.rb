@@ -77,6 +77,7 @@ require_relative "repo_files"
 # signature root were the same directory until the variable above
 # separated them.
 $LOAD_PATH.unshift(File.expand_path("lib", Dir.pwd))
+require "logger"
 require "ovallsp"
 
 # `046`'s C8. Every false corpus result this project has recorded came
@@ -109,6 +110,7 @@ end
 
 control_expectations = []
 corpus_args = []
+rails_root = nil
 ARGV.each do |arg|
   # `--expect-control=unresolved-constant:9550`: a category the change
   # under test cannot affect, and the count it must come out at. Written
@@ -120,6 +122,14 @@ ARGV.each do |arg|
   # agree.
   if arg.start_with?("--expect-control=")
     control_expectations << arg.split("=", 2).last
+  # `--rails-root=DIR`: boot a Runtime Agent against that application
+  # and analyse with the gem index it reports (`024.R7`). Without it
+  # the run is static-only, which is what every comparison before
+  # 0.3.0 measured -- so the two sides of an R7 diff are the same
+  # revision with and without this flag, and the provenance line below
+  # says which was which.
+  elsif arg.start_with?("--rails-root=")
+    rails_root = arg.split("=", 2).last
   else
     corpus_args << arg
   end
@@ -197,8 +207,28 @@ signatures = Ovallsp::Signatures::Environment.new.tap { |env| env.load(workspace
 # `workspace_index:`; `024.112` repeated it a release later, after that
 # comment had been added. A harness that assembles is a harness that can
 # differ from the server, so this one no longer assembles.
+# 024.R7. A gem index is the running application's answer, so it needs a
+# running application. Booted once, before the corpus is read, and its
+# size printed -- a diff whose two sides disagree about this number is
+# measuring the flag rather than the change.
+gem_index = Ovallsp::Semantic::GemIndex.empty
+agent_manager = nil
+if rails_root
+  logger = Logger.new($stderr)
+  logger.level = Logger::WARN
+  agent_manager = Ovallsp::RailsBootstrap.start(
+    root: File.expand_path(rails_root), logger: logger,
+    route_registry: Ovallsp::Routes::RouteRegistry.new,
+    model_registry: model_registry, hello_timeout: 120
+  )
+  payload = agent_manager&.fetch_gem_index
+  gem_index = Ovallsp::Semantic::GemIndex.from_agent(payload) if payload
+end
+provenance("gem-index-classes", gem_index.size)
+provenance("rails-root", rails_root || "none")
+
 stack = Ovallsp::AnalysisStack.build(signatures: signatures, workspace_index: workspace_index,
-                                     model_registry: model_registry)
+                                     model_registry: model_registry, gem_index: gem_index)
 hierarchy_index = stack.hierarchy_index
 method_resolver = stack.method_resolver
 local_inferencer = stack.local_inferencer
@@ -237,6 +267,8 @@ documents.each do |path, document|
 rescue StandardError => e
   warn "ANALYZE-ERROR #{path}: #{e.class}: #{e.message}"
 end
+
+agent_manager&.stop
 
 counts.sort_by { |code, n| [-n, code] }.each { |code, n| provenance("count.#{code}", n) }
 
