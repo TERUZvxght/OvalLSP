@@ -86,6 +86,7 @@ module Ovallsp
       @ancestry_registry = ancestry_registry
       @agent_bootstrap = agent_bootstrap
       @agent_manager = nil
+      @gem_index = Semantic::GemIndex.empty
       @agent_restart_mutex = Mutex.new
       @agent_refresh_mutex = Mutex.new
       # Serializing agent refreshes fixed out-of-order writes but made
@@ -1029,6 +1030,32 @@ module Ovallsp
     # workspace is trusted and looks like a Rails app -- but it's not
     # currently responding), or "ready-static" (no Agent attempt at all:
     # untrusted workspace, or not a Rails app).
+
+    # `024.R7`. Asked once, when an Agent becomes ready, and never on the
+    # request path: the payload is hundreds of kilobytes -- 938 KB and
+    # 2,098 classes measured against this repository's own Rails fixture.
+    #
+    # **Nothing reads it to decide an answer yet.** It is held and
+    # reported, and the half that makes a gem class *closed* is a separate
+    # change: closedness and members have to arrive together, and turning
+    # silence into reports across every Rails file owes a corpus run with
+    # a control that this repository has no Agent-backed corpus tool for.
+    # `024.R7` carries what is left.
+    def load_gem_index
+      # `respond_to?` rather than a rescue: a manager that cannot answer
+      # this question is not a failure to contain, it is a manager from
+      # before the question existed -- and the republish this sits in
+      # front of is what re-answers every open document once the Agent
+      # is ready. A NoMethodError here took that republish down with it.
+      return unless @agent_manager.respond_to?(:fetch_gem_index)
+
+      payload = @agent_manager.fetch_gem_index
+      return if payload.nil?
+
+      @gem_index = Semantic::GemIndex.from_agent(payload)
+      @logger.info("gem index: #{@gem_index.size} class(es) from the running application")
+    end
+
     def status_result(_params)
       state =
         if @cold_indexing
@@ -1045,7 +1072,8 @@ module Ovallsp
       # an operation did **not** rebuild the reference index --
       # `documentHighlight` is answered from the open file alone, and
       # the only way to say so from outside is to watch this not move.
-      { state: state, referenceIndexGeneration: @reference_index.generation }
+      { state: state, referenceIndexGeneration: @reference_index.generation,
+        gemIndexClasses: @gem_index.size }
     end
 
     # `OvalLSP: Restart Rails Agent` -- reuses the exact same
@@ -1687,6 +1715,7 @@ module Ovallsp
         end
         if agent_manager_ready?(@agent_manager)
           @agent_supervisor.record_success
+          load_gem_index
           cancel_scheduled_agent_retries
           # Only now is there an Agent to ask. The snapshot's own republish
           # already ran, from inside the bootstrap call above, while

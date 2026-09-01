@@ -90,7 +90,7 @@ RSpec.describe "Ovallsp::Server environment status (Task 020)" do
     server = Ovallsp::Server.new(input: StringIO.new(""), output: StringIO.new, logger: logger,
                                  workspace_root: Dir.pwd)
 
-    expect(server.send(:status_result, nil).keys).to contain_exactly(:state, :referenceIndexGeneration)
+    expect(server.send(:status_result, nil).keys).to contain_exactly(:state, :referenceIndexGeneration, :gemIndexClasses)
   end
 
   # Trust is now supplied, where this example used to send `params: {}`.

@@ -911,6 +911,21 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # 024.R7's Core half, first step. The Agent reports what the gems
+    # define and the server holds it; **nothing reads it to decide an
+    # answer yet**, which is why this asserts the index exists rather than
+    # a diagnostic that changed. Closedness and members have to arrive
+    # together, and turning silence into reports across every Rails file
+    # owes a corpus run with a control.
+    it "W5/W6: holds the running application's gem index once the Agent is ready" do
+      status = @client.raw_request("ovallsp/status", {})
+
+      expect(status).to have_key(:gemIndexClasses)
+      expect(status[:gemIndexClasses]).to be > 100,
+                                          "the gem index holds #{status[:gemIndexClasses]} classes; " \
+                                          "a real Rails bundle contributes thousands"
+    end
+
     it "H8: types an ivar assigned in another method, and declines where two methods disagree" do
       source = <<~SOURCE
         class IvWidget

@@ -4930,5 +4930,65 @@ competing design.
   uses.
 
 ---
+### 0.3.0: the Agent half is done, and the Core half is scoped by what it owes
 
+**Done, and measured against this repository's own Rails fixture
+rather than against this entry's estimate:**
+
+| | this entry said | measured |
+|---|---|---|
+| gems | 63 | **33** |
+| classes attributed | 2,204 | **2,098** |
+| methods defined directly on them | 15,868 | **14,617** |
+| payload | ~365 KB, names only | **938 KB** |
+| classes defining `method_missing` | — | **17** |
+
+The payload is 2.6x the estimate because ancestors are reported too and
+`Object`'s chain repeats 2,098 times. Asked once per boot, never on the
+request path, which is the decision that estimate was for.
+
+- `agent/gemIndex` walks every loaded module and attributes each to the
+  gem whose directory `Object.const_source_location` puts it in — **by
+  definition site, not by namespace**, so a class the application
+  reopens is still the gem's.
+- `Semantic::GemIndex` holds it Core-side. **A class defining
+  `method_missing` is never `knows?`**, whatever the index holds: it
+  answers to names no enumeration can list.
+- The Server asks once when an Agent becomes ready and reports the size
+  through `ovallsp/status`, which is what an E2E example asserts
+  against real Rails.
+- Protocol version 1 → 2.
+
+**Nothing reads it to decide an answer yet, and that is deliberate.**
+
+### What the Core half owes, precisely
+
+Making a gem class *closed* without also giving the engine that class's
+methods turns every correct call on a gem into a report. So four
+things move together or none of them do:
+
+1. `HierarchyIndex` must continue an ancestor chain **into** gem
+   classes. Today it is built from the workspace, so
+   `ActiveRecord::Base` has no entry and the chain stops.
+2. `MethodResolver#candidates_for_type` must offer the gem's methods,
+   or a closed receiver becomes a report factory.
+3. `#accounted_for?` and `#declares_method_missing?` must consult the
+   index — those two are one-line changes and are the *only* part that
+   looks small.
+4. Persistence per gem-version in the cache store, so a single bumped
+   gem re-indexes one gem and not thirty-three.
+
+**And the measurement it owes does not exist.** `045` requires a corpus
+run with a control for any change that alters what the engine asserts,
+and `scripts/corpus_diagnostics.rb` has no Agent path at all — grep it
+for `agent` and the answer is nothing. This change turns silence into
+reports across every file of every Rails application, which is the
+largest assertion change this product has ever made, and the tool that
+would measure it has to be built first.
+
+`024.18` remains a required part of this and is untouched.
+
+**Not started rather than half-built**, deliberately: a capability that
+answers *sometimes* is a wrong answer where it does not, and this one
+answers about the code every Rails developer writes.
 
