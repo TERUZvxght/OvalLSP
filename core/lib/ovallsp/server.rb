@@ -386,6 +386,8 @@ module Ovallsp
         respond(id, with_index_snapshot { signature_help_result(message[:params]) })
       when "textDocument/references"
         respond(id, with_index_snapshot { references_result(message[:params]) })
+      when "textDocument/documentHighlight"
+        respond(id, with_index_snapshot { document_highlight_result(message[:params]) })
       when "textDocument/prepareRename"
         respond(id, with_index_snapshot { prepare_rename_result(message[:params]) })
       when "textDocument/rename"
@@ -1027,7 +1029,11 @@ module Ovallsp
           "ready-static"
         end
 
-      { state: state }
+      # `referenceIndexGeneration` is here so a check can assert that
+      # an operation did **not** rebuild the reference index --
+      # `documentHighlight` is answered from the open file alone, and
+      # the only way to say so from outside is to watch this not move.
+      { state: state, referenceIndexGeneration: @reference_index.generation }
     end
 
     # `OvalLSP: Restart Rails Agent` -- reuses the exact same
@@ -2036,6 +2042,79 @@ module Ovallsp
 
       ensure_reference_index_current
       @reference_index.references(symbol_id, minimum_confidence: :high).map { |r| { uri: r.uri, range: r.location } }
+    end
+
+
+    # `textDocument/documentHighlight` -- the occurrences of the symbol
+    # under the cursor, **in this file only**.
+    #
+    # 0.3.0's first capability, and `045` orders it first of the four that
+    # need only what already exists. The comment on
+    # `#symbol_id_and_range_at` named the trap this has to avoid, and it is
+    # the whole reason this is not `references_result` filtered by uri:
+    # References and Rename call `#ensure_reference_index_current`, whose
+    # rebuild is O(workspace), and **the editor asks for highlights on
+    # every cursor move**. So nothing here touches the reference index, and
+    # `capabilities_spec`'s third F example asserts the generation does not
+    # move across five requests.
+    #
+    # The answer comes from the open file's own summary: the candidates it
+    # already recorded, narrowed by name before anything is resolved, so a
+    # cursor move costs one string comparison per candidate rather than one
+    # resolution.
+    def document_highlight_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return [] unless document && summary
+
+      symbol_id, = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
+      return [] unless symbol_id
+
+      highlights = matching_candidate_highlights(document, summary, uri, symbol_id)
+      declaration = summary.declarations.find { |d| d.symbol_id == symbol_id }
+      if declaration
+        # A declaration is `Write` -- it is where the name is introduced.
+        # `Read` for a call site. Neither is guessed: one comes from
+        # `declarations` and the other from `reference_candidates`.
+        highlights.unshift({ range: declaration.name_location || declaration.location, kind: 3 })
+      end
+
+      highlights.uniq { |h| h[:range] }
+    end
+
+    # Narrowed by name first, resolved second.
+    #
+    # **Text unless the site is known to be a read, and that is a
+    # decision rather than an omission.**
+    # A `method_call` candidate is a call, and a call reads the method --
+    # that is `Read`, not an inference. A `local_variable` candidate is
+    # every mention of the local, assignment and read alike: the parser
+    # records one kind for both, so telling `counter = 1` from `counter`
+    # would mean re-deriving it from the source here. Section 0 ranks a
+    # wrong answer below no answer, and the protocol has `Text` for
+    # exactly the case where the distinction is not known. The same goes
+    # for a `constant` candidate, which covers a class declaration's own
+    # name as well as every reference to it.
+    def matching_candidate_highlights(document, summary, uri, symbol_id)
+      name = Index::SymbolId.bare_name(symbol_id.name.to_s)
+      same_name = summary.reference_candidates.select { |c| c.name.to_s == name }
+      return [] if same_name.empty?
+
+      resolved = @reference_resolver.resolve(document, same_name, uri: uri,
+                                                                  generation: @reference_index.generation)
+      by_location = same_name.to_h { |c| [c.location, c.kind] }
+      resolved.filter_map do |r|
+        next unless r && r.symbol_id == symbol_id
+
+        { range: r.location, kind: highlight_kind(by_location[r.location]) }
+      end
+    end
+
+
+    # 1 = Text, 2 = Read, 3 = Write, per the protocol.
+    def highlight_kind(candidate_kind)
+      candidate_kind == :method_call ? 2 : 1
     end
 
     def range_span(range)
@@ -3392,6 +3471,7 @@ module Ovallsp
           documentSymbolProvider: true,
           definitionProvider: true,
           referencesProvider: true,
+          documentHighlightProvider: true,
           renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
           completionProvider: { triggerCharacters: ["."], resolveProvider: true },

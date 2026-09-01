@@ -1177,5 +1177,94 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(@client.workspace_symbols("symbol_probe_method")).to include("symbol_probe_method")
       end
     end
+
+  # 0.3.0's first capability. `045` orders it first of the four that need
+  # only what already exists: the reference index answers occurrences
+  # workspace-wide, so scoping to one file is nearly free.
+  #
+  # The deferral note in `server.rb` named the trap, and these examples
+  # are written against it: References and Rename call
+  # `ensure_reference_index_current`, whose rebuild is O(workspace),
+  # while the editor asks for highlights **on every cursor move**. So
+  # this answers from the open file's own summary and the last example
+  # here is the one that says so.
+  describe "in the current file" do
+    it "F1: highlights every occurrence of a local, and not a same-named local elsewhere" do
+      source = <<~RUBY
+        class HighlightProbe
+          def outer
+            counter = 1
+            counter += 2
+            counter
+          end
+
+          def other
+            counter = 9
+            counter
+          end
+        end
+      RUBY
+
+      with_file("app/models/highlight_probe.rb", source) do |uri|
+        # The caret is on `counter` in `counter = 1`, line 2.
+        highlights = @client.document_highlights(uri, 2, 4)
+        lines = highlights.map { |h| h[:range][:start][:line] }.sort
+
+        # Three in `outer`; the two in `other` are a different binding and
+        # a fixture where both scopes answered the same would not tell the
+        # two behaviours apart.
+        expect(lines).to eq([2, 3, 4])
+      end
+    end
+
+    it "F2: highlights a method's declaration and its call sites in the file" do
+      source = <<~RUBY
+        class HighlightMethodProbe
+          def compute_total
+            41
+          end
+
+          def caller_one
+            compute_total + 1
+          end
+
+          def caller_two
+            compute_total
+          end
+        end
+      RUBY
+
+      with_file("app/models/highlight_method_probe.rb", source) do |uri|
+        # The caret is on `compute_total` in its `def`, line 1.
+        highlights = @client.document_highlights(uri, 1, 6)
+        lines = highlights.map { |h| h[:range][:start][:line] }.sort
+
+        expect(lines).to eq([1, 6, 10])
+
+        # The protocol carries a kind, and a declaration is not a read.
+        # Without this the answer is a list of ranges wearing a field
+        # nothing sets.
+        by_line = highlights.to_h { |h| [h[:range][:start][:line], h[:kind]] }
+        expect(by_line[1]).to eq(3)
+        expect(by_line[6]).to eq(2)
+      end
+    end
+
+    # The capability's actual requirement, and the reason the row exists
+    # in a section of its own. An implementation that reached for
+    # `references_result` would pass both examples above and rebuild the
+    # workspace index on every keystroke.
+    it "F1/F2: answers without rebuilding the workspace reference index" do
+      source = "class HighlightCostProbe\n  def only\n    value = 1\n    value\n  end\nend\n"
+
+      with_file("app/models/highlight_cost_probe.rb", source) do |uri|
+        before = @client.raw_request("ovallsp/status", {})[:referenceIndexGeneration]
+        5.times { @client.document_highlights(uri, 2, 4) }
+        after = @client.raw_request("ovallsp/status", {})[:referenceIndexGeneration]
+
+        expect(after).to eq(before)
+      end
+    end
+  end
   end
 end

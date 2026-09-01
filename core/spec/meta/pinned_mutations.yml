@@ -704,3 +704,35 @@
   to: "        return new_name\n"
   spec: spec/ovallsp/server_rename_spec.rb
   example: "expands Ruby's hash shorthand rather than overwriting its colon"
+
+# 0.3.0's first capability. Four decisions, each of which a naive
+# documentHighlight would get wrong and none of which the protocol
+# forces: the scope match that keeps a same-named local in another
+# method out, the read/text split that refuses to guess a local's
+# assignment, the declaration row, and the one the whole capability is
+# about -- answering without rebuilding the workspace reference index
+# while the editor asks on every cursor move.
+- why: "the symbol match. Without it every same-named mention in the file is highlighted, including a local belonging to another method's scope."
+  file: core/lib/ovallsp/server.rb
+  from: "        next unless r && r.symbol_id == symbol_id\n"
+  to: "        next unless r\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "F1: highlights every occurrence of a local, and not a same-named local elsewhere"
+- why: "the read/text split. A call site is a read and a local's mention is not known to be either; flattening both to Text drops the distinction the protocol carries."
+  file: core/lib/ovallsp/server.rb
+  from: "      candidate_kind == :method_call ? 2 : 1\n"
+  to: "      1\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "F2: highlights a method's declaration and its call sites in the file"
+- why: "the declaration row. A `def` produces no reference candidate, so without this the method's own name is the one place not highlighted."
+  file: core/lib/ovallsp/server.rb
+  from: "      if declaration\n"
+  to: "      if false && declaration\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "F2: highlights a method's declaration and its call sites in the file"
+- why: "the capability's actual requirement. Warming the reference index here answers the same ranges and rebuilds O(workspace) on every cursor move, which is what the deferral note in server.rb said to watch for."
+  file: core/lib/ovallsp/server.rb
+  from: "      highlights = matching_candidate_highlights"
+  to: "      ensure_reference_index_current\n      highlights = matching_candidate_highlights"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "F1/F2: answers without rebuilding the workspace reference index"

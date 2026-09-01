@@ -131,6 +131,14 @@ module E2E
       Array(request("textDocument/references", { textDocument: { uri: uri }, position: { line: line, character: character } }))
     end
 
+# `textDocument/documentHighlight`. Ranges plus the protocol's kind,
+# which is 1 = Text, 2 = Read, 3 = Write.
+def document_highlights(uri, line, character)
+  request("textDocument/documentHighlight",
+          { textDocument: { uri: uri }, position: { line: line, character: character } })
+    .then { |r| Array(r).map { |h| { range: h[:range], kind: h[:kind] } } }
+end
+
     def rename_edits(uri, line, character, new_name)
       result = request("textDocument/rename", {
                          textDocument: { uri: uri }, position: { line: line, character: character }, newName: new_name

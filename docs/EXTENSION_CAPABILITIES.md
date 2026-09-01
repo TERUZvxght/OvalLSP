@@ -206,6 +206,17 @@ settle. Everything it declines is listed under the non-goals below.
 | W3 | Workspace symbol search | matching classes and methods | PASS |
 | W4 | Renames a method a macro declared (`attr_accessor`, `delegate`, …) | nothing is edited — the macro's argument is source the macro reads, not the method's name, so rewriting it also changes the ivar an `attr_*` reads, the second method `attr_accessor` declares, the label an `enum` uses for its scope and its stored mapping, or the method a `delegate` calls on its target. The editor shows its own refusal; the reason is logged, not surfaced (024.28) | PASS |
 
+## In the current file
+
+Occurrences within the open file, answered without touching the
+workspace-wide reference index — the editor asks on every cursor move,
+and that index's rebuild is O(workspace).
+
+| # | What the user does | What must happen | Status |
+|---|---|---|---|
+| F1 | Puts the cursor on a local variable | every occurrence of that local, in that file, highlighted — and not a same-named local in another scope | PASS |
+| F2 | Puts the cursor on a method name | its declaration and its call sites in that file, highlighted, with the write/read distinction the protocol carries | PASS |
+
 ## What this document deliberately does not promise
 
 - Type checking in the sense a static type checker means it. There is no
