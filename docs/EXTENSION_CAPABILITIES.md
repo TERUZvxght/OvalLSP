@@ -221,6 +221,15 @@ and that index's rebuild is O(workspace).
 | F1 | Puts the cursor on a local variable | every occurrence of that local, in that file, highlighted — and not a same-named local in another scope | PASS |
 | F2 | Puts the cursor on a method name | its declaration and its call sites in that file, highlighted, with the write/read distinction the protocol carries | PASS |
 
+## In the editor's margins
+
+What the type engine already answers on hover, shown where the code is.
+
+| # | What the user does | What must happen | Status |
+|---|---|---|---|
+| I1 | Opens a file with local variables | the inferred type appears after each assignment, and nowhere the type is not known | PASS |
+| I2 | Opens a file with calls to workspace methods | each argument carries the parameter name it is being passed as | PASS |
+
 ## What this document deliberately does not promise
 
 - Type checking in the sense a static type checker means it. There is no

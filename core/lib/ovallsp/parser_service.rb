@@ -1043,7 +1043,7 @@ module Ovallsp
       # left as it was and recorded, because changing it changes an
       # answer this entry did not measure.
       def visit_local_variable_write_node(node)
-        record_local_variable(node.name, node.name_loc)
+        record_local_variable(node.name, node.name_loc, write: true)
         super
       end
 
@@ -1054,17 +1054,17 @@ module Ovallsp
       # (`024.260`, `024.266`). `semantic_tokens.rb` already enumerates
       # the same six.
       def visit_local_variable_operator_write_node(node)
-        record_local_variable(node.name, node.name_loc)
+        record_local_variable(node.name, node.name_loc, write: true)
         super
       end
 
       def visit_local_variable_or_write_node(node)
-        record_local_variable(node.name, node.name_loc)
+        record_local_variable(node.name, node.name_loc, write: true)
         super
       end
 
       def visit_local_variable_and_write_node(node)
-        record_local_variable(node.name, node.name_loc)
+        record_local_variable(node.name, node.name_loc, write: true)
         super
       end
 
@@ -2437,7 +2437,7 @@ module Ovallsp
       # rules rather than one both would have to bend to.
       #
       # **Which scope binds it?** See #binding_scope.
-      def record_local_variable(name, location)
+      def record_local_variable(name, location, write: false)
         return unless location.slice == name.to_s
 
         frame = binding_scope(name)
@@ -2450,7 +2450,8 @@ module Ovallsp
 
         # The binding frame's owner, not the current cref's -- see
         # `Scope`. `024.277`.
-        record_reference(:local_variable, name.to_s, location, scope_id: frame.id, owner: frame.owner)
+        record_reference(:local_variable, name.to_s, location, scope_id: frame.id, owner: frame.owner,
+                         write: write)
       end
 
       # The frame that *binds* this name, not the innermost one that is
@@ -2506,11 +2507,12 @@ module Ovallsp
       # `owner` defaults to the cref's, which is what every kind but a
       # local variable wants. A local's comes from the frame that binds
       # it, because it does not have one of its own -- `Scope`, `024.277`.
-      def record_reference(kind, name, location, scope_id: nil, implicit_hash_value: false, owner: current_owner)
+      def record_reference(kind, name, location, scope_id: nil, implicit_hash_value: false,
+                           owner: current_owner, write: nil)
         @reference_candidates << Index::ReferenceCandidate.new(
           kind: kind, name: name, location: Index::SourceLocation.to_range(location, @lines), scope_id: scope_id,
           owner: owner, singleton: @cref.declares_singleton?, receiver: nil,
-          lexical_nesting: current_lexical_nesting, implicit_hash_value: implicit_hash_value
+          lexical_nesting: current_lexical_nesting, implicit_hash_value: implicit_hash_value, write: write
         )
       end
 

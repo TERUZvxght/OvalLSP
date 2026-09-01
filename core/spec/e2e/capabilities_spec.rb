@@ -706,6 +706,91 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(@client.type_definitions(uri, 2, 4)).to be_empty
       end
     end
+
+    # 0.3.0. `045`: "the inference that already exists". Hover answers
+    # these today; inlay hints put the answer where the code is.
+    it "I1: labels each local assignment with its inferred type, and nothing it cannot infer" do
+      source = <<~SOURCE
+        class IhProbe
+          def go(unknown_thing)
+            counted = 1
+            named = "x"
+            made = IhProbe.new
+            borrowed = unknown_thing
+            [counted, named, made, borrowed]
+          end
+        end
+      SOURCE
+
+      with_file("app/models/ih_probe.rb", source) do |uri|
+        hints = @client.inlay_hints(uri)
+        by_line = hints.to_h
+
+        expect(by_line[2]).to eq(": Integer")
+        expect(by_line[3]).to eq(": String")
+        expect(by_line[4]).to eq(": IhProbe")
+
+        # **The line that makes this a capability rather than a decoration.**
+        # `borrowed` is assigned from an untyped parameter, so the engine
+        # does not know; a label there would be a wrong answer written into
+        # the margin of the user's code, which section 0 ranks below none.
+        expect(by_line).not_to have_key(5)
+
+        # And a read is not an assignment: line 6 mentions all four and
+        # gets nothing.
+        expect(by_line).not_to have_key(6)
+      end
+    end
+
+    it "I2: labels each argument with the parameter name it is passed as" do
+      source = <<~SOURCE
+        class IhCallee
+          def resize(width, height, scale = 1)
+            [width, height, scale]
+          end
+
+          def post_required(first, middle = 1, last)
+            [first, middle, last]
+          end
+
+          def collecting(head, *tail)
+            [head, tail]
+          end
+        end
+
+        class IhCaller
+          def go
+            IhCallee.new.resize(10, 20, 30)
+          end
+
+          def awkward
+            IhCallee.new.post_required(1, 2)
+          end
+
+          def splatty
+            IhCallee.new.collecting(1, 2, 3)
+          end
+        end
+      SOURCE
+
+      with_file("app/models/ih_caller.rb", source) do |uri|
+        on = ->(line) { @client.inlay_hints(uri).select { |(l, _)| l == line }.map(&:last) }
+
+        # Two required and one optional, all three labelled: where the
+        # shape is plain the index-to-parameter mapping holds, and
+        # refusing the optional was under-answering.
+        expect(on.call(16)).to eq(["width:", "height:", "scale:"])
+
+        # **A required parameter after an optional one refuses the whole
+        # call.** Ruby fills the optional last -- `f(1, 2)` on
+        # `def f(a, b = 1, c)` binds `c = 2` -- so labelling by index
+        # would write `middle:` beside a value passed as `last`.
+        expect(on.call(20)).to be_empty
+
+        # And a `*rest` parameter, for the same reason.
+        expect(on.call(24)).to be_empty
+      end
+    end
   end
 
   describe "semantic highlighting" do
@@ -1353,6 +1438,14 @@ RSpec.describe "Extension capabilities", :e2e do
         # a fixture where both scopes answered the same would not tell the
         # two behaviours apart.
         expect(lines).to eq([2, 3, 4])
+
+        # **Write, write, read.** `counter = 1` and `counter += 2` assign;
+        # the bare `counter` reads. This shipped as `Text` for all three,
+        # on the argument that the layer could not tell -- which was true
+        # of the layer and wrong about what was knowable, since the parser
+        # has separate write visitors and was discarding the distinction.
+        by_line = highlights.to_h { |h| [h[:range][:start][:line], h[:kind]] }
+        expect(by_line).to eq({ 2 => 3, 3 => 3, 4 => 2 })
       end
     end
 

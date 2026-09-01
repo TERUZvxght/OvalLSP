@@ -269,8 +269,8 @@
   example: "says nothing about the call the resolved head makes correct"
 - why: "024.277's binding-frame owner -- without it a local takes the cref owner at the point of use, so the same variable read inside a `module_eval` block and outside it gets two identities and rename rewrites only one side."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        record_reference(:local_variable, name.to_s, location, scope_id: frame.id, owner: frame.owner)"
-  to: "        record_reference(:local_variable, name.to_s, location, scope_id: frame.id)"
+  from: "        record_reference(:local_variable, name.to_s, location, scope_id: frame.id, owner: frame.owner,\n"
+  to: "        record_reference(:local_variable, name.to_s, location, scope_id: frame.id,\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "keeps one identity across a `module_eval` block, which changes self but not the binding"
 - why: "024.271's receiver visit, hoisted above the cref switch and the frame push -- without it the `ty` on a `def ty.outer` line is never recorded, so rename rewrites every other mention and leaves the file not running."
@@ -632,19 +632,19 @@
   example: "records the same shorthand written as a hash literal's value"
 - why: "Recording LocalVariableOperatorWriteNode -- leaving `n += 1` behind after renaming `n` writes a file that does not run."
   file: core/lib/ovallsp/parser_service.rb
-  from: "      def visit_local_variable_operator_write_node(node)\n        record_local_variable(node.name, node.name_loc)\n        super\n      end\n"
+  from: "      def visit_local_variable_operator_write_node(node)\n        record_local_variable(node.name, node.name_loc, write: true)\n        super\n      end\n"
   to: "      def visit_local_variable_operator_write_node(node)\n        super\n      end\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "records the target of `+=`"
 - why: "Recording LocalVariableOrWriteNode -- the same gap in the `||=` spelling."
   file: core/lib/ovallsp/parser_service.rb
-  from: "      def visit_local_variable_or_write_node(node)\n        record_local_variable(node.name, node.name_loc)\n        super\n      end\n"
+  from: "      def visit_local_variable_or_write_node(node)\n        record_local_variable(node.name, node.name_loc, write: true)\n        super\n      end\n"
   to: "      def visit_local_variable_or_write_node(node)\n        super\n      end\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "records the target of `||=` and `&&=`"
 - why: "Recording LocalVariableAndWriteNode -- the third compound spelling, whose recorder the sweep cannot pin separately because all four arrive in one added block."
   file: core/lib/ovallsp/parser_service.rb
-  from: "      def visit_local_variable_and_write_node(node)\n        record_local_variable(node.name, node.name_loc)\n        super\n      end\n"
+  from: "      def visit_local_variable_and_write_node(node)\n        record_local_variable(node.name, node.name_loc, write: true)\n        super\n      end\n"
   to: "      def visit_local_variable_and_write_node(node)\n        super\n      end\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "records the target of `||=` and `&&=`"
@@ -718,10 +718,10 @@
   to: "        next unless r\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "F1: highlights every occurrence of a local, and not a same-named local elsewhere"
-- why: "the read/text split. A call site is a read and a local's mention is not known to be either; flattening both to Text drops the distinction the protocol carries."
+- why: "the read/write/text split. A call site is a read; a local is a write or a read, from the flag the parser records. Flattening a call to Text drops the distinction the protocol carries."
   file: core/lib/ovallsp/server.rb
-  from: "      candidate_kind == :method_call ? 2 : 1\n"
-  to: "      1\n"
+  from: "      return 2 if candidate.kind == :method_call\n"
+  to: "      return 1 if candidate.kind == :method_call\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "F2: highlights a method's declaration and its call sites in the file"
 - why: "the declaration row. A `def` produces no reference candidate, so without this the method's own name is the one place not highlighted."
@@ -778,3 +778,31 @@
   to: "      return [] if false\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "D5: answers nothing where the type is not a workspace class"
+
+# Inlay hints (I1/I2), 0.3.0. A hint sits in the margin of the user's
+# code continuously and is read as the engine's answer, so every one of
+# these is a refusal rather than a feature.
+- why: "the blank where the type is not known. A label there is a wrong answer written into the margin, which section 0 ranks below none."
+  file: core/lib/ovallsp/server.rb
+  from: "        next unless type.is_a?(Types::Nominal)\n"
+  to: "        next if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I1: labels each local assignment with its inferred type, and nothing it cannot infer"
+- why: "assignments only. Without it every mention of a local is labelled, including reads, which is the parser's write flag being ignored."
+  file: core/lib/ovallsp/server.rb
+  from: "        candidate.kind == :local_variable && candidate.write && range_contains?(range, candidate.location)\n"
+  to: "        candidate.kind == :local_variable && range_contains?(range, candidate.location)\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I1: labels each local assignment with its inferred type, and nothing it cannot infer"
+- why: "the `*rest` refusal. Past a rest parameter the argument index no longer names a parameter."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] if positional.length < parameters.length && parameters[positional.length].kind == :rest\n"
+  to: "        return [] if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I2: labels each argument with the parameter name it is passed as"
+- why: "the post-required refusal. Ruby fills the optional last, so on `def f(a, b = 1, c)` the second argument binds to `c` -- labelling by index writes `middle:` beside a value passed as `last`."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] if positional.any? { |parameter| parameter.kind == :optional } &&\n"
+  to: "        return [] if false &&\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I2: labels each argument with the parameter name it is passed as"

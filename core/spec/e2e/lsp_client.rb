@@ -132,6 +132,20 @@ module E2E
       Array(request("textDocument/references", { textDocument: { uri: uri }, position: { line: line, character: character } }))
     end
 
+    # `textDocument/inlayHint` over a whole file. Returns `[line, label]`
+    # pairs, sorted, because that is what every example here compares.
+    def inlay_hints(uri, last_line: 200)
+      Array(request("textDocument/inlayHint",
+                    { textDocument: { uri: uri },
+                      range: { start: { line: 0, character: 0 },
+                               end: { line: last_line, character: 0 } } }))
+        # Sorted by position, not by label: two hints on one line are
+      # ordered by where they sit, and sorting the pair by its second
+      # element put `height:` before `width:`.
+      .sort_by { |h| [h[:position][:line], h[:position][:character]] }
+      .map { |h| [h[:position][:line], h[:label]] }
+    end
+
     # `textDocument/typeDefinition`. Locations only; the protocol allows a
     # single Location or a list and this client normalises to a list.
     def type_definitions(uri, line, character)

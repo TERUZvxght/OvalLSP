@@ -388,6 +388,8 @@ module Ovallsp
         respond(id, with_index_snapshot { references_result(message[:params]) })
       when "textDocument/documentHighlight"
         respond(id, with_index_snapshot { document_highlight_result(message[:params]) })
+      when "textDocument/inlayHint"
+        respond(id, with_index_snapshot { inlay_hint_result(message[:params]) })
       when "textDocument/typeDefinition"
         respond(id, with_index_snapshot { type_definition_result(message[:params]) })
       when "textDocument/prepareCallHierarchy"
@@ -2101,14 +2103,20 @@ module Ovallsp
     # **Text unless the site is known to be a read, and that is a
     # decision rather than an omission.**
     # A `method_call` candidate is a call, and a call reads the method --
-    # that is `Read`, not an inference. A `local_variable` candidate is
-    # every mention of the local, assignment and read alike: the parser
-    # records one kind for both, so telling `counter = 1` from `counter`
-    # would mean re-deriving it from the source here. Section 0 ranks a
-    # wrong answer below no answer, and the protocol has `Text` for
-    # exactly the case where the distinction is not known. The same goes
-    # for a `constant` candidate, which covers a class declaration's own
-    # name as well as every reference to it.
+    # `Read`, not an inference.
+    #
+    # **A local was `Text` when this shipped, and is `Read`/`Write` now.**
+    # The reason given then was that the parser records one
+    # `local_variable` kind for assignment and read alike -- true of that
+    # layer, and wrong about what was knowable: the parser has four
+    # separate write visitors and was discarding the distinction at
+    # `#record_local_variable`. Inlay hints needed the assignment sites,
+    # so the candidate carries `write` and this reads it.
+    #
+    # A `constant` candidate stays `Text`: it covers a class declaration's
+    # own name as well as every reference to it, and nothing here
+    # distinguishes them. `write` is `nil` there, which is what the guard
+    # in `#highlight_kind` reads.
     def matching_candidate_highlights(document, summary, uri, symbol_id)
       name = Index::SymbolId.bare_name(symbol_id.name.to_s)
       same_name = summary.reference_candidates.select { |c| c.name.to_s == name }
@@ -2116,7 +2124,7 @@ module Ovallsp
 
       resolved = @reference_resolver.resolve(document, same_name, uri: uri,
                                                                   generation: @reference_index.generation)
-      by_location = same_name.to_h { |c| [c.location, c.kind] }
+      by_location = same_name.to_h { |c| [c.location, c] }
       resolved.filter_map do |r|
         next unless r && r.symbol_id == symbol_id
 
@@ -2126,8 +2134,12 @@ module Ovallsp
 
 
     # 1 = Text, 2 = Read, 3 = Write, per the protocol.
-    def highlight_kind(candidate_kind)
-      candidate_kind == :method_call ? 2 : 1
+    def highlight_kind(candidate)
+      return 1 unless candidate
+      return 2 if candidate.kind == :method_call
+      return 1 if candidate.write.nil?
+
+      candidate.write ? 3 : 2
     end
 
     # `textDocument/prepareCallHierarchy` and its two follow-ups.
@@ -2303,6 +2315,111 @@ module Ovallsp
       return [] unless type.is_a?(Types::Nominal)
 
       @workspace_index.class_declarations(type.name.to_s)
+    end
+
+    # `textDocument/inlayHint` -- what hover already answers, put where the
+    # code is.
+    #
+    # 0.3.0, and `045` calls it "the inference that already exists". Two
+    # kinds, both from things this server already computes:
+    #
+    #   `counted = 1`            ->  `: Integer` after the name
+    #   `resize(10, 20)`         ->  `width:` and `height:` before each
+    #
+    # **Nothing is labelled where the type is not known.** A hint is written
+    # into the margin of the user's code and read as the engine's answer, so
+    # a guess there is worse than a blank -- section 0, applied to a surface
+    # that is on screen continuously rather than asked for.
+    def inlay_hint_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return [] unless document && summary
+
+      range = params.fetch(:range)
+      local_type_hints(document, summary, uri, range) + parameter_name_hints(document, summary, uri, range)
+    end
+
+    # A type after each assignment, and only where the engine has one.
+    def local_type_hints(document, summary, uri, range)
+      writes = summary.reference_candidates.select do |candidate|
+        candidate.kind == :local_variable && candidate.write && range_contains?(range, candidate.location)
+      end
+
+      writes.filter_map do |candidate|
+        type = @query_service.type_at(document, candidate.location[:end], initial_env: view_initial_env(uri))
+        next unless type.is_a?(Types::Nominal)
+
+        { position: candidate.location[:end], label: ": #{Index::SymbolId.bare_name(type.name.to_s)}",
+          paddingLeft: false, paddingRight: true }
+      end
+    end
+
+    # The parameter each positional argument is being passed as, read from
+    # the callee's own declaration.
+    #
+    # **The refusal is about the declaration, not the call**, and the
+    # first version had it the other way round. A `*splat` at the call
+    # site needs no guard: the parser records `positional: 0` and no
+    # locations for it, so there is nothing to label. What breaks the
+    # index-to-parameter mapping is a *declaration* with a required
+    # parameter after an optional one -- Ruby fills the optional last:
+    #
+    #   $ ruby -e '
+    #   def f(a, b = 1, c) = [a, b, c]
+    #   p f(1, 2)
+    #   '
+    #   # => [1, 1, 2]
+    #   # ruby 3.4.10
+    #
+    # The second *argument* binds to the third *parameter*, so labelling by
+    # index would write `b:` beside a value Ruby passes as `c` -- in the
+    # margin, continuously, as the engine's answer. A `*rest` parameter is
+    # refused for the same reason.
+    #
+    # Optionals are labelled where the shape is plain, because there the
+    # mapping does hold and refusing them was under-answering.
+    def parameter_name_hints(document, summary, uri, range)
+      calls = summary.reference_candidates.select do |candidate|
+        candidate.kind == :method_call && candidate.arguments &&
+          candidate.arguments[:positional].to_i.positive? &&
+          range_contains?(range, candidate.location)
+      end
+      return [] if calls.empty?
+
+      resolved = @reference_resolver.resolve(document, calls, uri: uri, generation: @reference_index.generation)
+      calls.zip(resolved).flat_map do |candidate, reference|
+        next [] unless reference
+
+        parameters = positionally_mappable_parameters(parameters_of(reference.symbol_id))
+        next [] if parameters.empty?
+
+        Array(candidate.arguments[:positional_locations]).each_with_index.filter_map do |location, i|
+          parameter = parameters[i]
+          next unless parameter
+
+          { position: location[:start], label: "#{parameter.name}:", paddingLeft: false, paddingRight: true }
+        end
+      end
+    end
+
+    # The leading run of positional parameters, or nothing at all when the
+    # list is one an index cannot address. See the session above.
+    def positionally_mappable_parameters(parameters)
+      positional = parameters.take_while { |parameter| %i[required optional].include?(parameter.kind) }
+      return [] if positional.length < parameters.length && parameters[positional.length].kind == :rest
+      return [] if positional.any? { |parameter| parameter.kind == :optional } &&
+                   positional.last&.kind == :required
+
+      positional
+    end
+
+    def parameters_of(symbol_id)
+      @file_summaries.each_value do |summary|
+        found = summary.declarations.find { |d| d.symbol_id == symbol_id }
+        return Array(found.parameters) if found
+      end
+      []
     end
 
     def range_span(range)
@@ -3662,6 +3779,7 @@ module Ovallsp
           documentHighlightProvider: true,
           callHierarchyProvider: true,
           typeDefinitionProvider: true,
+          inlayHintProvider: true,
           renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
           completionProvider: { triggerCharacters: ["."], resolveProvider: true },
