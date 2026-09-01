@@ -15,7 +15,12 @@ module Ovallsp
     # extraction via agent/model; Task 006's reload follow-up adds
     # agent/reload for routes. No plugins yet.
     class Agent
-      PROTOCOL_VERSION = 1
+      # 2: `agent/gemIndex` (0.3.0, 024.R7). Core refuses an Agent whose
+      # version differs rather than discovering a missing method at the
+      # first call, so a protocol that gains one is a new version -- the
+      # Agent ships inside the same artifact as the Core, and the guard
+      # exists for a stale process spawned by an earlier install.
+      PROTOCOL_VERSION = 2
 
       METHOD_NOT_FOUND = -32601
       INTERNAL_ERROR = -32603
@@ -63,6 +68,8 @@ module Ovallsp
           respond(id, model_result(message[:params]))
         when "agent/models"
           respond(id, models_result)
+        when "agent/gemIndex"
+          respond(id, gem_index_result(message[:params]))
         when "agent/ancestors"
           respond(id, ancestors_result(message[:params]))
         when "agent/reload"
@@ -313,6 +320,78 @@ module Ovallsp
       # `null` for a name is a real answer -- "the application does not
       # have this" -- and Core relies on it to leave the static reading
       # alone rather than waiting for something that will never come.
+
+      # 024.R7. What the gems define, which is the thing nothing else here
+      # can see.
+      #
+      # The undefined-method check fires only on a *closed* receiver, and a
+      # class is closed only when the workspace can see its whole ancestry.
+      # In a Rails application that is a minority: a controller inherits
+      # from `ApplicationController`, whose parent is in a gem, so the check
+      # stays silent exactly where most code is written. The running
+      # application knows all of it.
+      #
+      # **Attribution is by definition site, not by namespace.** A constant
+      # is credited to a gem when `Object.const_source_location` puts it
+      # inside that gem's directory -- so a class an application reopens is
+      # still the gem's, and a class named like a gem's but defined in the
+      # app is not.
+      #
+      # Names only. Measured on a small Rails 8 app: 3027 named modules,
+      # 2204 attributable to 63 gems, 15868 methods defined directly on
+      # them -- roughly 365KB, which is small enough to persist and far too
+      # much to send per query. So this is asked once and cached, never
+      # asked on the request path.
+      def gem_index_result(_params)
+        by_gem = Hash.new { |h, k| h[k] = [] }
+        each_named_module do |mod, name|
+          gem = gem_for(mod, name) or next
+
+          by_gem[gem] << module_answer(mod, name)
+        end
+        { gems: by_gem.transform_values { |classes| { classes: classes } } }
+      end
+
+      def each_named_module
+        ::ObjectSpace.each_object(::Module) do |mod|
+          name = module_name(mod) or next
+
+          yield mod, name
+        end
+      end
+
+      # `…/gems/<name>-<version>/` is the shape every installed gem's path
+      # has, whatever the bundle layout, and it carries the version -- which
+      # is what makes the cache invalidate per gem rather than wholesale.
+      GEM_PATH = %r{/gems/(?<gem>[^/]+-[0-9][^/]*)/}
+
+      def gem_for(mod, name)
+        location = safely { ::Object.const_source_location(name) }
+        path = location.is_a?(Array) ? location.first : nil
+        return nil unless path
+
+        GEM_PATH.match(path.to_s)&.[](:gem)
+      end
+
+      # Its own methods, not its inherited ones: the ancestors are reported
+      # separately and reassembling them is Core's job, because sending each
+      # class its full ancestry's methods would repeat `Object`'s set 2204
+      # times.
+      #
+      # `definesMethodMissing` is reported because a class that defines one
+      # answers to names no index can enumerate -- and "closed" has to mean
+      # "we know the full method set", or the check built on it asserts
+      # something it has not established.
+      def module_answer(mod, name)
+        {
+          name: name,
+          ancestors: safely { mod.ancestors.filter_map { |a| module_name(a) } } || [],
+          instanceMethods: safely { mod.instance_methods(false).map(&:to_s) } || [],
+          singletonMethods: safely { mod.singleton_methods(false).map(&:to_s) } || [],
+          definesMethodMissing: safely { mod.private_method_defined?(:method_missing, false) } || false
+        }
+      end
+
       def ancestors_result(params)
         names = Array(params && (params[:names] || params["names"])).map(&:to_s)
 

@@ -182,6 +182,50 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
 
   # 2 & 3. Routes come from real config/routes.rb, and each source
   # location is normalized (absolute path, 0-based line).
+  # 024.R7. The running application knows what the gems define, and
+  # nothing else does: today "closed" means "declared in this
+  # workspace", so the undefined-method check goes quiet for every
+  # controller whose parent is in a gem -- which is most of a Rails app.
+  #
+  # This is the Agent half: walk the loaded modules once, attribute each
+  # to the gem whose path it was defined in, and report its own methods,
+  # its ancestors, and whether it defines `method_missing`.
+  it "attributes loaded modules to the gems that define them, with their own methods" do
+    @manager = boot_manager
+    index = @manager.fetch_gem_index
+
+    expect(index).not_to be_nil, "the Agent answered nothing for agent/gemIndex"
+    expect(index[:gems]).to be_a(Hash)
+
+    # ActiveRecord is in this application's bundle and defines `Base`.
+    activerecord = index[:gems].keys.find { |name| name.to_s.start_with?("activerecord-") }
+    expect(activerecord).not_to be_nil, "no activerecord entry among #{index[:gems].keys.first(8).inspect}"
+
+    base = index[:gems][activerecord][:classes].find { |c| c[:name] == "ActiveRecord::Base" }
+    expect(base).not_to be_nil, "activerecord contributed no ActiveRecord::Base"
+    expect(base[:ancestors]).to include("Object")
+
+    # **The point of the index**: a name the workspace cannot see.
+    # `save` is defined by ActiveRecord::Persistence, an ancestor, so
+    # `ActiveRecord::Base`'s own methods do not carry it -- the ancestor
+    # list is what makes it reachable, which is why both are reported.
+    persistence = index[:gems][activerecord][:classes].find { |c| c[:name] == "ActiveRecord::Persistence" }
+    expect(persistence).not_to be_nil
+    expect(persistence[:instanceMethods]).to include("save")
+
+    # And `method_missing` is reported, because a class that defines one
+    # can answer to names no index can enumerate -- which is the fact
+    # that decides whether "closed" is honest.
+    expect(base).to have_key(:definesMethodMissing)
+  ensure
+    # Every example in this file stops its manager, and this one did
+    # not: the leaked Agent held the fixture bundle and the next eleven
+    # examples booted to `static_only`. Bisected -- with this example
+    # reverted the file was green, which is what said it was the spec
+    # rather than the protocol bump beside it.
+    @manager&.stop
+  end
+
   it "lists routes drawn by real config/routes.rb with a normalized source_location" do
     @manager = boot_manager
     routes = @manager.fetch_snapshot(sections: ["routes"])[:routes]

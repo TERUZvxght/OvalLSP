@@ -10,6 +10,19 @@
 # stuck at :ready forever (docs/design/tasks/008.5-runtime-and-index-corrections.md).
 
 require "json"
+# The Core refuses an Agent whose protocol version differs from its
+# own, so a stub that writes the number as a literal is refused the
+# moment the protocol moves -- which is what 0.3.0's bump to 2 did
+# to all three of these. Read from the Core's own constant, with a
+# fallback for a stub run without it on the load path.
+PROTOCOL_VERSION =
+  begin
+    require "ovallsp/runtime_agent/agent"
+    Ovallsp::RuntimeAgent::Agent::PROTOCOL_VERSION
+  rescue LoadError, NameError
+    2
+  end
+
 
 def write_message(payload)
   json = JSON.generate(payload)
@@ -20,7 +33,7 @@ end
 write_message(
   jsonrpc: "2.0", id: 1,
   result: {
-    protocolVersion: 1, agentVersion: "0.0.0", root: Dir.pwd, railsVersion: nil,
+    protocolVersion: PROTOCOL_VERSION, agentVersion: "0.0.0", root: Dir.pwd, railsVersion: nil,
     rubyVersion: RUBY_VERSION, capabilities: {}
   }
 )

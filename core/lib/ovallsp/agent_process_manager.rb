@@ -292,6 +292,18 @@ module Ovallsp
     # genuinely dead Agent is still detected, by the reader thread, which
     # reports it directly rather than waiting for a request to notice
     # (docs/design/tasks/008.6-agent-and-index-hardening.md).
+    # 024.R7. Asked once per boot rather than per query: the answer is
+    # hundreds of kilobytes and Core persists it per gem-version. A
+    # generous timeout because it walks every loaded module, and `nil`
+    # where the Agent cannot answer -- which every reader treats as
+    # "the gems are not indexed", never as "the gems define nothing".
+    def fetch_gem_index(timeout: 60)
+      return nil unless ready?
+
+      response = request("agent/gemIndex", {}, timeout: timeout)
+      response && response[:result]
+    end
+
     def fetch_ancestors(names, timeout: 10)
       return nil unless ready?
 
