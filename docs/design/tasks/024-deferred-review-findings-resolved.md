@@ -5106,6 +5106,89 @@ interpreter — which is the expected-value rule failing in the narrow way
 `CLAUDE.md` describes: the claim was checked, but not against the case
 that breaks it.
 
+## 024.86 An ivar assigned in another method has no type, except in the view
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+released-in: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb`,
+`core/lib/ovallsp/semantic/method_analyzer.rb`
+
+`@article` assigned by a `before_action` and read in the action hovers
+`Post` **in the ERB template** and `""` **in the controller itself**,
+where completion after `@article.` offers 0 items against the view's 408.
+The same shape reproduces in a plain class: `@post` set in one method and
+read in another has no type. Measured through the real server by a review
+round of 0.2.6.
+
+So the machinery to walk a filter exists and is applied to views but not
+to the file the developer is actually editing. `@user`/`@post` set in a
+filter and used in the action is the canonical controller shape.
+
+Separately and in the same family: diagnostics never act on an ivar
+receiver even where hover and completion do know it — in the ERB,
+`@article.no_such_method` is silent while `Post.no_such_class_method` two
+lines below is reported.
+
+**Re-triaged in 0.2.17** (`024.276`). Stays, and `045` says why: `@ivar` completion is one of 0.3.0's eight promises and this is what it rests on. The machinery to walk a filter exists and is applied to views but not to the file being edited, so the work is extending an inference path rather than correcting one. The second half its body names — diagnostics never acting on an ivar receiver even where hover and completion do — is a silence too.
+### Fixed in 0.3.0: one missing seed, both halves
+
+Reproduced first, in the plain class this entry names:
+
+```
+type of @thing read in another method: Unknown
+type of @thing where it is assigned  : Nominal["Widget"]
+```
+
+**`#locate` gives each `def` a fresh environment.** Right for locals,
+wrong for instance variables — so an ivar assigned in another method of
+the same class was invisible to the one being edited. It works in an
+ERB view for one reason only: a view has no `def` for the descent to
+reset at, which is why this looked like Rails machinery that had not
+been generalised and was in fact a seam one level down.
+
+`#locate_in_def` now seeds from the enclosing class's other methods,
+memoised per parse. **Where two methods assign one name types that
+disagree, the answer is nothing** — picking one is a wrong answer at a
+position where the code has no single one.
+
+### And the same seed is the `@ivar` completion promise
+
+The roadmap's "completion of `@ivar` names the moment you type the
+sigil" was three things, not one, and each was found by running it:
+
+- `#capture_scope` **dropped every `@`-prefixed name** on the way out,
+  so the scope had no ivars to offer even once the environment held
+  them. `Scope` carries them separately now — a different namespace,
+  labelled differently, and merging would have made every existing
+  reader of `locals` start answering `@name`.
+- `#word_prefix_at_position` treated `@` as a boundary, so the prefix
+  at the sigil was the empty string — which matches every name and
+  therefore selects none of the ivars.
+- `@` was in `BOUND_PREFIX_SIGILS`, the list of prefixes this engine
+  answers nothing for. It is out; `$`, `:` and `@@` stay, because a
+  global, a symbol and a class variable are still names nothing here
+  tracks.
+
+### One regression, caught by an existing example
+
+`#infer_ivars_for_method_node` **replaces `@self_type_stack`
+wholesale**, and the sibling walk runs in the middle of a descent that
+owns it — so `def self.b` calling `a` started answering `Unknown`. The
+stack, the step count and the budget are saved and restored around the
+walk. Nothing new was written to find this; a Task 017 example did.
+
+Rows `C15` and `H8`, both languages, three pinned mutations.
+
+**The second half of this entry's body stays open** — diagnostics still
+do not act on an ivar receiver even where hover and completion now do.
+It is filed as its own entry rather than left inside a resolved one.
+
+
 ## 024.89 Signature help strips the parameter kinds and never advances
 
 ```yaml

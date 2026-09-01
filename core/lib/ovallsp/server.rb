@@ -2754,9 +2754,11 @@ module Ovallsp
       if receiver_dot_before?(document, position)
         return { isIncomplete: false, items: member_completion_items(document, position, prefix) }
       end
-      # Completion after `@` -- the instance variables in scope -- was
-      # built during 0.2.1's review loop and is deferred to 0.3.0 with the
-      # capability row that named it.
+      # Completion after `@` was built during 0.2.1's review loop and
+      # deferred to 0.3.0 with the capability row that named it. It
+      # answers here now: the sigil is part of the prefix, `@` is no
+      # longer a bound one, and the scope carries the class's instance
+      # variables rather than only the method's (`024.86`).
       # A bare identifier is what the workspace and Kernel sources answer
       # about. `$stdout`, `:symbol` and the name in a `def` are not bare
       # identifiers, and each was answered with every constant starting
@@ -3166,7 +3168,17 @@ module Ovallsp
     # Whether the identifier under the cursor is spoken for -- by a sigil
     # that makes it a variable or a symbol rather than a name to resolve,
     # or by a `def` that makes it a name being *declared*.
-    BOUND_PREFIX_SIGILS = %w[@ $ :].freeze
+    # `@` left this list in 0.3.0: an instance variable is a name this
+    # engine can now answer about, which is what the row `024.86`
+    # carries promises. `$` and `:` stay -- a global and a symbol are
+    # still names nothing here tracks, and answering them with every
+    # constant that starts the same way is the failure this guard
+    # exists for.
+    BOUND_PREFIX_SIGILS = %w[$ :].freeze
+
+    # `@@count` is a class variable, and this engine tracks none. It
+    # stays bound, which single `@` no longer is.
+    CLASS_VARIABLE_SIGIL = "@@"
 
     def bound_prefix_before?(document, position)
       text = document.text
@@ -3184,6 +3196,7 @@ module Ovallsp
       # The character immediately before the word answers all of them,
       # `@@count` included -- its nearest neighbour is still an `@`.
       return true if BOUND_PREFIX_SIGILS.include?(text[left - 1])
+      return true if text[(left - 2)...left] == CLASS_VARIABLE_SIGIL
 
       # `undef` names a method the same way `def` does -- a name being
       # declared or removed, not one to resolve. The boundary is `def`
@@ -3284,12 +3297,26 @@ module Ovallsp
 
 
 
+    # 024.86, and the roadmap's "the moment you type the sigil": an
+    # `@` is part of the name being typed, not a boundary before it.
+    # Without it the prefix at `@` is the empty string, which matches
+    # every name in scope and therefore none of the ivars -- the
+    # completion had the names and could not select them.
+    #
+    # Only leading, and only one: `@@x` is a class variable and `a@b`
+    # is not an identifier, so the sigil is taken where a name can
+    # start and nowhere else.
     def word_prefix_at_position(document, position)
       text = document.text
       offset = document.position_to_char_offset(position)
 
       left = offset
       left -= 1 while left > 0 && word_char?(text[left - 1])
+      # One statement, not two identical lines. Written as two, either could
+      # be deleted with the other still answering, so neither was pinned --
+      # measured, and the fixture could not tell the two behaviours apart
+      # because a single `@` needs only one of them.
+      left -= 1 while left.positive? && text[left - 1] == "@"
       text[left...offset]
     end
 

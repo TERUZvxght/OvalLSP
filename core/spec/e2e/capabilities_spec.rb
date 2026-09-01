@@ -884,6 +884,67 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(@client.code_actions(uri, 10, [missing])).to be_empty
       end
     end
+
+    # 0.3.0, `024.86`, and the roadmap's "completion of `@ivar` names the
+    # moment you type the sigil". One missing seed produced both: the
+    # descent starts a fresh environment per `def`, so an ivar assigned in
+    # another method was invisible to the method being edited -- for its
+    # type *and* for its name. It works in an ERB view because a view has
+    # no `def` for the descent to reset at.
+    it "C15: offers the class's instance variables at the sigil, not only this method's" do
+      source = <<~SOURCE
+        class IvProbe
+          def setup
+            @from_setup = 1
+          end
+
+          def use
+            @from_use = 2
+            @
+          end
+        end
+      SOURCE
+
+      with_file("app/models/iv_probe.rb", source) do |uri|
+        labels = @client.completion_labels(uri, 7, 5)
+        expect(labels).to include("@from_setup", "@from_use")
+      end
+    end
+
+    it "H8: types an ivar assigned in another method, and declines where two methods disagree" do
+      source = <<~SOURCE
+        class IvWidget
+          def label
+            "x"
+          end
+        end
+
+        class IvHolder
+          def setup
+            @agreed = IvWidget.new
+            @disputed = IvWidget.new
+          end
+
+          def other_setup
+            @disputed = 41
+          end
+
+          def use
+            [@agreed, @disputed]
+          end
+        end
+      SOURCE
+
+      with_file("app/models/iv_holder.rb", source) do |uri|
+        expect(@client.hover_text(uri, 17, 8)).to include("IvWidget")
+
+        # **Two methods, two different types, so nothing.** Picking one
+        # would be a wrong answer where the code has no single one, and a
+        # hover is read as the engine's claim about the program.
+        expect(@client.hover_text(uri, 17, 18).to_s).not_to include("IvWidget")
+        expect(@client.hover_text(uri, 17, 18).to_s).not_to include("Integer")
+      end
+    end
   end
 
   describe "semantic highlighting" do

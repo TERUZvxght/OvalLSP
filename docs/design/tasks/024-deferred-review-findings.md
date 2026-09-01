@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**289 entries below** <!-- measured: register-entries = 289 -->,
+**290 entries below** <!-- measured: register-entries = 290 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -261,7 +261,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.83`](#02483-the-undefined-method-check-is-loudest-exactly-where-no-runtime-agent-can-answer) | open | 0.3.0 | The undefined-method check is loudest exactly where no Runtime Agent… |
 | [`024.84`](024-deferred-review-findings-resolved.md#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | fixed | 0.2.18 | A constant is typed as a class object whatever it holds |
 | [`024.85`](024-deferred-review-findings-resolved.md#02485-self-completes-nothing) | fixed | 0.2.16 | `self.` completes nothing |
-| [`024.86`](#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | open | 0.3.0 | An ivar assigned in another method has no type, except in the view |
+| [`024.86`](024-deferred-review-findings-resolved.md#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | fixed | 0.3.0 | An ivar assigned in another method has no type, except in the view |
 | [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.3.0 | A relation stops being a relation after one hop |
 | [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.3.0 | Completion unions a union's members; the diagnostic intersects them |
 | [`024.89`](024-deferred-review-findings-resolved.md#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | fixed | 0.2.15 | Signature help strips the parameter kinds and never advances |
@@ -466,6 +466,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.291`](024-deferred-review-findings-resolved.md#024291-a-repeated-key-in-a-metadata-block-is-resolved-silently-and-one-of-them-discarded-a-withdrawal) | fixed | 0.2.18 | A repeated key in a metadata block is resolved silently, and one of … |
 | [`024.292`](024-deferred-review-findings-resolved.md#024292-045-disagrees-with-its-own-table-about-what-0-3-0-is-blocked-on) | fixed | 0.3.0 | `045` disagrees with its own table about what 0.3.0 is blocked on |
 | [`024.293`](024-deferred-review-findings-resolved.md#024293-check-pinned-mutations-rb-reads-a-skipped-example-as-a-mutation-that-escaped) | fixed | 0.3.0 | `check_pinned_mutations.rb` reads a skipped example as a mutation th… |
+| [`024.294`](#024294-diagnostics-do-not-act-on-an-ivar-receiver-even-where-hover-and-completion-know-its-type) | open | 0.3.1 | Diagnostics do not act on an `@ivar` receiver, even where hover and … |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -2529,36 +2530,6 @@ one exists, section 0.4 says a wrong answer on a walked path is what
 blocks, and this is one.
 
 **Re-triaged in 0.2.17** (`024.276`). This is one of the two where the pasted reason happened to be true: the Direction needs a witness outside the workspace — RBS, or a gem's own `sig/` — that says a class is declared elsewhere, and until one exists section 0.4 says a wrong answer on a walked path is what blocks. That witness is `024.R7`. Not re-driven since the measurement in the body, which is dated there.
-
-## 024.86 An ivar assigned in another method has no type, except in the view
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.0
-```
-
-**Area:** `core/lib/ovallsp/local_inferencer.rb`,
-`core/lib/ovallsp/semantic/method_analyzer.rb`
-
-`@article` assigned by a `before_action` and read in the action hovers
-`Post` **in the ERB template** and `""` **in the controller itself**,
-where completion after `@article.` offers 0 items against the view's 408.
-The same shape reproduces in a plain class: `@post` set in one method and
-read in another has no type. Measured through the real server by a review
-round of 0.2.6.
-
-So the machinery to walk a filter exists and is applied to views but not
-to the file the developer is actually editing. `@user`/`@post` set in a
-filter and used in the action is the canonical controller shape.
-
-Separately and in the same family: diagnostics never act on an ivar
-receiver even where hover and completion do know it — in the ERB,
-`@article.no_such_method` is silent while `Post.no_such_class_method` two
-lines below is reported.
-
-**Re-triaged in 0.2.17** (`024.276`). Stays, and `045` says why: `@ivar` completion is one of 0.3.0's eight promises and this is what it rests on. The machinery to walk a filter exists and is applied to views but not to the file being edited, so the work is extending an inference path rather than correcting one. The second half its body names — diagnostics never acting on an ivar receiver even where hover and completion do — is a silence too.
 
 ## 024.87 A relation stops being a relation after one hop
 
@@ -4698,6 +4669,34 @@ Asserted rather than described: `object_receiver_decline_spec.rb`'s
 "also says nothing about a genuine typo at the top level, which is what
 it costs".
 
+## 024.294 Diagnostics do not act on an `@ivar` receiver, even where hover and completion know its type
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.1
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+
+The second half of `024.86`'s body, filed on its own when the first
+half was fixed in 0.3.0 rather than left inside a resolved entry.
+
+In an ERB template `@article.no_such_method` is silent while
+`Post.no_such_class_method` two lines below is reported. 0.3.0 makes
+the ivar's type available in ordinary Ruby files too — `H8` — so the
+gap is now wider than when it was written: hover and completion answer
+for an ivar receiver in a plain class, and the undefined-method check
+still does not.
+
+**This is a silence, not a wrong answer**, which is why it is a `0.3.1`
+and not a blocker: the engine declines where it could speak. Turning a
+decline into an answer is the shape `045` calls capability.
+
+**Not re-driven since `024.86` closed**, and the reproduction to run
+first is the plain-class one rather than the ERB one the body names —
+the ivar type arrives by a different path now.
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml

@@ -830,3 +830,16 @@ local in a thousand files of real gem source and running what came out.
   and is being kept on purpose until the shapes above are, because it is
   what stops a local-variable rename being one keystroke
   away. <!-- documents: 024.245 -->
+
+## Diagnostics say nothing about a method called on an `@ivar`
+
+**`@article.no_such_method` is not reported, while
+`Post.no_such_class_method` on the next line is.** Since 0.3.0 the
+engine knows what an instance variable holds even when it was assigned
+in another method — hover tells you, and completion after the dot
+offers its members — but the undefined-method check still does not act
+on that receiver.
+
+So this is a silence rather than a wrong report: nothing incorrect is
+said, and a real mistake goes unmentioned where the engine had enough
+to mention it. <!-- documents: 024.294 -->

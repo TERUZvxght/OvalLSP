@@ -834,3 +834,24 @@
   to: "        return [] unless keep\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "Q3: removes surplus arguments, and offers nothing when there are too few"
+
+# 024.86 and the `@ivar` completion promise, 0.3.0. One missing seed
+# produced both halves, and the decline is the third decision.
+- why: "024.86's decline where two methods assign one ivar types that disagree. Picking one is a wrong answer at a position where the code has no single one, and a hover is read as the engine's claim."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "            disputed << name\n"
+  to: "            merged[name] = type\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "H8: types an ivar assigned in another method, and declines where two methods disagree"
+- why: "024.86's seed itself. The descent gives each `def` a fresh environment, which is right for locals and wrong for instance variables -- without this an ivar assigned in another method is invisible for its type and for its name."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "      locate(node.body, offset, parameter_env(node).merge(sibling_ivar_env(node)))\n"
+  to: "      locate(node.body, offset, parameter_env(node))\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "H8: types an ivar assigned in another method, and declines where two methods disagree"
+- why: "the sigil being part of the name being typed. Without it the prefix at `@` is empty, which matches every name in scope and selects none of the ivars -- the completion has the names and cannot pick them."
+  file: core/lib/ovallsp/server.rb
+  from: "      left -= 1 while left.positive? && text[left - 1] == \"@\"\n"
+  to: "      left -= 0\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "C15: offers the class's instance variables at the sigil, not only this method's"

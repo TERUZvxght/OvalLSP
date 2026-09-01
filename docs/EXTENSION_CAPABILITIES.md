@@ -108,6 +108,7 @@ suite in step: every row must have an example, every example a row.
 | H5 | Hovers a method call | its parameter list, spelled as declared (`documented(first, second = 1)`) | PASS |
 | H6 | Hovers an expression nested in a keyword argument, array, hash, `case`, `while` or `return` | that expression's own type, not the enclosing structure's | PASS |
 | H7 | Hovers a *call written with a receiver* to a method declared with an RDoc/YARD comment above it | the comment appears in the hover, below the type | PASS |
+| H8 | Hovers an `@ivar` assigned in another method of the same class | its type; and nothing where two methods assign it types that disagree | PASS |
 
 ## Completion: the single most-used feature
 
@@ -127,6 +128,7 @@ suite in step: every row must have an example, every example a row.
 | C12 | Types `Art` with no receiver in front of it | workspace classes, the locals in scope, and the methods callable at that position | PASS |
 | C13 | Highlights a completion candidate declared with an RDoc/YARD comment, *in the list a receiver produced* | the comment appears as the item's documentation | PASS |
 | C14 | Types `self.` inside a method body | the members of whatever `self` is *there* — the class's instance methods inside `def x`, its singleton methods inside `def self.x` and inside `class << self` | PASS |
+| C15 | Types `@` inside a method | the instance variables the class assigns anywhere, not only the ones this method assigns | PASS |
 
 C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
 a bare constant inferred as `Unknown`, so nothing downstream ever saw a

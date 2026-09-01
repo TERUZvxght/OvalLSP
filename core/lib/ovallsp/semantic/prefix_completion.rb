@@ -82,7 +82,7 @@ module Ovallsp
         return Result.new(items: [], incomplete: false) if prefix.to_s.empty?
 
         scope = @query_service.scope_at(document, position)
-        candidates = locals(scope, prefix) + self_methods(scope, prefix)
+        candidates = locals(scope, prefix) + ivars(scope, prefix) + self_methods(scope, prefix)
         candidates += constants(prefix) + kernel_methods(prefix) if prefix.length >= MIN_PREFIX_FOR_WORKSPACE
 
         # One line per name *per kind*. A name can be in more than one
@@ -136,6 +136,18 @@ module Ovallsp
 
       def locals(scope, prefix)
         scope.locals.filter_map do |name, type|
+          next unless matches?(name, prefix)
+
+          { label: name, kind: KIND_VARIABLE, detail: type.to_s, __group: GROUP_LOCAL }
+        end
+      end
+
+      # 024.86, and the roadmap's "completion of `@ivar` names the
+      # moment you type the sigil". The names come from the whole
+      # class, not only the method being edited -- an ivar assigned in
+      # `setup` and read in `use` is the shape this is for.
+      def ivars(scope, prefix)
+        scope.ivars.filter_map do |name, type|
           next unless matches?(name, prefix)
 
           { label: name, kind: KIND_VARIABLE, detail: type.to_s, __group: GROUP_LOCAL }

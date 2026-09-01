@@ -131,7 +131,13 @@ module Ovallsp
     # `CLAUDE.md`'s test for whether one value serves two readers is
     # whether they want the same answer; these want it *most* of the
     # time, which is the case that says they do not.
-    Scope = Data.define(:locals, :self_type) do
+    # `ivars` is kept apart from `locals` rather than merged into it:
+    # they are different namespaces in Ruby, a caller offering both
+    # wants to label them differently, and merging would have made
+    # every existing reader of `locals` start answering `@name`.
+    Scope = Data.define(:locals, :self_type, :ivars) do
+      def initialize(ivars: {}, **rest) = super(ivars: ivars, **rest)
+
       def implicit_self_type = self_type || Types::Nominal.new(name: "Object")
     end
 
@@ -155,6 +161,8 @@ module Ovallsp
       @steps = 0
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
+      @enclosing_class_bodies = []
+      @class_ivar_cache = {}
       @scope_capture = nil
       @capturing_scope = true
 
@@ -177,6 +185,8 @@ module Ovallsp
       @steps = 0
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
+      @enclosing_class_bodies = []
+      @class_ivar_cache = {}
       @lexical_nesting = []
       @in_singleton_class = false
       @target_span = nil
@@ -216,6 +226,8 @@ module Ovallsp
       @steps = 0
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
+      @enclosing_class_bodies = []
+      @class_ivar_cache = {}
       @lexical_nesting = []
       @in_singleton_class = false
       @target_span = [start_offset, end_offset]
@@ -382,12 +394,18 @@ module Ovallsp
       ANONYMOUS_CLASS_FACTORIES.fetch(Index::SymbolId.bare_name(constant_type.name), []).include?(node.name)
     end
 
+    # 024.86: the instance variables were dropped here rather than
+    # returned separately, so completion at `@` had nothing to offer
+    # even once the environment held them. Split rather than merged --
+    # see `Scope`.
     def capture_scope(env)
-      locals = env.each_with_object({}) do |(key, value), acc|
+      locals = {}
+      ivars = {}
+      env.each do |key, value|
         name = key.to_s
-        acc[name] = value unless name.start_with?("@")
+        (name.start_with?("@") ? ivars : locals)[name] = value
       end
-      @scope_capture = Scope.new(locals: locals, self_type: @self_type_stack.last)
+      @scope_capture = Scope.new(locals: locals, ivars: ivars, self_type: @self_type_stack.last)
     end
 
     # Inclusive of `end_offset`, which is one past the node's last
@@ -575,7 +593,18 @@ module Ovallsp
         )
       )
       push_nesting(node.constant_path.full_name)
-      locate(node.body, offset, {})
+      # 024.86: the class body a `def` below this is a sibling in. The
+      # descent gives each `def` a fresh environment, which is right for
+      # locals and wrong for instance variables -- an ivar assigned in
+      # another method of the same class was invisible to the one being
+      # edited, for its type and for its name. It works in an ERB view
+      # only because a view has no `def` for the descent to reset at.
+      @enclosing_class_bodies.push(node.body)
+      begin
+        locate(node.body, offset, {})
+      ensure
+        @enclosing_class_bodies.pop
+      end
     ensure
       @in_singleton_class = previous_in_singleton_class
       @self_type_stack.pop
@@ -691,7 +720,7 @@ module Ovallsp
       return Types::UNKNOWN unless contains?(node.location, offset)
 
       @self_type_stack.push(def_self_type(node))
-      locate(node.body, offset, parameter_env(node))
+      locate(node.body, offset, parameter_env(node).merge(sibling_ivar_env(node)))
     ensure
       @self_type_stack.pop
     end
@@ -773,6 +802,96 @@ module Ovallsp
     # being unobservable the moment a parameter carries a real type (a
     # signature, an inferred call site), at which point a String key would
     # silently un-shadow a same-named method.
+
+    # 024.86. The instance variables the *class* assigns, for a `def` being
+    # descended into -- so `@thing` set in `setup` has a type when read in
+    # `use`, and shows up when `@` is typed there.
+    #
+    # **Where two methods assign one name types that disagree, the answer
+    # is nothing.** Picking one would be a wrong answer at a position where
+    # the code has no single one, and both a hover and a completion are
+    # read as the engine's claim about the program. A name assigned
+    # consistently is answered; a name assigned two ways is not.
+    #
+    # Memoised per parse, because the alternative is inferring every
+    # sibling method on every keystroke and `024.45` already measures a
+    # single analysis at nine times its stated budget.
+    def sibling_ivar_env(def_node)
+      body = @enclosing_class_bodies.last
+      return {} unless body
+
+      siblings = class_ivar_environment(body)
+      return {} if siblings.empty?
+
+      # This method's own assignments win: they are nearer, and the walk
+      # about to happen will overwrite them anyway.
+      siblings.reject { |name, _| own_ivar_names(def_node).include?(name) }
+    end
+
+    # Per query, not per process. The key is a byte offset into *a*
+    # file, so two files whose class body starts at the same offset
+    # share an entry -- which passed in isolation and failed the moment
+    # the suite opened a second file, with `hover` answering nil rather
+    # than wrongly. Cleared where the rest of the per-query state is.
+    def class_ivar_environment(body)
+      @class_ivar_cache ||= {}
+      @class_ivar_cache[body.location.start_offset] ||= build_class_ivar_environment(body)
+    end
+
+    # **`#infer_ivars_for_method_node` replaces `@self_type_stack`
+    # wholesale**, and this runs in the middle of a descent that owns
+    # it. Without saving and restoring, a `def self.b` calling `a`
+    # answered `Unknown` -- the sibling walk had left the stack holding
+    # an instance type where the descent had put a class object. Caught
+    # by an existing example, which is the only reason it is not in the
+    # shipped answer.
+    def build_class_ivar_environment(body)
+      saved_self_types = @self_type_stack.dup
+      saved_steps = @steps
+      saved_budget = @step_budget
+      merged = {}
+      disputed = []
+      body.child_nodes.compact.grep(Prism::DefNode).each do |sibling|
+        infer_ivars_for_method_node(sibling, self_type_name: current_self_type_name,
+                                             reset_budget: false).each do |name, type|
+          next if type.is_a?(Types::Unknown)
+
+          if merged.key?(name) && merged[name] != type
+            disputed << name
+          else
+            merged[name] = type
+          end
+        end
+      end
+      merged.reject { |name, _| disputed.include?(name) }
+    ensure
+      @self_type_stack = saved_self_types
+      @steps = saved_steps
+      @step_budget = saved_budget
+    end
+
+    def own_ivar_names(def_node)
+      return [] unless def_node.body
+
+      names = []
+      stack = [def_node.body]
+      until stack.empty?
+        node = stack.pop
+        names << node.name if node.is_a?(Prism::InstanceVariableWriteNode) ||
+                              node.is_a?(Prism::InstanceVariableOrWriteNode)
+        stack.concat(node.compact_child_nodes)
+      end
+      names
+    end
+
+    def current_self_type_name
+      type = @self_type_stack.last
+      return nil unless type
+
+      inner = type.respond_to?(:inner) ? type.inner : type
+      inner.is_a?(Types::Nominal) ? inner.name.to_s : nil
+    end
+
     def parameter_env(def_node)
       params = def_node.parameters
       return {} unless params
