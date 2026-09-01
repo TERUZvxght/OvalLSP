@@ -440,6 +440,25 @@ module Ovallsp
         @gem_index.knows?(name) && kind_for_gem(name) == :class
       end
 
+      # An `extend`ed module puts its *instance* methods on the
+      # class-level chain, and the index's `singletonMethods` is
+      # `singleton_methods(false)`, which cannot see them. Ruby settles
+      # it: `CGI.singleton_class.ancestors` carries `CGI::Escape`, and
+      # `CGI.escapeHTML` -- which exists -- was reported missing over
+      # rack's own source without this.
+      #
+      # The links are asked for their *instance* methods, because that
+      # is what `extend` surfaces -- `AncestorEntry#declaration_kind`
+      # already makes that distinction for a workspace `extend`.
+      def gem_singleton_links(canonical, entries)
+        return [] if @gem_index.empty?
+        return [] unless entries.length == 1
+        return [] unless @gem_index.knows?(canonical)
+
+        @gem_index.singleton_ancestors(canonical).drop(1).reject { |n| DEFAULT_CHAIN_NAMES.include?(n) }
+                  .map { |n| AncestorEntry.identified(name: n, kind: :module, origin: :extend, location: nil) }
+      end
+
       def kind_for_gem(name)
         @gem_index.ancestors(name).include?("Object") ? :class : :module
       end
@@ -587,6 +606,9 @@ module Ovallsp
       # anywhere at all.
       def singleton_tail_for(type_name, entries)
         return [] if entries.any? { |entry| !entry.identified? }
+
+        gem_singleton = gem_singleton_links(canonical_name(type_name), entries)
+        return gem_singleton + DEFAULT_CLASS_SINGLETON_CHAIN unless gem_singleton.empty?
 
         canonical = canonical_name(type_name)
         # `class_here?` rather than `kind_of`: the workspace index does

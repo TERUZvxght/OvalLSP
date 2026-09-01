@@ -28,7 +28,8 @@ module Ovallsp
     # empty index as authoritative would report every method in the
     # workspace as missing.
     class GemIndex
-      Entry = Data.define(:instance_methods, :singleton_methods, :ancestors, :defines_method_missing)
+      Entry = Data.define(:instance_methods, :singleton_methods, :ancestors, :singleton_ancestors,
+                          :defines_method_missing)
 
       def self.empty = new({})
 
@@ -52,6 +53,7 @@ module Ovallsp
               instance_methods: Array(klass[:instanceMethods] || klass["instanceMethods"]).map(&:to_s).to_set,
               singleton_methods: Array(klass[:singletonMethods] || klass["singletonMethods"]).map(&:to_s).to_set,
               ancestors: Array(klass[:ancestors] || klass["ancestors"]).map(&:to_s),
+              singleton_ancestors: Array(klass[:singletonAncestors] || klass["singletonAncestors"]).map(&:to_s),
               defines_method_missing: klass[:definesMethodMissing] || klass["definesMethodMissing"] ? true : false
             )
           end
@@ -94,6 +96,11 @@ module Ovallsp
       def singleton_methods(name) = entry_for(name)&.singleton_methods || Set.new
 
       def ancestors(name) = entry_for(name)&.ancestors || []
+
+      # The class-level chain, which is not the instance one: an
+      # `extend`ed module puts its instance methods there and
+      # `singleton_methods(false)` cannot see them.
+      def singleton_ancestors(name) = entry_for(name)&.singleton_ancestors || []
 
       private
 

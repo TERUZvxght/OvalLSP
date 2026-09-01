@@ -388,6 +388,21 @@ module Ovallsp
           ancestors: safely { mod.ancestors.filter_map { |a| module_name(a) } } || [],
           instanceMethods: safely { mod.instance_methods(false).map(&:to_s) } || [],
           singletonMethods: safely { mod.singleton_methods(false).map(&:to_s) } || [],
+          # `extend`ed modules put their *instance* methods on the
+          # class-level chain, and `singleton_methods(false)` does not
+          # see them. Asked of Ruby rather than assumed:
+          #
+          #   $ ruby -rcgi -e '
+          #   p CGI.singleton_methods(false).include?(:escapeHTML)
+          #   p CGI.singleton_class.ancestors.first(3).map(&:to_s)
+          #   '
+          #   # => false
+          #   # => ["#<Class:CGI>", "CGI::Escape", "CGI::Util"]
+          #   # ruby 3.4.10
+          #
+          # Without this, `CGI.escapeHTML` -- which exists -- was
+          # reported missing over rack's own source.
+          singletonAncestors: safely { mod.singleton_class.ancestors.filter_map { |a| module_name(a) } } || [],
           definesMethodMissing: safely { mod.private_method_defined?(:method_missing, false) } || false
         }
       end

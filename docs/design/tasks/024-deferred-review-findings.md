@@ -2485,6 +2485,50 @@ mattered) is gone: it was the ambiguous-bare-name resolution fixed
 earlier in this release, and none of it survives in the ten.
 
 **Re-triaged in 0.2.17** (`024.276`). The cluster that mattered is gone — the ambiguous bare-name resolution fixed earlier — and the ten that remain are the same shape as `024.83`: the check cannot tell a class the workspace merely reopens from one it owns without a witness outside the workspace. That witness is `024.R7`, which is why this stays, and `045` records it as one of D2's four.
+### Re-driven in 0.3.0, after `024.R7` landed
+
+Same three gems at the same versions, same 213 files, same
+`corpus-sha256`:
+
+| | `unknown-method` |
+|---|---|
+| 0.2.5 round 2, as this entry records | 54 |
+| 0.3.0, no gem index | **23** |
+| 0.3.0, with the gem index | **23** |
+
+**The entry's 54 is five releases stale**; the check has since been
+narrowed repeatedly and answers 23 on the same corpus. Re-measured
+rather than assumed, which is what this entry's own "not a regression
+— it is the state of the check" asks of a later reader.
+
+**And the gem index changes nothing here**, which is the right answer:
+these three gems are analysed as the workspace, so their own classes
+are workspace-declared already. R7 speaks about a class whose *parent*
+is a gem's, and rack's `Utils` has no such parent.
+
+One report did appear on the first run with the index and it was
+false: `CGI.escapeHTML`, which exists. Asked of Ruby —
+
+```
+$ ruby -rcgi -e '
+p CGI.singleton_methods(false).include?(:escapeHTML)
+p CGI.singleton_class.ancestors.first(3).map(&:to_s)
+'
+# => false
+# => ["#<Class:CGI>", "CGI::Escape", "CGI::Util"]
+# ruby 3.4.10
+```
+
+— an `extend`ed module puts its *instance* methods on the class-level
+chain, and the index reported `singleton_methods(false)`, which cannot
+see them. The Agent reports `singletonAncestors` now and the singleton
+walk reads it. That is a defect `024.R7` shipped with, found by
+re-driving this entry rather than by a reviewer.
+
+**Stays open**: 23 reports over 213 files is still the state of the
+check, and this entry is about that number rather than about the
+index.
+
 
 ## 024.83 The undefined-method check is loudest exactly where no Runtime Agent can answer
 
