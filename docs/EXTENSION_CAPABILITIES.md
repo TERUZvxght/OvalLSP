@@ -230,6 +230,18 @@ What the type engine already answers on hover, shown where the code is.
 | I1 | Opens a file with local variables | the inferred type appears after each assignment, and nowhere the type is not known | PASS |
 | I2 | Opens a file with calls to workspace methods | each argument carries the parameter name it is being passed as | PASS |
 
+## Quick fixes
+
+A diagnostic that only names a problem leaves the work to the reader.
+Each of these is offered **only where the edit it would make is
+defined** — a fix that guesses is a wrong edit applied with one click.
+
+| # | What the user does | What must happen | Status |
+|---|---|---|---|
+| Q1 | Invokes the quick fix on an unknown method | a `def` for it is inserted into the class the call was made on | PASS |
+| Q2 | Invokes it on an unknown route helper | the name is replaced with the closest helper the application actually has | PASS |
+| Q3 | Invokes it on a call with too many arguments | the surplus arguments are removed; with too *few*, nothing is offered, because there is no value to write | PASS |
+
 ## What this document deliberately does not promise
 
 - Type checking in the sense a static type checker means it. There is no

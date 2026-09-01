@@ -132,6 +132,34 @@ module E2E
       Array(request("textDocument/references", { textDocument: { uri: uri }, position: { line: line, character: character } }))
     end
 
+    # `textDocument/codeAction` for the diagnostics on one line. Returns
+    # `[title, edits]` pairs, where each edit is `[line, newText]`.
+    def code_actions(uri, line, diagnostics)
+      Array(request("textDocument/codeAction",
+                    { textDocument: { uri: uri },
+                      range: { start: { line: line, character: 0 }, end: { line: line, character: 200 } },
+                      context: { diagnostics: diagnostics } }))
+        .map do |action|
+          edits = (action.dig(:edit, :changes) || {}).values.flatten
+                                                     .map { |e| [e[:range][:start][:line], e[:newText]] }
+          [action[:title], edits]
+        end
+    end
+
+    # The diagnostics the server published for a file, in the shape the
+    # protocol hands back to `codeAction` -- a fix keyed off a diagnostic
+    # has to be asked for with that diagnostic, not with a hand-built one.
+    def published_diagnostics(uri, timeout: 15)
+      deadline = monotonic + timeout
+      while monotonic < deadline
+        found = @mutex.synchronize { @diagnostics_by_uri[uri].dup }
+        return found if found && !found.empty?
+
+        sleep 0.05
+      end
+      []
+    end
+
     # `textDocument/inlayHint` over a whole file. Returns `[line, label]`
     # pairs, sorted, because that is what every example here compares.
     def inlay_hints(uri, last_line: 200)

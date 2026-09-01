@@ -791,6 +791,99 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(on.call(24)).to be_empty
       end
     end
+
+    # 0.3.0. `045`: "the diagnostics that already exist". Each of these is
+    # offered only where the edit is defined -- a quick fix that guesses is
+    # a wrong edit applied with one click, which is section 0 at its
+    # sharpest, because the user never sees the reasoning.
+    it "Q1: offers a `def` for an unknown method, inserted into the class it was called on" do
+      # `QfCaller` is written **first** on purpose. With the receiver's
+      # class first, "insert into the class the call was made on" and
+      # "insert into whichever class this file declares first" are the same
+      # edit, and the example cannot tell them apart.
+      source = "class QfCaller\n  def go\n    QfSubject.new.absent_one\n  end\nend\n\n" \
+               "class QfSubject\n  def known; end\nend\n"
+
+      with_file("app/models/qf_probe.rb", source) do |uri|
+        published = @client.published_diagnostics(uri)
+        unknown = published.select { |d| d[:code] == "unknown-method" }
+        expect(unknown).not_to be_empty, "no unknown-method diagnostic to act on"
+
+        actions = @client.code_actions(uri, unknown.first[:range][:start][:line], unknown)
+        titles = actions.map(&:first)
+        expect(titles).to include(a_string_including("absent_one"))
+
+        # The edit goes into QfSubject's body, not the caller's -- the
+        # method was called *on* QfSubject.
+        edits = actions.find { |t, _| t.include?("absent_one") }.last
+        # Line 7, the first line of `QfSubject`'s body -- which is now
+        # the *second* class in the file, so this cannot be satisfied
+        # by inserting into whichever class comes first.
+        expect(edits.map(&:first)).to eq([7])
+        expect(edits.map(&:last).join).to include("def absent_one")
+      end
+    end
+
+    it "Q2: replaces an unknown route helper with the closest one the application has" do
+      # `posts_path` exists in this workspace (`config/routes.rb` draws
+      # `resources :posts`), and `postss_path` is one edit from it.
+      #
+      # The name has to *end* in `_path` or `_url`, or the engine reads
+      # it as an ordinary unknown method rather than a route helper --
+      # `posts_pathh` was the first attempt and produced
+      # `unknown-method`, which is a different fix. The
+      # first version of this example used a route the application does
+      # not have at all and skipped -- a skipped example is not a passing
+      # one, and this row claims PASS.
+      source = "class QfRoutes\n  def go\n    postss_path\n  end\nend\n"
+
+      with_file("app/models/qf_routes.rb", source) do |uri|
+        published = @client.published_diagnostics(uri)
+        helper = published.select { |d| d[:code] == "unknown-route-helper" }
+        expect(helper).not_to be_empty, "no unknown-route-helper diagnostic: #{published.map { |d| d[:message] }}"
+
+        actions = @client.code_actions(uri, helper.first[:range][:start][:line], helper)
+        expect(actions.map(&:first)).to include("Change to `posts_path`")
+
+        # And the edit replaces the name rather than appending to it.
+        expect(actions.first.last.map(&:last)).to eq(["posts_path"])
+
+        # **And a name that is not close to anything is refused.** Rewriting
+        # one wrong name into another unrelated one is a wrong edit applied
+        # with a click, not a fix -- so the ceiling is what makes this a
+        # capability rather than a name-substitution.
+        far = "class QfFarRoute\n  def go\n    completely_different_thing_path\n  end\nend\n"
+        with_file("app/models/qf_far_route.rb", far) do |far_uri|
+          published_far = @client.published_diagnostics(far_uri)
+          far_helper = published_far.select { |d| d[:code] == "unknown-route-helper" }
+          expect(far_helper).not_to be_empty
+          expect(@client.code_actions(far_uri, far_helper.first[:range][:start][:line], far_helper)).to be_empty
+        end
+      end
+    end
+
+    it "Q3: removes surplus arguments, and offers nothing when there are too few" do
+      source = "class QfArity\n  def takes_two(a, b)\n    [a, b]\n  end\n\n" \
+               "  def too_many\n    takes_two(1, 2, 3)\n  end\n\n" \
+               "  def too_few\n    takes_two(1)\n  end\nend\n"
+
+      with_file("app/models/qf_arity.rb", source) do |uri|
+        published = @client.published_diagnostics(uri)
+        counts = published.select { |d| d[:code] == "argument-count" }
+        expect(counts.length).to eq(2), "expected one diagnostic per call, got #{counts.map { |d| d[:message] }}"
+
+        surplus = counts.find { |d| d[:range][:start][:line] == 6 }
+        missing = counts.find { |d| d[:range][:start][:line] == 10 }
+
+        expect(@client.code_actions(uri, 6, [surplus]).map(&:first))
+          .to include(a_string_including("Remove"))
+
+        # **Nothing for the other one, and that is the capability.** There
+        # is no value to write in place of a missing argument, and writing
+        # `nil` would be this engine putting a guess into the user's file.
+        expect(@client.code_actions(uri, 10, [missing])).to be_empty
+      end
+    end
   end
 
   describe "semantic highlighting" do

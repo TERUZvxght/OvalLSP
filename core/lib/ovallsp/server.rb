@@ -388,6 +388,8 @@ module Ovallsp
         respond(id, with_index_snapshot { references_result(message[:params]) })
       when "textDocument/documentHighlight"
         respond(id, with_index_snapshot { document_highlight_result(message[:params]) })
+      when "textDocument/codeAction"
+        respond(id, with_index_snapshot { code_action_result(message[:params]) })
       when "textDocument/inlayHint"
         respond(id, with_index_snapshot { inlay_hint_result(message[:params]) })
       when "textDocument/typeDefinition"
@@ -2075,6 +2077,11 @@ module Ovallsp
     # A call hierarchy names methods. A class or a constant has no
     # callers in this protocol's sense, and answering for one would be
     # a list of mentions wearing a caller's name.
+    # Beyond this, "closest" stops meaning anything: two names four
+    # edits apart are different names, and rewriting one into the other
+    # is a wrong edit rather than a fix.
+    MAX_ROUTE_HELPER_DISTANCE = 3
+
     CALLABLE_KINDS = %i[instance_method singleton_method].freeze
 
     def document_highlight_result(params)
@@ -2420,6 +2427,133 @@ module Ovallsp
         return Array(found.parameters) if found
       end
       []
+    end
+
+    # `textDocument/codeAction` -- a fix for a diagnostic this engine
+    # published.
+    #
+    # 0.3.0, and `045` calls it "the diagnostics that already exist". Three
+    # codes have an action; the rest do not, and that is the design rather
+    # than a gap. **A quick fix is applied with one click and its reasoning
+    # is never seen**, so it is offered only where the edit it would make is
+    # defined by the diagnostic itself. Section 0's "a wrong answer is worse
+    # than no answer" is at its sharpest on a surface that edits the file.
+    def code_action_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return [] unless document && summary
+
+      Array(params.dig(:context, :diagnostics)).flat_map do |diagnostic|
+        case diagnostic[:code]
+        when "unknown-method" then define_method_action(document, summary, uri, diagnostic)
+        when "unknown-route-helper" then route_helper_action(document, uri, diagnostic)
+        when "argument-count" then surplus_argument_action(summary, uri, diagnostic)
+        else []
+        end
+      end.compact
+    end
+
+    # Insert `def name; end` into the class the call was made on -- which is
+    # the receiver's class, not the file the call is written in.
+    def define_method_action(document, summary, uri, diagnostic)
+      candidate = summary.reference_candidates.find do |c|
+        c.kind == :method_call && c.location == diagnostic[:range]
+      end
+      return [] unless candidate
+
+      resolved = @reference_resolver.resolve(document, [candidate], uri: uri,
+                                                                    generation: @reference_index.generation).first
+      owner = resolved&.symbol_id&.owner || receiver_owner_for(document, candidate)
+      return [] unless owner
+
+      target = @workspace_index.class_declarations(owner).first
+      return [] unless target
+
+      # Just inside the class's own line, at the indentation its body uses.
+      insert_line = target[:range][:start][:line] + 1
+      [{ title: "Define `#{candidate.name}` in #{Index::SymbolId.bare_name(owner)}",
+         kind: "quickfix", diagnostics: [diagnostic],
+         edit: { changes: { target[:uri] => [
+           { range: { start: { line: insert_line, character: 0 }, end: { line: insert_line, character: 0 } },
+             newText: "  def #{candidate.name}\n  end\n\n" }
+         ] } } }]
+    end
+
+    # `candidate.receiver` is `{position:, written_self:}` -- a point, not
+    # a range. The first version asked it for `[:end]` and got `nil`, so
+    # every fix that needed the receiver's type answered nothing and the
+    # example that exists for it failed with an empty list rather than a
+    # wrong one. Read from the structure rather than from what a receiver
+    # looked like it should be.
+    def receiver_owner_for(document, candidate)
+      position = candidate.receiver.is_a?(Hash) ? candidate.receiver[:position] : nil
+      return nil unless position
+
+      type = @query_service.type_at(document, position, initial_env: {})
+      type.is_a?(Types::Nominal) ? type.name.to_s : nil
+    end
+
+    # Replace the name with the closest helper the application actually has.
+    # Nothing is offered when nothing is close: a fix that rewrites one
+    # wrong name into another is worse than the diagnostic alone.
+    def route_helper_action(document, uri, diagnostic)
+      written = word_at_position(document, diagnostic[:range][:start])
+      return [] unless written
+
+      nearest = @route_registry.completion_names.min_by { |name| levenshtein(written, name) }
+      return [] unless nearest && levenshtein(written, nearest) <= MAX_ROUTE_HELPER_DISTANCE
+
+      [{ title: "Change to `#{nearest}`", kind: "quickfix", diagnostics: [diagnostic],
+         edit: { changes: { uri => [{ range: diagnostic[:range], newText: nearest }] } } }]
+    end
+
+    # Too many arguments has a defined edit: delete the ones past the
+    # maximum. **Too few does not**, and nothing is offered there -- there is
+    # no value to write, and writing `nil` would be this engine putting a
+    # guess into the user's file.
+    def surplus_argument_action(summary, uri, diagnostic)
+      candidate = summary.reference_candidates.find do |c|
+        c.kind == :method_call && c.location == diagnostic[:range] && c.arguments
+      end
+      return [] unless candidate
+
+      locations = Array(candidate.arguments[:positional_locations])
+      keep = diagnostic_maximum(diagnostic)
+      return [] unless keep && locations.length > keep
+
+      surplus = locations[keep..]
+      from = locations[keep - 1][:end]
+      to = surplus.last[:end]
+      [{ title: "Remove #{surplus.length} surplus argument#{'s' if surplus.length > 1}",
+         kind: "quickfix", diagnostics: [diagnostic],
+         edit: { changes: { uri => [{ range: { start: from, end: to }, newText: "" }] } } }]
+    end
+
+    # The message states the arity, and the finding's evidence does not
+    # survive the round trip to the client -- so it is read back from the
+    # text the client hands in, which is the only thing the protocol
+    # guarantees is the same on both sides.
+    def diagnostic_maximum(diagnostic)
+      message = diagnostic[:message].to_s
+      return nil unless message =~ /takes (?:at most )?(\d+)|takes (\d+)/
+
+      (Regexp.last_match(1) || Regexp.last_match(2)).to_i
+    end
+
+    # Edit distance, for "the closest helper the application has". Two rows
+    # rather than a full matrix: the inputs are identifier-length and this
+    # runs once per offered fix, so the shorter form is the simpler one.
+    def levenshtein(from, to)
+      previous = (0..to.length).to_a
+      from.each_char.with_index do |a, i|
+        current = [i + 1]
+        to.each_char.with_index do |b, j|
+          current << [previous[j + 1] + 1, current[j] + 1, previous[j] + (a == b ? 0 : 1)].min
+        end
+        previous = current
+      end
+      previous.last
     end
 
     def range_span(range)
@@ -3780,6 +3914,7 @@ module Ovallsp
           callHierarchyProvider: true,
           typeDefinitionProvider: true,
           inlayHintProvider: true,
+          codeActionProvider: true,
           renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
           completionProvider: { triggerCharacters: ["."], resolveProvider: true },

@@ -806,3 +806,31 @@
   to: "        return [] if false &&\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "I2: labels each argument with the parameter name it is passed as"
+
+# Quick fixes (Q1-Q3), 0.3.0. Every one of these is a refusal or an
+# aim: a code action edits the file with one click and is never
+# explained, so a wrong one is worse than none.
+- why: "insert into the class the call was made on, not whichever the file declares first. A quick fix writes into the user's file and its reasoning is never seen."
+  file: core/lib/ovallsp/server.rb
+  from: "      target = @workspace_index.class_declarations(owner).first\n"
+  to: "      target = @workspace_index.class_declarations(summary.declarations.first.symbol_id.name.to_s).first\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "Q1: offers a `def` for an unknown method, inserted into the class it was called on"
+- why: "the distance ceiling. Rewriting one wrong name into an unrelated one is a wrong edit applied with a click, not a fix."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] unless nearest && levenshtein(written, nearest) <= MAX_ROUTE_HELPER_DISTANCE\n"
+  to: "        return [] unless nearest\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "Q2: replaces an unknown route helper with the closest one the application has"
+- why: "the nearest helper, not the first one the registry lists."
+  file: core/lib/ovallsp/server.rb
+  from: "      nearest = @route_registry.completion_names.min_by { |name| levenshtein(written, name) }\n"
+  to: "        nearest = @route_registry.completion_names.first\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "Q2: replaces an unknown route helper with the closest one the application has"
+- why: "surplus only. With too few arguments there is no value to write, and offering a fix there would put this engine's guess into the user's file."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] unless keep && locations.length > keep\n"
+  to: "        return [] unless keep\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "Q3: removes surplus arguments, and offers nothing when there are too few"
