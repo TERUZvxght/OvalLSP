@@ -851,7 +851,7 @@ module Ovallsp
       saved_budget = @step_budget
       merged = {}
       disputed = []
-      body.child_nodes.compact.grep(Prism::DefNode).each do |sibling|
+      body.child_nodes.compact.grep(Prism::DefNode).reject(&:receiver).each do |sibling|
         infer_ivars_for_method_node(sibling, self_type_name: current_self_type_name,
                                              reset_budget: false).each do |name, type|
           next if type.is_a?(Types::Unknown)
@@ -861,6 +861,20 @@ module Ovallsp
           else
             merged[name] = type
           end
+        end
+
+        # The walk above answers "what type", and `next if Unknown`
+        # is right for that question and wrong for "was it assigned".
+        # `@memo ||= []`, a multiple assignment, an assignment inside
+        # `case` or `rescue` -- each is an assignment the type fold
+        # does not model, and each was missing from a list the reader
+        # reads as complete. `#assigned_ivar_names` carries the same
+        # note for the view check, which met this in 0.2.0.
+        #
+        # Typed entries win; these only fill the gaps, and a disputed
+        # name stays out either way.
+        Diagnostics::Engine::IvarWriteCollector.new.tap { |c| sibling.accept(c) }.names.uniq.each do |name|
+          merged[name.to_sym] = Types::UNKNOWN unless merged.key?(name.to_sym)
         end
       end
       merged.reject { |name, _| disputed.include?(name) }

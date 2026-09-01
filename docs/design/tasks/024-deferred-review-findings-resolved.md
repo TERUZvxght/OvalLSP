@@ -14820,6 +14820,138 @@ Driven through a real server after the merge, renaming `label`:
 three edits, the file parses, and the keys are untouched.
 
 
+
+**0.3.0 changed one of this entry's two answers.** The pattern half —
+`in {a:}`, where the key is left as written and the use is rewritten —
+was chosen here on the argument that a partial rename is louder than a
+`case` that silently matches differently. Both of those are wrong
+answers. The third, refusing, was not weighed, and section 0 ranks it
+above either.
+
+`024.273` takes it, and not as a decision about patterns: the planner
+now refuses a local rename when no occurrence of the local is a write,
+which is to say when this engine does not know where the local is
+bound. A hash pattern's shorthand is one of the two bindings it does
+not record, so it is refused with a reason instead of half-rewritten.
+The `helper(limit:)` and `{a:}` halves of this entry are unaffected:
+those are recorded, and they expand.
+
+## 024.273 Renaming a local that is a parameter leaves the parameter behind, and the answer can be silent
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.3.0
+released-in: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`
+
+`ParserService::Visitor` records a local-variable reference from the
+six node kinds that *use* a local. It records nothing from the node
+kinds that declare a **parameter** — `RequiredParameterNode`,
+`OptionalParameterNode`, the two keyword parameter nodes,
+`RestParameterNode`, `KeywordRestParameterNode`, `BlockParameterNode`
+— and a parameter is where most locals in real code are bound. So
+renaming `value` in `def double(value); value * 2; end` rewrites the
+body and leaves the `def` line, and the method stops working.
+
+**The failure is not always loud, and that is what makes this the
+largest of the rename findings rather than an untidy one.** Where the
+remaining occurrence assigns before reading, the renamed file runs and
+answers something else:
+
+```
+$ ruby -e '
+def before(names) = ((names = names || ["fallback"]); names)
+def after(names)  = ((renamed = renamed || ["fallback"]); renamed)
+p before(["given"])
+p after(["given"])
+'
+# => ["given"]
+# => ["fallback"]
+# ruby 3.4.10
+```
+
+Both halves reproduce at BASE `98fc14e`, so this predates 0.2.17 and
+is not caused by it.
+
+**Measured, because the size of it is the argument for taking it
+next.** Every local-variable symbol in 1,179 files of activerecord,
+activesupport, actionpack, railties, rbs and irb was renamed to a
+fresh same-length name, the edits applied, the file re-parsed, and the
+two syntax trees compared with the new name mapped back:
+
+```
+ruby rename_oracle.rb, 1,179 files, identical corpus on every side.
+
+                                renames   locals whose rename       of those, the name is
+                                checked   changes the meaning       a parameter in that file
+  BASE 98fc14e                   25,863                 9,157                        —
+  this release                   23,091                 7,813                    7,816 of 7,901*
+
+  renames that stop the file parsing:  BASE 130    this release 0
+
+* the parameter count is over this release's set including the 88 that are also
+  counted under another shape; 99% of what remains is this entry.
+```
+
+**0.2.17 adds instances to it**, and the entry says so rather than
+leaving it to be discovered: recording the compound spellings
+(`024.260`) makes a parameter renameable from an occurrence that used
+to have no candidate. Over the same corpus that is **one** local —
+`activerecord/lib/active_record/encryption/encryptable_record.rb`'s
+`attribute_names`, an optional parameter whose only other spelling is
+`|=`, where the renamed file runs and answers `true`. Against 130
+non-parsing renames and 1,344 broken locals removed, the release is
+taken with this recorded rather than held.
+
+**The direction** is to record the parameter's own range, declining
+the two keyword-parameter nodes for `024.272`'s reason — `def m(by:)`
+spells the method's interface, and rewriting it renames the keyword
+every caller passes, not the local. That is a capability change with
+its own corpus to drive, which is why it is an entry rather than a
+hunk in a review round.
+
+Pinned as `parser_scope_frames_spec.rb`'s "does not record a
+parameter's own range, so a rename leaves the `def` line behind", so
+the gap is a written decision rather than an absence.
+
+**Taken in 0.3.0, and the shape of the fix is not quite the one this
+entry named.** The direction above was "record the parameter's own
+range, declining the two keyword-parameter nodes". The recording half
+is done: seven parameter kinds now record their binding site as a
+write, which also gave 0.3.0's `documentHighlight` (F1) the occurrence
+it was missing — the feature did not work for the commonest local in
+Ruby without it.
+
+**Declining to record the keyword nodes was not enough on its own**,
+and this entry did not see it. With no binding site recorded, Rename
+did not refuse — it rewrote the body and left the signature, which is
+this entry's own failure arriving through the exception it named:
+
+```
+def m(by:)      def m(by:)
+  by * 2    ->    factor * 2
+end             end
+```
+
+This entry argued that "an occurrence nothing records is one nothing
+can miss". That is true of the occurrence and false of the *count*:
+`Rename::Planner` now refuses a local rename when **no occurrence of
+the local is a write**, which is to say when this engine does not know
+where the local is bound. Every binding form the parser records is
+recorded as a write, so the question is always answerable, and any
+binding form added later is refused rather than half-rewritten until
+it is recorded. `Index::Reference` carries `write` for that reader, the
+way it already carried `implicit_hash_value` for the same one.
+
+**Not re-measured.** The corpus figures above were taken before the
+fix. `scripts/rename_oracle.rb` over the same 1,043-file corpus is the
+way to re-take them, and it was not run to completion here; the
+published limitation was rewritten to state the shape rather than to
+carry a number nothing measured.
 ## 024.277 A local variable's identity follows the cref, so a block that changes `self` splits it
 
 ```yaml

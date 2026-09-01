@@ -1068,6 +1068,97 @@ module Ovallsp
         super
       end
 
+      # **A parameter binds a local, and its own name was not an
+      # occurrence of it.** Each scope frame is seeded from Prism's
+      # `#locals`, which lists the parameter names, so a *use* of `arg`
+      # resolved to the right frame from the start -- and nothing ever
+      # recorded the `arg` written in the signature. Every reader of
+      # those occurrences was therefore one short: documentHighlight
+      # answered with the body alone, and Rename rewrote the body alone,
+      # handing back
+      #
+      #   def g(arg)
+      #     renamed + 1
+      #   end
+      #
+      # which parses and raises `NameError`. That is the defect 0.2.17
+      # shipped a fix for, reached through a binding form that had never
+      # been recorded -- and Rename could not have refused instead,
+      # because an occurrence nothing records is one nothing can miss.
+      #
+      # Recorded as a write: the binding site is where the value arrives.
+      #
+      # The keyword forms need `#chop`, because Prism's `name_loc` for
+      # them spans the colon as well:
+      #
+      #   $ ruby -rprism -e '
+      #   n = Prism.parse("def f(key:); end").value.statements.body.first
+      #   p n.parameters.keywords.first.name_loc.slice
+      #   '
+      #   # => "key:"
+      #   # ruby 3.4.10
+      #
+      # `#record_local_variable` compares the range against the name and
+      # declines when they differ, so an unchopped keyword would have been
+      # dropped silently rather than recorded wrong -- the safe half of a
+      # guard doing the work a visitor should.
+      def visit_required_parameter_node(node)
+        record_parameter_binding(node)
+        super
+      end
+
+      def visit_optional_parameter_node(node)
+        record_parameter_binding(node)
+        super
+      end
+
+      def visit_rest_parameter_node(node)
+        record_parameter_binding(node)
+        super
+      end
+
+      def visit_keyword_rest_parameter_node(node)
+        record_parameter_binding(node)
+        super
+      end
+
+      def visit_block_parameter_node(node)
+        record_parameter_binding(node)
+        super
+      end
+
+      # A bare `*`, `**` or `&` binds nothing nameable, and Prism gives
+      # those a nil name.
+      #
+      # **Which location holds the name is not uniform.** A
+      # `RequiredParameterNode` has no `name_loc` at all -- its own
+      # `location` is the name -- while the other kinds have one:
+      #
+      #   $ ruby -rprism -e 'ps = Prism.parse("def f(a, b = 1); end").value.statements.body.first.parameters
+      #                      p ps.requireds.first.respond_to?(:name_loc)
+      #                      p ps.optionals.first.name_loc.slice'
+      #   # => false
+      #   # => "b"
+      #   # ruby 3.4.10
+      #
+      # Reaching for `name_loc` on all of them raised `NoMethodError`
+      # inside the walk, which took hover, signature help, the arity check
+      # and both inlay hints down with it: thirteen examples, one cause.
+      # `#record_local_variable` compares the range against the name and
+      # declines when they differ, so a location picked wrongly here is
+      # dropped rather than recorded wrong.
+      #
+      # **The two keyword nodes are not here, deliberately.** `def m(by:)`
+      # spells the method's interface: rewriting that `by` renames the
+      # keyword every caller passes, not the local. `024.273` names the
+      # direction and names the exception, and `024.272` is the reason.
+      def record_parameter_binding(node)
+        return unless node.name
+
+        location = node.respond_to?(:name_loc) && node.name_loc ? node.name_loc : node.location
+        record_local_variable(node.name, location, write: true)
+      end
+
       # `a, b = 1, 2`, a `for` variable, `rescue => e`, a pattern capture
       # and a regexp named capture all arrive here. This node has no
       # `#name_loc`, so its own location is the name -- except where it
@@ -1100,8 +1191,15 @@ module Ovallsp
       # had: until this release no target spelling was recorded at all.
       # A plain `_a = 1` write is unaffected -- that is a write node, and
       # writes may repeat freely.
+      # **A target assigns.** Every binding form that is not a plain
+      # write node arrives here -- a multiple assignment's left-hand
+      # side, a `for` variable, every pattern binding, `x => bound`,
+      # `rescue => e` -- and 0.3.0's `write` flag was set only by the
+      # four write-node visitors, so `a, b = 1, 2` recorded `a` as a
+      # read: no inlay hint, and `Read` where documentHighlight should
+      # say `Write`.
       def visit_local_variable_target_node(node)
-        record_local_variable(node.name, node.location) unless node.name.start_with?("_")
+        record_local_variable(node.name, node.location, write: true) unless node.name.start_with?("_")
         super
       end
 
@@ -1248,7 +1346,13 @@ module Ovallsp
         return unless frame
 
         record_reference(:local_variable, value.name.to_s, node.location,
-                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: true)
+                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: true,
+                         # A read: `{ name: }` passes the local's value.
+                         # This reached `record_reference` directly and
+                         # took the `nil` default, which downstream reads
+                         # as "not a local" -- so one occurrence of a
+                         # local answered `Text` and the next `Read`.
+                         write: false)
         # `super` is deliberately not called, and deliberately not
         # *guarded against* either: measured, descending adds no second
         # candidate for the same name, because the read inside an
@@ -1260,13 +1364,18 @@ module Ovallsp
         # on the omission.
       end
 
+      # An ivar carries the same `write` flag a local does, and for the
+      # same two readers: inlay hints label assignments, and
+      # documentHighlight answers `Read`/`Write`. Without it both
+      # answered `Text` -- the flag's `nil` default, which downstream
+      # reads as "not known to be either".
       def visit_instance_variable_read_node(node)
-        record_reference(:ivar, node.name.to_s, node.location)
+        record_reference(:ivar, node.name.to_s, node.location, write: false)
         super
       end
 
       def visit_instance_variable_write_node(node)
-        record_reference(:ivar, node.name.to_s, node.name_loc)
+        record_reference(:ivar, node.name.to_s, node.name_loc, write: true)
         super
       end
 

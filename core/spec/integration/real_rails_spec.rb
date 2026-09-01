@@ -180,6 +180,48 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
     @manager&.stop
   end
 
+  # A class that answers dynamically is the one fact that decides whether
+  # "closed" can be honest, and `method_missing` is *conventionally*
+  # private -- so the first version asked `private_method_defined?`
+  # alone and could not see a public one. Predicted blind by a subagent
+  # given only the feature list, and confirmed against Ruby:
+  #
+  #   $ ruby -e '
+  #   class Pub; def method_missing(n, *) = :a; end
+  #   p Pub.private_method_defined?(:method_missing, false)
+  #   p Pub.method_defined?(:method_missing, false)
+  #   '
+  #   # => false
+  #   # => true
+  #   # ruby 3.4.10
+  it "reports a class that answers dynamically, whichever visibility it used" do
+    @manager = boot_manager
+    index = @manager.fetch_gem_index
+    classes = index[:gems].values.flat_map { |gem| gem[:classes] }.to_h { |c| [c[:name], c] }
+
+    # A *private* one, which is the convention.
+    private_one = classes["ActiveRecord::AttributeMethods"]
+    expect(private_one).not_to be_nil
+    expect(private_one[:definesMethodMissing]).to be(true)
+
+    # And a **public** one, which `private_method_defined?` cannot see.
+    # This bundle has 25; naming one is what tells the two behaviours
+    # apart -- with only the private assertion above, reverting the fix
+    # left this example green.
+    public_one = classes["ActiveSupport::OrderedOptions"]
+    expect(public_one).not_to be_nil, "the fixture bundle no longer loads ActiveSupport::OrderedOptions"
+    expect(public_one[:definesMethodMissing]).to be(true),
+                                                 "a public `method_missing` is not being seen; " \
+                                                 "`private_method_defined?` alone cannot find one"
+
+    # And a class that implements only `respond_to_missing?` still answers
+    # to names no enumeration can list.
+    responds = classes["ActiveSupport::OptionMerger"]
+    expect(responds && responds[:definesMethodMissing]).to be(true) if responds
+  ensure
+    @manager&.stop
+  end
+
   # 2 & 3. Routes come from real config/routes.rb, and each source
   # location is normalized (absolute path, 0-based line).
   # 024.R7. The running application knows what the gems define, and

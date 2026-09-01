@@ -809,14 +809,14 @@ measurement by driving the product, and none of those had been reported
 before; the first three below were found in 0.2.17, by renaming every
 local in a thousand files of real gem source and running what came out.
 
-- **Renaming a local that is a method or block parameter leaves the
-  parameter behind**, so the renamed method stops working — and where
-  the body assigns before it reads (`names = names || []`), nothing
-  raises and the method quietly answers something else. This is the
-  largest of the shapes here by a long way: renaming every local across
-  1,043 files of Rails and i18n source leaves 57 renames that change
-  what the file means, and every one of them is
-  this. <!-- documents: 024.273 -->
+- **Renaming a local that is a *keyword* parameter is refused**, with the
+  reason shown. `def m(by:)` binds a local named `by` *because* the
+  keyword is `by`, and Ruby has no spelling that separates the two — so
+  renaming the local would rename the keyword every caller passes, which
+  is a different edit from the one asked for. Nothing is edited; change
+  the signature and its call sites by hand. Every other parameter —
+  positional, optional, `*rest`, `**opts`, `&block`, and block
+  parameters — is renamed with its uses.
 - **A binding whose name begins with an underscore is left behind**
   when it is written as a multiple-assignment target, a `for`
   variable, a `rescue => _e` or a pattern. Ruby lets one pattern bind

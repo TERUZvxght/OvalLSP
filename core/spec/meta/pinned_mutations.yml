@@ -608,8 +608,8 @@
   example: "separates a name that only the block binds from a same-named local written after it"
 - why: "Recording LocalVariableTargetNode -- `a, b = 1, 2`, a `for` variable and `rescue => e` are bindings Rename has to rewrite with the rest."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        record_local_variable(node.name, node.location) unless node.name.start_with?(\"_\")\n"
-  to: "        nil unless node.name.start_with?(\"_\")\n"
+  from: "        record_local_variable(node.name, node.location, write: true) unless node.name.start_with?(\"_\")\n"
+  to: "        super\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "records a multiple-assignment target"
 - why: "Declining an underscore-prefixed target -- Ruby lets one pattern bind such a name twice, so two edits that are each the name exactly make the file stop parsing."
@@ -693,8 +693,8 @@
   example: "records one flagged site per shorthand, and leaves the ordinary sites alone"
 - why: "the flag that says this range is a `key:` token rather than an identifier -- without it a rewrite substitutes over the colon, and the hash literal stops parsing."
   file: core/lib/ovallsp/parser_service.rb
-  from: "                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: true)\n"
-  to: "                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: false)\n"
+  from: "                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: true,\n"
+  to: "                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: false,\n"
   spec: spec/ovallsp/parser_service_spec.rb
   example: "records one flagged site per shorthand, and leaves the ordinary sites alone"
 
@@ -883,3 +883,51 @@
   to: "        return nil if decls.empty?\n"
   spec: spec/ovallsp/semantic/gem_backed_closure_spec.rb
   example: "reports nothing about the gem's own methods, inherited or direct"
+- why: "A hint that repeats its own argument is noise; `take(name)` rendered `name: name`."
+  file: core/lib/ovallsp/server.rb
+  from: "          next if argument_spells?(document, location, parameter.name)\n"
+  to: "          next if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I2: says nothing where the argument already spells the parameter"
+- why: "The call-site splat refusal. Labelling by index across a splat names the parameter Ruby did not use."
+  file: core/lib/ovallsp/server.rb
+  from: "          !candidate.arguments[:splat] && named_call?(candidate.name) &&\n"
+  to: "          true && named_call?(candidate.name) &&\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I2: says nothing about a call whose arguments are splatted"
+- why: "The operator refusal. `self + v` labelled `v` with `other:`, which is true and says nothing."
+  file: core/lib/ovallsp/server.rb
+  from: "          !candidate.arguments[:splat] && named_call?(candidate.name) &&\n"
+  to: "          !candidate.arguments[:splat] && true &&\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I2: says nothing about an operator call"
+- why: "A parameter's binding site is an occurrence of the local. Without it Rename rewrote the body and left the signature, handing back a file that raises NameError."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        record_local_variable(node.name, location, write: true)\n"
+  to: "        nil\n"
+  spec: spec/ovallsp/server_rename_spec.rb
+  example: "rewrites a parameter's own binding site, not only its uses"
+- why: "The singleton side holds different variables. Without this an `@x` written in `def self.build` was offered inside instance methods, where it reads nil."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "      body.child_nodes.compact.grep(Prism::DefNode).reject(&:receiver).each do |sibling|\n"
+  to: "      body.child_nodes.compact.grep(Prism::DefNode).each do |sibling|\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "C15: offers the instance side only, including names it cannot type"
+- why: "A name the type walk cannot type is still a name the class assigns; `@memo ||= []` was missing from a list the reader reads as complete."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "          merged[name.to_sym] = Types::UNKNOWN unless merged.key?(name.to_sym)\n"
+  to: "          nil unless merged.key?(name.to_sym)\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "C15: offers the instance side only, including names it cannot type"
+- why: "A sigil inside a string is text. Without the mask, typing an address into a string opened the class's instance variables."
+  file: core/lib/ovallsp/server.rb
+  from: "      if inside_string_or_comment?(document, document.position_to_char_offset(position))\n"
+  to: "      if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "C15: says nothing at a sigil inside a string"
+- why: "A heredoc keeps its body below; deleting only the marker leaves it as live code that still parses."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] if opens_a_heredoc?(document, from, to)\n"
+  to: "      return [] if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "Q3: offers nothing where the surplus argument is a heredoc"

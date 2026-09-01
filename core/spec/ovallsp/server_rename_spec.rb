@@ -119,6 +119,69 @@ RSpec.describe "Ovallsp::Server textDocument/prepareRename and textDocument/rena
     expect(lines).to contain_exactly(1, 2)
   end
 
+  # **Renaming from a parameter's use rewrote the body and left the
+  # signature**, which is the failure 0.2.17 shipped a fix for arriving
+  # through a binding form nothing recorded:
+  #
+  #   def g(arg)     ->   def g(arg)
+  #     arg + 1             renamed + 1
+  #   end                 end
+  #
+  # That parses and raises `NameError` when it runs. The parser seeded
+  # each frame from Prism's `#locals`, so the *use* resolved and the
+  # binding site was never an occurrence -- so Rename could not know it
+  # had missed one, and refusing was not available to it either.
+  it "rewrites a parameter's own binding site, not only its uses" do
+    input =
+      did_open("file:///param.rb", "def g(arg)\n  arg + 1\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///param.rb" }, position: { line: 1, character: 2 },
+                  newName: "renamed" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    edits = sent_messages.first[:result][:changes][:"file:///param.rb"]
+    starts = edits.map { |e| [e[:range][:start][:line], e[:range][:start][:character]] }.sort
+
+    expect(starts).to eq([[0, 6], [1, 2]]),
+                      "rewriting the use alone hands back a file that raises NameError"
+  end
+
+  # **A keyword parameter's name is the method's interface, and Ruby has
+  # no spelling that separates the two.** `def m(by:)` binds a local
+  # named `by` *because* the keyword is `by`; there is no `def m(by: as
+  # factor)`. So renaming the local necessarily renames the keyword
+  # every caller passes, which is not the edit the user asked for and
+  # not one any caller would be given.
+  #
+  # The parser therefore records no binding site for it -- and that on
+  # its own left the worse answer, not the safe one: the body was
+  # rewritten and the signature left, exactly the file-that-does-not-run
+  # shape. Refusing is the answer, and the planner asks a question it
+  # can always answer: **do I know where this local is bound?** A local
+  # with no write among its occurrences has a binding site this engine
+  # cannot see, whatever the reason, and rewriting the rest of it is
+  # never right.
+  it "refuses to rename a keyword parameter rather than rewriting half of it" do
+    input =
+      did_open("file:///kw.rb", "def m(by:)\n  by * 2\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///kw.rb" }, position: { line: 1, character: 2 },
+                  newName: "factor" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    changes = sent_messages.first[:result]&.dig(:changes)
+    expect(changes.to_h.values.flatten).to be_empty,
+                                           "rewriting the body alone leaves a method that raises NameError"
+  end
+
   # **prepareRename does not rebuild the reference index, and that is a
   # decision.** `024.245` reported the asymmetry: Find References and
   # rename rebuild it first and this does not, a local variable has no

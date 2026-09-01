@@ -214,6 +214,7 @@ settle. Everything it declines is listed under the non-goals below.
 | W4 | Renames a method a macro declared (`attr_accessor`, `delegate`, …) | nothing is edited — the macro's argument is source the macro reads, not the method's name, so rewriting it also changes the ivar an `attr_*` reads, the second method `attr_accessor` declares, the label an `enum` uses for its scope and its stored mapping, or the method a `delegate` calls on its target. The editor shows its own refusal; the reason is logged, not surfaced (024.28) | PASS |
 | W5 | Opens the call hierarchy on a workspace method | its callers, across files, each with the range of the call inside the calling method | PASS |
 | W6 | Expands the outgoing side | the methods that method calls, each with the range of the call | PASS |
+| W7 | Renames a local that a method or block parameter declares | the declaration is rewritten with the uses — leaving it behind hands back a method that raises `NameError`, or one that silently answers something else where the body assigns before it reads. A *keyword* parameter is refused instead: its name is the method's interface, and rewriting it renames the keyword every caller passes (024.273) | PASS |
 
 ## In the current file
 

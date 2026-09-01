@@ -445,7 +445,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.270`](024-deferred-review-findings-resolved.md#024270-not-a-defect-recorded-so-nobody-promotes-it-into-one) | done | 0.2.17 | Not a defect — recorded so nobody promotes it into one |
 | [`024.271`](024-deferred-review-findings-resolved.md#024271-renaming-a-local-leaves-def-local-method-behind-so-the-file-stops-running) | fixed | 0.2.17 | Renaming a local leaves `def <local>.method` behind, so the file sto… |
 | [`024.272`](024-deferred-review-findings-resolved.md#024272-renaming-a-local-leaves-every-value-omitted-shorthand-behind-so-the-rename-is-still-partial) | fixed | 0.2.17 | Renaming a local leaves every value-omitted shorthand behind, so the… |
-| [`024.273`](#024273-renaming-a-local-that-is-a-parameter-leaves-the-parameter-behind-and-the-answer-can-be-silent) | open | 0.3.0 | Renaming a local that is a parameter leaves the parameter behind, an… |
+| [`024.273`](024-deferred-review-findings-resolved.md#024273-renaming-a-local-that-is-a-parameter-leaves-the-parameter-behind-and-the-answer-can-be-silent) | fixed | 0.3.0 | Renaming a local that is a parameter leaves the parameter behind, an… |
 | [`024.274`](#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | open | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
 | [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | unscheduled | A workspace-identity example fails only in a full-suite run, and not… |
 | [`024.276`](#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | open | 0.3.0 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
@@ -4011,87 +4011,6 @@ two shorthand rows, where the recorded range covered the colon.
 `024.274`. The six that remain are what this is waiting on.
 
 **Retargeted in 0.2.17 to the release its blockers are in.** The refusal is the guard, and it stays until the shapes behind it are fixed: six of the eight remain, and the two largest — `024.273` and `024.274` — are at 0.3.0. Warming the index here before they are done converts "the editor refuses" into "the editor rewrites your file wrongly", which section 0.4 ranks the other way round. Nothing about this waits on 0.2.17; it waits on them.
-
-## 024.273 Renaming a local that is a parameter leaves the parameter behind, and the answer can be silent
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.0
-```
-
-**Area:** `core/lib/ovallsp/parser_service.rb`
-
-`ParserService::Visitor` records a local-variable reference from the
-six node kinds that *use* a local. It records nothing from the node
-kinds that declare a **parameter** — `RequiredParameterNode`,
-`OptionalParameterNode`, the two keyword parameter nodes,
-`RestParameterNode`, `KeywordRestParameterNode`, `BlockParameterNode`
-— and a parameter is where most locals in real code are bound. So
-renaming `value` in `def double(value); value * 2; end` rewrites the
-body and leaves the `def` line, and the method stops working.
-
-**The failure is not always loud, and that is what makes this the
-largest of the rename findings rather than an untidy one.** Where the
-remaining occurrence assigns before reading, the renamed file runs and
-answers something else:
-
-```
-$ ruby -e '
-def before(names) = ((names = names || ["fallback"]); names)
-def after(names)  = ((renamed = renamed || ["fallback"]); renamed)
-p before(["given"])
-p after(["given"])
-'
-# => ["given"]
-# => ["fallback"]
-# ruby 3.4.10
-```
-
-Both halves reproduce at BASE `98fc14e`, so this predates 0.2.17 and
-is not caused by it.
-
-**Measured, because the size of it is the argument for taking it
-next.** Every local-variable symbol in 1,179 files of activerecord,
-activesupport, actionpack, railties, rbs and irb was renamed to a
-fresh same-length name, the edits applied, the file re-parsed, and the
-two syntax trees compared with the new name mapped back:
-
-```
-ruby rename_oracle.rb, 1,179 files, identical corpus on every side.
-
-                                renames   locals whose rename       of those, the name is
-                                checked   changes the meaning       a parameter in that file
-  BASE 98fc14e                   25,863                 9,157                        —
-  this release                   23,091                 7,813                    7,816 of 7,901*
-
-  renames that stop the file parsing:  BASE 130    this release 0
-
-* the parameter count is over this release's set including the 88 that are also
-  counted under another shape; 99% of what remains is this entry.
-```
-
-**0.2.17 adds instances to it**, and the entry says so rather than
-leaving it to be discovered: recording the compound spellings
-(`024.260`) makes a parameter renameable from an occurrence that used
-to have no candidate. Over the same corpus that is **one** local —
-`activerecord/lib/active_record/encryption/encryptable_record.rb`'s
-`attribute_names`, an optional parameter whose only other spelling is
-`|=`, where the renamed file runs and answers `true`. Against 130
-non-parsing renames and 1,344 broken locals removed, the release is
-taken with this recorded rather than held.
-
-**The direction** is to record the parameter's own range, declining
-the two keyword-parameter nodes for `024.272`'s reason — `def m(by:)`
-spells the method's interface, and rewriting it renames the keyword
-every caller passes, not the local. That is a capability change with
-its own corpus to drive, which is why it is an entry rather than a
-hunk in a review round.
-
-Pinned as `parser_scope_frames_spec.rb`'s "does not record a
-parameter's own range, so a rename leaves the `def` line behind", so
-the gap is a written decision rather than an absence.
 
 ## 024.274 An underscore-prefixed target is not recorded, because Ruby lets one pattern bind it twice
 

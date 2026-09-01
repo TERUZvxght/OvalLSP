@@ -107,6 +107,23 @@ RSpec.describe "Extension capabilities", :e2e do
     yield @client.open(path, text: source), path
   end
 
+  # Applies a WorkspaceEdit's text edits to `source` and returns the
+  # result, so an example can assert about the file the user would be
+  # left holding rather than about the edit's shape. Applied last-first
+  # so an earlier edit's offsets are still valid.
+  def apply_edits(source, edits)
+    lines = source.lines
+    ordered = edits.sort_by { |e| [e[:range][:start][:line], e[:range][:start][:character]] }.reverse
+    ordered.each do |edit|
+      from = edit[:range][:start]
+      to = edit[:range][:end]
+      head = (lines[from[:line]] || "")[0...from[:character]]
+      tail = (lines[to[:line]] || "")[to[:character]..] || ""
+      lines[from[:line]..to[:line]] = [head + edit[:newText] + tail]
+    end
+    lines.join
+  end
+
   describe "baseline" do
     it "B1/B2: reaches a ready state against a real Rails app" do
       expect(@state).to eq("ready-rails")
@@ -792,6 +809,71 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # **A label that repeats the argument is noise.** `take(name)` against
+    # `def take(name)` rendered `name: name`; every other language server
+    # suppresses that, and a hint's whole value is telling the reader
+    # something the code does not already say.
+    #
+    # Predicted blind by a subagent given only the feature list.
+    it "I2: says nothing where the argument already spells the parameter" do
+      source = "class EchoProbe\n  def take(name, other)\n    [name, other]\n  end\n\n" \
+               "  def go(name)\n    take(name, 2)\n  end\nend\n"
+
+      with_file("app/models/echo_probe.rb", source) do |uri|
+        labels = @client.inlay_hints(uri).select { |(line, _)| line == 6 }.map(&:last)
+
+        expect(labels).to eq(["other:"]),
+                          "expected only the argument whose name differs to carry a label"
+      end
+    end
+
+    # **The index stops meaning the position once a splat is passed.** Ruby
+    # fills the parameters from a flattened argument list, so the argument
+    # written third is not the third parameter:
+    #
+    #   $ ruby -e '
+    #   def f(a, b, c) = [a, b, c]
+    #   rest = [2]
+    #   p f(1, *rest, 3)
+    #   '
+    #   # => [1, 2, 3]
+    #   # ruby 3.4.10
+    #
+    # `3` is passed as `c`. Labelling by index writes `b:` beside it, in the
+    # margin, as the engine's answer. The parser already records `splat:`
+    # for exactly this reason and the two other readers of that shape --
+    # the arity check and the argument-type check -- each open by refusing
+    # it; this is the third.
+    #
+    # Predicted blind by two independent subagents given only the feature
+    # list, and the comment here previously asserted the opposite.
+    it "I2: says nothing about a call whose arguments are splatted" do
+      source = "class SplatProbe\n  def take(a, b, c)\n    [a, b, c]\n  end\n\n" \
+               "  def go(rest)\n    take(1, *rest, 3)\n  end\nend\n"
+
+      with_file("app/models/splat_probe.rb", source) do |uri|
+        labels = @client.inlay_hints(uri).select { |(line, _)| line == 6 }.map(&:last)
+
+        expect(labels).to be_empty,
+                          "labelling by index across a splat names the parameter Ruby did not use"
+      end
+    end
+
+    # An operator call carries no name worth showing. `self + v` rendered
+    # `other:` beside `v`, which is true and tells the reader nothing --
+    # the same noise the example above refuses, arriving from the operand
+    # side rather than the argument side.
+    it "I2: says nothing about an operator call" do
+      source = "class OperandProbe\n  def +(other)\n    other\n  end\n\n" \
+               "  def go(v)\n    self + v\n  end\nend\n"
+
+      with_file("app/models/operand_probe.rb", source) do |uri|
+        labels = @client.inlay_hints(uri).select { |(line, _)| line == 6 }.map(&:last)
+
+        expect(labels).to be_empty, "an operator's operand does not need naming"
+      end
+    end
+
     # 0.3.0. `045`: "the diagnostics that already exist". Each of these is
     # offered only where the edit is defined -- a quick fix that guesses is
     # a wrong edit applied with one click, which is section 0 at its
@@ -822,6 +904,48 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(edits.map(&:first)).to eq([7])
         expect(edits.map(&:last).join).to include("def absent_one")
       end
+    end
+
+    # Where the class body's end is found by scanning, three shapes can
+    # move it: a class written on one line, a class holding a nested
+    # class, and a heredoc whose text contains the word `end`. Each was
+    # predicted blind as a place the insertion would land inside another
+    # construct; this drives all three and asserts the file still parses,
+    # which is the property that actually matters on a surface that edits
+    # with one click.
+    it "Q1: inserts into the right body when the class's end is not the first one" do
+      shapes = {
+        "one_line" => "class QfOneLine < Object; def known; end; end\n" \
+                      "class QfOneLineCaller\n  def go\n    QfOneLine.new.absent_a\n  end\nend\n",
+        "nested" => "class QfNested\n  class Inner\n    def known; end\n  end\nend\n" \
+                    "class QfNestedCaller\n  def go\n    QfNested.new.absent_b\n  end\nend\n",
+        "heredoc_end" => "class QfHeredocEnd\n  def text\n    <<~BODY\n      end\n    BODY\n  end\nend\n" \
+                         "class QfHeredocEndCaller\n  def go\n    QfHeredocEnd.new.absent_c\n  end\nend\n"
+      }
+
+      driven = []
+      shapes.each do |name, source|
+        with_file("app/models/qf_shape_#{name}.rb", source) do |uri|
+          unknown = @client.published_diagnostics(uri).select { |d| d[:code] == "unknown-method" }
+          next if unknown.empty?
+
+          action = @client.code_action_edits(uri, unknown.first[:range][:start][:line], unknown)
+                          .find { |title, _| title.include?("absent_") }
+          next unless action
+
+          driven << name
+
+          edits = action.last
+          applied = apply_edits(source, edits)
+          expect(Prism.parse(applied).success?).to be(true),
+                                                   "the #{name} shape stopped parsing after the fix:\n#{applied}"
+        end
+      end
+
+      # **Without this the example passes by not running.** Each shape
+      # is skipped when the engine reports nothing to act on, which is
+      # exactly what a regression here would look like.
+      expect(driven).to match_array(shapes.keys)
     end
 
     it "Q2: replaces an unknown route helper with the closest one the application has" do
@@ -885,6 +1009,38 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # **A heredoc argument keeps its body somewhere else**, and the edit
+    # deleted only the marker. `takes_one(1, <<~TXT)` became
+    #
+    #     takes_one(1)
+    #       body line
+    #     TXT
+    #
+    # which **still parses** -- `body line` reads as a call and `TXT` as a
+    # constant -- so nothing tells the user their file changed meaning.
+    # A quick fix is applied with one click and its reasoning is never
+    # seen, which is why this surface refuses rather than guesses.
+    #
+    # The test is the text being *deleted*, not the call: a heredoc that
+    # is being kept is not a problem, because its marker stays where its
+    # body expects it.
+    #
+    # Predicted blind by a subagent given only the feature list.
+    it "Q3: offers nothing where the surplus argument is a heredoc" do
+      source = "class QfHeredoc\n  def takes_one(a)\n    a\n  end\n\n" \
+               "  def too_many\n    takes_one(1, <<~TXT)\n      body line\n    TXT\n  end\nend\n"
+
+      with_file("app/models/qf_heredoc.rb", source) do |uri|
+        surplus = @client.published_diagnostics(uri).find do |d|
+          d[:code] == "argument-count" && d[:range][:start][:line] == 6
+        end
+        expect(surplus).not_to be_nil, "expected the arity diagnostic to still be reported"
+
+        expect(@client.code_actions(uri, 6, [surplus])).to be_empty,
+                                                          "deleting the marker leaves its body behind as live code"
+      end
+    end
+
     # 0.3.0, `024.86`, and the roadmap's "completion of `@ivar` names the
     # moment you type the sigil". One missing seed produced both: the
     # descent starts a fresh environment per `def`, so an ivar assigned in
@@ -908,6 +1064,93 @@ RSpec.describe "Extension capabilities", :e2e do
       with_file("app/models/iv_probe.rb", source) do |uri|
         labels = @client.completion_labels(uri, 7, 5)
         expect(labels).to include("@from_setup", "@from_use")
+      end
+    end
+
+    # **The two sides hold different variables.** An `@x` written in
+    # `def self.build` lives on the class object; an `@x` read in an
+    # instance method is the instance's, and it is `nil`:
+    #
+    #   $ ruby -e '
+    #   class S
+    #     def self.build; @x = "class side"; end
+    #     def read; @x; end
+    #   end
+    #   S.build
+    #   p S.new.read
+    #   p S.instance_variable_get(:@x)
+    #   '
+    #   # => nil
+    #   # => "class side"
+    #   # ruby 3.4.10
+    #
+    # The class-wide walk took every `def` in the body, so the singleton
+    # side's names were offered inside instance methods -- a name the
+    # reader picks and gets `nil` from.
+    #
+    # The second half is the other direction: `@memo ||= []` is an
+    # assignment, and the walk is a *type* inference that drops what it
+    # cannot type. `#assigned_ivar_names` already carries the note that
+    # "was it assigned at all" is a syntactic question and that `||=`,
+    # `case`, `rescue` and multiple assignment each reached it -- this
+    # surface asked the typed walk instead.
+    #
+    # Predicted blind by two independent subagents given only the
+    # feature list.
+    it "C15: offers the instance side only, including names it cannot type" do
+      source = <<~RUBY
+        class SidedProbe
+          def self.build
+            @only_singleton = "s"
+          end
+
+          def assigns
+            @plain = 1
+            @memo ||= []
+            @first, @second = 1, 2
+          end
+
+          def here
+            @
+          end
+        end
+      RUBY
+
+      with_file("app/models/sided_probe.rb", source) do |uri|
+        offered = @client.completion_labels(uri, 12, 5).select { |l| l.start_with?("@") }
+
+        expect(offered).not_to include("@only_singleton"),
+                               "a singleton ivar read from an instance method is nil"
+        expect(offered).to include("@plain", "@memo", "@first", "@second")
+      end
+    end
+
+    # A sigil inside a string literal is text. The completion path
+    # computed its prefix from the characters to the left and never asked
+    # whether the caret was in code, so typing an address into a string
+    # opened the class's instance variables. `#inside_string_or_comment?`
+    # already existed for the `def` scan and for the call scan; this was
+    # the third reader and did not ask it.
+    #
+    # Predicted blind by two independent subagents given only the feature
+    # list.
+    it "C15: says nothing at a sigil inside a string" do
+      source = <<~RUBY
+        class QuotedProbe
+          def assigns
+            @address = 1
+          end
+
+          def here
+            "mail to @"
+          end
+        end
+      RUBY
+
+      with_file("app/models/quoted_probe.rb", source) do |uri|
+        # The caret is just past the `@` inside the string, line 6.
+        inside = @client.completion_labels(uri, 6, 14).select { |l| l.start_with?("@") }
+        expect(inside).to be_empty, "the sigil inside a string literal is text, not a name being typed"
       end
     end
 
@@ -1530,6 +1773,32 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # **A parameter is where most locals in real code are bound**, and
+    # its own range was recorded by nothing -- so a rename rewrote the
+    # body, left the `def` line, and handed back a method that raises
+    # `NameError`. Where the body assigns before it reads the file runs
+    # and answers something else, which is worse. `024.273` measured it
+    # and named the direction; this is that direction taken.
+    #
+    # Its own row rather than a second `W2`: `capability_coverage_spec`
+    # compares ids as set differences.
+    it "W7: rewrites a parameter's own declaration, not only its uses" do
+      with_file("app/models/param_rename_probe.rb", <<~RUBY) do |uri|
+        class ParamRenameProbe
+          def double(value)
+            value * 2
+          end
+        end
+      RUBY
+        # The caret is on `value` in the body, line 2.
+        edits = @client.rename_edits(uri, 2, 6, "factor").values.flatten
+        lines_touched = edits.map { |e| e[:range][:start][:line] }.sort
+
+        expect(lines_touched).to eq([1, 2]),
+                                 "leaving the `def` line behind hands back a method that raises NameError"
+      end
+    end
+
     # Its own row, not a second `W2`: `capability_coverage_spec` compares
     # ids as set differences, so a duplicate id makes the new row and its
     # example cancel out and the guard cannot see either.
@@ -1703,6 +1972,46 @@ RSpec.describe "Extension capabilities", :e2e do
         # has separate write visitors and was discarding the distinction.
         by_line = highlights.to_h { |h| [h[:range][:start][:line], h[:kind]] }
         expect(by_line).to eq({ 2 => 3, 3 => 3, 4 => 2 })
+      end
+    end
+
+    # **A parameter is a local, and its binding site is an occurrence.**
+    # The parser seeded each scope frame from Prism's `#locals`, so a use
+    # of `arg` resolved -- and nothing recorded the `arg` in the signature,
+    # so it was invisible to every reader of those occurrences. Highlight
+    # answered with the body alone, and Rename rewrote the body alone,
+    # which is the file-that-does-not-run 0.2.17 shipped a fix for.
+    #
+    # Method parameters are the commonest local in Ruby, so this was the
+    # feature not working for its most ordinary input.
+    #
+    # Predicted blind by two independent subagents given only the feature
+    # list.
+    it "F1: counts a method or block parameter's own binding site" do
+      source = <<~RUBY
+        class ParameterProbe
+          def outer(tally)
+            tally + 1
+          end
+
+          def blocky
+            [1].each { |item| item + 1 }
+          end
+        end
+      RUBY
+
+      with_file("app/models/parameter_probe.rb", source) do |uri|
+        # The caret is on `tally` in the body, line 2.
+        from_use = @client.document_highlights(uri, 2, 4).map { |h| h[:range][:start][:line] }.sort
+        expect(from_use).to eq([1, 2]), "the signature's `tally` is an occurrence of the same local"
+
+        # And from the signature itself, line 1, column 12.
+        from_declaration = @client.document_highlights(uri, 1, 12).map { |h| h[:range][:start][:line] }.sort
+        expect(from_declaration).to eq([1, 2]), "the caret on a parameter answered nothing at all"
+
+        # A block parameter binds the same way.
+        block_sites = @client.document_highlights(uri, 6, 16).map { |h| h[:range][:start][:line] }.sort
+        expect(block_sites).to eq([6, 6])
       end
     end
 

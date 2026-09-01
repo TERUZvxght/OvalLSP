@@ -2416,10 +2416,28 @@ module Ovallsp
     # The parameter each positional argument is being passed as, read from
     # the callee's own declaration.
     #
-    # **The refusal is about the declaration, not the call**, and the
-    # first version had it the other way round. A `*splat` at the call
-    # site needs no guard: the parser records `positional: 0` and no
-    # locations for it, so there is nothing to label. What breaks the
+    # **Both the declaration and the call can break the index**, and
+    # this said otherwise until 0.3.0: that a call-site splat needed no
+    # guard because the parser recorded `positional: 0` for it. It does
+    # not. `#call_argument_shape` rejects the splat *node* and keeps the
+    # arguments around it, so `take(1, *rest, 3)` records two locations,
+    # and Ruby fills the parameters from the flattened list:
+    #
+    #   $ ruby -e '
+    #   def f(a, b, c) = [a, b, c]
+    #   rest = [2]
+    #   p f(1, *rest, 3)
+    #   '
+    #   # => [1, 2, 3]
+    #   # ruby 3.4.10
+    #
+    # `3` is passed as `c`, so labelling by index writes `b:` beside it.
+    # The shape records `splat:` for exactly this, and its two other
+    # readers -- the arity check and the argument-type check -- each open
+    # with `next if shape[:splat]`. This was the third reader and the
+    # only one that did not.
+    #
+    # What breaks the
     # index-to-parameter mapping is a *declaration* with a required
     # parameter after an optional one -- Ruby fills the optional last:
     #
@@ -2441,6 +2459,7 @@ module Ovallsp
       calls = summary.reference_candidates.select do |candidate|
         candidate.kind == :method_call && candidate.arguments &&
           candidate.arguments[:positional].to_i.positive? &&
+          !candidate.arguments[:splat] && named_call?(candidate.name) &&
           range_contains?(range, candidate.location)
       end
       return [] if calls.empty?
@@ -2455,10 +2474,39 @@ module Ovallsp
         Array(candidate.arguments[:positional_locations]).each_with_index.filter_map do |location, i|
           parameter = parameters[i]
           next unless parameter
+          next if argument_spells?(document, location, parameter.name)
 
           { position: location[:start], label: "#{parameter.name}:", paddingLeft: false, paddingRight: true }
         end
       end
+    end
+
+    # Whether the callee has a name worth showing beside an argument.
+    # `self + v` labelled `v` with `other:`, which is true and says
+    # nothing -- an operator's operands are named by the operator. A
+    # name that does not begin like an identifier is one of Ruby's
+    # operator methods (`+`, `<=>`, `[]`, `==`).
+    def named_call?(name)
+      name.to_s.match?(/\A[A-Za-z_]/)
+    end
+
+    # Whether the argument already spells the parameter, in which case
+    # the hint repeats the line back at the reader: `take(name)` against
+    # `def take(name)` rendered `name: name`. Every other language server
+    # suppresses that shape, and a hint's whole value is telling the
+    # reader something the code does not already say.
+    #
+    # It compares the argument's own source extent and nothing more. A
+    # looser rule -- the last segment of a member access, an ivar's stem
+    # -- buys a few more suppressions by deciding that two different
+    # expressions are the same expression, which is a claim rather than
+    # a rendering choice.
+    def argument_spells?(document, location, parameter_name)
+      first = document.position_to_char_offset(location[:start])
+      last = document.position_to_char_offset(location[:end])
+      return false unless last > first
+
+      document.text[first...last] == parameter_name.to_s
     end
 
     # The leading run of positional parameters, or nothing at all when the
@@ -2499,7 +2547,7 @@ module Ovallsp
         case diagnostic[:code]
         when "unknown-method" then define_method_action(document, summary, uri, diagnostic)
         when "unknown-route-helper" then route_helper_action(document, uri, diagnostic)
-        when "argument-count" then surplus_argument_action(summary, uri, diagnostic)
+        when "argument-count" then surplus_argument_action(document, summary, uri, diagnostic)
         else []
         end
       end.compact
@@ -2563,7 +2611,7 @@ module Ovallsp
     # maximum. **Too few does not**, and nothing is offered there -- there is
     # no value to write, and writing `nil` would be this engine putting a
     # guess into the user's file.
-    def surplus_argument_action(summary, uri, diagnostic)
+    def surplus_argument_action(document, summary, uri, diagnostic)
       candidate = summary.reference_candidates.find do |c|
         c.kind == :method_call && c.location == diagnostic[:range] && c.arguments
       end
@@ -2576,9 +2624,41 @@ module Ovallsp
       surplus = locations[keep..]
       from = locations[keep - 1][:end]
       to = surplus.last[:end]
+      return [] if opens_a_heredoc?(document, from, to)
+
       [{ title: "Remove #{surplus.length} surplus argument#{'s' if surplus.length > 1}",
          kind: "quickfix", diagnostics: [diagnostic],
          edit: { changes: { uri => [{ range: { start: from, end: to }, newText: "" }] } } }]
+    end
+
+    # **A heredoc keeps its body on the lines below**, and the argument's
+    # own range covers only the marker. Deleting `, <<~TXT` left
+    #
+    #     takes_one(1)
+    #       body line
+    #     TXT
+    #
+    # which still parses -- `body line` reads as a call and `TXT` as a
+    # constant -- so the file changed meaning with nothing to say so, at
+    # one click, on the surface where section 0 is sharpest.
+    #
+    # The question is asked of the text being *deleted* rather than of
+    # the call, which is the whole of why it is this cheap: a heredoc
+    # among the arguments being kept is not a problem, because its
+    # marker stays where its body expects it, so `f(<<~A, 2)` is still
+    # fixable.
+    #
+    # A `<<` inside a string literal in the deleted span refuses a fix
+    # that would have been safe. That is the direction this surface
+    # errs in everywhere else too.
+    HEREDOC_OPENER = /<<[-~]?['"`]?[A-Za-z_]/
+
+    def opens_a_heredoc?(document, from, to)
+      first = document.position_to_char_offset(from)
+      last = document.position_to_char_offset(to)
+      return false unless last > first
+
+      document.text[first...last].match?(HEREDOC_OPENER)
     end
 
     # The message states the arity, and the finding's evidence does not
@@ -2792,6 +2872,17 @@ module Ovallsp
       return { isIncomplete: false, items: [] } unless document
 
       position = params.fetch(:position)
+
+      # A sigil, or any name, inside a string or a comment is text.
+      # The prefix is read from the characters to the left and cannot
+      # tell the two apart, so typing an address into a string opened
+      # the class's instance variables. `#inside_string_or_comment?`
+      # is the same mask the `def` scan and the call scan already ask;
+      # this was the third reader of that question and the only one
+      # that did not ask it.
+      if inside_string_or_comment?(document, document.position_to_char_offset(position))
+        return { isIncomplete: false, items: [] }
+      end
       prefix = word_prefix_at_position(document, position)
 
       # After a receiver dot the question is "what can be called on this

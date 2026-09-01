@@ -150,6 +150,18 @@ module E2E
         end
     end
 
+    # The same request as `#code_actions`, keeping each edit's whole
+    # range. `#code_actions` reduces an edit to its line and its text,
+    # which is enough to say where a `def` was inserted and not enough
+    # to apply the edit and look at the file the user is left with.
+    def code_action_edits(uri, line, diagnostics)
+      Array(request("textDocument/codeAction",
+                    { textDocument: { uri: uri },
+                      range: { start: { line: line, character: 0 }, end: { line: line, character: 200 } },
+                      context: { diagnostics: diagnostics } }))
+        .map { |action| [action[:title], (action.dig(:edit, :changes) || {}).values.flatten] }
+    end
+
     # The diagnostics the server published for a file, in the shape the
     # protocol hands back to `codeAction` -- a fix keyed off a diagnostic
     # has to be asked for with that diagnostic, not with a hand-built one.

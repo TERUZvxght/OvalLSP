@@ -143,6 +143,22 @@ module Ovallsp
           return refused_plan(symbol_id, generation, "`#{new_name}` is not a valid #{symbol_id.kind} name")
         end
 
+        if binding_site_unknown?(symbol_id)
+          return refused_plan(
+),
+  %(            symbol_id, generation,
+),
+  %(            "`#{simple_name(symbol_id)}` is a local whose binding site this engine does not record -- a " \
+),
+  %(            "keyword parameter (`def m(by:)`) or a hash pattern's shorthand (`in {a:}`), each of which " \
+),
+  %(            "spells something other than a local name. Rewriting the occurrences it can see would leave " \
+),
+  %(            "the binding behind and hand back a file that raises NameError, so nothing is edited here"
+),
+  %(          )
+        end
+
         if (declaration = uneditable_declaration(symbol_id))
           position = declaration.name_location || declaration.location
           return refused_plan(
@@ -221,6 +237,29 @@ module Ovallsp
         return new_name unless implicit_hash_value
 
         "#{simple_name(symbol_id)}: #{new_name}"
+      end
+
+      # **Do I know where this local is bound?** Every binding form the
+      # parser records is recorded as a *write*, so a local with no write
+      # among its occurrences has a binding site this engine cannot see.
+      #
+      # The one that reaches here today is a keyword parameter, left
+      # unrecorded on purpose -- `def m(by:)` binds a local named `by`
+      # *because* the keyword is `by`, and Ruby has no spelling that
+      # separates them, so renaming the local is renaming the interface.
+      # `024.273`.
+      #
+      # Asked as "is the binding site known" rather than "is this a
+      # keyword parameter": the register argued that an occurrence
+      # nothing records is one nothing can miss, which is true of the
+      # occurrence and false of the *count*. Any binding form added to
+      # the parser later is refused here until it is recorded, rather
+      # than half-rewritten.
+      def binding_site_unknown?(symbol_id)
+        return false unless symbol_id.kind == :local_variable
+
+        references = @reference_index.references(symbol_id, minimum_confidence: :high)
+        references.any? && references.none?(&:write)
       end
 
       def simple_name(symbol_id)

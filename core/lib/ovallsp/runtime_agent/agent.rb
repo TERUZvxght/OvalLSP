@@ -352,6 +352,17 @@ module Ovallsp
         { gems: by_gem.transform_values { |classes| { classes: classes } } }
       end
 
+
+      # `false` on each: this class's own definition, not an inherited one.
+      # The chain is reported separately and Core asks every link, so
+      # searching ancestors here would mark 2,000 classes dynamic because
+      # one of them is.
+      def answers_dynamically?(mod)
+        %i[method_missing respond_to_missing?].any? do |name|
+          mod.private_method_defined?(name, false) || mod.method_defined?(name, false)
+        end
+      end
+
       def each_named_module
         ::ObjectSpace.each_object(::Module) do |mod|
           name = module_name(mod) or next
@@ -403,7 +414,24 @@ module Ovallsp
           # Without this, `CGI.escapeHTML` -- which exists -- was
           # reported missing over rack's own source.
           singletonAncestors: safely { mod.singleton_class.ancestors.filter_map { |a| module_name(a) } } || [],
-          definesMethodMissing: safely { mod.private_method_defined?(:method_missing, false) } || false
+          # **Both visibilities.** `method_missing` is conventionally
+          # private, and `private_method_defined?` alone cannot see a
+          # public one -- so a class that defines it publicly was
+          # reported as having none, called closed, and every name it
+          # answers dynamically became a false report. Asked of Ruby:
+          #
+          #   $ ruby -e '
+          #   class Pub; def method_missing(n, *) = :a; end
+          #   p Pub.private_method_defined?(:method_missing, false)
+          #   p Pub.method_defined?(:method_missing, false)
+          #   '
+          #   # => false
+          #   # => true
+          #   # ruby 3.4.10
+          #
+          # `respond_to_missing?` too: a class that implements only that
+          # one still answers to names no enumeration can list.
+          definesMethodMissing: safely { answers_dynamically?(mod) } || false
         }
       end
 

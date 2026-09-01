@@ -71,7 +71,7 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics: unknown method on a model | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: unknown route helper | ✅ | — (no Runtime Agent) | — |
 | Diagnostics: wrong number of arguments | ⚠️ [^argcount] | ⚠️ | ⚠️ 1.0.0 |
-| Diagnostics: unknown method or variable on a class inheriting from a gem | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Diagnostics: unknown method or variable on a class inheriting from a gem | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Diagnostics: reading an `@ivar` that is never assigned | ⚠️ [^ivar] | ⚠️ | — |
 | Signature help: workspace, stdlib, route helpers | ✅ | ⚠️ (route helpers: —) | ⚠️ 1.0.0 |
 | Find references, rename [^rename], workspace symbols | ✅ | ⚠️ | ⚠️ 1.0.0 |
@@ -79,13 +79,13 @@ verified per platform, is what 1.0.0 requires (024.R4).
 | Diagnostics across the whole project, not just open files | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Documentation (RDoc/YARD) in hover and completion [^doc] | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Semantic highlighting (local variable vs. method call), in `.rb` and in an ERB template's Ruby regions | ✅ | ⚠️ | ⚠️ 1.0.0 |
-| Completion: Active Record `Relation` API (`where`, `order`, `limit`) | 0.3.0 | — (no Runtime Agent) | — |
-| Inlay hints (inferred types, parameter names) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Code actions / quick fixes for each diagnostic | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Go to type definition | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Call hierarchy (callers and callees) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Document highlight (occurrences within a file) | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
-| Completion of `@ivar` names after typing `@` | 0.3.0 | ⚠️ 0.3.0 | ⚠️ 1.0.0 |
+| Completion: Active Record `Relation` API (`where`, `order`, `limit`) | ✅ | — (no Runtime Agent) | — |
+| Inlay hints (inferred types, parameter names) | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Code actions / quick fixes for each diagnostic | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Go to type definition | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Call hierarchy (callers and callees) | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Document highlight (occurrences within a file) | ✅ | ⚠️ | ⚠️ 1.0.0 |
+| Completion of `@ivar` names after typing `@` | ✅ | ⚠️ | ⚠️ 1.0.0 |
 | Per-check diagnostic severity settings | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Auto-`require` insertion | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
 | Signature help: active parameter highlighting | 0.4.0 | ⚠️ 0.4.0 | ⚠️ 1.0.0 |
