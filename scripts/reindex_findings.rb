@@ -24,7 +24,14 @@ require_relative "deferred_findings"
 
 module ReindexFindings
   ROOT = File.expand_path("..", __dir__)
-  PATH = File.join(ROOT, "docs", "design", "tasks", "024-deferred-review-findings.md")
+  PATH = File.join(ROOT, DeferredFindings::LIVE)
+
+  # 024.R9: the index is generated into the live file and covers both.
+  # A reader holding `024.N` opens the file they have always opened; a
+  # resolved entry's row links across rather than being absent, which
+  # is the entry's "one place to look" and the thing a split is most
+  # likely to lose.
+  ARCHIVE = File.join(ROOT, DeferredFindings::ARCHIVE)
 
   module_function
 
@@ -65,19 +72,25 @@ module ReindexFindings
     DeferredFindings.entries(block).values.first || {}
   end
 
-  def anchor_for(number, title)
+  # `in_archive` prefixes the archive's filename, so the row is a link
+  # across files rather than a dead in-page anchor. Same slug either
+  # way -- GitHub derives it from the heading, not from the file.
+  def anchor_for(number, title, in_archive: false)
     slug = title.downcase.gsub(/[^a-z0-9]+/, "-").gsub(/\A-|-\z/, "")
-    "##{number.delete('.')}-#{slug}"
+    file = in_archive ? File.basename(ARCHIVE) : ""
+    "#{file}##{number.delete('.')}-#{slug}"
   end
 
-  def render(legend, blocks)
-    rows = blocks.map do |block|
+  def render(legend, blocks, archived = [])
+    rows = (blocks + archived).sort_by { |b| entry_key(number_of(b)) }.map do |block|
+      archived_here = archived.include?(block)
       number = number_of(block)
       meta = metadata_of(block)
       title = title_of(block)
       shown = title.length > 69 ? "#{title[0, 68]}…" : title
       release = meta["target"] || meta["released-in"] || "—"
-      "| [`#{number}`](#{anchor_for(number, title)}) | #{meta.fetch('status', '?')} | #{release} | #{shown} |"
+      "| [`#{number}`](#{anchor_for(number, title, in_archive: archived_here)}) | " \
+        "#{meta.fetch('status', '?')} | #{release} | #{shown} |"
     end
 
     index = <<~INDEX
@@ -98,7 +111,7 @@ module ReindexFindings
 
     INDEX
 
-    "#{legend}\n#{index}#{blocks.join}"
+    "#{legend}\n#{index}#{blocks.sort_by { |b| entry_key(number_of(b)) }.join}"
   end
 
   # Raised when the register carries a heading this grammar cannot read.
@@ -140,7 +153,8 @@ module ReindexFindings
     # dropped here rather than parsed, so this is idempotent.
     legend = legend.split(/^## Index$/, 2).first.rstrip + "\n"
 
-    render(legend, blocks.sort_by { |block| entry_key(number_of(block)) })
+    archived = File.exist?(ARCHIVE) ? blocks_of(File.read(ARCHIVE, encoding: "UTF-8")) : []
+    render(legend, blocks, archived)
   end
 end
 

@@ -312,9 +312,23 @@ RSpec.describe "deferred findings metadata" do
     it "indexes every entry, so the table cannot silently omit one" do
       require_relative "../../../scripts/reindex_findings"
 
+      # 024.R9: the index is generated into the live file and carries
+      # every entry, archived ones included -- that is the entry's "one
+      # place to look". So the rows are compared against both files'
+      # headings, not the live file's own, which is what this check
+      # reported the moment the split landed.
       body = File.read(ReindexFindings::PATH, encoding: "UTF-8")
+      whole = DeferredFindings.register(File.expand_path("../../..", __dir__))
 
-      expect(body.scan(INDEX_ROW).flatten).to eq(DeferredFindings.headings(body))
+      # Ordered by the register's own key on both sides. The live file's
+      # numeric order and its index's currency are asserted byte-for-byte
+      # by `is in numeric order with its index current`; this example is
+      # about omission, and comparing raw order here would have made it
+      # fail for the split alone.
+      by_number = ->(numbers) { numbers.sort_by { |n| ReindexFindings.entry_key(n) } }
+
+      expect(by_number.call(body.scan(INDEX_ROW).flatten))
+        .to eq(by_number.call(DeferredFindings.headings(whole)))
     end
 
     # The example above cannot fail on a sub-number while the register
