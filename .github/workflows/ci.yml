@@ -470,6 +470,17 @@ jobs:
           bundler-cache: true
           working-directory: core
 
+      # 0.3.0's capability mutations name `spec/e2e/capabilities_spec.rb`,
+      # which skips in full without these -- and a skipped example reads
+      # exactly like a mutation that escaped. The checker now says which
+      # it is; this makes it the first one.
+      - name: Install real Rails/sqlite3 (the capability suite skips in full without them)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+          gem install rails -v '~> 8.1' --no-document
+          gem install sqlite3 -v '>= 2.1' --no-document
+
       - name: Every named mutation is caught by the example that names it
         run: ruby scripts/check_pinned_mutations.rb
 

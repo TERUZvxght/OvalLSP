@@ -159,6 +159,7 @@
 "core/lib/ovallsp/server.rb#receiverless_call_at?": "contained: false, and both callers return early on it -- the declining direction"
 "core/lib/ovallsp/server.rb#documentation_at": surfaces
 "core/lib/ovallsp/server.rb#completion_resolve_result": surfaces
+"core/lib/ovallsp/server.rb#symbol_id_from_call_hierarchy_item": "contained: nil, and every caller above answers the empty list on it -- which is no call hierarchy here, not a claim about the code. The item is handed back by the client verbatim, so this is the boundary where a payload this server did not produce arrives; it is logged, and no reader can turn nil into an assertion."
 "core/lib/ovallsp/signatures/environment.rb#load_environment": surfaces
 "core/lib/ovallsp/signatures/environment.rb#load_stdlib_only": surfaces
 "core/lib/ovallsp/signatures/environment.rb#type_parameters": "contained: no parameters known reads as non-generic, which is the same conclusion a type with none produces"

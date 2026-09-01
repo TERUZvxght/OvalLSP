@@ -660,6 +660,52 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(targets).to include(a_string_matching(/string\.rbs\z/))
       end
     end
+
+    # 0.3.0. `045`: "cheap given `explainType` already resolves the type".
+    # The difference from D1 is the whole point -- go to *definition* on
+    # `widget.build` lands on `def build`; go to *type* definition lands on
+    # the class the expression evaluates to.
+    it "D4: jumps to the class an expression evaluates to, not to the method that produced it" do
+      source = <<~SOURCE
+        class TdWidget
+          def label
+            "x"
+          end
+        end
+
+        class TdHolder
+          def use
+            made = TdWidget.new
+            made
+          end
+        end
+      SOURCE
+
+      with_file("app/models/td_probe.rb", source) do |uri|
+        # The caret is on `made` at line 9, whose type is TdWidget.
+        targets = @client.type_definitions(uri, 9, 4)
+        expect(targets).not_to be_empty, "typeDefinition answered nothing for a local of a known class"
+        expect(targets.map { |t| t[:uri] }).to all(end_with("td_probe.rb"))
+
+        # **The control, and it is inside the answer rather than beside it.**
+        # Line 0 is `class TdWidget`; line 8 is the assignment `made = ...`.
+        # A server that forwarded this to `textDocument/definition` would
+        # answer the assignment and look plausible. Go to definition at this
+        # same caret answers nothing at all today, so it cannot be the
+        # control -- measured, not assumed.
+        expect(targets.map { |t| t[:line] }).to eq([0])
+      end
+    end
+
+    it "D5: answers nothing where the type is not a workspace class" do
+      source = "class TdUnknown\n  def go(anything)\n    anything\n  end\nend\n"
+
+      with_file("app/models/td_unknown.rb", source) do |uri|
+        # A parameter with no declared type: the engine does not know what
+        # it is, and the nearest name that looks right is a guess.
+        expect(@client.type_definitions(uri, 2, 4)).to be_empty
+      end
+    end
   end
 
   describe "semantic highlighting" do
@@ -1175,6 +1221,99 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(@client.workspace_symbols("SymbolProbe")).to include("SymbolProbe")
         # The row says "classes and methods"; only the class was asserted.
         expect(@client.workspace_symbols("symbol_probe_method")).to include("symbol_probe_method")
+      end
+    end
+
+    # 0.3.0. `045`: "an incremental step on the same index" -- incoming
+    # calls are the references the index already holds, grouped by the
+    # method each one sits inside.
+    #
+    # Unlike documentHighlight this *does* warm the reference index, and
+    # that is right: opening a call hierarchy is a deliberate action, not
+    # something the editor does on every cursor move.
+    it "W5: lists a method's callers across files, with the range of each call" do
+      callee = "class ChSubject\n  def ch_target\n    1\n  end\nend\n"
+      # Three shapes in one file, each of which a different wrong
+      # implementation gets wrong:
+      #
+      #   `go`             -- the ordinary caller.
+      #   `outer`/`inner`  -- nested `def`s, both of whose recorded ranges
+      #                       contain the call. The innermost is the caller;
+      #                       taking the first declaration that contains it
+      #                       names `outer`, which did not make the call.
+      #   the top-level call -- no enclosing method at all, and a caller
+      #                       invented for it is an assertion about the
+      #                       user's code that nothing supports.
+      calling = <<~SOURCE
+        class ChCaller
+          def go
+            ChSubject.new.ch_target
+          end
+
+          def outer
+            def inner
+              ChSubject.new.ch_target
+            end
+          end
+        end
+
+        ChSubject.new.ch_target
+      SOURCE
+
+      with_file("app/models/ch_subject.rb", callee) do |uri|
+        with_file("app/models/ch_caller.rb", calling) do |_other|
+          item = @client.prepare_call_hierarchy(uri, 1, 6).first
+          expect(item).not_to be_nil, "prepareCallHierarchy answered nothing on a `def`"
+          expect(item[:name]).to eq("ch_target")
+
+          incoming = @client.incoming_calls(item)
+          # Exactly these two. Not the class, not the file, and nothing for
+          # the top-level call, which has no caller this protocol can name.
+          expect(incoming.map { |c| c[:from][:name] }.sort).to eq(%w[go inner])
+
+          # And the range is the call site inside `go`, which is what makes
+          # the entry navigable rather than merely named.
+          by_caller = incoming.to_h { |c| [c[:from][:name], Array(c[:fromRanges]).map { |r| r[:start][:line] }] }
+          expect(by_caller["go"]).to eq([2])
+          expect(by_caller["inner"]).to eq([7])
+        end
+      end
+    end
+
+    it "W6: lists the methods a method calls, with the range of each call" do
+      source = "class ChOutgoing\n" \
+               "  def first_leg\n    1\n  end\n\n" \
+               "  def second_leg\n    2\n  end\n\n" \
+               "  def both\n    first_leg\n    second_leg\n  end\n" \
+               "end\n"
+
+      with_file("app/models/ch_outgoing.rb", source) do |uri|
+        item = @client.prepare_call_hierarchy(uri, 9, 6).first
+        expect(item).not_to be_nil
+        expect(item[:name]).to eq("both")
+
+        outgoing = @client.outgoing_calls(item)
+        expect(outgoing.map { |c| c[:to][:name] }).to contain_exactly("first_leg", "second_leg")
+
+        # One range per call, at the line the call is written on. Without
+        # this the two entries are indistinguishable from a name list.
+        by_name = outgoing.to_h { |c| [c[:to][:name], Array(c[:fromRanges]).map { |r| r[:start][:line] }] }
+        expect(by_name["first_leg"]).to eq([10])
+        expect(by_name["second_leg"]).to eq([11])
+      end
+    end
+
+    # The live half of `CALLABLE_KINDS`. A class has no callers in this
+    # protocol's sense, so answering for one would be a list of mentions
+    # wearing a caller's name -- and the guard that refuses it was
+    # unpinned until this example, while the same constant's use on the
+    # outgoing side turned out to be dead and was removed.
+    it "W5/W6: offers no call hierarchy on a class name" do
+      with_file("app/models/ch_class_probe.rb", "class ChClassProbe\n  def m; end\nend\n") do |uri|
+        expect(@client.prepare_call_hierarchy(uri, 0, 8)).to be_empty
+        # The control: the same file answers on the method one line down,
+        # so an empty answer above is the guard and not a dead request.
+        expect(@client.prepare_call_hierarchy(uri, 1, 6)).not_to be_empty
       end
     end
 

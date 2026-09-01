@@ -15332,6 +15332,104 @@ found this. Recorded because the useful move was **not trusting the
 sweep's own hits**, which is the same discipline the measurement
 section asks for.
 
+## 024.292 `045` disagrees with its own table about what 0.3.0 is blocked on
+
+```yaml
+status: fixed
+released-in: 0.3.0
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it cost is that the document deciding
+  0.3.0's work order overstated by three what the release's largest
+  item blocks, and understated by one what can proceed today.
+```
+
+**Area:** `docs/design/tasks/045-0.3.0-scope.md`
+
+`045`'s dependency table is nine rows and is unambiguous:
+
+- **two** rows name `024.R7` — unknown methods on gem-inheriting
+  classes, and `Article.all.` completing;
+- **five** say "the inference / the diagnostics / the reference index
+  that already exists" — inlay hints, quick fixes, go to type
+  definition, call hierarchy, highlight occurrences;
+- one is `024.85` (shipped in 0.2.16) and one is `024.86`.
+
+Its prose contradicts that in three places:
+
+| where | said | the table says |
+|---|---|---|
+| opening paragraph | "**five of them wait on the same one**" | two do |
+| "`024.R7` last" | "**five promises hang off it**" | two do |
+| "Where to start" | "the **four** that need only what is already built", listing occurrences, call hierarchy, go-to-type-definition, inlay hints | five, and **quick fixes** is the one left out |
+
+The first two look like the count of the *unblocked* rows with the
+wrong predicate attached to it. Whatever produced them, the effect is
+the same in both directions: a session reading the prose believes most
+of 0.3.0 is gated behind the release's largest item, and does not know
+quick fixes is available now.
+
+**Found by counting the table against the sentence above it**, while
+answering "what is left in 0.3.0" — not by a reviewer, and not by
+reading the paragraph again. `046` is the release whose subject was
+exactly this, and this is the same shape in the document that orders
+the next one.
+
+### Fixed in 0.3.0
+
+All three corrected against the table, each saying what it used to say
+rather than being quietly rewritten. The table was not touched: it is
+the thing that turned out to be right.
+## 024.293 `check_pinned_mutations.rb` reads a skipped example as a mutation that escaped
+
+```yaml
+status: fixed
+released-in: 0.3.0
+kind: defect
+user-visible: no
+user-visible-note: >
+  Nothing a user meets. What it cost is that the check built to say
+  "this decision is pinned" said the opposite about four decisions
+  that were pinned, in the one environment where nobody could see it
+  was wrong.
+```
+
+**Area:** `scripts/check_pinned_mutations.rb`, `.github/workflows/ci.yml`
+
+The checker applies a mutation, runs the one example that names it, and
+reads `N examples, M failures` out of the output. **A skipped example
+is still an example**: without its dependencies the capability suite
+reports `1 example, 0 failures, 1 pending` and exits 0, which is
+byte-for-byte what a mutation that escaped produces.
+
+The `pinned-mutations` CI job installs no Rails and no sqlite3, so
+0.3.0's four `documentHighlight` mutations — all of which pass locally
+— came back as **"4 of 104 mutation(s) not caught"** on the first push
+that had them.
+
+This is `024.148`'s shape *inside the checker built for that class*:
+a check that cannot see its subject reporting exactly what a working
+check reports when nothing is pinned. `CLAUDE.md` states it in the
+general form — "a checker that cannot see the thing it checks reports
+exactly what a working checker reports when nothing is pinned" — and
+the paragraph is about this very script's first run.
+
+### Fixed in 0.3.0, in both halves
+
+**The report** now reads the pending count and says which it is: *the
+example did not run — N pending; that says nothing about the mutation,
+it says this environment cannot verify it.* Verified by forcing every
+example in the capability suite to skip and running the checker: it
+names the four and refuses, rather than calling them unpinned.
+
+**The job** now installs Rails and sqlite3, the same step the `core`
+job already carries, so the answer is a verification rather than an
+honest refusal.
+
+Both halves, because either alone leaves something wrong: without the
+first, the next suite that skips is misreported again; without the
+second, four real decisions go unverified on CI.
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml

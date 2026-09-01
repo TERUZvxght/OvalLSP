@@ -14,6 +14,7 @@ module E2E
   # directly.
   class LspClient
     class Timeout < StandardError; end
+    class Error < StandardError; end
 
     # Which Core the capability suite drives. The development tree by
     # default; set OVALLSP_E2E_CORE_BIN to the bundled copy inside a built
@@ -131,13 +132,36 @@ module E2E
       Array(request("textDocument/references", { textDocument: { uri: uri }, position: { line: line, character: character } }))
     end
 
-# `textDocument/documentHighlight`. Ranges plus the protocol's kind,
-# which is 1 = Text, 2 = Read, 3 = Write.
-def document_highlights(uri, line, character)
-  request("textDocument/documentHighlight",
-          { textDocument: { uri: uri }, position: { line: line, character: character } })
-    .then { |r| Array(r).map { |h| { range: h[:range], kind: h[:kind] } } }
-end
+    # `textDocument/typeDefinition`. Locations only; the protocol allows a
+    # single Location or a list and this client normalises to a list.
+    def type_definitions(uri, line, character)
+      Array(request("textDocument/typeDefinition",
+                    { textDocument: { uri: uri }, position: { line: line, character: character } }))
+        .map { |d| { uri: d[:uri], line: d[:range][:start][:line] } }
+    end
+
+    # `textDocument/prepareCallHierarchy` and the two follow-ups. The
+    # protocol hands the item back verbatim, so the follow-ups take one.
+    def prepare_call_hierarchy(uri, line, character)
+      Array(request("textDocument/prepareCallHierarchy",
+                    { textDocument: { uri: uri }, position: { line: line, character: character } }))
+    end
+
+    def incoming_calls(item)
+      Array(request("callHierarchy/incomingCalls", { item: item }))
+    end
+
+    def outgoing_calls(item)
+      Array(request("callHierarchy/outgoingCalls", { item: item }))
+    end
+
+    # `textDocument/documentHighlight`. Ranges plus the protocol's kind,
+    # which is 1 = Text, 2 = Read, 3 = Write.
+    def document_highlights(uri, line, character)
+      request("textDocument/documentHighlight",
+              { textDocument: { uri: uri }, position: { line: line, character: character } })
+        .then { |r| Array(r).map { |h| { range: h[:range], kind: h[:kind] } } }
+    end
 
     def rename_edits(uri, line, character, new_name)
       result = request("textDocument/rename", {
@@ -194,7 +218,18 @@ end
       deadline = monotonic + timeout
       while monotonic < deadline
         response = @mutex.synchronize { @responses.delete(id) }
-        return response[:result] if response
+        if response
+          # **An error response is not an empty answer.** `result` is absent
+          # on an error, so returning it handed every caller `nil` -- and
+          # every example asserting "answers nothing" passed just as well when
+          # the handler raised. 0.3.0's D5 was written that way and could not
+          # tell a deliberate decline from a crash, which is the distinction
+          # section 0 is built on. Found by removing a guard and watching the
+          # example that exists for it stay green.
+          raise Error, "#{method} answered an error: #{response[:error].inspect}" if response[:error]
+
+          return response[:result]
+        end
 
         sleep 0.02
       end

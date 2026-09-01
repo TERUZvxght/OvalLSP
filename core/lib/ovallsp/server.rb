@@ -388,6 +388,14 @@ module Ovallsp
         respond(id, with_index_snapshot { references_result(message[:params]) })
       when "textDocument/documentHighlight"
         respond(id, with_index_snapshot { document_highlight_result(message[:params]) })
+      when "textDocument/typeDefinition"
+        respond(id, with_index_snapshot { type_definition_result(message[:params]) })
+      when "textDocument/prepareCallHierarchy"
+        respond(id, with_index_snapshot { prepare_call_hierarchy_result(message[:params]) })
+      when "callHierarchy/incomingCalls"
+        respond(id, with_index_snapshot { incoming_calls_result(message[:params]) })
+      when "callHierarchy/outgoingCalls"
+        respond(id, with_index_snapshot { outgoing_calls_result(message[:params]) })
       when "textDocument/prepareRename"
         respond(id, with_index_snapshot { prepare_rename_result(message[:params]) })
       when "textDocument/rename"
@@ -2062,6 +2070,11 @@ module Ovallsp
     # already recorded, narrowed by name before anything is resolved, so a
     # cursor move costs one string comparison per candidate rather than one
     # resolution.
+    # A call hierarchy names methods. A class or a constant has no
+    # callers in this protocol's sense, and answering for one would be
+    # a list of mentions wearing a caller's name.
+    CALLABLE_KINDS = %i[instance_method singleton_method].freeze
+
     def document_highlight_result(params)
       uri = params.fetch(:textDocument).fetch(:uri)
       document = analyzable_document(@document_store.fetch(uri: uri))
@@ -2115,6 +2128,181 @@ module Ovallsp
     # 1 = Text, 2 = Read, 3 = Write, per the protocol.
     def highlight_kind(candidate_kind)
       candidate_kind == :method_call ? 2 : 1
+    end
+
+    # `textDocument/prepareCallHierarchy` and its two follow-ups.
+    #
+    # 0.3.0, and `045` calls it "an incremental step on the same index":
+    # incoming calls are the references the reference index already holds,
+    # grouped by the method each one sits inside, which is the difference
+    # between a call hierarchy and the flat list Find References gives.
+    #
+    # **This warms the reference index and documentHighlight does not.**
+    # That is the same decision read from the other side: opening a call
+    # hierarchy is a deliberate action, so paying for an O(workspace)
+    # rebuild once is right, where paying it on every cursor move is not.
+    def prepare_call_hierarchy_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return nil unless document && summary
+
+      symbol_id, range = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
+      return nil unless symbol_id && CALLABLE_KINDS.include?(symbol_id.kind)
+
+      declaration = summary.declarations.find { |d| d.symbol_id == symbol_id }
+      [call_hierarchy_item(symbol_id, uri, declaration&.location || range, declaration&.name_location || range)]
+    end
+
+    # Callers. The protocol wants the *calling method*, so each reference is
+    # attributed to the declaration whose recorded range contains it -- a
+    # `def`'s range spans its whole body, which is what makes containment the
+    # right question here and the wrong one in `#declaration_named_at`.
+    #
+    # A reference with no enclosing method is dropped rather than attributed
+    # to the file: a call written at the top level has no caller this
+    # protocol can name, and inventing one is an assertion about the user's
+    # code that nothing supports.
+    def incoming_calls_result(params)
+      symbol_id = symbol_id_from_call_hierarchy_item(params.fetch(:item))
+      return [] unless symbol_id
+
+      ensure_reference_index_current
+      grouped = Hash.new { |h, k| h[k] = [] }
+      @reference_index.references(symbol_id, minimum_confidence: :high).each do |reference|
+        enclosing = enclosing_callable(reference.uri, reference.location)
+        next unless enclosing
+
+        grouped[[reference.uri, enclosing.symbol_id]] << reference.location
+      end
+
+      grouped.map do |(caller_uri, caller_id), ranges|
+        declaration = @file_summaries[caller_uri]&.declarations&.find { |d| d.symbol_id == caller_id }
+        { from: call_hierarchy_item(caller_id, caller_uri, declaration&.location, declaration&.name_location),
+          fromRanges: ranges }
+      end
+    end
+
+    # Callees. Read out of the method's own body in the file it is declared
+    # in -- the reference index is keyed by the symbol being referred *to*,
+    # so it answers the incoming question and not this one.
+    def outgoing_calls_result(params)
+      item = params.fetch(:item)
+      symbol_id = symbol_id_from_call_hierarchy_item(item)
+      uri = item[:uri]
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return [] unless symbol_id && document && summary
+
+      declaration = summary.declarations.find { |d| d.symbol_id == symbol_id }
+      return [] unless declaration
+
+      inside = summary.reference_candidates.select do |candidate|
+        candidate.kind == :method_call && range_contains?(declaration.location, candidate.location)
+      end
+      return [] if inside.empty?
+
+      resolved = @reference_resolver.resolve(document, inside, uri: uri, generation: @reference_index.generation)
+      grouped = Hash.new { |h, k| h[k] = [] }
+      resolved.each do |r|
+        # No kind filter here, deliberately: `inside` is already only
+        # `:method_call` candidates, and a resolved one is a method
+        # kind or nothing. A guard that cannot be made to matter was
+        # written here first and removed when no fixture could tell
+        # the two behaviours apart.
+        next unless r
+
+        grouped[r.symbol_id] << r.location
+      end
+
+      grouped.map do |callee_id, ranges|
+        target = declaration_for_symbol(callee_id)
+        { to: call_hierarchy_item(callee_id, target&.first || uri, target&.last&.location, target&.last&.name_location),
+          fromRanges: ranges }
+      end
+    end
+
+    # The protocol hands the item back verbatim, so the symbol travels in
+    # `data` rather than being re-derived from a position that may have moved
+    # under the user between the prepare and the expansion.
+    def call_hierarchy_item(symbol_id, uri, range, selection_range)
+      range ||= { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }
+      { name: Index::SymbolId.bare_name(symbol_id.name.to_s),
+        kind: 6,
+        uri: uri,
+        range: range,
+        selectionRange: selection_range || range,
+        data: { kind: symbol_id.kind.to_s, owner: symbol_id.owner, name: symbol_id.name } }
+    end
+
+    def symbol_id_from_call_hierarchy_item(item)
+      data = item[:data] or return nil
+
+      Index::SymbolId.new(kind: data[:kind].to_sym, owner: data[:owner], name: data[:name], discriminator: nil)
+    rescue StandardError => e
+      # Contained: an `item` this server did not produce cannot be turned
+      # into a symbol, and `nil` makes every caller above answer the empty
+      # list -- which is "no hierarchy here", not a claim about the code.
+      @logger.warn("call hierarchy item could not be read: #{e.class}")
+      nil
+    end
+
+    def enclosing_callable(uri, location)
+      @file_summaries[uri]&.declarations&.select { |d| CALLABLE_KINDS.include?(d.symbol_id.kind) }
+                          &.select { |d| range_contains?(d.location, location) }
+                          &.min_by { |d| d.location[:end][:line] - d.location[:start][:line] }
+    end
+
+    def declaration_for_symbol(symbol_id)
+      @file_summaries.each do |uri, summary|
+        found = summary.declarations.find { |d| d.symbol_id == symbol_id }
+        return [uri, found] if found
+      end
+      nil
+    end
+
+    def range_contains?(outer, inner)
+      return false unless outer && inner
+
+      after_start = outer[:start][:line] < inner[:start][:line] ||
+                    (outer[:start][:line] == inner[:start][:line] &&
+                     outer[:start][:character] <= inner[:start][:character])
+      before_end = inner[:end][:line] < outer[:end][:line] ||
+                   (inner[:end][:line] == outer[:end][:line] &&
+                    inner[:end][:character] <= outer[:end][:character])
+      after_start && before_end
+    end
+
+
+    # `textDocument/typeDefinition` -- the class an expression evaluates to.
+    #
+    # 0.3.0, and `045` calls it "cheap given `explainType` already resolves
+    # the type": the type comes from the same `#type_at` that answers hover,
+    # and the location from the index's own class declarations.
+    #
+    # **The difference from `textDocument/definition` is the whole point.**
+    # Go to definition on `made` lands on the assignment; go to *type*
+    # definition lands on `TdWidget`. An implementation that forwarded to
+    # the definition handler would answer plausibly and never be right, so
+    # `capabilities_spec`'s D4 asserts both at the same caret.
+    #
+    # Nothing is answered where the type is not a workspace class -- an
+    # unknown type, a stdlib class the workspace does not declare, a union.
+    # The nearest name that looks right is a guess, and section 0 ranks a
+    # wrong jump below no jump.
+    def type_definition_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      return [] unless document
+
+      position = params.fetch(:position)
+      query_context = build_query_context(uri, position)
+      type = @query_service.type_at(document, position, initial_env: view_initial_env(uri),
+                                                        budget: query_context.budget)
+      warn_if_stale(query_context)
+      return [] unless type.is_a?(Types::Nominal)
+
+      @workspace_index.class_declarations(type.name.to_s)
     end
 
     def range_span(range)
@@ -3472,6 +3660,8 @@ module Ovallsp
           definitionProvider: true,
           referencesProvider: true,
           documentHighlightProvider: true,
+          callHierarchyProvider: true,
+          typeDefinitionProvider: true,
           renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
           completionProvider: { triggerCharacters: ["."], resolveProvider: true },

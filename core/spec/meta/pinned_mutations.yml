@@ -736,3 +736,45 @@
   to: "      ensure_reference_index_current\n      highlights = matching_candidate_highlights"
   spec: spec/e2e/capabilities_spec.rb
   example: "F1/F2: answers without rebuilding the workspace reference index"
+
+# Call hierarchy (W5/W6), 0.3.0. Each of these was written, then
+# measured unpinned, then given a fixture that tells the two behaviours
+# apart -- the first fixture agreed with the code by accident.
+- why: "the enclosing-method attribution. Without it a call written at the top level gets a caller invented for it, which is an assertion about the user's code nothing supports."
+  file: core/lib/ovallsp/server.rb
+  from: "        next unless enclosing\n"
+  to: "        enclosing ||= reference\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "W5: lists a method's callers across files, with the range of each call"
+- why: "innermost, not first. Nested `def`s both contain the call; taking the first declaration that contains it names the outer one, which did not make the call."
+  file: core/lib/ovallsp/server.rb
+  from: "                          &.min_by { |d| d.location[:end][:line] - d.location[:start][:line] }\n"
+  to: "                          &.first\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "W5: lists a method's callers across files, with the range of each call"
+- why: "the call ranges. Without them a call hierarchy entry is a name, and the protocol's point is that it is navigable."
+  file: core/lib/ovallsp/server.rb
+  from: "          fromRanges: ranges }\n      end\n    end\n\n    # Callees."
+  to: "          fromRanges: [] }\n      end\n    end\n\n    # Callees."
+  spec: spec/e2e/capabilities_spec.rb
+  example: "W5: lists a method's callers across files, with the range of each call"
+- why: "the kind guard on prepare. A class has no callers in this protocol's sense, and answering for one is a list of mentions wearing a caller's name."
+  file: core/lib/ovallsp/server.rb
+  from: "      return nil unless symbol_id && CALLABLE_KINDS.include?(symbol_id.kind)\n"
+  to: "      return nil unless symbol_id\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "W5/W6: offers no call hierarchy on a class name"
+
+# Go to type definition (D4/D5), 0.3.0.
+- why: "resolving the type rather than forwarding to go-to-definition. The forwarded answer is the assignment, which is plausible and never the class the expression evaluates to."
+  file: core/lib/ovallsp/server.rb
+  from: "      @workspace_index.class_declarations(type.name.to_s)\n"
+  to: "      definition_result(params)\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "D4: jumps to the class an expression evaluates to, not to the method that produced it"
+- why: "the decline where the type is not a workspace class. Without it `type.name` raises on an unknown type and the request answers an error -- which the E2E client used to hand back as an empty result, so this was unpinned until the client learned to tell the two apart."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] unless type.is_a?(Types::Nominal)\n"
+  to: "      return [] if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "D5: answers nothing where the type is not a workspace class"

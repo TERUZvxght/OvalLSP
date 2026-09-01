@@ -143,6 +143,8 @@ which is what it is for.
 | D1 | Go to definition on a call to a workspace method, with or without a receiver in front | jumps to its `def` | PASS |
 | D2 | Go to definition on an Active Record column/association | jumps to the owning model class | PASS |
 | D3 | Go to definition on a stdlib method | jumps into the RBS declaration | PASS |
+| D4 | Go to **type** definition on an expression | jumps to the class the expression evaluates to, not to the method that produced it | PASS |
+| D5 | Go to type definition where the type is not known, or is not a workspace class | nothing, rather than the nearest name that looks right | PASS |
 
 ## Diagnostics
 
@@ -205,6 +207,8 @@ settle. Everything it declines is listed under the non-goals below.
 | W2 | Rename a workspace method declared with `def` | every call site is rewritten | PASS |
 | W3 | Workspace symbol search | matching classes and methods | PASS |
 | W4 | Renames a method a macro declared (`attr_accessor`, `delegate`, …) | nothing is edited — the macro's argument is source the macro reads, not the method's name, so rewriting it also changes the ivar an `attr_*` reads, the second method `attr_accessor` declares, the label an `enum` uses for its scope and its stored mapping, or the method a `delegate` calls on its target. The editor shows its own refusal; the reason is logged, not surfaced (024.28) | PASS |
+| W5 | Opens the call hierarchy on a workspace method | its callers, across files, each with the range of the call inside the calling method | PASS |
+| W6 | Expands the outgoing side | the methods that method calls, each with the range of the call | PASS |
 
 ## In the current file
 
