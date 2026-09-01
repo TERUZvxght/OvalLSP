@@ -37,4 +37,23 @@ RSpec.describe "the suite's cache root" do
   it "is unique to this process" do
     expect(SUITE_CACHE_HOME).to include(Process.pid.to_s)
   end
+
+# And the root the *server* computes from it lands inside, which is
+# what actually decides where a run writes: the three above are about
+# the variable, and a store that ignored it would satisfy all of them.
+#
+# From 0.3.1's own version of this file, which was written
+# independently on that branch and is the stronger half of the two.
+# `Cache::Key` has no `cache_root`, which that example asserted against
+# until it was run -- so this asks the server for the store it actually
+# builds.
+it "keeps the root the server computes inside it" do
+  server = Ovallsp::Server.new(input: StringIO.new(""), output: StringIO.new,
+                               logger: Logger.new(File::NULL), workspace_root: Dir.pwd)
+  store = server.send(:build_cache_store)
+  cache_dir = store.instance_variable_get(:@cache_dir)
+
+  expect(cache_dir).not_to be_nil, "the store is disabled, so this asserts nothing"
+  expect(File.expand_path(cache_dir.to_s)).to start_with(File.expand_path(SUITE_CACHE_HOME))
+end
 end

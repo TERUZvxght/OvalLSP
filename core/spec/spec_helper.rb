@@ -70,6 +70,31 @@ module ExampleTmpdir
   end
 end
 
+# **The suite gets its own cache root, before anything reads one.**
+#
+# `Cache::Store` derives its root from `XDG_CACHE_HOME`, and two spec
+# files set it. Every other example that started a server therefore swept
+# the developer's own cache: measured here at 26,397 scopes and 282,805
+# entries, about five seconds per example and most of a thirteen-minute
+# run.
+#
+# It is also the shape `027` is about -- six days of `bundle exec rspec`
+# removing installed applications -- and the lesson there was that a test
+# reaching outside its own tmpdir is the hazard, whatever it does next.
+# Set here rather than per file, so it holds for every example whether or
+# not its author thought about the cache.
+#
+# One directory for the whole run rather than one per example: the cache
+# is meant to be reused across launches, and an example that wants a
+# fresh one already makes its own.
+require "tmpdir"
+require "fileutils"
+
+SUITE_CACHE_HOME = File.join(Dir.tmpdir, "ovallsp-suite-cache-#{Process.pid}")
+FileUtils.mkdir_p(SUITE_CACHE_HOME)
+ENV["XDG_CACHE_HOME"] = SUITE_CACHE_HOME
+at_exit { FileUtils.remove_entry(SUITE_CACHE_HOME) if File.directory?(SUITE_CACHE_HOME) }
+
 RSpec.configure do |config|
   config.include ExampleTmpdir
   config.after { remove_example_tmpdirs }

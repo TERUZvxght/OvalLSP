@@ -176,7 +176,7 @@ module Ovallsp
           # once -- ten projects, ten launches, and until then their
           # method bodies stay world-readable. This walk is the one place
           # that sees all of them, and it already runs on every launch.
-          tighten_tree(path)
+          tighten_tree_once(path)
 
           next if File.expand_path(path) == current_scope
 
@@ -286,6 +286,57 @@ module Ovallsp
       # handful of chmods per launch and not a full tree walk; and
       # best-effort throughout, because a cache on a filesystem that
       # cannot represent these modes is still a working cache.
+
+      # A scope whose tree has already been tightened by a build that does
+      # this. The file's presence is the whole state; its content is a note
+      # for whoever finds it.
+      MODES_MARKER = ".ovallsp-modes"
+
+      # **Once per scope, not once per launch.**
+      #
+      # The walk above exists so that a machine's *other* projects get
+      # 0.2.5's modes without each being opened once, and that reason still
+      # holds -- but `#tighten_tree` globs `**/*`, and calling it for every
+      # scope on every launch is a full walk of the whole cache root before
+      # the server answers anything.
+      #
+      # Measured on a real cache: **26,397 scopes, 282,805 entries, 8.58
+      # seconds**, paid on every start. A cache gains a scope per workspace
+      # per generation, so it is a cost that only grows. The suite paid it
+      # too -- roughly a hundred examples were each waiting five seconds for
+      # a shutdown blocked behind this walk, which is most of a thirteen
+      # minute run.
+      #
+      # The guarantee is unchanged: the first launch after upgrading still
+      # tightens every scope on the machine. What changes is that the second
+      # one does not.
+      #
+      # The scope currently in use is exempt from the marker, because this
+      # process is about to write into it -- `#ensure_directory` tightens
+      # what it creates, and this is the belt to that's braces.
+      def self.tighten_tree_once(scope_dir, always: false)
+        marker = File.join(scope_dir, MODES_MARKER)
+        return if !always && File.file?(marker)
+
+        # **The scope's own mtime is load-bearing**, and writing a file
+        # into a directory updates it. Pruning ages an abandoned scope
+        # by that mtime, so a marker written here made every scope look
+        # freshly used and nothing was ever pruned -- a cache that only
+        # grows, which is worse than the walk this method removes.
+        # Caught by `store_spec`'s pre-0.2.1 example, which ages a
+        # directory by two days and expects it gone.
+        aged = File.mtime(scope_dir)
+        tighten_tree(scope_dir)
+        File.write(marker, "modes tightened by ovallsp #{Ovallsp::VERSION}\n")
+        tighten(marker, 0o600)
+        File.utime(File.atime(scope_dir), aged, scope_dir)
+      rescue StandardError
+        # Contained: a cache root this process cannot write a marker into is
+        # a cache that still works -- the only consequence is that the walk
+        # is paid again next launch, which is what every launch did before.
+        nil
+      end
+
       def self.tighten_tree(scope_dir)
         tighten(scope_dir)
         Dir.glob(File.join(scope_dir, "**", "*"), File::FNM_DOTMATCH).each do |entry|
