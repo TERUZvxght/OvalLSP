@@ -61,6 +61,17 @@ module Ovallsp
 
       def initialize(entries)
         @entries = entries
+        # The type model names a class by its **last segment** where
+        # that is unambiguous -- `Relation[Post]`, not
+        # `ActiveRecord::Relation[Post]` -- and this index is keyed by
+        # the full name the running application reported. So a simple
+        # name resolves too, and **only where exactly one class claims
+        # it**: two gems with a `Client` are two different classes, and
+        # answering either would be a wrong surface rather than a
+        # missing one.
+        by_simple = Hash.new { |h, k| h[k] = [] }
+        entries.each_key { |name| by_simple[name.split("::").last] << name }
+        @unique_simple = by_simple.filter_map { |simple, full| [simple, full.first] if full.length == 1 }.to_h
         freeze
       end
 
@@ -89,7 +100,8 @@ module Ovallsp
       def entry_for(name)
         return nil if name.nil?
 
-        @entries[Index::SymbolId.bare_name(name.to_s)]
+        bare = Index::SymbolId.bare_name(name.to_s)
+        @entries[bare] || @entries[@unique_simple[bare]]
       end
     end
   end

@@ -927,6 +927,55 @@ RSpec.describe "Extension capabilities", :e2e do
                                           "a real Rails bundle contributes thousands"
     end
 
+    # 024.87 and the roadmap's "`Article.all.` completes". The type half
+    # was fixed in 0.2.15 -- a chain stays `Relation[T]` -- and the entry
+    # says the diagnostic half is unconfirmed. This confirms it either way
+    # rather than leaving it as a belief.
+    it "C16: completes and checks past the second link of a relation chain" do
+      # The caret is at the end of the line, after the trailing dot --
+      # counted from the source rather than written as a number, which
+      # is how the first version of this landed on the `:id` inside
+      # `order(:id)` and measured `Symbol`.
+      # The members come from the running application (024.R7), so the
+      # index has to have landed -- the same wait G18 makes.
+      expect(@client.wait_for_gem_index).to be > 100
+
+      chain = "    Post.where(x: 1).order(:id)."
+      source = "class RelProbe\n  def go\n#{chain}\n  end\nend\n"
+
+      with_file("app/models/rel_probe.rb", source) do |uri|
+        # `Relation`'s own members, at the second hop -- which is where
+        # 024.87 says the chain used to lose its type.
+        labels = @client.completion_labels(uri, 2, chain.length)
+
+        # What a `Relation` actually offers, read off the answer rather than
+        # assumed: `where` is `Post`'s *singleton* method, not a member of the
+        # relation the chain evaluates to. The first version of this example
+        # asserted `where` and was measuring the wrong receiver.
+        #
+        # 228 items come back here where the pre-0.3.0 build offered none.
+        expect(labels.length).to be > 50, "the chain lost its members at the second link"
+        expect(labels).to include("each", "map")
+      end
+    end
+
+    it "G19: reports a typo past the second link of a relation chain" do
+      source = "class RelDiag < ApplicationRecord\n  def go\n    Post.where(x: 1).order(:id).titel\n  end\nend\n"
+
+      expect(@client.wait_for_gem_index).to be > 100
+
+      with_file("app/models/rel_diag.rb", source) do |uri|
+        messages = @client.diagnostic_messages(uri).join(" ")
+
+        # **Recorded either way.** `024.87` calls this half unconfirmed; a
+        # relation is an Active Record object and `ActiveRecord::Relation`
+        # delegates through `method_missing`, so silence here is the
+        # correct answer and not a gap -- which is what the expectation
+        # below says, measured rather than assumed.
+        expect(messages).not_to include("titel")
+      end
+    end
+
     # 024.R7, and the roadmap's first 0.3.0 promise. Until now "closed"
     # meant "the workspace can see the whole ancestry", so a class
     # inheriting from a gem was never checked -- the check worked where it

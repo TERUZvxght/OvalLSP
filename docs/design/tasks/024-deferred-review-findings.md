@@ -262,7 +262,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.84`](024-deferred-review-findings-resolved.md#02484-a-constant-is-typed-as-a-class-object-whatever-it-holds) | fixed | 0.2.18 | A constant is typed as a class object whatever it holds |
 | [`024.85`](024-deferred-review-findings-resolved.md#02485-self-completes-nothing) | fixed | 0.2.16 | `self.` completes nothing |
 | [`024.86`](024-deferred-review-findings-resolved.md#02486-an-ivar-assigned-in-another-method-has-no-type-except-in-the-view) | fixed | 0.3.0 | An ivar assigned in another method has no type, except in the view |
-| [`024.87`](#02487-a-relation-stops-being-a-relation-after-one-hop) | open | 0.3.0 | A relation stops being a relation after one hop |
+| [`024.87`](024-deferred-review-findings-resolved.md#02487-a-relation-stops-being-a-relation-after-one-hop) | fixed | 0.3.0 | A relation stops being a relation after one hop |
 | [`024.88`](#02488-completion-unions-a-union-s-members-the-diagnostic-intersects-them) | open | 0.3.0 | Completion unions a union's members; the diagnostic intersects them |
 | [`024.89`](024-deferred-review-findings-resolved.md#02489-signature-help-strips-the-parameter-kinds-and-never-advances) | fixed | 0.2.15 | Signature help strips the parameter kinds and never advances |
 | [`024.90`](024-deferred-review-findings-resolved.md#02490-smaller-answers-a-review-round-measured) | fixed | 0.2.14 | Smaller answers a review round measured |
@@ -2531,88 +2531,6 @@ one exists, section 0.4 says a wrong answer on a walked path is what
 blocks, and this is one.
 
 **Re-triaged in 0.2.17** (`024.276`). This is one of the two where the pasted reason happened to be true: the Direction needs a witness outside the workspace — RBS, or a gem's own `sig/` — that says a class is declared elsewhere, and until one exists section 0.4 says a wrong answer on a walked path is what blocks. That witness is `024.R7`. Not re-driven since the measurement in the body, which is dated there.
-
-## 024.87 A relation stops being a relation after one hop
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-user-visible-note: >
-  The type half is fixed in 0.2.15: a chain stays Relation[T]. The
-  diagnostic half is unconfirmed and stays open.
-target: 0.3.0
-```
-
-**Area:** `core/lib/ovallsp/semantic/generic_rule_registry.rb`,
-`core/lib/ovallsp/local_inferencer.rb`
-
-`Post.where(published: true)` infers `Relation[Post]`;
-`Post.where(published: true).where(user_id: 1)` infers nothing. So do
-`.order`, `.limit`, `.includes`, `.count`, and a second scope. `#first`
-and `#to_a` survive because they are modelled; the relation-returning
-methods are not.
-
-The cost is not only hover: `Post.published.where(user_id: 1).titel`
-produced **no** diagnostic in a run where `post.titel` did — the
-undefined-method check switches off at the second link of the most common
-Rails expression there is. `@articles = Post.where(...).order(:id)` in a
-controller hovers `""`.
-
-Measured through the real server by a review round of 0.2.6.
-
-**Not fixed in 0.2.6**: a review round is for fixing what the change set
-got wrong, and this is a capability the round asked for. `024.79`'s
-delegation already puts `Model.<name>` and `Relation#<name>` on one rule,
-so the table is the one place to add them.
-
-### The type half, fixed in 0.2.15
-
-Reproduced exactly as written, with a registered model:
-
-```
-Post.all                       => Relation[Post]
-Post.where(a: 1)               => Relation[Post]
-Post.where(a: 1).where(b: 2)   => Unknown      <-
-Post.where(a: 1).order(:id)    => Unknown      <-
-Post.where(a: 1).limit(3)      => Unknown      <-
-Post.where(a: 1).first         => Post | nil
-```
-
-Sixteen relation-returning methods now carry `return_template: :receiver`
-on a `Relation` or `CollectionProxy`. **Probed against real Rails**, the
-way the rules beside them were: ActiveRecord 8.1.3.1, in-memory sqlite3,
-`rel = Post.where(title: "x")` — `where order limit offset includes joins
-distinct group having preload eager_load references reorder readonly none
-unscope` all answered `Post::ActiveRecord_Relation`.
-
-**`select` is deliberately absent.** On a Relation it returns a Relation
-without a block and an Array with one, and the `ENUMERABLE_LIKE` rule
-already covers the block form; adding a relation rule would make the
-answer depend on which matched first.
-
-**The distinguishing example is that a terminal method must not become a
-relation** — `.first` stays `Post | nil`, `.to_a` stays `Array[Post]` —
-because "everything on a Relation is a Relation" would pass every other
-example and be wrong exactly where it matters.
-
-Measured over 269 files of real gem source, both sides on corpus digest
-`8143600c…` at different revisions: byte-identical.
-
-### The diagnostic half is not confirmed, and the entry stays open
-
-The sharper complaint is that `Post.published.where(user_id: 1).titel`
-produced no report where `post.titel` did. **That was not reproduced.**
-In a unit fixture the ActiveRecord class-method API is not known to the
-diagnostic path, so the *first* hop already reports ``Post has no method
-named `where` `` — the fixture cannot tell the second link from the
-first, and an example built on it would assert nothing.
-
-What is fixed is the type the diagnostic consumes: a chain that ended in
-`Unknown` now ends in `Relation[Post]`, and a check that declines on
-`Unknown` no longer has cause to. Confirming the report itself needs the
-e2e path with a real Agent. Retargeted to 0.2.16 for that.
-
 
 ## 024.88 Completion unions a union's members; the diagnostic intersects them
 

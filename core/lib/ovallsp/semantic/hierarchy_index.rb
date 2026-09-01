@@ -406,7 +406,14 @@ module Ovallsp
         # it, which nothing here knows. Measured: with modules rooted,
         # activerecord`s own source reported `superclass`, `name` and
         # `primary_key` on its own modules, all of them correct code.
-        return [] unless kind_of(canonical) == :class
+        # `kind_of` reads the *workspace* index, which knows nothing
+        # about a gem's own class -- so this refused a receiver that is
+        # itself a gem class, and `ActiveRecord::Relation`'s chain
+        # stopped at one link. That is `024.87`'s unconfirmed half:
+        # hover said `Relation[Post]` and completion after the dot was
+        # empty, because the type survived and the members had nowhere
+        # to come from.
+        return [] unless class_here?(canonical)
         return [] if entries.any? { |e| e.identified? && qualify(e.identified_name) == "::BasicObject" }
 
         tail = entries.reverse.find { |e| e.identified? && @gem_index.knows?(e.identified_name) }
@@ -424,6 +431,15 @@ module Ovallsp
       # ancestry starts with itself and then `Object` is a class; one
       # that does not reach `Object` is a module, which is what Ruby's
       # own `Module#ancestors` shows for a bare module.
+      # A class, as either index sees it. The gem index does not label
+      # class or module, so `#kind_for_gem` reads it off the loaded
+      # ancestry -- a bare module's does not reach `Object`.
+      def class_here?(name)
+        return true if kind_of(name) == :class
+
+        @gem_index.knows?(name) && kind_for_gem(name) == :class
+      end
+
       def kind_for_gem(name)
         @gem_index.ancestors(name).include?("Object") ? :class : :module
       end
@@ -573,7 +589,21 @@ module Ovallsp
         return [] if entries.any? { |entry| !entry.identified? }
 
         canonical = canonical_name(type_name)
-        case kind_of(canonical)
+        # `class_here?` rather than `kind_of`: the workspace index does
+        # not know a gem class, so its singleton chain got no tail and
+        # `Foo.new` became a closed receiver with no `new` on it -- 37
+        # false reports over activerecord, every one a `.new`.
+        # The workspace answers first: it distinguishes class from
+        # module, and the gem index only says "class" or nothing.
+        # Written the other way round, a workspace *module* was given a
+        # class tail and 25 examples failed.
+        # The workspace answers first -- it distinguishes class from
+        # module, and the gem index only says "class" or nothing. And
+        # the gem fallback applies only to a name the *index* knows, so
+        # a workspace name the workspace could not classify keeps the
+        # answer it had. Written without either guard, 25 examples
+        # failed on workspace types this never used to speak about.
+        case kind_of(canonical) || (@gem_index.knows?(canonical) && kind_for_gem(canonical) == :class ? :class : nil)
         when :class then DEFAULT_CLASS_SINGLETON_CHAIN
         when :module then DEFAULT_MODULE_SINGLETON_CHAIN
         else []

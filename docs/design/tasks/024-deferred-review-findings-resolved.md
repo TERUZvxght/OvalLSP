@@ -5189,6 +5189,129 @@ do not act on an ivar receiver even where hover and completion now do.
 It is filed as its own entry rather than left inside a resolved one.
 
 
+## 024.87 A relation stops being a relation after one hop
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+user-visible-note: >
+  The type half is fixed in 0.2.15: a chain stays Relation[T]. The
+  diagnostic half is unconfirmed and stays open.
+released-in: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/generic_rule_registry.rb`,
+`core/lib/ovallsp/local_inferencer.rb`
+
+`Post.where(published: true)` infers `Relation[Post]`;
+`Post.where(published: true).where(user_id: 1)` infers nothing. So do
+`.order`, `.limit`, `.includes`, `.count`, and a second scope. `#first`
+and `#to_a` survive because they are modelled; the relation-returning
+methods are not.
+
+The cost is not only hover: `Post.published.where(user_id: 1).titel`
+produced **no** diagnostic in a run where `post.titel` did — the
+undefined-method check switches off at the second link of the most common
+Rails expression there is. `@articles = Post.where(...).order(:id)` in a
+controller hovers `""`.
+
+Measured through the real server by a review round of 0.2.6.
+
+**Not fixed in 0.2.6**: a review round is for fixing what the change set
+got wrong, and this is a capability the round asked for. `024.79`'s
+delegation already puts `Model.<name>` and `Relation#<name>` on one rule,
+so the table is the one place to add them.
+
+### The type half, fixed in 0.2.15
+
+Reproduced exactly as written, with a registered model:
+
+```
+Post.all                       => Relation[Post]
+Post.where(a: 1)               => Relation[Post]
+Post.where(a: 1).where(b: 2)   => Unknown      <-
+Post.where(a: 1).order(:id)    => Unknown      <-
+Post.where(a: 1).limit(3)      => Unknown      <-
+Post.where(a: 1).first         => Post | nil
+```
+
+Sixteen relation-returning methods now carry `return_template: :receiver`
+on a `Relation` or `CollectionProxy`. **Probed against real Rails**, the
+way the rules beside them were: ActiveRecord 8.1.3.1, in-memory sqlite3,
+`rel = Post.where(title: "x")` — `where order limit offset includes joins
+distinct group having preload eager_load references reorder readonly none
+unscope` all answered `Post::ActiveRecord_Relation`.
+
+**`select` is deliberately absent.** On a Relation it returns a Relation
+without a block and an Array with one, and the `ENUMERABLE_LIKE` rule
+already covers the block form; adding a relation rule would make the
+answer depend on which matched first.
+
+**The distinguishing example is that a terminal method must not become a
+relation** — `.first` stays `Post | nil`, `.to_a` stays `Array[Post]` —
+because "everything on a Relation is a Relation" would pass every other
+example and be wrong exactly where it matters.
+
+Measured over 269 files of real gem source, both sides on corpus digest
+`8143600c…` at different revisions: byte-identical.
+
+### The diagnostic half is not confirmed, and the entry stays open
+
+The sharper complaint is that `Post.published.where(user_id: 1).titel`
+produced no report where `post.titel` did. **That was not reproduced.**
+In a unit fixture the ActiveRecord class-method API is not known to the
+diagnostic path, so the *first* hop already reports ``Post has no method
+named `where` `` — the fixture cannot tell the second link from the
+first, and an example built on it would assert nothing.
+
+What is fixed is the type the diagnostic consumes: a chain that ended in
+`Unknown` now ends in `Relation[Post]`, and a check that declines on
+`Unknown` no longer has cause to. Confirming the report itself needs the
+e2e path with a real Agent. Retargeted to 0.2.16 for that.
+### Fixed in 0.3.0, and the unconfirmed half was two different things
+
+The entry's note says the type half was fixed in 0.2.15 and the
+diagnostic half is unconfirmed. Measured through the real server, both
+are now confirmed and they are not the same answer.
+
+**The members were the missing half, not the type.** Hover on
+`Post.where(x: 1).order(:id).` says `Relation[Post]`; completion at the
+same caret answered **nothing**. `#receiver_members` handed a `Generic`
+to a walk that asks a `Nominal`, so the type survived the chain and its
+members had nowhere to come from. **228 items** come back now.
+
+Three things had to move together, and each was found by measuring:
+
+- `#receiver_members` unwraps a `Generic` — but **not `ClassOf`**,
+  which is a Generic too and is the one that must stay whole. Routing
+  through `#each_nominal`, which unwraps both, asked every class object
+  for its *instance* members and failed 21 examples.
+- `HierarchyIndex#gem_ancestry` refused a receiver that is itself a gem
+  class, because `kind_of` reads the workspace index. So
+  `ActiveRecord::Relation`'s own chain was one link.
+- `GemIndex` resolves a **unique** simple name, because the type model
+  says `Relation[Post]` and the running application says
+  `ActiveRecord::Relation`. Only where exactly one class claims the
+  simple name: two gems with a `Client` are two classes.
+
+**The diagnostic half is a silence, and it is correct.** A relation is
+an Active Record object and its chain reaches
+`ActiveRecord::AttributeMethods`, which defines `method_missing` — so
+`Post.where(x: 1).order(:id).titel` is *not* reported, and reporting it
+would be a wrong answer. `G19` asserts the silence rather than leaving
+the entry's "unconfirmed" standing.
+
+### And one regression the corpus caught
+
+Giving a gem class its singleton tail turned `Foo.new` into 37 false
+reports over activerecord — `Class#new` is on the singleton chain, and
+the gem index reports `singleton_methods(false)`. The tail is now taken
+from the workspace's answer first and the index's only for a name the
+index knows. Back to **0 introduced, 13 removed**, control
+`unresolved-constant` identical at 1,609.
+
+
 ## 024.89 Signature help strips the parameter kinds and never advances
 
 ```yaml

@@ -17,8 +17,23 @@ RSpec.describe "a receiver whose ancestry runs into a gem" do
           instanceMethods: %w[persist], singletonMethods: %w[configure], definesMethodMissing: false },
         { name: "WidgetGem::Naming", ancestors: %w[WidgetGem::Naming Object Kernel BasicObject],
           instanceMethods: %w[human_name], singletonMethods: [], definesMethodMissing: false },
+        # A **module**: its loaded ancestry does not reach `Object`,
+        # which is how a bare module reads. What `self` is inside a
+        # `ClassMethods`-style module at call time is whatever class
+        # extended it, so rooting one is a report factory -- 795 false
+        # reports over activerecord's own source, measured.
+        { name: "WidgetGem::ClassMethods", ancestors: %w[WidgetGem::ClassMethods],
+          instanceMethods: %w[declared], singletonMethods: [], definesMethodMissing: false },
         { name: "WidgetGem::Dynamic", ancestors: %w[WidgetGem::Dynamic Object Kernel BasicObject],
-          instanceMethods: [], singletonMethods: [], definesMethodMissing: true }
+          instanceMethods: [], singletonMethods: [], definesMethodMissing: true },
+        # A class whose *ancestor* answers at call time. `#knows?` is
+        # asked of the receiver and says yes here; the resolver's own
+        # refusal is asked of every link, and only this shape tells the
+        # two apart -- with the first fixture both made the receiver
+        # open and the guard was measured unpinned.
+        { name: "WidgetGem::Heir",
+          ancestors: %w[WidgetGem::Heir WidgetGem::Dynamic Object Kernel BasicObject],
+          instanceMethods: %w[settled], singletonMethods: [], definesMethodMissing: false }
       ] } } }
     )
   end
@@ -73,6 +88,25 @@ RSpec.describe "a receiver whose ancestry runs into a gem" do
   # holds: it answers to names no enumeration can list.
   it "stays silent under a parent that answers at call time" do
     source = "class Widget < WidgetGem::Dynamic\n  def go\n    anything_at_all\n  end\nend\n"
+
+    expect(findings(source).select { |f| f.code == "unknown-method" }).to be_empty
+  end
+
+  # And when the `method_missing` is an *ancestor* of the receiver
+  # rather than the receiver itself. `#knows?` answers about the
+  # receiver alone, so this is the shape that pins the resolver's own
+  # refusal -- measured unpinned without it.
+  it "stays silent when an ancestor answers at call time" do
+    source = "class Widget < WidgetGem::Heir\n  def go\n    anything_at_all\n  end\nend\n"
+
+    expect(findings(source).select { |f| f.code == "unknown-method" }).to be_empty
+  end
+
+  # The classes-only guard. Without a module in the fixture nothing
+  # could tell "root a class" from "root anything", and it measured
+  # unpinned.
+  it "says nothing inside a module, whose self at call time it cannot know" do
+    source = "module WidgetGem::ClassMethods\n  def go\n    whatever_the_extender_has\n  end\nend\n"
 
     expect(findings(source).select { |f| f.code == "unknown-method" }).to be_empty
   end

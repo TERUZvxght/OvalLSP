@@ -855,3 +855,31 @@
   to: "      left -= 0\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "C15: offers the class's instance variables at the sigil, not only this method's"
+
+# 024.R7 and 024.87, 0.3.0. Each of these was measured over
+# activerecord's own 397 files before it was believed; two earlier
+# versions produced 47 and 795 false reports and were rejected.
+- why: "024.R7's rooting. Without it a class whose parent is in a gem never reaches BasicObject, so the undefined-method check stays silent for every Rails controller."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "        entries.concat(gem_ancestry(canonical, entries))\n"
+  to: "        entries.concat([])\n"
+  spec: spec/ovallsp/semantic/gem_backed_closure_spec.rb
+  example: "reports a typo on a class whose parent is in a gem"
+- why: "024.R7's classes-only guard. Rooting a module makes every `ClassMethods`-style module a closed receiver, and what `self` is inside one at call time is the class that extended it -- 795 false reports over activerecord."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "        return [] unless class_here?(canonical)\n"
+  to: "        return [] unless true\n"
+  spec: spec/ovallsp/semantic/gem_backed_closure_spec.rb
+  example: "says nothing inside a module, whose self at call time it cannot know"
+- why: "024.R7's method_missing refusal. A gem class that defines one answers to names no enumeration can list."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "        return true if entry.identified? && gem_index.defines_method_missing?(entry.name)\n"
+  to: "        return true if false\n"
+  spec: spec/ovallsp/semantic/gem_backed_closure_spec.rb
+  example: "stays silent when an ancestor answers at call time"
+- why: "024.R7's member half. Closedness without members turns every correct call on a gem into a report."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "        return gem_candidate(entry, resolved_name, symbol_id, rank) if decls.empty?\n"
+  to: "        return nil if decls.empty?\n"
+  spec: spec/ovallsp/semantic/gem_backed_closure_spec.rb
+  example: "reports nothing about the gem's own methods, inherited or direct"

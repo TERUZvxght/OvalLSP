@@ -129,6 +129,7 @@ suite in step: every row must have an example, every example a row.
 | C13 | Highlights a completion candidate declared with an RDoc/YARD comment, *in the list a receiver produced* | the comment appears as the item's documentation | PASS |
 | C14 | Types `self.` inside a method body | the members of whatever `self` is *there* — the class's instance methods inside `def x`, its singleton methods inside `def self.x` and inside `class << self` | PASS |
 | C15 | Types `@` inside a method | the instance variables the class assigns anywhere, not only the ones this method assigns | PASS |
+| C16 | Types `.` after a chained relation — `Post.where(...).order(:id).` | the relation's own members, not nothing: the chain keeps its type past the second link | PASS |
 
 C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
 a bare constant inferred as `Unknown`, so nothing downstream ever saw a
@@ -169,6 +170,7 @@ which is what it is for.
 | G16 | Reads an `@ivar` in a view that no controller action or callback assigns | it is reported | PASS |
 | G17 | Has a mistake in a file present before the server started and never opened | it is reported anyway | PASS |
 | G18 | Calls a method that does not exist on a class inheriting from a gem | it is reported — the running application's own class list is what makes the receiver knowable | PASS |
+| G19 | Calls a method that does not exist on a chained relation | **nothing is reported** — a relation reaches `ActiveRecord::AttributeMethods`, which answers at call time, so a report there would be a wrong answer | PASS |
 
 G4 used to follow from the same missing-ancestor problem as C4 and is now
 closed: the Runtime Agent reports what each model actually responds to,

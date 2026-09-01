@@ -603,8 +603,17 @@ module Ovallsp
         fact.visibility || declared_visibility(owner, kind, fact.old_name) || :public
       end
 
+      # 024.R7 and 024.87: the gem's own names as well as the
+      # workspace's. `#build_candidate` already answers a gem method
+      # when asked about one by name; this is the same knowledge read
+      # the other way, for completion -- without it a receiver whose
+      # whole chain is a gem's offers nothing, which is what
+      # `Post.where(...).order(:id).` did while hover on the same caret
+      # said `Relation[Post]`.
       def method_names_for_owner(owner, kind)
         declared = @workspace_index.method_symbol_ids(owner, kind: kind).map(&:name)
+        declared += (kind == :singleton_method ? gem_index.singleton_methods(owner)
+                                               : gem_index.instance_methods(owner)).to_a
         aliases = @hierarchy_index.aliases(owner)
                                   .select { |fact| fact.singleton == (kind == :singleton_method) }
                                   .map(&:new_name)
