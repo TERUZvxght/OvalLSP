@@ -138,7 +138,7 @@
 "core/lib/ovallsp/server.rb#build_cache_store[2]": surfaces
 "core/lib/ovallsp/server.rb#gemfile_lock_digest": "contained: a cache key that cannot be computed means do not cache"
 "core/lib/ovallsp/server.rb#rbs_digest": "contained: same"
-"core/lib/ovallsp/server.rb#load_signatures_environment": surfaces
+"core/lib/ovallsp/server.rb#load_signatures_into": surfaces
 "core/lib/ovallsp/server.rb#maybe_start_agent": surfaces
 "core/lib/ovallsp/server.rb#maybe_start_agent[2]": surfaces
 "core/lib/ovallsp/views/controller_ivars.rb#assigned_ivars_for": surfaces

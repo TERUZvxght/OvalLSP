@@ -44,7 +44,8 @@ module Ovallsp
                    generated_method_index: Semantic::GeneratedMethodIndex.new,
                    gem_index: Semantic::GemIndex.empty,
                    max_steps: nil)
-      hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: workspace_index, gem_index: gem_index)
+      hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: workspace_index, gem_index: gem_index,
+                                                    signatures: signatures)
       method_resolver = Semantic::MethodResolver.new(workspace_index: workspace_index,
                                                     hierarchy_index: hierarchy_index,
                                                     gem_index: gem_index)

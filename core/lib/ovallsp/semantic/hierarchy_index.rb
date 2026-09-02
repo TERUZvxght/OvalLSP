@@ -181,11 +181,17 @@ module Ovallsp
       ROOT_SUPERCLASS_NAMES = %w[Object ::Object].freeze
       private_constant :ROOT_SUPERCLASS_NAMES
 
-      def initialize(workspace_index:, gem_index: GemIndex.empty)
+      def initialize(workspace_index:, gem_index: GemIndex.empty, signatures: nil)
         @workspace_index = workspace_index
         # 024.R7. Empty unless a Runtime Agent has answered. Read at the
         # one place a chain stops for want of a superclass fact.
         @gem_index = gem_index
+        # Read for one question only, in #canonical_name: whether a bare
+        # name already denotes something, which is the difference between
+        # reading `Relation` as a gem class and reading `Integer` as one.
+        # `nil` is a stack built without signatures, and it declines
+        # rather than guesses.
+        @signatures = signatures
         @mutex = Mutex.new
         @facts_by_uri = {}
         @superclass_by_owner = {}
@@ -319,7 +325,32 @@ module Ovallsp
         return resolved if resolved
 
         bare = type_name.to_s
+        return bare unless free_for_a_gem_to_claim?(bare)
+
         @gem_index.resolve_simple_name(bare) || bare
+      end
+
+      # **Whether this bare name means nothing yet.** The rule above
+      # declines where two gems claim one simple name, and that was written
+      # as though a contest between gems were the only way to be wrong. A
+      # core class is the other way, and it cannot enter the contest:
+      # `Object.const_source_location` answers `[]` for one, so the Agent --
+      # which keeps only what a gem path accounts for -- never reports it,
+      # and a gem's own nested class of that name stands unopposed. The
+      # receiver then takes that class's chain, and every core method on it
+      # is reported as one that does not exist.
+      #
+      # Signatures are the oracle, because they are the one thing here that
+      # knows a name has a referent without a gem having loaded it. Only an
+      # outright `false` -- never heard of it -- licenses the
+      # reinterpretation. `nil` is the unbuildable chain of `024.223` and
+      # declines; so does having no signature environment at all. This is
+      # the "is this constant known" direction `#declares?` names, and that
+      # one fails towards *known*.
+      def free_for_a_gem_to_claim?(bare)
+        return false unless @signatures
+
+        @signatures.declares?(bare) == false
       end
 
       def remove_file_locked(uri)

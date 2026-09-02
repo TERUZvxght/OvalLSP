@@ -153,6 +153,10 @@ release that found it. Empty means everything found has been triaged.
   - where: core/lib/ovallsp/server.rb, `next unless enclosing` and the render's `declarations.find ... or next`
   - Measured: mutating either alone leaves both W5 examples green; mutating both fails them. So one is redundant as the code stands, and `pinned_mutations.yml` now pins the pair rather than pretending to pin a line. Deciding which to remove needs the call-hierarchy design, not a review round.
   - unverified: the redundancy is measured; which line should go is not decided
+- **A bare name RBS does not declare is still reinterpreted as the one gem class sharing its last segment**
+  - found by: core/lib/ovallsp/semantic/hierarchy_index.rb#canonical_name, core/lib/ovallsp/semantic/gem_index.rb#resolve_simple_name
+  - 0.3.0 stopped a gem's nested class from claiming a core name by asking the signature environment whether the bare name already denotes something. That leaves the rule intact for every name RBS has not heard of, which is where it was needed (Relation -> ActiveRecord::Relation) and also where it can still be wrong: a class the user wrote and the workspace index has not got is indistinguishable from a name nothing claims, so a gem's SomeGem::Config would answer for a bare Config. Not driven -- what is needed is a workspace whose own class is missing from the index at the moment the question is asked, and whether that state is reachable at all is the first thing to establish.
+  - unverified: not yet driven against the tree
 <!-- intake: none -->
 
 *(No untriaged issues.)*

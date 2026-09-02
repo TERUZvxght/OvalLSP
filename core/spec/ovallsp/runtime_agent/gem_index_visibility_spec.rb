@@ -25,11 +25,11 @@ require "logger"
 #     private def helper; end
 #     protected def compare; end
 #   end
-#   p VisProbe.instance_methods(false)
-#   p VisProbe.private_instance_methods(false)
-#   p VisProbe.protected_instance_methods(false)
+#   p VisProbe.instance_methods(false).sort
+#   p VisProbe.private_instance_methods(false).sort
+#   p VisProbe.protected_instance_methods(false).sort
 #   '
-#   # => [:pub, :compare]
+#   # => [:compare, :pub]
 #   # => [:helper]
 #   # => [:compare]
 #   # ruby 3.4.10

@@ -407,14 +407,21 @@ module Ovallsp
           #     private def helper; end
           #     protected def compare; end
           #   end
-          #   p PrivProbe.instance_methods(false)
-          #   p PrivProbe.private_instance_methods(false)
-          #   p PrivProbe.protected_instance_methods(false)
+          #   p PrivProbe.instance_methods(false).sort
+          #   p PrivProbe.private_instance_methods(false).sort
+          #   p PrivProbe.protected_instance_methods(false).sort
           #   '
-          #   # => [:pub, :compare]
+          #   # => [:compare, :pub]
           #   # => [:helper]
           #   # => [:compare]
           #   # ruby 3.4.10
+          #
+          # `.sort` on each line is not decoration. `instance_methods`
+          # returns them in no specified order, and the unsorted form of
+          # this session reproduced on one machine and not on another --
+          # so the evidence failed where nothing about the claim had
+          # changed. A session that prints an unordered collection has to
+          # order it, or it is pinning the interpreter's internals.
           #
           # A receiverless call from a subclass reaches all three, so
           # without these a gem's own private helper was reported as a

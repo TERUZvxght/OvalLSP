@@ -319,7 +319,17 @@ module Ovallsp
 
       @logger.info("workspace root from the client: #{path}")
       @workspace_root = path
-      @signatures = load_signatures_environment
+      # **Reloaded in place, not replaced.** `AnalysisStack` was handed
+      # this object at construction, so assigning a new one here left
+      # the stack -- the local inferencer, and the hierarchy index that
+      # reads signatures to decide whether a bare name already denotes
+      # something -- holding one loaded from the process's own cwd,
+      # while every request-time reader got the adopted one. Two
+      # environments in one server, and which answered depended on
+      # which collaborator was asked. The reload path below already
+      # calls `#load` on the environment in place for exactly this
+      # reason; this is the same call at the other site.
+      load_signatures_into(@signatures)
     end
 
     def client_workspace_root(params)
@@ -1669,8 +1679,13 @@ module Ovallsp
     # 失敗でRuby source解析を停止しない") — every downstream consumer already
     # treats a nil/empty Signatures::Environment as "no signature results",
     # never as an error.
-    def load_signatures_environment
-      env = Signatures::Environment.new
+    def load_signatures_environment = load_signatures_into(Signatures::Environment.new)
+
+    # One place that knows what a failed load does, because the two
+    # callers must not differ about it: a first load and an adoption
+    # of the editor's root both leave the environment readable and
+    # empty rather than raising.
+    def load_signatures_into(env)
       env.load(workspace_root: @workspace_root)
       env
     rescue StandardError => e

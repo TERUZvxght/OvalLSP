@@ -268,6 +268,61 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
     @manager&.stop
   end
 
+# **A core class is not up for reinterpretation by a gem**, and only a
+# loaded application can show that the danger is real: the index a
+# bare name is matched against is whatever this process happened to
+# require.
+#
+# `HierarchyIndex#canonical_name` reads a bare name the workspace does
+# not own as the one gem class whose last segment matches it, so that
+# `Relation` reaches `ActiveRecord::Relation`. A core class cannot
+# contest that match -- `Object.const_source_location` answers `[]`
+# for one, so the Agent, which keeps only what a gem path accounts
+# for, never reports it -- and a gem's nested class of that name won
+# by default. Measured against this very fixture, three core names
+# were already being claimed here and a fourth was claimed on CI,
+# where the second claimant of `Integer` was not loaded:
+#
+#     Integer  -> ActiveModel::Type::Integer     (on CI)
+#     Symbol   -> ActionDispatch::Journey::Nodes::Symbol
+#     Range    -> Arel::Nodes::Range
+#     Regexp   -> Arel::Nodes::Regexp
+#
+# ``Integer has no method named `+` `` over `assert_equal 2, 1 + 1`
+# is what that produced. Whether a core class keeps its meaning must
+# not depend on which gems a process has required, which is why this
+# is asserted against a real bundle rather than a fixture index.
+it "leaves a core class its own chain, whatever nested class of that name a gem loaded" do
+  @manager = boot_manager
+  payload = @manager.fetch_gem_index
+  expect(payload).not_to be_nil, "the Agent answered nothing for agent/gemIndex"
+
+  gem_index = Ovallsp::Semantic::GemIndex.from_agent(payload)
+  probes = %w[Integer Symbol Range Regexp String Float Array Hash]
+  claimed = probes.select { |core| gem_index.resolve_simple_name(core) }
+
+  # The control, and it is the whole reason this example is not
+  # vacuous: this bundle really does contain nested classes whose last
+  # segment is a core class's name, and the rule really would answer
+  # with one. An assertion that a capture did not happen is worth
+  # nothing in a process where no capture was on offer.
+  expect(claimed).not_to be_empty,
+                         "no gem class in this bundle claims any of #{probes.inspect}, " \
+                         "so this example cannot tell the fix from its absence"
+
+  stack = Ovallsp::AnalysisStack.build(
+    signatures: AnalysisStackHelper.shared_signatures,
+    workspace_index: Ovallsp::WorkspaceIndex.new, gem_index: gem_index
+  )
+  claimed.each do |core|
+    foreign = gem_index.resolve_simple_name(core)
+    expect(stack.hierarchy_index.ancestors(core).map(&:name)).not_to include(foreign),
+                                                                    "#{core} took #{foreign}'s ancestry"
+  end
+ensure
+  @manager&.stop
+end
+
   it "lists routes drawn by real config/routes.rb with a normalized source_location" do
     @manager = boot_manager
     routes = @manager.fetch_snapshot(sections: ["routes"])[:routes]

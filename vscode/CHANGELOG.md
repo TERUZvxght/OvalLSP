@@ -66,6 +66,28 @@ pattern behind — the file still ran, and answered something else. The
 limitation published for that said no edit was made at all, which was
 true of one half of it and false of the half a user meets.
 
+**A gem could take a core class's name, and which gems a process had
+loaded decided whether it did.** A bare name the workspace does not
+own is read as the one gem class whose last segment matches it, so
+that `Relation` reaches `ActiveRecord::Relation`. A core class cannot
+contest that match — Ruby reports no source location for one, so the
+Agent, which keeps only what a gem path accounts for, never sends it —
+and a gem's own nested class of that name won by default. Measured
+against a real Rails application, `Symbol`, `Range` and `Regexp` were
+already being answered for by Arel and ActionDispatch classes, and on
+a machine where the second claimant of `Integer` was not loaded,
+``Integer has no method named `+` `` was reported over `1 + 1`. A bare
+name a signature already gives a referent is no longer up for
+reinterpretation.
+
+**And adopting the editor's workspace root built a second signature
+environment beside the first.** The root the editor names arrives
+after the server has started, and taking it replaced the environment
+rather than reloading it — so the type engine went on reading
+signatures from the directory the process happened to start in, while
+every request-time reader used the adopted one. Two answers to the
+same question in one server, chosen by which part was asked.
+
 ### Details
 
 **The gem index is what makes the new diagnostic possible, and what

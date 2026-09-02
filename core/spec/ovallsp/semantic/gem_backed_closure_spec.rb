@@ -211,9 +211,9 @@ RSpec.describe "a receiver whose ancestry runs into a gem" do
   #     def pub; end
   #     private def helper; end
   #   end
-  #   p PrivProbe.instance_methods(false)
-  #   p PrivProbe.private_instance_methods(false)
-  #   p PrivProbe.protected_instance_methods(false)
+  #   p PrivProbe.instance_methods(false).sort
+  #   p PrivProbe.private_instance_methods(false).sort
+  #   p PrivProbe.protected_instance_methods(false).sort
   #   '
   #   # => [:pub]
   #   # => [:helper]
