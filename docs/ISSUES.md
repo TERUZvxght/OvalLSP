@@ -157,6 +157,10 @@ release that found it. Empty means everything found has been triaged.
   - found by: core/lib/ovallsp/semantic/hierarchy_index.rb#canonical_name, core/lib/ovallsp/semantic/gem_index.rb#resolve_simple_name
   - 0.3.0 stopped a gem's nested class from claiming a core name by asking the signature environment whether the bare name already denotes something. That leaves the rule intact for every name RBS has not heard of, which is where it was needed (Relation -> ActiveRecord::Relation) and also where it can still be wrong: a class the user wrote and the workspace index has not got is indistinguishable from a name nothing claims, so a gem's SomeGem::Config would answer for a bare Config. Not driven -- what is needed is a workspace whose own class is missing from the index at the moment the question is asked, and whether that state is reachable at all is the first thing to establish.
   - unverified: not yet driven against the tree
+- **Four readers of the ancestor chain each write the same three decisions out by hand**
+  - found by: core/lib/ovallsp/semantic/hierarchy_index.rb, and its four callers that walk #ancestors
+  - A fix-stage worktree from 0.3.0's review workflow proposed HierarchyIndex#links: one walk that skips an unidentified link, asks AncestorEntry#declaration_kind which side of the link the chain reaches, and numbers a link by its position in the whole chain rather than in the surviving subset. Four call sites currently write those three out separately, which is the shape CLAUDE.md's same-place rule calls for a countermeasure over. It did not land in 0.3.0 and nothing is known to be wrong because of it -- so this is a candidate, not a defect, and DTSTTCPW's own warning applies: 048 produced eight simplifications of working code and every one failed measurement. What would settle it is whether the four readers really want the same answer. The worktree that holds the attempt is .claude/worktrees/wf_ed17cf22-643-3, which is disposable; the idea is what is worth keeping.
+  - unverified: not yet driven against the tree
 <!-- intake: none -->
 
 *(No untriaged issues.)*
