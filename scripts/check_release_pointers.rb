@@ -25,6 +25,14 @@ require_relative "utf8"
 # the shape `scripts/check_pinned_mutations.rb` reported on its first run:
 # a checker that cannot see what it checks prints what a working one prints.
 #
+# **It checks one direction on purpose.** A branch with no document is a
+# problem; a document naming a branch that is gone is not, because a
+# release's record outlives its branch. That said, the branches are not
+# meant to go: `main` squash-merges, so a release's individual commits
+# live only there. `CONTRIBUTING.md`'s "A merged release branch is kept"
+# is the reason, and deleting one is a decision to write down rather
+# than a tidy-up this check would notice.
+#
 # Usage: ruby scripts/check_release_pointers.rb
 # Exits non-zero when a branch git can see is named by no task document.
 

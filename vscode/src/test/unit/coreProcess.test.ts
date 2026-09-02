@@ -47,6 +47,16 @@ describe('SpawnedCoreProcess', () => {
     if (process.platform === 'win32') {
       this.skip();
     }
+    // **Spawning a real interpreter under mocha's 2s default is a
+    // wall-clock bound on an example that asserts nothing about speed.**
+    // This one starts `ruby`, loads `core-session.rb` and an entrypoint,
+    // and asserts that the session id equals the pid. On a loaded CI
+    // runner that took longer than two seconds once, and the run went red
+    // on a documentation-only pull request. Raising the bound removes a
+    // measurement of the machine rather than adding one: what the example
+    // checks is unchanged, and it still fails if no session is
+    // established.
+    this.timeout(30000);
     const temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ovallsp-session-'));
     const entrypoint = path.join(temporaryDirectory, 'entrypoint.rb');
     fs.writeFileSync(entrypoint, 'puts "#{Process.pid}:#{Process.getsid(0)}"');
@@ -97,6 +107,9 @@ describe('SpawnedCoreProcess', () => {
     if (process.platform === 'win32') {
       this.skip();
     }
+    // Spawns a real process too; the session example above says why the
+    // default bound is the wrong instrument here.
+    this.timeout(30000);
 
     const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
       detached: true,
@@ -116,6 +129,9 @@ describe('SpawnedCoreProcess', () => {
     if (process.platform === 'win32') {
       this.skip();
     }
+    // Spawns a real process too; the session example above says why the
+    // default bound is the wrong instrument here.
+    this.timeout(30000);
 
     const script =
       "const {spawn}=require('child_process');" +

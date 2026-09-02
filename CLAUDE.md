@@ -739,6 +739,18 @@ starts. 0.2.17 was named a fix and shipped a capability; 0.2.18 was
 going to be a fix and turned out to be a record release. One name per
 version needs no such guess.
 
+**None of those branches is deleted once merged, and that includes the
+old ones.** `main` squash-merges, so a release's individual commits are
+reachable only from its branch — 21 for `release/0.3.0`, 25 for
+`fix/0.2.3` — and with them every commit message saying why a change
+was made. `main` can say which release changed something; only the
+branch can say which change did, and this project asks that question
+often enough to have answered it twice in 0.3.1 alone. Nothing is at
+risk in the code: `main` is strictly ahead of all of them. Deleting one
+is a decision to record, not tidying up; `CONTRIBUTING.md`'s "A merged
+release branch is kept" has the demonstration. Local branches and
+worktrees are the ordinary clutter and need no ceremony.
+
 The task file on `main` that names the release also names that branch.
 A pointer to a file that exists only on an unnamed branch is a pointer
 to nothing for every session that cannot see the branch.
