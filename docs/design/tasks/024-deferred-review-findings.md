@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**301 entries below** <!-- measured: register-entries = 301 -->,
+**315 entries below** <!-- measured: register-entries = 315 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -447,7 +447,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.272`](024-deferred-review-findings-resolved.md#024272-renaming-a-local-leaves-every-value-omitted-shorthand-behind-so-the-rename-is-still-partial) | fixed | 0.2.17 | Renaming a local leaves every value-omitted shorthand behind, so the… |
 | [`024.273`](024-deferred-review-findings-resolved.md#024273-renaming-a-local-that-is-a-parameter-leaves-the-parameter-behind-and-the-answer-can-be-silent) | fixed | 0.3.0 | Renaming a local that is a parameter leaves the parameter behind, an… |
 | [`024.274`](024-deferred-review-findings-resolved.md#024274-an-underscore-prefixed-target-is-not-recorded-because-ruby-lets-one-pattern-bind-it-twice) | fixed | 0.3.0 | An underscore-prefixed target is not recorded, because Ruby lets one… |
-| [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | unscheduled | A workspace-identity example fails only in a full-suite run, and not… |
+| [`024.275`](#024275-a-workspace-identity-example-fails-only-in-a-full-suite-run-and-not-reproducibly) | open | 0.3.2 | A workspace-identity example fails only in a full-suite run, and not… |
 | [`024.276`](024-deferred-review-findings-resolved.md#024276-a-closing-pass-retargeted-54-entries-at-0-3-0-and-53-of-them-give-one-of-two-pasted-reasons) | fixed | 0.2.17 | A closing pass retargeted 54 entries at 0.3.0, and 53 of them give o… |
 | [`024.277`](024-deferred-review-findings-resolved.md#024277-a-local-variable-s-identity-follows-the-cref-so-a-block-that-changes-self-splits-it) | fixed | 0.2.17 | A local variable's identity follows the cref, so a block that change… |
 | [`024.278`](024-deferred-review-findings-resolved.md#024278-a-local-variable-s-identity-has-no-file-in-it-so-renaming-one-edits-another-file) | fixed | 0.2.17 | A local variable's identity has no file in it, so renaming one edits… |
@@ -478,9 +478,23 @@ nobody can search is the recording habit without the benefit.
 | [`024.303`](#024303-a-multiple-assignment-s-targets-get-no-inlay-hint) | open | 0.4.0 | A multiple assignment's targets get no inlay hint |
 | [`024.304`](#024304-the-gem-backed-check-is-silenced-by-any-class-body-call-the-parser-cannot-read) | open | 0.4.0 | The gem-backed check is silenced by any class-body call the parser c… |
 | [`024.305`](#024305-one-name-six-modules-and-the-index-keeps-the-empty-one) | open | 0.3.2 | One name, six modules, and the index keeps the empty one |
+| [`024.306`](#024306-the-0-3-0-record-states-as-measured-that-a-method-call-candidate-never-resolves-to-a-constant) | open | 0.3.2 | The 0.3.0 record states as measured that a `:method_call` candidate … |
+| [`024.307`](#024307-the-capability-suite-s-own-fixtures-cannot-reach-six-shapes-the-release-found) | open | 0.3.2 | The capability suite's own fixtures cannot reach six shapes the rele… |
+| [`024.308`](#024308-referenceresolver-resolve-states-no-contract-about-alignment) | open | 0.3.2 | `ReferenceResolver#resolve` states no contract about alignment |
+| [`024.309`](#024309-the-quick-fix-e2e-example-asserts-that-the-result-parses-which-both-answers-do) | open | 0.3.2 | The quick-fix E2E example asserts that the result parses, which both… |
+| [`024.310`](#024310-a-range-arity-reads-takes-0-1-argument) | open | 0.3.2 | A range arity reads "takes 0..1 argument" |
+| [`024.311`](#024311-referencecandidate-s-comment-omits-a-field-four-readers-use) | open | 0.3.2 | `ReferenceCandidate`'s comment omits a field four readers use |
+| [`024.312`](#024312-the-release-record-has-one-direction-of-the-ivar-split-and-not-the-other) | open | 0.3.2 | The release record has one direction of the ivar split and not the o… |
+| [`024.313`](#024313-four-comment-lines-and-a-chain-sit-at-the-wrong-indentation) | open | 0.3.2 | Four comment lines and a chain sit at the wrong indentation |
+| [`024.314`](#024314-a-comment-numbers-a-schema-bump-that-was-not-made) | open | 0.3.2 | A comment numbers a schema bump that was not made |
+| [`024.315`](#024315-inlay-hints-label-block-parameters-and-no-release-note-says-so) | open | 0.3.2 | Inlay hints label block parameters, and no release note says so |
+| [`024.316`](#024316-two-lines-each-drop-a-top-level-call-and-only-both-together-are-pinned) | open | 0.3.2 | Two lines each drop a top-level call, and only both together are pin… |
+| [`024.317`](#024317-six-of-the-documentation-map-s-trigger-rows-have-nothing-enforcing-them) | open | 0.3.2 | Six of the documentation map's trigger rows have nothing enforcing t… |
+| [`024.318`](#024318-a-workspace-directory-shaped-like-a-gem-path-would-be-attributed-to-a-gem) | open | 0.4.0 | A workspace directory shaped like a gem path would be attributed to … |
+| [`024.319`](#024319-a-bare-name-no-signature-declares-is-still-read-as-the-one-gem-class-sharing-its-last-segment) | open | 0.4.0 | A bare name no signature declares is still read as the one gem class… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
-| [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
+| [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | 1.0.0 | Feature parity roadmap, measured against Pylance |
 | [`024.R4`](#024R4-only-one-platform-is-published-or-verified-roadmap-1-0-0) | open | 1.0.0 | Only one platform is published or verified (roadmap, 1.0.0) |
 | [`024.R5`](024-deferred-review-findings-resolved.md#024R5-a-reopened-gem-class-still-looks-closed-done-0-1-7) | done | 0.1.7 | A reopened gem class still looks closed (done, 0.1.7) |
 | [`024.R6`](024-deferred-review-findings-resolved.md#024R6-reading-an-instance-variable-that-is-never-assigned-done-0-2-0) | done | 0.2.0 | Reading an instance variable that is never assigned (done, 0.2.0) |
@@ -4178,7 +4192,7 @@ user-visible-note: >
   named -- and an assertion that fails sometimes is either a defect in
   the product or a defect in the test, and neither is acceptable
   unexamined.
-target: unscheduled
+target: 0.3.2
 ```
 
 **Area:** `core/spec/ovallsp/server_workspace_identity_spec.rb`,
@@ -4316,6 +4330,8 @@ When it fires, the message arrives with it, and the entry becomes
 ordinary work in whatever release that is.
 
 
+
+**Retargeted to 0.3.2.** An assertion that fails sometimes is either a defect in the product or a defect in the test, and leaving it unscheduled is how it stays neither. 0.3.0 attached a self-recording report to the assertion, so the next reproduction carries the value nobody has seen; 0.3.2 is when that evidence is read, and if it has still not fired the entry is a candidate for closure as unreproducible rather than for another wait.
 ## 024.283 The packaged Core is driven only on Linux, so the macOS build is still smoke-tested
 
 ```yaml
@@ -4999,6 +5015,319 @@ inside the Agent, which is a side effect the walk does not have today.
 Establishing that it is harmless is the work, and it is why this is
 not a patch.
 
+## 024.306 The 0.3.0 record states as measured that a `:method_call` candidate never resolves to a constant
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >-
+  A record defect, not a product one. Nothing a user meets changes;
+  what changes is what the next reader believes about the resolver
+  before touching it, which is how a line gets deleted on a false
+  premise.
+target: 0.3.2
+```
+
+**Area:** `docs/design/tasks/054-0.3.0-the-first-release-that-adds.md`,
+section "One of the four turned out to be dead, and was removed"
+
+The record says a `:method_call` candidate "resolves to a method kind
+or to nothing — never to a constant or a class", and removes a line on
+that basis. `ReferenceResolver` also resolves such a candidate to
+`:route_helper` and to an Active Record column, neither of which is a
+method kind. The conclusion may still hold; what does not hold is the
+premise as written, and the record presents it as measured.
+
+## 024.307 The capability suite's own fixtures cannot reach six shapes the release found
+
+```yaml
+status: open
+kind: friction
+user-visible: no
+user-visible-note: >-
+  Coverage, so nothing is wrong until something else breaks. Recorded
+  because the gap is in the file that decides whether a capability row
+  may say PASS.
+target: 0.3.2
+```
+
+**Area:** `core/spec/e2e/capabilities_spec.rb`, the "in the current
+file" block and W5/W6
+
+No example uses a namespaced constant, an instance variable, a route
+helper, a symbol declared twice in one file, nested `def`s on one line,
+or a `prepareCallHierarchy` issued at a call site rather than at a
+`def`. Six of 0.3.0's review findings live in exactly those shapes, so
+the suite that certifies the rows could not have found any of them.
+
+## 024.308 `ReferenceResolver#resolve` states no contract about alignment
+
+```yaml
+status: open
+kind: friction
+user-visible: no
+user-visible-note: >-
+  An unstated invariant that every caller currently happens to
+  respect. It costs nothing today and costs a wrong answer the first
+  time somebody indexes the result against the input.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/semantic/reference_resolver.rb:43-45`
+
+`resolve` is a `filter_map`, so its result is shorter than its input
+whenever a candidate declines — and nothing says so. Its pre-0.3.0
+callers avoid the assumption by accident rather than by being told:
+two pass a single-element array, one iterates. A caller that zips the
+two lists would be wrong on the first declining candidate.
+
+## 024.309 The quick-fix E2E example asserts that the result parses, which both answers do
+
+```yaml
+status: open
+kind: friction
+user-visible: no
+user-visible-note: >-
+  The behaviour it guards is correct; the guard is what is thin. A
+  fixture that cannot tell the two candidate answers apart is the
+  shape CLAUDE.md calls unpinned even while it passes.
+target: 0.3.2
+```
+
+**Area:** `core/spec/e2e/capabilities_spec.rb`, Q1's "inserts into the
+right body when the class's end is not the first one"
+
+It drives three shapes and asserts `Prism.parse(applied).success?` for
+each, with a `match_array` so no shape can be skipped. Both of those
+are worth having. Neither distinguishes a `def` inserted inside the
+class from one inserted after it: 0.3.0 found exactly that, by hand,
+after this example had been passing on both placements.
+
+## 024.310 A range arity reads "takes 0..1 argument"
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb:695-698`
+
+The plural follows `maximum` rather than the count being printed:
+`"argument#{maximum == 1 ? '' : 's'}"`. For a range whose upper bound
+is 1 the sentence comes out singular over a plural count — `def opt(a = 1)`
+called with three arguments reports that it "takes 0..1 argument".
+
+Worth one caution before fixing it: `Server#diagnostic_maximum` reads
+the arity back out of this message with
+`/takes (?:\d+\.\.)?(\d+)(?: positional)? argument/`. The pattern has
+no word boundary, so the plural is safe to change — but two places
+agree about one user-facing string and only one of them formats it.
+
+## 024.311 `ReferenceCandidate`'s comment omits a field four readers use
+
+```yaml
+status: open
+kind: friction
+user-visible: no
+user-visible-note: >-
+  Documentation of an internal shape. It misleads whoever reads the
+  comment instead of the producer, and 0.3.0 added the fourth reader
+  without the comment gaining the field.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/index/reference_candidate.rb:48-52`
+
+The comment gives the shape as `{ positional:, splat:, keywords:, block: }`.
+`ParserService#call_argument_shape` also records `positional_locations:`,
+which the argument-type check, inlay hints, the surplus-argument action
+and `diagnostic_maximum` all read.
+
+## 024.312 The release record has one direction of the ivar split and not the other
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >-
+  Half a fix described as the whole of it. The product does both
+  directions; a reader of the record would believe it does one, and
+  would find the second half unexplained on the next visit.
+target: 0.3.2
+```
+
+**Area:** `docs/design/tasks/054-0.3.0-the-first-release-that-adds.md:609`
+
+The record explains that an `@x` written in `def self.build` used to be
+offered inside instance methods. The change also runs the other way —
+an ivar written in the class body is the class object's, and 0.3.1
+found and fixed the depth test that decided it — and the record does
+not say so.
+
+## 024.313 Four comment lines and a chain sit at the wrong indentation
+
+```yaml
+status: open
+kind: friction
+user-visible: no
+user-visible-note: >-
+  Layout only. It is here because the file is one the parser's
+  reviewers read closely, and mis-indentation there reads as a
+  different block structure than the one that runs.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`,
+`#record_assigned_struct_members`
+
+The comment opening "`SymbolNode` only." starts at eight spaces with
+its continuations at four, and the `names = ...` assignment with its
+chained `select`/`filter_map` is indented to the enclosing block
+rather than to the method.
+
+## 024.314 A comment numbers a schema bump that was not made
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >-
+  Nothing reaches a user. The hazard is the next bump: a numbered
+  entry for a version that does not exist invites the following one to
+  take the number after it, and the cache key would then skip a value.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/cache/key.rb`, above `SCHEMA_VERSION = 6`
+
+The list above the constant carries an entry numbered 7, describing
+`singletonAncestors` and closing "Left at 6 deliberately". Numbering a
+note about a bump that did not happen, inside the list that records the
+bumps that did, is the confusion that list exists to prevent.
+
+## 024.315 Inlay hints label block parameters, and no release note says so
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >-
+  The labels are correct, so a user meets a feature rather than a
+  fault. It is filed because an undescribed behaviour cannot be
+  reviewed against intent, and a capability nobody wrote down is one
+  nobody can decide to remove.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/server.rb`, `#local_type_hints`
+
+Parameter binding sites are recorded as writes, so
+`[1, 2].each { |n| n }` renders as `[1, 2].each { |n: Integer| n }`.
+Driving `def f(a)` and `def f(a = 1)` produced no wrong label, so this
+is a description gap rather than a defect in the hint.
+
+## 024.316 Two lines each drop a top-level call, and only both together are pinned
+
+```yaml
+status: open
+kind: friction
+user-visible: no
+user-visible-note: >-
+  Redundancy inside one method. Neither line is wrong and the pair is
+  pinned honestly; what is unresolved is which of the two should
+  remain, and that is a call-hierarchy design question rather than a
+  review finding.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/server.rb`, `#incoming_calls_result`
+
+Measured: mutating `next unless enclosing` alone leaves both W5
+examples green, mutating the render's `or next` alone does too, and
+mutating both fails them. `pinned_mutations.yml` names the containment
+test the pair shares rather than claiming to pin a line.
+
+## 024.317 Six of the documentation map's trigger rows have nothing enforcing them
+
+```yaml
+status: open
+kind: friction
+user-visible: no
+user-visible-note: >-
+  A gap in the machinery rather than in the product. Its cost is
+  measured though: of the eight rows that were unenforced before
+  0.3.1, three had already drifted.
+target: 0.3.2
+```
+
+**Area:** `docs/DOCUMENTATION_MAP.md`, the trigger table
+
+Of twenty-one rows, six carry nothing in the "Checked by" column:
+a change reverted mid-release, a review round finding the same place
+twice, install steps and the extension id, anything about the Runtime
+Agent or workspace trust, which Ruby and Rails the product accepts,
+and thread and lock ownership.
+
+0.3.1 closed two of the eight that were open — the protocol document
+and release-branch pointers, both of which had drifted by the time a
+check was written for them, and a third drift (a guard hunting a
+retired branch spelling) was repaired in the same pass. That is three
+of eight found the first time anybody looked, which is the argument
+for closing the rest.
+
+## 024.318 A workspace directory shaped like a gem path would be attributed to a gem
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >-
+  The misattribution is driven; its consequence is not. Confirming
+  that a monorepo's own class is then treated as closed needs a
+  monorepo workspace with a booted Agent, which is why this is filed
+  at the shape rather than at the report it would produce.
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/runtime_agent/agent.rb`, `GEM_PATH`
+
+`%r{/gems/(?<gem>[^/]+-[0-9][^/]*)/}` matches anywhere in the path
+`const_source_location` returns. A repository keeping local engines
+under `gems/billing-1.0/` would have its own classes filed under a
+"gem", and a gem-index entry makes a receiver closed — so the check
+would report the workspace's own methods as missing.
+
+## 024.319 A bare name no signature declares is still read as the one gem class sharing its last segment
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/hierarchy_index.rb`
+(`#canonical_name`), `core/lib/ovallsp/semantic/gem_index.rb`
+(`#resolve_simple_name`)
+
+0.3.0 stopped a gem's nested class from claiming a **core** name by
+asking the signature environment whether the bare name already denotes
+something. That leaves the rule intact wherever RBS has never heard of
+the name — which is where it was wanted (`Relation` reaching
+`ActiveRecord::Relation`) and also where it can still be wrong. A class
+the user wrote that the workspace index does not hold is
+indistinguishable, at that moment, from a name nothing claims.
+
+What has not been established is whether that moment is reachable: it
+needs the index to be missing a workspace class while the question is
+asked. Until it is driven, the shape is recorded and the rule is not
+narrowed further — every recovery rule strong enough to reunite two
+spellings of one class also unites two different classes, and 0.2.1
+lost a release to the version of this that was too strong.
+
 ---
 
 
@@ -5063,7 +5392,7 @@ column and this entry is why.
 ```yaml
 status: open
 kind: roadmap
-target: unscheduled
+target: 1.0.0
 ```
 
 roadmap. Its three 0.2.0 rows are done; the table below carries a **shipped in** column so the entry can be read as a record rather than only as a plan. Two of the three shipped outright; whole-project diagnostics shipped without a capability row, because the E2E example written for it did not pass (024.14) -- README marks that row ⚠️ and both changelogs say so.
@@ -5111,6 +5440,8 @@ These versions are also carried in README.md and README.ja.md's
 capability matrix, which is the user-facing statement of them; this
 section is the reasoning behind each. Keep the two in step.
 
+
+**Retargeted to 1.0.0.** A parity roadmap does not get fixed in a release; it terminates at the version whose definition it serves. The other two roadmap entries that are still open, 024.R1 and 024.R4, are both 1.0.0, and docs/PUBLISHING.md's 0.x section is what defines that bar. Unscheduled was the value that let it sit outside every release's reckoning.
 ## 024.R4 Only one platform is published or verified (roadmap, 1.0.0)
 
 ```yaml

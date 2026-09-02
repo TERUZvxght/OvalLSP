@@ -877,3 +877,26 @@ The same is true after a `bundle install`, which restarts the Runtime
 Agent: the list is discarded with the application it described and
 asked for again. Until 0.3.1 it was kept, and the old gems' method
 sets went on answering for the new ones — which did report wrongly. <!-- documents: 024.295 -->
+
+## A range of accepted argument counts is written with a singular noun
+
+**A method that takes between none and one argument, called with three,
+is reported as one that "takes 0..1 argument".** The count is a range
+and the noun follows its upper bound instead of the range. Nothing
+about which call is wrong, or why, changes — only the sentence. <!-- documents: 024.310 -->
+
+## A class this editor has not indexed yet can be answered for by a gem's class of the same name
+
+**Where a name is written that neither the workspace index nor the
+bundled signatures know, and exactly one loaded gem has a nested class
+whose last segment matches it, that gem's class answers.** The rule
+exists so that `Relation` reaches `ActiveRecord::Relation` without
+anyone writing the namespace, and for a name nothing else claims it is
+usually right.
+
+Since 0.3.1 it will not do this to a class Ruby itself provides —
+`Integer`, `Symbol`, `Range` — because the signatures already give
+those names a meaning. It can still do it to one of *yours*, in the
+window before the file declaring it has been read. What that would
+look like is completion offering a foreign class's methods, or a typo
+going unreported because the wrong class happens to have the name. <!-- documents: 024.319 -->
