@@ -139,7 +139,7 @@
   from: "          if creates_a_class?\n            @cref.in_eval_block(nil)\n"
   to: "          if false\n            nil\n"
   spec: spec/ovallsp/diagnostics/class_creating_block_spec.rb
-  example: "records nothing on the enclosing class for a Struct.new block"
+  example: "puts a Struct.new block's members on the Struct and nothing on the enclosing class"
 
 # --- checks in `scripts/`, added in 0.2.14 ---------------------------
 #
@@ -949,3 +949,9 @@
   to: "                                   public_only: false)\n"
   spec: spec/ovallsp/semantic/explicit_receiver_visibility_spec.rb
   example: "offers none of Ruby's private methods after a dot"
+- why: "A Struct or Data constant naming its members in the call; without it `Seed.new.` offers 51 items and not `seed`."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "          record_assigned_struct_members(node)\n"
+  to: "          nil\n"
+  spec: spec/ovallsp/struct_members_spec.rb
+  example: "records a reader and a writer for each Struct member"

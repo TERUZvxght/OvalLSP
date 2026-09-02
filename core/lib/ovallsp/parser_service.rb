@@ -1501,6 +1501,7 @@ module Ovallsp
         if kind == :class
           record_assigned_superclass(node)
           record_assigned_class_open_surface(node)
+          record_assigned_struct_members(node)
         end
 
         super
@@ -1694,6 +1695,59 @@ module Ovallsp
         owner = Index::SymbolId.bare_name(assigned_class_name(node))
         @open_surface_owners << [owner, :instance]
         @open_surface_owners << [owner, :singleton]
+      end
+
+      # **A `Struct` or `Data` constant names its members in the call**, and
+      # they were recorded nowhere -- so `Seed.new.` offered 51 items and
+      # not `seed`, and hover and definition had nothing either. Asked of
+      # Ruby, including the arguments that are not members:
+      #
+      #     Struct.new(:a, :b).instance_methods(false)          # => [:a, :a=, :b, :b=]
+      #     Struct.new(:a, keyword_init: true)…(false)          # => [:a, :a=]
+      #     Struct.new("Named", :c).instance_methods(false)     # => [:c, :c=]
+      #     Data.define(:x, :y).instance_methods(false)         # => [:x, :y]
+      #     Data.define.instance_methods(false)                 # => []
+      #
+      # Symbols only, and a writer for `Struct` where `Data` has none.
+      #
+      # **The surface stays open**, which is the whole of why this is safe
+      # to add. `024.110`'s rule is that an enumeration carries its own
+      # completeness and a generated one cannot; naming the class without
+      # opening it produced ``HeredocData has no method named
+      # `common_whitespace=` `` over real gem source. This adds what the
+      # class *has* and asserts nothing about what it lacks. `024.237`.
+      def record_assigned_struct_members(node)
+        value = node.value
+        return unless value.is_a?(Prism::CallNode)
+
+        receiver = value.receiver && raw_constant_name(value.receiver)
+        return unless receiver
+
+        bare = Index::SymbolId.bare_name(receiver.to_s)
+        return unless GENERATES_MEMBERS[bare] == value.name
+
+        # `SymbolNode` only. `Struct.new("Named", :c)` names the struct
+    # with that String and takes `:c` as its one member, and
+    # `#symbol_name` reads a String literal too -- which recorded
+    # `Named` and `Named=` as members of it.
+    names = Array(value.arguments&.arguments)
+            .select { |argument| argument.is_a?(Prism::SymbolNode) }
+            .filter_map { |argument| symbol_name(argument) }
+        return if names.empty?
+
+        saved = @cref
+        @cref = @cref.with(owner: assigned_class_name(node))
+        names.each do |name|
+          add_generated_method(node: value, name: name, name_node: value, kind: :instance_method,
+                               return_type: nil, origin: :generated, parameters: [])
+          next unless bare == "Struct"
+
+          add_generated_method(node: value, name: "#{name}=", name_node: value, kind: :instance_method,
+                               return_type: nil, origin: :generated,
+                               parameters: [Index::Parameter.new(name: "value", kind: :required, default_source: nil)])
+        end
+      ensure
+        @cref = saved if saved
       end
 
       # `Class.new(Bar)`'s first argument is the superclass. Only a

@@ -1584,6 +1584,15 @@ Retargeted to 0.3.0, where the inference core's cost is `024.45`'s
 subject anyway — and `024.45`'s profile says the time is in `SymbolId`
 and the indexes, not here.
 
+
+**Not taken in 0.3.0.** `capture_scope` on every descent step is on
+the completion request path, and the entry's own table is the
+measurement that justifies it (0.24 ms at 50 locals, growing). The
+change is to capture at the final step rather than each one, which
+is small -- but it is a hot path this release has not otherwise
+touched, and 0.3.0 spent its measurement budget on the enumeration
+family. Recorded rather than attempted so the next release starts
+from the number rather than the title.
 ## 024.39 `LocalInferencer` keeps per-request state, and 0.2.0 gave it a second thread
 
 ```yaml
@@ -1639,6 +1648,15 @@ than held on the instance, which is a rewrite of the inference core's
 entry points. Retargeted to 0.3.0 with `024.45` and `024.38`, which are
 the same core and the same rewrite.
 
+
+**Not taken in 0.3.0, and it is the one here that is a correctness
+hazard rather than a cost.** `@capturing_scope` and the rest are
+per-request state on an object two threads reach since 0.2.0 put
+`analyze` on a background thread. Nothing in this release made it
+likelier or safer. It wants either per-call state or a lock, and
+both are changes to how the inferencer is entered rather than to
+what it computes -- which is why it is recorded here rather than
+pushed at from the side during a review loop.
 ## 024.42 An RBS signature label says `Unknown` where RBS says `self`, and leaks method type variables
 
 ```yaml
@@ -1721,6 +1739,19 @@ wrote `U` too. Left open and retargeted.
 
 **Re-triaged in 0.2.17** (`024.276`). The remaining half is a question about what a label *should* say for a type parameter unbound at the call site, not about what a gem defines — the source wrote `U` too, so carrying the source's word does not answer it. Deciding that is a refinement rather than a repair, which is why the target stands. Not re-driven since the half above it was fixed.
 
+
+**Driven at 0.3.0: the headline is fixed, the rest is not.**
+
+    push  -> ["push(...) -> self"]
+    map   -> ["map() { |E| ... } -> Array[T]", "map() -> Enumerator[Array[Unknown]]"]
+    size  -> ["size() -> Integer"]
+
+`Array#push` shows `-> self`, which is what RBS wrote and what this
+entry asked for. What remains is the second half: `Array[T]` puts the
+method's own type variable in front of a reader, and
+`Enumerator[Array[Unknown]]` still leaks the converted sentinel into
+a label. Both are prose problems on a surface that is prose, and
+neither reaches the type model or the check.
 ## 024.44 A partial's local is not resolved, and C11's stated basis names it
 
 ```yaml
@@ -2554,6 +2585,38 @@ check, and this entry is about that number rather than about the
 index.
 
 
+
+**Re-driven at 0.3.0 and it holds, on a smaller corpus.** Over
+activesupport 8.1.3.1 and i18n 1.15.2 -- 335 files, Agent connected,
+2,078 gem classes indexed -- the check produces **19** `unknown-method`
+reports and **every one of them is false**. Sorted by what makes them
+false:
+
+- **5 -- a core class this very gem reopens.** `Integer has no method
+  named `kilobyte``, and `minutes`, `megabytes`, `hour`. ActiveSupport
+  defines them in the corpus being read.
+- **6 -- a core or stdlib method the signatures do not carry.**
+  `NameError#original_message`, `BigDecimal#finite?`, and `IPAddr`'s
+  `ipv4?`, `ipv6?` and `prefix`.
+- **4 -- a module receiver whose surface belongs to its includer.**
+  `Class has no method named `redefine_method``,
+  `remove_possible_method`, and `BaseTimeGroup has no method named
+  `now`` twice.
+- **2 -- `Kernel#BigDecimal` called receiverlessly inside a module.**
+  `ActiveSupport::NumberHelper::RoundingHelper has no method named
+  `BigDecimal``.
+- **1 -- an operator on a core class.** `Numeric has no method named
+  `*``.
+
+**Six of the nineteen are `024.243`.** That entry's second shape --
+the Object chain plus a nameless includer -- removed exactly the four
+in the third group when it was measured, and the two in the fourth
+are the same cause reached receiverlessly. So the module-chain
+direction is worth more than the one entry it is filed under, and
+this is the count to re-take when it lands.
+
+The other thirteen are the enumeration question `024.290` now records
+as unanswered: `024.R7` indexes 2,078 gem classes and no core ones.
 ## 024.83 The undefined-method check is loudest exactly where no Runtime Agent can answer
 
 ```yaml
@@ -3239,6 +3302,15 @@ already states the cost, with its measured numbers, in both languages.
 
 `024.139` is the sibling that this one's `#find` sentence pointed at.
 
+
+**Driven at 0.3.0, and the cost is smaller than the title suggests.**
+2,000 classes indexed, 200 searches: **0.031s total, 0.16 ms each**.
+The scan really is O(every symbol) -- that part of the entry is
+structurally true -- but at a workspace of this size it is not
+something a user meets. Recorded so the number is here before anyone
+optimises on the strength of the heading; the case that would justify
+it is a workspace an order of magnitude larger, and this project has
+not measured one.
 ## 024.151 A check can be disabled, and no check notices
 
 ```yaml
@@ -3455,6 +3527,41 @@ residue under `024.111`'s number until 0.2.15.
 
 **Re-triaged in 0.2.17** (`024.276`). The residue is a deliberate containment, not a gap in what is known about gems: until the receiver question is answered, letting a `private` escape that should have been contained marks a whole class private and removes its answers, which is the 0.2.7 regression. Answering the receiver question is capability. Not re-driven since the residue was recorded.
 
+
+**Driven at 0.3.0: it reproduces, and the recorded value is an
+assertion rather than a gap.** Ruby:
+
+    $ ruby -e '
+    SOME_CONST = [1]
+    class Widget
+      SOME_CONST.each { private }
+      def helper; end
+    end
+    p Widget.new.respond_to?(:helper)
+    p Widget.private_instance_methods(false).include?(:helper)
+    '
+    # => false
+    # => true
+    # ruby 3.4.10
+
+The parser records `Widget#helper` with `visibility: :public`. So the
+engine believes a call Ruby refuses, which since 0.3.0 also means
+completion offers it after a dot -- `024.99` filters RBS's private
+members and reads the parser's word for a workspace one.
+
+**Both blanket directions are wrong**, which is why this is still
+open and not merely unfinished. Applying the block's `private` to the
+enclosing body is right here and wrong for `included do … end`,
+`class_eval`, `concerning … do` and `instance_eval`, which really do
+run it against a different module -- and `included do` is on most
+Rails concerns. Declining, which is what happens now, records
+`:public`, and that is a claim.
+
+The shape that fits is a third value -- visibility *unknown* -- and
+that is a sentinel every reader of a declaration has to remember, of
+the kind `024.243`'s second shape was rejected for in this same
+release. Worth its own look rather than a third attempt from the
+side.
 ## 024.224 A namespaced type is reported incompatible with itself
 
 ```yaml
@@ -3615,6 +3722,32 @@ signature and index sides together. Until then the entry stays open and
 `KNOWN_LIMITATIONS` keeps its paragraph in both languages: the product
 does have this defect, and 0.2.16 shipped without fixing it.
 
+
+**Re-driven at 0.3.0 over rbs 4.0.3 with its own `sig/`, and it has
+grown from three to seven.** 102 files, control `unresolved-constant`
+at 326:
+
+    lib/rbs/cli.rb:498               `constant` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/inline_parser.rb:533     `new` expects RBS::Location here, but Location is given
+    lib/rbs/inline_parser.rb:534     `new` expects RBS::Location here, but Location is given
+    lib/rbs/prototype/runtime.rb:525 `generate_mixin` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/prototype/runtime.rb:528 `generate_methods` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/prototype/runtime.rb:565 `generate_mixin` expects RBS::TypeName here, but TypeName is given
+    lib/rbs/prototype/runtime.rb:567 `generate_methods` expects RBS::TypeName here, but TypeName is given
+
+**Every `argument-type` report this corpus produces is this entry.**
+The check's whole output on a hand-written-signature corpus is false.
+
+**And there is a direction that is not spelling normalisation.**
+`CLAUDE.md` records why normalising the two spellings cannot work --
+every rule strong enough to reunite `TypeName` and `RBS::TypeName`
+also unites two different classes. But the *actual* side is inferred
+from Ruby source whose lexical nesting the parser already records on
+the candidate: a bare `TypeName` written inside `module RBS` resolves
+to `RBS::TypeName` the way Ruby resolves it, not by guessing at the
+string. That is a different mechanism from the one the register
+rejects, and it is the one worth measuring next -- 7 to 0, with
+`unresolved-constant` at 326 as the control.
 ## 024.237 Four shapes stopped reporting by declining on the body, not by reading it
 
 ```yaml
@@ -3649,6 +3782,27 @@ correctly about them. Reading them properly means knowing what
 `Struct.new` and `define_method` produce, which is the enumeration
 question again, and `024.R7` is the release that takes it on.
 
+
+**The syntactic half is taken in 0.3.0; the enumeration half is not.**
+
+`Struct.new(:seed, :used)` and `Data.define(:x, :y)` name their members
+in the call, and the parser now records them -- readers and writers for
+`Struct`, readers only for `Data`, symbol arguments only so
+`keyword_init:` and the String in `Struct.new("Named", :c)` are not
+mistaken for members. Before this, `Seed.new.` offered 51 items and not
+`seed`, and hover and definition had nothing to answer.
+
+**The surface stays open, deliberately**, so the check is no louder
+than it was: corpus **0 introduced, 0 removed**, control at 916.
+`024.110`'s rule is that a generated enumeration cannot carry its own
+completeness, and naming the class without opening it is what produced
+``HeredocData has no method named `common_whitespace=` `` over real gem
+source.
+
+So what is left of this entry is the part its own last paragraph names:
+reading `define_method` inside `Class.new do … end` and a literal
+`define_method` in a loop, which is the enumeration question, and
+`024.290` now records that `024.R7` as shipped does not answer it.
 ## 024.243 Signature help says nothing for a receiverless call inside a module body
 
 ```yaml

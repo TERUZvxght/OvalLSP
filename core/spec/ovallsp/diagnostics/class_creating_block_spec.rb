@@ -29,9 +29,18 @@ RSpec.describe "Ovallsp::ParserService and a block that creates a class" do
       .map { |d| [d.symbol_id.kind, d.symbol_id.owner, d.symbol_id.name] }.sort
   end
 
-  it "records nothing on the enclosing class for a Struct.new block" do
-    expect(generated("class Outer\n  Seed = Struct.new(:x) do\n    attr_reader :label\n  end\nend\n"))
-      .to be_empty
+  # **`x` and `x=` are the Struct's own, and they belong to it.** They
+  # are recorded since 0.3.0 (`024.237`) -- the point this example
+  # makes is where they land, not whether they exist. `label`, which
+  # the *block* declares, is still attributed to nothing: the block's
+  # owner is a class this parser cannot name.
+  it "puts a Struct.new block's members on the Struct and nothing on the enclosing class" do
+    recorded = generated("class Outer\n  Seed = Struct.new(:x) do\n    attr_reader :label\n  end\nend\n")
+
+    expect(recorded).to eq([[:instance_method, "::Outer::Seed", "x"],
+                            [:instance_method, "::Outer::Seed", "x="]])
+    expect(recorded.map { |(_, owner, _)| owner }).not_to include("::Outer")
+    expect(recorded.map(&:last)).not_to include("label")
   end
 
   it "records nothing for a Class.new block, however deep" do
@@ -41,9 +50,13 @@ RSpec.describe "Ovallsp::ParserService and a block that creates a class" do
     expect(generated(source)).to be_empty
   end
 
-  it "records nothing for a Module.new or Data.define block" do
+  it "records a Data.define block's members on the Data class, and a Module.new block's nowhere" do
     expect(generated("class Outer\n  M = Module.new do\n    attr_reader :m_x\n  end\nend\n")).to be_empty
-    expect(generated("class Outer\n  D = Data.define(:a) do\n    attr_reader :d_x\n  end\nend\n")).to be_empty
+
+    # `Data.define(:a)` generates a reader and no writer, so `a` is the
+    # whole of it; `d_x` is the block's and stays unattributed.
+    expect(generated("class Outer\n  D = Data.define(:a) do\n    attr_reader :d_x\n  end\nend\n"))
+      .to eq([[:instance_method, "::Outer::D", "a"]])
   end
 
   # The control, and what an implementation that simply dropped every
