@@ -55,6 +55,7 @@
 "core/lib/ovallsp/cache/store.rb#save": "contained: failing to save means no cache, never a wrong cache"
 "core/lib/ovallsp/cache/store.rb#ensure_directory": "contained: reason written at the site -- a read-only filesystem means the cache never activates"
 "core/lib/ovallsp/cache/store.rb#prune_if_over_bound": "contained: housekeeping; a failure leaves the cache larger, never wrong"
+"core/lib/ovallsp/cache/store.rb#self.tighten_tree_once": "contained: a cache root this process cannot write a marker into is a cache that still works. The only consequence is that the walk is paid again next launch, which is what every launch did before this method existed -- so the fallback is the old behaviour rather than an assertion about anything."
 "core/lib/ovallsp/child_process.rb#signal": "contained: false means the signal did not land, which the caller retries or gives up on"
 "core/lib/ovallsp/child_process.rb#close_quietly": "contained: closing an already-closed fd"
 "core/lib/ovallsp/child_process.rb#join_quietly": "contained: true means stop waiting for a thread that is already gone"

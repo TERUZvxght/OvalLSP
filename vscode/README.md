@@ -44,7 +44,7 @@ implemented and tested today, not a roadmap.
 | macOS, Apple Silicon (`darwin-arm64`) | **Supported** |
 | macOS, Intel / Rosetta | Not supported in this Preview |
 | Linux, Windows | Not supported in this Preview |
-| Ruby 3.4.x | **Supported** (tested: 3.4.5, 3.4.7) |
+| Ruby 3.4.x | **Supported** (tested: 3.4.5, 3.4.7, 3.4.10) |
 | Ruby 4.0.x | Best effort — a non-gating CI job runs the Core suite under 4.0 on every pull request and every push to `main`, and reports how many examples ran; a 4.0-only failure is recorded rather than fixed |
 | Ruby 3.3.x, 3.5.x | Not verified |
 | Rails 8.1 | **Supported** (tested against the real integration suite) |

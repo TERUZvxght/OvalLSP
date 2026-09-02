@@ -17,6 +17,21 @@
 #   and a false report was nearly attributed to a fix that introduced
 #   none.
 #
+# Measured on that machine: 26,397 scopes and 282,805 entries, about
+# five seconds per example that starts a server, and most of a
+# thirteen-minute run.
+#
+# Set here rather than in the two spec files that already redirected it,
+# so it holds for every example whether or not its author thought about
+# the cache -- and because this is the shape `027` is about, where six
+# days of `bundle exec rspec` removed installed applications. The lesson
+# there was that a test reaching outside its own tmpdir is the hazard,
+# whatever it does next.
+#
+# One directory for the whole run rather than one per example: the cache
+# is meant to be reused across launches, and an example that wants a
+# fresh one already makes its own.
+#
 # Per process, so parallel runs cannot share one, and removed at exit.
 require "tmpdir"
 require "fileutils"
@@ -26,8 +41,6 @@ FileUtils.mkdir_p(SUITE_CACHE_HOME)
 ENV["XDG_CACHE_HOME"] = SUITE_CACHE_HOME
 at_exit { FileUtils.remove_entry(SUITE_CACHE_HOME) if File.directory?(SUITE_CACHE_HOME) }
 
-require "fileutils"
-require "tmpdir"
 
 require_relative "../lib/ovallsp"
 

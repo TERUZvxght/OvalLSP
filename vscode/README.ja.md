@@ -40,7 +40,7 @@ OvalLSPはRuby実装の言語サーバー(`ovallsp`)をVS Codeと並行して起
 | macOS, Apple Silicon (`darwin-arm64`) | **対応** |
 | macOS, Intel / Rosetta | このPreviewでは非対応 |
 | Linux, Windows | このPreviewでは非対応 |
-| Ruby 3.4.x | **対応**(3.4.5、3.4.7で動作確認済み) |
+| Ruby 3.4.x | **対応**(3.4.5、3.4.7、3.4.10で動作確認済み) |
 | Ruby 4.0.x | best effort(gateしないCIジョブがすべてのpull requestと`main`へのpushでCoreスイートを4.0で実行し、実行できたexample数を報告する。4.0固有の失敗は記録のみで修正しない) |
 | Ruby 3.3.x, 3.5.x | 未検証 |
 | Rails 8.1 | **対応**(実際の統合テストで確認済み) |

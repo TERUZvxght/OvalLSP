@@ -337,11 +337,22 @@ module Ovallsp
       # still the gem's, and a class named like a gem's but defined in the
       # app is not.
       #
-      # Names only. Measured on a small Rails 8 app: 3027 named modules,
-      # 2204 attributable to 63 gems, 15868 methods defined directly on
-      # them -- roughly 365KB, which is small enough to persist and far too
-      # much to send per query. So this is asked once and cached, never
-      # asked on the request path.
+      # Names only, and asked once per Core start rather than on the request
+      # path.
+      #
+      # **Re-measured in 0.3.1, because the figure here was two releases
+      # stale and the sentence beside it was never true.** It said "roughly
+      # 365KB ... so this is asked once and cached": 365 KB predates
+      # `singletonAncestors` and the visibility split below, the payload is
+      # **1,815 KB** now, and nothing has ever cached it -- `Cache::Store`
+      # refuses anything that is not a `FileSummary`, and Core holds the
+      # index in memory only. `024.295` is the entry, and it also records
+      # why the per-gem-version key it asks for cannot work: attribution
+      # here is by *definition site*, so a model's generated modules are
+      # filed under activerecord and change when `app/models` does.
+      #
+      # For scale: 33 gems, 2,097 entries after `eager_load!` against 1,941
+      # straight after boot, and the walk itself is 17-26 ms.
       def gem_index_result(_params)
         by_gem = Hash.new { |h, k| h[k] = [] }
         each_named_module do |mod, name|

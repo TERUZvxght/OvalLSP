@@ -844,18 +844,23 @@ local in a thousand files of real gem source and running what came out.
   With no ordinary assignment of that name, the rename is refused
   instead and nothing is edited. <!-- documents: 024.296 -->
 
-## Diagnostics say nothing about a method called on an `@ivar`
+## In a view template, diagnostics say nothing about a method called on an `@ivar`
 
-**`@article.no_such_method` is not reported, while
-`Post.no_such_class_method` on the next line is.** Since 0.3.0 the
-engine knows what an instance variable holds even when it was assigned
-in another method — hover tells you, and completion after the dot
-offers its members — but the undefined-method check still does not act
-on that receiver.
+**In an `.erb` template `@article.no_such_method` is not reported,
+while `Post.no_such_class_method` on the next line is.** In ordinary
+Ruby it *is* reported — that has worked since 0.3.0, including where
+the variable was assigned in another method of the same class. This
+page said otherwise until 0.3.1, which was wrong about the commoner of
+the two places.
 
-So this is a silence rather than a wrong report: nothing incorrect is
-said, and a real mistake goes unmentioned where the engine had enough
-to mention it. <!-- documents: 024.294 -->
+In a template the engine knows the type — hover tells you, and
+completion after the dot offers its members — but it will not report
+on it, and the reason is worth stating: the type it knows is the one
+the *view's own* controller assigns. A template that another
+controller renders would be judged against the wrong class, and a
+wrong report is worse than a missing one. Where two actions of the
+same controller render it, the engine already answers with both
+(`Comment | Post`); it is the cross-controller case it cannot see yet. <!-- documents: 024.294 -->
 
 ## The gem index is rebuilt on every start
 
@@ -866,4 +871,9 @@ that list is asked for once the app has booted and kept only in memory,
 so every Core start pays for it again.
 
 Nothing is reported wrongly in the meantime; the files you have open are
-re-answered once it lands. It is late, every time, rather than once. <!-- documents: 024.295 -->
+re-answered once it lands. It is late, every time, rather than once.
+
+The same is true after a `bundle install`, which restarts the Runtime
+Agent: the list is discarded with the application it described and
+asked for again. Until 0.3.1 it was kept, and the old gems' method
+sets went on answering for the new ones — which did report wrongly. <!-- documents: 024.295 -->

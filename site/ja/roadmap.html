@@ -195,6 +195,28 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v031">
+          <div class="tl-version">
+            <span class="v">0.3.1</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>再起動後も古いgemが答え続けていました</h3>
+          <ul class="feature-list">
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong><code>bundle install</code>の後に、置き換えられたgemに対してコードが判定され続けることはなくなりました。</strong>Runtime Agentは再起動しますが、それが報告していたクラス一覧は再起動を越えて保持されていました &mdash; 入れたばかりのバージョンに存在するメソッドが「存在しない」と報告される、ということです。今はそれが記述していたアプリケーションと一緒に破棄されます。</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong><code>@ivar</code>のレシーバについて、本プロジェクトが公開していた説明が誤っていました。</strong>制限のページは両言語で「インスタンス変数に対して呼んだメソッドは検査されない」と書いていました。通常のRubyでは検査されます。0.3.0からです。沈黙するのはビューのテンプレートだけで、ページはどちらがどうかとその理由を書くようになりました。</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>テストスイートが起動のたびにキャッシュの権限を付け直すのをやめ、</strong>誰にも気づかれずに古くなっていた3つの文書は、代わりに検査が落ちるようになりました &mdash; 2つのプロセス間のプロトコル、リリースのブランチを名指す記録、そして2リリース前に廃止されたブランチ名の綴りをまだ探していた番人です。</span>
+                    </li>
+          </ul>
+        </article>
+
         <article class="tl-item" id="v0218">
           <div class="tl-version">
             <span class="v">0.2.18</span>

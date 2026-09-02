@@ -139,6 +139,24 @@ CHECKS = [
     why: "catching and continuing is not the default here",
     dir: ROOT, command: %w[ruby scripts/check_swallowed_failures.rb]
   ),
+  # Both of these guard a `docs/DOCUMENTATION_MAP.md` row whose
+  # "Checked by" column read as nothing at all. Measured when they were
+  # written: the protocol document stated version 1 against the Agent's
+  # 2, had no section for three of the nine requests it dispatches, and
+  # specified seven methods `core/lib` does not contain -- six of them
+  # written as an ordinary specification. And `release/0.3.1` existed
+  # with no document naming it, which is the shape that had 0.2.3
+  # prepared twice in parallel.
+  Check.new(
+    name: "the protocol document matches the Agent",
+    why: "0.3.0 added a request and bumped the version; nothing noticed the document had neither",
+    dir: ROOT, command: %w[ruby scripts/check_protocol_doc.rb]
+  ),
+  Check.new(
+    name: "every release branch is named by a task document",
+    why: "a branch nothing on main names is invisible to the next session, which rebuilt 0.2.3 from scratch",
+    dir: ROOT, command: %w[ruby scripts/check_release_pointers.rb]
+  ),
   Check.new(
     name: "site links resolve",
     why: "the site is not generated from the docs and propagates nothing on its own",
