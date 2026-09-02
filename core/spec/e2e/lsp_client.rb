@@ -14,6 +14,7 @@ module E2E
   # directly.
   class LspClient
     class Timeout < StandardError; end
+    class Error < StandardError; end
 
     # Which Core the capability suite drives. The development tree by
     # default; set OVALLSP_E2E_CORE_BIN to the bundled copy inside a built
@@ -53,8 +54,12 @@ module E2E
 
     def open(path, text: nil)
       uri = "file://#{path}"
+      # Kept so a caller can re-send the document unchanged, which is
+      # how an analysis deferred on an Agent round trip gets re-run.
+      @texts ||= {}
+      @texts[uri] = text || File.read(path)
       notify("textDocument/didOpen", {
-               textDocument: { uri: uri, text: text || File.read(path), version: 1, languageId: "ruby" }
+               textDocument: { uri: uri, text: @texts[uri], version: 1, languageId: "ruby" }
              })
       uri
     end
@@ -131,6 +136,125 @@ module E2E
       Array(request("textDocument/references", { textDocument: { uri: uri }, position: { line: line, character: character } }))
     end
 
+    # `textDocument/codeAction` for the diagnostics on one line. Returns
+    # `[title, edits]` pairs, where each edit is `[line, newText]`.
+    def code_actions(uri, line, diagnostics)
+      Array(request("textDocument/codeAction",
+                    { textDocument: { uri: uri },
+                      range: { start: { line: line, character: 0 }, end: { line: line, character: 200 } },
+                      context: { diagnostics: diagnostics } }))
+        .map do |action|
+          edits = (action.dig(:edit, :changes) || {}).values.flatten
+                                                     .map { |e| [e[:range][:start][:line], e[:newText]] }
+          [action[:title], edits]
+        end
+    end
+
+    # The same request as `#code_actions`, keeping each edit's whole
+    # range. `#code_actions` reduces an edit to its line and its text,
+    # which is enough to say where a `def` was inserted and not enough
+    # to apply the edit and look at the file the user is left with.
+    def code_action_edits(uri, line, diagnostics)
+      Array(request("textDocument/codeAction",
+                    { textDocument: { uri: uri },
+                      range: { start: { line: line, character: 0 }, end: { line: line, character: 200 } },
+                      context: { diagnostics: diagnostics } }))
+        .map { |action| [action[:title], (action.dig(:edit, :changes) || {}).values.flatten] }
+    end
+
+    # The diagnostics the server published for a file, in the shape the
+    # protocol hands back to `codeAction` -- a fix keyed off a diagnostic
+    # has to be asked for with that diagnostic, not with a hand-built one.
+    def published_diagnostics(uri, timeout: 15)
+      deadline = monotonic + timeout
+      while monotonic < deadline
+        found = @mutex.synchronize { @diagnostics_by_uri[uri].dup }
+        return found if found && !found.empty?
+
+        sleep 0.05
+      end
+      []
+    end
+
+    # `textDocument/inlayHint` over a whole file. Returns `[line, label]`
+    # pairs, sorted, because that is what every example here compares.
+    def inlay_hints(uri, last_line: 200)
+      Array(request("textDocument/inlayHint",
+                    { textDocument: { uri: uri },
+                      range: { start: { line: 0, character: 0 },
+                               end: { line: last_line, character: 0 } } }))
+        # Sorted by position, not by label: two hints on one line are
+      # ordered by where they sit, and sorting the pair by its second
+      # element put `height:` before `width:`.
+      .sort_by { |h| [h[:position][:line], h[:position][:character]] }
+      .map { |h| [h[:position][:line], h[:label]] }
+    end
+
+    # `textDocument/typeDefinition`. Locations only; the protocol allows a
+    # single Location or a list and this client normalises to a list.
+    def type_definitions(uri, line, character)
+      Array(request("textDocument/typeDefinition",
+                    { textDocument: { uri: uri }, position: { line: line, character: character } }))
+        .map { |d| { uri: d[:uri], line: d[:range][:start][:line] } }
+    end
+
+    # `textDocument/prepareCallHierarchy` and the two follow-ups. The
+    # protocol hands the item back verbatim, so the follow-ups take one.
+    def prepare_call_hierarchy(uri, line, character)
+      Array(request("textDocument/prepareCallHierarchy",
+                    { textDocument: { uri: uri }, position: { line: line, character: character } }))
+    end
+
+    def incoming_calls(item)
+      Array(request("callHierarchy/incomingCalls", { item: item }))
+    end
+
+    def outgoing_calls(item)
+      Array(request("callHierarchy/outgoingCalls", { item: item }))
+    end
+
+    # `textDocument/documentHighlight`. Ranges plus the protocol's kind,
+    # which is 1 = Text, 2 = Read, 3 = Write.
+    # `024.R7`. The gem index is asked for once an Agent is ready and
+    # walks every loaded module -- 2,077 classes here -- so a request
+    # made before it lands is answered without it. Not a defect: a
+    # file opened during boot is re-answered by the republish that
+    # follows. An example about the index has to wait for it.
+    # The undefined-method check defers on an ancestor it has asked the
+    # Agent about and not yet heard back on -- reporting before the
+    # answer is the guess `024.R5` records as already known wrong. So an
+    # example about a report has to let that round trip finish, and a
+    # `didChange` is what re-runs the analysis once it has.
+    def wait_for_diagnostic(uri, needle, timeout: 30)
+      deadline = monotonic + timeout
+      while monotonic < deadline
+        found = diagnostic_messages(uri, timeout: 2).join(" ")
+        return found if found.include?(needle)
+
+        notify("textDocument/didChange",
+               { textDocument: { uri: uri, version: (@next_id += 1) },
+                 contentChanges: [{ text: @texts[uri] }] })
+      end
+      ""
+    end
+
+    def wait_for_gem_index(timeout: 120)
+      deadline = monotonic + timeout
+      while monotonic < deadline
+        loaded = request("ovallsp/status", {})[:gemIndexClasses].to_i
+        return loaded if loaded.positive?
+
+        sleep 0.2
+      end
+      0
+    end
+
+    def document_highlights(uri, line, character)
+      request("textDocument/documentHighlight",
+              { textDocument: { uri: uri }, position: { line: line, character: character } })
+        .then { |r| Array(r).map { |h| { range: h[:range], kind: h[:kind] } } }
+    end
+
     def rename_edits(uri, line, character, new_name)
       result = request("textDocument/rename", {
                          textDocument: { uri: uri }, position: { line: line, character: character }, newName: new_name
@@ -186,7 +310,18 @@ module E2E
       deadline = monotonic + timeout
       while monotonic < deadline
         response = @mutex.synchronize { @responses.delete(id) }
-        return response[:result] if response
+        if response
+          # **An error response is not an empty answer.** `result` is absent
+          # on an error, so returning it handed every caller `nil` -- and
+          # every example asserting "answers nothing" passed just as well when
+          # the handler raised. 0.3.0's D5 was written that way and could not
+          # tell a deliberate decline from a crash, which is the distinction
+          # section 0 is built on. Found by removing a guard and watching the
+          # example that exists for it stay green.
+          raise Error, "#{method} answered an error: #{response[:error].inspect}" if response[:error]
+
+          return response[:result]
+        end
 
         sleep 0.02
       end

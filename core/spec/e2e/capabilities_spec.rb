@@ -107,6 +107,23 @@ RSpec.describe "Extension capabilities", :e2e do
     yield @client.open(path, text: source), path
   end
 
+  # Applies a WorkspaceEdit's text edits to `source` and returns the
+  # result, so an example can assert about the file the user would be
+  # left holding rather than about the edit's shape. Applied last-first
+  # so an earlier edit's offsets are still valid.
+  def apply_edits(source, edits)
+    lines = source.lines
+    ordered = edits.sort_by { |e| [e[:range][:start][:line], e[:range][:start][:character]] }.reverse
+    ordered.each do |edit|
+      from = edit[:range][:start]
+      to = edit[:range][:end]
+      head = (lines[from[:line]] || "")[0...from[:character]]
+      tail = (lines[to[:line]] || "")[to[:character]..] || ""
+      lines[from[:line]..to[:line]] = [head + edit[:newText] + tail]
+    end
+    lines.join
+  end
+
   describe "baseline" do
     it "B1/B2: reaches a ready state against a real Rails app" do
       expect(@state).to eq("ready-rails")
@@ -660,6 +677,627 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(targets).to include(a_string_matching(/string\.rbs\z/))
       end
     end
+
+    # 0.3.0. `045`: "cheap given `explainType` already resolves the type".
+    # The difference from D1 is the whole point -- go to *definition* on
+    # `widget.build` lands on `def build`; go to *type* definition lands on
+    # the class the expression evaluates to.
+    it "D4: jumps to the class an expression evaluates to, not to the method that produced it" do
+      source = <<~SOURCE
+        class TdWidget
+          def label
+            "x"
+          end
+        end
+
+        class TdHolder
+          def use
+            made = TdWidget.new
+            made
+          end
+        end
+      SOURCE
+
+      with_file("app/models/td_probe.rb", source) do |uri|
+        # The caret is on `made` at line 9, whose type is TdWidget.
+        targets = @client.type_definitions(uri, 9, 4)
+        expect(targets).not_to be_empty, "typeDefinition answered nothing for a local of a known class"
+        expect(targets.map { |t| t[:uri] }).to all(end_with("td_probe.rb"))
+
+        # **The control, and it is inside the answer rather than beside it.**
+        # Line 0 is `class TdWidget`; line 8 is the assignment `made = ...`.
+        # A server that forwarded this to `textDocument/definition` would
+        # answer the assignment and look plausible. Go to definition at this
+        # same caret answers nothing at all today, so it cannot be the
+        # control -- measured, not assumed.
+        expect(targets.map { |t| t[:line] }).to eq([0])
+      end
+    end
+
+    it "D5: answers nothing where the type is not a workspace class" do
+      source = "class TdUnknown\n  def go(anything)\n    anything\n  end\nend\n"
+
+      with_file("app/models/td_unknown.rb", source) do |uri|
+        # A parameter with no declared type: the engine does not know what
+        # it is, and the nearest name that looks right is a guess.
+        expect(@client.type_definitions(uri, 2, 4)).to be_empty
+      end
+    end
+
+    # 0.3.0. `045`: "the inference that already exists". Hover answers
+    # these today; inlay hints put the answer where the code is.
+    it "I1: labels each local assignment with its inferred type, and nothing it cannot infer" do
+      source = <<~SOURCE
+        class IhProbe
+          def go(unknown_thing)
+            counted = 1
+            named = "x"
+            made = IhProbe.new
+            borrowed = unknown_thing
+            [counted, named, made, borrowed]
+          end
+        end
+      SOURCE
+
+      with_file("app/models/ih_probe.rb", source) do |uri|
+        hints = @client.inlay_hints(uri)
+        by_line = hints.to_h
+
+        expect(by_line[2]).to eq(": Integer")
+        expect(by_line[3]).to eq(": String")
+        expect(by_line[4]).to eq(": IhProbe")
+
+        # **The line that makes this a capability rather than a decoration.**
+        # `borrowed` is assigned from an untyped parameter, so the engine
+        # does not know; a label there would be a wrong answer written into
+        # the margin of the user's code, which section 0 ranks below none.
+        expect(by_line).not_to have_key(5)
+
+        # And a read is not an assignment: line 6 mentions all four and
+        # gets nothing.
+        expect(by_line).not_to have_key(6)
+      end
+    end
+
+    it "I2: labels each argument with the parameter name it is passed as" do
+      source = <<~SOURCE
+        class IhCallee
+          def resize(width, height, scale = 1)
+            [width, height, scale]
+          end
+
+          def post_required(first, middle = 1, last)
+            [first, middle, last]
+          end
+
+          def collecting(head, *tail)
+            [head, tail]
+          end
+        end
+
+        class IhCaller
+          def go
+            IhCallee.new.resize(10, 20, 30)
+          end
+
+          def awkward
+            IhCallee.new.post_required(1, 2)
+          end
+
+          def splatty
+            IhCallee.new.collecting(1, 2, 3)
+          end
+        end
+      SOURCE
+
+      with_file("app/models/ih_caller.rb", source) do |uri|
+        on = ->(line) { @client.inlay_hints(uri).select { |(l, _)| l == line }.map(&:last) }
+
+        # Two required and one optional, all three labelled: where the
+        # shape is plain the index-to-parameter mapping holds, and
+        # refusing the optional was under-answering.
+        expect(on.call(16)).to eq(["width:", "height:", "scale:"])
+
+        # **A required parameter after an optional one refuses the whole
+        # call.** Ruby fills the optional last -- `f(1, 2)` on
+        # `def f(a, b = 1, c)` binds `c = 2` -- so labelling by index
+        # would write `middle:` beside a value passed as `last`.
+        expect(on.call(20)).to be_empty
+
+        # And a `*rest` parameter, for the same reason.
+        expect(on.call(24)).to be_empty
+      end
+    end
+
+    # **A label that repeats the argument is noise.** `take(name)` against
+    # `def take(name)` rendered `name: name`; every other language server
+    # suppresses that, and a hint's whole value is telling the reader
+    # something the code does not already say.
+    #
+    # Predicted blind by a subagent given only the feature list.
+    it "I2: says nothing where the argument already spells the parameter" do
+      source = "class EchoProbe\n  def take(name, other)\n    [name, other]\n  end\n\n" \
+               "  def go(name)\n    take(name, 2)\n  end\nend\n"
+
+      with_file("app/models/echo_probe.rb", source) do |uri|
+        labels = @client.inlay_hints(uri).select { |(line, _)| line == 6 }.map(&:last)
+
+        expect(labels).to eq(["other:"]),
+                          "expected only the argument whose name differs to carry a label"
+      end
+    end
+
+    # **The index stops meaning the position once a splat is passed.** Ruby
+    # fills the parameters from a flattened argument list, so the argument
+    # written third is not the third parameter:
+    #
+    #   $ ruby -e '
+    #   def f(a, b, c) = [a, b, c]
+    #   rest = [2]
+    #   p f(1, *rest, 3)
+    #   '
+    #   # => [1, 2, 3]
+    #   # ruby 3.4.10
+    #
+    # `3` is passed as `c`. Labelling by index writes `b:` beside it, in the
+    # margin, as the engine's answer. The parser already records `splat:`
+    # for exactly this reason and the two other readers of that shape --
+    # the arity check and the argument-type check -- each open by refusing
+    # it; this is the third.
+    #
+    # Predicted blind by two independent subagents given only the feature
+    # list, and the comment here previously asserted the opposite.
+    it "I2: says nothing about a call whose arguments are splatted" do
+      source = "class SplatProbe\n  def take(a, b, c)\n    [a, b, c]\n  end\n\n" \
+               "  def go(rest)\n    take(1, *rest, 3)\n  end\nend\n"
+
+      with_file("app/models/splat_probe.rb", source) do |uri|
+        labels = @client.inlay_hints(uri).select { |(line, _)| line == 6 }.map(&:last)
+
+        expect(labels).to be_empty,
+                          "labelling by index across a splat names the parameter Ruby did not use"
+      end
+    end
+
+    # An operator call carries no name worth showing. `self + v` rendered
+    # `other:` beside `v`, which is true and tells the reader nothing --
+    # the same noise the example above refuses, arriving from the operand
+    # side rather than the argument side.
+    it "I2: says nothing about an operator call" do
+      source = "class OperandProbe\n  def +(other)\n    other\n  end\n\n" \
+               "  def go(v)\n    self + v\n  end\nend\n"
+
+      with_file("app/models/operand_probe.rb", source) do |uri|
+        labels = @client.inlay_hints(uri).select { |(line, _)| line == 6 }.map(&:last)
+
+        expect(labels).to be_empty, "an operator's operand does not need naming"
+      end
+    end
+
+    # 0.3.0. `045`: "the diagnostics that already exist". Each of these is
+    # offered only where the edit is defined -- a quick fix that guesses is
+    # a wrong edit applied with one click, which is section 0 at its
+    # sharpest, because the user never sees the reasoning.
+    it "Q1: offers a `def` for an unknown method, inserted into the class it was called on" do
+      # `QfCaller` is written **first** on purpose. With the receiver's
+      # class first, "insert into the class the call was made on" and
+      # "insert into whichever class this file declares first" are the same
+      # edit, and the example cannot tell them apart.
+      source = "class QfCaller\n  def go\n    QfSubject.new.absent_one\n  end\nend\n\n" \
+               "class QfSubject\n  def known; end\nend\n"
+
+      with_file("app/models/qf_probe.rb", source) do |uri|
+        published = @client.published_diagnostics(uri)
+        unknown = published.select { |d| d[:code] == "unknown-method" }
+        expect(unknown).not_to be_empty, "no unknown-method diagnostic to act on"
+
+        actions = @client.code_actions(uri, unknown.first[:range][:start][:line], unknown)
+        titles = actions.map(&:first)
+        expect(titles).to include(a_string_including("absent_one"))
+
+        # The edit goes into QfSubject's body, not the caller's -- the
+        # method was called *on* QfSubject.
+        edits = actions.find { |t, _| t.include?("absent_one") }.last
+        # **Line 8, the line the class's own `end` is on**, so the `def` goes
+        # in immediately above it. This asserted line 7 -- "the class's start
+        # line plus one" -- until 0.3.0's review measured what that does to
+        # the shapes this fixture does not have: a one-line class put the
+        # `def` *after* its own `end`, and a multi-line header put it between
+        # `class Wide <` and the superclass. Both parse, which is why an
+        # assertion about the applied text parsing could not see either.
+        #
+        # The fixture is unchanged, so the two numbers are the same insertion
+        # rule disagreeing rather than a different fixture.
+        expect(edits.map(&:first)).to eq([8])
+        expect(edits.map(&:last).join).to include("def absent_one")
+      end
+    end
+
+    # Where the class body's end is found by scanning, three shapes can
+    # move it: a class written on one line, a class holding a nested
+    # class, and a heredoc whose text contains the word `end`. Each was
+    # predicted blind as a place the insertion would land inside another
+    # construct; this drives all three and asserts the file still parses,
+    # which is the property that actually matters on a surface that edits
+    # with one click.
+    it "Q1: inserts into the right body when the class's end is not the first one" do
+      shapes = {
+        "one_line" => "class QfOneLine < Object; def known; end; end\n" \
+                      "class QfOneLineCaller\n  def go\n    QfOneLine.new.absent_a\n  end\nend\n",
+        "nested" => "class QfNested\n  class Inner\n    def known; end\n  end\nend\n" \
+                    "class QfNestedCaller\n  def go\n    QfNested.new.absent_b\n  end\nend\n",
+        "heredoc_end" => "class QfHeredocEnd\n  def text\n    <<~BODY\n      end\n    BODY\n  end\nend\n" \
+                         "class QfHeredocEndCaller\n  def go\n    QfHeredocEnd.new.absent_c\n  end\nend\n"
+      }
+
+      driven = []
+      shapes.each do |name, source|
+        with_file("app/models/qf_shape_#{name}.rb", source) do |uri|
+          unknown = @client.published_diagnostics(uri).select { |d| d[:code] == "unknown-method" }
+          next if unknown.empty?
+
+          action = @client.code_action_edits(uri, unknown.first[:range][:start][:line], unknown)
+                          .find { |title, _| title.include?("absent_") }
+          next unless action
+
+          driven << name
+
+          edits = action.last
+          applied = apply_edits(source, edits)
+          expect(Prism.parse(applied).success?).to be(true),
+                                                   "the #{name} shape stopped parsing after the fix:\n#{applied}"
+        end
+      end
+
+      # **Without this the example passes by not running.** Each shape
+      # is skipped when the engine reports nothing to act on, which is
+      # exactly what a regression here would look like.
+      expect(driven).to match_array(shapes.keys)
+    end
+
+    it "Q2: replaces an unknown route helper with the closest one the application has" do
+      # `posts_path` exists in this workspace (`config/routes.rb` draws
+      # `resources :posts`), and `postss_path` is one edit from it.
+      #
+      # The name has to *end* in `_path` or `_url`, or the engine reads
+      # it as an ordinary unknown method rather than a route helper --
+      # `posts_pathh` was the first attempt and produced
+      # `unknown-method`, which is a different fix. The
+      # first version of this example used a route the application does
+      # not have at all and skipped -- a skipped example is not a passing
+      # one, and this row claims PASS.
+      source = "class QfRoutes\n  def go\n    postss_path\n  end\nend\n"
+
+      with_file("app/models/qf_routes.rb", source) do |uri|
+        published = @client.published_diagnostics(uri)
+        helper = published.select { |d| d[:code] == "unknown-route-helper" }
+        expect(helper).not_to be_empty, "no unknown-route-helper diagnostic: #{published.map { |d| d[:message] }}"
+
+        actions = @client.code_actions(uri, helper.first[:range][:start][:line], helper)
+        expect(actions.map(&:first)).to include("Change to `posts_path`")
+
+        # And the edit replaces the name rather than appending to it.
+        expect(actions.first.last.map(&:last)).to eq(["posts_path"])
+
+        # **And a name that is not close to anything is refused.** Rewriting
+        # one wrong name into another unrelated one is a wrong edit applied
+        # with a click, not a fix -- so the ceiling is what makes this a
+        # capability rather than a name-substitution.
+        far = "class QfFarRoute\n  def go\n    completely_different_thing_path\n  end\nend\n"
+        with_file("app/models/qf_far_route.rb", far) do |far_uri|
+          published_far = @client.published_diagnostics(far_uri)
+          far_helper = published_far.select { |d| d[:code] == "unknown-route-helper" }
+          expect(far_helper).not_to be_empty
+          expect(@client.code_actions(far_uri, far_helper.first[:range][:start][:line], far_helper)).to be_empty
+        end
+      end
+    end
+
+    it "Q3: removes surplus arguments, and offers nothing when there are too few" do
+      source = "class QfArity\n  def takes_two(a, b)\n    [a, b]\n  end\n\n" \
+               "  def too_many\n    takes_two(1, 2, 3)\n  end\n\n" \
+               "  def too_few\n    takes_two(1)\n  end\nend\n"
+
+      with_file("app/models/qf_arity.rb", source) do |uri|
+        published = @client.published_diagnostics(uri)
+        counts = published.select { |d| d[:code] == "argument-count" }
+        expect(counts.length).to eq(2), "expected one diagnostic per call, got #{counts.map { |d| d[:message] }}"
+
+        surplus = counts.find { |d| d[:range][:start][:line] == 6 }
+        missing = counts.find { |d| d[:range][:start][:line] == 10 }
+
+        expect(@client.code_actions(uri, 6, [surplus]).map(&:first))
+          .to include(a_string_including("Remove"))
+
+        # **Nothing for the other one, and that is the capability.** There
+        # is no value to write in place of a missing argument, and writing
+        # `nil` would be this engine putting a guess into the user's file.
+        expect(@client.code_actions(uri, 10, [missing])).to be_empty
+      end
+    end
+
+    # **A heredoc argument keeps its body somewhere else**, and the edit
+    # deleted only the marker. `takes_one(1, <<~TXT)` became
+    #
+    #     takes_one(1)
+    #       body line
+    #     TXT
+    #
+    # which **still parses** -- `body line` reads as a call and `TXT` as a
+    # constant -- so nothing tells the user their file changed meaning.
+    # A quick fix is applied with one click and its reasoning is never
+    # seen, which is why this surface refuses rather than guesses.
+    #
+    # The test is the text being *deleted*, not the call: a heredoc that
+    # is being kept is not a problem, because its marker stays where its
+    # body expects it.
+    #
+    # Predicted blind by a subagent given only the feature list.
+    it "Q3: offers nothing where the surplus argument is a heredoc" do
+      source = "class QfHeredoc\n  def takes_one(a)\n    a\n  end\n\n" \
+               "  def too_many\n    takes_one(1, <<~TXT)\n      body line\n    TXT\n  end\nend\n"
+
+      with_file("app/models/qf_heredoc.rb", source) do |uri|
+        surplus = @client.published_diagnostics(uri).find do |d|
+          d[:code] == "argument-count" && d[:range][:start][:line] == 6
+        end
+        expect(surplus).not_to be_nil, "expected the arity diagnostic to still be reported"
+
+        expect(@client.code_actions(uri, 6, [surplus])).to be_empty,
+                                                          "deleting the marker leaves its body behind as live code"
+      end
+    end
+
+    # 0.3.0, `024.86`, and the roadmap's "completion of `@ivar` names the
+    # moment you type the sigil". One missing seed produced both: the
+    # descent starts a fresh environment per `def`, so an ivar assigned in
+    # another method was invisible to the method being edited -- for its
+    # type *and* for its name. It works in an ERB view because a view has
+    # no `def` for the descent to reset at.
+    it "C15: offers the class's instance variables at the sigil, not only this method's" do
+      source = <<~SOURCE
+        class IvProbe
+          def setup
+            @from_setup = 1
+          end
+
+          def use
+            @from_use = 2
+            @
+          end
+        end
+      SOURCE
+
+      with_file("app/models/iv_probe.rb", source) do |uri|
+        labels = @client.completion_labels(uri, 7, 5)
+        expect(labels).to include("@from_setup", "@from_use")
+      end
+    end
+
+    # **The two sides hold different variables.** An `@x` written in
+    # `def self.build` lives on the class object; an `@x` read in an
+    # instance method is the instance's, and it is `nil`:
+    #
+    #   $ ruby -e '
+    #   class S
+    #     def self.build; @x = "class side"; end
+    #     def read; @x; end
+    #   end
+    #   S.build
+    #   p S.new.read
+    #   p S.instance_variable_get(:@x)
+    #   '
+    #   # => nil
+    #   # => "class side"
+    #   # ruby 3.4.10
+    #
+    # The class-wide walk took every `def` in the body, so the singleton
+    # side's names were offered inside instance methods -- a name the
+    # reader picks and gets `nil` from.
+    #
+    # The second half is the other direction: `@memo ||= []` is an
+    # assignment, and the walk is a *type* inference that drops what it
+    # cannot type. `#assigned_ivar_names` already carries the note that
+    # "was it assigned at all" is a syntactic question and that `||=`,
+    # `case`, `rescue` and multiple assignment each reached it -- this
+    # surface asked the typed walk instead.
+    #
+    # Predicted blind by two independent subagents given only the
+    # feature list.
+    it "C15: offers the instance side only, including names it cannot type" do
+      source = <<~RUBY
+        class SidedProbe
+          def self.build
+            @only_singleton = "s"
+          end
+
+          def assigns
+            @plain = 1
+            @memo ||= []
+            @first, @second = 1, 2
+          end
+
+          def here
+            @
+          end
+        end
+      RUBY
+
+      with_file("app/models/sided_probe.rb", source) do |uri|
+        offered = @client.completion_labels(uri, 12, 5).select { |l| l.start_with?("@") }
+
+        expect(offered).not_to include("@only_singleton"),
+                               "a singleton ivar read from an instance method is nil"
+        expect(offered).to include("@plain", "@memo", "@first", "@second")
+      end
+    end
+
+    # A sigil inside a string literal is text. The completion path
+    # computed its prefix from the characters to the left and never asked
+    # whether the caret was in code, so typing an address into a string
+    # opened the class's instance variables. `#inside_string_or_comment?`
+    # already existed for the `def` scan and for the call scan; this was
+    # the third reader and did not ask it.
+    #
+    # Predicted blind by two independent subagents given only the feature
+    # list.
+    it "C15: says nothing at a sigil inside a string" do
+      source = <<~RUBY
+        class QuotedProbe
+          def assigns
+            @address = 1
+          end
+
+          def here
+            "mail to @"
+          end
+        end
+      RUBY
+
+      with_file("app/models/quoted_probe.rb", source) do |uri|
+        # The caret is just past the `@` inside the string, line 6.
+        inside = @client.completion_labels(uri, 6, 14).select { |l| l.start_with?("@") }
+        expect(inside).to be_empty, "the sigil inside a string literal is text, not a name being typed"
+      end
+    end
+
+    # 024.R7's Core half, first step. The Agent reports what the gems
+    # define and the server holds it; **nothing reads it to decide an
+    # answer yet**, which is why this asserts the index exists rather than
+    # a diagnostic that changed. Closedness and members have to arrive
+    # together, and turning silence into reports across every Rails file
+    # owes a corpus run with a control.
+    it "W5/W6: holds the running application's gem index once the Agent is ready" do
+      @client.wait_for_gem_index
+      status = @client.raw_request("ovallsp/status", {})
+
+      expect(status).to have_key(:gemIndexClasses)
+      expect(status[:gemIndexClasses]).to be > 100,
+                                          "the gem index holds #{status[:gemIndexClasses]} classes; " \
+                                          "a real Rails bundle contributes thousands"
+    end
+
+    # 024.87 and the roadmap's "`Article.all.` completes". The type half
+    # was fixed in 0.2.15 -- a chain stays `Relation[T]` -- and the entry
+    # says the diagnostic half is unconfirmed. This confirms it either way
+    # rather than leaving it as a belief.
+    it "C16: completes and checks past the second link of a relation chain" do
+      # The caret is at the end of the line, after the trailing dot --
+      # counted from the source rather than written as a number, which
+      # is how the first version of this landed on the `:id` inside
+      # `order(:id)` and measured `Symbol`.
+      # The members come from the running application (024.R7), so the
+      # index has to have landed -- the same wait G18 makes.
+      expect(@client.wait_for_gem_index).to be > 100
+
+      chain = "    Post.where(x: 1).order(:id)."
+      source = "class RelProbe\n  def go\n#{chain}\n  end\nend\n"
+
+      with_file("app/models/rel_probe.rb", source) do |uri|
+        # `Relation`'s own members, at the second hop -- which is where
+        # 024.87 says the chain used to lose its type.
+        labels = @client.completion_labels(uri, 2, chain.length)
+
+        # What a `Relation` actually offers, read off the answer rather than
+        # assumed: `where` is `Post`'s *singleton* method, not a member of the
+        # relation the chain evaluates to. The first version of this example
+        # asserted `where` and was measuring the wrong receiver.
+        #
+        # 228 items come back here where the pre-0.3.0 build offered none.
+        expect(labels.length).to be > 50, "the chain lost its members at the second link"
+        expect(labels).to include("each", "map")
+      end
+    end
+
+    it "G19: reports a typo past the second link of a relation chain" do
+      source = "class RelDiag < ApplicationRecord\n  def go\n    Post.where(x: 1).order(:id).titel\n  end\nend\n"
+
+      expect(@client.wait_for_gem_index).to be > 100
+
+      with_file("app/models/rel_diag.rb", source) do |uri|
+        messages = @client.diagnostic_messages(uri).join(" ")
+
+        # **Recorded either way.** `024.87` calls this half unconfirmed; a
+        # relation is an Active Record object and `ActiveRecord::Relation`
+        # delegates through `method_missing`, so silence here is the
+        # correct answer and not a gap -- which is what the expectation
+        # below says, measured rather than assumed.
+        expect(messages).not_to include("titel")
+      end
+    end
+
+    # 024.R7, and the roadmap's first 0.3.0 promise. Until now "closed"
+    # meant "the workspace can see the whole ancestry", so a class
+    # inheriting from a gem was never checked -- the check worked where it
+    # was least needed and said nothing where most code is written.
+    #
+    # Measured over activerecord's own 397 files with the index on and
+    # off, same corpus sha, control identical at 1,609: **0 reports
+    # introduced, 13 removed.**
+    #
+    # **`ActiveRecord::Base` is deliberately not the fixture, and cannot
+    # be.** `ActiveRecord::AttributeMethods` defines `method_missing` --
+    # `ActiveRecord::Base.private_method_defined?(:method_missing)` is
+    # `true`, asked of the running application -- so a model answers to
+    # names no enumeration can list and reporting on one would be a wrong
+    # answer. 577 of this bundle's classes have no such ancestor; this is
+    # one of them.
+    it "G18: reports a method that does not exist on a class inheriting from a gem" do
+      source = "class GemHeir < ActionView::Helpers::FormBuilder\n  def go\n    no_such_method_at_all\n  end\nend\n"
+
+      expect(@client.wait_for_gem_index).to be > 100, "the gem index never loaded"
+
+      with_file("app/models/gem_heir.rb", source) do |uri|
+        expect(@client.wait_for_diagnostic(uri, "no_such_method_at_all")).to include("no_such_method_at_all")
+      end
+    end
+
+    # The other half, and the one section 0 cares about more: a receiver
+    # that answers at call time stays silent, whatever the index holds.
+    it "G18: stays silent on an Active Record model, which answers at call time" do
+      source = "class QuietHeir < ActiveRecord::Base\n  def go\n    no_such_method_at_all\n  end\nend\n"
+
+      expect(@client.wait_for_gem_index).to be > 100
+
+      with_file("app/models/quiet_heir.rb", source) do |uri|
+        expect(@client.diagnostic_messages(uri).join(" ")).not_to include("no_such_method_at_all")
+      end
+    end
+
+    it "H8: types an ivar assigned in another method, and declines where two methods disagree" do
+      source = <<~SOURCE
+        class IvWidget
+          def label
+            "x"
+          end
+        end
+
+        class IvHolder
+          def setup
+            @agreed = IvWidget.new
+            @disputed = IvWidget.new
+          end
+
+          def other_setup
+            @disputed = 41
+          end
+
+          def use
+            [@agreed, @disputed]
+          end
+        end
+      SOURCE
+
+      with_file("app/models/iv_holder.rb", source) do |uri|
+        expect(@client.hover_text(uri, 17, 8)).to include("IvWidget")
+
+        # **Two methods, two different types, so nothing.** Picking one
+        # would be a wrong answer where the code has no single one, and a
+        # hover is read as the engine's claim about the program.
+        expect(@client.hover_text(uri, 17, 18).to_s).not_to include("IvWidget")
+        expect(@client.hover_text(uri, 17, 18).to_s).not_to include("Integer")
+      end
+    end
   end
 
   describe "semantic highlighting" do
@@ -1142,6 +1780,32 @@ RSpec.describe "Extension capabilities", :e2e do
       end
     end
 
+    # **A parameter is where most locals in real code are bound**, and
+    # its own range was recorded by nothing -- so a rename rewrote the
+    # body, left the `def` line, and handed back a method that raises
+    # `NameError`. Where the body assigns before it reads the file runs
+    # and answers something else, which is worse. `024.273` measured it
+    # and named the direction; this is that direction taken.
+    #
+    # Its own row rather than a second `W2`: `capability_coverage_spec`
+    # compares ids as set differences.
+    it "W7: rewrites a parameter's own declaration, not only its uses" do
+      with_file("app/models/param_rename_probe.rb", <<~RUBY) do |uri|
+        class ParamRenameProbe
+          def double(value)
+            value * 2
+          end
+        end
+      RUBY
+        # The caret is on `value` in the body, line 2.
+        edits = @client.rename_edits(uri, 2, 6, "factor").values.flatten
+        lines_touched = edits.map { |e| e[:range][:start][:line] }.sort
+
+        expect(lines_touched).to eq([1, 2]),
+                                 "leaving the `def` line behind hands back a method that raises NameError"
+      end
+    end
+
     # Its own row, not a second `W2`: `capability_coverage_spec` compares
     # ids as set differences, so a duplicate id makes the new row and its
     # example cancel out and the guard cannot see either.
@@ -1177,5 +1841,271 @@ RSpec.describe "Extension capabilities", :e2e do
         expect(@client.workspace_symbols("symbol_probe_method")).to include("symbol_probe_method")
       end
     end
+
+    # 0.3.0. `045`: "an incremental step on the same index" -- incoming
+    # calls are the references the index already holds, grouped by the
+    # method each one sits inside.
+    #
+    # Unlike documentHighlight this *does* warm the reference index, and
+    # that is right: opening a call hierarchy is a deliberate action, not
+    # something the editor does on every cursor move.
+    it "W5: lists a method's callers across files, with the range of each call" do
+      callee = "class ChSubject\n  def ch_target\n    1\n  end\nend\n"
+      # Three shapes in one file, each of which a different wrong
+      # implementation gets wrong:
+      #
+      #   `go`             -- the ordinary caller.
+      #   `outer`/`inner`  -- nested `def`s, both of whose recorded ranges
+      #                       contain the call. The innermost is the caller;
+      #                       taking the first declaration that contains it
+      #                       names `outer`, which did not make the call.
+      #   the top-level call -- no enclosing method at all, and a caller
+      #                       invented for it is an assertion about the
+      #                       user's code that nothing supports.
+      calling = <<~SOURCE
+        class ChCaller
+          def go
+            ChSubject.new.ch_target
+          end
+
+          def outer
+            def inner
+              ChSubject.new.ch_target
+            end
+          end
+        end
+
+        ChSubject.new.ch_target
+      SOURCE
+
+      with_file("app/models/ch_subject.rb", callee) do |uri|
+        with_file("app/models/ch_caller.rb", calling) do |_other|
+          item = @client.prepare_call_hierarchy(uri, 1, 6).first
+          expect(item).not_to be_nil, "prepareCallHierarchy answered nothing on a `def`"
+          expect(item[:name]).to eq("ch_target")
+
+          incoming = @client.incoming_calls(item)
+          # Exactly these two. Not the class, not the file, and nothing for
+          # the top-level call, which has no caller this protocol can name.
+          expect(incoming.map { |c| c[:from][:name] }.sort).to eq(%w[go inner])
+
+          # And the range is the call site inside `go`, which is what makes
+          # the entry navigable rather than merely named.
+          by_caller = incoming.to_h { |c| [c[:from][:name], Array(c[:fromRanges]).map { |r| r[:start][:line] }] }
+          expect(by_caller["go"]).to eq([2])
+          expect(by_caller["inner"]).to eq([7])
+        end
+      end
+    end
+
+    # **A call written at the top level has no calling method**, and the
+    # answer is to leave it out rather than invent one. Two lines decide
+    # that -- `next unless enclosing` in the grouping, and the
+    # `declarations.find ... or next` in the render -- and the 0.3.0
+    # review's mutation sweep found that W5 above distinguishes *neither*
+    # of them: mutating either alone leaves it green, because the other
+    # still drops the group. Only mutating both fails it, so one example
+    # pinned a pair rather than a line.
+    #
+    # This one names the whole caller set, so a caller invented from a
+    # top-level call appears in the diff rather than being absorbed.
+    it "W5: leaves a top-level call out of the caller list rather than inventing a caller for it" do
+      callee = "class ChTopSubject\n  def ch_top_target\n    1\n  end\nend\n"
+      calling = <<~SOURCE
+        class ChTopCaller
+          def go
+            ChTopSubject.new.ch_top_target
+          end
+        end
+
+        ChTopSubject.new.ch_top_target
+      SOURCE
+
+      with_file("app/models/ch_top_subject.rb", callee) do |uri|
+        with_file("app/models/ch_top_caller.rb", calling) do
+          item = @client.prepare_call_hierarchy(uri, 1, 6).first
+          expect(item).not_to be_nil
+
+          callers = @client.incoming_calls(item).map { |c| c[:from][:name] }.sort
+
+        expect(callers).to eq(["go"]),
+                           "a call outside any method has no caller; inventing one names the callee as its own"
+        end
+      end
+    end
+
+    it "W6: lists the methods a method calls, with the range of each call" do
+      source = "class ChOutgoing\n" \
+               "  def first_leg\n    1\n  end\n\n" \
+               "  def second_leg\n    2\n  end\n\n" \
+               "  def both\n    first_leg\n    second_leg\n  end\n" \
+               "end\n"
+
+      with_file("app/models/ch_outgoing.rb", source) do |uri|
+        item = @client.prepare_call_hierarchy(uri, 9, 6).first
+        expect(item).not_to be_nil
+        expect(item[:name]).to eq("both")
+
+        outgoing = @client.outgoing_calls(item)
+        expect(outgoing.map { |c| c[:to][:name] }).to contain_exactly("first_leg", "second_leg")
+
+        # One range per call, at the line the call is written on. Without
+        # this the two entries are indistinguishable from a name list.
+        by_name = outgoing.to_h { |c| [c[:to][:name], Array(c[:fromRanges]).map { |r| r[:start][:line] }] }
+        expect(by_name["first_leg"]).to eq([10])
+        expect(by_name["second_leg"]).to eq([11])
+      end
+    end
+
+    # The live half of `CALLABLE_KINDS`. A class has no callers in this
+    # protocol's sense, so answering for one would be a list of mentions
+    # wearing a caller's name -- and the guard that refuses it was
+    # unpinned until this example, while the same constant's use on the
+    # outgoing side turned out to be dead and was removed.
+    it "W5/W6: offers no call hierarchy on a class name" do
+      with_file("app/models/ch_class_probe.rb", "class ChClassProbe\n  def m; end\nend\n") do |uri|
+        expect(@client.prepare_call_hierarchy(uri, 0, 8)).to be_empty
+        # The control: the same file answers on the method one line down,
+        # so an empty answer above is the guard and not a dead request.
+        expect(@client.prepare_call_hierarchy(uri, 1, 6)).not_to be_empty
+      end
+    end
+
+  # 0.3.0's first capability. `045` orders it first of the four that need
+  # only what already exists: the reference index answers occurrences
+  # workspace-wide, so scoping to one file is nearly free.
+  #
+  # The deferral note in `server.rb` named the trap, and these examples
+  # are written against it: References and Rename call
+  # `ensure_reference_index_current`, whose rebuild is O(workspace),
+  # while the editor asks for highlights **on every cursor move**. So
+  # this answers from the open file's own summary and the last example
+  # here is the one that says so.
+  describe "in the current file" do
+    it "F1: highlights every occurrence of a local, and not a same-named local elsewhere" do
+      source = <<~RUBY
+        class HighlightProbe
+          def outer
+            counter = 1
+            counter += 2
+            counter
+          end
+
+          def other
+            counter = 9
+            counter
+          end
+        end
+      RUBY
+
+      with_file("app/models/highlight_probe.rb", source) do |uri|
+        # The caret is on `counter` in `counter = 1`, line 2.
+        highlights = @client.document_highlights(uri, 2, 4)
+        lines = highlights.map { |h| h[:range][:start][:line] }.sort
+
+        # Three in `outer`; the two in `other` are a different binding and
+        # a fixture where both scopes answered the same would not tell the
+        # two behaviours apart.
+        expect(lines).to eq([2, 3, 4])
+
+        # **Write, write, read.** `counter = 1` and `counter += 2` assign;
+        # the bare `counter` reads. This shipped as `Text` for all three,
+        # on the argument that the layer could not tell -- which was true
+        # of the layer and wrong about what was knowable, since the parser
+        # has separate write visitors and was discarding the distinction.
+        by_line = highlights.to_h { |h| [h[:range][:start][:line], h[:kind]] }
+        expect(by_line).to eq({ 2 => 3, 3 => 3, 4 => 2 })
+      end
+    end
+
+    # **A parameter is a local, and its binding site is an occurrence.**
+    # The parser seeded each scope frame from Prism's `#locals`, so a use
+    # of `arg` resolved -- and nothing recorded the `arg` in the signature,
+    # so it was invisible to every reader of those occurrences. Highlight
+    # answered with the body alone, and Rename rewrote the body alone,
+    # which is the file-that-does-not-run 0.2.17 shipped a fix for.
+    #
+    # Method parameters are the commonest local in Ruby, so this was the
+    # feature not working for its most ordinary input.
+    #
+    # Predicted blind by two independent subagents given only the feature
+    # list.
+    it "F1: counts a method or block parameter's own binding site" do
+      source = <<~RUBY
+        class ParameterProbe
+          def outer(tally)
+            tally + 1
+          end
+
+          def blocky
+            [1].each { |item| item + 1 }
+          end
+        end
+      RUBY
+
+      with_file("app/models/parameter_probe.rb", source) do |uri|
+        # The caret is on `tally` in the body, line 2.
+        from_use = @client.document_highlights(uri, 2, 4).map { |h| h[:range][:start][:line] }.sort
+        expect(from_use).to eq([1, 2]), "the signature's `tally` is an occurrence of the same local"
+
+        # And from the signature itself, line 1, column 12.
+        from_declaration = @client.document_highlights(uri, 1, 12).map { |h| h[:range][:start][:line] }.sort
+        expect(from_declaration).to eq([1, 2]), "the caret on a parameter answered nothing at all"
+
+        # A block parameter binds the same way.
+        block_sites = @client.document_highlights(uri, 6, 16).map { |h| h[:range][:start][:line] }.sort
+        expect(block_sites).to eq([6, 6])
+      end
+    end
+
+    it "F2: highlights a method's declaration and its call sites in the file" do
+      source = <<~RUBY
+        class HighlightMethodProbe
+          def compute_total
+            41
+          end
+
+          def caller_one
+            compute_total + 1
+          end
+
+          def caller_two
+            compute_total
+          end
+        end
+      RUBY
+
+      with_file("app/models/highlight_method_probe.rb", source) do |uri|
+        # The caret is on `compute_total` in its `def`, line 1.
+        highlights = @client.document_highlights(uri, 1, 6)
+        lines = highlights.map { |h| h[:range][:start][:line] }.sort
+
+        expect(lines).to eq([1, 6, 10])
+
+        # The protocol carries a kind, and a declaration is not a read.
+        # Without this the answer is a list of ranges wearing a field
+        # nothing sets.
+        by_line = highlights.to_h { |h| [h[:range][:start][:line], h[:kind]] }
+        expect(by_line[1]).to eq(3)
+        expect(by_line[6]).to eq(2)
+      end
+    end
+
+    # The capability's actual requirement, and the reason the row exists
+    # in a section of its own. An implementation that reached for
+    # `references_result` would pass both examples above and rebuild the
+    # workspace index on every keystroke.
+    it "F1/F2: answers without rebuilding the workspace reference index" do
+      source = "class HighlightCostProbe\n  def only\n    value = 1\n    value\n  end\nend\n"
+
+      with_file("app/models/highlight_cost_probe.rb", source) do |uri|
+        before = @client.raw_request("ovallsp/status", {})[:referenceIndexGeneration]
+        5.times { @client.document_highlights(uri, 2, 4) }
+        after = @client.raw_request("ovallsp/status", {})[:referenceIndexGeneration]
+
+        expect(after).to eq(before)
+      end
+    end
+  end
   end
 end

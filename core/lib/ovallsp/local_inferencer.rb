@@ -131,7 +131,13 @@ module Ovallsp
     # `CLAUDE.md`'s test for whether one value serves two readers is
     # whether they want the same answer; these want it *most* of the
     # time, which is the case that says they do not.
-    Scope = Data.define(:locals, :self_type) do
+    # `ivars` is kept apart from `locals` rather than merged into it:
+    # they are different namespaces in Ruby, a caller offering both
+    # wants to label them differently, and merging would have made
+    # every existing reader of `locals` start answering `@name`.
+    Scope = Data.define(:locals, :self_type, :ivars) do
+      def initialize(ivars: {}, **rest) = super(ivars: ivars, **rest)
+
       def implicit_self_type = self_type || Types::Nominal.new(name: "Object")
     end
 
@@ -149,16 +155,18 @@ module Ovallsp
     # to everything that reads a scope -- which is why completion after
     # `@` answered nothing in a view while hovering the same name in the
     # same view answered its type.
-    def scope_at(document, position, max_steps: nil)
+    def scope_at(document, position, initial_env: {}, max_steps: nil)
       offset = document.position_to_byte_offset(position)
       result = parse_cached(document)
       @steps = 0
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
+      @enclosing_class_bodies = []
+      @class_ivar_cache = {}
       @scope_capture = nil
       @capturing_scope = true
 
-      locate(result.value.statements, offset, {})
+      locate(result.value.statements, offset, initial_env.dup)
       @scope_capture || Scope.new(locals: {}, self_type: nil)
     rescue BudgetExceeded, StandardError
       @scope_capture || Scope.new(locals: {}, self_type: nil)
@@ -177,6 +185,8 @@ module Ovallsp
       @steps = 0
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
+      @enclosing_class_bodies = []
+      @class_ivar_cache = {}
       @lexical_nesting = []
       @in_singleton_class = false
       @target_span = nil
@@ -216,6 +226,8 @@ module Ovallsp
       @steps = 0
       @step_budget = max_steps || @max_steps
       @self_type_stack = []
+      @enclosing_class_bodies = []
+      @class_ivar_cache = {}
       @lexical_nesting = []
       @in_singleton_class = false
       @target_span = [start_offset, end_offset]
@@ -382,12 +394,18 @@ module Ovallsp
       ANONYMOUS_CLASS_FACTORIES.fetch(Index::SymbolId.bare_name(constant_type.name), []).include?(node.name)
     end
 
+    # 024.86: the instance variables were dropped here rather than
+    # returned separately, so completion at `@` had nothing to offer
+    # even once the environment held them. Split rather than merged --
+    # see `Scope`.
     def capture_scope(env)
-      locals = env.each_with_object({}) do |(key, value), acc|
+      locals = {}
+      ivars = {}
+      env.each do |key, value|
         name = key.to_s
-        acc[name] = value unless name.start_with?("@")
+        (name.start_with?("@") ? ivars : locals)[name] = value
       end
-      @scope_capture = Scope.new(locals: locals, self_type: @self_type_stack.last)
+      @scope_capture = Scope.new(locals: locals, ivars: ivars, self_type: @self_type_stack.last)
     end
 
     # Inclusive of `end_offset`, which is one past the node's last
@@ -575,7 +593,18 @@ module Ovallsp
         )
       )
       push_nesting(node.constant_path.full_name)
-      locate(node.body, offset, {})
+      # 024.86: the class body a `def` below this is a sibling in. The
+      # descent gives each `def` a fresh environment, which is right for
+      # locals and wrong for instance variables -- an ivar assigned in
+      # another method of the same class was invisible to the one being
+      # edited, for its type and for its name. It works in an ERB view
+      # only because a view has no `def` for the descent to reset at.
+      @enclosing_class_bodies.push(node.body)
+      begin
+        locate(node.body, offset, {})
+      ensure
+        @enclosing_class_bodies.pop
+      end
     ensure
       @in_singleton_class = previous_in_singleton_class
       @self_type_stack.pop
@@ -681,7 +710,28 @@ module Ovallsp
       # a class body already holds the class object, and wrapping it again
       # would make `class << self` `ClassOf[ClassOf[W]]`.
       @self_type_stack.push(node.expression.is_a?(Prism::SelfNode) ? enclosing_class_object : nil)
-      locate(node.body, offset, {})
+      # **Its own body, not the class's.** Without this a `def` written
+      # in `class << self` took the *instance* side's ivars as its
+      # siblings -- and Ruby gives the two objects separate ivars:
+      #
+      #   $ ruby -e '
+      #   class Foo
+      #     def setup; @thing = "hello"; end
+      #     class << self
+      #       def build; @thing; end
+      #     end
+      #   end
+      #   Foo.new.setup
+      #   p Foo.build
+      #   '
+      #   # => nil
+      #   # ruby 3.4.10
+      @enclosing_class_bodies.push(node.body)
+      begin
+        locate(node.body, offset, {})
+      ensure
+        @enclosing_class_bodies.pop
+      end
     ensure
       @in_singleton_class = previous_in_singleton_class
       @self_type_stack.pop
@@ -691,7 +741,7 @@ module Ovallsp
       return Types::UNKNOWN unless contains?(node.location, offset)
 
       @self_type_stack.push(def_self_type(node))
-      locate(node.body, offset, parameter_env(node))
+      locate(node.body, offset, parameter_env(node).merge(sibling_ivar_env(node)))
     ensure
       @self_type_stack.pop
     end
@@ -773,6 +823,240 @@ module Ovallsp
     # being unobservable the moment a parameter carries a real type (a
     # signature, an inferred call site), at which point a String key would
     # silently un-shadow a same-named method.
+
+    # 024.86. The instance variables the *class* assigns, for a `def` being
+    # descended into -- so `@thing` set in `setup` has a type when read in
+    # `use`, and shows up when `@` is typed there.
+    #
+    # **Where two methods assign one name types that disagree, the answer
+    # is nothing.** Picking one would be a wrong answer at a position where
+    # the code has no single one, and both a hover and a completion are
+    # read as the engine's claim about the program. A name assigned
+    # consistently is answered; a name assigned two ways is not.
+    #
+    # Memoised per parse, because the alternative is inferring every
+    # sibling method on every keystroke and `024.45` already measures a
+    # single analysis at nine times its stated budget.
+    def sibling_ivar_env(def_node)
+      # **`def self.x` reads the class object's ivars, not the
+      # instance's.** The walk below already refuses to take a *source*
+      # assignment from a singleton sibling; the same rule applies to
+      # the method being descended into, and without it `def self.build`
+      # was seeded with the instance side's `@thing` and its answer
+      # reached a published `unknown-method` diagnostic.
+      return {} if def_node.receiver
+
+      body = @enclosing_class_bodies.last
+      return {} unless body
+
+      siblings = class_ivar_environment(body)
+      return {} if siblings.empty?
+
+      # This method's own assignments win: they are nearer, and the walk
+      # about to happen will overwrite them anyway.
+      siblings.reject { |name, _| own_ivar_names(def_node).include?(name) }
+    end
+
+    # Per query, not per process. The key is a byte offset into *a*
+    # file, so two files whose class body starts at the same offset
+    # share an entry -- which passed in isolation and failed the moment
+    # the suite opened a second file, with `hover` answering nil rather
+    # than wrongly. Cleared where the rest of the per-query state is.
+    def class_ivar_environment(body)
+      @class_ivar_cache ||= {}
+      @class_ivar_cache[body.location.start_offset] ||= build_class_ivar_environment(body)
+    end
+
+    # **`#infer_ivars_for_method_node` replaces `@self_type_stack`
+    # wholesale**, and this runs in the middle of a descent that owns
+    # it. Without saving and restoring, a `def self.b` calling `a`
+    # answered `Unknown` -- the sibling walk had left the stack holding
+    # an instance type where the descent had put a class object. Caught
+    # by an existing example, which is the only reason it is not in the
+    # shipped answer.
+    def build_class_ivar_environment(body)
+      saved_self_types = @self_type_stack.dup
+      saved_steps = @steps
+      saved_budget = @step_budget
+      merged = {}
+      disputed = []
+      # **Every `def` in the body, not its direct `DefNode` children.**
+      # `private def b` is a call wrapping a `def`, so a direct-child
+      # grep could not see it -- and the method it hid was often the one
+      # that made an assignment a *dispute*, so the rule "two methods
+      # disagree, answer nothing" was defeated by a visibility keyword.
+      # A `def` inside `if`, inside `included do`, inside `class_eval`
+      # is the same shape.
+      sibling_def_nodes(body).each do |sibling|
+        infer_ivars_for_method_node(sibling, self_type_name: current_self_type_name,
+                                             reset_budget: false).each do |name, type|
+          next if type.is_a?(Types::Unknown)
+
+          if merged.key?(name) && merged[name] != type
+            disputed << name
+          else
+            merged[name] = type
+          end
+        end
+      end
+
+      # The walk above answers "what type", and `next if Unknown` is
+      # right for that question and wrong for "was it assigned".
+      # `@memo ||= []`, a multiple assignment, an assignment inside
+      # `case` or `rescue`, one made in a `define_method` block -- each
+      # is an assignment the type fold does not model, and each was
+      # missing from a list the reader reads as complete.
+      #
+      # **Applied after the fold, into its own hash.** Written into
+      # `merged` inside the per-sibling loop, an `UNKNOWN` for a shape
+      # the fold does not model was then compared against a real type by
+      # the dispute check on the next sibling -- so the answer depended
+      # on the order the methods happened to be written in.
+      #
+      # Typed entries win; these only fill the gaps, and a disputed
+      # name stays out either way.
+      ClassBodyIvarWrites.new.tap { |c| body.accept(c) }.names.uniq.each do |name|
+        key = name.to_sym
+        merged[key] = Types::UNKNOWN unless merged.key?(key) || disputed.include?(key)
+      end
+
+      merged.reject { |name, _| disputed.include?(name) }
+    ensure
+      @self_type_stack = saved_self_types
+      @steps = saved_steps
+      @step_budget = saved_budget
+    end
+
+    # **The same list `IvarWriteCollector` holds**, rather than a second
+    # one twelve lines away that had already diverged from it: this knew
+    # the plain write and the or-write, and not the operator write, the
+    # and-write or a multiple-assignment target. A method whose own
+    # assignment was a multiple assignment therefore did not displace a
+    # sibling's, and the sibling's type was answered for a name this
+    # method had just written:
+    #
+    #   $ ruby -e '
+    #   class Foo
+    #     def b; @x = 1; end
+    #     def a; @x, @y = "s", 2; @x; end
+    #   end
+    #   p Foo.new.a
+    #   '
+    #   # => "s"
+    #   # ruby 3.4.10
+    def own_ivar_names(def_node)
+      return [] unless def_node.body
+
+      Diagnostics::Engine::IvarWriteCollector.new
+                                             .tap { |c| def_node.body.accept(c) }
+                                             .names.uniq.map(&:to_sym)
+    end
+
+    # The `def`s that share an object with the one being descended into.
+    # Not descended into: a nested class, module or `class << self`
+    # body, whose ivars belong to a different object, nor a `def
+    # self.x`, nor a `def` nested inside another `def` -- and a nested
+    # `def` is not a sibling of the one it is written in.
+    class SiblingDefNodes < Prism::Visitor
+      attr_reader :nodes
+
+      def initialize
+        @nodes = []
+        super
+      end
+
+      def visit_class_node(_node) = nil
+      def visit_module_node(_node) = nil
+      def visit_singleton_class_node(_node) = nil
+
+      def visit_def_node(node)
+        @nodes << node unless node.receiver
+        nil
+      end
+    end
+    private_constant :SiblingDefNodes
+
+    # The ivar names the whole class body assigns, by the same list
+    # `IvarWriteCollector` enumerates, stopping at the boundaries above.
+    # Reading the body rather than each `def` is what lets a name
+    # assigned in a `define_method` block be offered at all.
+    class ClassBodyIvarWrites < Diagnostics::Engine::IvarWriteCollector
+      def visit_class_node(_node) = nil
+      def visit_module_node(_node) = nil
+      def visit_singleton_class_node(_node) = nil
+      def visit_def_node(node)
+        return if node.receiver
+
+        was = @nested
+        @nested = true
+        super
+      ensure
+        @nested = was
+      end
+
+      # **A write sitting in the class body is the class object's**, the
+      # same as one in `def self.x`, and 0.3.0 excluded only the second:
+      #
+      #   $ ruby -e '
+      #   class Widget
+      #     @class_body_ivar = 1
+      #     def self.build; @singleton_ivar = 2; end
+      #     def inst; @instance_ivar = 3; end
+      #   end
+      #   Widget.build
+      #   p Widget.instance_variables
+      #   p Widget.new.tap(&:inst).instance_variables
+      #   '
+      #   # => [:@class_body_ivar, :@singleton_ivar]
+      #   # => [:@instance_ivar]
+      #   # ruby 3.4.10
+      #
+      # **A block is not the class body**, which is the distinction a first
+      # version of this got wrong by asking "are we inside a `def`":
+      #
+      #   $ ruby -e '
+      #   class W
+      #     define_method(:setter) { @from_block = 1 }
+      #     @body_level = 2
+      #   end
+      #   p W.new.tap(&:setter).instance_variables
+      #   p W.instance_variables
+      #   '
+      #   # => [:@from_block]
+      #   # => [:@body_level]
+      #   # ruby 3.4.10
+      #
+      # `define_method`'s block runs against the instance, and this walk
+      # exists to reach exactly those. So the test is depth: a write reached
+      # without entering a `def` or a block is the class object's.
+      def visit_block_node(node)
+        was = @nested
+        @nested = true
+        super
+      ensure
+        @nested = was
+      end
+
+      def visit_instance_variable_write_node(node) = @nested ? super : nil
+      def visit_instance_variable_or_write_node(node) = @nested ? super : nil
+      def visit_instance_variable_and_write_node(node) = @nested ? super : nil
+      def visit_instance_variable_operator_write_node(node) = @nested ? super : nil
+      def visit_instance_variable_target_node(node) = @nested ? super : nil
+    end
+    private_constant :ClassBodyIvarWrites
+
+    def sibling_def_nodes(body)
+      SiblingDefNodes.new.tap { |v| body.accept(v) }.nodes
+    end
+
+    def current_self_type_name
+      type = @self_type_stack.last
+      return nil unless type
+
+      inner = type.respond_to?(:inner) ? type.inner : type
+      inner.is_a?(Types::Nominal) ? inner.name.to_s : nil
+    end
+
     def parameter_env(def_node)
       params = def_node.parameters
       return {} unless params

@@ -170,9 +170,14 @@ jobs:
     name: Core Server (Ruby 4.0, informational)
     runs-on: ubuntu-latest
     # Reports; never gates. `docs/SUPPORT_MATRIX.md` calls 4.0 "best
-    # effort", and the standing decision for the 0.2.x line is that a
-    # 4.0-specific failure gets recorded rather than fixed -- a required
-    # job would turn the first one into work nobody agreed to do. What
+    # effort". The decision that a 4.0-specific failure gets recorded
+    # rather than fixed was scoped to the 0.2.x line and that line is
+    # closed; what replaces it is that such a failure gets a register
+    # entry with a release on it. `024.288` is the one open instance and
+    # it is owed by 0.3.2. The job still never gates: naming a release
+    # commits to fixing one report, not to making 4.0 required, and a
+    # required job would still turn the first failure into work nobody
+    # agreed to do. What
     # this buys is that the 4.0 row stops being a claim measured once by
     # hand on one machine: that row used to end "nothing continuously
     # verifies 4.0", and it was right.
@@ -469,6 +474,17 @@ jobs:
           ruby-version: "3.4"
           bundler-cache: true
           working-directory: core
+
+      # 0.3.0's capability mutations name `spec/e2e/capabilities_spec.rb`,
+      # which skips in full without these -- and a skipped example reads
+      # exactly like a mutation that escaped. The checker now says which
+      # it is; this makes it the first one.
+      - name: Install real Rails/sqlite3 (the capability suite skips in full without them)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+          gem install rails -v '~> 8.1' --no-document
+          gem install sqlite3 -v '>= 2.1' --no-document
 
       - name: Every named mutation is caught by the example that names it
         run: ruby scripts/check_pinned_mutations.rb

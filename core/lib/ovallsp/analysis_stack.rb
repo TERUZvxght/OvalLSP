@@ -42,10 +42,13 @@ module Ovallsp
                    observation_store: Observation::Store.new,
                    method_summary_store: Semantic::MethodSummaryStore.new,
                    generated_method_index: Semantic::GeneratedMethodIndex.new,
+                   gem_index: Semantic::GemIndex.empty,
                    max_steps: nil)
-      hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: workspace_index)
+      hierarchy_index = Semantic::HierarchyIndex.new(workspace_index: workspace_index, gem_index: gem_index,
+                                                    signatures: signatures)
       method_resolver = Semantic::MethodResolver.new(workspace_index: workspace_index,
-                                                    hierarchy_index: hierarchy_index)
+                                                    hierarchy_index: hierarchy_index,
+                                                    gem_index: gem_index)
       # `method_resolver`/`method_analyzer` let a plain (non-Active-Record)
       # method call chain keep resolving past its first hop instead of
       # widening to Unknown immediately -- see

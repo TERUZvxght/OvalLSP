@@ -108,6 +108,7 @@ suite in step: every row must have an example, every example a row.
 | H5 | Hovers a method call | its parameter list, spelled as declared (`documented(first, second = 1)`) | PASS |
 | H6 | Hovers an expression nested in a keyword argument, array, hash, `case`, `while` or `return` | that expression's own type, not the enclosing structure's | PASS |
 | H7 | Hovers a *call written with a receiver* to a method declared with an RDoc/YARD comment above it | the comment appears in the hover, below the type | PASS |
+| H8 | Hovers an `@ivar` assigned in another method of the same class | its type; and nothing where two methods assign it types that disagree | PASS |
 
 ## Completion: the single most-used feature
 
@@ -127,6 +128,8 @@ suite in step: every row must have an example, every example a row.
 | C12 | Types `Art` with no receiver in front of it | workspace classes, the locals in scope, and the methods callable at that position | PASS |
 | C13 | Highlights a completion candidate declared with an RDoc/YARD comment, *in the list a receiver produced* | the comment appears as the item's documentation | PASS |
 | C14 | Types `self.` inside a method body | the members of whatever `self` is *there* — the class's instance methods inside `def x`, its singleton methods inside `def self.x` and inside `class << self` | PASS |
+| C15 | Types `@` inside a method | the instance variables the class assigns anywhere, not only the ones this method assigns | PASS |
+| C16 | Types `.` after a chained relation — `Post.where(...).order(:id).` | the relation's own members, not nothing: the chain keeps its type past the second link | PASS |
 
 C4, C5 and C6 were all broken and are now fixed. C5/C6 shared one cause:
 a bare constant inferred as `Unknown`, so nothing downstream ever saw a
@@ -143,6 +146,8 @@ which is what it is for.
 | D1 | Go to definition on a call to a workspace method, with or without a receiver in front | jumps to its `def` | PASS |
 | D2 | Go to definition on an Active Record column/association | jumps to the owning model class | PASS |
 | D3 | Go to definition on a stdlib method | jumps into the RBS declaration | PASS |
+| D4 | Go to **type** definition on an expression | jumps to the class the expression evaluates to, not to the method that produced it | PASS |
+| D5 | Go to type definition where the type is not known, or is not a workspace class | nothing, rather than the nearest name that looks right | PASS |
 
 ## Diagnostics
 
@@ -164,6 +169,8 @@ which is what it is for.
 | G15 | Passes an argument whose type cannot be the one an RBS/RBI signature declares | it is reported, on the argument rather than on the whole call | PASS |
 | G16 | Reads an `@ivar` in a view that no controller action or callback assigns | it is reported | PASS |
 | G17 | Has a mistake in a file present before the server started and never opened | it is reported anyway | PASS |
+| G18 | Calls a method that does not exist on a class inheriting from a gem | it is reported — the running application's own class list is what makes the receiver knowable | PASS |
+| G19 | Calls a method that does not exist on a chained relation | **nothing is reported** — a relation reaches `ActiveRecord::AttributeMethods`, which answers at call time, so a report there would be a wrong answer | PASS |
 
 G4 used to follow from the same missing-ancestor problem as C4 and is now
 closed: the Runtime Agent reports what each model actually responds to,
@@ -205,6 +212,41 @@ settle. Everything it declines is listed under the non-goals below.
 | W2 | Rename a workspace method declared with `def` | every call site is rewritten | PASS |
 | W3 | Workspace symbol search | matching classes and methods | PASS |
 | W4 | Renames a method a macro declared (`attr_accessor`, `delegate`, …) | nothing is edited — the macro's argument is source the macro reads, not the method's name, so rewriting it also changes the ivar an `attr_*` reads, the second method `attr_accessor` declares, the label an `enum` uses for its scope and its stored mapping, or the method a `delegate` calls on its target. The editor shows its own refusal; the reason is logged, not surfaced (024.28) | PASS |
+| W5 | Opens the call hierarchy on a workspace method | its callers, across files, each with the range of the call inside the calling method | PASS |
+| W6 | Expands the outgoing side | the methods that method calls, each with the range of the call | PASS |
+| W7 | Renames a local that a method or block parameter declares | the declaration is rewritten with the uses — leaving it behind hands back a method that raises `NameError`, or one that silently answers something else where the body assigns before it reads. A *keyword* parameter is refused instead: its name is the method's interface, and rewriting it renames the keyword every caller passes (024.273) | PASS |
+
+## In the current file
+
+Occurrences within the open file, answered without touching the
+workspace-wide reference index — the editor asks on every cursor move,
+and that index's rebuild is O(workspace).
+
+| # | What the user does | What must happen | Status |
+|---|---|---|---|
+| F1 | Puts the cursor on a local variable | every occurrence of that local, in that file, highlighted — and not a same-named local in another scope | PASS |
+| F2 | Puts the cursor on a method name | its declaration and its call sites in that file, highlighted, with the write/read distinction the protocol carries | PASS |
+
+## In the editor's margins
+
+What the type engine already answers on hover, shown where the code is.
+
+| # | What the user does | What must happen | Status |
+|---|---|---|---|
+| I1 | Opens a file with local variables | the inferred type appears after each assignment, and nowhere the type is not known | PASS |
+| I2 | Opens a file with calls to workspace methods | each argument carries the parameter name it is being passed as | PASS |
+
+## Quick fixes
+
+A diagnostic that only names a problem leaves the work to the reader.
+Each of these is offered **only where the edit it would make is
+defined** — a fix that guesses is a wrong edit applied with one click.
+
+| # | What the user does | What must happen | Status |
+|---|---|---|---|
+| Q1 | Invokes the quick fix on an unknown method | a `def` for it is inserted into the class the call was made on | PASS |
+| Q2 | Invokes it on an unknown route helper | the name is replaced with the closest helper the application actually has | PASS |
+| Q3 | Invokes it on a call with too many arguments | the surplus arguments are removed; with too *few*, nothing is offered, because there is no value to write | PASS |
 
 ## What this document deliberately does not promise
 

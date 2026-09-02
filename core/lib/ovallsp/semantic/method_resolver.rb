@@ -50,10 +50,18 @@ module Ovallsp
     #     #complete's results (docs/design/tasks/009-method-hierarchy-and-lookup.md
     #     "private methodを不正な明示receiver候補として上位表示しない").
     class MethodResolver
-      def initialize(workspace_index:, hierarchy_index:)
+      def initialize(workspace_index:, hierarchy_index:, gem_index: GemIndex.empty)
         @workspace_index = workspace_index
         @hierarchy_index = hierarchy_index
+        # 024.R7. Not held here: `HierarchyIndex` owns the index because
+        # rooting a chain is its job, and two objects holding their own
+        # copy of one fact is two places that must agree. The argument
+        # is accepted and installed there so `AnalysisStack.build` reads
+        # the same way for both.
+        hierarchy_index.gem_index = gem_index unless gem_index.nil?
       end
+
+      def gem_index = @hierarchy_index.gem_index
 
       # The ancestor chain a lookup on this receiver walks, as
       # `[owner_name, singleton?]` pairs -- the second element being which
@@ -215,6 +223,13 @@ module Ovallsp
       # `#unknown_method_findings` returns before asking when there is no
       # signature environment.
       def accounted_for?(entry, signatures)
+        # 024.R7. The running application declared it, which is a
+        # stronger answer than any signature file: it is what the
+        # program actually loaded. Asked before the signature path
+        # because a gem class RBS has never heard of is the ordinary
+        # case and the one this exists for.
+        return true if entry.identified? && gem_index.knows?(entry.name)
+
         return false if signatures.nil?
         # **Before the `entry.kind` shortcut, not after it.** The workspace
         # knowing that `App::Key` is a class does not say what `App::Key`
@@ -272,6 +287,12 @@ module Ovallsp
       # `def self.method_missing` was judged closed and every call it
       # handles was reported (`024.116`). Ruby returns `:mm`.
       def declares_method_missing?(entry, singleton)
+        # 024.R7: the running application knows, and a gem class that
+        # defines one answers to names no enumeration can list. Asked
+        # first because the workspace has no record of a gem's methods
+        # at all, so its answer here is `false` for the wrong reason.
+        return true if entry.identified? && gem_index.defines_method_missing?(entry.name)
+
         @workspace_index.method_symbol_ids(entry.name, kind: side_of(entry, singleton))
                         .any? { |sid| sid.name == "method_missing" }
       end
@@ -413,8 +434,27 @@ module Ovallsp
         singleton = context[:singleton] == true
         entries = @hierarchy_index.ancestors(nominal.name, singleton: singleton)
 
-        entries.each_with_index.filter_map { |entry, rank| build_candidate(entry, method_name, singleton, rank) }
+        found = entries.each_with_index.filter_map do |entry, rank|
+          build_candidate(entry, method_name, singleton, rank)
+        end
+        return found unless found.empty?
+
+        # **An alias is recorded on one ancestor and its target lives on
+        # another.** `#resolve_alias` is asked of a single entry, so an
+        # `alias safe_escape escape` on `Page` resolved to `escape` and
+        # then looked for `Page#escape`, which does not exist when
+        # `escape` comes from an included module. Nothing carried the
+        # resolved name back to the rest of the chain (`024.238`).
+        #
+        # Only when the ordinary pass found nothing, so this can add an
+        # answer where there was none and cannot change one that was
+        # already given.
+        target = chain_alias_target(entries, method_name, singleton)
+        return [] unless target
+
+        entries.each_with_index.filter_map { |entry, rank| build_candidate(entry, target, singleton, rank) }
       end
+
 
       def build_candidate(entry, method_name, singleton, rank)
         # A nameless entry is what `HierarchyIndex` records for a parent it
@@ -433,11 +473,52 @@ module Ovallsp
         resolved_name = resolve_alias(entry.name, method_name, kind)
         symbol_id = Index::SymbolId.new(kind: kind, owner: entry.name, name: resolved_name, discriminator: nil)
         decls = @workspace_index.declarations_with_uri(symbol_id)
-        return nil if decls.empty?
+        return gem_candidate(entry, resolved_name, symbol_id, rank) if decls.empty?
 
         MethodCandidate.new(
           symbol_id: symbol_id, declarations: decls, owner: entry.name,
           visibility: decls.first[1].visibility, lookup_rank: rank, conditional: false, origin: entry.origin
+        )
+      end
+
+      # 024.R7's other half, and the one that decides whether any of it
+      # is shippable. Making a gem class *closed* without also knowing
+      # its methods turns every correct call on a gem into a report --
+      # so the same index that roots the chain answers what is on it.
+      #
+      # **No declarations, deliberately.** The running application knows
+      # the name exists; it does not tell us where it is written, and
+      # inventing a location would give go-to-definition somewhere to
+      # jump that is not the method. Every reader that wants a location
+      # already handles a candidate with none.
+      def gem_candidate(entry, method_name, symbol_id, rank)
+        return nil unless entry.identified?
+
+        if symbol_id.kind == :singleton_method
+          return nil unless gem_index.singleton_methods(entry.name).include?(method_name.to_s)
+
+          visibility = :public
+        else
+          # **Private and protected included**: a receiverless call may
+          # legally reach an inherited private method, and the Agent
+          # sends only `instance_methods(false)` -- the public and
+          # protected set -- so `process_action` on an ActionController
+          # subclass was reported as a method that does not exist, on
+          # correct code.
+          #
+          # Labelled rather than merged. The candidate carries the
+          # visibility it was found under, the way a workspace
+          # declaration's does one branch up, so a reader that has to
+          # tell them apart has the field; and `#method_names_for_owner`
+          # -- what completion after a dot reads -- still asks only for
+          # the public set, so nothing private is offered there.
+          visibility = gem_index.instance_method_visibility(entry.name, method_name)
+          return nil unless visibility
+        end
+
+        MethodCandidate.new(
+          symbol_id: symbol_id, declarations: [], owner: entry.name,
+          visibility: visibility, lookup_rank: rank, conditional: false, origin: entry.origin
         )
       end
 
@@ -454,6 +535,24 @@ module Ovallsp
       # file and Diagnostics::Engine cannot disagree about it; they did,
       # and both copies were wrong for the tail.
       def symbol_kind_for(entry, singleton) = entry.declaration_kind(singleton: singleton)
+
+      # The name the nearest ancestor's alias points at, or nil where no
+      # ancestor aliases this name. Nearest wins because Ruby binds an
+      # alias at the point it is written, so a subclass's alias shadows
+      # one further up.
+      #
+      # A self-alias is refused rather than followed: it would make the
+      # second pass identical to the first.
+      def chain_alias_target(entries, method_name, singleton)
+        entries.each do |entry|
+          next unless entry.identified?
+
+          fact = @hierarchy_index.aliases(entry.name)
+                                 .find { |f| f.new_name == method_name && f.singleton == singleton }
+          return fact.old_name if fact && fact.old_name != method_name
+        end
+        nil
+      end
 
       # A single level of `alias`/`alias_method` indirection: if `owner`
       # doesn't declare `method_name` directly but *does* record an alias
@@ -558,8 +657,17 @@ module Ovallsp
         fact.visibility || declared_visibility(owner, kind, fact.old_name) || :public
       end
 
+      # 024.R7 and 024.87: the gem's own names as well as the
+      # workspace's. `#build_candidate` already answers a gem method
+      # when asked about one by name; this is the same knowledge read
+      # the other way, for completion -- without it a receiver whose
+      # whole chain is a gem's offers nothing, which is what
+      # `Post.where(...).order(:id).` did while hover on the same caret
+      # said `Relation[Post]`.
       def method_names_for_owner(owner, kind)
         declared = @workspace_index.method_symbol_ids(owner, kind: kind).map(&:name)
+        declared += (kind == :singleton_method ? gem_index.singleton_methods(owner)
+                                               : gem_index.instance_methods(owner)).to_a
         aliases = @hierarchy_index.aliases(owner)
                                   .select { |fact| fact.singleton == (kind == :singleton_method) }
                                   .map(&:new_name)

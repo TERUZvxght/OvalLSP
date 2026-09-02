@@ -391,12 +391,12 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
     # computable, and `#visit_match_write_node` records *that* — both
     # spellings now land on the name and nothing rewrites a pattern.
     it "records a named capture whose location really is the name" do
-      expect(positions("def m(s)\n  /(?<n>x)/o =~ s\n  n\nend\n")).to eq([["n", 1, 6], ["n", 2, 2], ["s", 1, 16]])
+      expect(positions("def m(s)\n  /(?<n>x)/o =~ s\n  n\nend\n")).to eq([["n", 1, 6], ["n", 2, 2], ["s", 0, 6], ["s", 1, 16]])
     end
 
     it "records a named capture whose location is the whole literal, at the name's own range" do
       expect(positions("def m(s)\n  /(?<n>\\d)/ =~ s\n  n\nend\n"))
-        .to eq([["n", 1, 6], ["n", 2, 2], ["s", 1, 16]])
+        .to eq([["n", 1, 6], ["n", 2, 2], ["s", 0, 6], ["s", 1, 16]])
     end
 
     # And exactly once. Prism gives the `/o` spelling a target whose
@@ -503,7 +503,7 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
     # raises -- the `case` quietly matches something else.
     it "declines a hash pattern's shorthand binding, whose range is the pattern's key too" do
       expect(positions("def m(h)\n  case h\n  in {a:}\n    a\n  end\nend\n"))
-        .to eq([["a", 3, 4], ["h", 1, 7]])
+        .to eq([["a", 3, 4], ["h", 0, 6], ["h", 1, 7]])
     end
 
     # The hash-literal spelling of the same read, recorded for the same
@@ -520,7 +520,7 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
     # patterns.
     it "records a pattern binding the source writes out in full" do
       expect(positions("def m(h)\n  case h\n  in {a: v}\n    v\n  end\nend\n"))
-        .to eq([["h", 1, 7], ["v", 2, 9], ["v", 3, 4]])
+        .to eq([["h", 0, 6], ["h", 1, 7], ["v", 2, 9], ["v", 3, 4]])
     end
 
     # **Two edits that are each right, and a file that does not parse.**
@@ -551,34 +551,52 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
     # rename, published as a limitation.
     it "declines an underscore-prefixed target, which a pattern may repeat" do
       expect(positions("def m(pair)\n  case pair\n  in [_a, _a]\n    :ok\n  end\nend\n"))
-        .to eq([["pair", 1, 7]])
+        .to eq([["pair", 0, 6], ["pair", 1, 7]])
     end
 
-    # The reach of that rule, pinned rather than left to be inferred from
-    # the sentence above: it is written about targets, so it also
-    # declines the underscore-prefixed ones no pattern produced, and
-    # records the plain write beside them.
-    it "declines an underscore-prefixed multiple-assignment target" do
-      expect(positions("def m\n  _a, b = 1, 2\n  _a = 3\nend\n")).to eq([["_a", 2, 2], ["b", 1, 6]])
+    # **The reach of that rule is the pattern, and it used to be every
+    # target.** Ruby forbids the repeat inside a pattern and nowhere
+    # else, so a multiple assignment, a `for` variable and a
+    # `rescue => _e` cannot produce the illegal pair -- and declining
+    # them cost documentHighlight and Find References an occurrence
+    # apiece for a rule that does not reach them. `024.274`.
+    it "records an underscore-prefixed multiple-assignment target" do
+      expect(positions("def m\n  _a, b = 1, 2\n  _a = 3\nend\n"))
+        .to eq([["_a", 1, 2], ["_a", 2, 2], ["b", 1, 6]])
     end
 
     it "still records a target a pattern may not repeat" do
       expect(positions("def m(pair)\n  case pair\n  in [x, 1]\n    x\n  end\nend\n"))
-        .to eq([["pair", 1, 7], ["x", 2, 6], ["x", 3, 4]])
+        .to eq([["pair", 0, 6], ["pair", 1, 7], ["x", 2, 6], ["x", 3, 4]])
     end
 
-    # **A parameter binds, and its own range is recorded by nothing.**
-    # That is not this release's decision and it is the largest hole
-    # left in a local rename -- the six spellings above are recorded and
-    # the seventh, which is where most locals are actually bound, is
-    # not. It is pinned here because an unwritten gap reads exactly like
-    # an oversight, and because the count below is what says which of
-    # the two it is: over 1,179 gem files, 7,816 of the 7,901 locals
-    # whose rename produces a file that no longer means what it meant
-    # are names a parameter declares. Published as a limitation, with
-    # the register entry naming the direction.
-    it "does not record a parameter's own range, so a rename leaves the `def` line behind" do
-      expect(positions("def m(value)\n  value * 2\nend\n")).to eq([["value", 1, 2]])
+    # **A parameter binds, and its own range is now recorded.** It was
+    # not, and this example pinned the gap so it would read as a
+    # decision rather than an oversight: over 1,179 gem files, 7,816 of
+    # the 7,901 locals whose rename produced a file that no longer meant
+    # what it meant were names a parameter declares. `024.273` named the
+    # direction; 0.3.0 took it, because the same missing occurrence made
+    # `documentHighlight` answer with the body alone and F1 does not
+    # work for the commonest local in Ruby without it.
+    it "records a parameter's own range, so a rename rewrites the `def` line too" do
+      expect(positions("def m(value)\n  value * 2\nend\n")).to eq([["value", 0, 6], ["value", 1, 2]])
+    end
+
+    # **The two keyword nodes stay out, and that is the entry's own
+    # exception rather than a shortfall.** `def m(by:)` spells the
+    # method's interface: rewriting that `by` renames the keyword every
+    # caller passes, which is a different edit from renaming a local and
+    # one no caller in the workspace would be given. `024.272`.
+    it "declines a keyword parameter, whose name is the method's interface" do
+      expect(positions("def m(by:)\n  by * 2\nend\n")).to eq([["by", 1, 2]])
+    end
+
+    # `*rest`, `**opts` and `&blk` do bind ordinary locals, and their
+    # names are the caller's business in no way at all.
+    it "records the rest, keyword-rest and block parameters" do
+      expect(positions("def m(*rest, **opts, &blk)\n  [rest, opts, blk]\nend\n"))
+        .to eq([["blk", 0, 22], ["blk", 1, 15], ["opts", 0, 15], ["opts", 1, 9],
+                ["rest", 0, 7], ["rest", 1, 3]])
     end
 
     # The control for that guard, and the reason it compares strings
@@ -688,9 +706,9 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
         .to eq("def m\n  renamed = 0\n  renamed += 1\n  renamed ||= 2\n  other, renamed = 1, 3\n  renamed\nend\n")
     end
 
-    # The edit as the editor applies it. `in {a:}` is left exactly as
-    # written, because the alternative is not "rename it too" but "change
-    # which values this `case` matches":
+    # **Three answers were available and 0.2.17 weighed two.** `in {a:}`
+    # binds `a` from the key `a:`, so rewriting it changes which values
+    # the `case` matches:
     #
     #   $ ruby -e '
     #   def before(h) = (case h; in {a:} then a + 1; else :fell_through; end)
@@ -702,14 +720,21 @@ RSpec.describe "Ovallsp::ParserService and the scope frame a local variable bind
     #   # => :fell_through
     #   # ruby 3.4.10
     #
-    # What is left is a partial rename, which stops the file running and
-    # is published as a limitation. That is louder than a `case` that
-    # silently takes the other branch, which is the whole of why this
-    # decline is the better of the two answers available.
-    it "leaves a hash pattern's shorthand key as written" do
+    # `024.272` chose to leave the key and rewrite the use, on the
+    # argument that a partial rename stops the file running and is
+    # therefore louder than a `case` that silently takes the other
+    # branch. Both of those are wrong answers; the third answer is to
+    # **refuse**, which section 0 ranks above either, and which is what
+    # every other unrenameable shape here already does.
+    #
+    # 0.3.0 takes it, not as a decision about patterns but as a
+    # consequence of one about bindings: the planner refuses a local
+    # whose binding site it does not record, and this binding is one of
+    # the two it does not. `024.273`.
+    it "refuses a hash pattern's shorthand rather than renaming half of it" do
       source = "def m(h)\n  case h\n  in {a:}\n    a\n  end\nend\n"
 
-      expect(renamed(source, 3, 4, "renamed")).to eq("def m(h)\n  case h\n  in {a:}\n    renamed\n  end\nend\n")
+      expect(renamed(source, 3, 4, "renamed")).to eq(source)
     end
 
     it "rewrites a pattern binding the source writes out, so the renamed file still runs" do

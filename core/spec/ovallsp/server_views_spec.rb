@@ -959,5 +959,41 @@ describe "hover in a view" do
     expect(in_controller[:result].dig(:contents, :value)).to include("decorate(scope = nil)")
     expect(in_view[:result]).to be_nil
   end
+
+  # **The view seed reached hover and not completion.** `#type_at`'s five
+  # callers all pass `#view_initial_env`; `LocalInferencer#scope_at` had
+  # no `initial_env:` parameter at all, so completion of `@` in a view
+  # was built from the template's own body, which assigns nothing.
+  #
+  # The comment above `#scope_at` described the seeding as the reason it
+  # exists, and named this exact defect -- "completion after `@`
+  # answered nothing in a view while hovering the same name answered its
+  # type" -- as the thing it fixed. It did not exist.
+  it "offers the controller's ivars when `@` is typed in the view" do
+    controller = "class UsersController\n  def show\n    @user = User.find(params[:id])\n    @title = \"x\"\n  end\nend\n"
+    input =
+      open("file:///app/controllers/users_controller.rb", controller) +
+      open("file:///app/views/users/show.html.erb", "<p><%= @ %></p>\n", language_id: "erb") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/completion",
+        params: { textDocument: { uri: "file:///app/views/users/show.html.erb" },
+                  position: { line: 0, character: 8 } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/completion",
+        params: { textDocument: { uri: "file:///app/controllers/users_controller.rb" },
+                  position: { line: 3, character: 5 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    in_view, in_controller = sent_messages
+    # CONTROL: the same completion inside the controller, which already
+    # worked -- so a build that offered everything everywhere would not
+    # pass, and neither would one that offered nothing.
+    expect(in_controller[:result][:items].map { |i| i[:label] }).to include("@user")
+    expect(in_view[:result][:items].map { |i| i[:label] }).to include("@user", "@title")
+  end
 end
 end

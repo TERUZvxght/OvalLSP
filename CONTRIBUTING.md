@@ -145,6 +145,27 @@ The name carries no `feat/` or `fix/` prefix, because that is a claim
 about the release's contents made before the work starts — 0.2.17 was
 named a fix and shipped a capability. One name per version needs no
 such guess.
+**`main` refuses a direct push, and this is enforced by GitHub rather
+than by this paragraph.** Set 2026-09-01. What is on:
+
+- a pull request is required; **0 approving reviews**, because GitHub
+  does not let anyone approve their own pull request and a solo
+  maintainer would otherwise be locked out of their own repository;
+- **ten required status checks** — every CI job except
+  `Core Server (Ruby 4.0, informational)`, which is a preview version
+  and is expected to fail;
+- the branch must be up to date with `main` before merging;
+- the rules **apply to administrators too**, so nothing here is a rule
+  only some contributors follow;
+- force pushes and branch deletion are refused.
+
+Verified by trying it: a direct push to `main` came back
+`GH006: Protected branch update failed` — "Changes must be made through
+a pull request", "10 of 10 required status checks are expected".
+
+The owner can change or lift this in the repository's Settings →
+Branches. Nothing in this repository can, which is the point.
+
 
 Work that is not a release — a correction to the record, a fix to a
 check — takes a short-lived branch of its own and the same pull

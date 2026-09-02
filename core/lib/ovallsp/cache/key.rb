@@ -48,7 +48,16 @@ module Ovallsp
       # `FileSummary.members`, which this change leaves untouched. It
       # compares the reachable Data shapes now, for the same reason it
       # exists at all.
-      SCHEMA_VERSION = 5
+      # 6: `ReferenceCandidate` gained `write` in 0.3.0 (inlay hints
+      # need the assignment sites, and documentHighlight reads the same
+      # flag). A cache written under 5 unmarshals into a shape with one
+      # member fewer, which is what this number exists to refuse.
+      # 7: `ReferenceCandidate` is unchanged, but 0.3.0 also added
+      # `singletonAncestors` to what the Agent reports -- that is not a
+      # FileSummary shape and needs no bump. Left at 6 deliberately;
+      # this comment exists so the next reader does not bump it for a
+      # change the constant is not about.
+      SCHEMA_VERSION = 6
 
       module_function
 

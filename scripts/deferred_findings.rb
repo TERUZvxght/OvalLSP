@@ -71,6 +71,30 @@ module DeferredFindings
   # as `NUMBER`: three splits with three patterns disagreed about whether
   # a heading needed a trailing space, and the one that said no rendered
   # an index row for a heading the checks could not parse.
+# The register is two files, and this is the only place that knows it.
+#
+# 024.R9: 239 of 287 entries were resolved -- 75.7% of a 20,703-line
+# file -- so the live register is the open work and its legend, and the
+# resolved entries live beside it. Every function in this module takes
+# markdown, so a caller that reads through here keeps seeing one
+# register and needs no other change. A caller that reads the live file
+# directly silently loses three-quarters of the entries, which is why
+# `register_split_spec` asserts the combined count against the two.
+#
+# Order matters: live first, so a `String#index`-style search finds an
+# open entry before an archived one of the same number would -- and
+# `register_split_spec` forbids one number being in both anyway.
+LIVE = File.join("docs", "design", "tasks", "024-deferred-review-findings.md")
+ARCHIVE = File.join("docs", "design", "tasks", "024-deferred-review-findings-resolved.md")
+
+def register(root)
+  live = File.read(File.join(root, LIVE), encoding: "UTF-8")
+  archive_path = File.join(root, ARCHIVE)
+  return live unless File.exist?(archive_path)
+
+  "#{live}\n#{File.read(archive_path, encoding: 'UTF-8')}"
+end
+
   ENTRY_SPLIT = /^(?=## 024\.)/
 
   # A pointer *to* an entry, written in prose anywhere in the tree.
@@ -403,8 +427,7 @@ if __FILE__ == $PROGRAM_NAME
     exit 1
   end
 
-  register = File.expand_path("../docs/design/tasks/024-deferred-review-findings.md", __dir__)
-  markdown = File.read(register, encoding: "UTF-8")
+  markdown = DeferredFindings.register(File.expand_path("..", __dir__))
   areas = DeferredFindings.area_paths(markdown)
 
   matching = DeferredFindings.entries(markdown).select do |_, fields|

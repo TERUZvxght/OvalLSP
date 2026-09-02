@@ -118,7 +118,12 @@ module Ovallsp
         AncestorEntry.identified(name: "Kernel", kind: :module, origin: :default, location: nil),
         AncestorEntry.identified(name: "BasicObject", kind: :class, origin: :default, location: nil)
       ].freeze
-      private_constant :DEFAULT_OBJECT_CHAIN
+      DEFAULT_CHAIN_NAMES = %w[Object Kernel BasicObject].freeze
+      # What a class object's singleton chain ends in, over and above
+      # the object chain: read by `#gem_singleton_links`, which must not
+      # re-emit the tail `DEFAULT_CLASS_SINGLETON_CHAIN` already adds.
+      CLASS_OBJECT_TAIL_NAMES = (DEFAULT_CHAIN_NAMES + %w[Class Module]).freeze
+      private_constant :DEFAULT_OBJECT_CHAIN, :DEFAULT_CHAIN_NAMES, :CLASS_OBJECT_TAIL_NAMES
 
       # What a class object *is*, which is what its singleton chain ends
       # in: `Widget.private` finds `Module#private` because `Widget` is a
@@ -176,8 +181,17 @@ module Ovallsp
       ROOT_SUPERCLASS_NAMES = %w[Object ::Object].freeze
       private_constant :ROOT_SUPERCLASS_NAMES
 
-      def initialize(workspace_index:)
+      def initialize(workspace_index:, gem_index: GemIndex.empty, signatures: nil)
         @workspace_index = workspace_index
+        # 024.R7. Empty unless a Runtime Agent has answered. Read at the
+        # one place a chain stops for want of a superclass fact.
+        @gem_index = gem_index
+        # Read for one question only, in #canonical_name: whether a bare
+        # name already denotes something, which is the difference between
+        # reading `Relation` as a gem class and reading `Integer` as one.
+        # `nil` is a stack built without signatures, and it declines
+        # rather than guesses.
+        @signatures = signatures
         @mutex = Mutex.new
         @facts_by_uri = {}
         @superclass_by_owner = {}
@@ -231,6 +245,16 @@ module Ovallsp
       # chain recursively — or, for `singleton: true`, the type's own
       # singleton "self" entry, extended modules (most recently extended
       # first), then the superclass's singleton chain.
+      # 024.R7. Installed after the stack is built, because it is the
+      # running application's answer and the stack exists before there
+      # is one. Under the same mutex as everything else here: a query
+      # on another thread must see one index or the other, never half.
+      def gem_index = @mutex.synchronize { @gem_index }
+
+      def gem_index=(index)
+        @mutex.synchronize { @gem_index = index }
+      end
+
       def ancestors(type_name, singleton: false)
         @mutex.synchronize do
           entries = compute_ancestors_locked(type_name, singleton: singleton, visited: Set.new)
@@ -290,8 +314,43 @@ module Ovallsp
       # them apart -- so the rule stays where it can be applied safely,
       # in the diagnostics engine, which is refusing to *report* rather
       # than refusing to resolve. 024.47 records what a real fix needs.
+      # The workspace answers first. Where it does not own the name at
+      # all, the gem index's simple-name resolution does -- `Relation`
+      # is what the type model spells `ActiveRecord::Relation`, and
+      # `024.87` is the entry that needs it. Asking here, rather than
+      # inside every gem-index lookup, is what keeps a workspace class
+      # from being answered for out of a same-named gem class.
       def canonical_name(type_name)
-        @workspace_index.resolve_type_name(type_name) || type_name.to_s
+        resolved = @workspace_index.resolve_type_name(type_name)
+        return resolved if resolved
+
+        bare = type_name.to_s
+        return bare unless free_for_a_gem_to_claim?(bare)
+
+        @gem_index.resolve_simple_name(bare) || bare
+      end
+
+      # **Whether this bare name means nothing yet.** The rule above
+      # declines where two gems claim one simple name, and that was written
+      # as though a contest between gems were the only way to be wrong. A
+      # core class is the other way, and it cannot enter the contest:
+      # `Object.const_source_location` answers `[]` for one, so the Agent --
+      # which keeps only what a gem path accounts for -- never reports it,
+      # and a gem's own nested class of that name stands unopposed. The
+      # receiver then takes that class's chain, and every core method on it
+      # is reported as one that does not exist.
+      #
+      # Signatures are the oracle, because they are the one thing here that
+      # knows a name has a referent without a gem having loaded it. Only an
+      # outright `false` -- never heard of it -- licenses the
+      # reinterpretation. `nil` is the unbuildable chain of `024.223` and
+      # declines; so does having no signature environment at all. This is
+      # the "is this constant known" direction `#declares?` names, and that
+      # one fails towards *known*.
+      def free_for_a_gem_to_claim?(bare)
+        return false unless @signatures
+
+        @signatures.declares?(bare) == false
       end
 
       def remove_file_locked(uri)
@@ -359,8 +418,120 @@ module Ovallsp
           entries.concat(DEFAULT_OBJECT_CHAIN)
         end
 
+        entries.concat(gem_ancestry(canonical, entries))
         entries
       end
+
+      # 024.R7. Where the workspace's knowledge stops and the running
+      # application's begins.
+      #
+      # A class whose parent is in a gem has no superclass fact, so the
+      # walk above ends at that parent without reaching `BasicObject` --
+      # honest while nothing knows what the gem defines, and the reason
+      # the undefined-method check goes quiet for every Rails
+      # controller.
+      #
+      # **Here rather than in `MethodResolver`, and that was measured.**
+      # Splicing it there produced 47 reports over activerecord's own
+      # source and every one was false -- `Foo.new` and `raise` among
+      # them -- because rooting a chain needs three things this class
+      # owns and a splice elsewhere skips: `DEFAULT_OBJECT_CHAIN`, whose
+      # `Kernel` is a **module** and which the splice called a class;
+      # the singleton tail, without which `.new` is not on the chain at
+      # all; and `dedupe_named`.
+      #
+      # Only the gem's own links are added. `Object`/`Kernel`/
+      # `BasicObject` come from the default chain, which is what every
+      # other rooted class gets.
+      def gem_ancestry(canonical, entries)
+        return [] if @gem_index.empty?
+        # **Classes only.** Rooting a module`s chain makes every
+        # `ClassMethods`-style module a closed receiver -- and what
+        # `self` is inside one at call time is the class that extended
+        # it, which nothing here knows. Measured: with modules rooted,
+        # activerecord`s own source reported `superclass`, `name` and
+        # `primary_key` on its own modules, all of them correct code.
+        # `kind_of` reads the *workspace* index, which knows nothing
+        # about a gem's own class -- so this refused a receiver that is
+        # itself a gem class, and `ActiveRecord::Relation`'s chain
+        # stopped at one link. That is `024.87`'s unconfirmed half:
+        # hover said `Relation[Post]` and completion after the dot was
+        # empty, because the type survived and the members had nowhere
+        # to come from.
+        return [] unless class_here?(canonical)
+        return [] if entries.any? { |e| e.identified? && qualify(e.identified_name) == "::BasicObject" }
+
+        tail = entries.reverse.find { |e| e.identified? && @gem_index.knows?(e.identified_name) }
+        return [] unless tail
+
+        # **By identity, not by position.** `.drop(1)` assumed the
+        # payload's first ancestor was the class itself, which is only
+        # true when nothing is prepended -- Ruby puts a `prepend`ed
+        # module *ahead* of the class, and instrumentation gems prepend
+        # into ActiveRecord and ActionController routinely. Dropping the
+        # head then deleted the module (its methods reported missing on
+        # correct code, and a `method_missing` it declares never asked
+        # about) and left the class on the chain twice, because `tail`
+        # is already an entry in `entries`.
+        known = @gem_index.ancestors(tail.identified_name).reject do |name|
+          name == tail.identified_name || DEFAULT_CHAIN_NAMES.include?(name)
+        end
+        known.map { |name| AncestorEntry.identified(name: name, kind: kind_for_gem(name), origin: :superclass, location: nil) } +
+          DEFAULT_OBJECT_CHAIN
+      end
+
+      # The gem index does not say class or module, and the distinction
+      # decides which side a link is asked about. A gem entry whose own
+      # ancestry starts with itself and then `Object` is a class; one
+      # that does not reach `Object` is a module, which is what Ruby's
+      # own `Module#ancestors` shows for a bare module.
+      # A class, as either index sees it. The gem index does not label
+      # class or module, so `#kind_for_gem` reads it off the loaded
+      # ancestry -- a bare module's does not reach `Object`.
+      def class_here?(name)
+        return true if kind_of(name) == :class
+
+        @gem_index.knows?(name) && kind_for_gem(name) == :class
+      end
+
+      # An `extend`ed module puts its *instance* methods on the
+      # class-level chain, and the index's `singletonMethods` is
+      # `singleton_methods(false)`, which cannot see them. Ruby settles
+      # it: `CGI.singleton_class.ancestors` carries `CGI::Escape`, and
+      # `CGI.escapeHTML` -- which exists -- was reported missing over
+      # rack's own source without this.
+      #
+      # The links are asked for their *instance* methods, because that
+      # is what `extend` surfaces -- `AncestorEntry#declaration_kind`
+      # already makes that distinction for a workspace `extend`.
+      def gem_singleton_links(canonical, entries)
+        return [] if @gem_index.empty?
+        return [] unless entries.length == 1
+        return [] unless @gem_index.knows?(canonical)
+
+        # `.drop(1)` here ate the first extended module rather than the
+        # receiver: the Agent's `filter_map` has already removed the
+        # anonymous `#<Class:X>`, which has no `module_name`, so element
+        # 0 is the very thing this method exists to add. Rejecting by
+        # identity keeps it and still removes the duplicate.
+        #
+        # `Class` and `Module` are rejected alongside the object chain
+        # because they are the *class object's* own tail, which
+        # `DEFAULT_CLASS_SINGLETON_CHAIN` supplies below with the right
+        # `:class_object` origin and `kind: :class`. Left in, they made
+        # this result non-empty for every receiver, so the `case` in
+        # `#singleton_tail_for` never ran and a gem **module** was given
+        # the class tail with `Class` on it.
+        @gem_index.singleton_ancestors(canonical)
+                  .reject { |n| n == canonical || CLASS_OBJECT_TAIL_NAMES.include?(n) }
+                  .map { |n| AncestorEntry.identified(name: n, kind: :module, origin: :extend, location: nil) }
+      end
+
+      def kind_for_gem(name)
+        @gem_index.ancestors(name).include?("Object") ? :class : :module
+      end
+
+      def qualify(name) = Index::SymbolId.qualify_owner(name)
 
       def singleton_ancestors_locked(canonical, visited, origin_for_self)
         entries = [AncestorEntry.identified(name: canonical, kind: kind_of(canonical), origin: origin_for_self, location: nil)]
@@ -504,8 +675,25 @@ module Ovallsp
       def singleton_tail_for(type_name, entries)
         return [] if entries.any? { |entry| !entry.identified? }
 
+        gem_singleton = gem_singleton_links(canonical_name(type_name), entries)
+        return gem_singleton + DEFAULT_CLASS_SINGLETON_CHAIN unless gem_singleton.empty?
+
         canonical = canonical_name(type_name)
-        case kind_of(canonical)
+        # `class_here?` rather than `kind_of`: the workspace index does
+        # not know a gem class, so its singleton chain got no tail and
+        # `Foo.new` became a closed receiver with no `new` on it -- 37
+        # false reports over activerecord, every one a `.new`.
+        # The workspace answers first: it distinguishes class from
+        # module, and the gem index only says "class" or nothing.
+        # Written the other way round, a workspace *module* was given a
+        # class tail and 25 examples failed.
+        # The workspace answers first -- it distinguishes class from
+        # module, and the gem index only says "class" or nothing. And
+        # the gem fallback applies only to a name the *index* knows, so
+        # a workspace name the workspace could not classify keeps the
+        # answer it had. Written without either guard, 25 examples
+        # failed on workspace types this never used to speak about.
+        case kind_of(canonical) || (@gem_index.knows?(canonical) && kind_for_gem(canonical) == :class ? :class : nil)
         when :class then DEFAULT_CLASS_SINGLETON_CHAIN
         when :module then DEFAULT_MODULE_SINGLETON_CHAIN
         else []

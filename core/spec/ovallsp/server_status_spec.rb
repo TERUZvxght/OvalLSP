@@ -44,9 +44,14 @@ RSpec.describe "Ovallsp::Server environment status (Task 020)" do
       server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: root)
       server.send(:start_cold_index)
 
-      wait_until { server.send(:status_result, nil) != { state: "indexing" } }
+      # `[:state]`, not the whole payload. This compared the hash and
+      # 0.3.0 added a key to it, so the condition became true on the
+      # first look and the assertion below ran while Cold Index was
+      # still going -- the wait silently stopped waiting. A payload
+      # shape known in six places was one more than anybody counted.
+      wait_until { server.send(:status_result, nil)[:state] != "indexing" }
 
-      expect(server.send(:status_result, nil)).to eq(state: "ready-static")
+      expect(server.send(:status_result, nil)).to include(state: "ready-static")
     end
   end
 
@@ -55,7 +60,7 @@ RSpec.describe "Ovallsp::Server environment status (Task 020)" do
     agent_manager = instance_double(Ovallsp::AgentProcessManager, ready?: true)
     server.instance_variable_set(:@agent_manager, agent_manager)
 
-    expect(server.send(:status_result, nil)).to eq(state: "ready-rails")
+    expect(server.send(:status_result, nil)).to include(state: "ready-rails")
   end
 
   it "reports agent-unavailable when a Runtime Agent bootstrap was attempted but isn't responding" do
@@ -63,14 +68,29 @@ RSpec.describe "Ovallsp::Server environment status (Task 020)" do
     agent_manager = instance_double(Ovallsp::AgentProcessManager, ready?: false)
     server.instance_variable_set(:@agent_manager, agent_manager)
 
-    expect(server.send(:status_result, nil)).to eq(state: "agent-unavailable")
+    expect(server.send(:status_result, nil)).to include(state: "agent-unavailable")
   end
 
   it "reports indexing while Cold Index is still running" do
     server = build_server(frame(jsonrpc: "2.0", method: "exit", params: nil))
     server.instance_variable_set(:@cold_indexing, true)
 
-    expect(server.send(:status_result, nil)).to eq(state: "indexing")
+    expect(server.send(:status_result, nil)).to include(state: "indexing")
+  end
+
+  # The examples above ask about `state`, one each. This is the only one
+  # about the payload's *shape*, and it exists because they used to
+  # compare the whole hash -- so adding `referenceIndexGeneration` in
+  # 0.3.0 failed all five, none of which was about that key.
+  #
+  # Adding a key to `ovallsp/status` means editing this example. That is
+  # the point: it is a client-facing payload, and a key arriving in it
+  # unnoticed is a change to what the extension receives.
+  it "carries exactly the keys the client is told to expect" do
+    server = Ovallsp::Server.new(input: StringIO.new(""), output: StringIO.new, logger: logger,
+                                 workspace_root: Dir.pwd)
+
+    expect(server.send(:status_result, nil).keys).to contain_exactly(:state, :referenceIndexGeneration, :gemIndexClasses)
   end
 
   # Trust is now supplied, where this example used to send `params: {}`.

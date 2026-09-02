@@ -119,63 +119,93 @@ RSpec.describe "Ovallsp::Server textDocument/prepareRename and textDocument/rena
     expect(lines).to contain_exactly(1, 2)
   end
 
-  # **prepareRename does not rebuild the reference index, and that is a
-  # decision.** `024.245` reported the asymmetry: Find References and
-  # rename rebuild it first and this does not, a local variable has no
-  # declaration in the workspace index at all, so cold F2 on one is
-  # refused while `textDocument/rename` at the identical caret produces
-  # edits. Adding the rebuild here closes the asymmetry and makes rename
-  # reachable from F2 alone -- which is the whole of what it does, and is
-  # why it is not here: driven with the edits applied back and re-parsed,
-  # eight local-variable shapes come out as code that no longer means
-  # what it meant, six of them as a file that stops running. The entry
-  # carries the eight.
+  # **Renaming from a parameter's use rewrote the body and left the
+  # signature**, which is the failure 0.2.17 shipped a fix for arriving
+  # through a binding form nothing recorded:
   #
-  # The three requests are one example because each is the other two's
-  # control. Refusal alone proves nothing -- a server answering nothing
-  # at all would satisfy it -- so the enclosing method's name is asked at
-  # the same cold moment and has to be offered, and the *same* local is
-  # asked again after a Find All References, which is what warms the
-  # index, and has to be offered then. That last one is not decoration:
-  # it says the refusal is the cold index and nothing else, so this
-  # example goes red both if the rebuild is added here and if the
-  # deferral is turned into a refusal of local variables generally --
-  # a different decision, which would need its own record.
-  it "leaves prepareRename cold, so a local is refused until something else warms the index" do
-    source = "def a\n  x = 1\n  x\nend\n"
+  #   def g(arg)     ->   def g(arg)
+  #     arg + 1             renamed + 1
+  #   end                 end
+  #
+  # That parses and raises `NameError` when it runs. The parser seeded
+  # each frame from Prism's `#locals`, so the *use* resolved and the
+  # binding site was never an occurrence -- so Rename could not know it
+  # had missed one, and refusing was not available to it either.
+  it "rewrites a parameter's own binding site, not only its uses" do
     input =
-      did_open("file:///a.rb", source) +
+      did_open("file:///param.rb", "def g(arg)\n  arg + 1\nend\n") +
       frame(
-        jsonrpc: "2.0", id: 1, method: "textDocument/prepareRename",
-        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 1, character: 2 } }
-      ) +
-      frame(
-        jsonrpc: "2.0", id: 2, method: "textDocument/prepareRename",
-        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 0, character: 4 } }
-      ) +
-      frame(
-        jsonrpc: "2.0", id: 3, method: "textDocument/references",
-        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 1, character: 2 },
-                  context: { includeDeclaration: true } }
-      ) +
-      frame(
-        jsonrpc: "2.0", id: 4, method: "textDocument/prepareRename",
-        params: { textDocument: { uri: "file:///a.rb" }, position: { line: 1, character: 2 } }
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///param.rb" }, position: { line: 1, character: 2 },
+                  newName: "renamed" }
       ) +
       frame(jsonrpc: "2.0", method: "exit", params: nil)
 
     build_server(input).run
 
-    results = sent_messages.sort_by { |m| m[:id] }.to_h { |m| [m[:id], m[:result]] }
-    # The keys first: `results[1]` is nil both when the answer was null
-    # and when no answer came back at all, and only one of those is what
-    # this example is about.
-    expect(results.keys).to contain_exactly(1, 2, 3, 4)
-    expect(results[1]).to be_nil
-    expect(results[2][:placeholder]).to eq("a")
-    expect(results[4]).to eq(
-      range: { start: { line: 1, character: 2 }, end: { line: 1, character: 3 } }, placeholder: "x"
-    )
+    edits = sent_messages.first[:result][:changes][:"file:///param.rb"]
+    starts = edits.map { |e| [e[:range][:start][:line], e[:range][:start][:character]] }.sort
+
+    expect(starts).to eq([[0, 6], [1, 2]]),
+                      "rewriting the use alone hands back a file that raises NameError"
+  end
+
+  # **A keyword parameter's name is the method's interface, and Ruby has
+  # no spelling that separates the two.** `def m(by:)` binds a local
+  # named `by` *because* the keyword is `by`; there is no `def m(by: as
+  # factor)`. So renaming the local necessarily renames the keyword
+  # every caller passes, which is not the edit the user asked for and
+  # not one any caller would be given.
+  #
+  # The parser therefore records no binding site for it -- and that on
+  # its own left the worse answer, not the safe one: the body was
+  # rewritten and the signature left, exactly the file-that-does-not-run
+  # shape. Refusing is the answer, and the planner asks a question it
+  # can always answer: **do I know where this local is bound?** A local
+  # with no write among its occurrences has a binding site this engine
+  # cannot see, whatever the reason, and rewriting the rest of it is
+  # never right.
+  it "refuses to rename a keyword parameter rather than rewriting half of it" do
+    input =
+      did_open("file:///kw.rb", "def m(by:)\n  by * 2\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///kw.rb" }, position: { line: 1, character: 2 },
+                  newName: "factor" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    changes = sent_messages.first[:result]&.dig(:changes)
+    expect(changes.to_h.values.flatten).to be_empty,
+                                           "rewriting the body alone leaves a method that raises NameError"
+  end
+
+  # **prepareRename warms the reference index, and did not.**
+  # `#references_result` and `#rename_result` both call
+  # `#ensure_reference_index_current`; this did not, so with the index
+  # cold -- its state until the user has run Find All References or an
+  # actual rename, and again after every edit that bumps the generation
+  # -- `Rename::Planner#locations_for` saw declarations only. A local
+  # has none, so the editor refused the rename box at a position where
+  # `textDocument/rename` would have worked. `024.245`.
+  #
+  # Not the same trade as `documentHighlight`, which deliberately leaves
+  # it cold: highlights are asked on every cursor move, and this is
+  # asked once, when the user presses F2.
+  it "warms the reference index, so a local can be renamed without a rehearsal" do
+    input =
+      did_open("file:///cold.rb", "def m\n  value = 1\n  value\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/prepareRename",
+        params: { textDocument: { uri: "file:///cold.rb" }, position: { line: 1, character: 2 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    expect(sent_messages.first[:result]).to include(placeholder: "value")
   end
 
   # The same cold F2, on a class written inside a `module` body, driven
@@ -466,5 +496,138 @@ RSpec.describe "Ovallsp::Server textDocument/prepareRename and textDocument/rena
 
     expect(lines.join).to eq("/(?<digits>\\d+)/ =~ line\ndigits = digits.to_i if digits\nputs digits\n")
     expect(Prism.parse(lines.join)).to be_success
+  end
+
+  # `024.273` gave rename a third refusal reason -- a local whose binding
+  # site the parser does not record -- and the branch that states it was
+  # committed with its argument list broken apart into string literals,
+  # so `refused_plan` was called with no arguments and every rename that
+  # reached the branch raised, answering `-32603 internal error` instead
+  # of the paragraph the register wrote.
+  #
+  # The CONTROL is the second rename in the same session: an ordinary
+  # parameter must still come back with its edits, so an example that
+  # merely asserted "no error" could not pass by refusing everything.
+  it "refuses a keyword parameter with a stated reason, not an internal error" do
+    warnings = []
+    allow(logger).to receive(:warn) { |message| warnings << message }
+
+    input =
+      did_open("file:///kw.rb", "def m(by:)\n  by * 2\nend\n") +
+      did_open("file:///pos.rb", "def g(arg)\n  arg + 1\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///kw.rb" }, position: { line: 1, character: 2 },
+                  newName: "factor" }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///pos.rb" }, position: { line: 1, character: 2 },
+                  newName: "factor" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    refusal, control = sent_messages
+    expect(refusal[:error]).to be_nil
+    expect(refusal[:result]).to be_nil
+    expect(warnings.join("\n")).to include("binding site")
+
+    # CONTROL: a positional parameter renames, declaration and use.
+    expect(control[:error]).to be_nil
+    expect(control[:result][:changes][:"file:///pos.rb"].map { |e| e[:newText] }).to eq(%w[factor factor])
+  end
+
+  # **`prepareRename` and `plan` must refuse the same things.** `prepare`
+  # screens the refused kinds, a macro-generated declaration and an
+  # empty location list; the third reason `024.273` added was not added
+  # to it, so the editor opened its input box and the rename that
+  # followed answered nothing.
+  it "does not offer a rename box where the rename itself will refuse" do
+    input =
+      did_open("file:///kw.rb", "def m(by:)\n  by * 2\nend\n") +
+      did_open("file:///pos.rb", "def g(arg)\n  arg + 1\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/prepareRename",
+        params: { textDocument: { uri: "file:///kw.rb" }, position: { line: 1, character: 2 } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/prepareRename",
+        params: { textDocument: { uri: "file:///pos.rb" }, position: { line: 1, character: 2 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    keyword, control = sent_messages
+    # CONTROL: the box still opens for an ordinary parameter.
+    expect(control[:result][:placeholder]).to eq("arg")
+    expect(keyword[:result]).to be_nil
+  end
+
+  # **Renaming one binding onto another silently captured it.** Ruby
+  # refuses the result outright:
+  #
+  #   $ ruby -e '
+  #   begin
+  #     eval("def f(b, b); [b]; end")
+  #     puts "legal"
+  #   rescue SyntaxError
+  #     puts "SyntaxError"
+  #   end
+  #   '
+  #   # => SyntaxError
+  #   # ruby 3.4.10
+  #
+  # This is newly reachable in 0.3.0, because recording a parameter's
+  # own binding site is what makes rename rewrite the declaration.
+  it "refuses to rename a parameter onto another binding in the same scope" do
+    warnings = []
+    allow(logger).to receive(:warn) { |message| warnings << message }
+
+    input =
+      did_open("file:///c.rb", "def f(a, b)\n  [a, b]\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///c.rb" }, position: { line: 0, character: 6 }, newName: "b" }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///c.rb" }, position: { line: 0, character: 6 }, newName: "c" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    captured, control = sent_messages
+    expect(captured[:result]).to be_nil
+    expect(warnings.join("\n")).to include("already")
+    # CONTROL: a free name in the same scope still renames both sites.
+    expect(control[:result][:changes][:"file:///c.rb"].map { |e| e[:newText] }).to eq(%w[c c])
+  end
+
+  # **Every Ruby keyword was accepted as a new name**, and the applied
+  # file does not parse. 0.3.0 makes it write one more edit -- the
+  # parameter's own binding site -- into the same unparseable file.
+  it "refuses a Ruby keyword as a new name" do
+    input =
+      did_open("file:///k2.rb", "def g(arg)\n  arg + 1\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///k2.rb" }, position: { line: 0, character: 6 }, newName: "end" }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///k2.rb" }, position: { line: 0, character: 6 }, newName: "beta" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    keyword, control = sent_messages
+    expect(keyword[:result]).to be_nil
+    # CONTROL: an ordinary name in the same fixture still renames.
+    expect(control[:result][:changes][:"file:///k2.rb"].map { |e| e[:newText] }).to eq(%w[beta beta])
   end
 end

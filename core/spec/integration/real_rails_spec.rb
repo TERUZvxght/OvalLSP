@@ -180,8 +180,149 @@ RSpec.describe "Runtime Agent against a real Rails app", :real_rails do
     @manager&.stop
   end
 
+  # A class that answers dynamically is the one fact that decides whether
+  # "closed" can be honest, and `method_missing` is *conventionally*
+  # private -- so the first version asked `private_method_defined?`
+  # alone and could not see a public one. Predicted blind by a subagent
+  # given only the feature list, and confirmed against Ruby:
+  #
+  #   $ ruby -e '
+  #   class Pub; def method_missing(n, *) = :a; end
+  #   p Pub.private_method_defined?(:method_missing, false)
+  #   p Pub.method_defined?(:method_missing, false)
+  #   '
+  #   # => false
+  #   # => true
+  #   # ruby 3.4.10
+  it "reports a class that answers dynamically, whichever visibility it used" do
+    @manager = boot_manager
+    index = @manager.fetch_gem_index
+    classes = index[:gems].values.flat_map { |gem| gem[:classes] }.to_h { |c| [c[:name], c] }
+
+    # A *private* one, which is the convention.
+    private_one = classes["ActiveRecord::AttributeMethods"]
+    expect(private_one).not_to be_nil
+    expect(private_one[:definesMethodMissing]).to be(true)
+
+    # And a **public** one, which `private_method_defined?` cannot see.
+    # This bundle has 25; naming one is what tells the two behaviours
+    # apart -- with only the private assertion above, reverting the fix
+    # left this example green.
+    public_one = classes["ActiveSupport::OrderedOptions"]
+    expect(public_one).not_to be_nil, "the fixture bundle no longer loads ActiveSupport::OrderedOptions"
+    expect(public_one[:definesMethodMissing]).to be(true),
+                                                 "a public `method_missing` is not being seen; " \
+                                                 "`private_method_defined?` alone cannot find one"
+
+    # And a class that implements only `respond_to_missing?` still answers
+    # to names no enumeration can list.
+    responds = classes["ActiveSupport::OptionMerger"]
+    expect(responds && responds[:definesMethodMissing]).to be(true) if responds
+  ensure
+    @manager&.stop
+  end
+
   # 2 & 3. Routes come from real config/routes.rb, and each source
   # location is normalized (absolute path, 0-based line).
+  # 024.R7. The running application knows what the gems define, and
+  # nothing else does: today "closed" means "declared in this
+  # workspace", so the undefined-method check goes quiet for every
+  # controller whose parent is in a gem -- which is most of a Rails app.
+  #
+  # This is the Agent half: walk the loaded modules once, attribute each
+  # to the gem whose path it was defined in, and report its own methods,
+  # its ancestors, and whether it defines `method_missing`.
+  it "attributes loaded modules to the gems that define them, with their own methods" do
+    @manager = boot_manager
+    index = @manager.fetch_gem_index
+
+    expect(index).not_to be_nil, "the Agent answered nothing for agent/gemIndex"
+    expect(index[:gems]).to be_a(Hash)
+
+    # ActiveRecord is in this application's bundle and defines `Base`.
+    activerecord = index[:gems].keys.find { |name| name.to_s.start_with?("activerecord-") }
+    expect(activerecord).not_to be_nil, "no activerecord entry among #{index[:gems].keys.first(8).inspect}"
+
+    base = index[:gems][activerecord][:classes].find { |c| c[:name] == "ActiveRecord::Base" }
+    expect(base).not_to be_nil, "activerecord contributed no ActiveRecord::Base"
+    expect(base[:ancestors]).to include("Object")
+
+    # **The point of the index**: a name the workspace cannot see.
+    # `save` is defined by ActiveRecord::Persistence, an ancestor, so
+    # `ActiveRecord::Base`'s own methods do not carry it -- the ancestor
+    # list is what makes it reachable, which is why both are reported.
+    persistence = index[:gems][activerecord][:classes].find { |c| c[:name] == "ActiveRecord::Persistence" }
+    expect(persistence).not_to be_nil
+    expect(persistence[:instanceMethods]).to include("save")
+
+    # And `method_missing` is reported, because a class that defines one
+    # can answer to names no index can enumerate -- which is the fact
+    # that decides whether "closed" is honest.
+    expect(base).to have_key(:definesMethodMissing)
+  ensure
+    # Every example in this file stops its manager, and this one did
+    # not: the leaked Agent held the fixture bundle and the next eleven
+    # examples booted to `static_only`. Bisected -- with this example
+    # reverted the file was green, which is what said it was the spec
+    # rather than the protocol bump beside it.
+    @manager&.stop
+  end
+
+# **A core class is not up for reinterpretation by a gem**, and only a
+# loaded application can show that the danger is real: the index a
+# bare name is matched against is whatever this process happened to
+# require.
+#
+# `HierarchyIndex#canonical_name` reads a bare name the workspace does
+# not own as the one gem class whose last segment matches it, so that
+# `Relation` reaches `ActiveRecord::Relation`. A core class cannot
+# contest that match -- `Object.const_source_location` answers `[]`
+# for one, so the Agent, which keeps only what a gem path accounts
+# for, never reports it -- and a gem's nested class of that name won
+# by default. Measured against this very fixture, three core names
+# were already being claimed here and a fourth was claimed on CI,
+# where the second claimant of `Integer` was not loaded:
+#
+#     Integer  -> ActiveModel::Type::Integer     (on CI)
+#     Symbol   -> ActionDispatch::Journey::Nodes::Symbol
+#     Range    -> Arel::Nodes::Range
+#     Regexp   -> Arel::Nodes::Regexp
+#
+# ``Integer has no method named `+` `` over `assert_equal 2, 1 + 1`
+# is what that produced. Whether a core class keeps its meaning must
+# not depend on which gems a process has required, which is why this
+# is asserted against a real bundle rather than a fixture index.
+it "leaves a core class its own chain, whatever nested class of that name a gem loaded" do
+  @manager = boot_manager
+  payload = @manager.fetch_gem_index
+  expect(payload).not_to be_nil, "the Agent answered nothing for agent/gemIndex"
+
+  gem_index = Ovallsp::Semantic::GemIndex.from_agent(payload)
+  probes = %w[Integer Symbol Range Regexp String Float Array Hash]
+  claimed = probes.select { |core| gem_index.resolve_simple_name(core) }
+
+  # The control, and it is the whole reason this example is not
+  # vacuous: this bundle really does contain nested classes whose last
+  # segment is a core class's name, and the rule really would answer
+  # with one. An assertion that a capture did not happen is worth
+  # nothing in a process where no capture was on offer.
+  expect(claimed).not_to be_empty,
+                         "no gem class in this bundle claims any of #{probes.inspect}, " \
+                         "so this example cannot tell the fix from its absence"
+
+  stack = Ovallsp::AnalysisStack.build(
+    signatures: AnalysisStackHelper.shared_signatures,
+    workspace_index: Ovallsp::WorkspaceIndex.new, gem_index: gem_index
+  )
+  claimed.each do |core|
+    foreign = gem_index.resolve_simple_name(core)
+    expect(stack.hierarchy_index.ancestors(core).map(&:name)).not_to include(foreign),
+                                                                    "#{core} took #{foreign}'s ancestry"
+  end
+ensure
+  @manager&.stop
+end
+
   it "lists routes drawn by real config/routes.rb with a normalized source_location" do
     @manager = boot_manager
     routes = @manager.fetch_snapshot(sections: ["routes"])[:routes]

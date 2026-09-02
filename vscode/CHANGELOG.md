@@ -6,6 +6,120 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.3.0 — the first release that adds
+
+Eight new things the editor can do, and the undefined-method check now
+covers classes that inherit from a gem.
+
+- **Document highlight.** Put the cursor on a local and every occurrence
+  of *that* local lights up — not a same-named local in another scope —
+  each marked as a read or a write. On a method name, its declaration
+  and its call sites in the file.
+- **Call hierarchy.** Who calls this method, across files, and what it
+  calls, each with the range of the call inside the calling method.
+- **Go to type definition.** Jumps to the class an expression evaluates
+  to, rather than to the method that produced the value. Nothing where
+  the type is not known or is not a class in your workspace.
+- **Inlay hints.** The inferred type after each local assignment, and
+  the parameter name each argument is being passed as.
+- **Quick fixes.** Insert a `def` for a method reported as unknown, into
+  the class the call was made on; replace an unknown route helper with
+  the nearest one your application actually has; remove surplus
+  arguments where a call passes too many.
+- **Completion of `@ivar` names**, the moment you type the sigil, from
+  the instance variables the class assigns anywhere — not only the ones
+  the method you are in assigns.
+- **Hover on an `@ivar`** now answers from the whole class the same way,
+  and says nothing where two methods assign it types that disagree.
+- **Completion on a chained relation.** `Post.where(x: 1).order(:id).`
+  offers the relation's members; the chain used to lose its type after
+  the second link. **228 items** where there were none.
+- **`undefined method` on a class that inherits from a gem** is now
+  reported. A Runtime Agent walks the loaded modules of your running
+  application and the engine uses that to decide whether it really knows
+  a receiver's whole method set. It stays silent where the receiver can
+  answer at call time, which is why a model is never reported: an
+  ActiveRecord class answers `title` when asked, not before.
+
+**Renaming a local now rewrites the parameter that declares it.** It did
+not, and the renamed method stopped working — or worse, where the body
+assigned before it read, ran and answered something else. A *keyword*
+parameter is refused instead, with the reason: `def m(by:)` binds `by`
+because the keyword is `by`, so renaming the local would rename the
+keyword every caller passes.
+
+**Reviewed before release, and what that found is published rather than
+quietly carried.** A four-stage review — one reader given only the
+feature list and no code, six given one feature each, then judging,
+fixing and checking — produced 168 findings; 69 reproduced inside this
+release's own code and 38 were fixed. What it did not fix is eight
+shapes these new answers do not reach, and `KNOWN_LIMITATIONS` now has a
+section naming each: a call hierarchy that cannot see `send`, a
+relation's completion that omits the model's own scopes, a `def` fix
+offered on one receiver shape of three, and five more.
+
+Two of its findings were fixed here because leaving them would have been
+worse than the feature not shipping. One timeout from the Runtime Agent
+used to disable the gem-backed check for the rest of the session. And a
+rename could rewrite a local a `case/in` pattern also binds, leaving the
+pattern behind — the file still ran, and answered something else. The
+limitation published for that said no edit was made at all, which was
+true of one half of it and false of the half a user meets.
+
+**A gem could take a core class's name, and which gems a process had
+loaded decided whether it did.** A bare name the workspace does not
+own is read as the one gem class whose last segment matches it, so
+that `Relation` reaches `ActiveRecord::Relation`. A core class cannot
+contest that match — Ruby reports no source location for one, so the
+Agent, which keeps only what a gem path accounts for, never sends it —
+and a gem's own nested class of that name won by default. Measured
+against a real Rails application, `Symbol`, `Range` and `Regexp` were
+already being answered for by Arel and ActionDispatch classes, and on
+a machine where the second claimant of `Integer` was not loaded,
+``Integer has no method named `+` `` was reported over `1 + 1`. A bare
+name a signature already gives a referent is no longer up for
+reinterpretation.
+
+**And adopting the editor's workspace root built a second signature
+environment beside the first.** The root the editor names arrives
+after the server has started, and taking it replaced the environment
+rather than reloading it — so the type engine went on reading
+signatures from the directory the process happened to start in, while
+every request-time reader used the adopted one. Two answers to the
+same question in one server, chosen by which part was asked.
+
+### Details
+
+**The gem index is what makes the new diagnostic possible, and what
+bounds it.** The Agent reports each loaded module's ancestors, its
+singleton ancestors, the methods it defines itself, and whether it
+answers dynamically. The check fires only where every link in that chain
+is known and nothing in it defines `method_missing`. Over a real
+application's bundle that covers 577 classes and not a model, which is
+the correct answer rather than a shortfall — reporting `post.titel` and
+being wrong about a generated attribute is the outcome this project
+ranks worst.
+
+**Measured rather than assumed.** The corpus run refused two earlier
+implementations of the check before this one: 47 false reports, then
+795. The shipped version introduces 0 and removes 13, with the control
+category identical on both sides at 1,609.
+
+**Eleven defects were found before release by a method worth recording.**
+Two agents were given only the list of what this release added — no
+code, no repository — and asked what bugs they would expect. 306
+guesses, 39 checked, 11 real, and the two agreed separately on four of
+them. Among them: a quick fix that deleted a heredoc's marker and left
+its body as live code that still parsed; an inlay hint that named the
+parameter Ruby does not use when a call splats; instance-side completion
+offering variables that live on the class object; and the Agent seeing
+`method_missing` only when it was public, which is the visibility almost
+nobody writes.
+
+**Known limitation, unchanged and published:** the gem index is rebuilt
+on every start, so the check is late by a few seconds each session
+rather than once.
+
 ## 0.2.18 — a published latency figure was the one we had already retracted
 
 - **A latency figure we published for seventeen releases was wrong**, in

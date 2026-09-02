@@ -156,7 +156,11 @@ RSpec.describe "numbers documented about this tree" do
 
   # At `rev` when the claim is dated, otherwise as it stands.
   def self.register(rev = nil)
-    return File.read(File.join(TREE_ROOT, REGISTER), encoding: "UTF-8") if rev.nil?
+    # 024.R9 split the register in two, and every count derived here is
+    # about both. Reading the live file alone would have said 48 where
+    # the tree has 287 -- which is what this check reported when the
+    # split landed, before it was taught.
+    return DeferredFindings.register(TREE_ROOT) if rev.nil?
 
     # Through `RepoFiles`, which unsets `GIT_DIR` and its family at the
     # spawn -- `024.157`. `chdir:` does not override them, so under a
@@ -165,7 +169,13 @@ RSpec.describe "numbers documented about this tree" do
     out = RepoFiles.capture(TREE_ROOT, ["show", "#{rev}:#{REGISTER}"])
     raise "cannot read #{REGISTER} at #{rev}: #{out}" unless $?.success?
 
-    out
+    # The archive did not exist before 0.3.0, and `git show` of a path
+    # a revision does not have is an error rather than an empty string.
+    # So it is asked for and its absence accepted -- a dated claim made
+    # before the split is about a register that was one file, and
+    # answering it from two would be answering a different question.
+    archived = RepoFiles.capture(TREE_ROOT, ["show", "#{rev}:#{DeferredFindings::ARCHIVE}"])
+    $?.success? ? "#{out}\n#{archived}" : out
   end
 
   # `024.181`. This read four hand-written globs -- which is the pre-fix
@@ -431,7 +441,11 @@ RSpec.describe "numbers documented about this tree" do
     # readers of the entry number in three grammars, and these were two
     # of them.
     def register_numbers
-      register = File.read(File.join(TREE_ROOT, "docs", "design", "tasks", REGISTER_BASENAME), encoding: "UTF-8")
+      # Both files: 024.R9 split the register by state, and a citation
+      # resolves wherever the entry lives. Reading the live file alone
+      # reported every citation of a resolved entry as dangling, which
+      # is what this check said the moment the split landed.
+      register = DeferredFindings.register(TREE_ROOT)
       (DeferredFindings.headings(register) + DeferredFindings.retired_numbers(register)).to_set
     end
 

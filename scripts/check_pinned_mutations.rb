@@ -142,11 +142,24 @@ entries.each_with_index do |entry, i|
 
   count = output[/(\d+) examples?, (\d+) failures?/, 1].to_i
   fails = output[/(\d+) examples?, (\d+) failures?/, 2].to_i
+# A skipped example is still an example. Without this, an environment
+# that cannot run the spec -- no Rails, no sqlite3, no
+# `vscode/node_modules` -- reports `1 example, 0 failures, 1 pending`
+# and exits 0, which is byte-for-byte what a mutation that escaped
+# looks like. This job had no Rails, so four e2e mutations were
+# reported as unpinned on CI while passing locally: `024.148`'s shape,
+# in the checker built to catch it.
+pending = output[/(\d+) pending/, 1].to_i
 
   if count.zero?
     failures << "#{label}\n    `#{entry["example"].to_s.strip}` selected no example in #{entry["spec"]}."
   elsif count > 1
     failures << "#{label}\n    `#{entry["example"].to_s.strip}` selected #{count} examples; it must select one."
+elsif pending.positive?
+  failures << "#{label}\n    the example did not run -- #{pending} pending in " \
+              "#{entry['spec']}. That says nothing about the mutation; it says this " \
+              "environment cannot verify it. Install what that suite needs " \
+              "(CONTRIBUTING.md) rather than reading a green run as a pinned one."
   elsif fails.zero? && status.success?
     failures << "#{label}\n    the example passed with the mutation applied, so it does not pin what it claims " \
                 "to. #{entry["spec"]} -- `#{entry["example"].to_s.strip}`"

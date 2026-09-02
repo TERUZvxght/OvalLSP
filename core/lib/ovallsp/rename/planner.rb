@@ -44,11 +44,44 @@ module Ovallsp
       # a generated/DSL-origin symbol).
       def prepare(symbol_id)
         return nil unless symbol_id
-        return nil if REFUSED_KINDS.include?(symbol_id.kind)
-        return nil if uneditable_declaration(symbol_id)
+        return nil if symbol_refusal(symbol_id)
         return nil if locations_for(symbol_id).empty?
 
         { placeholder: simple_name(symbol_id) }
+      end
+
+      # **The reasons `prepare` and `plan` must agree about**, in one
+      # place because keeping two lists in step is what failed:
+      # `024.273` added a third refusal to `plan` and not to `prepare`,
+      # so the editor opened its input box for a keyword parameter and
+      # the rename that followed answered nothing. A fourth reason
+      # cannot now be added to only one of them.
+      #
+      # `nil`, or the sentence a user is owed.
+      def symbol_refusal(symbol_id)
+        if REFUSED_KINDS.include?(symbol_id.kind)
+          return "`#{simple_name(symbol_id)}` is a generated Rails method (#{symbol_id.kind}) -- " \
+                 "rename its source declaration (the association/column, or the route) instead; " \
+                 "the call sites are never edited directly here"
+        end
+
+        if binding_site_unknown?(symbol_id)
+          return "`#{simple_name(symbol_id)}` is a local whose binding site this engine does not record -- a " \
+                 "keyword parameter (`def m(by:)`), a hash pattern's shorthand (`in {a:}`), or a numbered " \
+                 "block parameter (`_1`). Rewriting the occurrences it can see would leave the binding " \
+                 "behind and hand back a file that raises NameError, so nothing is edited here"
+        end
+
+        return nil unless (declaration = uneditable_declaration(symbol_id))
+
+        position = declaration.name_location || declaration.location
+        "`#{simple_name(symbol_id)}` is declared by a macro rather than by a `def`, at " \
+          "#{position[:start][:line] + 1}:#{position[:start][:character] + 1}. That argument is source the " \
+          "macro reads, so rewriting it is not the same edit as renaming this method -- the same token also " \
+          "spells the ivar an `attr_*` reads, the second method `attr_accessor` declares, the label an " \
+          "`enum` uses for its scope and its stored mapping, or the method a `delegate` calls on its " \
+          "target. Nothing is edited here: change the macro and its call sites by hand, or write the " \
+          "method as a `def`, which this does rename"
       end
 
       # **A macro's argument is not this method's name, even now that the
@@ -132,29 +165,12 @@ module Ovallsp
       def plan(symbol_id, new_name:, generation:)
         return Plan.new(target: nil, generation: generation) unless symbol_id
 
-        if REFUSED_KINDS.include?(symbol_id.kind)
-          return refused_plan(symbol_id, generation,
-                               "`#{simple_name(symbol_id)}` is a generated Rails method (#{symbol_id.kind}) -- " \
-                               "rename its source declaration (the association/column, or the route) instead; " \
-                               "the call sites are never edited directly here")
+        if (reason = symbol_refusal(symbol_id))
+          return refused_plan(symbol_id, generation, reason)
         end
 
         unless valid_identifier?(symbol_id.kind, new_name)
           return refused_plan(symbol_id, generation, "`#{new_name}` is not a valid #{symbol_id.kind} name")
-        end
-
-        if (declaration = uneditable_declaration(symbol_id))
-          position = declaration.name_location || declaration.location
-          return refused_plan(
-            symbol_id, generation,
-            "`#{simple_name(symbol_id)}` is declared by a macro rather than by a `def`, at " \
-            "#{position[:start][:line] + 1}:#{position[:start][:character] + 1}. That argument is source the " \
-            "macro reads, so rewriting it is not the same edit as renaming this method -- the same token also " \
-            "spells the ivar an `attr_*` reads, the second method `attr_accessor` declares, the label an " \
-            "`enum` uses for its scope and its stored mapping, or the method a `delegate` calls on its " \
-            "target. Nothing is edited here: change the macro and its call sites by hand, or write the " \
-            "method as a `def`, which this does rename"
-          )
         end
 
         conflicts = conflicts_for(symbol_id, new_name)
@@ -223,6 +239,29 @@ module Ovallsp
         "#{simple_name(symbol_id)}: #{new_name}"
       end
 
+      # **Do I know where this local is bound?** Every binding form the
+      # parser records is recorded as a *write*, so a local with no write
+      # among its occurrences has a binding site this engine cannot see.
+      #
+      # The one that reaches here today is a keyword parameter, left
+      # unrecorded on purpose -- `def m(by:)` binds a local named `by`
+      # *because* the keyword is `by`, and Ruby has no spelling that
+      # separates them, so renaming the local is renaming the interface.
+      # `024.273`.
+      #
+      # Asked as "is the binding site known" rather than "is this a
+      # keyword parameter": the register argued that an occurrence
+      # nothing records is one nothing can miss, which is true of the
+      # occurrence and false of the *count*. Any binding form added to
+      # the parser later is refused here until it is recorded, rather
+      # than half-rewritten.
+      def binding_site_unknown?(symbol_id)
+        return false unless symbol_id.kind == :local_variable
+
+        references = @reference_index.references(symbol_id, minimum_confidence: :high)
+        references.any? && references.none?(&:write)
+      end
+
       def simple_name(symbol_id)
         symbol_id.name.to_s.split("::").last
       end
@@ -230,8 +269,38 @@ module Ovallsp
       def valid_identifier?(kind, name)
         pattern = IDENTIFIER_PATTERNS[kind]
         return true unless pattern
+        return false unless pattern.match?(name.to_s)
 
-        !!pattern.match?(name.to_s)
+        !(kind == :local_variable && reserved_word?(name.to_s))
+      end
+
+      # **Every Ruby keyword matched the local pattern**, so `end`,
+      # `class`, `nil` and `self` were all accepted and the applied file
+      # did not parse:
+      #
+      #   $ ruby -e '
+      #   %w[beta end class nil self].each do |name|
+      #     begin
+      #       eval("#{name} = 1")
+      #       puts "legal"
+      #     rescue SyntaxError
+      #       puts "SyntaxError"
+      #     end
+      #   end
+      #   '
+      #   # => legal
+      #   # => SyntaxError
+      #   # => SyntaxError
+      #   # => SyntaxError
+      #   # => SyntaxError
+      #   # ruby 3.4.10
+      #
+      # Asked of the parser rather than typed out as a list, so it
+      # cannot go stale: a keyword is exactly a name no assignment can
+      # bind. `name` has already matched the local pattern here, so it
+      # is a bare lowercase word and nothing else.
+      def reserved_word?(name)
+        !Prism.parse("#{name} = nil").success?
       end
 
       # Constant/class/module: does a type by the renamed fully-qualified
@@ -247,9 +316,38 @@ module Ovallsp
           constant_conflicts(symbol_id, new_name)
         when :instance_method, :singleton_method
           method_conflicts(symbol_id, new_name)
+        when :local_variable
+          local_conflicts(symbol_id, new_name)
         else
           []
         end
+      end
+
+      # **Renaming one binding onto another captures it silently**, and
+      # Ruby refuses the result outright:
+      #
+      #   $ ruby -e '
+      #   begin
+      #     eval("def f(b, b); [b]; end")
+      #     puts "legal"
+      #   rescue SyntaxError
+      #     puts "SyntaxError"
+      #   end
+      #   '
+      #   # => SyntaxError
+      #   # ruby 3.4.10
+      #
+      # A local's `owner` already carries its file, its enclosing owner
+      # and its scope id, so the same owner *is* "the same scope" --
+      # which is the whole check. Reachable in 0.3.0 because recording a
+      # parameter's own binding site is what makes rename rewrite the
+      # declaration.
+      def local_conflicts(symbol_id, new_name)
+        occupant = Index::SymbolId.new(kind: :local_variable, owner: symbol_id.owner,
+                                        name: new_name, discriminator: nil)
+        return [] unless @reference_index.references(occupant, minimum_confidence: :high).any?(&:write)
+
+        [{ reason: "`#{new_name}` is already bound in this scope -- renaming onto it would capture it" }]
       end
 
       def constant_conflicts(symbol_id, new_name)

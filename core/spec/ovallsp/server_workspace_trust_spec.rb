@@ -252,7 +252,7 @@ RSpec.describe "Ovallsp::Server workspace trust gating" do
     # regression this test targets: with @agent_manager still nil, status
     # must read "ready-static", not "agent-unavailable".
     server.instance_variable_set(:@cold_indexing, false)
-    expect(server.send(:status_result, nil)).to eq(state: "ready-static")
+    expect(server.send(:status_result, nil)).to include(state: "ready-static")
 
     # Let the bootstrap, then #run itself, finish cleanly.
     release_handshake << true

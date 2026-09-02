@@ -717,7 +717,11 @@ full list.
 **One branch per version, merged into `main` by pull request.** The
 branch is `release/<version>` — `release/0.3.0` — and every commit for
 that release goes on it. `main` is what has shipped; it is not where a
-release is assembled. Set by the maintainer on 2026-09-01.
+release is assembled. Set by the maintainer on 2026-09-01, and **`main`
+is branch-protected on GitHub since the same day** — a direct push is
+refused, ten status checks are required, and the rules apply to
+administrators, so this is not a rule that depends on being read.
+`CONTRIBUTING.md` lists what is on.
 
 *This is (b) in section 0.6's terms — a dated instruction — and the
 paragraphs below it are (c), this project's own reasons, which predate

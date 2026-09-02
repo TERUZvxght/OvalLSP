@@ -96,6 +96,34 @@ end
     server
   end
 
+# **Adopting the editor's root built a second signature environment
+# and left the first one wired in.** `#adopt_client_workspace_root`
+# assigned `@signatures` a freshly loaded `Environment`, while
+# `AnalysisStack` -- and through it the local inferencer, the method
+# resolver's callers and, since a core class stopped being reinterpretable
+# by a gem, the hierarchy index -- went on holding the one built from
+# the process's own cwd. Two environments in one server, and which one
+# answered depended on which collaborator was asked.
+#
+# The reload path already had this right: it calls `#load` on the
+# environment in place, precisely so that every holder sees it. This
+# is the same call at the other site.
+#
+# The control is the first expectation: the server's own reference
+# *does* know the name, so the signature file is real and loadable and
+# the second expectation is about who can see it rather than about
+# whether there was anything to see.
+it "reloads the environment the analysis stack holds rather than building a second one beside it" do
+  FileUtils.mkdir_p(File.join(@real, "sig"))
+  File.write(File.join(@real, "sig", "probe.rbs"), "class SigOnlyProbe\n  def go: () -> void\nend\n")
+  # Started from a directory carrying no signatures of its own, so
+  # knowing this name can only have come from adopting the root.
+  server = server_started_from(@parent, root_uri: @link)
+
+  expect(server.instance_variable_get(:@signatures).declares?("SigOnlyProbe")).to be(true)
+  expect(server.instance_variable_get(:@analysis).signatures.declares?("SigOnlyProbe")).to be(true)
+end
+
   it "takes the root the editor named, not the one its own cwd resolves to" do
     server = server_started_from(@real, root_uri: @link)
 
@@ -204,15 +232,23 @@ end
   # left the index following `rootUri` while `sig/` followed the cwd. For
   # a symlinked workspace both name the same files; for a client that
   # spawns from the editor's own directory they do not.
+  #
+  # **The generation, not the object.** This asserted `not_to equal(before)`
+  # -- that adoption produced a *different* environment -- which is a fact
+  # about how the reload was written rather than the property named above,
+  # and it turned out to be the wrong one of the two: replacing the object
+  # is exactly what left `AnalysisStack` holding the old one. A load bumps
+  # the generation, so this says the environment was rebuilt without saying
+  # anything about which object carries it.
   it "rebuilds the signature environment when the root moves" do
     output = StringIO.new
     server = Ovallsp::Server.new(input: StringIO.new(""), output: output, logger: logger, workspace_root: @real)
-    before = server.instance_variable_get(:@signatures)
+    before = server.instance_variable_get(:@signatures).generation
 
     server.send(:dispatch, { method: "initialize", id: 1,
                              params: { rootUri: Ovallsp::UriUtil.from_path(@link) } })
 
-    expect(server.instance_variable_get(:@signatures)).not_to equal(before)
+    expect(server.instance_variable_get(:@signatures).generation).to be > before
   end
 end
 

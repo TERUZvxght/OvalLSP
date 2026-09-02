@@ -175,7 +175,7 @@ module Ovallsp
         Index::Reference.new(
           symbol_id: symbol_id, location: candidate.location, kind: candidate.kind, confidence: confidence,
           origin: origin, receiver_type: receiver_type, uri: uri, generation: generation,
-          implicit_hash_value: candidate.implicit_hash_value
+          implicit_hash_value: candidate.implicit_hash_value, write: candidate.write
         )
       end
     end

@@ -40,10 +40,16 @@ module Ovallsp
     #   hash key and the value, so an edit here expands rather than
     #   substitutes. Read by Rename::Planner and by nothing else;
     #   `false` for every site whose `location` is just the identifier.
+    # - write: carried through from the candidate, and `nil` where the
+    #   candidate did not say. Read by Rename::Planner to ask whether
+    #   this engine knows where a local is *bound*: every binding form
+    #   the parser records is recorded as a write, so a local with none
+    #   has a binding site nothing can see, and rewriting the rest of it
+    #   leaves a file that does not run (`024.273`).
     Reference = Data.define(:symbol_id, :location, :kind, :confidence, :origin, :receiver_type, :generation, :uri,
-                            :implicit_hash_value) do
-      def initialize(implicit_hash_value: false, **rest)
-        super(implicit_hash_value: implicit_hash_value, **rest)
+                            :implicit_hash_value, :write) do
+      def initialize(implicit_hash_value: false, write: nil, **rest)
+        super(implicit_hash_value: implicit_hash_value, write: write, **rest)
       end
     end
   end

@@ -57,11 +57,22 @@ module Ovallsp
     #   and a caller that only highlights can ignore this. `false`
     #   everywhere else, which is every site where `location` is exactly
     #   the identifier.
+    # `write` -- true where this occurrence *assigns* the name. Only
+    # meaningful for `:local_variable`, and `nil` everywhere else.
+    #
+    # The parser has always known: `#visit_local_variable_write_node`
+    # and its three operator siblings are separate visitors from
+    # `#visit_local_variable_read_node`. It threw the distinction away
+    # at `#record_local_variable`, so 0.3.0's documentHighlight
+    # answered `Text` for every local -- correct as a statement about
+    # what *that layer* could tell, and wrong about what was knowable.
+    # Added for inlay hints, which need the assignment sites, and read
+    # by highlighting for the same reason.
     ReferenceCandidate = Data.define(:kind, :name, :location, :scope_id, :owner, :singleton, :receiver,
-                                      :lexical_nesting, :arguments, :implicit_hash_value) do
-      def initialize(lexical_nesting: [], arguments: nil, implicit_hash_value: false, **rest)
+                                      :lexical_nesting, :arguments, :implicit_hash_value, :write) do
+      def initialize(lexical_nesting: [], arguments: nil, implicit_hash_value: false, write: nil, **rest)
         super(lexical_nesting: lexical_nesting, arguments: arguments,
-              implicit_hash_value: implicit_hash_value, **rest)
+              implicit_hash_value: implicit_hash_value, write: write, **rest)
       end
     end
   end

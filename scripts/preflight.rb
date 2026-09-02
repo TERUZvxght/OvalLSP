@@ -115,10 +115,24 @@ CHECKS = [
     why: "a path resolving to nothing sends the next reader somewhere that does not exist",
     dir: ROOT, command: %w[ruby scripts/check_doc_links.rb]
   ),
+  # 024.R9 split the register by state, and that split is only true while
+  # resolving an entry moves it. The move is a script rather than a hand
+  # edit -- this file's own class of accident, `024.225` -- and this is
+  # the gate that says it was run.
+  Check.new(
+    name: "resolved findings are in the archive",
+    why: "the register is split by state, so a resolved entry left in the live file breaks the split it is the whole point of",
+    dir: ROOT, command: %w[ruby scripts/archive_resolved_findings.rb --check]
+  ),
   Check.new(
     name: "register index current",
     why: "the index is generated; a hand-edited one is a record nobody can search",
     dir: ROOT, command: %w[ruby scripts/reindex_findings.rb --check]
+  ),
+  Check.new(
+    name: "issue index current",
+    why: "docs/ISSUES.md is one view of every open issue, generated so it cannot drift from the register",
+    dir: ROOT, command: %w[ruby scripts/issue_index.rb --check]
   ),
   Check.new(
     name: "every rescue in core/lib has a verdict",

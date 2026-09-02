@@ -7,6 +7,41 @@ Marketplace Pre-Release, as distinct from bugs. See
 [docs/SUPPORT_MATRIX.md](SUPPORT_MATRIX.md) for the exact,
 evidence-based supported/unsupported table this summarizes.
 
+## What 0.3.0's new answers do not cover yet
+
+Eight things arrived in 0.3.0, and a review before release drove each of
+them against real code. What it found is below — none of these is the
+feature failing, and each is a shape it does not reach.
+
+- **Call hierarchy lists no callee reached through `send`, `super` or a
+  Rails macro.** A method whose callees are all written that way shows
+  "no outgoing calls", which looks the same as a method that has
+  none. <!-- documents: 024.297 -->
+- **An inlay hint on `Foo.new(1, 2)` names `Class#new`'s parameters
+  rather than `initialize`'s**, so the labels come from a declaration
+  that is not the one being called. <!-- documents: 024.298 -->
+- **Completion on a relation offers none of the model's own scopes,
+  `enum` predicates or `def self.` methods.** Rails delegates those to
+  the model and they are callable there; the list says
+  otherwise. <!-- documents: 024.299 -->
+- **`@ivar` completion reads the class's own body only**, so an
+  `@current_user` a superclass or a concern assigns is not offered. In a
+  Rails application that is most of them. <!-- documents: 024.300 -->
+- **The route-helper quick fix ignores `_path` versus `_url` and the
+  helper's arity**, so it can offer an absolute URL where a path was
+  written, or a helper that needs an argument for one written with
+  none. <!-- documents: 024.301 -->
+- **The `def` quick fix is offered on an instance receiver only.** A
+  report on `Foo.bar` or on a receiverless call gets a diagnostic with no
+  fix beside it. <!-- documents: 024.302 -->
+- **A multiple assignment's targets get no inlay hint**, and where the
+  same name was assigned earlier the hint from *that* assignment can be
+  shown against the new one. <!-- documents: 024.303 -->
+- **The gem-backed undefined-method check declines about any class whose
+  body carries a macro this extension does not model** — `before_action`,
+  `helper_method`, `rescue_from`. In a Rails application that is nearly
+  every controller. <!-- documents: 024.304 -->
+
 ## Platform scope
 
 - **Only macOS on Apple Silicon (`darwin-arm64`) is targeted.** The VSIX
@@ -570,14 +605,6 @@ in completion, hover and go to definition. <!-- documents: 024.106 -->
 
 ## Completion offers methods you cannot call
 
-On a class — `Post.`, `Circle.` — and on any receiver in a plain Ruby
-project, the list includes private methods. Measured by asking a running
-application whether each offered name is actually callable: 91 of 816 on
-a Rails model class, 69 of 121 on a class of your own in a plain project,
-`initialize` among them. Accepting one raises `NoMethodError`. The
-instance-level list in a Rails project with the Runtime Agent connected
-is clean. <!-- documents: 024.99 -->
-
 ## The four features disagree at the same position
 
 - `<% @posts.each do |post| %>` then `post.titel` in a view: hover says
@@ -597,14 +624,12 @@ is clean. <!-- documents: 024.99 -->
 Two shapes, both of them code that runs. Measured over 177 files of
 rspec-core, i18n, psych and reline: 16 reports.
 
-- **`alias` to a method that came from an included module.**
-  `include Escaping` then `alias safe_escape escape` — calling
-  `safe_escape` is reported. Aliasing a `def` in the same class is
-  fine. <!-- documents: 024.238 -->
-- **`URI(...)` written on your own class.** `Kernel#URI` comes from a
-  gem, and this extension does not yet index what gems define, so it
-  cannot see it. The same will apply to other `Kernel` methods a gem
-  supplies. <!-- documents: 024.R7 -->
+- **`URI(...)` written on your own class** is reported as unknown.
+  Since 0.3.0 this extension does index what your gems define — 2,078
+  classes in a typical Rails bundle — but the walk that builds that
+  index reports only modules whose source sits under a gem directory,
+  and `Kernel` is not one. So a core method a gem supplies is still
+  invisible to the check. <!-- documents: 024.290 -->
 
 This section said *four* shapes and 41 reports until 0.2.16, and two of
 the four had stopped happening some releases earlier — the count was
@@ -641,20 +666,14 @@ away. <!-- documents: 024.83 -->
 
 ## An instance variable set in another method
 
-`@article` assigned by a `before_action` and read in the action has a
-type **in the view** and no type **in the controller**: hovering it in
-`show.html.erb` says `Post` and offers 408 completions, hovering the same
-name in the controller says nothing and offers none. Any ivar written in
-one method and read in another behaves this way. <!-- documents: 024.86 -->
-
 ## Where a relation stops being a relation
 
-`Post.where(published: true)` is understood. `Post.where(published:
-true).where(user_id: 1)` is not, and neither are `.order`, `.limit`,
-`.includes`, `.count` or a second scope. Hover goes blank at the second
-link, and so does the undefined-method check —
-`Post.published.where(user_id: 1).titel` is not
-reported. <!-- documents: 024.87 -->
+**Nothing is reported about a method called on a relation.**
+`Post.published.where(user_id: 1).titel` is not reported, and that is
+deliberate rather than missing: a relation reaches
+`ActiveRecord::AttributeMethods`, which answers at call time, so a
+report there would be a wrong answer. Hover and completion do follow
+the chain past its second link as of 0.3.0. <!-- documents: 024.290 -->
 
 ## Completion on a value that could be two things
 
@@ -735,13 +754,6 @@ method was found:
   exactly true in a module body: completion answers, signature help and
   hover do not. In a `class` body, and in a `def self.` inside a module,
   all three answer as of 0.2.16. <!-- documents: 024.243 -->
-- **At the top level of a file, outside any class, signature help says
-  nothing at all** — `puts(` written in a script rather than in a class
-  body. There is a fix for this that passes every test and makes things
-  worse: it would answer a call to *your own* top-level method with the
-  stdlib method of the same name, and `open` is the name that collides
-  most. It is being fixed properly rather than
-  quickly (024.229). <!-- documents: 024.229 -->
 - **Nothing is reported about a call whose receiver is `Object`** —
   which includes every bare call written at the top level of a file.
   What is on `Object` is whatever your process has loaded, and no static
@@ -809,24 +821,49 @@ measurement by driving the product, and none of those had been reported
 before; the first three below were found in 0.2.17, by renaming every
 local in a thousand files of real gem source and running what came out.
 
-- **Renaming a local that is a method or block parameter leaves the
-  parameter behind**, so the renamed method stops working — and where
-  the body assigns before it reads (`names = names || []`), nothing
-  raises and the method quietly answers something else. This is the
-  largest of the shapes here by a long way: renaming every local across
-  1,043 files of Rails and i18n source leaves 57 renames that change
-  what the file means, and every one of them is
-  this. <!-- documents: 024.273 -->
-- **A binding whose name begins with an underscore is left behind**
-  when it is written as a multiple-assignment target, a `for`
-  variable, a `rescue => _e` or a pattern. Ruby lets one pattern bind
-  such a name twice, and two edits that are each correct would then
-  make the file stop parsing, so none is
-  made. <!-- documents: 024.274 -->
-- **The first rename of a session is refused if nothing else has been
-  asked yet**: press F2 straight after opening a file and the rename does
-  not start, while using Find All References once makes the same position
-  work. That is one line away from being fixed
-  and is being kept on purpose until the shapes above are, because it is
-  what stops a local-variable rename being one keystroke
-  away. <!-- documents: 024.245 -->
+- **Renaming a local that is a *keyword* parameter is refused**, with the
+  reason shown. `def m(by:)` binds a local named `by` *because* the
+  keyword is `by`, and Ruby has no spelling that separates the two — so
+  renaming the local would rename the keyword every caller passes, which
+  is a different edit from the one asked for. Nothing is edited; change
+  the signature and its call sites by hand. Every other parameter —
+  positional, optional, `*rest`, `**opts`, `&block`, and block
+  parameters — is renamed with its uses.
+- **Renaming a local that a pattern also binds rewrites the rest and
+  leaves the pattern.** `in [_a, 1]` — or `in {a:}` for any name — is a
+  binding this extension does not record, and where the same name is
+  also assigned normally in that scope the rename goes ahead on the
+  occurrences it can see. The file still parses and still runs, and the
+  method answers something else:
+
+  ```ruby
+  def m(pair) = (_a = 0; case pair; in [_a, 1] then _a; end)   # => 5
+  def m(pair) = (bb = 0; case pair; in [_a, 1] then bb; end)   # => 0
+  ```
+
+  With no ordinary assignment of that name, the rename is refused
+  instead and nothing is edited. <!-- documents: 024.296 -->
+
+## Diagnostics say nothing about a method called on an `@ivar`
+
+**`@article.no_such_method` is not reported, while
+`Post.no_such_class_method` on the next line is.** Since 0.3.0 the
+engine knows what an instance variable holds even when it was assigned
+in another method — hover tells you, and completion after the dot
+offers its members — but the undefined-method check still does not act
+on that receiver.
+
+So this is a silence rather than a wrong report: nothing incorrect is
+said, and a real mistake goes unmentioned where the engine had enough
+to mention it. <!-- documents: 024.294 -->
+
+## The gem index is rebuilt on every start
+
+**The check that reports a typo on a class inheriting from a gem is off
+for the first seconds of each session.** It needs the running
+application's own class list — 2,077 classes on a small Rails 8 app — and
+that list is asked for once the app has booted and kept only in memory,
+so every Core start pays for it again.
+
+Nothing is reported wrongly in the meantime; the files you have open are
+re-answered once it lands. It is late, every time, rather than once. <!-- documents: 024.295 -->

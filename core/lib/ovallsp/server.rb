@@ -86,6 +86,7 @@ module Ovallsp
       @ancestry_registry = ancestry_registry
       @agent_bootstrap = agent_bootstrap
       @agent_manager = nil
+      @gem_index = Semantic::GemIndex.empty
       @agent_restart_mutex = Mutex.new
       @agent_refresh_mutex = Mutex.new
       # Serializing agent refreshes fixed out-of-order writes but made
@@ -318,7 +319,17 @@ module Ovallsp
 
       @logger.info("workspace root from the client: #{path}")
       @workspace_root = path
-      @signatures = load_signatures_environment
+      # **Reloaded in place, not replaced.** `AnalysisStack` was handed
+      # this object at construction, so assigning a new one here left
+      # the stack -- the local inferencer, and the hierarchy index that
+      # reads signatures to decide whether a bare name already denotes
+      # something -- holding one loaded from the process's own cwd,
+      # while every request-time reader got the adopted one. Two
+      # environments in one server, and which answered depended on
+      # which collaborator was asked. The reload path below already
+      # calls `#load` on the environment in place for exactly this
+      # reason; this is the same call at the other site.
+      load_signatures_into(@signatures)
     end
 
     def client_workspace_root(params)
@@ -386,6 +397,20 @@ module Ovallsp
         respond(id, with_index_snapshot { signature_help_result(message[:params]) })
       when "textDocument/references"
         respond(id, with_index_snapshot { references_result(message[:params]) })
+      when "textDocument/documentHighlight"
+        respond(id, with_index_snapshot { document_highlight_result(message[:params]) })
+      when "textDocument/codeAction"
+        respond(id, with_index_snapshot { code_action_result(message[:params]) })
+      when "textDocument/inlayHint"
+        respond(id, with_index_snapshot { inlay_hint_result(message[:params]) })
+      when "textDocument/typeDefinition"
+        respond(id, with_index_snapshot { type_definition_result(message[:params]) })
+      when "textDocument/prepareCallHierarchy"
+        respond(id, with_index_snapshot { prepare_call_hierarchy_result(message[:params]) })
+      when "callHierarchy/incomingCalls"
+        respond(id, with_index_snapshot { incoming_calls_result(message[:params]) })
+      when "callHierarchy/outgoingCalls"
+        respond(id, with_index_snapshot { outgoing_calls_result(message[:params]) })
       when "textDocument/prepareRename"
         respond(id, with_index_snapshot { prepare_rename_result(message[:params]) })
       when "textDocument/rename"
@@ -541,6 +566,7 @@ module Ovallsp
       # statically is one it must defer on rather than guess about, and
       # deferring is only right when an answer can actually arrive.
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
+      ensure_gem_index
       findings = with_index_snapshot do
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
@@ -709,6 +735,7 @@ module Ovallsp
     # answer differently about one view.
     def workspace_findings_for(document)
       @ancestry_registry.activate! if agent_manager_ready?(@agent_manager)
+      ensure_gem_index
       with_index_snapshot do
         context = diagnostics_semantic_context.with(assigned_ivars: assigned_ivars_for(document.uri, document))
         @diagnostics_engine.analyze(document: document, semantic_context: context, mode: @diagnostics_mode)
@@ -995,10 +1022,17 @@ module Ovallsp
 
     DIAGNOSTIC_SEVERITY = { error: 1, warning: 2, information: 3, hint: 4 }.freeze
 
+    # Stamped on everything this server publishes, and read back by
+    # `#code_action_result` -- which switched on `code` alone, so a
+    # diagnostic another extension published carrying one of these three
+    # codes was offered an edit computed from this engine's model of the
+    # file.
+    DIAGNOSTIC_SOURCE = "ovallsp"
+
     def to_lsp_diagnostic(finding)
       {
         range: finding.range, severity: DIAGNOSTIC_SEVERITY.fetch(finding.severity, 2), code: finding.code,
-        source: "ovallsp", message: finding.message, relatedInformation: finding.related_information
+        source: DIAGNOSTIC_SOURCE, message: finding.message, relatedInformation: finding.related_information
       }
     end
 
@@ -1015,6 +1049,65 @@ module Ovallsp
     # workspace is trusted and looks like a Rails app -- but it's not
     # currently responding), or "ready-static" (no Agent attempt at all:
     # untrusted workspace, or not a Rails app).
+
+    # `024.R7`. Asked once, when an Agent becomes ready, and never on the
+    # request path: the payload is hundreds of kilobytes -- 938 KB and
+    # 2,098 classes measured against this repository's own Rails fixture.
+    #
+    # **Nothing reads it to decide an answer yet.** It is held and
+    # reported, and the half that makes a gem class *closed* is a separate
+    # change: closedness and members have to arrive together, and turning
+    # silence into reports across every Rails file owes a corpus run with
+    # a control that this repository has no Agent-backed corpus tool for.
+    # `024.R7` carries what is left.
+    # Beside `@ancestry_registry.activate!`, because that is where
+    # "is there a running application to ask" is already decided, and
+    # because both paths that answer a document run through it.
+    #
+    # The first version called this once, from the bootstrap's own
+    # success branch -- a path the shared E2E client does not take, so
+    # the index loaded in some sessions and not others and the
+    # capability was off in the one that mattered. Idempotent and
+    # asked-once, rather than placed once.
+    def ensure_gem_index
+      return if @gem_index_loaded
+      return unless agent_manager_ready?(@agent_manager)
+
+      # **Set when there is an index, not when one is asked for.** This
+      # was the other way round, and `#load_gem_index` returns quietly
+      # on a nil payload -- which is what a slow or busy Agent gives
+      # back. So one timeout at boot left the index empty and this guard
+      # refusing to try again, and 0.3.0's whole gem-backed check was
+      # off until the editor restarted.
+      @gem_index_loaded = load_gem_index
+    end
+
+    def load_gem_index
+      # `respond_to?` rather than a rescue: a manager that cannot answer
+      # this question is not a failure to contain, it is a manager from
+      # before the question existed -- and the republish this sits in
+      # front of is what re-answers every open document once the Agent
+      # is ready. A NoMethodError here took that republish down with it.
+      return unless @agent_manager.respond_to?(:fetch_gem_index)
+
+      payload = @agent_manager.fetch_gem_index
+      # `false`, and said out loud. The caller reads it as "there is no
+      # index yet", which is the difference between a fetch that failed
+      # and a session that already has one.
+      if payload.nil?
+        @logger.info("gem index: the Agent answered nothing; will ask again")
+        return false
+      end
+
+      @gem_index = Semantic::GemIndex.from_agent(payload)
+      # Into the stack that is already running, which is the only place
+      # it changes an answer. Holding it on the server alone is what the
+      # first version did, and the capability it exists for stayed off.
+      @hierarchy_index.gem_index = @gem_index
+      @logger.info("gem index: #{@gem_index.size} class(es) from the running application")
+      true
+    end
+
     def status_result(_params)
       state =
         if @cold_indexing
@@ -1027,7 +1120,12 @@ module Ovallsp
           "ready-static"
         end
 
-      { state: state }
+      # `referenceIndexGeneration` is here so a check can assert that
+      # an operation did **not** rebuild the reference index --
+      # `documentHighlight` is answered from the open file alone, and
+      # the only way to say so from outside is to watch this not move.
+      { state: state, referenceIndexGeneration: @reference_index.generation,
+        gemIndexClasses: @gem_index.size }
     end
 
     # `OvalLSP: Restart Rails Agent` -- reuses the exact same
@@ -1581,8 +1679,13 @@ module Ovallsp
     # 失敗でRuby source解析を停止しない") — every downstream consumer already
     # treats a nil/empty Signatures::Environment as "no signature results",
     # never as an error.
-    def load_signatures_environment
-      env = Signatures::Environment.new
+    def load_signatures_environment = load_signatures_into(Signatures::Environment.new)
+
+    # One place that knows what a failed load does, because the two
+    # callers must not differ about it: a first load and an adoption
+    # of the editor's root both leave the environment readable and
+    # empty rather than raising.
+    def load_signatures_into(env)
       env.load(workspace_root: @workspace_root)
       env
     rescue StandardError => e
@@ -2038,6 +2141,808 @@ module Ovallsp
       @reference_index.references(symbol_id, minimum_confidence: :high).map { |r| { uri: r.uri, range: r.location } }
     end
 
+
+    # `textDocument/documentHighlight` -- the occurrences of the symbol
+    # under the cursor, **in this file only**.
+    #
+    # 0.3.0's first capability, and `045` orders it first of the four that
+    # need only what already exists. The comment on
+    # `#symbol_id_and_range_at` named the trap this has to avoid, and it is
+    # the whole reason this is not `references_result` filtered by uri:
+    # References and Rename call `#ensure_reference_index_current`, whose
+    # rebuild is O(workspace), and **the editor asks for highlights on
+    # every cursor move**. So nothing here touches the reference index, and
+    # `capabilities_spec`'s third F example asserts the generation does not
+    # move across five requests.
+    #
+    # The answer comes from the open file's own summary: the candidates it
+    # already recorded, narrowed by name before anything is resolved.
+    # The narrowing is by *name*, not by cost -- every surviving
+    # candidate is still resolved.
+
+    # A call hierarchy names methods. A class or a constant has no
+    # callers in this protocol's sense, and answering for one would be
+    # a list of mentions wearing a caller's name.
+    CALLABLE_KINDS = %i[instance_method singleton_method].freeze
+
+    def document_highlight_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return [] unless document && summary
+
+      symbol_id, = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
+      return [] unless symbol_id
+
+      highlights = matching_candidate_highlights(document, summary, uri, symbol_id)
+      # **Every declaration, not the first.** A method name is not a
+      # reference candidate, so this `select` is the only source of
+      # `def`-line highlights -- and with a class reopened, `find` made
+      # the two carets indistinguishable and left out the `def` the user
+      # was standing on.
+      #
+      # A declaration is `Write` -- it is where the name is introduced.
+      # `Read` for a call site. Neither is guessed: one comes from
+      # `declarations` and the other from `reference_candidates`.
+      summary.declarations.select { |d| d.symbol_id == symbol_id }.reverse_each do |declaration|
+        highlights.unshift({ range: declaration.name_location || declaration.location, kind: 3 })
+      end
+
+      highlights.uniq { |h| h[:range] }
+    end
+
+    # Narrowed by name first, resolved second.
+    #
+    # **Text unless the site is known to be a read, and that is a
+    # decision rather than an omission.**
+    # A `method_call` candidate is a call, and a call reads the method --
+    # `Read`, not an inference.
+    #
+    # **A local was `Text` when this shipped, and is `Read`/`Write` now.**
+    # The reason given then was that the parser records one
+    # `local_variable` kind for assignment and read alike -- true of that
+    # layer, and wrong about what was knowable: the parser has four
+    # separate write visitors and was discarding the distinction at
+    # `#record_local_variable`. Inlay hints needed the assignment sites,
+    # so the candidate carries `write` and this reads it.
+    #
+    # A `constant` candidate stays `Text`: it covers a class declaration's
+    # own name as well as every reference to it, and nothing here
+    # distinguishes them. `write` is `nil` there, which is what the guard
+    # in `#highlight_kind` reads.
+    def matching_candidate_highlights(document, summary, uri, symbol_id)
+      same_name = summary.reference_candidates.select { |c| candidate_may_match?(symbol_id, c) }
+      return [] if same_name.empty?
+
+      resolved = @reference_resolver.resolve(document, same_name, uri: uri,
+                                                                  generation: @reference_index.generation)
+      by_location = same_name.to_h { |c| [c.location, c] }
+      resolved.filter_map do |r|
+        next unless r && r.symbol_id == symbol_id
+
+        { range: r.location, kind: highlight_kind(by_location[r.location]) }
+      end
+    end
+
+
+    # **The pre-filter only has to stop being narrower than the
+    # resolver**, which decides afterwards -- so where the symbol's name
+    # and the candidate's spelling are two different things, both are
+    # admitted.
+    #
+    # A constant inside its own namespace is the first case: the symbol
+    # is `::Api::Widget` and the source writes `Widget`, so an exact
+    # comparison matched nothing and documentHighlight dropped every
+    # occurrence including the one under the caret.
+    #
+    # A route helper is the second: `RouteHelper#name` is the route
+    # *stem*, so the symbol is named `user` and every call site is
+    # spelled `user_path` or `user_url` -- the pair
+    # `RouteRegistry#find_by_method_name` already reverses.
+    def candidate_may_match?(symbol_id, candidate)
+      name = Index::SymbolId.bare_name(symbol_id.name.to_s)
+      spelling = candidate.name.to_s
+      return true if spelling == name
+      return true if name.end_with?("::#{spelling}")
+
+      symbol_id.kind == :route_helper && (spelling == "#{name}_path" || spelling == "#{name}_url")
+    end
+
+    # 1 = Text, 2 = Read, 3 = Write, per the protocol.
+    def highlight_kind(candidate)
+      return 1 unless candidate
+      return 2 if candidate.kind == :method_call
+      return 1 if candidate.write.nil?
+
+      candidate.write ? 3 : 2
+    end
+
+    # `textDocument/prepareCallHierarchy` and its two follow-ups.
+    #
+    # 0.3.0, and `045` calls it "an incremental step on the same index":
+    # incoming calls are the references the reference index already holds,
+    # grouped by the method each one sits inside, which is the difference
+    # between a call hierarchy and the flat list Find References gives.
+    #
+    # **This warms the reference index and documentHighlight does not.**
+    # That is the same decision read from the other side: opening a call
+    # hierarchy is a deliberate action, so paying for an O(workspace)
+    # rebuild once is right, where paying it on every cursor move is not.
+    def prepare_call_hierarchy_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return nil unless document && summary
+
+      symbol_id, range = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
+      return nil unless symbol_id && CALLABLE_KINDS.include?(symbol_id.kind)
+
+      # **The declaring file, not the requesting one.** A prepare at a
+      # *call site* found no declaration in this file's own summary and
+      # built the item out of the call: the item then asserted that the
+      # method lives here, at the call, and `outgoingCalls` -- which
+      # reads the body out of `item[:uri]` -- found nothing there and
+      # answered "no outgoing calls" for a method that has some.
+      declaration = summary.declarations.find { |d| d.symbol_id == symbol_id }
+      if declaration
+        return [call_hierarchy_item(symbol_id, uri, declaration.location, declaration.name_location || range)]
+      end
+
+      elsewhere = declaration_for_symbol(symbol_id)
+      return [call_hierarchy_item(symbol_id, uri, range, range)] unless elsewhere
+
+      declaring_uri, found = elsewhere
+      [call_hierarchy_item(symbol_id, declaring_uri, found.location, found.name_location || found.location)]
+    end
+
+    # Callers. The protocol wants the *calling method*, so each reference is
+    # attributed to the declaration whose recorded range contains it -- a
+    # `def`'s range spans its whole body, which is what makes containment the
+    # right question here and the wrong one in `#declaration_named_at`.
+    #
+    # A reference with no enclosing method is dropped rather than attributed
+    # to the file: a call written at the top level has no caller this
+    # protocol can name, and inventing one is an assertion about the user's
+    # code that nothing supports.
+    def incoming_calls_result(params)
+      symbol_id = symbol_id_from_call_hierarchy_item(params.fetch(:item))
+      return [] unless symbol_id
+
+      ensure_reference_index_current
+      grouped = Hash.new { |h, k| h[k] = [] }
+      @reference_index.references(symbol_id, minimum_confidence: :high).each do |reference|
+        enclosing = enclosing_callable(reference.uri, reference.location)
+        next unless enclosing
+
+        grouped[[reference.uri, enclosing.symbol_id]] << reference.location
+      end
+
+      grouped.filter_map do |(caller_uri, caller_id), ranges|
+        declaration = @file_summaries[caller_uri]&.declarations&.find { |d| d.symbol_id == caller_id } or next
+
+        { from: call_hierarchy_item(caller_id, caller_uri, declaration.location, declaration.name_location),
+          fromRanges: ranges }
+      end
+    end
+
+    # Callees. Read out of the method's own body in the file it is declared
+    # in -- the reference index is keyed by the symbol being referred *to*,
+    # so it answers the incoming question and not this one.
+    def outgoing_calls_result(params)
+      item = params.fetch(:item)
+      symbol_id = symbol_id_from_call_hierarchy_item(item)
+      uri = item[:uri]
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return [] unless symbol_id && document && summary
+
+      declaration = summary.declarations.find { |d| d.symbol_id == symbol_id }
+      return [] unless declaration
+
+      # **The same innermost-callable rule the incoming side uses.**
+      # Plain containment credited a call written inside a nested `def`
+      # to the method around it, while `#incoming_calls_result`
+      # credited the same call to the nested one -- the two directions
+      # contradicting each other about one call.
+      inside = summary.reference_candidates.select do |candidate|
+        candidate.kind == :method_call &&
+          enclosing_callable(uri, candidate.location)&.symbol_id == symbol_id
+      end
+      return [] if inside.empty?
+
+      resolved = @reference_resolver.resolve(document, inside, uri: uri, generation: @reference_index.generation)
+      grouped = Hash.new { |h, k| h[k] = [] }
+      resolved.each do |r|
+        # **A `:method_call` candidate does not only resolve to a method
+        # kind.** The comment that stood here said it did, and
+        # `ReferenceResolver`'s route-helper and model-registry paths
+        # both make it false: a `user_path(1)` call resolved to a
+        # `:route_helper`, and the hierarchy then named a callee that is
+        # not a method. No fixture could tell the two behaviours apart
+        # because none had a route registry loaded.
+        next unless CALLABLE_KINDS.include?(r.symbol_id.kind)
+
+        grouped[r.symbol_id] << r.location
+      end
+
+      grouped.filter_map do |callee_id, ranges|
+        # **Dropped rather than pointed somewhere.** With no declaration
+        # this used to hand back the *calling* file and let
+        # `#call_hierarchy_item` default the range to line 0, so the
+        # item offered a jump to the top of the wrong file. Section 0
+        # ranks no jump above a wrong one.
+        target = declaration_for_symbol(callee_id) or next
+
+        { to: call_hierarchy_item(callee_id, target.first, target.last.location, target.last.name_location),
+          fromRanges: ranges }
+      end
+    end
+
+    # The protocol hands the item back verbatim, so the symbol travels in
+    # `data` rather than being re-derived from a position that may have moved
+    # under the user between the prepare and the expansion.
+    # `range` is required. It used to default to line 0 when a caller
+    # had none, which is how a callee with no declaration came back
+    # pointing at the top of the calling file; the default is gone so
+    # the next caller cannot reintroduce that answer by accident.
+    def call_hierarchy_item(symbol_id, uri, range, selection_range)
+      { name: Index::SymbolId.bare_name(symbol_id.name.to_s),
+        kind: 6,
+        uri: uri,
+        range: range,
+        selectionRange: selection_range || range,
+        data: { kind: symbol_id.kind.to_s, owner: symbol_id.owner, name: symbol_id.name } }
+    end
+
+    def symbol_id_from_call_hierarchy_item(item)
+      data = item[:data] or return nil
+
+      Index::SymbolId.new(kind: data[:kind].to_sym, owner: data[:owner], name: data[:name], discriminator: nil)
+    rescue StandardError => e
+      # Contained: an `item` this server did not produce cannot be turned
+      # into a symbol, and `nil` makes every caller above answer the empty
+      # list -- which is "no hierarchy here", not a claim about the code.
+      @logger.warn("call hierarchy item could not be read: #{e.class}")
+      nil
+    end
+
+    # `#range_span`, the spelling `#declaration_named_at` already uses:
+    # ranking on line count alone made two `def`s written on one line
+    # tie, and `#min_by` keeps the first, so a call was credited to the
+    # outer method that did not make it.
+    def enclosing_callable(uri, location)
+      @file_summaries[uri]&.declarations&.select { |d| CALLABLE_KINDS.include?(d.symbol_id.kind) }
+                          &.select { |d| range_contains?(d.location, location) }
+                          &.min_by { |d| range_span(d.location) }
+    end
+
+    def declaration_for_symbol(symbol_id)
+      @file_summaries.each do |uri, summary|
+        found = summary.declarations.find { |d| d.symbol_id == symbol_id }
+        return [uri, found] if found
+      end
+      nil
+    end
+
+    def range_contains?(outer, inner)
+      return false unless outer && inner
+
+      after_start = outer[:start][:line] < inner[:start][:line] ||
+                    (outer[:start][:line] == inner[:start][:line] &&
+                     outer[:start][:character] <= inner[:start][:character])
+      before_end = inner[:end][:line] < outer[:end][:line] ||
+                   (inner[:end][:line] == outer[:end][:line] &&
+                    inner[:end][:character] <= outer[:end][:character])
+      after_start && before_end
+    end
+
+
+    # `textDocument/typeDefinition` -- the class an expression evaluates to.
+    #
+    # 0.3.0, and `045` calls it "cheap given `explainType` already resolves
+    # the type": the type comes from the same `#type_at` that answers hover,
+    # and the location from the index's own class declarations.
+    #
+    # **The difference from `textDocument/definition` is the whole point.**
+    # Go to definition on `made` lands on the assignment; go to *type*
+    # definition lands on `TdWidget`. An implementation that forwarded to
+    # the definition handler would answer plausibly and never be right, so
+    # `capabilities_spec`'s D4 asserts both at the same caret.
+    #
+    # Nothing is answered where the type is not a workspace class -- an
+    # unknown type, a stdlib class the workspace does not declare, a union.
+    # The nearest name that looks right is a guess, and section 0 ranks a
+    # wrong jump below no jump.
+    def type_definition_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      return [] unless document
+
+      position = params.fetch(:position)
+      query_context = build_query_context(uri, position)
+      type = @query_service.type_at(document, position, initial_env: view_initial_env(uri),
+                                                        budget: query_context.budget)
+      warn_if_stale(query_context)
+      return [] unless type.is_a?(Types::Nominal)
+
+      @workspace_index.class_declarations(type.name.to_s)
+    end
+
+    # `textDocument/inlayHint` -- what hover already answers, put where the
+    # code is.
+    #
+    # 0.3.0, and `045` calls it "the inference that already exists". Two
+    # kinds, both from things this server already computes:
+    #
+    #   `counted = 1`            ->  `: Integer` after the name
+    #   `resize(10, 20)`         ->  `width:` and `height:` before each
+    #
+    # **Nothing is labelled where the type is not known.** A hint is written
+    # into the margin of the user's code and read as the engine's answer, so
+    # a guess there is worse than a blank -- section 0, applied to a surface
+    # that is on screen continuously rather than asked for.
+    def inlay_hint_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return [] unless document && summary
+
+      range = params.fetch(:range)
+      local_type_hints(document, summary, uri, range) + parameter_name_hints(document, summary, uri, range)
+    end
+
+    # A type after each assignment, and only where the engine has one.
+    def local_type_hints(document, summary, uri, range)
+      writes = summary.reference_candidates.select do |candidate|
+        candidate.kind == :local_variable && candidate.write && position_in?(range, candidate.location[:end])
+      end
+
+      writes.filter_map do |candidate|
+        type = @query_service.type_at(document, candidate.location[:end], initial_env: view_initial_env(uri))
+        next unless type.is_a?(Types::Nominal)
+
+        { position: candidate.location[:end], label: ": #{Index::SymbolId.bare_name(type.name.to_s)}",
+          paddingLeft: false, paddingRight: true }
+      end
+    end
+
+    # The parameter each positional argument is being passed as, read from
+    # the callee's own declaration.
+    #
+    # **Both the declaration and the call can break the index**, and
+    # this said otherwise until 0.3.0: that a call-site splat needed no
+    # guard because the parser recorded `positional: 0` for it. It does
+    # not. `#call_argument_shape` rejects the splat *node* and keeps the
+    # arguments around it, so `take(1, *rest, 3)` records two locations,
+    # and Ruby fills the parameters from the flattened list:
+    #
+    #   $ ruby -e '
+    #   def f(a, b, c) = [a, b, c]
+    #   rest = [2]
+    #   p f(1, *rest, 3)
+    #   '
+    #   # => [1, 2, 3]
+    #   # ruby 3.4.10
+    #
+    # `3` is passed as `c`, so labelling by index writes `b:` beside it.
+    # The shape records `splat:` for exactly this, and its two other
+    # readers -- the arity check and the argument-type check -- each open
+    # with `next if shape[:splat]`. This was the third reader and the
+    # only one that did not.
+    #
+    # What breaks the
+    # index-to-parameter mapping is a *declaration* with a required
+    # parameter after an optional one -- Ruby fills the optional last:
+    #
+    #   $ ruby -e '
+    #   def f(a, b = 1, c) = [a, b, c]
+    #   p f(1, 2)
+    #   '
+    #   # => [1, 1, 2]
+    #   # ruby 3.4.10
+    #
+    # The second *argument* binds to the third *parameter*, so labelling by
+    # index would write `b:` beside a value Ruby passes as `c` -- in the
+    # margin, continuously, as the engine's answer. A `*rest` parameter is
+    # refused for the same reason.
+    #
+    # Optionals are labelled where the shape is plain, because there the
+    # mapping does hold and refusing them was under-answering.
+    def parameter_name_hints(document, summary, uri, range)
+      # **The range is tested where a hint goes, not where the call's
+      # name is.** `candidate.location` is the *message* -- `resize(` --
+      # so on a call written across lines, a request for the argument
+      # lines returned nothing (the opener was outside it) while a
+      # request for the opener's line returned hints below it, outside
+      # the range the client asked for. Asking whether any argument is
+      # in range is both the cheap pre-filter and the right question,
+      # because an argument's own position is the only place this
+      # emits.
+      calls = summary.reference_candidates.select do |candidate|
+        candidate.kind == :method_call && candidate.arguments &&
+          candidate.arguments[:positional].to_i.positive? &&
+          !candidate.arguments[:splat] && named_call?(candidate.name) &&
+          Array(candidate.arguments[:positional_locations]).any? { |l| position_in?(range, l[:start]) }
+      end
+      return [] if calls.empty?
+
+      # **Keyed by location, not zipped.** `ReferenceResolver#resolve`
+      # is a `filter_map`, so its result is shorter than `calls`
+      # whenever one call cannot be resolved -- and `calls.zip(resolved)`
+      # then paired every later call with the *previous* callee's
+      # parameters, rendering one method's parameter names beside
+      # another method's arguments. `#matching_candidate_highlights`
+      # already looks references up this way.
+      resolved = @reference_resolver.resolve(document, calls, uri: uri, generation: @reference_index.generation)
+      by_location = resolved.to_h { |reference| [reference.location, reference] }
+      calls.flat_map do |candidate|
+        reference = by_location[candidate.location]
+        next [] unless reference
+
+        parameters = positionally_mappable_parameters(parameters_of(reference.symbol_id))
+        next [] if parameters.empty?
+
+        Array(candidate.arguments[:positional_locations]).each_with_index.filter_map do |location, i|
+          parameter = parameters[i]
+          # `&.name`: a destructuring parameter (`def f((a, b), tail)`)
+          # is a `MultiTargetNode` and has none, and interpolating nil
+          # rendered a bare `:` in the margin beside the argument.
+          next unless parameter&.name
+          next unless position_in?(range, location[:start])
+          next if argument_spells?(document, location, parameter.name)
+
+          { position: location[:start], label: "#{parameter.name}:", paddingLeft: false, paddingRight: true }
+        end
+      end
+    end
+
+    # Whether a single position falls inside a range. The inlay-hint
+    # handlers ask this rather than `#range_contains?`, because what has
+    # to be inside the client's range is the hint, which has no extent.
+    def position_in?(range, position)
+      return false unless range && position
+
+      after_start = range[:start][:line] < position[:line] ||
+                    (range[:start][:line] == position[:line] &&
+                     range[:start][:character] <= position[:character])
+      before_end = position[:line] < range[:end][:line] ||
+                   (position[:line] == range[:end][:line] &&
+                    position[:character] <= range[:end][:character])
+      after_start && before_end
+    end
+
+    # Whether the callee has a name worth showing beside an argument.
+    # `self + v` labelled `v` with `other:`, which is true and says
+    # nothing -- an operator's operands are named by the operator. A
+    # name that does not begin like an identifier is one of Ruby's
+    # operator methods (`+`, `<=>`, `[]`, `==`).
+    # A trailing `=` is the attribute-write shape (`ParserService#visit_call_node`
+    # names it the same way), and `obj.name = "x"` rendered as
+    # `obj.name = value: "x"`. The index form of the same construct,
+    # `arr[0] = 1`, was already silent because `[]=` does not begin like
+    # an identifier -- two spellings of one thing answered oppositely.
+    def named_call?(name)
+      name.to_s.match?(/\A[A-Za-z_]/) && !name.to_s.end_with?("=")
+    end
+
+    # Whether the argument already spells the parameter, in which case
+    # the hint repeats the line back at the reader: `take(name)` against
+    # `def take(name)` rendered `name: name`. Every other language server
+    # suppresses that shape, and a hint's whole value is telling the
+    # reader something the code does not already say.
+    #
+    # It compares the argument's own source extent and nothing more. A
+    # looser rule -- the last segment of a member access, an ivar's stem
+    # -- buys a few more suppressions by deciding that two different
+    # expressions are the same expression, which is a claim rather than
+    # a rendering choice.
+    def argument_spells?(document, location, parameter_name)
+      first = document.position_to_char_offset(location[:start])
+      last = document.position_to_char_offset(location[:end])
+      return false unless last > first
+
+      document.text[first...last] == parameter_name.to_s
+    end
+
+    # The leading run of positional parameters, or nothing at all when the
+    # list is one an index cannot address. See the session above.
+    def positionally_mappable_parameters(parameters)
+      positional = parameters.take_while { |parameter| %i[required optional].include?(parameter.kind) }
+      return [] if positional.length < parameters.length && parameters[positional.length].kind == :rest
+      return [] if positional.any? { |parameter| parameter.kind == :optional } &&
+                   positional.last&.kind == :required
+
+      positional
+    end
+
+    def parameters_of(symbol_id)
+      @file_summaries.each_value do |summary|
+        found = summary.declarations.find { |d| d.symbol_id == symbol_id }
+        return Array(found.parameters) if found
+      end
+      []
+    end
+
+    # `textDocument/codeAction` -- a fix for a diagnostic this engine
+    # published.
+    #
+    # 0.3.0, and `045` calls it "the diagnostics that already exist". Three
+    # codes have an action; the rest do not, and that is the design rather
+    # than a gap. **A quick fix is applied with one click and its reasoning
+    # is never seen**, so it is offered only where the edit it would make is
+    # defined by the diagnostic itself. Section 0's "a wrong answer is worse
+    # than no answer" is at its sharpest on a surface that edits the file.
+    def code_action_result(params)
+      uri = params.fetch(:textDocument).fetch(:uri)
+      document = analyzable_document(@document_store.fetch(uri: uri))
+      summary = @file_summaries[uri]
+      return [] unless document && summary
+
+      Array(params.dig(:context, :diagnostics)).flat_map do |diagnostic|
+        # Ours, or nothing. The two `find`-on-range checks below are a
+        # second line of defence and were serving as the first.
+        next [] unless diagnostic[:source] == DIAGNOSTIC_SOURCE
+
+        case diagnostic[:code]
+        when "unknown-method" then define_method_action(document, summary, uri, diagnostic)
+        when "unknown-route-helper" then route_helper_action(document, uri, diagnostic)
+        when "argument-count" then surplus_argument_action(document, summary, uri, diagnostic)
+        else []
+        end
+      end.compact
+    end
+
+    # Insert `def name; end` into the class the call was made on -- which is
+    # the receiver's class, not the file the call is written in.
+    def define_method_action(document, summary, uri, diagnostic)
+      candidate = summary.reference_candidates.find do |c|
+        c.kind == :method_call && c.location == diagnostic[:range]
+      end
+      return [] unless candidate
+
+      resolved = @reference_resolver.resolve(document, [candidate], uri: uri,
+                                                                    generation: @reference_index.generation).first
+      owner = resolved&.symbol_id&.owner || receiver_owner_for(document, candidate)
+      return [] unless owner
+
+      target = @workspace_index.class_declarations(owner).first
+      return [] unless target
+      # **Not into somebody else's installed gem.** The insertion target
+      # is the *owner's* declaring file, and for a class defined in a
+      # gem that is a read-only path inside the bundle -- so one click
+      # offered to edit vendored source. `…/gems/<name>-<version>/` is
+      # the shape every installed gem's path has, whatever the bundle
+      # layout; it is the same match the Runtime Agent uses to attribute
+      # a module to a gem.
+      return [] if INSTALLED_GEM_PATH.match?(target[:uri].to_s)
+
+      [{ title: "Define `#{candidate.name}` in #{Index::SymbolId.bare_name(owner)}",
+         kind: "quickfix", diagnostics: [diagnostic],
+         edit: { changes: { target[:uri] => [insertion_for(target, candidate)] } } }]
+    end
+
+    INSTALLED_GEM_PATH = %r{/gems/[^/]+-[0-9][^/]*/}
+
+    # **Immediately above the class's own `end`, not one line below its
+    # first.** "The class's start line plus one" is the body's first
+    # line only where the class is written across lines with nothing
+    # after the header: a one-line class put the `def` *after* its own
+    # `end`, and a header written across lines put it between `class Wide <`
+    # and the superclass. Both results parse -- which is why the E2E
+    # assertion, "the applied text parses", could not see either -- and
+    # neither defines the method: the first raises NoMethodError at the
+    # call the fix was offered for, the second a TypeError on load.
+    #
+    # The `end` is the one landmark this has without the class's body,
+    # which `WorkspaceIndex#class_declarations` does not carry.
+    def insertion_for(target, candidate)
+      range = target[:range]
+      # The parameters the call actually passes. Without them, applying
+      # this fix produced the *next* diagnostic immediately -- "takes 0
+      # arguments, but 2 given" -- whose own fix used to do nothing.
+      arity = candidate.arguments ? candidate.arguments[:positional].to_i : 0
+      signature = arity.positive? ? "(#{(1..arity).map { |i| "arg#{i}" }.join(', ')})" : ""
+
+      if range[:start][:line] == range[:end][:line]
+        # One line: insert just before the closing `end`, which is the
+        # only interior position this can name.
+        at = { line: range[:end][:line], character: [range[:end][:character] - 3, 0].max }
+        return { range: { start: at, end: at }, newText: "def #{candidate.name}#{signature}\nend\n" }
+      end
+
+      # The comment this replaces claimed "at the indentation its body
+      # uses" while two spaces were hardcoded, so a class nested in a
+      # module got its `def` at the wrong depth.
+      indent = " " * (range[:start][:character] + 2)
+      at = { line: range[:end][:line], character: 0 }
+      { range: { start: at, end: at },
+        newText: "#{indent}def #{candidate.name}#{signature}\n#{indent}end\n" }
+    end
+
+    # `candidate.receiver` is `{position:, written_self:}` -- a point, not
+    # a range. The first version asked it for `[:end]` and got `nil`, so
+    # every fix that needed the receiver's type answered nothing and the
+    # example that exists for it failed with an empty list rather than a
+    # wrong one. Read from the structure rather than from what a receiver
+    # looked like it should be.
+    def receiver_owner_for(document, candidate)
+      position = candidate.receiver.is_a?(Hash) ? candidate.receiver[:position] : nil
+      return nil unless position
+
+      type = @query_service.type_at(document, position, initial_env: {})
+      type.is_a?(Types::Nominal) ? type.name.to_s : nil
+    end
+
+    # How far the written name may be from a real helper before nothing
+    # is offered. Beyond this, "closest" stops meaning anything: two
+    # names four edits apart are different names, and rewriting one into
+    # the other is a wrong edit rather than a fix.
+    MAX_ROUTE_HELPER_DISTANCE = 3
+
+    # Replace the name with the closest helper the application actually has.
+    # Nothing is offered when nothing is close: a fix that rewrites one
+    # wrong name into another is worse than the diagnostic alone.
+    def route_helper_action(document, uri, diagnostic)
+      written = word_at_position(document, diagnostic[:range][:start])
+      return [] unless written
+
+      nearest = @route_registry.completion_names.min_by { |name| levenshtein(written, name) }
+      return [] unless nearest && levenshtein(written, nearest) <= MAX_ROUTE_HELPER_DISTANCE
+
+      [{ title: "Change to `#{nearest}`", kind: "quickfix", diagnostics: [diagnostic],
+         edit: { changes: { uri => [{ range: diagnostic[:range], newText: nearest }] } } }]
+    end
+
+    # Too many arguments has a defined edit: delete the ones past the
+    # maximum. **Too few does not**, and nothing is offered there -- there is
+    # no value to write, and writing `nil` would be this engine putting a
+    # guess into the user's file.
+    def surplus_argument_action(document, summary, uri, diagnostic)
+      candidate = summary.reference_candidates.find do |c|
+        c.kind == :method_call && c.location == diagnostic[:range] && c.arguments
+      end
+      return [] unless candidate
+
+      locations = Array(candidate.arguments[:positional_locations])
+      keep = diagnostic_maximum(diagnostic)
+      return [] unless keep && locations.length > keep
+
+      surplus = locations[keep..]
+      # `locations[keep - 1]` is `locations[-1]` when the callee takes
+      # none -- the *last* argument -- so `from` equalled `to` and the
+      # offered fix was an empty deletion at a point: clicking it
+      # changed nothing and the diagnostic stayed. With nothing to keep,
+      # the deletion starts at the first argument, leaving `none()`.
+      from = keep.zero? ? locations.first[:start] : locations[keep - 1][:end]
+      to = surplus.last[:end]
+      return [] if crosses_a_heredoc?(document, from, to)
+
+      [{ title: "Remove #{surplus.length} surplus argument#{'s' if surplus.length > 1}",
+         kind: "quickfix", diagnostics: [diagnostic],
+         edit: { changes: { uri => [{ range: { start: from, end: to }, newText: "" }] } } }]
+    end
+
+    # **A heredoc keeps its body on the lines below**, and the argument's
+    # own range covers only the marker. Deleting `, <<~TXT` left
+    #
+    #     takes_one(1)
+    #       body line
+    #     TXT
+    #
+    # which still parses -- `body line` reads as a call and `TXT` as a
+    # constant -- so the file changed meaning with nothing to say so, at
+    # one click, on the surface where section 0 is sharpest.
+    #
+    # The question is asked of the text being *deleted* rather than of
+    # the call, which is the whole of why it is this cheap: a heredoc
+    # among the arguments being kept is not a problem, because its
+    # marker stays where its body expects it, so `f(<<~A, 2)` is still
+    # fixable.
+    #
+    # A `<<` inside a string literal in the deleted span refuses a fix
+    # that would have been safe. That is the direction this surface
+    # errs in everywhere else too.
+    HEREDOC_OPENER = /<<[-~]?['"`]?[A-Za-z_]/
+
+    # **Asking only whether the span *opens* a heredoc missed the span
+    # that *closes* one.** With the marker among the arguments being
+    # kept and the surplus argument written after the terminator --
+    #
+    #     takes_one(<<~SQL,
+    #       select 1
+    #     SQL
+    #       2)
+    #
+    # -- the deleted text holds no `<<` at all, so the regex was silent,
+    # the fix ate the body and the terminator, and the result did not
+    # parse. So the question is whether the deletion *crosses* a
+    # heredoc: it does when it reaches past the opener's own line while
+    # a heredoc is still open there. A deletion that stays on the
+    # opener's line -- `f(<<~A, 2)` losing `, 2` -- leaves the body
+    # exactly where the marker expects it, and is still offered.
+    def crosses_a_heredoc?(document, from, to)
+      return true if opens_a_heredoc?(document, from, to)
+
+      heredoc_line_spans(document).any? do |(open_line, close_line)|
+        to[:line] > open_line && from[:line] <= close_line
+      end
+    end
+
+    def opens_a_heredoc?(document, from, to)
+      first = document.position_to_char_offset(from)
+      last = document.position_to_char_offset(to)
+      return false unless last > first
+
+      document.text[first...last].match?(HEREDOC_OPENER)
+    end
+
+    # `[opener line, terminator line]` -- zero-based -- for every heredoc
+    # in the file, asked of Prism rather than of a regexp, because the
+    # regexp is exactly what could not see the closing side.
+    # No `rescue`: `Prism.parse` reports a malformed file as errors on
+    # the result rather than by raising, and the visitor below only
+    # reads locations off the nodes it is handed.
+    def heredoc_line_spans(document)
+      spans = []
+      Prism.parse(document.text).value.accept(HeredocCollector.new(spans))
+      spans
+    end
+
+    class HeredocCollector < Prism::Visitor
+      def initialize(spans)
+        @spans = spans
+        super()
+      end
+
+      def visit_string_node(node) = record(node) || super
+      def visit_interpolated_string_node(node) = record(node) || super
+      def visit_x_string_node(node) = record(node) || super
+      def visit_interpolated_x_string_node(node) = record(node) || super
+
+      private
+
+      def record(node)
+        return nil unless node.respond_to?(:heredoc?) && node.heredoc? && node.opening_loc && node.closing_loc
+
+        @spans << [node.opening_loc.start_line - 1, node.closing_loc.start_line - 1]
+        nil
+      end
+    end
+    private_constant :HeredocCollector
+
+    # The message states the arity, and the finding's evidence does not
+    # survive the round trip to the client -- so it is read back from the
+    # text the client hands in, which is the only thing the protocol
+    # guarantees is the same on both sides.
+    def diagnostic_maximum(diagnostic)
+      # **The *maximum*.** `#expected_arity` writes a range whenever the
+      # required count differs from the maximum -- "takes 1..2
+      # arguments" -- and the pattern captured the first number it saw,
+      # which is the minimum. The fix then deleted back to the required
+      # count and silently discarded an optional argument the callee
+      # accepts. (The old "at most" alternative was never produced, and
+      # its second branch was unreachable behind the first.)
+      message = diagnostic[:message].to_s
+      return nil unless message =~ /takes (?:\d+\.\.)?(\d+)(?: positional)? argument/
+
+      Regexp.last_match(1).to_i
+    end
+
+    # Edit distance, for "the closest helper the application has". Two rows
+    # rather than a full matrix: the inputs are identifier-length and this
+    # runs once per offered fix, so the shorter form is the simpler one.
+    def levenshtein(from, to)
+      previous = (0..to.length).to_a
+      from.each_char.with_index do |a, i|
+        current = [i + 1]
+        to.each_char.with_index do |b, j|
+          current << [previous[j + 1] + 1, current[j] + 1, previous[j] + (a == b ? 0 : 1)].min
+        end
+        previous = current
+      end
+      previous.last
+    end
+
     def range_span(range)
       [range[:end][:line] - range[:start][:line], range[:end][:character] - range[:start][:character]]
     end
@@ -2093,6 +2998,21 @@ module Ovallsp
       document = analyzable_document(@document_store.fetch(uri: uri))
       summary = @file_summaries[uri]
       return nil unless document && summary
+
+      # **The index the planner reads, warmed before it is read.**
+      # `#references_result` and `#rename_result` both do this and this
+      # did not, so with the index cold -- its state until the user has
+      # run Find All References or an actual rename, and again after
+      # every edit that bumps the generation -- `#locations_for` saw
+      # declarations only. A local variable has none, so the editor
+      # refused the rename box at a position where `textDocument/rename`
+      # would have worked. `024.245`.
+      #
+      # Not the trade `documentHighlight` makes. That is asked on every
+      # cursor move and the rebuild is O(workspace), which is why it
+      # answers from the open file's own summary instead; this is asked
+      # once, when the user presses F2.
+      ensure_reference_index_current
 
       symbol_id, range = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
       return nil unless symbol_id
@@ -2223,6 +3143,17 @@ module Ovallsp
       return { isIncomplete: false, items: [] } unless document
 
       position = params.fetch(:position)
+
+      # A sigil, or any name, inside a string or a comment is text.
+      # The prefix is read from the characters to the left and cannot
+      # tell the two apart, so typing an address into a string opened
+      # the class's instance variables. `#inside_string_or_comment?`
+      # is the same mask the `def` scan and the call scan already ask;
+      # this was the third reader of that question and the only one
+      # that did not ask it.
+      if inside_string_or_comment?(document, document.position_to_char_offset(position))
+        return { isIncomplete: false, items: [] }
+      end
       prefix = word_prefix_at_position(document, position)
 
       # After a receiver dot the question is "what can be called on this
@@ -2236,9 +3167,11 @@ module Ovallsp
       if receiver_dot_before?(document, position)
         return { isIncomplete: false, items: member_completion_items(document, position, prefix) }
       end
-      # Completion after `@` -- the instance variables in scope -- was
-      # built during 0.2.1's review loop and is deferred to 0.3.0 with the
-      # capability row that named it.
+      # Completion after `@` was built during 0.2.1's review loop and
+      # deferred to 0.3.0 with the capability row that named it. It
+      # answers here now: the sigil is part of the prefix, `@` is no
+      # longer a bound one, and the scope carries the class's instance
+      # variables rather than only the method's (`024.86`).
       # A bare identifier is what the workspace and Kernel sources answer
       # about. `$stdout`, `:symbol` and the name in a `def` are not bare
       # identifiers, and each was answered with every constant starting
@@ -2256,7 +3189,8 @@ module Ovallsp
               ) }
           end
         end
-      bare = @prefix_completion.items(document: document, position: position, prefix: prefix)
+      bare = @prefix_completion.items(document: document, position: position, prefix: prefix,
+                                      initial_env: view_initial_env(document.uri))
       { isIncomplete: bare.incomplete, items: route_items + bare.items }
     end
 
@@ -2283,7 +3217,19 @@ module Ovallsp
       receiver_type = receiver_type_before_dot(document, position)
       return [] unless receiver_type
 
-      @query_service.members_of(receiver_type, prefix: prefix).map do |member|
+      # **The one enumeration with a receiver in front of it.** Ruby
+      # refuses a private method called that way, and RBS says which
+      # they are -- `fork`, `exec`, `abort`, `exit!`, `eval`,
+      # `initialize` and `puts` are all `:private` on `Object`.
+      # Offering them put 69 of 121 labels on a plain Ruby class that
+      # raise when picked (`024.99`).
+      #
+      # Asked for here rather than defaulted on in `#members_of`:
+      # every other caller is a bare prefix, which is the one place
+      # Ruby *does* let those be called, and making the filter the
+      # default dropped `puts` from the top level of every file.
+      @query_service.members_of(receiver_type, prefix: prefix,
+                                context: { explicit_receiver: true }).map do |member|
         item = { label: member.name, kind: COMPLETION_KIND.fetch(member.origin, 1), detail: member.detail&.to_s,
                  sortText: Semantic::PrefixCompletion.sort_text(
                    member.conditional ? MEMBER_ON_ONE_BRANCH : MEMBER_ON_EVERY_BRANCH, member.name
@@ -2648,7 +3594,17 @@ module Ovallsp
     # Whether the identifier under the cursor is spoken for -- by a sigil
     # that makes it a variable or a symbol rather than a name to resolve,
     # or by a `def` that makes it a name being *declared*.
-    BOUND_PREFIX_SIGILS = %w[@ $ :].freeze
+    # `@` left this list in 0.3.0: an instance variable is a name this
+    # engine can now answer about, which is what the row `024.86`
+    # carries promises. `$` and `:` stay -- a global and a symbol are
+    # still names nothing here tracks, and answering them with every
+    # constant that starts the same way is the failure this guard
+    # exists for.
+    BOUND_PREFIX_SIGILS = %w[$ :].freeze
+
+    # `@@count` is a class variable, and this engine tracks none. It
+    # stays bound, which single `@` no longer is.
+    CLASS_VARIABLE_SIGIL = "@@"
 
     def bound_prefix_before?(document, position)
       text = document.text
@@ -2666,6 +3622,7 @@ module Ovallsp
       # The character immediately before the word answers all of them,
       # `@@count` included -- its nearest neighbour is still an `@`.
       return true if BOUND_PREFIX_SIGILS.include?(text[left - 1])
+      return true if text[(left - 2)...left] == CLASS_VARIABLE_SIGIL
 
       # `undef` names a method the same way `def` does -- a name being
       # declared or removed, not one to resolve. The boundary is `def`
@@ -2766,12 +3723,26 @@ module Ovallsp
 
 
 
+    # 024.86, and the roadmap's "the moment you type the sigil": an
+    # `@` is part of the name being typed, not a boundary before it.
+    # Without it the prefix at `@` is the empty string, which matches
+    # every name in scope and therefore none of the ivars -- the
+    # completion had the names and could not select them.
+    #
+    # Only leading, and only one: `@@x` is a class variable and `a@b`
+    # is not an identifier, so the sigil is taken where a name can
+    # start and nowhere else.
     def word_prefix_at_position(document, position)
       text = document.text
       offset = document.position_to_char_offset(position)
 
       left = offset
       left -= 1 while left > 0 && word_char?(text[left - 1])
+      # One statement, not two identical lines. Written as two, either could
+      # be deleted with the other still answering, so neither was pinned --
+      # measured, and the fixture could not tell the two behaviours apart
+      # because a single `@` needs only one of them.
+      left -= 1 while left.positive? && text[left - 1] == "@"
       text[left...offset]
     end
 
@@ -3392,6 +4363,11 @@ module Ovallsp
           documentSymbolProvider: true,
           definitionProvider: true,
           referencesProvider: true,
+          documentHighlightProvider: true,
+          callHierarchyProvider: true,
+          typeDefinitionProvider: true,
+          inlayHintProvider: true,
+          codeActionProvider: true,
           renameProvider: { prepareProvider: true },
           workspaceSymbolProvider: true,
           completionProvider: { triggerCharacters: ["."], resolveProvider: true },

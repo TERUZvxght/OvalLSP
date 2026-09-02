@@ -247,6 +247,7 @@ module Ovallsp
       def initialize(lines)
         super()
         @lines = lines
+        @pattern_depth = 0
         @declarations = []
         @ancestor_facts = []
         @alias_facts = []
@@ -1043,7 +1044,7 @@ module Ovallsp
       # left as it was and recorded, because changing it changes an
       # answer this entry did not measure.
       def visit_local_variable_write_node(node)
-        record_local_variable(node.name, node.name_loc)
+        record_local_variable(node.name, node.name_loc, write: true)
         super
       end
 
@@ -1054,18 +1055,109 @@ module Ovallsp
       # (`024.260`, `024.266`). `semantic_tokens.rb` already enumerates
       # the same six.
       def visit_local_variable_operator_write_node(node)
-        record_local_variable(node.name, node.name_loc)
+        record_local_variable(node.name, node.name_loc, write: true)
         super
       end
 
       def visit_local_variable_or_write_node(node)
-        record_local_variable(node.name, node.name_loc)
+        record_local_variable(node.name, node.name_loc, write: true)
         super
       end
 
       def visit_local_variable_and_write_node(node)
-        record_local_variable(node.name, node.name_loc)
+        record_local_variable(node.name, node.name_loc, write: true)
         super
+      end
+
+      # **A parameter binds a local, and its own name was not an
+      # occurrence of it.** Each scope frame is seeded from Prism's
+      # `#locals`, which lists the parameter names, so a *use* of `arg`
+      # resolved to the right frame from the start -- and nothing ever
+      # recorded the `arg` written in the signature. Every reader of
+      # those occurrences was therefore one short: documentHighlight
+      # answered with the body alone, and Rename rewrote the body alone,
+      # handing back
+      #
+      #   def g(arg)
+      #     renamed + 1
+      #   end
+      #
+      # which parses and raises `NameError`. That is the defect 0.2.17
+      # shipped a fix for, reached through a binding form that had never
+      # been recorded -- and Rename could not have refused instead,
+      # because an occurrence nothing records is one nothing can miss.
+      #
+      # Recorded as a write: the binding site is where the value arrives.
+      #
+      # The keyword forms need `#chop`, because Prism's `name_loc` for
+      # them spans the colon as well:
+      #
+      #   $ ruby -rprism -e '
+      #   n = Prism.parse("def f(key:); end").value.statements.body.first
+      #   p n.parameters.keywords.first.name_loc.slice
+      #   '
+      #   # => "key:"
+      #   # ruby 3.4.10
+      #
+      # `#record_local_variable` compares the range against the name and
+      # declines when they differ, so an unchopped keyword would have been
+      # dropped silently rather than recorded wrong -- the safe half of a
+      # guard doing the work a visitor should.
+      def visit_required_parameter_node(node)
+        record_parameter_binding(node)
+        super
+      end
+
+      def visit_optional_parameter_node(node)
+        record_parameter_binding(node)
+        super
+      end
+
+      def visit_rest_parameter_node(node)
+        record_parameter_binding(node)
+        super
+      end
+
+      def visit_keyword_rest_parameter_node(node)
+        record_parameter_binding(node)
+        super
+      end
+
+      def visit_block_parameter_node(node)
+        record_parameter_binding(node)
+        super
+      end
+
+      # A bare `*`, `**` or `&` binds nothing nameable, and Prism gives
+      # those a nil name.
+      #
+      # **Which location holds the name is not uniform.** A
+      # `RequiredParameterNode` has no `name_loc` at all -- its own
+      # `location` is the name -- while the other kinds have one:
+      #
+      #   $ ruby -rprism -e 'ps = Prism.parse("def f(a, b = 1); end").value.statements.body.first.parameters
+      #                      p ps.requireds.first.respond_to?(:name_loc)
+      #                      p ps.optionals.first.name_loc.slice'
+      #   # => false
+      #   # => "b"
+      #   # ruby 3.4.10
+      #
+      # Reaching for `name_loc` on all of them raised `NoMethodError`
+      # inside the walk, which took hover, signature help, the arity check
+      # and both inlay hints down with it: thirteen examples, one cause.
+      # `#record_local_variable` compares the range against the name and
+      # declines when they differ, so a location picked wrongly here is
+      # dropped rather than recorded wrong.
+      #
+      # **The two keyword nodes are not here, deliberately.** `def m(by:)`
+      # spells the method's interface: rewriting that `by` renames the
+      # keyword every caller passes, not the local. `024.273` names the
+      # direction and names the exception, and `024.272` is the reason.
+      def record_parameter_binding(node)
+        return unless node.name
+
+        location = node.respond_to?(:name_loc) && node.name_loc ? node.name_loc : node.location
+        record_local_variable(node.name, location, write: true)
       end
 
       # `a, b = 1, 2`, a `for` variable, `rescue => e`, a pattern capture
@@ -1100,9 +1192,85 @@ module Ovallsp
       # had: until this release no target spelling was recorded at all.
       # A plain `_a = 1` write is unaffected -- that is a write node, and
       # writes may repeat freely.
+      # **A target assigns.** Every binding form that is not a plain
+      # write node arrives here -- a multiple assignment's left-hand
+      # side, a `for` variable, every pattern binding, `x => bound`,
+      # `rescue => e` -- and 0.3.0's `write` flag was set only by the
+      # four write-node visitors, so `a, b = 1, 2` recorded `a` as a
+      # read: no inlay hint, and `Read` where documentHighlight should
+      # say `Write`.
       def visit_local_variable_target_node(node)
-        record_local_variable(node.name, node.location) unless node.name.start_with?("_")
+        record_local_variable(node.name, node.location, write: true) unless declined_underscore?(node.name)
         super
+      end
+
+      # **Only inside a pattern.** A pattern may bind one name twice when it
+      # begins with an underscore, and each of those two ranges really is
+      # the name -- so nothing asked *at a range* can see that it is the
+      # pair that would be illegal, and `Rename::Planner` builds one
+      # `newText` per range. Ruby:
+      #
+      #   $ ruby -e '
+      #   ["_a, _a = 1, 2; [_a]",
+      #    "case [1, 2]; in [_a, _a] then :ok; end",
+      #    "case [1, 2]; in [zz, zz] then :ok; end"].each do |src|
+      #     begin
+      #       eval(src)
+      #       puts "legal"
+      #     rescue SyntaxError
+      #       puts "SyntaxError"
+      #     rescue StandardError
+      #       puts "legal"
+      #     end
+      #   end
+      #   '
+      #   # => legal
+      #   # => legal
+      #   # => SyntaxError
+      #   # ruby 3.4.10
+      #
+      # A multiple assignment, a `for` variable and a `rescue => _e` cannot
+      # produce that pair, and 0.2.17 declined all of them alike -- which
+      # cost documentHighlight and Find References an occurrence apiece for
+      # a rule that does not reach them. `024.274`.
+      def declined_underscore?(name)
+        @pattern_depth.positive? && name.to_s.start_with?("_")
+      end
+
+      # `MatchRequiredNode` (`h => [a]`) and `MatchPredicateNode`
+      # (`h in [a]`) are a pattern and nothing else, so the whole node
+      # can carry the depth.
+      %i[match_required_node match_predicate_node].each do |suffix|
+        define_method(:"visit_#{suffix}") do |node|
+          @pattern_depth += 1
+          super(node)
+        ensure
+          @pattern_depth -= 1
+        end
+      end
+
+      # **An `in` clause's body is not a pattern.** Raising the depth
+      # around the whole clause was argued as taking nothing away --
+      # every underscore binding "in here" was declined before -- and
+      # that reading of "in here" was wrong: the clause's *body* holds
+      # ordinary statements, so `_p, _q = 1, 2` written inside a branch
+      # was declined as a pattern target. Renaming from a read then
+      # rewrote the reads and left the assignment, which changes what
+      # the method returns.
+      #
+      # A guard is inside `node.pattern` -- Prism wraps the pattern in an
+      # `IfNode` whose predicate is the guard -- so raising the depth
+      # around the pattern alone still covers every child a guard can
+      # hide behind, which is what the previous comment was worried
+      # about.
+      def visit_in_node(node)
+        @pattern_depth += 1
+        begin
+          visit(node.pattern)
+        ensure
+          @pattern_depth -= 1
+        end
+        visit(node.statements)
       end
 
       # **A regexp named capture binds a local, and Prism points at the
@@ -1142,7 +1310,7 @@ module Ovallsp
             next if target.location.slice == target.name.to_s
 
             location = capture_name_location(pattern, target.name.to_s)
-            record_local_variable(target.name, location) if location
+            record_local_variable(target.name, location, write: true) if location
           end
         end
         super
@@ -1248,7 +1416,13 @@ module Ovallsp
         return unless frame
 
         record_reference(:local_variable, value.name.to_s, node.location,
-                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: true)
+                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: true,
+                         # A read: `{ name: }` passes the local's value.
+                         # This reached `record_reference` directly and
+                         # took the `nil` default, which downstream reads
+                         # as "not a local" -- so one occurrence of a
+                         # local answered `Text` and the next `Read`.
+                         write: false)
         # `super` is deliberately not called, and deliberately not
         # *guarded against* either: measured, descending adds no second
         # candidate for the same name, because the read inside an
@@ -1260,23 +1434,78 @@ module Ovallsp
         # on the omission.
       end
 
+      # An ivar carries the same `write` flag a local does, and for the
+      # same two readers: inlay hints label assignments, and
+      # documentHighlight answers `Read`/`Write`. Without it both
+      # answered `Text` -- the flag's `nil` default, which downstream
+      # reads as "not known to be either".
       def visit_instance_variable_read_node(node)
-        record_reference(:ivar, node.name.to_s, node.location)
+        record_reference(:ivar, node.name.to_s, node.location, write: false)
         super
       end
 
       def visit_instance_variable_write_node(node)
-        record_reference(:ivar, node.name.to_s, node.name_loc)
+        record_reference(:ivar, node.name.to_s, node.name_loc, write: true)
         super
       end
 
+      # The operator forms and the multiple-assignment target were not
+      # recorded *at all* until 0.3.0's review -- not as reads, not as
+      # writes -- because only the two nodes above had visitors. That is
+      # not a missing flag: documentHighlight showed two of the four
+      # occurrences of a memoised ivar, and rename rewrote the same two,
+      # handing back a file that still parses and memoises into an ivar
+      # nothing reads. The same six kinds a local already has.
+      def visit_instance_variable_operator_write_node(node)
+        record_reference(:ivar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_instance_variable_or_write_node(node)
+        record_reference(:ivar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_instance_variable_and_write_node(node)
+        record_reference(:ivar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_instance_variable_target_node(node)
+        record_reference(:ivar, node.name.to_s, node.location, write: true)
+        super
+      end
+
+      # Class variables take the flag for the same reason ivars do:
+      # without it `@@x = 1` answered `Text` where `@x = 1` answers
+      # `Write`, two spellings of one construct highlighted oppositely.
       def visit_class_variable_read_node(node)
-        record_reference(:cvar, node.name.to_s, node.location)
+        record_reference(:cvar, node.name.to_s, node.location, write: false)
         super
       end
 
       def visit_class_variable_write_node(node)
-        record_reference(:cvar, node.name.to_s, node.name_loc)
+        record_reference(:cvar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_class_variable_operator_write_node(node)
+        record_reference(:cvar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_class_variable_or_write_node(node)
+        record_reference(:cvar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_class_variable_and_write_node(node)
+        record_reference(:cvar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_class_variable_target_node(node)
+        record_reference(:cvar, node.name.to_s, node.location, write: true)
         super
       end
 
@@ -1345,6 +1574,7 @@ module Ovallsp
         if kind == :class
           record_assigned_superclass(node)
           record_assigned_class_open_surface(node)
+          record_assigned_struct_members(node)
         end
 
         super
@@ -1538,6 +1768,59 @@ module Ovallsp
         owner = Index::SymbolId.bare_name(assigned_class_name(node))
         @open_surface_owners << [owner, :instance]
         @open_surface_owners << [owner, :singleton]
+      end
+
+      # **A `Struct` or `Data` constant names its members in the call**, and
+      # they were recorded nowhere -- so `Seed.new.` offered 51 items and
+      # not `seed`, and hover and definition had nothing either. Asked of
+      # Ruby, including the arguments that are not members:
+      #
+      #     Struct.new(:a, :b).instance_methods(false)          # => [:a, :a=, :b, :b=]
+      #     Struct.new(:a, keyword_init: true)…(false)          # => [:a, :a=]
+      #     Struct.new("Named", :c).instance_methods(false)     # => [:c, :c=]
+      #     Data.define(:x, :y).instance_methods(false)         # => [:x, :y]
+      #     Data.define.instance_methods(false)                 # => []
+      #
+      # Symbols only, and a writer for `Struct` where `Data` has none.
+      #
+      # **The surface stays open**, which is the whole of why this is safe
+      # to add. `024.110`'s rule is that an enumeration carries its own
+      # completeness and a generated one cannot; naming the class without
+      # opening it produced ``HeredocData has no method named
+      # `common_whitespace=` `` over real gem source. This adds what the
+      # class *has* and asserts nothing about what it lacks. `024.237`.
+      def record_assigned_struct_members(node)
+        value = node.value
+        return unless value.is_a?(Prism::CallNode)
+
+        receiver = value.receiver && raw_constant_name(value.receiver)
+        return unless receiver
+
+        bare = Index::SymbolId.bare_name(receiver.to_s)
+        return unless GENERATES_MEMBERS[bare] == value.name
+
+        # `SymbolNode` only. `Struct.new("Named", :c)` names the struct
+    # with that String and takes `:c` as its one member, and
+    # `#symbol_name` reads a String literal too -- which recorded
+    # `Named` and `Named=` as members of it.
+    names = Array(value.arguments&.arguments)
+            .select { |argument| argument.is_a?(Prism::SymbolNode) }
+            .filter_map { |argument| symbol_name(argument) }
+        return if names.empty?
+
+        saved = @cref
+        @cref = @cref.with(owner: assigned_class_name(node))
+        names.each do |name|
+          add_generated_method(node: value, name: name, name_node: value, kind: :instance_method,
+                               return_type: nil, origin: :generated, parameters: [])
+          next unless bare == "Struct"
+
+          add_generated_method(node: value, name: "#{name}=", name_node: value, kind: :instance_method,
+                               return_type: nil, origin: :generated,
+                               parameters: [Index::Parameter.new(name: "value", kind: :required, default_source: nil)])
+        end
+      ensure
+        @cref = saved if saved
       end
 
       # `Class.new(Bar)`'s first argument is the superclass. Only a
@@ -2437,7 +2720,7 @@ module Ovallsp
       # rules rather than one both would have to bend to.
       #
       # **Which scope binds it?** See #binding_scope.
-      def record_local_variable(name, location)
+      def record_local_variable(name, location, write: false)
         return unless location.slice == name.to_s
 
         frame = binding_scope(name)
@@ -2450,7 +2733,8 @@ module Ovallsp
 
         # The binding frame's owner, not the current cref's -- see
         # `Scope`. `024.277`.
-        record_reference(:local_variable, name.to_s, location, scope_id: frame.id, owner: frame.owner)
+        record_reference(:local_variable, name.to_s, location, scope_id: frame.id, owner: frame.owner,
+                         write: write)
       end
 
       # The frame that *binds* this name, not the innermost one that is
@@ -2506,11 +2790,12 @@ module Ovallsp
       # `owner` defaults to the cref's, which is what every kind but a
       # local variable wants. A local's comes from the frame that binds
       # it, because it does not have one of its own -- `Scope`, `024.277`.
-      def record_reference(kind, name, location, scope_id: nil, implicit_hash_value: false, owner: current_owner)
+      def record_reference(kind, name, location, scope_id: nil, implicit_hash_value: false,
+                           owner: current_owner, write: nil)
         @reference_candidates << Index::ReferenceCandidate.new(
           kind: kind, name: name, location: Index::SourceLocation.to_range(location, @lines), scope_id: scope_id,
           owner: owner, singleton: @cref.declares_singleton?, receiver: nil,
-          lexical_nesting: current_lexical_nesting, implicit_hash_value: implicit_hash_value
+          lexical_nesting: current_lexical_nesting, implicit_hash_value: implicit_hash_value, write: write
         )
       end
 

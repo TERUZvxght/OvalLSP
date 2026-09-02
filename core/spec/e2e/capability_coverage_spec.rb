@@ -20,6 +20,13 @@ RSpec.describe "capability document coverage" do
   # Table rows look like `| C5 | ... |`; example names carry the id they
   # verify, either alone ("C5: ...") or paired ("B1/B2: ...").
   #
+  # **The letters are matched by shape, not by a list.** This read
+  # `[BHCDGSTW]` until 0.3.0, which is the same defect as the one
+  # described next and hidden the same way: a capability group under a
+  # new letter would have been invisible to *both* directions of this
+  # check, so a row with no example and an example with no row would
+  # both have passed. Found while adding one, not by a reviewer.
+  #
   # `\d+`, not `\d`: with a single digit every id from G10 up matched as
   # "G1", so both directions of the check silently passed for them --
   # G10, G11 and G12 were documented and verified without this guard ever
@@ -30,9 +37,9 @@ RSpec.describe "capability document coverage" do
   # locale-dependent read has already broken this project once.
   def read_utf8(path) = File.read(path, encoding: "UTF-8")
 
-  let(:documented) { read_utf8(CAPABILITY_DOC).scan(/^\| ([BHCDGSTW]\d+) \|/).flatten }
+  let(:documented) { read_utf8(CAPABILITY_DOC).scan(/^\| ([A-Z]+\d+) \|/).flatten }
   let(:verified) do
-    read_utf8(CAPABILITY_SPEC).scan(/it "([BHCDGSTW]\d+)(?:\/([BHCDGSTW]\d+))?:/).flatten.compact
+    read_utf8(CAPABILITY_SPEC).scan(/it "([A-Z]+\d+)(?:\/([A-Z]+\d+))?:/).flatten.compact
   end
 
   it "verifies every capability the document lists" do
@@ -56,7 +63,11 @@ RSpec.describe "capability document coverage" do
   # the other is how a translated document quietly starts describing a
   # different product.
   it "lists the same capabilities in the Japanese pair" do
-    japanese = read_utf8(CAPABILITY_DOC_JA).scan(/^\| ([BHCDGSTW]\d+) \|/).flatten
+    # By shape, like the two above. This was a third copy of the
+    # letter list and it was missed when they were widened -- which is
+    # the list-somebody-remembered defect appearing a third time in the
+    # file that was being fixed for it.
+    japanese = read_utf8(CAPABILITY_DOC_JA).scan(/^\| ([A-Z]+\d+) \|/).flatten
 
     expect(japanese).to eq(documented)
   end

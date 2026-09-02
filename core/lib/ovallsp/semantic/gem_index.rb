@@ -1,0 +1,162 @@
+# frozen_string_literal: true
+
+module Ovallsp
+  module Semantic
+    # What the gems define, as the running application reported it.
+    #
+    # `024.R7`. The undefined-method check fires only on a *closed*
+    # receiver, and until 0.3.0 "closed" meant "the workspace can see the
+    # whole ancestry". In a Rails application that is a minority of
+    # classes -- a controller inherits from `ApplicationController`,
+    # whose parent is in a gem -- so the check worked where it was least
+    # needed and stayed silent where most code is written.
+    #
+    # **Closedness and members arrive together, or not at all.** Telling
+    # the engine a gem class is closed without also telling it that
+    # class's methods turns every correct call on a gem into a report.
+    # Both come out of one payload here for that reason, and
+    # `gem_index_spec.rb` holds them against each other.
+    #
+    # **A class that defines `method_missing` is never knowable**,
+    # whatever this holds about it: it answers to names no enumeration
+    # can list, so reporting against it would be asserting from a
+    # question that cannot be asked. `#knows?` refuses it, and
+    # `#defines_method_missing?` says why.
+    #
+    # Every absence is "I do not know", never "there is nothing there" --
+    # the ordinary state is no Agent at all, and a reader that read an
+    # empty index as authoritative would report every method in the
+    # workspace as missing.
+    class GemIndex
+      Entry = Data.define(:instance_methods, :private_instance_methods, :protected_instance_methods,
+                          :singleton_methods, :ancestors, :singleton_ancestors, :defines_method_missing)
+
+      def self.empty = new({})
+
+      # Tolerant by construction: the payload crosses a process boundary
+      # and an Agent that answered something unexpected must leave this
+      # empty rather than raise on the request path.
+      def self.from_agent(payload)
+        gems = payload.is_a?(Hash) ? payload[:gems] || payload["gems"] : nil
+        return empty unless gems.is_a?(Hash)
+
+        entries = {}
+        gems.each_value do |gem|
+          classes = gem.is_a?(Hash) ? gem[:classes] || gem["classes"] : nil
+          Array(classes).each do |klass|
+            next unless klass.is_a?(Hash)
+
+            name = klass[:name] || klass["name"]
+            next unless name
+
+            entries[Index::SymbolId.bare_name(name.to_s)] = Entry.new(
+              instance_methods: Array(klass[:instanceMethods] || klass["instanceMethods"]).map(&:to_s).to_set,
+              private_instance_methods:
+                Array(klass[:privateInstanceMethods] || klass["privateInstanceMethods"]).map(&:to_s).to_set,
+              protected_instance_methods:
+                Array(klass[:protectedInstanceMethods] || klass["protectedInstanceMethods"]).map(&:to_s).to_set,
+              singleton_methods: Array(klass[:singletonMethods] || klass["singletonMethods"]).map(&:to_s).to_set,
+              ancestors: Array(klass[:ancestors] || klass["ancestors"]).map(&:to_s),
+              singleton_ancestors: Array(klass[:singletonAncestors] || klass["singletonAncestors"]).map(&:to_s),
+              defines_method_missing: klass[:definesMethodMissing] || klass["definesMethodMissing"] ? true : false
+            )
+          end
+        end
+        new(entries)
+      end
+
+      def initialize(entries)
+        @entries = entries
+        # The type model names a class by its **last segment** where
+        # that is unambiguous -- `Relation[Post]`, not
+        # `ActiveRecord::Relation[Post]` -- and this index is keyed by
+        # the full name the running application reported. So a simple
+        # name resolves too, and **only where exactly one class claims
+        # it**: two gems with a `Client` are two different classes, and
+        # answering either would be a wrong surface rather than a
+        # missing one.
+        by_simple = Hash.new { |h, k| h[k] = [] }
+        entries.each_key { |name| by_simple[name.split("::").last] << name }
+        @unique_simple = by_simple.filter_map { |simple, full| [simple, full.first] if full.length == 1 }.to_h
+        freeze
+      end
+
+      def empty? = @entries.empty?
+
+      def size = @entries.size
+
+      # Whether this index can account for the class's whole method set.
+      # False for a `method_missing` class, which is the one case where
+      # holding an entry does not mean knowing the surface.
+      def knows?(name)
+        entry = entry_for(name)
+        !entry.nil? && !entry.defines_method_missing
+      end
+
+      def defines_method_missing?(name) = entry_for(name)&.defines_method_missing || false
+
+      def instance_methods(name) = entry_for(name)&.instance_methods || Set.new
+
+      # **A receiverless call may legally reach an inherited private
+      # method**, so the closedness check has to see them or it reports
+      # correct code -- `process_action` on an ActionController subclass
+      # was the instance driven. They are kept as their own sets rather
+      # than folded into `#instance_methods`, because completion after a
+      # dot must keep offering the public set alone.
+      def private_instance_methods(name) = entry_for(name)&.private_instance_methods || Set.new
+
+      def protected_instance_methods(name) = entry_for(name)&.protected_instance_methods || Set.new
+
+      # The visibility this index records for a name on this class, or
+      # nil when it holds no such method. One place that knows the
+      # order to ask in, so `MethodResolver` and any later reader
+      # cannot disagree about it.
+      def instance_method_visibility(name, method_name)
+        entry = entry_for(name)
+        return nil unless entry
+
+        method = method_name.to_s
+        return :public if entry.instance_methods.include?(method)
+        return :protected if entry.protected_instance_methods.include?(method)
+        return :private if entry.private_instance_methods.include?(method)
+
+        nil
+      end
+
+      def singleton_methods(name) = entry_for(name)&.singleton_methods || Set.new
+
+      def ancestors(name) = entry_for(name)&.ancestors || []
+
+      # The class-level chain, which is not the instance one: an
+      # `extend`ed module puts its instance methods there and
+      # `singleton_methods(false)` cannot see them.
+      def singleton_ancestors(name) = entry_for(name)&.singleton_ancestors || []
+
+      # **The full name a bare one stands for, where exactly one gem
+      # class claims that last segment.** Asked as its own question,
+      # because it is a *different* question from "what is on this
+      # class" -- and it used to sit on the private lookup every reader
+      # goes through, so a workspace class called `Widget` was answered
+      # for out of a gem's `OtherGem::Widget`: closed with a method set
+      # that is not its own, its typos unreported and the foreign
+      # class's methods offered on it.
+      #
+      # `nil` where nothing claims it, or where two gems do -- two gems
+      # with a `Client` are two different classes, and answering either
+      # would be a wrong surface rather than a missing one.
+      def resolve_simple_name(name)
+        return nil if name.nil?
+
+        @unique_simple[Index::SymbolId.bare_name(name.to_s)]
+      end
+
+      private
+
+      def entry_for(name)
+        return nil if name.nil?
+
+        @entries[Index::SymbolId.bare_name(name.to_s)]
+      end
+    end
+  end
+end

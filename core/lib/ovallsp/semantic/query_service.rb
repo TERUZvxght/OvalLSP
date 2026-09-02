@@ -81,8 +81,8 @@ module Ovallsp
       # (0.2.0). Passes through for the same reason `type_at` does: the
       # inference budget and the inferencer instance are this service's to
       # own, not every caller's.
-      def scope_at(document, position, budget: nil)
-        @local_inferencer.scope_at(document, position, max_steps: budget)
+      def scope_at(document, position, initial_env: {}, budget: nil)
+        @local_inferencer.scope_at(document, position, initial_env: initial_env, max_steps: budget)
       end
 
       # Every distinct member name starting with `prefix` reachable from
@@ -456,7 +456,8 @@ module Ovallsp
         # what the chain offers, which is the opposite of the
         # nearest-wins question a single call asks.
         names = rbs_owner_chains(receiver_type, context).flatten(1).flat_map do |owner, owner_singleton|
-          @signatures.member_names(qualify(owner), prefix: prefix, singleton: owner_singleton)
+          @signatures.member_names(qualify(owner), prefix: prefix, singleton: owner_singleton,
+                                   public_only: context[:explicit_receiver] == true)
         end
         names.each do |name|
           candidates[name] ||= Member.new(
@@ -903,8 +904,33 @@ module Ovallsp
       # unwrapping one here (as `#each_nominal` does, correctly, for the
       # signature-environment paths that key on a type name) answered
       # nothing for `Widget.build(`.
+      # 024.87. A `Generic` is the *name* plus its parameters, and every
+      # reader below asks a `Nominal` -- so `Relation[Post]` reached
+      # `#branch_members` as itself and answered nothing. Completion
+      # after `Post.where(x: 1).order(:id).` was empty while hover on
+      # the same caret said `Relation[Post]`, which is that entry's
+      # unconfirmed half: the type survives the chain and the members do
+      # not.
+      #
+      # `#each_nominal` already knows the rule and three other readers
+      # go through it; this one did not.
       def receiver_members(type)
-        type.is_a?(Types::Union) ? type.members : [type]
+        # **Only a Generic, and `ClassOf` is not unwrapped.**
+        # `#each_nominal` does both, and routing through it turned every
+        # `ClassOf[X]` receiver into `X` -- a class object asked for its
+        # *instance* members, and 21 examples failed.
+        # `MethodResolver#normalize_class_receiver` is the one place
+        # that reads a class object, and it needs it intact.
+        case type
+        when Types::Union then type.members
+        when Types::Generic
+          # `ClassOf` is a Generic too, and it is the one that must stay
+          # whole: `Types.class_object?` is the existing reader of that
+          # distinction, and unwrapping it asked a class object for its
+          # instance members.
+          Types.class_object?(type) ? [type] : [Types::Nominal.new(name: type.name)]
+        else [type]
+        end
       end
 
       def each_nominal(type)

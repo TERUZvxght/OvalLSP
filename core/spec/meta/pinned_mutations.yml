@@ -139,7 +139,7 @@
   from: "          if creates_a_class?\n            @cref.in_eval_block(nil)\n"
   to: "          if false\n            nil\n"
   spec: spec/ovallsp/diagnostics/class_creating_block_spec.rb
-  example: "records nothing on the enclosing class for a Struct.new block"
+  example: "puts a Struct.new block's members on the Struct and nothing on the enclosing class"
 
 # --- checks in `scripts/`, added in 0.2.14 ---------------------------
 #
@@ -221,8 +221,8 @@
   example: "publishes nothing when the close lands while it is still computing"
 - why: "024.280's capture-name range -- without it a regexp named capture is not recorded at all, so a rename rewrites the uses and leaves the capture, and the renamed name becomes a defined-but-nil local rather than an error."
   file: core/lib/ovallsp/parser_service.rb
-  from: "            record_local_variable(target.name, location) if location\n"
-  to: ""
+  from: "            location = capture_name_location(pattern, target.name.to_s)\n"
+  to: "            location = nil\n"
   spec: spec/ovallsp/server_rename_spec.rb
   example: "rewrites a regexp named capture with the local it binds"
 - why: "024.280's skip of a target Prism already gave the name's own range -- without it the `/o` spelling is recorded twice, which is two identical edits in one WorkspaceEdit."
@@ -269,8 +269,8 @@
   example: "says nothing about the call the resolved head makes correct"
 - why: "024.277's binding-frame owner -- without it a local takes the cref owner at the point of use, so the same variable read inside a `module_eval` block and outside it gets two identities and rename rewrites only one side."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        record_reference(:local_variable, name.to_s, location, scope_id: frame.id, owner: frame.owner)"
-  to: "        record_reference(:local_variable, name.to_s, location, scope_id: frame.id)"
+  from: "        record_reference(:local_variable, name.to_s, location, scope_id: frame.id, owner: frame.owner,\n"
+  to: "        record_reference(:local_variable, name.to_s, location, scope_id: frame.id,\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "keeps one identity across a `module_eval` block, which changes self but not the binding"
 - why: "024.271's receiver visit, hoisted above the cref switch and the frame push -- without it the `ty` on a `def ty.outer` line is never recorded, so rename rewrites every other mention and leaves the file not running."
@@ -608,14 +608,14 @@
   example: "separates a name that only the block binds from a same-named local written after it"
 - why: "Recording LocalVariableTargetNode -- `a, b = 1, 2`, a `for` variable and `rescue => e` are bindings Rename has to rewrite with the rest."
   file: core/lib/ovallsp/parser_service.rb
-  from: "        record_local_variable(node.name, node.location) unless node.name.start_with?(\"_\")\n"
-  to: "        nil unless node.name.start_with?(\"_\")\n"
+  from: "        record_local_variable(node.name, node.location, write: true) unless declined_underscore?(node.name)\n"
+  to: "        super\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "records a multiple-assignment target"
-- why: "Declining an underscore-prefixed target -- Ruby lets one pattern bind such a name twice, so two edits that are each the name exactly make the file stop parsing."
+- why: "Declining an underscore target inside a pattern -- Ruby lets one pattern bind such a name twice, so two edits that are each the name exactly make the file stop parsing."
   file: core/lib/ovallsp/parser_service.rb
-  from: " unless node.name.start_with?(\"_\")\n"
-  to: "\n"
+  from: "        @pattern_depth.positive? && name.to_s.start_with?(\"_\")\n"
+  to: "        false\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "declines an underscore-prefixed target, which a pattern may repeat"
 - why: "Declining a value-omitted shorthand's pattern binding -- the range Prism reports for it is the hash key's and is spelled without the colon, so the range comparison passes it and Rename rewrites a pattern's key."
@@ -632,19 +632,19 @@
   example: "records the same shorthand written as a hash literal's value"
 - why: "Recording LocalVariableOperatorWriteNode -- leaving `n += 1` behind after renaming `n` writes a file that does not run."
   file: core/lib/ovallsp/parser_service.rb
-  from: "      def visit_local_variable_operator_write_node(node)\n        record_local_variable(node.name, node.name_loc)\n        super\n      end\n"
+  from: "      def visit_local_variable_operator_write_node(node)\n        record_local_variable(node.name, node.name_loc, write: true)\n        super\n      end\n"
   to: "      def visit_local_variable_operator_write_node(node)\n        super\n      end\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "records the target of `+=`"
 - why: "Recording LocalVariableOrWriteNode -- the same gap in the `||=` spelling."
   file: core/lib/ovallsp/parser_service.rb
-  from: "      def visit_local_variable_or_write_node(node)\n        record_local_variable(node.name, node.name_loc)\n        super\n      end\n"
+  from: "      def visit_local_variable_or_write_node(node)\n        record_local_variable(node.name, node.name_loc, write: true)\n        super\n      end\n"
   to: "      def visit_local_variable_or_write_node(node)\n        super\n      end\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "records the target of `||=` and `&&=`"
 - why: "Recording LocalVariableAndWriteNode -- the third compound spelling, whose recorder the sweep cannot pin separately because all four arrive in one added block."
   file: core/lib/ovallsp/parser_service.rb
-  from: "      def visit_local_variable_and_write_node(node)\n        record_local_variable(node.name, node.name_loc)\n        super\n      end\n"
+  from: "      def visit_local_variable_and_write_node(node)\n        record_local_variable(node.name, node.name_loc, write: true)\n        super\n      end\n"
   to: "      def visit_local_variable_and_write_node(node)\n        super\n      end\n"
   spec: spec/ovallsp/parser_scope_frames_spec.rb
   example: "records the target of `||=` and `&&=`"
@@ -693,8 +693,8 @@
   example: "records one flagged site per shorthand, and leaves the ordinary sites alone"
 - why: "the flag that says this range is a `key:` token rather than an identifier -- without it a rewrite substitutes over the colon, and the hash literal stops parsing."
   file: core/lib/ovallsp/parser_service.rb
-  from: "                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: true)\n"
-  to: "                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: false)\n"
+  from: "                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: true,\n"
+  to: "                         scope_id: frame.id, owner: frame.owner, implicit_hash_value: false,\n"
   spec: spec/ovallsp/parser_service_spec.rb
   example: "records one flagged site per shorthand, and leaves the ordinary sites alone"
 
@@ -704,3 +704,254 @@
   to: "        return new_name\n"
   spec: spec/ovallsp/server_rename_spec.rb
   example: "expands Ruby's hash shorthand rather than overwriting its colon"
+
+# 0.3.0's first capability. Four decisions, each of which a naive
+# documentHighlight would get wrong and none of which the protocol
+# forces: the scope match that keeps a same-named local in another
+# method out, the read/text split that refuses to guess a local's
+# assignment, the declaration row, and the one the whole capability is
+# about -- answering without rebuilding the workspace reference index
+# while the editor asks on every cursor move.
+- why: "the symbol match. Without it every same-named mention in the file is highlighted, including a local belonging to another method's scope."
+  file: core/lib/ovallsp/server.rb
+  from: "        next unless r && r.symbol_id == symbol_id\n"
+  to: "        next unless r\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "F1: highlights every occurrence of a local, and not a same-named local elsewhere"
+- why: "the read/write/text split. A call site is a read; a local is a write or a read, from the flag the parser records. Flattening a call to Text drops the distinction the protocol carries."
+  file: core/lib/ovallsp/server.rb
+  from: "      return 2 if candidate.kind == :method_call\n"
+  to: "      return 1 if candidate.kind == :method_call\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "F2: highlights a method's declaration and its call sites in the file"
+- why: "the declaration row. A `def` produces no reference candidate, so without this a method's own name is not highlighted. Re-aimed after the 0.3.0 review replaced `find` with `select ... reverse_each` here -- the old `from:` then matched an unrelated `if declaration` the same review added to prepare_call_hierarchy_result."
+  file: core/lib/ovallsp/server.rb
+  from: "      summary.declarations.select { |d| d.symbol_id == symbol_id }.reverse_each do |declaration|\n"
+  to: "      [].each do |declaration|\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "F2: highlights a method's declaration and its call sites in the file"
+- why: "the capability's actual requirement. Warming the reference index here answers the same ranges and rebuilds O(workspace) on every cursor move, which is what the deferral note in server.rb said to watch for."
+  file: core/lib/ovallsp/server.rb
+  from: "      highlights = matching_candidate_highlights"
+  to: "      ensure_reference_index_current\n      highlights = matching_candidate_highlights"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "F1/F2: answers without rebuilding the workspace reference index"
+
+# Call hierarchy (W5/W6), 0.3.0. Each of these was written, then
+# measured unpinned, then given a fixture that tells the two behaviours
+# apart -- the first fixture agreed with the code by accident.
+- why: "a call outside any method has no calling method. **Aimed at `enclosing_callable`'s containment test, because the two guards downstream cover each other**: mutating `next unless enclosing` alone, or the render's `or next` alone, leaves both W5 examples green -- each drops the group the other would have. Widening the containment makes every declaration in the file contain the call, which defeats both at once. One of the two downstream lines is redundant as the code stands, and that is recorded in docs/ISSUES.md."
+  file: core/lib/ovallsp/server.rb
+  from: "                          &.select { |d| range_contains?(d.location, location) }\n"
+  to: "                          &.select { |d| true }\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "W5: lists a method's callers across files, with the range of each call"
+- why: "innermost, not first. Nested `def`s both contain the call; taking the first declaration that contains it names the outer one, which did not make the call."
+  file: core/lib/ovallsp/server.rb
+  from: "                          &.min_by { |d| range_span(d.location) }\n"
+  to: "                          &.first\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "W5: lists a method's callers across files, with the range of each call"
+- why: "the call ranges. Without them a call hierarchy entry is a name, and the protocol's point is that it is navigable."
+  file: core/lib/ovallsp/server.rb
+  from: "          fromRanges: ranges }\n      end\n    end\n\n    # Callees."
+  to: "          fromRanges: [] }\n      end\n    end\n\n    # Callees."
+  spec: spec/e2e/capabilities_spec.rb
+  example: "W5: lists a method's callers across files, with the range of each call"
+- why: "the kind guard on prepare. A class has no callers in this protocol's sense, and answering for one is a list of mentions wearing a caller's name."
+  file: core/lib/ovallsp/server.rb
+  from: "      return nil unless symbol_id && CALLABLE_KINDS.include?(symbol_id.kind)\n"
+  to: "      return nil unless symbol_id\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "W5/W6: offers no call hierarchy on a class name"
+
+# Go to type definition (D4/D5), 0.3.0.
+- why: "resolving the type rather than forwarding to go-to-definition. The forwarded answer is the assignment, which is plausible and never the class the expression evaluates to."
+  file: core/lib/ovallsp/server.rb
+  from: "      @workspace_index.class_declarations(type.name.to_s)\n"
+  to: "      definition_result(params)\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "D4: jumps to the class an expression evaluates to, not to the method that produced it"
+- why: "the decline where the type is not a workspace class. Without it `type.name` raises on an unknown type and the request answers an error -- which the E2E client used to hand back as an empty result, so this was unpinned until the client learned to tell the two apart."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] unless type.is_a?(Types::Nominal)\n"
+  to: "      return [] if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "D5: answers nothing where the type is not a workspace class"
+
+# Inlay hints (I1/I2), 0.3.0. A hint sits in the margin of the user's
+# code continuously and is read as the engine's answer, so every one of
+# these is a refusal rather than a feature.
+- why: "the blank where the type is not known. A label there is a wrong answer written into the margin, which section 0 ranks below none."
+  file: core/lib/ovallsp/server.rb
+  from: "        next unless type.is_a?(Types::Nominal)\n"
+  to: "        next if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I1: labels each local assignment with its inferred type, and nothing it cannot infer"
+- why: "assignments only. Without it every mention of a local is labelled, including reads, which is the parser's write flag being ignored."
+  file: core/lib/ovallsp/server.rb
+  from: "        candidate.kind == :local_variable && candidate.write && position_in?(range, candidate.location[:end])\n"
+  to: "        candidate.kind == :local_variable && position_in?(range, candidate.location[:end])\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I1: labels each local assignment with its inferred type, and nothing it cannot infer"
+- why: "the `*rest` refusal. Past a rest parameter the argument index no longer names a parameter."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] if positional.length < parameters.length && parameters[positional.length].kind == :rest\n"
+  to: "        return [] if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I2: labels each argument with the parameter name it is passed as"
+- why: "the post-required refusal. Ruby fills the optional last, so on `def f(a, b = 1, c)` the second argument binds to `c` -- labelling by index writes `middle:` beside a value passed as `last`."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] if positional.any? { |parameter| parameter.kind == :optional } &&\n"
+  to: "        return [] if false &&\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I2: labels each argument with the parameter name it is passed as"
+
+# Quick fixes (Q1-Q3), 0.3.0. Every one of these is a refusal or an
+# aim: a code action edits the file with one click and is never
+# explained, so a wrong one is worse than none.
+- why: "insert into the class the call was made on, not whichever the file declares first. A quick fix writes into the user's file and its reasoning is never seen."
+  file: core/lib/ovallsp/server.rb
+  from: "      target = @workspace_index.class_declarations(owner).first\n"
+  to: "      target = @workspace_index.class_declarations(summary.declarations.first.symbol_id.name.to_s).first\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "Q1: offers a `def` for an unknown method, inserted into the class it was called on"
+- why: "the distance ceiling. Rewriting one wrong name into an unrelated one is a wrong edit applied with a click, not a fix."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] unless nearest && levenshtein(written, nearest) <= MAX_ROUTE_HELPER_DISTANCE\n"
+  to: "        return [] unless nearest\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "Q2: replaces an unknown route helper with the closest one the application has"
+- why: "the nearest helper, not the first one the registry lists."
+  file: core/lib/ovallsp/server.rb
+  from: "      nearest = @route_registry.completion_names.min_by { |name| levenshtein(written, name) }\n"
+  to: "        nearest = @route_registry.completion_names.first\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "Q2: replaces an unknown route helper with the closest one the application has"
+- why: "surplus only. With too few arguments there is no value to write, and offering a fix there would put this engine's guess into the user's file."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] unless keep && locations.length > keep\n"
+  to: "        return [] unless keep\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "Q3: removes surplus arguments, and offers nothing when there are too few"
+
+# 024.86 and the `@ivar` completion promise, 0.3.0. One missing seed
+# produced both halves, and the decline is the third decision.
+- why: "024.86's decline where two methods assign one ivar types that disagree. Picking one is a wrong answer at a position where the code has no single one, and a hover is read as the engine's claim."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "            disputed << name\n"
+  to: "            merged[name] = type\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "H8: types an ivar assigned in another method, and declines where two methods disagree"
+- why: "024.86's seed itself. The descent gives each `def` a fresh environment, which is right for locals and wrong for instance variables -- without this an ivar assigned in another method is invisible for its type and for its name."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "      locate(node.body, offset, parameter_env(node).merge(sibling_ivar_env(node)))\n"
+  to: "      locate(node.body, offset, parameter_env(node))\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "H8: types an ivar assigned in another method, and declines where two methods disagree"
+- why: "the sigil being part of the name being typed. Without it the prefix at `@` is empty, which matches every name in scope and selects none of the ivars -- the completion has the names and cannot pick them."
+  file: core/lib/ovallsp/server.rb
+  from: "      left -= 1 while left.positive? && text[left - 1] == \"@\"\n"
+  to: "      left -= 0\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "C15: offers the class's instance variables at the sigil, not only this method's"
+
+# 024.R7 and 024.87, 0.3.0. Each of these was measured over
+# activerecord's own 397 files before it was believed; two earlier
+# versions produced 47 and 795 false reports and were rejected.
+- why: "024.R7's rooting. Without it a class whose parent is in a gem never reaches BasicObject, so the undefined-method check stays silent for every Rails controller."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "        entries.concat(gem_ancestry(canonical, entries))\n"
+  to: "        entries.concat([])\n"
+  spec: spec/ovallsp/semantic/gem_backed_closure_spec.rb
+  example: "reports a typo on a class whose parent is in a gem"
+- why: "024.R7's classes-only guard. Rooting a module makes every `ClassMethods`-style module a closed receiver, and what `self` is inside one at call time is the class that extended it -- 795 false reports over activerecord."
+  file: core/lib/ovallsp/semantic/hierarchy_index.rb
+  from: "        return [] unless class_here?(canonical)\n"
+  to: "        return [] unless true\n"
+  spec: spec/ovallsp/semantic/gem_backed_closure_spec.rb
+  example: "says nothing inside a module, whose self at call time it cannot know"
+- why: "024.R7's method_missing refusal. A gem class that defines one answers to names no enumeration can list."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "        return true if entry.identified? && gem_index.defines_method_missing?(entry.name)\n"
+  to: "        return true if false\n"
+  spec: spec/ovallsp/semantic/gem_backed_closure_spec.rb
+  example: "stays silent when an ancestor answers at call time"
+- why: "024.R7's member half. Closedness without members turns every correct call on a gem into a report."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "        return gem_candidate(entry, resolved_name, symbol_id, rank) if decls.empty?\n"
+  to: "        return nil if decls.empty?\n"
+  spec: spec/ovallsp/semantic/gem_backed_closure_spec.rb
+  example: "reports nothing about the gem's own methods, inherited or direct"
+- why: "A hint that repeats its own argument is noise; `take(name)` rendered `name: name`."
+  file: core/lib/ovallsp/server.rb
+  from: "          next if argument_spells?(document, location, parameter.name)\n"
+  to: "          next if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I2: says nothing where the argument already spells the parameter"
+- why: "The call-site splat refusal. Labelling by index across a splat names the parameter Ruby did not use."
+  file: core/lib/ovallsp/server.rb
+  from: "          !candidate.arguments[:splat] && named_call?(candidate.name) &&\n"
+  to: "          true && named_call?(candidate.name) &&\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I2: says nothing about a call whose arguments are splatted"
+- why: "The operator refusal. `self + v` labelled `v` with `other:`, which is true and says nothing."
+  file: core/lib/ovallsp/server.rb
+  from: "          !candidate.arguments[:splat] && named_call?(candidate.name) &&\n"
+  to: "          !candidate.arguments[:splat] && true &&\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "I2: says nothing about an operator call"
+- why: "A parameter's binding site is an occurrence of the local. Without it Rename rewrote the body and left the signature, handing back a file that raises NameError."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "        record_local_variable(node.name, location, write: true)\n"
+  to: "        nil\n"
+  spec: spec/ovallsp/server_rename_spec.rb
+  example: "rewrites a parameter's own binding site, not only its uses"
+- why: "The singleton side holds different variables. Without this an `@x` written in `def self.build` was offered inside instance methods, where it reads nil."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "        @nodes << node unless node.receiver\n"
+  to: "        @nodes << node\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "C15: offers the instance side only, including names it cannot type"
+- why: "A name the type walk cannot type is still a name the class assigns; `@memo ||= []` was missing from a list the reader reads as complete."
+  file: core/lib/ovallsp/local_inferencer.rb
+  from: "        merged[key] = Types::UNKNOWN unless merged.key?(key) || disputed.include?(key)\n"
+  to: "        nil unless merged.key?(key) || disputed.include?(key)\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "C15: offers the instance side only, including names it cannot type"
+- why: "A sigil inside a string is text. Without the mask, typing an address into a string opened the class's instance variables."
+  file: core/lib/ovallsp/server.rb
+  from: "      if inside_string_or_comment?(document, document.position_to_char_offset(position))\n"
+  to: "      if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "C15: says nothing at a sigil inside a string"
+- why: "A heredoc keeps its body below; deleting only the marker leaves it as live code that still parses."
+  file: core/lib/ovallsp/server.rb
+  from: "      return [] if crosses_a_heredoc?(document, from, to)\n"
+  to: "      return [] if false\n"
+  spec: spec/e2e/capabilities_spec.rb
+  example: "Q3: offers nothing where the surplus argument is a heredoc"
+- why: "An alias recorded on one ancestor whose target lives on another; without it `alias` to an included module's method is reported as unknown."
+  file: core/lib/ovallsp/semantic/method_resolver.rb
+  from: "        target = chain_alias_target(entries, method_name, singleton)\n"
+  to: "        target = nil\n"
+  spec: spec/ovallsp/semantic/alias_through_module_spec.rb
+  example: "does not report an alias whose target an included module declares"
+- why: "prepareRename warming the index it reads; without it a local is refused until Find References has been run once."
+  file: core/lib/ovallsp/server.rb
+  from: "    def ensure_reference_index_current\n"
+  to: "      nil\n"
+  spec: spec/ovallsp/server_rename_spec.rb
+  example: "warms the reference index, so a local can be renamed without a rehearsal"
+- why: "The private-member filter on a receiver-dot completion; without it 69 of 121 labels on a plain Ruby class raise when picked."
+  file: core/lib/ovallsp/semantic/query_service.rb
+  from: "                                   public_only: context[:explicit_receiver] == true)\n"
+  to: "                                   public_only: false)\n"
+  spec: spec/ovallsp/semantic/explicit_receiver_visibility_spec.rb
+  example: "offers none of Ruby's private methods after a dot"
+- why: "A Struct or Data constant naming its members in the call; without it `Seed.new.` offers 51 items and not `seed`."
+  file: core/lib/ovallsp/parser_service.rb
+  from: "          record_assigned_struct_members(node)\n"
+  to: "          nil\n"
+  spec: spec/ovallsp/struct_members_spec.rb
+  example: "records a reader and a writer for each Struct member"
