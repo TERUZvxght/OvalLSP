@@ -731,6 +731,14 @@ release, not a defect to patch in the current change set.
 
 **Re-triaged in 0.2.17** (`024.276`). The enumeration question really is what blocks this one: the check needs a witness for what a gem-backed controller assigns, and neither the static chain nor the workspace index can supply it. That is `024.R7`, and 0.3.0 keeps it for that reason rather than because a closing pass said so. Not re-driven since 0.2.16.
 
+
+
+**Not driven at 0.3.0.** Its own body says it is blocked on `024.R7`
+for the part that needs it, and `024.290` now records that R7 as
+shipped carries no core classes -- so the blocker is still there and
+is now measured. The rest of it is view-side precision, which needs
+the `capabilities_spec` Rails harness rather than the probes this
+sweep used.
 ## 024.19 The argument-type check judges against a class the receiver is not
 
 ```yaml
@@ -942,6 +950,15 @@ pending with its reason, the two silences that misled, and the control
 that makes them mean something. The entry said "not reproduced from a
 fixture here"; it is now.
 
+
+
+**Not driven at 0.3.0.** It is about `WorkspaceIndex`'s simple-name
+fallback reaching the argument-type check, which `024.224`'s re-drive
+touched from the other side -- that corpus's entire `argument-type`
+output was `024.224`, so nothing there exercised this. A fixture that
+resolves a constant path the workspace does not declare is what it
+needs, and building one that fails for *this* reason rather than
+another is the work.
 ## 024.20 `contains?` treats an exclusive end offset as inclusive
 
 ```yaml
@@ -1111,6 +1128,14 @@ E2E fixture should carry the generated `ApplicationController`, so the
 row measures the real shape and fails honestly.
 
 
+
+
+**Not driven at 0.3.0.** The claim is about what a `rails new`
+application produces, so the fixture is an application rather than a
+snippet, and the sweep that gave the other entries a verdict used
+`corpus_diagnostics` and in-process probes. Unverified rather than
+assumed to reproduce: 0.2.14 published a limitation the product did
+not have by promoting an entry nobody ran.
 ## 024.28 Rename refuses on a macro-declared method rather than editing it
 
 ```yaml
@@ -1785,6 +1810,11 @@ is a patch.
 
 **Re-triaged in 0.2.17** (`024.276`). Stays where it is, on its own body's argument rather than the pasted one: the type has to come from the `render` call site, which needs the same propagation `ivars_for_view` does for instance variables but keyed by partial name — a new inference path, not a correction. `C11`'s row already states the gap in the document users read, so nothing is claimed that is not delivered.
 
+
+
+**Not driven at 0.3.0.** A partial's local needs an ERB template
+rendered from an action, which only the E2E harness sets up. Left
+unverified.
 ## 024.45 Re-analysis after a keystroke is seconds on a large file, against a stated 300 ms
 
 ```yaml
@@ -1973,6 +2003,15 @@ Travels with `024.38` and `024.121`, which are the same measurement
 from the other two sides.
 
 
+
+
+**Not taken in 0.3.0**, and the entry's own numbers are why it is not
+a review-round hunk: the cost is super-linear and
+`ParserService#summarize` is 19 ms of it, so the rest is reference
+resolution and the index. 0.2.18 measured the same shape from the
+other end -- 710,425 method identities built for one 2,574-line file
+-- and recorded that fixing it is a change to how the index is
+queried. Nothing in 0.3.0 moved that.
 ## 024.47 A namespaced class named after a core class loses its diagnostics, and the readers disagree about a shadowed literal
 
 ```yaml
@@ -2311,6 +2350,15 @@ a measurement showing the merged shape is not a third place, and this
 release has no corpus that would show it. Retargeted rather than
 attempted on the strength of the idea.
 
+
+**Not taken in 0.3.0.** Merging `HierarchyIndex` and
+`GeneratedMethodIndex` is a consolidation, and `048` measured eight
+of those in this tree: every one failed, four would have made the
+product worse, and the headline came out at +3 net lines. `CLAUDE.md`
+records the measure as *places that must agree*, not lines -- these
+two are updated in one mutex block from one summary, so nothing
+currently disagrees. Recorded as an unexplained boundary, which is
+what it is, rather than acted on.
 ## 024.71 One mutable Rails fixture is shared by every worker, so the suite cannot be parallelised
 
 ```yaml
@@ -2663,6 +2711,14 @@ blocks, and this is one.
 
 **Re-triaged in 0.2.17** (`024.276`). This is one of the two where the pasted reason happened to be true: the Direction needs a witness outside the workspace — RBS, or a gem's own `sig/` — that says a class is declared elsewhere, and until one exists section 0.4 says a wrong answer on a walked path is what blocks. That witness is `024.R7`. Not re-driven since the measurement in the body, which is dated there.
 
+
+
+**Not driven at 0.3.0 in its own shape**, but its premise is now
+measured: it says the check is loudest where no Runtime Agent can
+answer, and `024.76`'s re-drive with an Agent connected still
+produced 19 reports over 335 files, every one false. So the Agent's
+presence is not what separates the loud case from the quiet one,
+which is worth knowing before this entry is worked on.
 ## 024.88 Completion unions a union's members; the diagnostic intersects them
 
 ```yaml
@@ -2844,6 +2900,12 @@ answers to one question.
 
 **Re-triaged in 0.2.17** (`024.276`). The Direction is one query per position that all four features read — `037`'s availability item — which is a restructuring, not an enumeration. It stays at 0.3.0 because that restructuring is what two of that release's promises rest on, per `045`'s D3. Not re-driven since the disagreement was recorded.
 
+
+
+**Not driven at 0.3.0**, and it is the entry most worth driving next:
+it is four positions that disagree, and the first of them -- `<%
+@posts.each do |post| %>` then `post.titel` -- is the commonest line
+in a Rails index view. It needs the E2E harness.
 ## 024.106 `module_function` and `extend self` produce nothing
 
 ```yaml
@@ -3029,6 +3091,14 @@ in. Both travel to 0.3.0 together, with `024.45` and `024.38`, which
 are the same measurement problem seen from the product's side.
 
 
+
+**Not taken in 0.3.0, and 0.3.0 is evidence for it.** The missing
+third layer is a whole-tree measure of what no test would notice
+changing. This release added five behavioural changes and each was
+pinned by hand into `pinned_mutations.yml`, which now stands at 137
+-- the manifest is layer two working exactly as described, and the
+absence of layer one's automation is why every one of those pins was
+a manual step. Still infrastructure of its own size.
 ## 024.129 No undefined-method report on a core-library receiver
 
 ```yaml
@@ -3076,6 +3146,11 @@ hop; this is about never having one.
 
 **Re-triaged in 0.2.17** (`024.276`). A scope defined in a concern's `included do` has no type, which is a silence rather than a false answer — the product says nothing where it could say something, and giving it one is capability. Adjacent to `024.87`, which is about a relation losing its type after one hop; this is about never having one. Not re-driven since it was split out of `024.90`.
 
+
+
+**Not driven at 0.3.0.** `included do scope :recent, -> { … } end`
+needs a concern included into a model with a database behind it,
+which is the E2E harness rather than a probe.
 ## 024.137 `WorkspaceIndex#search` scans every symbol in the workspace
 
 ```yaml
@@ -3473,6 +3548,14 @@ and not the shape has not closed anything.
 
 0.2.17 paid several instalments of it — coverage floors on the measured-claim scanner and the home-path scanner, a reader for `released-in:` which had none, and a check that open entries do not repeat a justification word for word. Each is the shape this entry's Direction asks for: an answer where the value is produced, rather than an assertion at each reader.
 
+
+**Not taken in 0.3.0.** Defending the checks' reachability is a
+change to every checker, and this release instead spent its
+measurement on the entries the release owed. Worth noting from the
+sweep: two of 0.3.0's own checks *did* catch a disabled guard --
+`check_pinned_mutations` refused a `from:` that matched zero lines
+twice, and once that matched five -- so the class this entry names
+is real and the instances it names are not all still open.
 ## 024.221 A block whose receiver cannot be vouched for contains a `private` that Ruby would let through
 
 ```yaml
@@ -3748,6 +3831,33 @@ to `RBS::TypeName` the way Ruby resolves it, not by guessing at the
 string. That is a different mechanism from the one the register
 rejects, and it is the one worth measuring next -- 7 to 0, with
 `unresolved-constant` at 326 as the control.
+
+**Attempted in 0.3.0 and abandoned before a change, with one fact
+gained.** The lexical-nesting direction sketched above is not the one:
+two fixtures were built for it -- a bare name written inside its own
+`module`, then the same across two files, which is rbs's own shape --
+and **neither reproduces**. Both were deleted rather than kept, because
+a passing example that does not reproduce the defect is worse than no
+example: it reads as coverage.
+
+What the fixtures ruled out is that this is Ruby-side constant
+resolution. rbs writes the expected side **bare** in its own signature:
+
+    sig/resolver/constant_resolver.rbs:29
+      def constant: (TypeName constant_name) -> Constant?
+
+and it arrives at the check as `RBS::TypeName`. So the absolutisation
+RBS performs is reaching one side and not the other, and both sides
+are RBS's -- not, as this entry says, an actual side "inferred from
+Ruby source written inside `module RBS`".
+
+That puts the root exactly where `CLAUDE.md` already puts it, in the
+DTSTTCPW section: `Signatures::TypeConverter` holds an absolute
+`RBS::TypeName` at the moment it builds the `Types::Nominal` and
+flattens it to a String, after which three readers normalise spellings
+to get the identity back. The direction is to keep the identity, which
+is a change to what a `Nominal` carries and to its readers -- not a
+hunk a review round can add.
 ## 024.237 Four shapes stopped reporting by declining on the body, not by reading it
 
 ```yaml
@@ -4189,6 +4299,14 @@ spec already does in a subprocess. Cost is startup time on every boot
 against a list that changes once per Ruby release, so it is a real
 trade rather than an obvious win — hence an entry.
 
+
+**Cannot be driven here.** This is a Ruby 4.0 fact and 0.3.0's
+measurements were taken on `ruby 3.4.10`, where
+`object_signature_gap_spec` re-derives `UNIVERSAL_RUBY_NAMES` and
+agrees with it. The entry is about what the informational 4.0 job
+reports, and nothing in this session could reach that. Left open
+with its target unchanged rather than re-triaged on a run that did
+not happen.
 ## 024.289 A class that includes an unread module is not checked at class level, so a typo there is silent
 
 ```yaml
