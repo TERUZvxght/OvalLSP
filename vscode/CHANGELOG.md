@@ -6,6 +6,71 @@ All notable changes to the OvalLSP VS Code extension are documented here.
 Each release leads with what changed; the reasoning, the measurements and
 the disproved approaches are kept below it under **Details**.
 
+## 0.3.1 — a restart left the old gems answering
+
+A `bundle install` restarts the Runtime Agent, and the list of classes
+the running application had reported was kept across it. So the
+undefined-method check went on judging your code against the gems that
+were gone: a method that exists in the version you just installed was
+reported as one that does not exist. It is dropped with the
+application it described now, and asked for again.
+
+- **`@ivar` receivers: what this extension told you was wrong.**
+  `KNOWN_LIMITATIONS` said, in both languages, that a method called on
+  an instance variable is never checked. In ordinary Ruby it is, and
+  has been since 0.3.0 — including where the variable was assigned in
+  another method of the same class. Only view templates are silent,
+  and the page now says so, with the reason.
+- **The test suite stops re-tightening the cache on every launch.**
+  Permissions on a cache scope are set once and marked, rather than
+  walked again each time the extension starts.
+
+### Details
+
+**The restart.** `#restart_agent` already dropped the ancestor
+registry, under a comment making the argument in full: what comes back
+may be a different Gemfile and a different environment, so answering
+from the old process would be answering about an application that no
+longer exists. The gem index is the same kind of fact from the same
+process and was not dropped. Driven, with the fresh index as the
+control:
+
+    FRESH: ["MyCtl has no method named `definitely_not_a_method_either`"]
+    STALE: ["MyCtl has no method named `performed?`",
+            "MyCtl has no method named `definitely_not_a_method_either`"]
+
+`performed?` exists in the gems that came back. A wrong answer, which
+this project ranks below saying nothing — and the page describing this
+area told users that nothing is reported wrongly while the list is
+missing.
+
+**Two records that were wrong about their own subject.** Both open
+items scheduled for this release were re-driven before being worked
+on, and driving them changed what they were. One said the
+undefined-method check never acts on an instance-variable receiver;
+it does, in the commoner of the two places, and the limitation
+published for it was false in both languages. The other asked for the
+class list to be cached per gem version — which cannot work, because
+a class is attributed to the gem whose file defines it, and Rails
+defines each model's generated methods inside Active Record's own
+source. Measured twice with the lockfile byte-identical: adding one
+model, and then one scope, changed what that gem reported.
+
+**A capability from 0.3.0 had no test.** Reporting a typo on an
+instance-variable receiver could be removed with 1,156 examples still
+green. It is pinned now, together with the template's silence, so
+neither can change without an example failing.
+
+**Three checks that were people remembering.** The document describing
+the protocol between the two processes said version 1 while the code
+said 2, had no section for three of the nine requests it answers, and
+specified seven that do not exist — six written as though somebody
+might implement them. A release branch existed that no document named,
+which is what once had a release prepared twice in parallel. And the
+guard stopping one document from naming the release in progress was
+still hunting a branch-name spelling retired two releases ago. All
+three now fail a check rather than waiting for a reader.
+
 ## 0.3.0 — the first release that adds
 
 Eight new things the editor can do, and the undefined-method check now

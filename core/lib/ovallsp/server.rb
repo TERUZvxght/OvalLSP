@@ -1082,6 +1082,21 @@ module Ovallsp
       @gem_index_loaded = load_gem_index
     end
 
+    # Dropped rather than re-fetched here. The restart runs on its own
+    # thread and the new Agent is not ready yet; `#ensure_gem_index` asks
+    # again on the next document that needs one, which is the path a cold
+    # start already takes.
+    #
+    # Assigned through `#gem_index=` the same way `#load_gem_index` does,
+    # rather than guarded by `respond_to?`: the two must install an index
+    # the same way, and a guard here that the assignment ten lines below
+    # does not have would be a guard no input can reach.
+    def reset_gem_index
+      @gem_index_loaded = false
+      @gem_index = Semantic::GemIndex.empty
+      @hierarchy_index.gem_index = @gem_index
+    end
+
     def load_gem_index
       # `respond_to?` rather than a rescue: a manager that cannot answer
       # this question is not a failure to contain, it is a manager from
@@ -4262,6 +4277,14 @@ module Ovallsp
           # cleared -- answered names are never re-asked, so a stale answer
           # that got in would have been permanent.
           @ancestry_registry.reset
+          # The gem index is the same kind of fact from the same process, and
+          # was not dropped here until 0.3.1: a `bundle install` routes to a
+          # restart, and the held index went on answering with the old gems'
+          # method sets. Driven, with the fresh index as the control, that is a
+          # report of `performed?` as a method that does not exist on a class
+          # that has it -- a wrong answer, which section 0 ranks below saying
+          # nothing.
+          reset_gem_index
           manager = start_agent_bootstrap(
             bootstrap,
             root: root, logger: logger, route_registry: route_registry, model_registry: model_registry,

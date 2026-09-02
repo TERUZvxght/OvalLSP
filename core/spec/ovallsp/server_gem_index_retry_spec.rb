@@ -31,6 +31,10 @@ RSpec.describe "Ovallsp::Server and a gem index fetch that comes back empty" do
     double = Object.new
     double.define_singleton_method(:fetch_gem_index) { answers.shift }
     double.define_singleton_method(:ready?) { true }
+    # `#restart_agent` stops the old manager before it resets anything;
+    # a double without this dies on the restart thread and the example
+    # below then fails for the wrong reason.
+    double.define_singleton_method(:stop) { nil }
     double
   end
 
@@ -42,6 +46,18 @@ RSpec.describe "Ovallsp::Server and a gem index fetch that comes back empty" do
     server.instance_variable_set(:@agent_manager, manager)
     allow(server).to receive(:agent_manager_ready?).and_return(true)
   end
+
+# The restart runs on its own thread, so the assertion has to outlive
+# the call rather than the statement after it.
+def wait_until(timeout: 3)
+  deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + timeout
+  loop do
+    return true if yield
+    return false if Process.clock_gettime(Process::CLOCK_MONOTONIC) >= deadline
+
+    sleep 0.02
+  end
+end
 
   def gem_index_size
     server.instance_variable_get(:@gem_index)&.size.to_i
@@ -70,6 +86,44 @@ RSpec.describe "Ovallsp::Server and a gem index fetch that comes back empty" do
 
     expect(gem_index_size).to eq(1), "a third call must not re-fetch: `answers` is empty and would give nil"
   end
+
+# **A restart replaces the application, and the gem index is a fact about
+# the one that is gone.**
+#
+# `#restart_agent` resets `@ancestry_registry` under a comment that makes
+# the argument in full -- "what comes back may be a different Gemfile, a
+# different environment, and answering from the old process would be
+# answering about an application that no longer exists". The gem index is
+# the same kind of fact from the same process and was not reset, so a
+# `bundle install` -- which `#classify_change` routes to a restart --
+# left the old gem's method sets answering for the new one.
+#
+# Driven before the fix, with the fresh index as the control:
+#
+#     FRESH: ["MyCtl has no method named `definitely_not_a_method_either`"]
+#     STALE: ["MyCtl has no method named `performed?`",
+#             "MyCtl has no method named `definitely_not_a_method_either`"]
+#
+# `performed?` exists in the gems that came back; the held index predates
+# them. That is a false report on code that runs, which section 0 ranks
+# below saying nothing -- and `KNOWN_LIMITATIONS` told users in both
+# languages that nothing is reported wrongly while the index is missing.
+it "forgets the gem index when the Agent restarts" do
+  server.send(:ensure_gem_index)
+  server.send(:ensure_gem_index)
+  expect(gem_index_size).to eq(1), "the fixture must have an index to forget, or this asserts nothing"
+
+  # Since `024.74` trust is asked in front of the spawn, and a server
+  # built here has handled no `initialize` to be told.
+  server.instance_variable_set(:@workspace_trusted, true)
+  server.send(:restart_agent)
+
+  expect(wait_until { gem_index_size.zero? }).to be(true),
+                                                 "the index survived a restart, so it describes an application " \
+                                                 "that is gone"
+  expect(server.instance_variable_get(:@gem_index_loaded)).to be_falsey,
+                                                             "the flag still says this session has an index"
+end
 
   it "says so in the log rather than swallowing the empty answer" do
     server.send(:ensure_gem_index)

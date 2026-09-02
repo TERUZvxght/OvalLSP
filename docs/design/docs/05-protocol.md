@@ -27,7 +27,7 @@ hello request:
   "id": 1,
   "method": "agent/hello",
   "params": {
-    "protocolVersion": 1,
+    "protocolVersion": 2,
     "coreVersion": "0.1.0",
     "capabilities": {
       "progress": true,
@@ -44,7 +44,7 @@ response:
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "protocolVersion": 1,
+    "protocolVersion": 2,
     "agentVersion": "0.1.0",
     "root": "/workspace",
     "railsVersion": "8.x",
@@ -59,7 +59,14 @@ response:
 }
 ```
 
-major protocol不一致は接続拒否。minor機能はcapabilityで交渉する。
+**不一致は接続拒否。** `AgentProcessManager#compatible_protocol_version?`は
+`==`で比べるので、major/minorの区別なくどの差でも拒否する。この行は長く
+「major不一致は接続拒否」と書いていたが、そう動いたことはない。minor機能は
+capabilityで交渉する。
+
+**version 2は0.3.0。** `agent/gemIndex`を追加し、`module_answer`に
+`privateInstanceMethods`と`protectedInstanceMethods`を加えた。version 1は
+0.1.0から0.2.18まで。
 
 ## 3. 共通型
 
@@ -97,6 +104,14 @@ backtraceはdebug設定時のみ返す。
 
 接続確立とcapability negotiation。
 
+### agent/status
+
+引数なし。生きていることの確認だけを目的とし、pidと起動からの経過秒を返す。
+
+```json
+{"pid": 41234, "uptimeSeconds": 12.5}
+```
+
 ### agent/snapshot
 
 params:
@@ -131,7 +146,61 @@ requestは何も返さない(以前は`"metadata"`を既定にしていた)。`0
 {"models": [{"name": "User", "tableName": "users", "columns": [...], "associations": [...], "partial": false}]}
 ```
 
+### agent/gemIndex
+
+引数なし。0.3.0で追加。読み込まれている名前付きモジュールのうち、
+`Object.const_source_location`が`…/gems/<name>-<version>/`を指すものだけを、
+その gem ごとにまとめて返す。
+
+```json
+{"gems": {"activerecord-8.1.3.1": {"classes": [
+  {"name": "ActiveRecord::Base",
+   "ancestors": ["ActiveRecord::Base", "ActiveRecord::Persistence", "Object"],
+   "instanceMethods": ["save"],
+   "privateInstanceMethods": ["_run_save_callbacks"],
+   "protectedInstanceMethods": [],
+   "singletonMethods": ["find"],
+   "singletonAncestors": ["ActiveRecord::Querying"],
+   "definesMethodMissing": false}
+]}}}
+```
+
+**コアクラスは構造上ここに現れない。** `Object.const_source_location("Integer")`
+は`[]`を返すため、gemのパスに帰属させられず、この一覧に載らない。gemが
+`Integer`を再オープンしていても同じである。
+
+`instanceMethods`は**publicとprotectedの集合**であり、privateは別に送る。
+レシーバなしの呼び出しは継承したprivateにも届くので、分けずに送ると
+ActionControllerのサブクラスにおける`process_action`が「存在しないメソッド」
+として報告される。
+
+`definesMethodMissing`を送るのは、`method_missing`を定義するクラスが
+どんな索引にも列挙できない名前に答えるためである。「閉じている」が
+「メソッド集合を全部知っている」を意味しなければ、その上に築いた検査は
+確かめていないことを主張することになる。
+
+### agent/ancestors
+
+```json
+{"names": ["ActiveSupport::TestCase", "Widget"]}
+```
+
+response: `objectAncestors`(そのプロセスの`Object.ancestors`)と、
+名前ごとに次の三つのいずれか。
+
+- `{"ancestors": [...]}` — 読み込み済みなので実際の祖先鎖を`Object`のそれと
+  比較できる;
+- `{"definedOutsideWorkspace": true}` — 読み込まれていないが、ワークスペース
+  外のファイルからのautoloadとして登録されている。何も読み込まずに決着する;
+- `null` — アプリケーションがその名前を知らないか、まだ読み込んでいない
+  ワークスペースのファイルからしか知らない。どちらもCoreの静的な読みを
+  そのまま残す。
+
 ### agent/routeLocation
+
+**未実装。** `core/lib`のどこもこのメソッドを名指していない。routeの位置は
+`agent/snapshot`のroute tableが`sourceLocation`として既に運んでいるので、
+Coreはそちらから読む。
 
 ```json
 {"helper": "post_path", "routeSet": "main_app"}
@@ -149,9 +218,13 @@ requestは何も返さない(以前は`"metadata"`を既定にしていた)。`0
 
 ### agent/restartRequired
 
+**未実装。** `core/lib`のどこもこのメソッドを名指していない。
+
 query形式で、変更pathがrestartを必要とするか確認する。MVPではCore側ruleのみでもよい。
 
 ### agent/plugin/request
+
+**未実装。** `core/lib`のどこもこのメソッドを名指していない。
 
 ```json
 {
@@ -168,6 +241,8 @@ query形式で、変更pathがrestartを必要とするか確認する。MVPで�
 ## 5. Notifications
 
 ### agent/progress
+
+**未実装。** `core/lib`のどこもこの通知を名指していない。
 
 ```json
 {
@@ -188,9 +263,14 @@ Agent側で変化を検出した場合。既定ではAgentにfile watcherを持�
 
 ### agent/log
 
+**未実装。** `core/lib`のどこもこの通知を名指していない。Agentのstderrは
+そのままCoreのOutput channelへ流れる。
+
 structured log。raw stderrも許容するが、protocol利用を推奨。
 
 ### agent/runtimeChanged
+
+**未実装。** `core/lib`のどこもこの通知を名指していない。
 
 pluginやRails内部の変化でsnapshot generationが変わったとき。
 

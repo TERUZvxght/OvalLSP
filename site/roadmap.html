@@ -200,6 +200,28 @@
           </p>
         </article>
 
+        <article class="tl-item" id="v031">
+          <div class="tl-version">
+            <span class="v">0.3.1</span>
+            <span class="mark mark--yes">shipped</span>
+          </div>
+          <h3>A restart left the old gems answering</h3>
+          <ul class="feature-list">
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>A <code>bundle install</code> no longer leaves the check judging your code against the gems that were replaced.</strong> The Runtime Agent restarts, and the class list it had reported was kept across it &mdash; so a method that exists in the version just installed was reported as one that does not. It is dropped with the application it described now.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>What this project published about <code>@ivar</code> receivers was wrong.</strong> The limitation page said, in both languages, that a method called on an instance variable is never checked. In ordinary Ruby it is, and has been since 0.3.0. Only view templates are silent, and the page now says which and why.</span>
+                    </li>
+                    <li>
+                      <span class="tick is-yes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+                      <span><strong>The test suite stops re-tightening the cache on every launch,</strong> and three documents that went stale without anything noticing now fail a check instead &mdash; the protocol between the two processes, the record naming a release&rsquo;s branch, and a guard still hunting a branch-name spelling retired two releases ago.</span>
+                    </li>
+          </ul>
+        </article>
+
         <article class="tl-item" id="v0218">
           <div class="tl-version">
             <span class="v">0.2.18</span>

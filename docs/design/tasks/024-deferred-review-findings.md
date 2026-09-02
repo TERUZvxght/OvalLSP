@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**300 entries below** <!-- measured: register-entries = 300 -->,
+**301 entries below** <!-- measured: register-entries = 301 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -466,8 +466,8 @@ nobody can search is the recording habit without the benefit.
 | [`024.291`](024-deferred-review-findings-resolved.md#024291-a-repeated-key-in-a-metadata-block-is-resolved-silently-and-one-of-them-discarded-a-withdrawal) | fixed | 0.2.18 | A repeated key in a metadata block is resolved silently, and one of … |
 | [`024.292`](024-deferred-review-findings-resolved.md#024292-045-disagrees-with-its-own-table-about-what-0-3-0-is-blocked-on) | fixed | 0.3.0 | `045` disagrees with its own table about what 0.3.0 is blocked on |
 | [`024.293`](024-deferred-review-findings-resolved.md#024293-check-pinned-mutations-rb-reads-a-skipped-example-as-a-mutation-that-escaped) | fixed | 0.3.0 | `check_pinned_mutations.rb` reads a skipped example as a mutation th… |
-| [`024.294`](#024294-diagnostics-do-not-act-on-an-ivar-receiver-even-where-hover-and-completion-know-its-type) | open | 0.3.1 | Diagnostics do not act on an `@ivar` receiver, even where hover and … |
-| [`024.295`](#024295-the-gem-index-is-fetched-on-every-boot-and-persisted-nowhere) | open | 0.3.1 | The gem index is fetched on every boot and persisted nowhere |
+| [`024.294`](#024294-a-template-s-ivar-receiver-is-not-checked-and-its-type-is-one-action-s) | open | 0.4.0 | A template's `@ivar` receiver is not checked, and its type is one ac… |
+| [`024.295`](#024295-the-gem-index-is-fetched-on-every-boot-and-persisted-nowhere) | open | 0.3.2 | The gem index is fetched on every boot and persisted nowhere |
 | [`024.296`](#024296-renaming-a-local-a-pattern-also-binds-rewrites-the-rest-and-leaves-the-pattern) | open | 0.3.2 | Renaming a local a pattern also binds rewrites the rest and leaves t… |
 | [`024.297`](#024297-call-hierarchy-lists-no-callee-reached-through-send-super-or-a-macro) | open | 0.4.0 | Call hierarchy lists no callee reached through `send`, `super` or a … |
 | [`024.298`](#024298-an-inlay-hint-on-foo-new-names-new-s-parameters-not-initialize-s) | open | 0.4.0 | An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initi… |
@@ -477,6 +477,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.302`](#024302-the-def-quick-fix-is-offered-for-one-receiver-shape-of-three) | open | 0.4.0 | The `def` quick fix is offered for one receiver shape of three |
 | [`024.303`](#024303-a-multiple-assignment-s-targets-get-no-inlay-hint) | open | 0.4.0 | A multiple assignment's targets get no inlay hint |
 | [`024.304`](#024304-the-gem-backed-check-is-silenced-by-any-class-body-call-the-parser-cannot-read) | open | 0.4.0 | The gem-backed check is silenced by any class-body call the parser c… |
+| [`024.305`](#024305-one-name-six-modules-and-the-index-keeps-the-empty-one) | open | 0.3.2 | One name, six modules, and the index keeps the empty one |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -757,6 +758,36 @@ sweep used.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** Turning the
 unassigned-`@ivar` check's silences into answers adds what the
 product can say, and its own blocker is `024.R7`'s scope.
+
+**The blocker is gone, and the cross-controller shape was driven in
+0.3.1.** `024.R7` shipped in 0.3.0, so the attribution this entry
+waited for exists. The first of its two remaining shapes reproduces
+as written, and with a control:
+
+    A  view reads `@widget`, which only WidgetsController assigns,
+       and WidgetsController renders "articles/show"
+       -> [unassigned-ivar] `@widget` is never assigned before this is read
+    B  CONTROL: the same assignment moved into the view's own action
+       -> (no diagnostics)
+
+A false report on code that runs, which is the direction section 0
+ranks worst — and it is *published*, not deferred, because
+`unassigned-ivar` is on by default.
+
+**It also reaches the type side, which this entry did not say.** The
+same blindness makes hover answer `Post`, completion offer Post's
+methods, and `explainType` answer `{type: "Post"}` on a template
+`WidgetsController#index` renders with a `Comment`. So the "precision"
+half is not only a silence to be turned into an answer; three shipped
+capabilities already answer, and answer wrongly, on the same shape.
+`024.294` is the fourth reader of the same fact and is the one that
+declines.
+
+What closes all four is one thing: a reverse lookup from a template
+path to every action that renders it. The index already holds every
+literal render target, so this is a lookup rather than new evidence —
+and until it exists, no consumer of `#ivars_for_view` should be given
+more authority than it has.
 ## 024.19 The argument-type check judges against a class the receiver is not
 
 ```yaml
@@ -4538,65 +4569,102 @@ earns its cheapness from that filter.
 **Retargeted to 0.4.0 in 0.3.0's closing sweep.** An `Object`
 receiver becoming judgeable is the largest of the enumeration
 answers, and `024.R7` as shipped does not carry it.
-## 024.294 Diagnostics do not act on an `@ivar` receiver, even where hover and completion know its type
+## 024.294 A template's `@ivar` receiver is not checked, and its type is one action's
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.1
+target: 0.4.0
 ```
 
-**Area:** `core/lib/ovallsp/diagnostics/engine.rb`
+**Area:** `core/lib/ovallsp/semantic/receiver_resolution.rb`,
+`core/lib/ovallsp/views/controller_ivars.rb`
 
-The second half of `024.86`'s body, filed on its own when the first
-half was fixed in 0.3.0 rather than left inside a resolved entry.
+**Rewritten in 0.3.1 after being driven; half of what it said was
+false.** It claimed the undefined-method check does not act on an
+`@ivar` receiver anywhere, "even where hover and completion know its
+type", and that 0.3.0 widened the gap. In a plain Ruby file 0.3.0's
+`H8` closed it: `@article.no_such_method_zz` is reported, in the
+same-method and the sibling-method shapes alike, with the control that
+deleting only that line removes exactly one finding. The entry was
+split off from `024.86` and never re-driven — `024.130`'s shape, a
+limitation published that the product does not have, in both
+languages. `core/spec/ovallsp/diagnostics/view_ivar_receiver_spec.rb`
+now holds both halves.
 
-In an ERB template `@article.no_such_method` is silent while
-`Post.no_such_class_method` two lines below is reported. 0.3.0 makes
-the ivar's type available in ordinary Ruby files too — `H8` — so the
-gap is now wider than when it was written: hover and completion answer
-for an ivar receiver in a plain class, and the undefined-method check
-still does not.
+What remains is the template. `Views::ControllerIvars#ivars_for_view`
+computes the type and `Server#view_initial_env` hands it to hover,
+completion, explainType and go-to-definition; the two diagnostics call
+sites build their context with `assigned_ivars:` — a *name* set — and
+`Diagnostics::SemanticContext` has no field for ivar types, so
+`ReceiverResolution.receiver_type_for` calls `infer_at` with no
+`initial_env:` and the receiver is `Unknown`.
 
-**This is a silence, not a wrong answer**, which is why it is a `0.3.1`
-and not a blocker: the engine declines where it could speak. Turning a
-decline into an answer is the shape `045` calls capability.
+**Wiring it as it stands would be wrong, and that is the whole
+difficulty.** `#contributing_actions` reads only the view's own
+controller, so for a template a second controller renders it answers
+one action's type as if it were the receiver's class. Driven: seeding
+it produces `Post has no method named ...` on a template
+`WidgetsController#index` renders with a `Comment`, and `Comment` has
+that method. Over 43 ERB views in two real applications the seed added
+**zero** reports, so what it buys is not measured either.
 
-**Not re-driven since `024.86` closed**, and the reproduction to run
-first is the plain-class one rather than the ERB one the body names —
-the ivar type arrives by a different path now.
+**This is not an upper bound; it is an unenumerated union.** A second
+render from the *same* controller already yields `Comment | Post` —
+the difference is enumeration, not variance — so the shape is
+completable rather than irreducible, and `024.18` owns the index that
+would complete it. Turning this decline into an answer is what `045`
+calls capability, which is why the target moved off the patch line.
+
 ## 024.295 The gem index is fetched on every boot and persisted nowhere
 
 ```yaml
 status: open
 kind: defect
 user-visible: yes
-target: 0.3.1
+target: 0.3.2
 ```
 
 **Area:** `core/lib/ovallsp/server.rb`, `core/lib/ovallsp/cache/`
 
 `024.R7` shipped the index without the fourth of the four things its
-Direction names: persistence per gem-version. Measured against this
-repository's Rails fixture, the walk answers **2,077 classes and 938 KB
-of JSON**, and it is asked once per Core start and thrown away at exit.
+Direction names: persistence. The walk is asked once per Core start
+and thrown away at exit, so the gem-backed undefined-method check is
+off for the first seconds of every session.
 
-**What a user meets** is that the undefined-method check on
-gem-inheriting classes is off for the first seconds of every session,
-not only the first ever — the walk runs after the Agent is ready, and a
-file analysed before it lands is analysed without it. The republish
-that follows re-answers open documents, so nothing is *wrong*; it is
-late, every time.
+**Re-measured in 0.3.1, and both of the numbers this entry carried
+were wrong.** The payload is **1,815 KB**, not 938 KB — the smaller
+figure was taken before `singletonAncestors` and the visibility split
+were added to `#module_answer`, confirmed against the commit that
+wrote it. The walk itself is 17–26 ms; the wait a user meets is the
+Agent's boot, not the walk.
 
-`Gemfile.lock` already contributes to the cache key, so the shape is in
-place. `024.R7`'s Direction asks for it to become **per gem** rather
-than whole-index, so a single bumped gem re-indexes one gem and not
-thirty-three.
+**The per-gem-version key this entry asked for cannot work.** The
+Agent attributes a module by `Object.const_source_location`, i.e. by
+*definition site*, and Rails defines `<Model>::GeneratedAssociationMethods`
+and `::GeneratedRelationMethods` inside activerecord's own source — so
+`activerecord-8.1.3.1`'s slice contains entries that are a function of
+the user's `app/models/*.rb`. Driven twice, with `Gemfile.lock`
+byte-identical: adding one model grew that gem's slice, and adding one
+scope put `zzz_only_posts_have_this` under it. 19 of 2,097 entries
+have a root constant outside every gem. The whole-index alternative
+fails the same way, because `Cache::Key.workspace_digest` has no term
+that moves when `app/models/*.rb` changes.
 
-**Not attempted in 0.3.0** rather than half-done: a cache that answers
-a stale surface would turn this capability from late into wrong, and
-the invalidation is the whole of the work.
+The payload is also a function of load state — 1,941 entries after
+boot, 2,097 after `eager_load!` — and the surviving copy of a
+duplicated name differs across processes, so what would be frozen to
+disk is not stable either. `024.R7`'s own Direction already said the
+index "describes *a* boot, not the gem in the abstract"; the fourth
+bullet contradicted it, and the bullet is what changed.
+
+**What must land before anything is written to disk:** `024.305`, the
+duplicate-name collapse, because persistence would freeze it.
+
+0.3.1 fixed the half of this that was making *wrong* answers rather
+than late ones: the index is now dropped when the Agent restarts.
+
 ## 024.296 Renaming a local a pattern also binds rewrites the rest and leaves the pattern
 
 ```yaml
@@ -4880,6 +4948,60 @@ question, not a code change.
 Recorded per `CLAUDE.md`'s rule that a release ships with its open
 findings written down.
 
+## 024.305 One name, six modules, and the index keeps the empty one
+
+```yaml
+status: open
+kind: defect
+user-visible: no
+user-visible-note: >-
+  Driven, and the observable consequence could not be established.
+  Completion on a relation is 228 items as shipped against 227
+  repaired -- a wash, 13 delegation names traded for 12 real ones --
+  and no diagnostic changed either way. It is recorded because the
+  state is one `gem_index.rb`'s own header says must never exist, and
+  because `024.295` cannot write anything to disk while it does.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/runtime_agent/agent.rb` (`#each_named_module`),
+`core/lib/ovallsp/semantic/gem_index.rb:52`
+
+Rails' per-model relation classes override `.name` to return their
+parent's, so after `eager_load!` **six Module objects report
+`ActiveRecord::Relation`** — one real, five shadows
+(`ApplicationRecord::ActiveRecord_Relation`, `User::…`, and so on).
+`GemIndex#initialize` keys by name and the last writer wins, and the
+copy that survives is a shadow with no methods of its own:
+
+    ActiveRecord::Relation      knows=true  instance_methods=0  ancestors=23
+    …::CollectionProxy          knows=true  instance_methods=0
+    CONTROL ActiveRecord::Base  knows=true  instance_methods=116
+
+So the index holds a class it says it knows the whole surface of, with
+no surface — the one state that file's header says must not exist,
+because a check built on "closed" then asserts something nobody
+established. Four names are affected on this repository's fixture.
+
+The collapse is guaranteed rather than incidental: one module reports
+that name after boot and six after `eager_load!`, and
+`RailsBootstrap#populate_registries` eager-loads before
+`#ensure_gem_index` can fire.
+
+**Two candidate fixes, and the obvious one is a wash.** Keeping the
+copy with the largest method set trades 13 delegation names for 12
+real ones. Keeping the module the constant actually resolves to
+(`Object.const_get(name).equal?(mod)`) drops exactly the 20 shadows
+and no legitimate class — measured, with `ActionController::Metal`
+identical on both sides as the control. That is the better shape and
+it is not free: `const_get` on a qualified name can trigger autoload
+inside the Agent, which is a side effect the walk does not have today.
+Establishing that it is harmless is the work, and it is why this is
+not a patch.
+
+---
+
+
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml
@@ -4988,9 +5110,6 @@ noticed in the first ten minutes.
 These versions are also carried in README.md and README.ja.md's
 capability matrix, which is the user-facing statement of them; this
 section is the reasoning behind each. Keep the two in step.
-
----
-
 
 ## 024.R4 Only one platform is published or verified (roadmap, 1.0.0)
 

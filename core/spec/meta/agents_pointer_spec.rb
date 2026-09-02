@@ -25,13 +25,21 @@ RSpec.describe "AGENTS.md's work-in-progress pointer" do
   # matching anything -- which is this release's own subject.
   AGENTS_TASK_FILE = %r{`?(\d{3}(?:\.\d+)?-[a-z0-9.-]+\.md)`?}
 
-  # The same rule, for the goal paragraph's pair. Round 3 found this file
+# **Widened in 0.3.1, because the convention moved out from under it.**
+# Branches became `release/<version>` on 2026-09-01 and `AGENTS.md`,
+# `CONTRIBUTING.md` and `.ja.md` were all updated; this pattern was
+# not, so it went on hunting a spelling nobody will write again.
+# Driven: `Work for the next one lives on `release/0.3.2`.` matched
+# nothing before and matches now, while the generic `release/<version>`
+# form the documents use, and ordinary citations, still match neither.
+#
+# The same rule, for the goal paragraph's pair. Round 3 found this file
   # stating the rule in its header and then breaking it one method later:
   # the release-and-branch regex was written out twice, so replacing the
   # assertion's copy with one that matches nothing left all five examples
   # green -- the planted example still passing while the real one had
   # stopped matching anything, which is the header's own sentence.
-  AGENTS_RELEASE_CLAIM = %r{`feat/[0-9]+\.[0-9]+\.[0-9]+`|being prepared now is \*\*[0-9]}
+  AGENTS_RELEASE_CLAIM = %r{`(?:feat|fix|release)/[0-9]+\.[0-9]+\.[0-9]+`|being prepared now is \*\*[0-9]}
 
   # The bullet, from its bold opener to the blank line before the next
   # top-level bullet. Its own italic postscript is part of it.
@@ -73,9 +81,15 @@ RSpec.describe "AGENTS.md's work-in-progress pointer" do
   end
 
   it "would catch the claim coming back" do
-    planted = "The release being prepared now is **0.3.0, on `feat/0.3.0`** — the first"
+    # Both spellings, because the pattern now carries both and an example
+    # planting only one would let the other rot the way the first did.
+    retired = "The release being prepared now is **0.3.0, on `feat/0.3.0`** — the first"
+    current = "Work for the next one lives on `release/0.3.2`."
 
-    expect(planted.scan(AGENTS_RELEASE_CLAIM)).not_to be_empty
+    expect(retired.scan(AGENTS_RELEASE_CLAIM)).not_to be_empty
+    expect(current.scan(AGENTS_RELEASE_CLAIM)).not_to be_empty
+    # And the generic form the documents themselves use is not a claim.
+    expect("The branch is `release/<version>`.".scan(AGENTS_RELEASE_CLAIM)).to be_empty
   end
 
   it "does not name a task file by number" do
