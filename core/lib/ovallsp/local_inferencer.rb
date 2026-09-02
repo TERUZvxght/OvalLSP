@@ -984,7 +984,64 @@ module Ovallsp
       def visit_class_node(_node) = nil
       def visit_module_node(_node) = nil
       def visit_singleton_class_node(_node) = nil
-      def visit_def_node(node) = node.receiver ? nil : super
+      def visit_def_node(node)
+        return if node.receiver
+
+        was = @nested
+        @nested = true
+        super
+      ensure
+        @nested = was
+      end
+
+      # **A write sitting in the class body is the class object's**, the
+      # same as one in `def self.x`, and 0.3.0 excluded only the second:
+      #
+      #   $ ruby -e '
+      #   class Widget
+      #     @class_body_ivar = 1
+      #     def self.build; @singleton_ivar = 2; end
+      #     def inst; @instance_ivar = 3; end
+      #   end
+      #   Widget.build
+      #   p Widget.instance_variables
+      #   p Widget.new.tap(&:inst).instance_variables
+      #   '
+      #   # => [:@class_body_ivar, :@singleton_ivar]
+      #   # => [:@instance_ivar]
+      #   # ruby 3.4.10
+      #
+      # **A block is not the class body**, which is the distinction a first
+      # version of this got wrong by asking "are we inside a `def`":
+      #
+      #   $ ruby -e '
+      #   class W
+      #     define_method(:setter) { @from_block = 1 }
+      #     @body_level = 2
+      #   end
+      #   p W.new.tap(&:setter).instance_variables
+      #   p W.instance_variables
+      #   '
+      #   # => [:@from_block]
+      #   # => [:@body_level]
+      #   # ruby 3.4.10
+      #
+      # `define_method`'s block runs against the instance, and this walk
+      # exists to reach exactly those. So the test is depth: a write reached
+      # without entering a `def` or a block is the class object's.
+      def visit_block_node(node)
+        was = @nested
+        @nested = true
+        super
+      ensure
+        @nested = was
+      end
+
+      def visit_instance_variable_write_node(node) = @nested ? super : nil
+      def visit_instance_variable_or_write_node(node) = @nested ? super : nil
+      def visit_instance_variable_and_write_node(node) = @nested ? super : nil
+      def visit_instance_variable_operator_write_node(node) = @nested ? super : nil
+      def visit_instance_variable_target_node(node) = @nested ? super : nil
     end
     private_constant :ClassBodyIvarWrites
 

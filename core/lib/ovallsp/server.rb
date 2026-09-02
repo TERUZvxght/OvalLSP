@@ -1063,8 +1063,13 @@ module Ovallsp
       return if @gem_index_loaded
       return unless agent_manager_ready?(@agent_manager)
 
-      @gem_index_loaded = true
-      load_gem_index
+      # **Set when there is an index, not when one is asked for.** This
+      # was the other way round, and `#load_gem_index` returns quietly
+      # on a nil payload -- which is what a slow or busy Agent gives
+      # back. So one timeout at boot left the index empty and this guard
+      # refusing to try again, and 0.3.0's whole gem-backed check was
+      # off until the editor restarted.
+      @gem_index_loaded = load_gem_index
     end
 
     def load_gem_index
@@ -1076,7 +1081,13 @@ module Ovallsp
       return unless @agent_manager.respond_to?(:fetch_gem_index)
 
       payload = @agent_manager.fetch_gem_index
-      return if payload.nil?
+      # `false`, and said out loud. The caller reads it as "there is no
+      # index yet", which is the difference between a fetch that failed
+      # and a session that already has one.
+      if payload.nil?
+        @logger.info("gem index: the Agent answered nothing; will ask again")
+        return false
+      end
 
       @gem_index = Semantic::GemIndex.from_agent(payload)
       # Into the stack that is already running, which is the only place
@@ -1084,6 +1095,7 @@ module Ovallsp
       # first version did, and the capability it exists for stayed off.
       @hierarchy_index.gem_index = @gem_index
       @logger.info("gem index: #{@gem_index.size} class(es) from the running application")
+      true
     end
 
     def status_result(_params)

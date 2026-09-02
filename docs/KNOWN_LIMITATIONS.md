@@ -7,6 +7,41 @@ Marketplace Pre-Release, as distinct from bugs. See
 [docs/SUPPORT_MATRIX.md](SUPPORT_MATRIX.md) for the exact,
 evidence-based supported/unsupported table this summarizes.
 
+## What 0.3.0's new answers do not cover yet
+
+Eight things arrived in 0.3.0, and a review before release drove each of
+them against real code. What it found is below — none of these is the
+feature failing, and each is a shape it does not reach.
+
+- **Call hierarchy lists no callee reached through `send`, `super` or a
+  Rails macro.** A method whose callees are all written that way shows
+  "no outgoing calls", which looks the same as a method that has
+  none. <!-- documents: 024.297 -->
+- **An inlay hint on `Foo.new(1, 2)` names `Class#new`'s parameters
+  rather than `initialize`'s**, so the labels come from a declaration
+  that is not the one being called. <!-- documents: 024.298 -->
+- **Completion on a relation offers none of the model's own scopes,
+  `enum` predicates or `def self.` methods.** Rails delegates those to
+  the model and they are callable there; the list says
+  otherwise. <!-- documents: 024.299 -->
+- **`@ivar` completion reads the class's own body only**, so an
+  `@current_user` a superclass or a concern assigns is not offered. In a
+  Rails application that is most of them. <!-- documents: 024.300 -->
+- **The route-helper quick fix ignores `_path` versus `_url` and the
+  helper's arity**, so it can offer an absolute URL where a path was
+  written, or a helper that needs an argument for one written with
+  none. <!-- documents: 024.301 -->
+- **The `def` quick fix is offered on an instance receiver only.** A
+  report on `Foo.bar` or on a receiverless call gets a diagnostic with no
+  fix beside it. <!-- documents: 024.302 -->
+- **A multiple assignment's targets get no inlay hint**, and where the
+  same name was assigned earlier the hint from *that* assignment can be
+  shown against the new one. <!-- documents: 024.303 -->
+- **The gem-backed undefined-method check declines about any class whose
+  body carries a macro this extension does not model** — `before_action`,
+  `helper_method`, `rescue_from`. In a Rails application that is nearly
+  every controller. <!-- documents: 024.304 -->
+
 ## Platform scope
 
 - **Only macOS on Apple Silicon (`darwin-arm64`) is targeted.** The VSIX
@@ -794,13 +829,20 @@ local in a thousand files of real gem source and running what came out.
   the signature and its call sites by hand. Every other parameter —
   positional, optional, `*rest`, `**opts`, `&block`, and block
   parameters — is renamed with its uses.
-- **A binding whose name begins with an underscore is left behind when
-  it is written inside a pattern** — `in {_a:}`, `in [_a, 1]`. Ruby lets
-  one pattern bind such a name twice, and two edits that are each
-  correct would then make the file stop parsing, so none is made.
-  Written as a multiple-assignment target, a `for` variable or a
-  `rescue => _e` it is renamed with the rest: none of those can make the
-  illegal pair.
+- **Renaming a local that a pattern also binds rewrites the rest and
+  leaves the pattern.** `in [_a, 1]` — or `in {a:}` for any name — is a
+  binding this extension does not record, and where the same name is
+  also assigned normally in that scope the rename goes ahead on the
+  occurrences it can see. The file still parses and still runs, and the
+  method answers something else:
+
+  ```ruby
+  def m(pair) = (_a = 0; case pair; in [_a, 1] then _a; end)   # => 5
+  def m(pair) = (bb = 0; case pair; in [_a, 1] then bb; end)   # => 0
+  ```
+
+  With no ordinary assignment of that name, the rename is refused
+  instead and nothing is edited. <!-- documents: 024.296 -->
 
 ## Diagnostics say nothing about a method called on an `@ivar`
 

@@ -16,35 +16,6 @@ planned, are in
 [`design/tasks/024-deferred-review-findings.md`](design/tasks/024-deferred-review-findings.md)
 (024.R3).
 
-## 0.3.0 — Knowing what the gems define
-
-*Capability only.* The accuracy work that had been aimed at 0.3.0 moved
-to the patch line in 0.2.14, because a release cannot both add
-capability and absorb everything unscheduled. A minor now ships with no
-open, user-visible defect that has no release assigned to it.
-
-
-- **Unknown methods are reported on classes that inherit from a gem** —
-  `ApplicationController`, and so most controllers and jobs. Today the
-  check is deliberately silent there, because reporting would mean
-  guessing (024.R7).
-- **`Article.all.` completes.** A `Relation` answers what it holds —
-  `where`, `order`, `limit`, and the chain they build. Today hover names
-  the type (`Relation[Article]`) and completion offers nothing, because
-  nothing tells the engine what a Relation's own API is; the gem index
-  above is what supplies it.
-- **Inlay hints.** The inferred types and parameter names appear in the
-  code itself, not only when you hover.
-- **Quick fixes for each diagnostic.** Define the missing method, correct
-  the route helper name, fix the argument count.
-- **Go to type definition** — jump to the class an expression evaluates
-  to, rather than to the method being called.
-- **Call hierarchy** — callers and callees, navigable, instead of a flat
-  list of references.
-- **Highlight the other occurrences** of the symbol under the cursor,
-  within the file.
-- **Completion of `@ivar` names** the moment you type the sigil.
-
 ## 0.4.0 — Refinements
 
 - **Per-check severity settings**, so a check you disagree with can be a

@@ -48,6 +48,24 @@ parameter is refused instead, with the reason: `def m(by:)` binds `by`
 because the keyword is `by`, so renaming the local would rename the
 keyword every caller passes.
 
+**Reviewed before release, and what that found is published rather than
+quietly carried.** A four-stage review — one reader given only the
+feature list and no code, six given one feature each, then judging,
+fixing and checking — produced 168 findings; 69 reproduced inside this
+release's own code and 38 were fixed. What it did not fix is eight
+shapes these new answers do not reach, and `KNOWN_LIMITATIONS` now has a
+section naming each: a call hierarchy that cannot see `send`, a
+relation's completion that omits the model's own scopes, a `def` fix
+offered on one receiver shape of three, and five more.
+
+Two of its findings were fixed here because leaving them would have been
+worse than the feature not shipping. One timeout from the Runtime Agent
+used to disable the gem-backed check for the rest of the session. And a
+rename could rewrite a local a `case/in` pattern also binds, leaving the
+pattern behind — the file still ran, and answered something else. The
+limitation published for that said no edit was made at all, which was
+true of one half of it and false of the half a user meets.
+
 ### Details
 
 **The gem index is what makes the new diagnostic possible, and what

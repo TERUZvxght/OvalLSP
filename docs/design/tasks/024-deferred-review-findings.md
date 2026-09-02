@@ -132,7 +132,7 @@ roadmap file for the same reason everything else does — one place.
 
 ## Retired numbers
 
-**291 entries below** <!-- measured: register-entries = 291 -->,
+**300 entries below** <!-- measured: register-entries = 300 -->,
 counted by `core/spec/meta/measured_claims_spec.rb` rather than by hand.
 The marker lives here rather than in the Index, which
 `scripts/reindex_findings.rb` regenerates and would strip it from.
@@ -468,6 +468,15 @@ nobody can search is the recording habit without the benefit.
 | [`024.293`](024-deferred-review-findings-resolved.md#024293-check-pinned-mutations-rb-reads-a-skipped-example-as-a-mutation-that-escaped) | fixed | 0.3.0 | `check_pinned_mutations.rb` reads a skipped example as a mutation th… |
 | [`024.294`](#024294-diagnostics-do-not-act-on-an-ivar-receiver-even-where-hover-and-completion-know-its-type) | open | 0.3.1 | Diagnostics do not act on an `@ivar` receiver, even where hover and … |
 | [`024.295`](#024295-the-gem-index-is-fetched-on-every-boot-and-persisted-nowhere) | open | 0.3.1 | The gem index is fetched on every boot and persisted nowhere |
+| [`024.296`](#024296-renaming-a-local-a-pattern-also-binds-rewrites-the-rest-and-leaves-the-pattern) | open | 0.3.2 | Renaming a local a pattern also binds rewrites the rest and leaves t… |
+| [`024.297`](#024297-call-hierarchy-lists-no-callee-reached-through-send-super-or-a-macro) | open | 0.4.0 | Call hierarchy lists no callee reached through `send`, `super` or a … |
+| [`024.298`](#024298-an-inlay-hint-on-foo-new-names-new-s-parameters-not-initialize-s) | open | 0.4.0 | An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initi… |
+| [`024.299`](#024299-completion-on-a-relation-offers-none-of-the-model-s-own-scopes-or-class-methods) | open | 0.4.0 | Completion on a relation offers none of the model's own scopes or cl… |
+| [`024.300`](#024300-ivar-completion-offers-nothing-from-a-superclass-or-an-included-concern) | open | 0.4.0 | `@ivar` completion offers nothing from a superclass or an included c… |
+| [`024.301`](#024301-the-route-helper-quick-fix-ignores-the-path-url-split-and-the-helper-s-arity) | open | 0.4.0 | The route-helper quick fix ignores the `_path`/`_url` split and the … |
+| [`024.302`](#024302-the-def-quick-fix-is-offered-for-one-receiver-shape-of-three) | open | 0.4.0 | The `def` quick fix is offered for one receiver shape of three |
+| [`024.303`](#024303-a-multiple-assignment-s-targets-get-no-inlay-hint) | open | 0.4.0 | A multiple assignment's targets get no inlay hint |
+| [`024.304`](#024304-the-gem-backed-check-is-silenced-by-any-class-body-call-the-parser-cannot-read) | open | 0.4.0 | The gem-backed check is silenced by any class-body call the parser c… |
 | [`024.R1`](#024R1-rails-specific-behaviour-has-no-explicit-boundary-roadmap-1-0-0) | open | 1.0.0 | Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0) |
 | [`024.R2`](024-deferred-review-findings-resolved.md#024R2-argument-type-checking-done-0-2-0) | done | 0.2.0 | Argument *type* checking (done, 0.2.0) |
 | [`024.R3`](#024R3-feature-parity-roadmap-measured-against-pylance) | open | unscheduled | Feature parity roadmap, measured against Pylance |
@@ -4588,6 +4597,289 @@ thirty-three.
 **Not attempted in 0.3.0** rather than half-done: a cache that answers
 a stale surface would turn this capability from late into wrong, and
 the invalidation is the whole of the work.
+## 024.296 Renaming a local a pattern also binds rewrites the rest and leaves the pattern
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb` (`declined_underscore?`),
+`core/lib/ovallsp/rename/planner.rb` (`binding_site_unknown?`)
+
+A pattern's binding site is not recorded, and `024.273`'s refusal only
+fires when *no* occurrence of the name is a write. An ordinary
+assignment of the same name in the same scope defeats it, so the rename
+goes ahead on the occurrences it can see and leaves the pattern:
+
+    def m(pair)
+      _a = 0
+      case pair
+      in [_a, 1]
+        _a
+      end
+    end
+
+Driven against the real server, with a non-underscore name bound the
+same way as the control in the same fixture:
+
+    rename `_a` from its read -> edits at [[1, 2], [4, 4]]
+    rename `zz` from its read -> edits at [[6, 2], [8, 6], [9, 4]]
+
+The control rewrites its pattern site at line 8; the subject leaves line
+3 alone. What comes back parses, runs, and answers something else:
+
+    $ ruby -e '
+    def before(pair); _a = 0; case pair; in [_a, 1]; _a; end; end
+    def after(pair);  bb = 0; case pair; in [_a, 1]; bb; end; end
+    p before([5, 1])
+    p after([5, 1])
+    '
+    # => 5
+    # => 0
+    # ruby 3.4.10
+
+**The published limitation said the opposite until this entry.**
+`KNOWN_LIMITATIONS` read "so none is made", which is true only for the
+half where nothing else assigns the name -- there the rename is refused.
+The half where it *does* edit is the one a user meets, and it was
+described as the one that does not happen. That is `024.131`'s shape:
+an entry understating its defect in the direction that argues for the
+lower triage. Both languages now carry the shape that reproduces.
+
+**Not the hash-pattern shorthand.** `in {a:}` is left behind for every
+name, underscore or not, which is the recorded shorthand gap rather
+than this. The control for that spelling does not behave, so it is not
+counted here.
+
+**Why 0.3.2 and not 0.4.0**: it is a wrong answer applied to the user's
+file, which `docs/PUBLISHING.md`'s table puts on the patch line.
+
+## 024.297 Call hierarchy lists no callee reached through `send`, `super` or a macro
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`outgoing_calls_result`)
+
+`outgoing_calls_result` resolves `:method_call` candidates, and
+`send(:helper)`, `public_send`, `super`, a `&:sym` block-pass and the
+Rails macros that name a method (`before_action`, `delegate`) are not
+recorded as one. So a method whose only callees are written that way
+answers **no outgoing calls**, which the panel renders identically to
+a method that really has none.
+
+The gap is the rendering, not the resolution: "nothing" is read as a
+claim. `send(:x)` with a literal symbol is the half the parser can
+name exactly and is the cheapest place to start.
+
+Found by 0.3.0's four-stage review workflow and judged in scope.
+Skipped by that review because every one of the four forms needs its
+own producer -- a reference candidate for `send(:x)`, for `super`, for
+`&:sym`, for the macros -- and four producers is not a review-round
+hunk.
+Recorded per `CLAUDE.md`'s rule that a release ships with its open
+findings written down.
+
+## 024.298 An inlay hint on `Foo.new(...)` names `new`'s parameters, not `initialize`'s
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`parameter_name_hints`)
+
+The callee resolved for `Foo.new(1, 2)` is `Class#new`, whose RBS
+signature takes `*args`, so the labels come from the wrong
+declaration. What a reader wants is `initialize`'s parameter names,
+which is where the arguments actually land.
+
+Distinct from the splat and operator refusals 0.3.0 already makes:
+those decline where the mapping does not hold, and this one labels
+confidently from a declaration that is not the one being called.
+
+Found by 0.3.0's four-stage review workflow and judged in scope.
+Skipped because the severe half of the finding it came from -- labels
+landing on the wrong line -- was fixed and pinned in the same pass, and
+this half needs the resolver to answer `initialize` where the call
+names `new`.
+Recorded per `CLAUDE.md`'s rule that a release ships with its open
+findings written down.
+
+## 024.299 Completion on a relation offers none of the model's own scopes or class methods
+
+```yaml
+status: open
+kind: friction
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb` (`receiver_members`)
+
+`Post.where(x: 1).order(:id).` answers `ActiveRecord::Relation`'s
+members and none of `Post`'s own — a `scope :published`, an `enum`'s
+generated predicates, a `def self.` on the model. Rails delegates all
+of those to the model, so they are callable there and the list says
+they are not.
+
+`#receiver_members` maps a `Generic` to a bare `Nominal` and drops the
+`[Post]` parameter, so nothing downstream can reach the model. The
+registry already holds the singleton methods the Agent reports; what
+is missing is the identity to look them up by.
+
+Found by 0.3.0's four-stage review workflow and judged in scope.
+Skipped because the fix reaches across two layers: `#receiver_members`
+would have to consult the model registry, which is a change to what a
+member lookup is allowed to ask.
+Recorded per `CLAUDE.md`'s rule that a release ships with its open
+findings written down.
+
+## 024.300 `@ivar` completion offers nothing from a superclass or an included concern
+
+```yaml
+status: open
+kind: friction
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`sibling_ivar_env`)
+
+The class-wide walk reads the class's own body. An `@current_user`
+assigned by `ApplicationController` and read in a subclass, or one a
+concern's `included do` assigns, is not offered — which in a Rails
+application is most of them.
+
+C15's row promises "the instance variables the class assigns
+anywhere", and by that wording this is outside it rather than a
+broken promise. It is recorded because the distinction is invisible
+to a reader typing `@`.
+
+Found by 0.3.0's four-stage review workflow and judged in scope.
+Skipped because seeding from the ancestor chain's class bodies changes
+which names the list holds for every class, and the release had no
+measurement budget left to drive that.
+Recorded per `CLAUDE.md`'s rule that a release ships with its open
+findings written down.
+
+## 024.301 The route-helper quick fix ignores the `_path`/`_url` split and the helper's arity
+
+```yaml
+status: open
+kind: defect
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`route_helper_action`)
+
+The replacement is chosen by edit distance over every helper name, so
+`user_pathh` can be offered `user_url` — a different thing, an
+absolute URL rather than a path — and a helper needing an argument
+can replace one written with none, which raises at run time.
+
+The distance ceiling stops a nonsense suggestion; it does not stop a
+plausible wrong one. Both halves want the call's own candidate, which
+`route_helper_action` is not given.
+
+Found by 0.3.0's four-stage review workflow and judged in scope.
+Skipped because both halves want the call's own candidate, and
+`route_helper_action` is handed only the document, the uri and the
+diagnostic.
+Recorded per `CLAUDE.md`'s rule that a release ships with its open
+findings written down.
+
+## 024.302 The `def` quick fix is offered for one receiver shape of three
+
+```yaml
+status: open
+kind: friction
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/server.rb` (`define_method_action`)
+
+The unknown-method check reports on an instance receiver, a constant
+receiver (`Foo.bar`) and a receiverless call. Only the first is
+offered a `def`. The other two see a diagnostic with no fix, which
+reads as the fix having failed rather than never having been offered.
+
+Wiring the constant case in without also reading `candidate.singleton`
+turns a missing fix into a wrong one — it would insert an instance
+method for a call that needs `def self.`.
+
+Found by 0.3.0's four-stage review workflow and judged in scope.
+Skipped on the finding's own argument that wiring the constant case in
+without reading `candidate.singleton` turns a missing fix into a wrong
+one.
+Recorded per `CLAUDE.md`'s rule that a release ships with its open
+findings written down.
+
+## 024.303 A multiple assignment's targets get no inlay hint
+
+```yaml
+status: open
+kind: friction
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/local_inferencer.rb` (`locate`, `eval_type`)
+
+`a, b = 1, "x"` labels neither target. The inferencer has no case for
+`Prism::MultiWriteNode`, so the walk does not descend into the
+targets and each stays unknown.
+
+Worse than a blank where a type would go: because the multi-write
+never rebinds, an earlier binding of the same name survives, and a
+hint from *that* assignment can be shown against the new one.
+
+Found by 0.3.0's four-stage review workflow and judged in scope.
+Skipped because it needs a `Prism::MultiWriteNode` case pairing each
+target with its right-hand element, which is a new inference rather
+than a guard.
+Recorded per `CLAUDE.md`'s rule that a release ships with its open
+findings written down.
+
+## 024.304 The gem-backed check is silenced by any class-body call the parser cannot read
+
+```yaml
+status: open
+kind: friction
+user-visible: yes
+target: 0.4.0
+```
+
+**Area:** `core/lib/ovallsp/index/workspace_index.rb` (`open_surface?`)
+
+A class body carrying a macro this parser does not model has its
+surface marked open, and the undefined-method check then declines
+about that class entirely. In a Rails application that is nearly
+every controller — `before_action`, `helper_method`, `rescue_from` —
+so 0.3.0's gem-backed check reaches far fewer classes than the
+capability row suggests.
+
+The decline itself is right: a macro may install anything. What is
+not recorded anywhere is how much of a real application it covers.
+
+Found by 0.3.0's four-stage review workflow and judged in scope.
+Skipped because the decline is correct and what is missing is a
+measurement of how much of a real application it costs -- a corpus
+question, not a code change.
+Recorded per `CLAUDE.md`'s rule that a release ships with its open
+findings written down.
+
 ## 024.R1 Rails-specific behaviour has no explicit boundary (roadmap, 1.0.0)
 
 ```yaml
