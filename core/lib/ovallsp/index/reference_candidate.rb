@@ -43,7 +43,12 @@ module Ovallsp
     #   though `owner` looks identical either way). `[]` for a top-level
     #   reference. See Semantic::ReceiverResolution.
     # - arguments: for :method_call only -- what the call site passes, as
-    #   `{ positional:, splat:, keywords:, block: }`. `nil` for every
+    #   `{ positional:, positional_locations:, splat:, keywords:, block: }`.
+    #   `positional_locations` is the source range of each positional
+    #   argument, in the same order, and has four readers: the
+    #   argument-type check, inlay hints, the surplus-argument action and
+    #   `Server#diagnostic_maximum`. It was absent from this list while
+    #   0.3.0 added the fourth of them. `nil` for every
     #   other kind, and for a call whose shape the parser deliberately
     #   does not model. `splat` being true means the positional count is
     #   a lower bound, not a count, so no arity conclusion may be drawn

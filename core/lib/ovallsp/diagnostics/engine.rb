@@ -692,9 +692,14 @@ module Ovallsp
       # wrong. The word is added only where the method actually declares
       # keywords; adding it everywhere would be a different wrong
       # message.
+      # **The noun follows the count, not the upper bound.** It used to ask
+      # `maximum == 1`, so a method accepting none or one read as taking
+      # "0..1 argument" -- singular over a range. Exactly one is the only
+      # count that is singular, and a range is never exactly one.
       def expected_arity(required, maximum, positional: false)
+        exactly_one = required == maximum && maximum == 1
         count = required == maximum ? required.to_s : "#{required}..#{maximum}"
-        "#{count}#{positional ? ' positional' : ''} argument#{maximum == 1 ? '' : 's'}"
+        "#{count}#{positional ? ' positional' : ''} argument#{exactly_one ? '' : 's'}"
       end
 
       # The one source declaration this call resolves to, or nil when the

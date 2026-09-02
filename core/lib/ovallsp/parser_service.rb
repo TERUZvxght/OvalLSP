@@ -1800,12 +1800,12 @@ module Ovallsp
         return unless GENERATES_MEMBERS[bare] == value.name
 
         # `SymbolNode` only. `Struct.new("Named", :c)` names the struct
-    # with that String and takes `:c` as its one member, and
-    # `#symbol_name` reads a String literal too -- which recorded
-    # `Named` and `Named=` as members of it.
-    names = Array(value.arguments&.arguments)
-            .select { |argument| argument.is_a?(Prism::SymbolNode) }
-            .filter_map { |argument| symbol_name(argument) }
+        # with that String and takes `:c` as its one member, and
+        # `#symbol_name` reads a String literal too -- which recorded
+        # `Named` and `Named=` as members of it.
+        names = Array(value.arguments&.arguments)
+                .select { |argument| argument.is_a?(Prism::SymbolNode) }
+                .filter_map { |argument| symbol_name(argument) }
         return if names.empty?
 
         saved = @cref

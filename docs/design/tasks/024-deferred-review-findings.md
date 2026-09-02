@@ -478,16 +478,16 @@ nobody can search is the recording habit without the benefit.
 | [`024.303`](#024303-a-multiple-assignment-s-targets-get-no-inlay-hint) | open | 0.4.0 | A multiple assignment's targets get no inlay hint |
 | [`024.304`](#024304-the-gem-backed-check-is-silenced-by-any-class-body-call-the-parser-cannot-read) | open | 0.4.0 | The gem-backed check is silenced by any class-body call the parser c… |
 | [`024.305`](#024305-one-name-six-modules-and-the-index-keeps-the-empty-one) | open | 0.3.2 | One name, six modules, and the index keeps the empty one |
-| [`024.306`](#024306-the-0-3-0-record-states-as-measured-that-a-method-call-candidate-never-resolves-to-a-constant) | open | 0.3.2 | The 0.3.0 record states as measured that a `:method_call` candidate … |
+| [`024.306`](024-deferred-review-findings-resolved.md#024306-the-0-3-0-record-states-as-measured-that-a-method-call-candidate-never-resolves-to-a-constant) | fixed | 0.3.2 | The 0.3.0 record states as measured that a `:method_call` candidate … |
 | [`024.307`](#024307-the-capability-suite-s-own-fixtures-cannot-reach-six-shapes-the-release-found) | open | 0.3.2 | The capability suite's own fixtures cannot reach six shapes the rele… |
 | [`024.308`](#024308-referenceresolver-resolve-states-no-contract-about-alignment) | open | 0.3.2 | `ReferenceResolver#resolve` states no contract about alignment |
 | [`024.309`](#024309-the-quick-fix-e2e-example-asserts-that-the-result-parses-which-both-answers-do) | open | 0.3.2 | The quick-fix E2E example asserts that the result parses, which both… |
-| [`024.310`](#024310-a-range-arity-reads-takes-0-1-argument) | open | 0.3.2 | A range arity reads "takes 0..1 argument" |
-| [`024.311`](#024311-referencecandidate-s-comment-omits-a-field-four-readers-use) | open | 0.3.2 | `ReferenceCandidate`'s comment omits a field four readers use |
-| [`024.312`](#024312-the-release-record-has-one-direction-of-the-ivar-split-and-not-the-other) | open | 0.3.2 | The release record has one direction of the ivar split and not the o… |
-| [`024.313`](#024313-four-comment-lines-and-a-chain-sit-at-the-wrong-indentation) | open | 0.3.2 | Four comment lines and a chain sit at the wrong indentation |
-| [`024.314`](#024314-a-comment-numbers-a-schema-bump-that-was-not-made) | open | 0.3.2 | A comment numbers a schema bump that was not made |
-| [`024.315`](#024315-inlay-hints-label-block-parameters-and-no-release-note-says-so) | open | 0.3.2 | Inlay hints label block parameters, and no release note says so |
+| [`024.310`](024-deferred-review-findings-resolved.md#024310-a-range-arity-reads-takes-0-1-argument) | fixed | 0.3.2 | A range arity reads "takes 0..1 argument" |
+| [`024.311`](024-deferred-review-findings-resolved.md#024311-referencecandidate-s-comment-omits-a-field-four-readers-use) | fixed | 0.3.2 | `ReferenceCandidate`'s comment omits a field four readers use |
+| [`024.312`](024-deferred-review-findings-resolved.md#024312-the-release-record-has-one-direction-of-the-ivar-split-and-not-the-other) | fixed | 0.3.2 | The release record has one direction of the ivar split and not the o… |
+| [`024.313`](024-deferred-review-findings-resolved.md#024313-four-comment-lines-and-a-chain-sit-at-the-wrong-indentation) | fixed | 0.3.2 | Four comment lines and a chain sit at the wrong indentation |
+| [`024.314`](024-deferred-review-findings-resolved.md#024314-a-comment-numbers-a-schema-bump-that-was-not-made) | fixed | 0.3.2 | A comment numbers a schema bump that was not made |
+| [`024.315`](024-deferred-review-findings-resolved.md#024315-inlay-hints-label-block-parameters-and-no-release-note-says-so) | fixed | 0.3.2 | Inlay hints label block parameters, and no release note says so |
 | [`024.316`](#024316-two-lines-each-drop-a-top-level-call-and-only-both-together-are-pinned) | open | 0.3.2 | Two lines each drop a top-level call, and only both together are pin… |
 | [`024.317`](#024317-six-of-the-documentation-map-s-trigger-rows-have-nothing-enforcing-them) | open | 0.3.2 | Six of the documentation map's trigger rows have nothing enforcing t… |
 | [`024.318`](#024318-a-workspace-directory-shaped-like-a-gem-path-would-be-attributed-to-a-gem) | open | 0.4.0 | A workspace directory shaped like a gem path would be attributed to … |
@@ -5015,30 +5015,6 @@ inside the Agent, which is a side effect the walk does not have today.
 Establishing that it is harmless is the work, and it is why this is
 not a patch.
 
-## 024.306 The 0.3.0 record states as measured that a `:method_call` candidate never resolves to a constant
-
-```yaml
-status: open
-kind: defect
-user-visible: no
-user-visible-note: >-
-  A record defect, not a product one. Nothing a user meets changes;
-  what changes is what the next reader believes about the resolver
-  before touching it, which is how a line gets deleted on a false
-  premise.
-target: 0.3.2
-```
-
-**Area:** `docs/design/tasks/054-0.3.0-the-first-release-that-adds.md`,
-section "One of the four turned out to be dead, and was removed"
-
-The record says a `:method_call` candidate "resolves to a method kind
-or to nothing — never to a constant or a class", and removes a line on
-that basis. `ReferenceResolver` also resolves such a candidate to
-`:route_helper` and to an Active Record column, neither of which is a
-method kind. The conclusion may still hold; what does not hold is the
-premise as written, and the record presents it as measured.
-
 ## 024.307 The capability suite's own fixtures cannot reach six shapes the release found
 
 ```yaml
@@ -5103,131 +5079,6 @@ each, with a `match_array` so no shape can be skipped. Both of those
 are worth having. Neither distinguishes a `def` inserted inside the
 class from one inserted after it: 0.3.0 found exactly that, by hand,
 after this example had been passing on both placements.
-
-## 024.310 A range arity reads "takes 0..1 argument"
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.2
-```
-
-**Area:** `core/lib/ovallsp/diagnostics/engine.rb:695-698`
-
-The plural follows `maximum` rather than the count being printed:
-`"argument#{maximum == 1 ? '' : 's'}"`. For a range whose upper bound
-is 1 the sentence comes out singular over a plural count — `def opt(a = 1)`
-called with three arguments reports that it "takes 0..1 argument".
-
-Worth one caution before fixing it: `Server#diagnostic_maximum` reads
-the arity back out of this message with
-`/takes (?:\d+\.\.)?(\d+)(?: positional)? argument/`. The pattern has
-no word boundary, so the plural is safe to change — but two places
-agree about one user-facing string and only one of them formats it.
-
-## 024.311 `ReferenceCandidate`'s comment omits a field four readers use
-
-```yaml
-status: open
-kind: friction
-user-visible: no
-user-visible-note: >-
-  Documentation of an internal shape. It misleads whoever reads the
-  comment instead of the producer, and 0.3.0 added the fourth reader
-  without the comment gaining the field.
-target: 0.3.2
-```
-
-**Area:** `core/lib/ovallsp/index/reference_candidate.rb:48-52`
-
-The comment gives the shape as `{ positional:, splat:, keywords:, block: }`.
-`ParserService#call_argument_shape` also records `positional_locations:`,
-which the argument-type check, inlay hints, the surplus-argument action
-and `diagnostic_maximum` all read.
-
-## 024.312 The release record has one direction of the ivar split and not the other
-
-```yaml
-status: open
-kind: defect
-user-visible: no
-user-visible-note: >-
-  Half a fix described as the whole of it. The product does both
-  directions; a reader of the record would believe it does one, and
-  would find the second half unexplained on the next visit.
-target: 0.3.2
-```
-
-**Area:** `docs/design/tasks/054-0.3.0-the-first-release-that-adds.md:609`
-
-The record explains that an `@x` written in `def self.build` used to be
-offered inside instance methods. The change also runs the other way —
-an ivar written in the class body is the class object's, and 0.3.1
-found and fixed the depth test that decided it — and the record does
-not say so.
-
-## 024.313 Four comment lines and a chain sit at the wrong indentation
-
-```yaml
-status: open
-kind: friction
-user-visible: no
-user-visible-note: >-
-  Layout only. It is here because the file is one the parser's
-  reviewers read closely, and mis-indentation there reads as a
-  different block structure than the one that runs.
-target: 0.3.2
-```
-
-**Area:** `core/lib/ovallsp/parser_service.rb`,
-`#record_assigned_struct_members`
-
-The comment opening "`SymbolNode` only." starts at eight spaces with
-its continuations at four, and the `names = ...` assignment with its
-chained `select`/`filter_map` is indented to the enclosing block
-rather than to the method.
-
-## 024.314 A comment numbers a schema bump that was not made
-
-```yaml
-status: open
-kind: defect
-user-visible: no
-user-visible-note: >-
-  Nothing reaches a user. The hazard is the next bump: a numbered
-  entry for a version that does not exist invites the following one to
-  take the number after it, and the cache key would then skip a value.
-target: 0.3.2
-```
-
-**Area:** `core/lib/ovallsp/cache/key.rb`, above `SCHEMA_VERSION = 6`
-
-The list above the constant carries an entry numbered 7, describing
-`singletonAncestors` and closing "Left at 6 deliberately". Numbering a
-note about a bump that did not happen, inside the list that records the
-bumps that did, is the confusion that list exists to prevent.
-
-## 024.315 Inlay hints label block parameters, and no release note says so
-
-```yaml
-status: open
-kind: defect
-user-visible: no
-user-visible-note: >-
-  The labels are correct, so a user meets a feature rather than a
-  fault. It is filed because an undescribed behaviour cannot be
-  reviewed against intent, and a capability nobody wrote down is one
-  nobody can decide to remove.
-target: 0.3.2
-```
-
-**Area:** `core/lib/ovallsp/server.rb`, `#local_type_hints`
-
-Parameter binding sites are recorded as writes, so
-`[1, 2].each { |n| n }` renders as `[1, 2].each { |n: Integer| n }`.
-Driving `def f(a)` and `def f(a = 1)` produced no wrong label, so this
-is a description gap rather than a defect in the hint.
 
 ## 024.316 Two lines each drop a top-level call, and only both together are pinned
 

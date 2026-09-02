@@ -16424,6 +16424,176 @@ honest refusal.
 Both halves, because either alone leaves something wrong: without the
 first, the next suite that skips is misreported again; without the
 second, four real decisions go unverified on CI.
+## 024.306 The 0.3.0 record states as measured that a `:method_call` candidate never resolves to a constant
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: no
+user-visible-note: >-
+  A record defect, not a product one. Nothing a user meets changes;
+  what changes is what the next reader believes about the resolver
+  before touching it, which is how a line gets deleted on a false
+  premise.
+target: 0.3.2
+```
+
+**Area:** `docs/design/tasks/054-0.3.0-the-first-release-that-adds.md`,
+section "One of the four turned out to be dead, and was removed"
+
+The record says a `:method_call` candidate "resolves to a method kind
+or to nothing — never to a constant or a class", and removes a line on
+that basis. `ReferenceResolver` also resolves such a candidate to
+`:route_helper` and to an Active Record column, neither of which is a
+method kind. The conclusion may still hold; what does not hold is the
+premise as written, and the record presents it as measured.
+
+**Fixed in 0.3.2.** The record said the line was removed; the code had put it back, and the guard is live against a route helper. Corrected in `054`, which is what the entry was about.
+
+## 024.310 A range arity reads "takes 0..1 argument"
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: yes
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/diagnostics/engine.rb:695-698`
+
+The plural follows `maximum` rather than the count being printed:
+`"argument#{maximum == 1 ? '' : 's'}"`. For a range whose upper bound
+is 1 the sentence comes out singular over a plural count — `def opt(a = 1)`
+called with three arguments reports that it "takes 0..1 argument".
+
+Worth one caution before fixing it: `Server#diagnostic_maximum` reads
+the arity back out of this message with
+`/takes (?:\d+\.\.)?(\d+)(?: positional)? argument/`. The pattern has
+no word boundary, so the plural is safe to change — but two places
+agree about one user-facing string and only one of them formats it.
+
+**Fixed in 0.3.2.** `#expected_arity` asks whether the count is exactly one rather than whether the upper bound is, so a range is never singular. Four examples, three of them controls, and one of those pins the pattern `Server#diagnostic_maximum` reads the number back out with.
+
+## 024.311 `ReferenceCandidate`'s comment omits a field four readers use
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: friction
+user-visible: no
+user-visible-note: >-
+  Documentation of an internal shape. It misleads whoever reads the
+  comment instead of the producer, and 0.3.0 added the fourth reader
+  without the comment gaining the field.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/index/reference_candidate.rb:48-52`
+
+The comment gives the shape as `{ positional:, splat:, keywords:, block: }`.
+`ParserService#call_argument_shape` also records `positional_locations:`,
+which the argument-type check, inlay hints, the surplus-argument action
+and `diagnostic_maximum` all read.
+
+**Fixed in 0.3.2.** `positional_locations` is in the shape the comment gives, with its four readers named.
+
+## 024.312 The release record has one direction of the ivar split and not the other
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: no
+user-visible-note: >-
+  Half a fix described as the whole of it. The product does both
+  directions; a reader of the record would believe it does one, and
+  would find the second half unexplained on the next visit.
+target: 0.3.2
+```
+
+**Area:** `docs/design/tasks/054-0.3.0-the-first-release-that-adds.md:609`
+
+The record explains that an `@x` written in `def self.build` used to be
+offered inside instance methods. The change also runs the other way —
+an ivar written in the class body is the class object's, and 0.3.1
+found and fixed the depth test that decided it — and the record does
+not say so.
+
+**Fixed in 0.3.2.** `054` carries both directions of the ivar split now, and says which release found the second.
+
+## 024.313 Four comment lines and a chain sit at the wrong indentation
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: friction
+user-visible: no
+user-visible-note: >-
+  Layout only. It is here because the file is one the parser's
+  reviewers read closely, and mis-indentation there reads as a
+  different block structure than the one that runs.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/parser_service.rb`,
+`#record_assigned_struct_members`
+
+The comment opening "`SymbolNode` only." starts at eight spaces with
+its continuations at four, and the `names = ...` assignment with its
+chained `select`/`filter_map` is indented to the enclosing block
+rather than to the method.
+
+**Fixed in 0.3.2.** The comment and the chained call sit at the method's indentation, the continuations aligned on the receiver.
+
+## 024.314 A comment numbers a schema bump that was not made
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: no
+user-visible-note: >-
+  Nothing reaches a user. The hazard is the next bump: a numbered
+  entry for a version that does not exist invites the following one to
+  take the number after it, and the cache key would then skip a value.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/cache/key.rb`, above `SCHEMA_VERSION = 6`
+
+The list above the constant carries an entry numbered 7, describing
+`singletonAncestors` and closing "Left at 6 deliberately". Numbering a
+note about a bump that did not happen, inside the list that records the
+bumps that did, is the confusion that list exists to prevent.
+
+**Fixed in 0.3.2.** The note about `singletonAncestors` is unnumbered, so the next real bump cannot take a number the list has already spent.
+
+## 024.315 Inlay hints label block parameters, and no release note says so
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: no
+user-visible-note: >-
+  The labels are correct, so a user meets a feature rather than a
+  fault. It is filed because an undescribed behaviour cannot be
+  reviewed against intent, and a capability nobody wrote down is one
+  nobody can decide to remove.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/server.rb`, `#local_type_hints`
+
+Parameter binding sites are recorded as writes, so
+`[1, 2].each { |n| n }` renders as `[1, 2].each { |n: Integer| n }`.
+Driving `def f(a)` and `def f(a = 1)` produced no wrong label, so this
+is a description gap rather than a defect in the hint.
+
+**Fixed in 0.3.2.** `054` records that a block parameter gets a label, and that it is a consequence of the `write` flag rather than a separate decision.
+
 ## 024.R2 Argument *type* checking (done, 0.2.0)
 
 ```yaml

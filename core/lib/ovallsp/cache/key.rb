@@ -52,11 +52,16 @@ module Ovallsp
       # need the assignment sites, and documentHighlight reads the same
       # flag). A cache written under 5 unmarshals into a shape with one
       # member fewer, which is what this number exists to refuse.
-      # 7: `ReferenceCandidate` is unchanged, but 0.3.0 also added
-      # `singletonAncestors` to what the Agent reports -- that is not a
-      # FileSummary shape and needs no bump. Left at 6 deliberately;
-      # this comment exists so the next reader does not bump it for a
-      # change the constant is not about.
+      #
+      # **Not a bump, and deliberately not numbered.** 0.3.0 also added
+      # `singletonAncestors`, and 0.3.1 the visibility split, to what the
+      # Agent reports; neither is a FileSummary shape and neither needs a
+      # value here. This note exists so the next reader does not bump for
+      # a change the constant is not about -- and it carries no number,
+      # because every number above is a value the constant has actually
+      # had. One numbered `7:` for a bump that did not happen invites the
+      # next real bump to take 8, and the list would then skip a value it
+      # is the record of.
       SCHEMA_VERSION = 6
 
       module_function
