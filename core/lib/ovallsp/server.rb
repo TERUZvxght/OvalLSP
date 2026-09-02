@@ -1012,10 +1012,17 @@ module Ovallsp
 
     DIAGNOSTIC_SEVERITY = { error: 1, warning: 2, information: 3, hint: 4 }.freeze
 
+    # Stamped on everything this server publishes, and read back by
+    # `#code_action_result` -- which switched on `code` alone, so a
+    # diagnostic another extension published carrying one of these three
+    # codes was offered an edit computed from this engine's model of the
+    # file.
+    DIAGNOSTIC_SOURCE = "ovallsp"
+
     def to_lsp_diagnostic(finding)
       {
         range: finding.range, severity: DIAGNOSTIC_SEVERITY.fetch(finding.severity, 2), code: finding.code,
-        source: "ovallsp", message: finding.message, relatedInformation: finding.related_information
+        source: DIAGNOSTIC_SOURCE, message: finding.message, relatedInformation: finding.related_information
       }
     end
 
@@ -2122,17 +2129,13 @@ module Ovallsp
     # move across five requests.
     #
     # The answer comes from the open file's own summary: the candidates it
-    # already recorded, narrowed by name before anything is resolved, so a
-    # cursor move costs one string comparison per candidate rather than one
-    # resolution.
+    # already recorded, narrowed by name before anything is resolved.
+    # The narrowing is by *name*, not by cost -- every surviving
+    # candidate is still resolved.
+
     # A call hierarchy names methods. A class or a constant has no
     # callers in this protocol's sense, and answering for one would be
     # a list of mentions wearing a caller's name.
-    # Beyond this, "closest" stops meaning anything: two names four
-    # edits apart are different names, and rewriting one into the other
-    # is a wrong edit rather than a fix.
-    MAX_ROUTE_HELPER_DISTANCE = 3
-
     CALLABLE_KINDS = %i[instance_method singleton_method].freeze
 
     def document_highlight_result(params)
@@ -2145,11 +2148,16 @@ module Ovallsp
       return [] unless symbol_id
 
       highlights = matching_candidate_highlights(document, summary, uri, symbol_id)
-      declaration = summary.declarations.find { |d| d.symbol_id == symbol_id }
-      if declaration
-        # A declaration is `Write` -- it is where the name is introduced.
-        # `Read` for a call site. Neither is guessed: one comes from
-        # `declarations` and the other from `reference_candidates`.
+      # **Every declaration, not the first.** A method name is not a
+      # reference candidate, so this `select` is the only source of
+      # `def`-line highlights -- and with a class reopened, `find` made
+      # the two carets indistinguishable and left out the `def` the user
+      # was standing on.
+      #
+      # A declaration is `Write` -- it is where the name is introduced.
+      # `Read` for a call site. Neither is guessed: one comes from
+      # `declarations` and the other from `reference_candidates`.
+      summary.declarations.select { |d| d.symbol_id == symbol_id }.reverse_each do |declaration|
         highlights.unshift({ range: declaration.name_location || declaration.location, kind: 3 })
       end
 
@@ -2176,8 +2184,7 @@ module Ovallsp
     # distinguishes them. `write` is `nil` there, which is what the guard
     # in `#highlight_kind` reads.
     def matching_candidate_highlights(document, summary, uri, symbol_id)
-      name = Index::SymbolId.bare_name(symbol_id.name.to_s)
-      same_name = summary.reference_candidates.select { |c| c.name.to_s == name }
+      same_name = summary.reference_candidates.select { |c| candidate_may_match?(symbol_id, c) }
       return [] if same_name.empty?
 
       resolved = @reference_resolver.resolve(document, same_name, uri: uri,
@@ -2190,6 +2197,29 @@ module Ovallsp
       end
     end
 
+
+    # **The pre-filter only has to stop being narrower than the
+    # resolver**, which decides afterwards -- so where the symbol's name
+    # and the candidate's spelling are two different things, both are
+    # admitted.
+    #
+    # A constant inside its own namespace is the first case: the symbol
+    # is `::Api::Widget` and the source writes `Widget`, so an exact
+    # comparison matched nothing and documentHighlight dropped every
+    # occurrence including the one under the caret.
+    #
+    # A route helper is the second: `RouteHelper#name` is the route
+    # *stem*, so the symbol is named `user` and every call site is
+    # spelled `user_path` or `user_url` -- the pair
+    # `RouteRegistry#find_by_method_name` already reverses.
+    def candidate_may_match?(symbol_id, candidate)
+      name = Index::SymbolId.bare_name(symbol_id.name.to_s)
+      spelling = candidate.name.to_s
+      return true if spelling == name
+      return true if name.end_with?("::#{spelling}")
+
+      symbol_id.kind == :route_helper && (spelling == "#{name}_path" || spelling == "#{name}_url")
+    end
 
     # 1 = Text, 2 = Read, 3 = Write, per the protocol.
     def highlight_kind(candidate)
@@ -2220,8 +2250,22 @@ module Ovallsp
       symbol_id, range = symbol_id_and_range_at(document, summary, uri, params.fetch(:position))
       return nil unless symbol_id && CALLABLE_KINDS.include?(symbol_id.kind)
 
+      # **The declaring file, not the requesting one.** A prepare at a
+      # *call site* found no declaration in this file's own summary and
+      # built the item out of the call: the item then asserted that the
+      # method lives here, at the call, and `outgoingCalls` -- which
+      # reads the body out of `item[:uri]` -- found nothing there and
+      # answered "no outgoing calls" for a method that has some.
       declaration = summary.declarations.find { |d| d.symbol_id == symbol_id }
-      [call_hierarchy_item(symbol_id, uri, declaration&.location || range, declaration&.name_location || range)]
+      if declaration
+        return [call_hierarchy_item(symbol_id, uri, declaration.location, declaration.name_location || range)]
+      end
+
+      elsewhere = declaration_for_symbol(symbol_id)
+      return [call_hierarchy_item(symbol_id, uri, range, range)] unless elsewhere
+
+      declaring_uri, found = elsewhere
+      [call_hierarchy_item(symbol_id, declaring_uri, found.location, found.name_location || found.location)]
     end
 
     # Callers. The protocol wants the *calling method*, so each reference is
@@ -2246,9 +2290,10 @@ module Ovallsp
         grouped[[reference.uri, enclosing.symbol_id]] << reference.location
       end
 
-      grouped.map do |(caller_uri, caller_id), ranges|
-        declaration = @file_summaries[caller_uri]&.declarations&.find { |d| d.symbol_id == caller_id }
-        { from: call_hierarchy_item(caller_id, caller_uri, declaration&.location, declaration&.name_location),
+      grouped.filter_map do |(caller_uri, caller_id), ranges|
+        declaration = @file_summaries[caller_uri]&.declarations&.find { |d| d.symbol_id == caller_id } or next
+
+        { from: call_hierarchy_item(caller_id, caller_uri, declaration.location, declaration.name_location),
           fromRanges: ranges }
       end
     end
@@ -2267,27 +2312,41 @@ module Ovallsp
       declaration = summary.declarations.find { |d| d.symbol_id == symbol_id }
       return [] unless declaration
 
+      # **The same innermost-callable rule the incoming side uses.**
+      # Plain containment credited a call written inside a nested `def`
+      # to the method around it, while `#incoming_calls_result`
+      # credited the same call to the nested one -- the two directions
+      # contradicting each other about one call.
       inside = summary.reference_candidates.select do |candidate|
-        candidate.kind == :method_call && range_contains?(declaration.location, candidate.location)
+        candidate.kind == :method_call &&
+          enclosing_callable(uri, candidate.location)&.symbol_id == symbol_id
       end
       return [] if inside.empty?
 
       resolved = @reference_resolver.resolve(document, inside, uri: uri, generation: @reference_index.generation)
       grouped = Hash.new { |h, k| h[k] = [] }
       resolved.each do |r|
-        # No kind filter here, deliberately: `inside` is already only
-        # `:method_call` candidates, and a resolved one is a method
-        # kind or nothing. A guard that cannot be made to matter was
-        # written here first and removed when no fixture could tell
-        # the two behaviours apart.
-        next unless r
+        # **A `:method_call` candidate does not only resolve to a method
+        # kind.** The comment that stood here said it did, and
+        # `ReferenceResolver`'s route-helper and model-registry paths
+        # both make it false: a `user_path(1)` call resolved to a
+        # `:route_helper`, and the hierarchy then named a callee that is
+        # not a method. No fixture could tell the two behaviours apart
+        # because none had a route registry loaded.
+        next unless CALLABLE_KINDS.include?(r.symbol_id.kind)
 
         grouped[r.symbol_id] << r.location
       end
 
-      grouped.map do |callee_id, ranges|
-        target = declaration_for_symbol(callee_id)
-        { to: call_hierarchy_item(callee_id, target&.first || uri, target&.last&.location, target&.last&.name_location),
+      grouped.filter_map do |callee_id, ranges|
+        # **Dropped rather than pointed somewhere.** With no declaration
+        # this used to hand back the *calling* file and let
+        # `#call_hierarchy_item` default the range to line 0, so the
+        # item offered a jump to the top of the wrong file. Section 0
+        # ranks no jump above a wrong one.
+        target = declaration_for_symbol(callee_id) or next
+
+        { to: call_hierarchy_item(callee_id, target.first, target.last.location, target.last.name_location),
           fromRanges: ranges }
       end
     end
@@ -2295,8 +2354,11 @@ module Ovallsp
     # The protocol hands the item back verbatim, so the symbol travels in
     # `data` rather than being re-derived from a position that may have moved
     # under the user between the prepare and the expansion.
+    # `range` is required. It used to default to line 0 when a caller
+    # had none, which is how a callee with no declaration came back
+    # pointing at the top of the calling file; the default is gone so
+    # the next caller cannot reintroduce that answer by accident.
     def call_hierarchy_item(symbol_id, uri, range, selection_range)
-      range ||= { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }
       { name: Index::SymbolId.bare_name(symbol_id.name.to_s),
         kind: 6,
         uri: uri,
@@ -2317,10 +2379,14 @@ module Ovallsp
       nil
     end
 
+    # `#range_span`, the spelling `#declaration_named_at` already uses:
+    # ranking on line count alone made two `def`s written on one line
+    # tie, and `#min_by` keeps the first, so a call was credited to the
+    # outer method that did not make it.
     def enclosing_callable(uri, location)
       @file_summaries[uri]&.declarations&.select { |d| CALLABLE_KINDS.include?(d.symbol_id.kind) }
                           &.select { |d| range_contains?(d.location, location) }
-                          &.min_by { |d| d.location[:end][:line] - d.location[:start][:line] }
+                          &.min_by { |d| range_span(d.location) }
     end
 
     def declaration_for_symbol(symbol_id)
@@ -2401,7 +2467,7 @@ module Ovallsp
     # A type after each assignment, and only where the engine has one.
     def local_type_hints(document, summary, uri, range)
       writes = summary.reference_candidates.select do |candidate|
-        candidate.kind == :local_variable && candidate.write && range_contains?(range, candidate.location)
+        candidate.kind == :local_variable && candidate.write && position_in?(range, candidate.location[:end])
       end
 
       writes.filter_map do |candidate|
@@ -2456,16 +2522,34 @@ module Ovallsp
     # Optionals are labelled where the shape is plain, because there the
     # mapping does hold and refusing them was under-answering.
     def parameter_name_hints(document, summary, uri, range)
+      # **The range is tested where a hint goes, not where the call's
+      # name is.** `candidate.location` is the *message* -- `resize(` --
+      # so on a call written across lines, a request for the argument
+      # lines returned nothing (the opener was outside it) while a
+      # request for the opener's line returned hints below it, outside
+      # the range the client asked for. Asking whether any argument is
+      # in range is both the cheap pre-filter and the right question,
+      # because an argument's own position is the only place this
+      # emits.
       calls = summary.reference_candidates.select do |candidate|
         candidate.kind == :method_call && candidate.arguments &&
           candidate.arguments[:positional].to_i.positive? &&
           !candidate.arguments[:splat] && named_call?(candidate.name) &&
-          range_contains?(range, candidate.location)
+          Array(candidate.arguments[:positional_locations]).any? { |l| position_in?(range, l[:start]) }
       end
       return [] if calls.empty?
 
+      # **Keyed by location, not zipped.** `ReferenceResolver#resolve`
+      # is a `filter_map`, so its result is shorter than `calls`
+      # whenever one call cannot be resolved -- and `calls.zip(resolved)`
+      # then paired every later call with the *previous* callee's
+      # parameters, rendering one method's parameter names beside
+      # another method's arguments. `#matching_candidate_highlights`
+      # already looks references up this way.
       resolved = @reference_resolver.resolve(document, calls, uri: uri, generation: @reference_index.generation)
-      calls.zip(resolved).flat_map do |candidate, reference|
+      by_location = resolved.to_h { |reference| [reference.location, reference] }
+      calls.flat_map do |candidate|
+        reference = by_location[candidate.location]
         next [] unless reference
 
         parameters = positionally_mappable_parameters(parameters_of(reference.symbol_id))
@@ -2473,7 +2557,11 @@ module Ovallsp
 
         Array(candidate.arguments[:positional_locations]).each_with_index.filter_map do |location, i|
           parameter = parameters[i]
-          next unless parameter
+          # `&.name`: a destructuring parameter (`def f((a, b), tail)`)
+          # is a `MultiTargetNode` and has none, and interpolating nil
+          # rendered a bare `:` in the margin beside the argument.
+          next unless parameter&.name
+          next unless position_in?(range, location[:start])
           next if argument_spells?(document, location, parameter.name)
 
           { position: location[:start], label: "#{parameter.name}:", paddingLeft: false, paddingRight: true }
@@ -2481,13 +2569,33 @@ module Ovallsp
       end
     end
 
+    # Whether a single position falls inside a range. The inlay-hint
+    # handlers ask this rather than `#range_contains?`, because what has
+    # to be inside the client's range is the hint, which has no extent.
+    def position_in?(range, position)
+      return false unless range && position
+
+      after_start = range[:start][:line] < position[:line] ||
+                    (range[:start][:line] == position[:line] &&
+                     range[:start][:character] <= position[:character])
+      before_end = position[:line] < range[:end][:line] ||
+                   (position[:line] == range[:end][:line] &&
+                    position[:character] <= range[:end][:character])
+      after_start && before_end
+    end
+
     # Whether the callee has a name worth showing beside an argument.
     # `self + v` labelled `v` with `other:`, which is true and says
     # nothing -- an operator's operands are named by the operator. A
     # name that does not begin like an identifier is one of Ruby's
     # operator methods (`+`, `<=>`, `[]`, `==`).
+    # A trailing `=` is the attribute-write shape (`ParserService#visit_call_node`
+    # names it the same way), and `obj.name = "x"` rendered as
+    # `obj.name = value: "x"`. The index form of the same construct,
+    # `arr[0] = 1`, was already silent because `[]=` does not begin like
+    # an identifier -- two spellings of one thing answered oppositely.
     def named_call?(name)
-      name.to_s.match?(/\A[A-Za-z_]/)
+      name.to_s.match?(/\A[A-Za-z_]/) && !name.to_s.end_with?("=")
     end
 
     # Whether the argument already spells the parameter, in which case
@@ -2544,6 +2652,10 @@ module Ovallsp
       return [] unless document && summary
 
       Array(params.dig(:context, :diagnostics)).flat_map do |diagnostic|
+        # Ours, or nothing. The two `find`-on-range checks below are a
+        # second line of defence and were serving as the first.
+        next [] unless diagnostic[:source] == DIAGNOSTIC_SOURCE
+
         case diagnostic[:code]
         when "unknown-method" then define_method_action(document, summary, uri, diagnostic)
         when "unknown-route-helper" then route_helper_action(document, uri, diagnostic)
@@ -2568,15 +2680,56 @@ module Ovallsp
 
       target = @workspace_index.class_declarations(owner).first
       return [] unless target
+      # **Not into somebody else's installed gem.** The insertion target
+      # is the *owner's* declaring file, and for a class defined in a
+      # gem that is a read-only path inside the bundle -- so one click
+      # offered to edit vendored source. `…/gems/<name>-<version>/` is
+      # the shape every installed gem's path has, whatever the bundle
+      # layout; it is the same match the Runtime Agent uses to attribute
+      # a module to a gem.
+      return [] if INSTALLED_GEM_PATH.match?(target[:uri].to_s)
 
-      # Just inside the class's own line, at the indentation its body uses.
-      insert_line = target[:range][:start][:line] + 1
       [{ title: "Define `#{candidate.name}` in #{Index::SymbolId.bare_name(owner)}",
          kind: "quickfix", diagnostics: [diagnostic],
-         edit: { changes: { target[:uri] => [
-           { range: { start: { line: insert_line, character: 0 }, end: { line: insert_line, character: 0 } },
-             newText: "  def #{candidate.name}\n  end\n\n" }
-         ] } } }]
+         edit: { changes: { target[:uri] => [insertion_for(target, candidate)] } } }]
+    end
+
+    INSTALLED_GEM_PATH = %r{/gems/[^/]+-[0-9][^/]*/}
+
+    # **Immediately above the class's own `end`, not one line below its
+    # first.** "The class's start line plus one" is the body's first
+    # line only where the class is written across lines with nothing
+    # after the header: a one-line class put the `def` *after* its own
+    # `end`, and a header written across lines put it between `class Wide <`
+    # and the superclass. Both results parse -- which is why the E2E
+    # assertion, "the applied text parses", could not see either -- and
+    # neither defines the method: the first raises NoMethodError at the
+    # call the fix was offered for, the second a TypeError on load.
+    #
+    # The `end` is the one landmark this has without the class's body,
+    # which `WorkspaceIndex#class_declarations` does not carry.
+    def insertion_for(target, candidate)
+      range = target[:range]
+      # The parameters the call actually passes. Without them, applying
+      # this fix produced the *next* diagnostic immediately -- "takes 0
+      # arguments, but 2 given" -- whose own fix used to do nothing.
+      arity = candidate.arguments ? candidate.arguments[:positional].to_i : 0
+      signature = arity.positive? ? "(#{(1..arity).map { |i| "arg#{i}" }.join(', ')})" : ""
+
+      if range[:start][:line] == range[:end][:line]
+        # One line: insert just before the closing `end`, which is the
+        # only interior position this can name.
+        at = { line: range[:end][:line], character: [range[:end][:character] - 3, 0].max }
+        return { range: { start: at, end: at }, newText: "def #{candidate.name}#{signature}\nend\n" }
+      end
+
+      # The comment this replaces claimed "at the indentation its body
+      # uses" while two spaces were hardcoded, so a class nested in a
+      # module got its `def` at the wrong depth.
+      indent = " " * (range[:start][:character] + 2)
+      at = { line: range[:end][:line], character: 0 }
+      { range: { start: at, end: at },
+        newText: "#{indent}def #{candidate.name}#{signature}\n#{indent}end\n" }
     end
 
     # `candidate.receiver` is `{position:, written_self:}` -- a point, not
@@ -2592,6 +2745,12 @@ module Ovallsp
       type = @query_service.type_at(document, position, initial_env: {})
       type.is_a?(Types::Nominal) ? type.name.to_s : nil
     end
+
+    # How far the written name may be from a real helper before nothing
+    # is offered. Beyond this, "closest" stops meaning anything: two
+    # names four edits apart are different names, and rewriting one into
+    # the other is a wrong edit rather than a fix.
+    MAX_ROUTE_HELPER_DISTANCE = 3
 
     # Replace the name with the closest helper the application actually has.
     # Nothing is offered when nothing is close: a fix that rewrites one
@@ -2622,9 +2781,14 @@ module Ovallsp
       return [] unless keep && locations.length > keep
 
       surplus = locations[keep..]
-      from = locations[keep - 1][:end]
+      # `locations[keep - 1]` is `locations[-1]` when the callee takes
+      # none -- the *last* argument -- so `from` equalled `to` and the
+      # offered fix was an empty deletion at a point: clicking it
+      # changed nothing and the diagnostic stayed. With nothing to keep,
+      # the deletion starts at the first argument, leaving `none()`.
+      from = keep.zero? ? locations.first[:start] : locations[keep - 1][:end]
       to = surplus.last[:end]
-      return [] if opens_a_heredoc?(document, from, to)
+      return [] if crosses_a_heredoc?(document, from, to)
 
       [{ title: "Remove #{surplus.length} surplus argument#{'s' if surplus.length > 1}",
          kind: "quickfix", diagnostics: [diagnostic],
@@ -2653,6 +2817,30 @@ module Ovallsp
     # errs in everywhere else too.
     HEREDOC_OPENER = /<<[-~]?['"`]?[A-Za-z_]/
 
+    # **Asking only whether the span *opens* a heredoc missed the span
+    # that *closes* one.** With the marker among the arguments being
+    # kept and the surplus argument written after the terminator --
+    #
+    #     takes_one(<<~SQL,
+    #       select 1
+    #     SQL
+    #       2)
+    #
+    # -- the deleted text holds no `<<` at all, so the regex was silent,
+    # the fix ate the body and the terminator, and the result did not
+    # parse. So the question is whether the deletion *crosses* a
+    # heredoc: it does when it reaches past the opener's own line while
+    # a heredoc is still open there. A deletion that stays on the
+    # opener's line -- `f(<<~A, 2)` losing `, 2` -- leaves the body
+    # exactly where the marker expects it, and is still offered.
+    def crosses_a_heredoc?(document, from, to)
+      return true if opens_a_heredoc?(document, from, to)
+
+      heredoc_line_spans(document).any? do |(open_line, close_line)|
+        to[:line] > open_line && from[:line] <= close_line
+      end
+    end
+
     def opens_a_heredoc?(document, from, to)
       first = document.position_to_char_offset(from)
       last = document.position_to_char_offset(to)
@@ -2661,15 +2849,56 @@ module Ovallsp
       document.text[first...last].match?(HEREDOC_OPENER)
     end
 
+    # `[opener line, terminator line]` -- zero-based -- for every heredoc
+    # in the file, asked of Prism rather than of a regexp, because the
+    # regexp is exactly what could not see the closing side.
+    # No `rescue`: `Prism.parse` reports a malformed file as errors on
+    # the result rather than by raising, and the visitor below only
+    # reads locations off the nodes it is handed.
+    def heredoc_line_spans(document)
+      spans = []
+      Prism.parse(document.text).value.accept(HeredocCollector.new(spans))
+      spans
+    end
+
+    class HeredocCollector < Prism::Visitor
+      def initialize(spans)
+        @spans = spans
+        super()
+      end
+
+      def visit_string_node(node) = record(node) || super
+      def visit_interpolated_string_node(node) = record(node) || super
+      def visit_x_string_node(node) = record(node) || super
+      def visit_interpolated_x_string_node(node) = record(node) || super
+
+      private
+
+      def record(node)
+        return nil unless node.respond_to?(:heredoc?) && node.heredoc? && node.opening_loc && node.closing_loc
+
+        @spans << [node.opening_loc.start_line - 1, node.closing_loc.start_line - 1]
+        nil
+      end
+    end
+    private_constant :HeredocCollector
+
     # The message states the arity, and the finding's evidence does not
     # survive the round trip to the client -- so it is read back from the
     # text the client hands in, which is the only thing the protocol
     # guarantees is the same on both sides.
     def diagnostic_maximum(diagnostic)
+      # **The *maximum*.** `#expected_arity` writes a range whenever the
+      # required count differs from the maximum -- "takes 1..2
+      # arguments" -- and the pattern captured the first number it saw,
+      # which is the minimum. The fix then deleted back to the required
+      # count and silently discarded an optional argument the callee
+      # accepts. (The old "at most" alternative was never produced, and
+      # its second branch was unreachable behind the first.)
       message = diagnostic[:message].to_s
-      return nil unless message =~ /takes (?:at most )?(\d+)|takes (\d+)/
+      return nil unless message =~ /takes (?:\d+\.\.)?(\d+)(?: positional)? argument/
 
-      (Regexp.last_match(1) || Regexp.last_match(2)).to_i
+      Regexp.last_match(1).to_i
     end
 
     # Edit distance, for "the closest helper the application has". Two rows
@@ -2933,7 +3162,8 @@ module Ovallsp
               ) }
           end
         end
-      bare = @prefix_completion.items(document: document, position: position, prefix: prefix)
+      bare = @prefix_completion.items(document: document, position: position, prefix: prefix,
+                                      initial_env: view_initial_env(document.uri))
       { isIncomplete: bare.incomplete, items: route_items + bare.items }
     end
 

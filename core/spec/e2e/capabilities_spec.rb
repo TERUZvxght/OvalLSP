@@ -898,10 +898,17 @@ RSpec.describe "Extension capabilities", :e2e do
         # The edit goes into QfSubject's body, not the caller's -- the
         # method was called *on* QfSubject.
         edits = actions.find { |t, _| t.include?("absent_one") }.last
-        # Line 7, the first line of `QfSubject`'s body -- which is now
-        # the *second* class in the file, so this cannot be satisfied
-        # by inserting into whichever class comes first.
-        expect(edits.map(&:first)).to eq([7])
+        # **Line 8, the line the class's own `end` is on**, so the `def` goes
+        # in immediately above it. This asserted line 7 -- "the class's start
+        # line plus one" -- until 0.3.0's review measured what that does to
+        # the shapes this fixture does not have: a one-line class put the
+        # `def` *after* its own `end`, and a multi-line header put it between
+        # `class Wide <` and the superclass. Both parse, which is why an
+        # assertion about the applied text parsing could not see either.
+        #
+        # The fixture is unchanged, so the two numbers are the same insertion
+        # rule disagreeing rather than a different fixture.
+        expect(edits.map(&:first)).to eq([8])
         expect(edits.map(&:last).join).to include("def absent_one")
       end
     end
@@ -1887,6 +1894,42 @@ RSpec.describe "Extension capabilities", :e2e do
           by_caller = incoming.to_h { |c| [c[:from][:name], Array(c[:fromRanges]).map { |r| r[:start][:line] }] }
           expect(by_caller["go"]).to eq([2])
           expect(by_caller["inner"]).to eq([7])
+        end
+      end
+    end
+
+    # **A call written at the top level has no calling method**, and the
+    # answer is to leave it out rather than invent one. Two lines decide
+    # that -- `next unless enclosing` in the grouping, and the
+    # `declarations.find ... or next` in the render -- and the 0.3.0
+    # review's mutation sweep found that W5 above distinguishes *neither*
+    # of them: mutating either alone leaves it green, because the other
+    # still drops the group. Only mutating both fails it, so one example
+    # pinned a pair rather than a line.
+    #
+    # This one names the whole caller set, so a caller invented from a
+    # top-level call appears in the diff rather than being absorbed.
+    it "W5: leaves a top-level call out of the caller list rather than inventing a caller for it" do
+      callee = "class ChTopSubject\n  def ch_top_target\n    1\n  end\nend\n"
+      calling = <<~SOURCE
+        class ChTopCaller
+          def go
+            ChTopSubject.new.ch_top_target
+          end
+        end
+
+        ChTopSubject.new.ch_top_target
+      SOURCE
+
+      with_file("app/models/ch_top_subject.rb", callee) do |uri|
+        with_file("app/models/ch_top_caller.rb", calling) do
+          item = @client.prepare_call_hierarchy(uri, 1, 6).first
+          expect(item).not_to be_nil
+
+          callers = @client.incoming_calls(item).map { |c| c[:from][:name] }.sort
+
+        expect(callers).to eq(["go"]),
+                           "a call outside any method has no caller; inventing one names the callee as its own"
         end
       end
     end

@@ -130,6 +130,11 @@ CHECKS = [
     dir: ROOT, command: %w[ruby scripts/reindex_findings.rb --check]
   ),
   Check.new(
+    name: "issue index current",
+    why: "docs/ISSUES.md is one view of every open issue, generated so it cannot drift from the register",
+    dir: ROOT, command: %w[ruby scripts/issue_index.rb --check]
+  ),
+  Check.new(
     name: "every rescue in core/lib has a verdict",
     why: "catching and continuing is not the default here",
     dir: ROOT, command: %w[ruby scripts/check_swallowed_failures.rb]

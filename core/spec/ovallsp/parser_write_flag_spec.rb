@@ -96,4 +96,59 @@ RSpec.describe "the write flag on a local-variable occurrence" do
 
     expect(ivars.map(&:write)).to eq([true, false])
   end
+
+  # A regexp named capture binds a local, and 0.3.0 records its binding
+  # site (`024.280`) -- but through the one call that forgot the flag,
+  # so the binding read back as a `Read`. Worse, `Rename::Planner`'s new
+  # "is the binding site known" guard asks exactly this question, so a
+  # rename from a use was refused rather than performed.
+  #
+  # CONTROL: the plain local in the same fixture, whose binding must
+  # still be a write and whose use must still be a read -- an example
+  # that marked everything `true` fails on it.
+  it "marks a regexp named capture's binding site as a write" do
+    by_name = occurrences("def go(line)\n  plain = 1\n  /(?<caught>\\d+)/ =~ line\n  [plain, caught]\nend\n")
+
+    expect(by_name["caught"].map(&:write)).to eq([true, false])
+    expect(by_name["plain"].map(&:write)).to eq([true, false])
+  end
+
+  # An ivar's *operator* assignments were not recorded at all -- not as
+  # a read, not as a write, simply absent -- because only the plain read
+  # and write nodes had visitors. documentHighlight showed two of four
+  # occurrences and rename rewrote two of four, leaving a file that
+  # still parses and memoises into an ivar nothing reads.
+  #
+  # CONTROL: the plain write and the plain read in the same method, which
+  # already worked and must keep their flags.
+  def ivar_occurrences(source)
+    document = Ovallsp::TextDocument.new(uri: "file:///i.rb", text: source, version: 1, language_id: "ruby")
+    Ovallsp::ParserService.new.summarize(document).reference_candidates
+                          .select { |c| c.kind == :ivar }
+  end
+
+  it "records an ivar's operator, or- and and-writes, and its multiple-assignment target" do
+    ivars = ivar_occurrences(
+      "class C\n  def go\n    @count = 0\n    @count ||= 1\n    @count &&= 2\n" \
+      "    @count += 1\n    @count, @other = 3, 4\n    @count\n  end\nend\n"
+    )
+
+    by_name = ivars.group_by { |c| c.name.to_s }
+    expect(by_name["@count"].map { |c| [c.location[:start][:line], c.write] })
+      .to eq([[2, true], [3, true], [4, true], [5, true], [6, true], [7, false]])
+    expect(by_name["@other"].map(&:write)).to eq([true])
+  end
+
+  # A class variable took `#record_reference`'s `nil` default, so
+  # `@@x = 1` answered `Text` where `@x = 1` answers `Write`.
+  it "marks a class variable's assignment and read the way an ivar's are" do
+    cvars = Ovallsp::ParserService.new
+                                  .summarize(Ovallsp::TextDocument.new(
+                                               uri: "file:///c.rb", version: 1, language_id: "ruby",
+                                               text: "class C\n  @@n = 1\n  def go\n    @@n\n  end\nend\n"
+                                             ))
+                                  .reference_candidates.select { |c| c.kind == :cvar }
+
+    expect(cvars.map(&:write)).to eq([true, false])
+  end
 end

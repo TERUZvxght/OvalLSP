@@ -398,6 +398,30 @@ module Ovallsp
           name: name,
           ancestors: safely { mod.ancestors.filter_map { |a| module_name(a) } } || [],
           instanceMethods: safely { mod.instance_methods(false).map(&:to_s) } || [],
+          # `instance_methods(false)` is the *public and protected* set,
+          # so the private one has to be asked for separately:
+          #
+          #   $ ruby -e '
+          #   class PrivProbe
+          #     def pub; end
+          #     private def helper; end
+          #     protected def compare; end
+          #   end
+          #   p PrivProbe.instance_methods(false)
+          #   p PrivProbe.private_instance_methods(false)
+          #   p PrivProbe.protected_instance_methods(false)
+          #   '
+          #   # => [:pub, :compare]
+          #   # => [:helper]
+          #   # => [:compare]
+          #   # ruby 3.4.10
+          #
+          # A receiverless call from a subclass reaches all three, so
+          # without these a gem's own private helper was reported as a
+          # method that does not exist. Sent as their own fields, not
+          # merged, because the explicit-receiver check needs the split.
+          privateInstanceMethods: safely { mod.private_instance_methods(false).map(&:to_s) } || [],
+          protectedInstanceMethods: safely { mod.protected_instance_methods(false).map(&:to_s) } || [],
           singletonMethods: safely { mod.singleton_methods(false).map(&:to_s) } || [],
           # `extend`ed modules put their *instance* methods on the
           # class-level chain, and `singleton_methods(false)` does not

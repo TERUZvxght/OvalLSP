@@ -63,4 +63,35 @@ RSpec.describe "Ovallsp::ParserService and an underscore-prefixed binding" do
     expect(bindings("def m(pair)\n  case pair\n  in [zz, 1]\n    zz\n  end\nend\n"))
       .to eq([["pair", 0], ["zz", 2]])
   end
+
+  # **An `in` clause's body is not a pattern.** The depth was raised
+  # around the whole clause, so an ordinary assignment written *inside*
+  # the branch was declined as though it were a pattern target -- and a
+  # rename from a read then rewrote the reads and left the assignment,
+  # which changes what the method returns:
+  #
+  #   $ ruby -e '
+  #   def f(h)
+  #     case h
+  #     in [z]
+  #       _p = 0
+  #       _p, _q = 1, 2
+  #       _p
+  #     end
+  #   end
+  #   p f([1])
+  #   '
+  #   # => 1
+  #   # ruby 3.4.10
+  #
+  # CONTROL, in the same example: the underscore target in the *pattern*
+  # on the same clause must still be declined, so widening the whole
+  # rule would not pass.
+  it "records an underscore binding in an `in` clause's body, but not in its pattern" do
+    recorded = bindings(
+      "def f(h)\n  case h\n  in [_z, _z]\n    _p = 0\n    _p, _q = 1, 2\n    _p\n  end\nend\n"
+    )
+
+    expect(recorded).to eq([["_p", 3], ["_p", 4], ["_q", 4], ["h", 0]])
+  end
 end

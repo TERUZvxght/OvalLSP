@@ -155,7 +155,7 @@ module Ovallsp
     # to everything that reads a scope -- which is why completion after
     # `@` answered nothing in a view while hovering the same name in the
     # same view answered its type.
-    def scope_at(document, position, max_steps: nil)
+    def scope_at(document, position, initial_env: {}, max_steps: nil)
       offset = document.position_to_byte_offset(position)
       result = parse_cached(document)
       @steps = 0
@@ -166,7 +166,7 @@ module Ovallsp
       @scope_capture = nil
       @capturing_scope = true
 
-      locate(result.value.statements, offset, {})
+      locate(result.value.statements, offset, initial_env.dup)
       @scope_capture || Scope.new(locals: {}, self_type: nil)
     rescue BudgetExceeded, StandardError
       @scope_capture || Scope.new(locals: {}, self_type: nil)
@@ -710,7 +710,28 @@ module Ovallsp
       # a class body already holds the class object, and wrapping it again
       # would make `class << self` `ClassOf[ClassOf[W]]`.
       @self_type_stack.push(node.expression.is_a?(Prism::SelfNode) ? enclosing_class_object : nil)
-      locate(node.body, offset, {})
+      # **Its own body, not the class's.** Without this a `def` written
+      # in `class << self` took the *instance* side's ivars as its
+      # siblings -- and Ruby gives the two objects separate ivars:
+      #
+      #   $ ruby -e '
+      #   class Foo
+      #     def setup; @thing = "hello"; end
+      #     class << self
+      #       def build; @thing; end
+      #     end
+      #   end
+      #   Foo.new.setup
+      #   p Foo.build
+      #   '
+      #   # => nil
+      #   # ruby 3.4.10
+      @enclosing_class_bodies.push(node.body)
+      begin
+        locate(node.body, offset, {})
+      ensure
+        @enclosing_class_bodies.pop
+      end
     ensure
       @in_singleton_class = previous_in_singleton_class
       @self_type_stack.pop
@@ -817,6 +838,14 @@ module Ovallsp
     # sibling method on every keystroke and `024.45` already measures a
     # single analysis at nine times its stated budget.
     def sibling_ivar_env(def_node)
+      # **`def self.x` reads the class object's ivars, not the
+      # instance's.** The walk below already refuses to take a *source*
+      # assignment from a singleton sibling; the same rule applies to
+      # the method being descended into, and without it `def self.build`
+      # was seeded with the instance side's `@thing` and its answer
+      # reached a published `unknown-method` diagnostic.
+      return {} if def_node.receiver
+
       body = @enclosing_class_bodies.last
       return {} unless body
 
@@ -851,7 +880,14 @@ module Ovallsp
       saved_budget = @step_budget
       merged = {}
       disputed = []
-      body.child_nodes.compact.grep(Prism::DefNode).reject(&:receiver).each do |sibling|
+      # **Every `def` in the body, not its direct `DefNode` children.**
+      # `private def b` is a call wrapping a `def`, so a direct-child
+      # grep could not see it -- and the method it hid was often the one
+      # that made an assignment a *dispute*, so the rule "two methods
+      # disagree, answer nothing" was defeated by a visibility keyword.
+      # A `def` inside `if`, inside `included do`, inside `class_eval`
+      # is the same shape.
+      sibling_def_nodes(body).each do |sibling|
         infer_ivars_for_method_node(sibling, self_type_name: current_self_type_name,
                                              reset_budget: false).each do |name, type|
           next if type.is_a?(Types::Unknown)
@@ -862,21 +898,28 @@ module Ovallsp
             merged[name] = type
           end
         end
-
-        # The walk above answers "what type", and `next if Unknown`
-        # is right for that question and wrong for "was it assigned".
-        # `@memo ||= []`, a multiple assignment, an assignment inside
-        # `case` or `rescue` -- each is an assignment the type fold
-        # does not model, and each was missing from a list the reader
-        # reads as complete. `#assigned_ivar_names` carries the same
-        # note for the view check, which met this in 0.2.0.
-        #
-        # Typed entries win; these only fill the gaps, and a disputed
-        # name stays out either way.
-        Diagnostics::Engine::IvarWriteCollector.new.tap { |c| sibling.accept(c) }.names.uniq.each do |name|
-          merged[name.to_sym] = Types::UNKNOWN unless merged.key?(name.to_sym)
-        end
       end
+
+      # The walk above answers "what type", and `next if Unknown` is
+      # right for that question and wrong for "was it assigned".
+      # `@memo ||= []`, a multiple assignment, an assignment inside
+      # `case` or `rescue`, one made in a `define_method` block -- each
+      # is an assignment the type fold does not model, and each was
+      # missing from a list the reader reads as complete.
+      #
+      # **Applied after the fold, into its own hash.** Written into
+      # `merged` inside the per-sibling loop, an `UNKNOWN` for a shape
+      # the fold does not model was then compared against a real type by
+      # the dispute check on the next sibling -- so the answer depended
+      # on the order the methods happened to be written in.
+      #
+      # Typed entries win; these only fill the gaps, and a disputed
+      # name stays out either way.
+      ClassBodyIvarWrites.new.tap { |c| body.accept(c) }.names.uniq.each do |name|
+        key = name.to_sym
+        merged[key] = Types::UNKNOWN unless merged.key?(key) || disputed.include?(key)
+      end
+
       merged.reject { |name, _| disputed.include?(name) }
     ensure
       @self_type_stack = saved_self_types
@@ -884,18 +927,69 @@ module Ovallsp
       @step_budget = saved_budget
     end
 
+    # **The same list `IvarWriteCollector` holds**, rather than a second
+    # one twelve lines away that had already diverged from it: this knew
+    # the plain write and the or-write, and not the operator write, the
+    # and-write or a multiple-assignment target. A method whose own
+    # assignment was a multiple assignment therefore did not displace a
+    # sibling's, and the sibling's type was answered for a name this
+    # method had just written:
+    #
+    #   $ ruby -e '
+    #   class Foo
+    #     def b; @x = 1; end
+    #     def a; @x, @y = "s", 2; @x; end
+    #   end
+    #   p Foo.new.a
+    #   '
+    #   # => "s"
+    #   # ruby 3.4.10
     def own_ivar_names(def_node)
       return [] unless def_node.body
 
-      names = []
-      stack = [def_node.body]
-      until stack.empty?
-        node = stack.pop
-        names << node.name if node.is_a?(Prism::InstanceVariableWriteNode) ||
-                              node.is_a?(Prism::InstanceVariableOrWriteNode)
-        stack.concat(node.compact_child_nodes)
+      Diagnostics::Engine::IvarWriteCollector.new
+                                             .tap { |c| def_node.body.accept(c) }
+                                             .names.uniq.map(&:to_sym)
+    end
+
+    # The `def`s that share an object with the one being descended into.
+    # Not descended into: a nested class, module or `class << self`
+    # body, whose ivars belong to a different object, nor a `def
+    # self.x`, nor a `def` nested inside another `def` -- and a nested
+    # `def` is not a sibling of the one it is written in.
+    class SiblingDefNodes < Prism::Visitor
+      attr_reader :nodes
+
+      def initialize
+        @nodes = []
+        super
       end
-      names
+
+      def visit_class_node(_node) = nil
+      def visit_module_node(_node) = nil
+      def visit_singleton_class_node(_node) = nil
+
+      def visit_def_node(node)
+        @nodes << node unless node.receiver
+        nil
+      end
+    end
+    private_constant :SiblingDefNodes
+
+    # The ivar names the whole class body assigns, by the same list
+    # `IvarWriteCollector` enumerates, stopping at the boundaries above.
+    # Reading the body rather than each `def` is what lets a name
+    # assigned in a `define_method` block be offered at all.
+    class ClassBodyIvarWrites < Diagnostics::Engine::IvarWriteCollector
+      def visit_class_node(_node) = nil
+      def visit_module_node(_node) = nil
+      def visit_singleton_class_node(_node) = nil
+      def visit_def_node(node) = node.receiver ? nil : super
+    end
+    private_constant :ClassBodyIvarWrites
+
+    def sibling_def_nodes(body)
+      SiblingDefNodes.new.tap { |v| body.accept(v) }.nodes
     end
 
     def current_self_type_name

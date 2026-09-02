@@ -1237,17 +1237,40 @@ module Ovallsp
         @pattern_depth.positive? && name.to_s.start_with?("_")
       end
 
-      # The whole `in` clause rather than its pattern alone: every
-      # underscore binding in here was declined before, so covering the body
-      # as well takes nothing away, and reaching only the pattern means
-      # knowing every child a guard can hide behind.
-      %i[in_node match_required_node match_predicate_node].each do |suffix|
+      # `MatchRequiredNode` (`h => [a]`) and `MatchPredicateNode`
+      # (`h in [a]`) are a pattern and nothing else, so the whole node
+      # can carry the depth.
+      %i[match_required_node match_predicate_node].each do |suffix|
         define_method(:"visit_#{suffix}") do |node|
           @pattern_depth += 1
           super(node)
         ensure
           @pattern_depth -= 1
         end
+      end
+
+      # **An `in` clause's body is not a pattern.** Raising the depth
+      # around the whole clause was argued as taking nothing away --
+      # every underscore binding "in here" was declined before -- and
+      # that reading of "in here" was wrong: the clause's *body* holds
+      # ordinary statements, so `_p, _q = 1, 2` written inside a branch
+      # was declined as a pattern target. Renaming from a read then
+      # rewrote the reads and left the assignment, which changes what
+      # the method returns.
+      #
+      # A guard is inside `node.pattern` -- Prism wraps the pattern in an
+      # `IfNode` whose predicate is the guard -- so raising the depth
+      # around the pattern alone still covers every child a guard can
+      # hide behind, which is what the previous comment was worried
+      # about.
+      def visit_in_node(node)
+        @pattern_depth += 1
+        begin
+          visit(node.pattern)
+        ensure
+          @pattern_depth -= 1
+        end
+        visit(node.statements)
       end
 
       # **A regexp named capture binds a local, and Prism points at the
@@ -1287,7 +1310,7 @@ module Ovallsp
             next if target.location.slice == target.name.to_s
 
             location = capture_name_location(pattern, target.name.to_s)
-            record_local_variable(target.name, location) if location
+            record_local_variable(target.name, location, write: true) if location
           end
         end
         super
@@ -1426,13 +1449,63 @@ module Ovallsp
         super
       end
 
+      # The operator forms and the multiple-assignment target were not
+      # recorded *at all* until 0.3.0's review -- not as reads, not as
+      # writes -- because only the two nodes above had visitors. That is
+      # not a missing flag: documentHighlight showed two of the four
+      # occurrences of a memoised ivar, and rename rewrote the same two,
+      # handing back a file that still parses and memoises into an ivar
+      # nothing reads. The same six kinds a local already has.
+      def visit_instance_variable_operator_write_node(node)
+        record_reference(:ivar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_instance_variable_or_write_node(node)
+        record_reference(:ivar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_instance_variable_and_write_node(node)
+        record_reference(:ivar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_instance_variable_target_node(node)
+        record_reference(:ivar, node.name.to_s, node.location, write: true)
+        super
+      end
+
+      # Class variables take the flag for the same reason ivars do:
+      # without it `@@x = 1` answered `Text` where `@x = 1` answers
+      # `Write`, two spellings of one construct highlighted oppositely.
       def visit_class_variable_read_node(node)
-        record_reference(:cvar, node.name.to_s, node.location)
+        record_reference(:cvar, node.name.to_s, node.location, write: false)
         super
       end
 
       def visit_class_variable_write_node(node)
-        record_reference(:cvar, node.name.to_s, node.name_loc)
+        record_reference(:cvar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_class_variable_operator_write_node(node)
+        record_reference(:cvar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_class_variable_or_write_node(node)
+        record_reference(:cvar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_class_variable_and_write_node(node)
+        record_reference(:cvar, node.name.to_s, node.name_loc, write: true)
+        super
+      end
+
+      def visit_class_variable_target_node(node)
+        record_reference(:cvar, node.name.to_s, node.location, write: true)
         super
       end
 

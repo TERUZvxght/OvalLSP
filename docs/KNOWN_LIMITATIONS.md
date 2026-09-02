@@ -570,14 +570,6 @@ in completion, hover and go to definition. <!-- documents: 024.106 -->
 
 ## Completion offers methods you cannot call
 
-On a class — `Post.`, `Circle.` — and on any receiver in a plain Ruby
-project, the list includes private methods. Measured by asking a running
-application whether each offered name is actually callable: 91 of 816 on
-a Rails model class, 69 of 121 on a class of your own in a plain project,
-`initialize` among them. Accepting one raises `NoMethodError`. The
-instance-level list in a Rails project with the Runtime Agent connected
-is clean. <!-- documents: 024.99 -->
-
 ## The four features disagree at the same position
 
 - `<% @posts.each do |post| %>` then `post.titel` in a view: hover says
@@ -597,14 +589,12 @@ is clean. <!-- documents: 024.99 -->
 Two shapes, both of them code that runs. Measured over 177 files of
 rspec-core, i18n, psych and reline: 16 reports.
 
-- **`alias` to a method that came from an included module.**
-  `include Escaping` then `alias safe_escape escape` — calling
-  `safe_escape` is reported. Aliasing a `def` in the same class is
-  fine. <!-- documents: 024.238 -->
-- **`URI(...)` written on your own class.** `Kernel#URI` comes from a
-  gem, and this extension does not yet index what gems define, so it
-  cannot see it. The same will apply to other `Kernel` methods a gem
-  supplies. <!-- documents: 024.R7 -->
+- **`URI(...)` written on your own class** is reported as unknown.
+  Since 0.3.0 this extension does index what your gems define — 2,078
+  classes in a typical Rails bundle — but the walk that builds that
+  index reports only modules whose source sits under a gem directory,
+  and `Kernel` is not one. So a core method a gem supplies is still
+  invisible to the check. <!-- documents: 024.290 -->
 
 This section said *four* shapes and 41 reports until 0.2.16, and two of
 the four had stopped happening some releases earlier — the count was
@@ -641,20 +631,14 @@ away. <!-- documents: 024.83 -->
 
 ## An instance variable set in another method
 
-`@article` assigned by a `before_action` and read in the action has a
-type **in the view** and no type **in the controller**: hovering it in
-`show.html.erb` says `Post` and offers 408 completions, hovering the same
-name in the controller says nothing and offers none. Any ivar written in
-one method and read in another behaves this way. <!-- documents: 024.86 -->
-
 ## Where a relation stops being a relation
 
-`Post.where(published: true)` is understood. `Post.where(published:
-true).where(user_id: 1)` is not, and neither are `.order`, `.limit`,
-`.includes`, `.count` or a second scope. Hover goes blank at the second
-link, and so does the undefined-method check —
-`Post.published.where(user_id: 1).titel` is not
-reported. <!-- documents: 024.87 -->
+**Nothing is reported about a method called on a relation.**
+`Post.published.where(user_id: 1).titel` is not reported, and that is
+deliberate rather than missing: a relation reaches
+`ActiveRecord::AttributeMethods`, which answers at call time, so a
+report there would be a wrong answer. Hover and completion do follow
+the chain past its second link as of 0.3.0. <!-- documents: 024.290 -->
 
 ## Completion on a value that could be two things
 
@@ -735,13 +719,6 @@ method was found:
   exactly true in a module body: completion answers, signature help and
   hover do not. In a `class` body, and in a `def self.` inside a module,
   all three answer as of 0.2.16. <!-- documents: 024.243 -->
-- **At the top level of a file, outside any class, signature help says
-  nothing at all** — `puts(` written in a script rather than in a class
-  body. There is a fix for this that passes every test and makes things
-  worse: it would answer a call to *your own* top-level method with the
-  stdlib method of the same name, and `open` is the name that collides
-  most. It is being fixed properly rather than
-  quickly (024.229). <!-- documents: 024.229 -->
 - **Nothing is reported about a call whose receiver is `Object`** —
   which includes every bare call written at the top level of a file.
   What is on `Object` is whatever your process has loaded, and no static
@@ -817,19 +794,13 @@ local in a thousand files of real gem source and running what came out.
   the signature and its call sites by hand. Every other parameter —
   positional, optional, `*rest`, `**opts`, `&block`, and block
   parameters — is renamed with its uses.
-- **A binding whose name begins with an underscore is left behind**
-  when it is written as a multiple-assignment target, a `for`
-  variable, a `rescue => _e` or a pattern. Ruby lets one pattern bind
-  such a name twice, and two edits that are each correct would then
-  make the file stop parsing, so none is
-  made. <!-- documents: 024.274 -->
-- **The first rename of a session is refused if nothing else has been
-  asked yet**: press F2 straight after opening a file and the rename does
-  not start, while using Find All References once makes the same position
-  work. That is one line away from being fixed
-  and is being kept on purpose until the shapes above are, because it is
-  what stops a local-variable rename being one keystroke
-  away. <!-- documents: 024.245 -->
+- **A binding whose name begins with an underscore is left behind when
+  it is written inside a pattern** — `in {_a:}`, `in [_a, 1]`. Ruby lets
+  one pattern bind such a name twice, and two edits that are each
+  correct would then make the file stop parsing, so none is made.
+  Written as a multiple-assignment target, a `for` variable or a
+  `rescue => _e` it is renamed with the rest: none of those can make the
+  illegal pair.
 
 ## Diagnostics say nothing about a method called on an `@ivar`
 

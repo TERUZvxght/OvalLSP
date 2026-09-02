@@ -4376,6 +4376,34 @@ not happen.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** A repair, and one
 that cannot be driven until this project runs on Ruby 4.0 -- the
 patch line is where it waits.
+
+**Scheduled for 0.3.2, and that is a change of decision rather than a
+reading of the old one.** The standing decision this entry cites is
+`ci.yml`'s, and it is scoped in its own words to "the 0.2.x line". That
+line closed with 0.2.18. Nothing replaced it, so between 0.3.0 and this
+paragraph the 4.0 job had no policy at all -- it reported a failure that
+no release owed and no rule excused.
+
+The argument for naming a release rather than restoring "record, not
+fix": a decision with no end date is indistinguishable from never doing
+it. `024.239` is the same defect on Ruby 3.4 and it was fixed; leaving
+the 4.0 instance open forever would make the two inconsistent for no
+reason anyone could state.
+
+**What it is not**: the 4.0 job stays `continue-on-error`. Naming a
+release commits to fixing this one report, not to making 4.0 gate; the
+reason a required job would be wrong is unchanged, and
+`docs/SUPPORT_MATRIX.md` still calls 4.0 best effort.
+
+**The shape of the fix, so 0.3.2 does not rediscover it.**
+`UNIVERSAL_RUBY_NAMES` is a frozen three-element list and
+`object_signature_gap_spec` re-derives it from the running interpreter
+and core RBS. Adding `instance_variables_to_inspect` to the list makes
+the 3.4 and 3.3 jobs fail, because their Ruby does not have that name
+and the re-derivation would no longer match. So the fix is a list that
+can differ per Ruby, not a fourth element -- and the spec that catches
+this is the thing to keep, since it is what turned "a written list goes
+stale on the next Ruby" from a prediction into a failing job.
 ## 024.289 A class that includes an unread module is not checked at class level, so a typo there is silent
 
 ```yaml

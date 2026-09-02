@@ -28,8 +28,8 @@ module Ovallsp
     # empty index as authoritative would report every method in the
     # workspace as missing.
     class GemIndex
-      Entry = Data.define(:instance_methods, :singleton_methods, :ancestors, :singleton_ancestors,
-                          :defines_method_missing)
+      Entry = Data.define(:instance_methods, :private_instance_methods, :protected_instance_methods,
+                          :singleton_methods, :ancestors, :singleton_ancestors, :defines_method_missing)
 
       def self.empty = new({})
 
@@ -51,6 +51,10 @@ module Ovallsp
 
             entries[Index::SymbolId.bare_name(name.to_s)] = Entry.new(
               instance_methods: Array(klass[:instanceMethods] || klass["instanceMethods"]).map(&:to_s).to_set,
+              private_instance_methods:
+                Array(klass[:privateInstanceMethods] || klass["privateInstanceMethods"]).map(&:to_s).to_set,
+              protected_instance_methods:
+                Array(klass[:protectedInstanceMethods] || klass["protectedInstanceMethods"]).map(&:to_s).to_set,
               singleton_methods: Array(klass[:singletonMethods] || klass["singletonMethods"]).map(&:to_s).to_set,
               ancestors: Array(klass[:ancestors] || klass["ancestors"]).map(&:to_s),
               singleton_ancestors: Array(klass[:singletonAncestors] || klass["singletonAncestors"]).map(&:to_s),
@@ -93,6 +97,32 @@ module Ovallsp
 
       def instance_methods(name) = entry_for(name)&.instance_methods || Set.new
 
+      # **A receiverless call may legally reach an inherited private
+      # method**, so the closedness check has to see them or it reports
+      # correct code -- `process_action` on an ActionController subclass
+      # was the instance driven. They are kept as their own sets rather
+      # than folded into `#instance_methods`, because completion after a
+      # dot must keep offering the public set alone.
+      def private_instance_methods(name) = entry_for(name)&.private_instance_methods || Set.new
+
+      def protected_instance_methods(name) = entry_for(name)&.protected_instance_methods || Set.new
+
+      # The visibility this index records for a name on this class, or
+      # nil when it holds no such method. One place that knows the
+      # order to ask in, so `MethodResolver` and any later reader
+      # cannot disagree about it.
+      def instance_method_visibility(name, method_name)
+        entry = entry_for(name)
+        return nil unless entry
+
+        method = method_name.to_s
+        return :public if entry.instance_methods.include?(method)
+        return :protected if entry.protected_instance_methods.include?(method)
+        return :private if entry.private_instance_methods.include?(method)
+
+        nil
+      end
+
       def singleton_methods(name) = entry_for(name)&.singleton_methods || Set.new
 
       def ancestors(name) = entry_for(name)&.ancestors || []
@@ -102,13 +132,30 @@ module Ovallsp
       # `singleton_methods(false)` cannot see them.
       def singleton_ancestors(name) = entry_for(name)&.singleton_ancestors || []
 
+      # **The full name a bare one stands for, where exactly one gem
+      # class claims that last segment.** Asked as its own question,
+      # because it is a *different* question from "what is on this
+      # class" -- and it used to sit on the private lookup every reader
+      # goes through, so a workspace class called `Widget` was answered
+      # for out of a gem's `OtherGem::Widget`: closed with a method set
+      # that is not its own, its typos unreported and the foreign
+      # class's methods offered on it.
+      #
+      # `nil` where nothing claims it, or where two gems do -- two gems
+      # with a `Client` are two different classes, and answering either
+      # would be a wrong surface rather than a missing one.
+      def resolve_simple_name(name)
+        return nil if name.nil?
+
+        @unique_simple[Index::SymbolId.bare_name(name.to_s)]
+      end
+
       private
 
       def entry_for(name)
         return nil if name.nil?
 
-        bare = Index::SymbolId.bare_name(name.to_s)
-        @entries[bare] || @entries[@unique_simple[bare]]
+        @entries[Index::SymbolId.bare_name(name.to_s)]
       end
     end
   end

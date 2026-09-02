@@ -221,8 +221,8 @@
   example: "publishes nothing when the close lands while it is still computing"
 - why: "024.280's capture-name range -- without it a regexp named capture is not recorded at all, so a rename rewrites the uses and leaves the capture, and the renamed name becomes a defined-but-nil local rather than an error."
   file: core/lib/ovallsp/parser_service.rb
-  from: "            record_local_variable(target.name, location) if location\n"
-  to: ""
+  from: "            location = capture_name_location(pattern, target.name.to_s)\n"
+  to: "            location = nil\n"
   spec: spec/ovallsp/server_rename_spec.rb
   example: "rewrites a regexp named capture with the local it binds"
 - why: "024.280's skip of a target Prism already gave the name's own range -- without it the `/o` spelling is recorded twice, which is two identical edits in one WorkspaceEdit."
@@ -724,10 +724,10 @@
   to: "      return 1 if candidate.kind == :method_call\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "F2: highlights a method's declaration and its call sites in the file"
-- why: "the declaration row. A `def` produces no reference candidate, so without this the method's own name is the one place not highlighted."
+- why: "the declaration row. A `def` produces no reference candidate, so without this a method's own name is not highlighted. Re-aimed after the 0.3.0 review replaced `find` with `select ... reverse_each` here -- the old `from:` then matched an unrelated `if declaration` the same review added to prepare_call_hierarchy_result."
   file: core/lib/ovallsp/server.rb
-  from: "      if declaration\n"
-  to: "      if false && declaration\n"
+  from: "      summary.declarations.select { |d| d.symbol_id == symbol_id }.reverse_each do |declaration|\n"
+  to: "      [].each do |declaration|\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "F2: highlights a method's declaration and its call sites in the file"
 - why: "the capability's actual requirement. Warming the reference index here answers the same ranges and rebuilds O(workspace) on every cursor move, which is what the deferral note in server.rb said to watch for."
@@ -740,15 +740,15 @@
 # Call hierarchy (W5/W6), 0.3.0. Each of these was written, then
 # measured unpinned, then given a fixture that tells the two behaviours
 # apart -- the first fixture agreed with the code by accident.
-- why: "the enclosing-method attribution. Without it a call written at the top level gets a caller invented for it, which is an assertion about the user's code nothing supports."
+- why: "a call outside any method has no calling method. **Aimed at `enclosing_callable`'s containment test, because the two guards downstream cover each other**: mutating `next unless enclosing` alone, or the render's `or next` alone, leaves both W5 examples green -- each drops the group the other would have. Widening the containment makes every declaration in the file contain the call, which defeats both at once. One of the two downstream lines is redundant as the code stands, and that is recorded in docs/ISSUES.md."
   file: core/lib/ovallsp/server.rb
-  from: "        next unless enclosing\n"
-  to: "        enclosing ||= reference\n"
+  from: "                          &.select { |d| range_contains?(d.location, location) }\n"
+  to: "                          &.select { |d| true }\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "W5: lists a method's callers across files, with the range of each call"
 - why: "innermost, not first. Nested `def`s both contain the call; taking the first declaration that contains it names the outer one, which did not make the call."
   file: core/lib/ovallsp/server.rb
-  from: "                          &.min_by { |d| d.location[:end][:line] - d.location[:start][:line] }\n"
+  from: "                          &.min_by { |d| range_span(d.location) }\n"
   to: "                          &.first\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "W5: lists a method's callers across files, with the range of each call"
@@ -790,8 +790,8 @@
   example: "I1: labels each local assignment with its inferred type, and nothing it cannot infer"
 - why: "assignments only. Without it every mention of a local is labelled, including reads, which is the parser's write flag being ignored."
   file: core/lib/ovallsp/server.rb
-  from: "        candidate.kind == :local_variable && candidate.write && range_contains?(range, candidate.location)\n"
-  to: "        candidate.kind == :local_variable && range_contains?(range, candidate.location)\n"
+  from: "        candidate.kind == :local_variable && candidate.write && position_in?(range, candidate.location[:end])\n"
+  to: "        candidate.kind == :local_variable && position_in?(range, candidate.location[:end])\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "I1: labels each local assignment with its inferred type, and nothing it cannot infer"
 - why: "the `*rest` refusal. Past a rest parameter the argument index no longer names a parameter."
@@ -909,14 +909,14 @@
   example: "rewrites a parameter's own binding site, not only its uses"
 - why: "The singleton side holds different variables. Without this an `@x` written in `def self.build` was offered inside instance methods, where it reads nil."
   file: core/lib/ovallsp/local_inferencer.rb
-  from: "      body.child_nodes.compact.grep(Prism::DefNode).reject(&:receiver).each do |sibling|\n"
-  to: "      body.child_nodes.compact.grep(Prism::DefNode).each do |sibling|\n"
+  from: "        @nodes << node unless node.receiver\n"
+  to: "        @nodes << node\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "C15: offers the instance side only, including names it cannot type"
 - why: "A name the type walk cannot type is still a name the class assigns; `@memo ||= []` was missing from a list the reader reads as complete."
   file: core/lib/ovallsp/local_inferencer.rb
-  from: "          merged[name.to_sym] = Types::UNKNOWN unless merged.key?(name.to_sym)\n"
-  to: "          nil unless merged.key?(name.to_sym)\n"
+  from: "        merged[key] = Types::UNKNOWN unless merged.key?(key) || disputed.include?(key)\n"
+  to: "        nil unless merged.key?(key) || disputed.include?(key)\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "C15: offers the instance side only, including names it cannot type"
 - why: "A sigil inside a string is text. Without the mask, typing an address into a string opened the class's instance variables."
@@ -927,7 +927,7 @@
   example: "C15: says nothing at a sigil inside a string"
 - why: "A heredoc keeps its body below; deleting only the marker leaves it as live code that still parses."
   file: core/lib/ovallsp/server.rb
-  from: "      return [] if opens_a_heredoc?(document, from, to)\n"
+  from: "      return [] if crosses_a_heredoc?(document, from, to)\n"
   to: "      return [] if false\n"
   spec: spec/e2e/capabilities_spec.rb
   example: "Q3: offers nothing where the surplus argument is a heredoc"

@@ -350,6 +350,10 @@ RSpec.describe "deferred findings metadata" do
   def read_utf8(name) = File.read(File.expand_path("../../../#{name}", __dir__), encoding: "UTF-8")
 
   let(:deferred) { read_utf8("docs/design/tasks/024-deferred-review-findings.md") }
+  # Both halves. `DeferredFindings.register` is the only reader that
+  # knows the register is two files; anything asking the live one alone
+  # is asking about a quarter of it.
+  let(:whole_register) { DeferredFindings.register(File.expand_path("../../..", __dir__)) }
   let(:artifacts) { read_utf8("docs/RELEASE_ARTIFACTS.md") }
   # Written before the tag, unlike RELEASE_ARTIFACTS.md's row, which
   # lands after the publish -- see `024.233`.
@@ -658,13 +662,33 @@ RSpec.describe "deferred findings metadata" do
                          "`user-visible: no` with a `user-visible-note` saying why."
     end
 
+    # **This read the live register, and a fixed entry is not in it.**
+    # `#wrongly_documented` asks `resolved(markdown)` which numbers are
+    # closed, and resolving an entry moves it to the archive -- so the
+    # combination was empty by construction and the example passed on
+    # every input, including eight real offenders sitting in the tree
+    # when this was found. The same shape as `024.148`: a check that
+    # cannot fail in the case it exists for.
+    #
+    # `DeferredFindings.register` is what every other reader uses for
+    # exactly this reason, and `register_split_spec` exists because a
+    # caller reading the live file alone loses three-quarters of the
+    # entries.
     it "stops documenting a finding once it is fixed" do
-      stale = DeferredFindings.wrongly_documented(deferred, english, japanese)
+      stale = DeferredFindings.wrongly_documented(whole_register, english, japanese)
 
       expect(stale).to be_empty,
                        "findings recorded as fixed but still published as current limitations: " \
                        "#{stale.join(", ")}. Remove the paragraph, in both languages -- a limitation " \
                        "naming a defect the release does not have is worse than none."
+    end
+
+    # The control, and it is what tells this pair apart: the same call
+    # against the live file alone finds nothing, because a resolved entry
+    # is never there. If this ever starts finding something, the split has
+    # changed and the example above is asking the wrong file.
+    it "finds nothing when given only the live register, which is why it is given both" do
+      expect(DeferredFindings.wrongly_documented(deferred, english, japanese)).to be_empty
     end
   end
   # `024.124`. Three releases in a row inherited entries naming a version

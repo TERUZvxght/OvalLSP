@@ -497,4 +497,137 @@ RSpec.describe "Ovallsp::Server textDocument/prepareRename and textDocument/rena
     expect(lines.join).to eq("/(?<digits>\\d+)/ =~ line\ndigits = digits.to_i if digits\nputs digits\n")
     expect(Prism.parse(lines.join)).to be_success
   end
+
+  # `024.273` gave rename a third refusal reason -- a local whose binding
+  # site the parser does not record -- and the branch that states it was
+  # committed with its argument list broken apart into string literals,
+  # so `refused_plan` was called with no arguments and every rename that
+  # reached the branch raised, answering `-32603 internal error` instead
+  # of the paragraph the register wrote.
+  #
+  # The CONTROL is the second rename in the same session: an ordinary
+  # parameter must still come back with its edits, so an example that
+  # merely asserted "no error" could not pass by refusing everything.
+  it "refuses a keyword parameter with a stated reason, not an internal error" do
+    warnings = []
+    allow(logger).to receive(:warn) { |message| warnings << message }
+
+    input =
+      did_open("file:///kw.rb", "def m(by:)\n  by * 2\nend\n") +
+      did_open("file:///pos.rb", "def g(arg)\n  arg + 1\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///kw.rb" }, position: { line: 1, character: 2 },
+                  newName: "factor" }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///pos.rb" }, position: { line: 1, character: 2 },
+                  newName: "factor" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    refusal, control = sent_messages
+    expect(refusal[:error]).to be_nil
+    expect(refusal[:result]).to be_nil
+    expect(warnings.join("\n")).to include("binding site")
+
+    # CONTROL: a positional parameter renames, declaration and use.
+    expect(control[:error]).to be_nil
+    expect(control[:result][:changes][:"file:///pos.rb"].map { |e| e[:newText] }).to eq(%w[factor factor])
+  end
+
+  # **`prepareRename` and `plan` must refuse the same things.** `prepare`
+  # screens the refused kinds, a macro-generated declaration and an
+  # empty location list; the third reason `024.273` added was not added
+  # to it, so the editor opened its input box and the rename that
+  # followed answered nothing.
+  it "does not offer a rename box where the rename itself will refuse" do
+    input =
+      did_open("file:///kw.rb", "def m(by:)\n  by * 2\nend\n") +
+      did_open("file:///pos.rb", "def g(arg)\n  arg + 1\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/prepareRename",
+        params: { textDocument: { uri: "file:///kw.rb" }, position: { line: 1, character: 2 } }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/prepareRename",
+        params: { textDocument: { uri: "file:///pos.rb" }, position: { line: 1, character: 2 } }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    keyword, control = sent_messages
+    # CONTROL: the box still opens for an ordinary parameter.
+    expect(control[:result][:placeholder]).to eq("arg")
+    expect(keyword[:result]).to be_nil
+  end
+
+  # **Renaming one binding onto another silently captured it.** Ruby
+  # refuses the result outright:
+  #
+  #   $ ruby -e '
+  #   begin
+  #     eval("def f(b, b); [b]; end")
+  #     puts "legal"
+  #   rescue SyntaxError
+  #     puts "SyntaxError"
+  #   end
+  #   '
+  #   # => SyntaxError
+  #   # ruby 3.4.10
+  #
+  # This is newly reachable in 0.3.0, because recording a parameter's
+  # own binding site is what makes rename rewrite the declaration.
+  it "refuses to rename a parameter onto another binding in the same scope" do
+    warnings = []
+    allow(logger).to receive(:warn) { |message| warnings << message }
+
+    input =
+      did_open("file:///c.rb", "def f(a, b)\n  [a, b]\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///c.rb" }, position: { line: 0, character: 6 }, newName: "b" }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///c.rb" }, position: { line: 0, character: 6 }, newName: "c" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    captured, control = sent_messages
+    expect(captured[:result]).to be_nil
+    expect(warnings.join("\n")).to include("already")
+    # CONTROL: a free name in the same scope still renames both sites.
+    expect(control[:result][:changes][:"file:///c.rb"].map { |e| e[:newText] }).to eq(%w[c c])
+  end
+
+  # **Every Ruby keyword was accepted as a new name**, and the applied
+  # file does not parse. 0.3.0 makes it write one more edit -- the
+  # parameter's own binding site -- into the same unparseable file.
+  it "refuses a Ruby keyword as a new name" do
+    input =
+      did_open("file:///k2.rb", "def g(arg)\n  arg + 1\nend\n") +
+      frame(
+        jsonrpc: "2.0", id: 1, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///k2.rb" }, position: { line: 0, character: 6 }, newName: "end" }
+      ) +
+      frame(
+        jsonrpc: "2.0", id: 2, method: "textDocument/rename",
+        params: { textDocument: { uri: "file:///k2.rb" }, position: { line: 0, character: 6 }, newName: "beta" }
+      ) +
+      frame(jsonrpc: "2.0", method: "exit", params: nil)
+
+    build_server(input).run
+
+    keyword, control = sent_messages
+    expect(keyword[:result]).to be_nil
+    # CONTROL: an ordinary name in the same fixture still renames.
+    expect(control[:result][:changes][:"file:///k2.rb"].map { |e| e[:newText] }).to eq(%w[beta beta])
+  end
 end

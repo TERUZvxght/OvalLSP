@@ -119,7 +119,11 @@ module Ovallsp
         AncestorEntry.identified(name: "BasicObject", kind: :class, origin: :default, location: nil)
       ].freeze
       DEFAULT_CHAIN_NAMES = %w[Object Kernel BasicObject].freeze
-      private_constant :DEFAULT_OBJECT_CHAIN, :DEFAULT_CHAIN_NAMES
+      # What a class object's singleton chain ends in, over and above
+      # the object chain: read by `#gem_singleton_links`, which must not
+      # re-emit the tail `DEFAULT_CLASS_SINGLETON_CHAIN` already adds.
+      CLASS_OBJECT_TAIL_NAMES = (DEFAULT_CHAIN_NAMES + %w[Class Module]).freeze
+      private_constant :DEFAULT_OBJECT_CHAIN, :DEFAULT_CHAIN_NAMES, :CLASS_OBJECT_TAIL_NAMES
 
       # What a class object *is*, which is what its singleton chain ends
       # in: `Widget.private` finds `Module#private` because `Widget` is a
@@ -304,8 +308,18 @@ module Ovallsp
       # them apart -- so the rule stays where it can be applied safely,
       # in the diagnostics engine, which is refusing to *report* rather
       # than refusing to resolve. 024.47 records what a real fix needs.
+      # The workspace answers first. Where it does not own the name at
+      # all, the gem index's simple-name resolution does -- `Relation`
+      # is what the type model spells `ActiveRecord::Relation`, and
+      # `024.87` is the entry that needs it. Asking here, rather than
+      # inside every gem-index lookup, is what keeps a workspace class
+      # from being answered for out of a same-named gem class.
       def canonical_name(type_name)
-        @workspace_index.resolve_type_name(type_name) || type_name.to_s
+        resolved = @workspace_index.resolve_type_name(type_name)
+        return resolved if resolved
+
+        bare = type_name.to_s
+        @gem_index.resolve_simple_name(bare) || bare
       end
 
       def remove_file_locked(uri)
@@ -419,8 +433,17 @@ module Ovallsp
         tail = entries.reverse.find { |e| e.identified? && @gem_index.knows?(e.identified_name) }
         return [] unless tail
 
-        known = @gem_index.ancestors(tail.identified_name).drop(1).reject do |name|
-          DEFAULT_CHAIN_NAMES.include?(name)
+        # **By identity, not by position.** `.drop(1)` assumed the
+        # payload's first ancestor was the class itself, which is only
+        # true when nothing is prepended -- Ruby puts a `prepend`ed
+        # module *ahead* of the class, and instrumentation gems prepend
+        # into ActiveRecord and ActionController routinely. Dropping the
+        # head then deleted the module (its methods reported missing on
+        # correct code, and a `method_missing` it declares never asked
+        # about) and left the class on the chain twice, because `tail`
+        # is already an entry in `entries`.
+        known = @gem_index.ancestors(tail.identified_name).reject do |name|
+          name == tail.identified_name || DEFAULT_CHAIN_NAMES.include?(name)
         end
         known.map { |name| AncestorEntry.identified(name: name, kind: kind_for_gem(name), origin: :superclass, location: nil) } +
           DEFAULT_OBJECT_CHAIN
@@ -455,7 +478,21 @@ module Ovallsp
         return [] unless entries.length == 1
         return [] unless @gem_index.knows?(canonical)
 
-        @gem_index.singleton_ancestors(canonical).drop(1).reject { |n| DEFAULT_CHAIN_NAMES.include?(n) }
+        # `.drop(1)` here ate the first extended module rather than the
+        # receiver: the Agent's `filter_map` has already removed the
+        # anonymous `#<Class:X>`, which has no `module_name`, so element
+        # 0 is the very thing this method exists to add. Rejecting by
+        # identity keeps it and still removes the duplicate.
+        #
+        # `Class` and `Module` are rejected alongside the object chain
+        # because they are the *class object's* own tail, which
+        # `DEFAULT_CLASS_SINGLETON_CHAIN` supplies below with the right
+        # `:class_object` origin and `kind: :class`. Left in, they made
+        # this result non-empty for every receiver, so the `case` in
+        # `#singleton_tail_for` never ran and a gem **module** was given
+        # the class tail with `Class` on it.
+        @gem_index.singleton_ancestors(canonical)
+                  .reject { |n| n == canonical || CLASS_OBJECT_TAIL_NAMES.include?(n) }
                   .map { |n| AncestorEntry.identified(name: n, kind: :module, origin: :extend, location: nil) }
       end
 

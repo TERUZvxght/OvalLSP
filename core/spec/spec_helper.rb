@@ -1,5 +1,31 @@
 # frozen_string_literal: true
 
+# **The suite used the maintainer's own cache**, which is 2.3 GB and
+# 53,509 directories on the machine this was written on. Every
+# `Server.new` in an example builds a cache store rooted at
+# `$XDG_CACHE_HOME/ovallsp`, and pruning walks it -- one real sweep is
+# 8.58 seconds, and the suite triggers it repeatedly.
+#
+# Two things were wrong with that, and the second is the worse one:
+#
+# - it is most of the suite's wall time, and none of it is testing
+#   anything;
+# - a run *mutates* the cache the editor then uses, and two trees
+#   measured against it are not measuring the same thing. That is not
+#   hypothetical: a corpus comparison in 0.3.0 came out with
+#   `gem-index-classes` at 2,077 on one side and 2,220 on the other,
+#   and a false report was nearly attributed to a fix that introduced
+#   none.
+#
+# Per process, so parallel runs cannot share one, and removed at exit.
+require "tmpdir"
+require "fileutils"
+
+SUITE_CACHE_HOME = File.join(Dir.tmpdir, "ovallsp-suite-cache-#{Process.pid}")
+FileUtils.mkdir_p(SUITE_CACHE_HOME)
+ENV["XDG_CACHE_HOME"] = SUITE_CACHE_HOME
+at_exit { FileUtils.remove_entry(SUITE_CACHE_HOME) if File.directory?(SUITE_CACHE_HOME) }
+
 require "fileutils"
 require "tmpdir"
 

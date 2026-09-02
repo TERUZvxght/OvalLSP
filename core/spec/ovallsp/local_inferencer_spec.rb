@@ -2064,4 +2064,136 @@ RSpec.describe Ovallsp::LocalInferencer do
       end
     end
   end
+
+  # `024.86` -- the ivars a *class* assigns, read in a method that does
+  # not assign them. The rule it states is "where two methods assign one
+  # name types that disagree, the answer is nothing", and each example
+  # here is a shape that defeated it or reached past it.
+  describe "the ivars a class's other methods assign" do
+    # **A singleton method does not see the instance side's ivars.**
+    # Ruby settles it:
+    #
+    #   $ ruby -e '
+    #   class Foo
+    #     def setup; @thing = "hello"; end
+    #     def self.build; @thing; end
+    #     class << self
+    #       def build2; @thing; end
+    #     end
+    #   end
+    #   Foo.new.setup
+    #   p Foo.build
+    #   p Foo.build2
+    #   '
+    #   # => nil
+    #   # => nil
+    #   # ruby 3.4.10
+    #
+    # The sibling walk already refuses to read a *source* assignment
+    # written in `def self.x`; it did not apply the same rule to the
+    # method being descended into, so `def self.build` was seeded with
+    # the instance side's `@thing` and answered `String` -- and that
+    # reached a published `unknown-method` diagnostic.
+    it "does not seed a `def self.` method from the instance side" do
+      source = "class Foo\n  def setup\n    @thing = \"hello\"\n  end\n\n" \
+               "  def self.build\n    @thing\n  end\n\n  def use\n    @thing\n  end\nend\n"
+
+      # CONTROL: the instance sibling, where the seeding is correct.
+      expect(infer(source, line: 10, character: 4).to_s).to eq("String")
+      expect(infer(source, line: 6, character: 4)).to be_a(Ovallsp::Types::Unknown)
+    end
+
+    it "does not seed a `class << self` method from the instance side" do
+      source = "class Foo\n  def setup\n    @thing = \"hello\"\n  end\n\n" \
+               "  class << self\n    def build\n      @thing\n    end\n  end\n\n" \
+               "  def use\n    @thing\n  end\nend\n"
+
+      expect(infer(source, line: 12, character: 4).to_s).to eq("String")
+      expect(infer(source, line: 7, character: 6)).to be_a(Ovallsp::Types::Unknown)
+    end
+
+    # **`private def` is a call wrapping a `def`**, so a direct-child
+    # grep of the class body cannot see it -- and the method it hides
+    # was the one that made the assignment a *dispute*. With the dispute
+    # invisible, the first method's type was asserted for a name two
+    # methods disagree about.
+    it "sees a `def` wrapped in a visibility call when deciding a dispute" do
+      wrapped = "class Foo\n  def a\n    @x = 1\n  end\n\n  private def b\n    @x = \"s\"\n  end\n\n" \
+                "  def c\n    @x\n  end\nend\n"
+      # CONTROL: the byte-identical class with `private` removed, where
+      # the dispute is visible and the answer is already nothing.
+      plain = wrapped.sub("private def b", "def b")
+
+      expect(infer(plain, line: 10, character: 4)).to be_a(Ovallsp::Types::Unknown)
+      expect(infer(wrapped, line: 10, character: 4)).to be_a(Ovallsp::Types::Unknown)
+    end
+
+    # **`#own_ivar_names` knew two of the five shapes** that assign an
+    # ivar, twelve lines above a collector that enumerates all five. So
+    # a method whose own assignment was a multiple assignment did not
+    # displace the sibling's, and the sibling's type was answered for a
+    # name this method had just written:
+    #
+    #   $ ruby -e '
+    #   class Foo
+    #     def b; @x = 1; end
+    #     def a; @x, @y = "s", 2; @x; end
+    #   end
+    #   p Foo.new.a
+    #   '
+    #   # => "s"
+    #   # ruby 3.4.10
+    it "lets this method's own multiple assignment win over a sibling's" do
+      source = "class Foo\n  def b\n    @x = 1\n  end\n\n  def a\n    @x, @y = \"s\", 2\n    @x\n  end\nend\n"
+      # CONTROL: the shape `#own_ivar_names` already recognised.
+      plain = "class Foo\n  def b\n    @x = 1\n  end\n\n  def a\n    @x = \"s\"\n    @x\n  end\nend\n"
+
+      expect(infer(plain, line: 7, character: 4).to_s).to eq("String")
+      # The sibling's `Integer` must not survive this method's own
+      # assignment. The type fold has no case for a multiple assignment,
+      # so what is left is a decline -- which is the right answer where
+      # the engine cannot say, and is not the answer it gave.
+      expect(infer(source, line: 7, character: 4)).to be_a(Ovallsp::Types::Unknown)
+    end
+
+    # **The untyped fill-in was written into the hash the dispute check
+    # reads**, inside one per-sibling loop -- so an `UNKNOWN` written for
+    # a shape the type fold does not model was then compared against a
+    # real type, counted as a dispute or not depending on which method
+    # came first, and the answer depended on the order the methods are
+    # written in.
+    it "answers the same whichever order the two assigning methods are written in" do
+      first = "class Foo\n  def a\n    @x, @y = \"s\", 2\n  end\n\n  def b\n    @x = 1\n  end\n\n" \
+              "  def c\n    @x\n  end\nend\n"
+      second = "class Foo\n  def b\n    @x = 1\n  end\n\n  def a\n    @x, @y = \"s\", 2\n  end\n\n" \
+               "  def c\n    @x\n  end\nend\n"
+
+      # Whichever it is, it must be the same for both: the file's meaning
+      # does not depend on which method is written first, and Ruby
+      # returns `"s"` from `f.a; f.c` either way. (That the surviving
+      # answer is the *typable* sibling's rather than a decline is a
+      # separate gap -- the fold has no case for a multiple assignment
+      # -- and is recorded rather than fixed here.)
+      expect(infer(first, line: 10, character: 4).to_s).to eq(infer(second, line: 10, character: 4).to_s)
+    end
+
+    # **An ivar assigned in a `define_method` block was not offered at
+    # all.** The names came from a direct-child grep of the class body's
+    # `DefNode`s, so a block-bodied definition contributed nothing and
+    # completion after `@` in the same class returned an empty list. The
+    # type walk deliberately does not follow a block, so the name
+    # arrives with no type -- which is what a completion list wants.
+    it "offers a name assigned in a `define_method` block" do
+      source = "class C\n  define_method(:setter) { @from_block = 1 }\n\n  def use\n    @\n  end\nend\n"
+      # CONTROL: the same class with a plain `def`, which already worked.
+      plain = "class C\n  def setter\n    @from_def = 1\n  end\n\n  def use\n    @\n  end\nend\n"
+
+      document = ->(text) { Ovallsp::TextDocument.new(uri: "file:///b.rb", text: text, version: 1, language_id: "ruby") }
+
+      expect(inferencer.scope_at(document.call(plain), { line: 6, character: 5 }).ivars.keys.map(&:to_s))
+        .to eq(["@from_def"])
+      expect(inferencer.scope_at(document.call(source), { line: 4, character: 5 }).ivars.keys.map(&:to_s))
+        .to eq(["@from_block"])
+    end
+  end
 end

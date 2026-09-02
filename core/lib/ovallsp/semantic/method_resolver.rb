@@ -494,13 +494,31 @@ module Ovallsp
       def gem_candidate(entry, method_name, symbol_id, rank)
         return nil unless entry.identified?
 
-        names = symbol_id.kind == :singleton_method ? gem_index.singleton_methods(entry.name)
-                                                    : gem_index.instance_methods(entry.name)
-        return nil unless names.include?(method_name.to_s)
+        if symbol_id.kind == :singleton_method
+          return nil unless gem_index.singleton_methods(entry.name).include?(method_name.to_s)
+
+          visibility = :public
+        else
+          # **Private and protected included**: a receiverless call may
+          # legally reach an inherited private method, and the Agent
+          # sends only `instance_methods(false)` -- the public and
+          # protected set -- so `process_action` on an ActionController
+          # subclass was reported as a method that does not exist, on
+          # correct code.
+          #
+          # Labelled rather than merged. The candidate carries the
+          # visibility it was found under, the way a workspace
+          # declaration's does one branch up, so a reader that has to
+          # tell them apart has the field; and `#method_names_for_owner`
+          # -- what completion after a dot reads -- still asks only for
+          # the public set, so nothing private is offered there.
+          visibility = gem_index.instance_method_visibility(entry.name, method_name)
+          return nil unless visibility
+        end
 
         MethodCandidate.new(
           symbol_id: symbol_id, declarations: [], owner: entry.name,
-          visibility: :public, lookup_rank: rank, conditional: false, origin: entry.origin
+          visibility: visibility, lookup_rank: rank, conditional: false, origin: entry.origin
         )
       end
 
