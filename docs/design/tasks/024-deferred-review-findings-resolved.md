@@ -5769,6 +5769,79 @@ diagnostics. It now agrees with the client's own uri and needs no
 `realpath` at all. That call was the single one in the whole E2E suite,
 and nobody read it as a symptom.
 
+## 024.99 Completion offers members that cannot be called from where it was asked
+
+```yaml
+status: fixed
+kind: defect
+user-visible: yes
+target: 0.3.0
+released-in: 0.3.0
+```
+
+**Area:** `core/lib/ovallsp/semantic/query_service.rb` (`#members_of`),
+`core/lib/ovallsp/semantic/method_resolver.rb`
+
+Measured by 0.2.7's `drive` round by asking the *running application*
+`respond_to?` for every label returned, rather than by inspection:
+
+| receiver | labels | not callable |
+|---|---|---|
+| `Post.` (Rails, Agent connected) | 816 | **91** — `abort`, `exec`, `fork`, `exit!`, `eval`, `append_features`, `` ` `` |
+| `p.` where `p = Post.new` | 338 | 0 |
+| a user's own class, plain Ruby | 121 | **69 (57%)**, `initialize` among them |
+| `Circle.` (plain Ruby) | 196 | 86 |
+| `"text".` (plain Ruby) | 251 | 69 |
+
+Every one of those raises `NoMethodError` if accepted. The instance path
+with a live Agent is clean, so this is the static and singleton paths.
+
+`docs/EXTENSION_CAPABILITIES.md` heads this section "the single most-used
+feature" and marks C1/C5 PASS. Section 0.3 sends completion *ordering* to
+2.x; this is not ordering.
+
+**Direction:** the member query answers visibility along with existence,
+and completion filters on where it was asked from — an explicit receiver
+sees public methods only. Same query as `024.78`'s and `024.88`'s
+subject; see the availability item in `037`.
+
+### 0.2.15 reassessment: this is not a small fix
+
+An implementation attempt classified it `small` and produced a change
+touching **seven files under `core/lib`** — `query_service.rb`,
+`method_resolver.rb`, `prefix_completion.rb`, `call_site_visibility.rb`,
+`signatures/environment.rb`, `parser_service.rb` and `server.rb` — plus
+two specs and a mutation entry.
+
+That is a cross-cutting change to how visibility reaches the completion
+path, not a bounded one, and calling it small is how a fix gets made in
+seven places instead of one. **Reclassified `large`** and left for a
+release that can carry it.
+
+*The rule it needs is already known and stated in `024.151`'s Direction:
+the answer belongs where the value is produced, not at each reader. What
+is not yet decided is which layer that is here — `MethodResolver`
+already owns "can this be called from there" for diagnostics, and the
+question is whether completion should be asking it rather than
+assembling its own answer.*
+
+**Re-triaged in 0.2.17** (`024.276`). Reclassified `large` in its own body, for a reason that has nothing to do with gems: the rule belongs where the value is produced, and which layer that is here is undecided — `MethodResolver` already owns "can this be called from there" for diagnostics, and whether completion should ask it rather than assemble its own answer is the open question. Not re-driven since the reclassification.
+
+**Fixed in 0.3.0.** Completion after a dot offers no private method.
+RBS already carried the answer -- `accessibility` is `:private` for
+`fork`, `exec`, `abort`, `exit!`, `eval`, `initialize` and `puts` on
+`Object` -- and `Signatures::Environment#member_names` was dropping it.
+
+**The filter is opt-in, and that is the load-bearing half.** Making it
+the default in `QueryService#members_of` silently changed every caller
+that omits a context, and dropped `puts` from the bare prefix at the
+top level of every file -- which is the one place Ruby lets a private
+method be called. `Server#member_completion_items` asks for it; the
+receiverless groups do not.
+
+What this does not cover is a *workspace* method whose recorded
+visibility is wrong, which is `024.221`.
+
 ## 024.101 Analysis runs per keystroke, so the answers fall behind the cursor and every wrong one is published
 
 ```yaml
