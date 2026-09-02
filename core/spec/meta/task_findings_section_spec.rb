@@ -21,7 +21,7 @@ require_relative "../../../scripts/repo_files"
 # ordinary writing. The distinction is the level, and it is the one thing
 # here a later reader might reasonably want to change.
 RSpec.describe "a findings section in a task document" do
-  ROOT = File.expand_path("../../..", __dir__)
+  TASK_FINDINGS_REPO_ROOT = File.expand_path("../../..", __dir__)
 
   # The shapes this project has actually grown, rather than a guess at
   # what one might be called. Two are the sections `024.139` was about;
@@ -30,14 +30,14 @@ RSpec.describe "a findings section in a task document" do
   POINTER = "未処理の指摘はこの文書ではなく `024` に書く"
 
   def task_documents
-    RepoFiles.list(ROOT)
+    RepoFiles.list(TASK_FINDINGS_REPO_ROOT)
              .select { |path| path.start_with?("docs/design/tasks/") && path.end_with?(".md") }
              .reject { |path| path.include?("024-deferred-review-findings") }
   end
 
   it "says where findings go, in every task document that has one" do
     offenders = task_documents.filter_map do |path|
-      body = File.read(File.join(ROOT, path), encoding: "UTF-8")
+      body = File.read(File.join(TASK_FINDINGS_REPO_ROOT, path), encoding: "UTF-8")
       sections = body.split(/^(?=## )/).select { |section| section.match?(FINDINGS_HEADINGS) }
       next if sections.empty?
       next if sections.all? { |section| section.include?(POINTER) }
@@ -57,7 +57,7 @@ RSpec.describe "a findings section in a task document" do
   # like a clean result.
   it "found the sections it is checking" do
     matched = task_documents.count do |path|
-      File.read(File.join(ROOT, path), encoding: "UTF-8")
+      File.read(File.join(TASK_FINDINGS_REPO_ROOT, path), encoding: "UTF-8")
           .split(/^(?=## )/).any? { |section| section.match?(FINDINGS_HEADINGS) }
     end
 

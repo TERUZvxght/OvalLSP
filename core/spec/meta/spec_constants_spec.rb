@@ -23,7 +23,7 @@
 # name and was not caught at all -- it ran for two review rounds against
 # a fixture from another file. Hence a check rather than a third rename.
 RSpec.describe "spec file constants" do
-  ROOT = File.expand_path("../..", __dir__)
+  SPEC_CONSTANTS_CORE_ROOT = File.expand_path("../..", __dir__)
 
   # Parsed, not scanned. This guard has now been wrong twice in its own
   # right, and both times for the same reason: a regex over lines cannot
@@ -258,11 +258,32 @@ RSpec.describe "spec file constants" do
     end
   end
 
+# **The census had no control, and that is how it was switched off.**
+# It globs from a constant, `spec_constants_spec.rb` and
+# `task_findings_section_spec.rb` both defined `ROOT` on Object, and
+# the two point at different directories: `core/`, which holds 241
+# spec files, and the repository root, which holds none. Under
+# `--order random` the file that loaded last decided which -- so the
+# check that reports constant collisions was being disabled, about
+# half the time, by a constant collision, and the collision it would
+# have reported was its own.
+#
+# Both constants are prefixed now. This is what would have said so:
+# a census over an empty glob is indistinguishable from a census over
+# a clean tree, which is `check_pinned_mutations.rb`'s first run and
+# the reason CLAUDE.md asks for this example by name.
+it "is reading the spec tree, not an empty glob" do
+  files = Dir.glob(File.join(SPEC_CONSTANTS_CORE_ROOT, "spec", "**", "*_spec.rb"))
+
+  expect(files.length).to be >= 100
+  expect(files).to include(a_string_ending_with("spec/meta/spec_constants_spec.rb"))
+end
+
   it "defines each one in only one file" do
     owners = Hash.new { |hash, key| hash[key] = [] }
 
-    Dir.glob(File.join(ROOT, "spec", "**", "*_spec.rb")).sort.each do |path|
-      relative = path.delete_prefix("#{ROOT}/")
+    Dir.glob(File.join(SPEC_CONSTANTS_CORE_ROOT, "spec", "**", "*_spec.rb")).sort.each do |path|
+      relative = path.delete_prefix("#{SPEC_CONSTANTS_CORE_ROOT}/")
       self.class.object_constants(File.read(path, encoding: "UTF-8")).each do |name|
         owners[name] << relative
       end
