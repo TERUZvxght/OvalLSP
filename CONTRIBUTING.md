@@ -172,6 +172,40 @@ check — takes a short-lived branch of its own and the same pull
 request. `docs/design/tasks/`'s highest-numbered file for a release
 names its branch, so a session that starts from `main` can find it.
 
+### A merged release branch is kept
+
+**`main` squash-merges, so a release's individual commits exist only on
+its branch.** `release/0.3.0` holds 21 commits `main` cannot reach;
+`fix/0.2.3` holds 25. No *code* is at stake — `main` is strictly ahead
+of every one of them — but the reason for each change is.
+
+Asked when `PROTOCOL_VERSION` became 2:
+
+```
+main                  3183588  2026-09-02  0.3.0 — the first release that may add capability (#25)
+origin/release/0.3.0  19058c3  2026-09-01  0.3.0: 024.R7's first half — the Agent reports what the gems define
+```
+
+`main` answers with the release. The branch answers with the change,
+and says why it was made.
+
+That is not archaeology for its own sake: 0.3.1's review established
+that a published size figure was two field-additions stale by running
+`git log -S "938 KB" release/0.3.0`, which the squashed history cannot
+answer. This project's record is built out of "why", and a squash
+message compresses twenty-one of them into one.
+
+Keeping them costs nothing. A remote ref does not appear in
+`git branch`, slows nothing, and `scripts/check_release_pointers.rb`
+passes with them present. The older `feat/` and `fix/` branches predate
+the naming above and are kept for the same reason.
+
+**Deleting one is a decision to write down, not tidying.** GitHub's
+"Restore branch" on a merged pull request is best-effort and not a
+guarantee, so it is not reversible in the way a local branch is.
+Cleaning up *local* branches and worktrees is ordinary and needs no
+ceremony; the remote refs are the record.
+
 ## Before committing: `preflight`
 
 ```bash
