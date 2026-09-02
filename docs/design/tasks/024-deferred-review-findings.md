@@ -479,9 +479,9 @@ nobody can search is the recording habit without the benefit.
 | [`024.304`](#024304-the-gem-backed-check-is-silenced-by-any-class-body-call-the-parser-cannot-read) | open | 0.4.0 | The gem-backed check is silenced by any class-body call the parser c… |
 | [`024.305`](#024305-one-name-six-modules-and-the-index-keeps-the-empty-one) | open | 0.3.2 | One name, six modules, and the index keeps the empty one |
 | [`024.306`](024-deferred-review-findings-resolved.md#024306-the-0-3-0-record-states-as-measured-that-a-method-call-candidate-never-resolves-to-a-constant) | fixed | 0.3.2 | The 0.3.0 record states as measured that a `:method_call` candidate … |
-| [`024.307`](#024307-the-capability-suite-s-own-fixtures-cannot-reach-six-shapes-the-release-found) | open | 0.3.2 | The capability suite's own fixtures cannot reach six shapes the rele… |
+| [`024.307`](024-deferred-review-findings-resolved.md#024307-the-capability-suite-s-own-fixtures-cannot-reach-six-shapes-the-release-found) | fixed | 0.3.2 | The capability suite's own fixtures cannot reach six shapes the rele… |
 | [`024.308`](024-deferred-review-findings-resolved.md#024308-referenceresolver-resolve-states-no-contract-about-alignment) | fixed | 0.3.2 | `ReferenceResolver#resolve` states no contract about alignment |
-| [`024.309`](#024309-the-quick-fix-e2e-example-asserts-that-the-result-parses-which-both-answers-do) | open | 0.3.2 | The quick-fix E2E example asserts that the result parses, which both… |
+| [`024.309`](024-deferred-review-findings-resolved.md#024309-the-quick-fix-e2e-example-asserts-that-the-result-parses-which-both-answers-do) | fixed | 0.3.2 | The quick-fix E2E example asserts that the result parses, which both… |
 | [`024.310`](024-deferred-review-findings-resolved.md#024310-a-range-arity-reads-takes-0-1-argument) | fixed | 0.3.2 | A range arity reads "takes 0..1 argument" |
 | [`024.311`](024-deferred-review-findings-resolved.md#024311-referencecandidate-s-comment-omits-a-field-four-readers-use) | fixed | 0.3.2 | `ReferenceCandidate`'s comment omits a field four readers use |
 | [`024.312`](024-deferred-review-findings-resolved.md#024312-the-release-record-has-one-direction-of-the-ivar-split-and-not-the-other) | fixed | 0.3.2 | The release record has one direction of the ivar split and not the o… |
@@ -4925,50 +4925,6 @@ it is not free: `const_get` on a qualified name can trigger autoload
 inside the Agent, which is a side effect the walk does not have today.
 Establishing that it is harmless is the work, and it is why this is
 not a patch.
-
-## 024.307 The capability suite's own fixtures cannot reach six shapes the release found
-
-```yaml
-status: open
-kind: friction
-user-visible: no
-user-visible-note: >-
-  Coverage, so nothing is wrong until something else breaks. Recorded
-  because the gap is in the file that decides whether a capability row
-  may say PASS.
-target: 0.3.2
-```
-
-**Area:** `core/spec/e2e/capabilities_spec.rb`, the "in the current
-file" block and W5/W6
-
-No example uses a namespaced constant, an instance variable, a route
-helper, a symbol declared twice in one file, nested `def`s on one line,
-or a `prepareCallHierarchy` issued at a call site rather than at a
-`def`. Six of 0.3.0's review findings live in exactly those shapes, so
-the suite that certifies the rows could not have found any of them.
-
-## 024.309 The quick-fix E2E example asserts that the result parses, which both answers do
-
-```yaml
-status: open
-kind: friction
-user-visible: no
-user-visible-note: >-
-  The behaviour it guards is correct; the guard is what is thin. A
-  fixture that cannot tell the two candidate answers apart is the
-  shape CLAUDE.md calls unpinned even while it passes.
-target: 0.3.2
-```
-
-**Area:** `core/spec/e2e/capabilities_spec.rb`, Q1's "inserts into the
-right body when the class's end is not the first one"
-
-It drives three shapes and asserts `Prism.parse(applied).success?` for
-each, with a `match_array` so no shape can be skipped. Both of those
-are worth having. Neither distinguishes a `def` inserted inside the
-class from one inserted after it: 0.3.0 found exactly that, by hand,
-after this example had been passing on both placements.
 
 ## 024.316 Two lines each drop a top-level call, and only both together are pinned
 

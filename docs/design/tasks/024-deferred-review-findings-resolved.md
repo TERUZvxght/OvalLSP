@@ -16544,6 +16544,31 @@ premise as written, and the record presents it as measured.
 
 **Fixed in 0.3.2.** The record said the line was removed; the code had put it back, and the guard is live against a route helper. Corrected in `054`, which is what the entry was about.
 
+## 024.307 The capability suite's own fixtures cannot reach six shapes the release found
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: friction
+user-visible: no
+user-visible-note: >-
+  Coverage, so nothing is wrong until something else breaks. Recorded
+  because the gap is in the file that decides whether a capability row
+  may say PASS.
+target: 0.3.2
+```
+
+**Area:** `core/spec/e2e/capabilities_spec.rb`, the "in the current
+file" block and W5/W6
+
+No example uses a namespaced constant, an instance variable, a route
+helper, a symbol declared twice in one file, nested `def`s on one line,
+or a `prepareCallHierarchy` issued at a call site rather than at a
+`def`. Six of 0.3.0's review findings live in exactly those shapes, so
+the suite that certifies the rows could not have found any of them.
+
+**Fixed in 0.3.2.** Six examples, one per shape the entry names: an instance variable across methods, a namespaced constant against a same-named one in another namespace, a route helper whose every occurrence is a call, two same-named methods in one file, two `def`s on one line where line numbers cannot separate the bindings, and a call hierarchy prepared at a call site rather than at a `def`. Every one of them answers correctly today -- the gap was in what the suite could see, not in what the engine does.
+
 ## 024.308 `ReferenceResolver#resolve` states no contract about alignment
 
 ```yaml
@@ -16567,6 +16592,31 @@ two pass a single-element array, one iterates. A caller that zips the
 two lists would be wrong on the first declining candidate.
 
 **Fixed in 0.3.2.** The contract is stated at `#resolve`, and pinned by an example that resolves two constants where one is declared and one is not. The control asserts both were candidates, so the shorter answer is the resolver declining rather than the parser finding one name.
+
+## 024.309 The quick-fix E2E example asserts that the result parses, which both answers do
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: friction
+user-visible: no
+user-visible-note: >-
+  The behaviour it guards is correct; the guard is what is thin. A
+  fixture that cannot tell the two candidate answers apart is the
+  shape CLAUDE.md calls unpinned even while it passes.
+target: 0.3.2
+```
+
+**Area:** `core/spec/e2e/capabilities_spec.rb`, Q1's "inserts into the
+right body when the class's end is not the first one"
+
+It drives three shapes and asserts `Prism.parse(applied).success?` for
+each, with a `match_array` so no shape can be skipped. Both of those
+are worth having. Neither distinguishes a `def` inserted inside the
+class from one inserted after it: 0.3.0 found exactly that, by hand,
+after this example had been passing on both placements.
+
+**Fixed in 0.3.2.** The example asserts the `def` is inside the class it was called on, walked with Prism so a nested class does not count as the outer one. A second example is the judge's own control: same method, two placements, both parsing, and it has to tell them apart. Verified by mutating the insertion back to the pre-0.3.0 placement -- the strengthened example fails, and the old `Prism.parse` assertion would not have.
 
 ## 024.310 A range arity reads "takes 0..1 argument"
 
