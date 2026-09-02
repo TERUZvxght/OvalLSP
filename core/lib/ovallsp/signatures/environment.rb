@@ -256,7 +256,44 @@ module Ovallsp
       # being such a name. `024.13` proposed declining on a *proxy*
       # instead ("the workspace reopens a foreign class"); measured, that
       # took four real typo reports with it, and was reverted.
-      UNIVERSAL_RUBY_NAMES = %w[iterator? set_trace_func trap].freeze
+      # **The gap is a function of the Ruby, so it is keyed by the Ruby.**
+      # It was one written list, and Ruby 4.0 put a fourth name on `Object`
+      # that RBS does not declare -- so the non-gating 4.0 job reported
+      # `instance_variables_to_inspect` as a method the user's own class
+      # does not have, which is exactly what `trap` did before `024.239`.
+      # A single list cannot be right for both: adding the 4.0 name on 3.4
+      # would decline a report for a name 3.4's `Object` genuinely lacks.
+      #
+      # Each row is measured rather than guessed. The row for the running
+      # Ruby is re-derived on every suite run by
+      # `object_signature_gap_spec.rb`, in a subprocess with no gems, and
+      # fails if it moves; the 4.0 row came from that example failing on
+      # the 4.0 job and saying precisely what the difference was:
+      #
+      #     expected: ["iterator?", "set_trace_func", "trap"]
+      #          got: ["instance_variables_to_inspect", "iterator?",
+      #                "set_trace_func", "trap"]
+      #
+      # `024.288`.
+      UNIVERSAL_RUBY_NAMES_BY_MINOR = {
+        "3.3" => %w[iterator? set_trace_func trap],
+        "3.4" => %w[iterator? set_trace_func trap],
+        "4.0" => %w[instance_variables_to_inspect iterator? set_trace_func trap]
+      }.freeze
+
+      # **An unlisted Ruby gets the union, and the direction is chosen
+      # rather than defaulted.** The two ways of being wrong here are not
+      # equal: a name in the list that this Ruby lacks costs one true
+      # report, and a name missing from it costs a *false* one on every
+      # class in the workspace. Section 0 ranks the false report worse, so
+      # the fallback errs towards silence. It is a fallback and not a
+      # policy -- the spec fails on an unlisted Ruby until a row is added,
+      # because a union is not a measurement.
+      def self.universal_ruby_names_for(minor)
+        UNIVERSAL_RUBY_NAMES_BY_MINOR.fetch(minor) { UNIVERSAL_RUBY_NAMES_BY_MINOR.values.flatten.uniq.sort }
+      end
+
+      UNIVERSAL_RUBY_NAMES = universal_ruby_names_for(RUBY_VERSION[/\A\d+\.\d+/]).freeze
 
       # Not asked per receiver: everything inherits from `Object`, so a
       # name in the gap is present on whatever branch a report would name.

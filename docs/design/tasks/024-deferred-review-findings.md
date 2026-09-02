@@ -460,7 +460,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.285`](024-deferred-review-findings-resolved.md#024285-three-interpreter-sessions-resolved-against-whatever-the-machine-had-installed) | fixed | 0.2.17 | Three interpreter sessions resolved against whatever the machine had… |
 | [`024.286`](024-deferred-review-findings-resolved.md#024286-a-session-recorded-on-one-ruby-was-compared-against-another-so-the-3-3-job-called-true-answers-wrong) | fixed | 0.2.17 | A session recorded on one Ruby was compared against another, so the … |
 | [`024.287`](024-deferred-review-findings-resolved.md#024287-the-informational-ruby-4-0-job-reported-five-checkout-failures-and-one-real-difference) | fixed | 0.2.18 | The informational Ruby 4.0 job reported five checkout failures and o… |
-| [`024.288`](#024288-ruby-4-0-puts-a-fourth-name-on-object-that-rbs-does-not-declare) | open | 0.3.2 | Ruby 4.0 puts a fourth name on Object that RBS does not declare |
+| [`024.288`](024-deferred-review-findings-resolved.md#024288-ruby-4-0-puts-a-fourth-name-on-object-that-rbs-does-not-declare) | fixed | 0.3.2 | Ruby 4.0 puts a fourth name on Object that RBS does not declare |
 | [`024.289`](#024289-a-class-that-includes-an-unread-module-is-not-checked-at-class-level-so-a-typo-there-is-silent) | open | 0.4.0 | A class that includes an unread module is not checked at class level… |
 | [`024.290`](#024290-nothing-is-reported-about-a-call-whose-receiver-is-object) | open | 0.4.0 | Nothing is reported about a call whose receiver is `Object` |
 | [`024.291`](024-deferred-review-findings-resolved.md#024291-a-repeated-key-in-a-metadata-block-is-resolved-silently-and-one-of-them-discarded-a-withdrawal) | fixed | 0.2.18 | A repeated key in a metadata block is resolved silently, and one of … |
@@ -480,7 +480,7 @@ nobody can search is the recording habit without the benefit.
 | [`024.305`](#024305-one-name-six-modules-and-the-index-keeps-the-empty-one) | open | 0.3.2 | One name, six modules, and the index keeps the empty one |
 | [`024.306`](024-deferred-review-findings-resolved.md#024306-the-0-3-0-record-states-as-measured-that-a-method-call-candidate-never-resolves-to-a-constant) | fixed | 0.3.2 | The 0.3.0 record states as measured that a `:method_call` candidate … |
 | [`024.307`](#024307-the-capability-suite-s-own-fixtures-cannot-reach-six-shapes-the-release-found) | open | 0.3.2 | The capability suite's own fixtures cannot reach six shapes the rele… |
-| [`024.308`](#024308-referenceresolver-resolve-states-no-contract-about-alignment) | open | 0.3.2 | `ReferenceResolver#resolve` states no contract about alignment |
+| [`024.308`](024-deferred-review-findings-resolved.md#024308-referenceresolver-resolve-states-no-contract-about-alignment) | fixed | 0.3.2 | `ReferenceResolver#resolve` states no contract about alignment |
 | [`024.309`](#024309-the-quick-fix-e2e-example-asserts-that-the-result-parses-which-both-answers-do) | open | 0.3.2 | The quick-fix E2E example asserts that the result parses, which both… |
 | [`024.310`](024-deferred-review-findings-resolved.md#024310-a-range-arity-reads-takes-0-1-argument) | fixed | 0.3.2 | A range arity reads "takes 0..1 argument" |
 | [`024.311`](024-deferred-review-findings-resolved.md#024311-referencecandidate-s-comment-omits-a-field-four-readers-use) | fixed | 0.3.2 | `ReferenceCandidate`'s comment omits a field four readers use |
@@ -4371,95 +4371,6 @@ than because the risk is small.
 **Retargeted to 0.3.2 in 0.3.0's closing sweep.** Driving the
 packaged Core on the platform it is published for is a gap against
 what `024.125` already claimed.
-## 024.288 Ruby 4.0 puts a fourth name on Object that RBS does not declare
-
-```yaml
-status: open
-kind: defect
-user-visible: yes
-target: 0.3.2
-```
-
-**Area:** `core/lib/ovallsp/signatures/environment.rb`
-
-`024.239` records that the signature set's `::Object` omits names the
-running Ruby gives every object, and that each omission became a false
-`unknown-method` report against the user's own class. Three were found
-on Ruby 3.4 — `trap`, `set_trace_func`, `iterator?` — and
-`UNIVERSAL_RUBY_NAMES` names them.
-
-`object_signature_gap_spec` re-derives that list rather than trusting it,
-"because a written list is exactly the thing that goes stale on the next
-Ruby or the next RBS". **It went stale, and the spec said so**, on the
-informational 4.0 job:
-
-```
-  expected: ["iterator?", "set_trace_func", "trap"]
-       got: ["instance_variables_to_inspect", "iterator?", "set_trace_func", "trap"]
-```
-
-So on Ruby 4.0 a call to `instance_variables_to_inspect` on the user's
-own class is reported missing, exactly as `trap` was before `024.239`.
-
-**Recorded rather than fixed, which is this job's standing decision**:
-`docs/SUPPORT_MATRIX.md` calls 4.0 best effort, and ci.yml says in as
-many words that "a 4.0-specific failure gets recorded rather than fixed
-— a required job would turn the first one into work nobody agreed to
-do."
-
-**And the one-line fix is the wrong one.** Adding the name
-unconditionally would make the engine decline on it under 3.3 and 3.4,
-where Ruby does not define it — so a genuine typo of that name goes
-silent on every currently supported Ruby. That is `024.13`'s failure,
-which cost four real typo reports for exactly this kind of proxy.
-
-**Direction.** The list is hand-derived and pinned by a spec that
-re-derives it; the shape that does not go stale is to derive it at load
-from the running interpreter minus the signature set, which is what the
-spec already does in a subprocess. Cost is startup time on every boot
-against a list that changes once per Ruby release, so it is a real
-trade rather than an obvious win — hence an entry.
-
-
-**Cannot be driven here.** This is a Ruby 4.0 fact and 0.3.0's
-measurements were taken on `ruby 3.4.10`, where
-`object_signature_gap_spec` re-derives `UNIVERSAL_RUBY_NAMES` and
-agrees with it. The entry is about what the informational 4.0 job
-reports, and nothing in this session could reach that. Left open
-with its target unchanged rather than re-triaged on a run that did
-not happen.
-
-**Retargeted to 0.3.2 in 0.3.0's closing sweep.** A repair, and one
-that cannot be driven until this project runs on Ruby 4.0 -- the
-patch line is where it waits.
-
-**Scheduled for 0.3.2, and that is a change of decision rather than a
-reading of the old one.** The standing decision this entry cites is
-`ci.yml`'s, and it is scoped in its own words to "the 0.2.x line". That
-line closed with 0.2.18. Nothing replaced it, so between 0.3.0 and this
-paragraph the 4.0 job had no policy at all -- it reported a failure that
-no release owed and no rule excused.
-
-The argument for naming a release rather than restoring "record, not
-fix": a decision with no end date is indistinguishable from never doing
-it. `024.239` is the same defect on Ruby 3.4 and it was fixed; leaving
-the 4.0 instance open forever would make the two inconsistent for no
-reason anyone could state.
-
-**What it is not**: the 4.0 job stays `continue-on-error`. Naming a
-release commits to fixing this one report, not to making 4.0 gate; the
-reason a required job would be wrong is unchanged, and
-`docs/SUPPORT_MATRIX.md` still calls 4.0 best effort.
-
-**The shape of the fix, so 0.3.2 does not rediscover it.**
-`UNIVERSAL_RUBY_NAMES` is a frozen three-element list and
-`object_signature_gap_spec` re-derives it from the running interpreter
-and core RBS. Adding `instance_variables_to_inspect` to the list makes
-the 3.4 and 3.3 jobs fail, because their Ruby does not have that name
-and the re-derivation would no longer match. So the fix is a list that
-can differ per Ruby, not a fourth element -- and the spec that catches
-this is the thing to keep, since it is what turned "a written list goes
-stale on the next Ruby" from a prediction into a failing job.
 ## 024.289 A class that includes an unread module is not checked at class level, so a typo there is silent
 
 ```yaml
@@ -5036,27 +4947,6 @@ helper, a symbol declared twice in one file, nested `def`s on one line,
 or a `prepareCallHierarchy` issued at a call site rather than at a
 `def`. Six of 0.3.0's review findings live in exactly those shapes, so
 the suite that certifies the rows could not have found any of them.
-
-## 024.308 `ReferenceResolver#resolve` states no contract about alignment
-
-```yaml
-status: open
-kind: friction
-user-visible: no
-user-visible-note: >-
-  An unstated invariant that every caller currently happens to
-  respect. It costs nothing today and costs a wrong answer the first
-  time somebody indexes the result against the input.
-target: 0.3.2
-```
-
-**Area:** `core/lib/ovallsp/semantic/reference_resolver.rb:43-45`
-
-`resolve` is a `filter_map`, so its result is shorter than its input
-whenever a candidate declines — and nothing says so. Its pre-0.3.0
-callers avoid the assumption by accident rather than by being told:
-two pass a single-element array, one iterates. A caller that zips the
-two lists would be wrong on the first declining candidate.
 
 ## 024.309 The quick-fix E2E example asserts that the result parses, which both answers do
 

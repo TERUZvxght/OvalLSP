@@ -114,6 +114,43 @@ RSpec.describe "a name the signature set's Object omits and Ruby has" do
       .to eq(Ovallsp::Signatures::Environment::UNIVERSAL_RUBY_NAMES.sort)
   end
 
+  # **A row for every Ruby CI runs, or the table goes stale the way the
+  # single list did.** The example above re-derives only for the Ruby it
+  # runs under, so on 3.4 it says nothing at all about the 4.0 row -- and
+  # 4.0's gap was found by a job failing rather than by anything here.
+  # This is the half that can be checked from any Ruby: `ci.yml`'s matrix
+  # names the versions, and each of them must have been measured.
+  it "carries a row for every Ruby CI runs" do
+    workflow = File.read(File.expand_path("../../../../.github/workflows/ci.yml", __dir__), encoding: "UTF-8")
+    matrix = workflow[/ruby:\s*\[([^\]]*)\]/, 1].to_s.scan(/"([\d.]+)"/).flatten
+    informational = workflow.scan(/ruby-version:\s*"([\d.]+)"/).flatten
+    exercised = (matrix + informational).uniq
+    measured = Ovallsp::Signatures::Environment::UNIVERSAL_RUBY_NAMES_BY_MINOR.keys
+
+    expect(exercised).to include("3.3", "3.4", "4.0"), "ci.yml no longer names the versions this expects"
+    expect(exercised - measured).to be_empty, "no measured row for: #{(exercised - measured).join(', ')}"
+  end
+
+  # **The fallback errs towards silence, and this is the example that can
+  # fail.** An unlisted Ruby has no measured row, and the two ways of
+  # being wrong are not equal: a name in the list this Ruby lacks costs
+  # one true report, a name missing from it costs a false report on every
+  # class in the workspace. Section 0 ranks the second worse, so the
+  # fallback is the union.
+  it "answers an unlisted Ruby with the union of every measured row" do
+    table = Ovallsp::Signatures::Environment::UNIVERSAL_RUBY_NAMES_BY_MINOR
+    union = table.values.flatten.uniq.sort
+
+    expect(Ovallsp::Signatures::Environment.universal_ruby_names_for("99.9")).to eq(union)
+
+    # The control: a listed Ruby gets its own row, and for at least one
+    # row that is *not* the union -- otherwise the assertion above would
+    # hold on a table with a single entry and say nothing.
+    expect(table.values.uniq.length).to be >= 2
+    expect(Ovallsp::Signatures::Environment.universal_ruby_names_for("3.4")).to eq(table.fetch("3.4"))
+    expect(Ovallsp::Signatures::Environment.universal_ruby_names_for("3.4")).not_to eq(union)
+  end
+
   # And no gem may reach the list. `to_json` is on this *process*'s
   # `Object` because the suite loads `json`, and a project that never
   # requires it must still be told about a genuine typo -- what a gem

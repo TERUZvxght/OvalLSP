@@ -36,6 +36,16 @@ module Ovallsp
         @route_registry = route_registry
       end
 
+      # **The result is not aligned with the input.** It is a `filter_map`:
+      # a candidate that resolves to nothing is dropped, so the answer is
+      # shorter than what was passed and index `n` of one is not index `n`
+      # of the other. Every caller respects that today by shape rather than
+      # by having been told -- four pass a single-element array, two
+      # iterate -- and the first one to zip the two lists would be wrong on
+      # the first declining candidate, silently and only in a workspace
+      # where something declines. Said here because it was said nowhere,
+      # and `reference_resolver_spec.rb` has the example. `024.308`.
+      #
       # `document` is only consulted for :method_call candidates whose
       # receiver needs live type inference; every other candidate kind
       # ignores it entirely (may be nil for callers that already know

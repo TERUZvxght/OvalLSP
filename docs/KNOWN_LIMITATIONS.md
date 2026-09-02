@@ -713,14 +713,6 @@ it.*
   `[1,2].siz` are silent, though completion at the same spot knows the
   type exactly. <!-- documents: 024.129 -->
 - A scope defined inside a concern's `included do` has no type. <!-- documents: 024.132 -->
-- **On Ruby 4.0 only**, `instance_variables_to_inspect` is reported
-  missing on your own class. Ruby 4.0 gives it to every object and the
-  bundled signatures do not declare it, so the check reads it as absent.
-  The three names with the same problem on 3.3 and 3.4 were fixed in
-  0.2.16; this one is not, because silencing it everywhere would also
-  silence a genuine typo of that name on the Ruby versions that do not
-  have it. Ruby 4.0 is best-effort — see the support
-  matrix. <!-- documents: 024.288 -->
 
 ## What a partial's local resolves to
 

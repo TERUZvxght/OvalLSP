@@ -16269,6 +16269,99 @@ continuously verifies 4.0', and it was right."
 
 Fixed by giving it the same checkout as the gating job.
 
+## 024.288 Ruby 4.0 puts a fourth name on Object that RBS does not declare
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: defect
+user-visible: yes
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/signatures/environment.rb`
+
+`024.239` records that the signature set's `::Object` omits names the
+running Ruby gives every object, and that each omission became a false
+`unknown-method` report against the user's own class. Three were found
+on Ruby 3.4 — `trap`, `set_trace_func`, `iterator?` — and
+`UNIVERSAL_RUBY_NAMES` names them.
+
+`object_signature_gap_spec` re-derives that list rather than trusting it,
+"because a written list is exactly the thing that goes stale on the next
+Ruby or the next RBS". **It went stale, and the spec said so**, on the
+informational 4.0 job:
+
+```
+  expected: ["iterator?", "set_trace_func", "trap"]
+       got: ["instance_variables_to_inspect", "iterator?", "set_trace_func", "trap"]
+```
+
+So on Ruby 4.0 a call to `instance_variables_to_inspect` on the user's
+own class is reported missing, exactly as `trap` was before `024.239`.
+
+**Recorded rather than fixed, which is this job's standing decision**:
+`docs/SUPPORT_MATRIX.md` calls 4.0 best effort, and ci.yml says in as
+many words that "a 4.0-specific failure gets recorded rather than fixed
+— a required job would turn the first one into work nobody agreed to
+do."
+
+**And the one-line fix is the wrong one.** Adding the name
+unconditionally would make the engine decline on it under 3.3 and 3.4,
+where Ruby does not define it — so a genuine typo of that name goes
+silent on every currently supported Ruby. That is `024.13`'s failure,
+which cost four real typo reports for exactly this kind of proxy.
+
+**Direction.** The list is hand-derived and pinned by a spec that
+re-derives it; the shape that does not go stale is to derive it at load
+from the running interpreter minus the signature set, which is what the
+spec already does in a subprocess. Cost is startup time on every boot
+against a list that changes once per Ruby release, so it is a real
+trade rather than an obvious win — hence an entry.
+
+
+**Cannot be driven here.** This is a Ruby 4.0 fact and 0.3.0's
+measurements were taken on `ruby 3.4.10`, where
+`object_signature_gap_spec` re-derives `UNIVERSAL_RUBY_NAMES` and
+agrees with it. The entry is about what the informational 4.0 job
+reports, and nothing in this session could reach that. Left open
+with its target unchanged rather than re-triaged on a run that did
+not happen.
+
+**Retargeted to 0.3.2 in 0.3.0's closing sweep.** A repair, and one
+that cannot be driven until this project runs on Ruby 4.0 -- the
+patch line is where it waits.
+
+**Scheduled for 0.3.2, and that is a change of decision rather than a
+reading of the old one.** The standing decision this entry cites is
+`ci.yml`'s, and it is scoped in its own words to "the 0.2.x line". That
+line closed with 0.2.18. Nothing replaced it, so between 0.3.0 and this
+paragraph the 4.0 job had no policy at all -- it reported a failure that
+no release owed and no rule excused.
+
+The argument for naming a release rather than restoring "record, not
+fix": a decision with no end date is indistinguishable from never doing
+it. `024.239` is the same defect on Ruby 3.4 and it was fixed; leaving
+the 4.0 instance open forever would make the two inconsistent for no
+reason anyone could state.
+
+**What it is not**: the 4.0 job stays `continue-on-error`. Naming a
+release commits to fixing this one report, not to making 4.0 gate; the
+reason a required job would be wrong is unchanged, and
+`docs/SUPPORT_MATRIX.md` still calls 4.0 best effort.
+
+**The shape of the fix, so 0.3.2 does not rediscover it.**
+`UNIVERSAL_RUBY_NAMES` is a frozen three-element list and
+`object_signature_gap_spec` re-derives it from the running interpreter
+and core RBS. Adding `instance_variables_to_inspect` to the list makes
+the 3.4 and 3.3 jobs fail, because their Ruby does not have that name
+and the re-derivation would no longer match. So the fix is a list that
+can differ per Ruby, not a fourth element -- and the spec that catches
+this is the thing to keep, since it is what turned "a written list goes
+stale on the next Ruby" from a prediction into a failing job.
+
+**Fixed in 0.3.2.** The gap is keyed by the Ruby that moves it. Three rows, each measured: 3.3 and 3.4 re-derived on every suite run, 4.0 taken from the job that reported the difference. An unlisted Ruby gets the union, which errs towards silence because a missing name costs a false report on every class and a surplus one costs a single true report. Two new examples: every Ruby `ci.yml` names has a row, and the fallback is asked about a version nothing will ship.
+
 ## 024.291 A repeated key in a metadata block is resolved silently, and one of them discarded a withdrawal
 
 ```yaml
@@ -16450,6 +16543,30 @@ method kind. The conclusion may still hold; what does not hold is the
 premise as written, and the record presents it as measured.
 
 **Fixed in 0.3.2.** The record said the line was removed; the code had put it back, and the guard is live against a route helper. Corrected in `054`, which is what the entry was about.
+
+## 024.308 `ReferenceResolver#resolve` states no contract about alignment
+
+```yaml
+status: fixed
+released-in: 0.3.2
+kind: friction
+user-visible: no
+user-visible-note: >-
+  An unstated invariant that every caller currently happens to
+  respect. It costs nothing today and costs a wrong answer the first
+  time somebody indexes the result against the input.
+target: 0.3.2
+```
+
+**Area:** `core/lib/ovallsp/semantic/reference_resolver.rb:43-45`
+
+`resolve` is a `filter_map`, so its result is shorter than its input
+whenever a candidate declines — and nothing says so. Its pre-0.3.0
+callers avoid the assumption by accident rather than by being told:
+two pass a single-element array, one iterates. A caller that zips the
+two lists would be wrong on the first declining candidate.
+
+**Fixed in 0.3.2.** The contract is stated at `#resolve`, and pinned by an example that resolves two constants where one is declared and one is not. The control asserts both were candidates, so the shorter answer is the resolver declining rather than the parser finding one name.
 
 ## 024.310 A range arity reads "takes 0..1 argument"
 
